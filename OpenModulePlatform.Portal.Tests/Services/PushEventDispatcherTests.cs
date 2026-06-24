@@ -51,6 +51,30 @@ public sealed class PushEventDispatcherTests
         AssertParameter(cmd, "@error_message", SqlDbType.NVarChar, "dispatch failed");
     }
 
+    [Fact]
+    public void CreateCleanupExpiredCommand_DeletesOnlyTerminalRowsWithBoundedBatch()
+    {
+        var options = new PushEventDispatcherOptions
+        {
+            CleanupBatchSize = 250,
+            DispatchedRetentionDays = 3,
+            FailedRetentionDays = 14
+        };
+        using var conn = new SqlConnection("Server=(local);Database=OpenModulePlatform;Integrated Security=true;TrustServerCertificate=true");
+
+        using var cmd = SqlPushEventOutboxStore.CreateCleanupExpiredCommand(conn, options);
+
+        Assert.Contains("DELETE TOP (@batch_size)", cmd.CommandText);
+        Assert.Contains("status = N'dispatched'", cmd.CommandText);
+        Assert.Contains("completed_utc IS NOT NULL", cmd.CommandText);
+        Assert.Contains("status IN (N'failed', N'dead-lettered')", cmd.CommandText);
+        Assert.DoesNotContain("status = N'pending'", cmd.CommandText);
+        Assert.DoesNotContain("status = N'processing'", cmd.CommandText);
+        AssertParameter(cmd, "@batch_size", SqlDbType.Int, 250);
+        AssertParameter(cmd, "@dispatched_retention_days", SqlDbType.Int, 3);
+        AssertParameter(cmd, "@failed_retention_days", SqlDbType.Int, 14);
+    }
+
     [Theory]
     [InlineData("user", """{"kind":"user","ids":["42"]}""", "omp-user:42")]
     [InlineData("role", """{"kind":"role","ids":["7"]}""", "omp-role:7")]

@@ -13,6 +13,7 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
     private readonly IOptionsMonitor<PushEventDispatcherOptions> _options;
     private readonly ILogger<PushEventDispatcherHostedService> _logger;
     private readonly string _leaseOwner;
+    private DateTime _nextCleanupUtc = DateTime.MinValue;
 
     public PushEventDispatcherHostedService(
         SqlPushEventOutboxStore outbox,
@@ -43,6 +44,8 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
 
             try
             {
+                await CleanupIfDueAsync(options, stoppingToken);
+
                 var leased = await _outbox.AcquireLeaseAsync(
                     options,
                     _leaseOwner,
@@ -68,6 +71,41 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
                 _logger.LogWarning(ex, "Failed to lease or dispatch OMP push events.");
                 await DelayAsync(options, stoppingToken);
             }
+        }
+    }
+
+    private async Task CleanupIfDueAsync(PushEventDispatcherOptions options, CancellationToken ct)
+    {
+        if (!options.CleanupEnabled)
+        {
+            return;
+        }
+
+        var nowUtc = DateTime.UtcNow;
+        if (nowUtc < _nextCleanupUtc)
+        {
+            return;
+        }
+
+        _nextCleanupUtc = nowUtc.AddMinutes(options.EffectiveCleanupIntervalMinutes);
+
+        try
+        {
+            var deleted = await _outbox.CleanupExpiredAsync(options, ct);
+            if (deleted > 0)
+            {
+                _logger.LogInformation(
+                    "Deleted {DeletedCount} expired OMP push event outbox rows.",
+                    deleted);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to clean up expired OMP push event outbox rows.");
         }
     }
 

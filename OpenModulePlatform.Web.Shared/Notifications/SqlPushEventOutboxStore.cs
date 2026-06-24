@@ -67,6 +67,15 @@ internal sealed class SqlPushEventOutboxStore
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<int> CleanupExpiredAsync(PushEventDispatcherOptions options, CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = CreateCleanupExpiredCommand(conn, options);
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     internal static SqlCommand CreateAcquireLeaseCommand(
         SqlConnection conn,
         PushEventDispatcherOptions options,
@@ -171,6 +180,36 @@ WHERE push_event_id = @push_event_id
         cmd.Parameters.Add("@retry_delay_seconds", SqlDbType.Int).Value = options.EffectiveRetryDelaySeconds;
         cmd.Parameters.Add("@error_message", SqlDbType.NVarChar, 2048).Value =
             Truncate(exception.Message, options.EffectiveMaxErrorMessageLength);
+        return cmd;
+    }
+
+    internal static SqlCommand CreateCleanupExpiredCommand(
+        SqlConnection conn,
+        PushEventDispatcherOptions options)
+    {
+        const string sql = @"
+DECLARE @now_utc datetime2(3) = SYSUTCDATETIME();
+DECLARE @dispatched_before_utc datetime2(3) = DATEADD(DAY, -@dispatched_retention_days, @now_utc);
+DECLARE @failed_before_utc datetime2(3) = DATEADD(DAY, -@failed_retention_days, @now_utc);
+
+DELETE TOP (@batch_size)
+FROM omp.push_event_outbox
+WHERE
+(
+    status = N'dispatched'
+    AND completed_utc IS NOT NULL
+    AND completed_utc < @dispatched_before_utc
+)
+OR
+(
+    status IN (N'failed', N'dead-lettered')
+    AND COALESCE(dead_lettered_utc, completed_utc, scheduled_utc, created_utc) < @failed_before_utc
+);";
+
+        var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@batch_size", SqlDbType.Int).Value = options.EffectiveCleanupBatchSize;
+        cmd.Parameters.Add("@dispatched_retention_days", SqlDbType.Int).Value = options.EffectiveDispatchedRetentionDays;
+        cmd.Parameters.Add("@failed_retention_days", SqlDbType.Int).Value = options.EffectiveFailedRetentionDays;
         return cmd;
     }
 
