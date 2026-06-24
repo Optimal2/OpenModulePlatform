@@ -9,8 +9,6 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class HostAgentJobProcessor
 {
-    private const int ScServiceNotFoundExitCode = 1060;
-    private const int ScServiceMarkedForDeletionExitCode = 1072;
     private const int DirectoryDeleteMaxAttempts = 20;
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
     // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
@@ -1246,12 +1244,12 @@ public sealed class HostAgentJobProcessor
         }
 
         var result = RunSc("delete", serviceName);
-        if (result.ExitCode == 0 || IsServiceNotFound(result))
+        if (result.ExitCode == 0 || result.IsServiceNotFound())
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Cleaned", $"Deleted Windows service '{serviceName}'.");
         }
 
-        if (IsServiceMarkedForDeletion(result))
+        if (result.IsServiceMarkedForDeletion())
         {
             return CreateMaintenanceCleanupEntryResult(
                 entry,
@@ -1543,7 +1541,7 @@ public sealed class HostAgentJobProcessor
         var result = RunSc("query", serviceName);
         if (result.ExitCode != 0)
         {
-            return IsServiceNotFound(result) ? null : throw new InvalidOperationException(result.CombinedOutput.Trim());
+            return result.IsServiceNotFound() ? null : throw new InvalidOperationException(result.CombinedOutput.Trim());
         }
 
         foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
@@ -1665,23 +1663,13 @@ public sealed class HostAgentJobProcessor
         }
     }
 
-    private static ScResult RunSc(params string[] arguments)
+    private static ScCommandResult RunSc(params string[] arguments)
     {
         var result = HostAgentProcessRunner.Run(
             Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
             arguments);
-        return new ScResult(result.ExitCode, result.StdOut, result.StdErr);
+        return new ScCommandResult(result.ExitCode, result.StdOut, result.StdErr);
     }
-
-    private static bool IsServiceNotFound(ScResult result)
-        => result.ExitCode == ScServiceNotFoundExitCode
-            || result.CombinedOutput.Contains("FAILED 1060", StringComparison.OrdinalIgnoreCase)
-            || result.CombinedOutput.Contains("does not exist", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsServiceMarkedForDeletion(ScResult result)
-        => result.ExitCode == ScServiceMarkedForDeletionExitCode
-            || result.CombinedOutput.Contains("FAILED 1072", StringComparison.OrdinalIgnoreCase)
-            || result.CombinedOutput.Contains("marked for deletion", StringComparison.OrdinalIgnoreCase);
 
     private static string FirstNonEmpty(params string?[] values)
         => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
@@ -1733,11 +1721,4 @@ public sealed class HostAgentJobProcessor
         string? State,
         string? ExecutablePath);
 
-    private sealed record ScResult(
-        int ExitCode,
-        string Output,
-        string Error)
-    {
-        public string CombinedOutput => string.Concat(Output, Error);
-    }
 }

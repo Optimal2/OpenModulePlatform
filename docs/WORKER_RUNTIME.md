@@ -15,6 +15,9 @@ Implemented as a Windows Service manager that:
 - is deployed as the `omp_core` `service-app` artifact `omp_workermanager`
 - applies a basic restart policy
 - requests graceful shutdown through named OS events
+- cleans orphaned `WorkerProcessHost` processes at startup; by default it kills
+  the full orphan process tree, configurable with
+  `WorkerManager:CleanupOrphansKillProcessTree`
 - publishes host heartbeat and observed runtime state back to OMP in database-backed mode
 
 ### OpenModulePlatform.WorkerProcessHost
