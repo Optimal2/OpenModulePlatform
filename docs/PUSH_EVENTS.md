@@ -14,8 +14,9 @@ The shared event contract lives in `OpenModulePlatform.EventPublisher.Abstractio
 
 - `PushEvent` is the normalized envelope.
 - `IPushEventPublisher` records a push event.
-- `PushEventTargetTypes` defines `user`, `broadcast`, and `authenticated`.
-- `PushEventCategories` defines common platform categories.
+- `PushTargetKind` defines `user`, `role`, `broadcast`, `authenticated`,
+  `app`, and `module` targets.
+- `PushEventCategory` defines common platform categories.
 
 The SQL implementation lives in `OpenModulePlatform.EventPublisher.Sql`. It
 writes to `omp.push_event_outbox` and does not depend on ASP.NET Core, SignalR,
@@ -24,8 +25,8 @@ or `OpenModulePlatform.Web.Shared`.
 ## Publishing Model
 
 Web apps should use the `IPushEventPublisher` service registered by
-`AddOmpWebDefaults`. Portal topbar notifications currently publish an outbox
-event and also send the existing SignalR hint immediately.
+`AddOmpWebDefaults`. The SQL publisher stores events durably in
+`omp.push_event_outbox`; it does not deliver browser messages by itself.
 
 Service apps should reference `OpenModulePlatform.EventPublisher.Abstractions`
 and `OpenModulePlatform.EventPublisher.Sql`, register `IPushEventPublisher`
@@ -74,10 +75,30 @@ Consumer modules adopt this by adding references and DI registration in their
 own repositories. OpenModulePlatform stays customer-neutral; it provides the
 contract, outbox writer, and web/worker host boundaries.
 
-## Current Delivery Boundary
+## Dispatcher And Browser Protocol
 
-The existing Portal topbar path still sends SignalR directly for notification
-state changes. Headless publishers can record durable outbox events now, but a
-generic outbox dispatcher is a separate future component. Until that dispatcher
-exists, non-topbar module events are recorded for the future delivery path and
-for local inspection, not delivered end to end automatically.
+Portal can host the outbox dispatcher by calling `AddOmpPushEventDispatcher`
+and setting `PushEvents:Dispatcher:Enabled` to `true`. Shared web defaults do
+not register the dispatcher automatically, so module web apps that call
+`AddOmpWebDefaults` do not compete for leases unless they explicitly opt in.
+
+The dispatcher leases pending rows atomically from `omp.push_event_outbox`,
+ordered by `push_event_id`, sends a lightweight SignalR envelope on
+`/topbar/notifications/updates` with method `notificationStateChanged`, and
+then marks the row `dispatched`. Failed dispatches are retried with a scheduled
+delay until `max_retries` is exceeded, after which the row is marked
+`dead-lettered`.
+
+The browser treats push as a wake-up hint. The envelope contains `eventId`,
+`deduplicationKey`, `category`, `targetKind`, `targetValue`, and optional
+`payload`, but the topbar still re-reads state through its normal summary
+endpoint. The client also still handles the legacy no-argument
+`notificationStateChanged` signal by refreshing the summary.
+
+## Multi-Node Delivery Boundary
+
+SignalR is registered without a Redis or other backplane dependency. In a
+multi-node IIS farm, enable sticky sessions for push mode or add a SignalR
+backplane in a later deployment design. The SQL outbox keeps events durable, but
+without sticky sessions or a backplane a browser connected to one node may not
+receive a SignalR send performed by another node.

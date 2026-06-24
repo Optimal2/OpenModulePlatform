@@ -160,6 +160,24 @@ public static class OmpWebHostingExtensions
         return builder;
     }
 
+    public static WebApplicationBuilder AddOmpPushEventDispatcher(this WebApplicationBuilder builder)
+    {
+        builder.Services.Configure<PushEventDispatcherOptions>(
+            builder.Configuration.GetSection(PushEventDispatcherOptions.SectionName));
+
+        var dispatcherOptions = builder.Configuration
+            .GetSection(PushEventDispatcherOptions.SectionName)
+            .Get<PushEventDispatcherOptions>() ?? new PushEventDispatcherOptions();
+
+        if (dispatcherOptions.Enabled)
+        {
+            builder.Services.AddSingleton<SqlPushEventOutboxStore>();
+            builder.Services.AddHostedService<PushEventDispatcherHostedService>();
+        }
+
+        return builder;
+    }
+
     public static IServiceCollection AddOmpCookieAuthentication(
         this IServiceCollection services,
         IConfiguration configuration)
