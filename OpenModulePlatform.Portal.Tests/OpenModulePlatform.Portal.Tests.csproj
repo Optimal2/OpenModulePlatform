@@ -20,6 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\OpenModulePlatform.EventPublisher.Abstractions\OpenModulePlatform.EventPublisher.Abstractions.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.EventPublisher.Sql\OpenModulePlatform.EventPublisher.Sql.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Auth\OpenModulePlatform.Auth.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Portal\OpenModulePlatform.Portal.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
