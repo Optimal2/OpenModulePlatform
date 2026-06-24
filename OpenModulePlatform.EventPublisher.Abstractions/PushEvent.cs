@@ -196,6 +196,9 @@ public sealed record PushTarget(PushTargetKind Kind, IReadOnlyList<string> Value
     public static PushTarget AuthenticatedUsers()
         => new(PushTargetKind.Authenticated, []);
 
+    public static PushTarget ForApp(string appKey)
+        => new(PushTargetKind.App, [appKey]);
+
     public static PushTarget ForModule(string moduleKey)
         => new(PushTargetKind.Module, [moduleKey]);
 
@@ -204,7 +207,7 @@ public sealed record PushTarget(PushTargetKind Kind, IReadOnlyList<string> Value
         var normalizedValues = Kind switch
         {
             PushTargetKind.User or PushTargetKind.Role => NormalizeNumericValues(Values, Kind),
-            PushTargetKind.Module => NormalizeModuleValues(Values),
+            PushTargetKind.App or PushTargetKind.Module => NormalizeKeyValues(Values, Kind),
             PushTargetKind.Broadcast or PushTargetKind.Authenticated => [],
             _ => throw new ArgumentOutOfRangeException(nameof(Kind), "Unsupported push target kind.")
         };
@@ -291,11 +294,11 @@ public sealed record PushTarget(PushTargetKind Kind, IReadOnlyList<string> Value
         return normalized;
     }
 
-    private static string[] NormalizeModuleValues(IReadOnlyList<string>? values)
+    private static string[] NormalizeKeyValues(IReadOnlyList<string>? values, PushTargetKind kind)
     {
         if (values is null || values.Count == 0)
         {
-            throw new ArgumentException("Module-targeted push events require at least one module key.", nameof(Values));
+            throw new ArgumentException($"Push target kind '{kind.ToJsonValue()}' requires at least one key.", nameof(Values));
         }
 
         var normalized = values
@@ -307,7 +310,7 @@ public sealed record PushTarget(PushTargetKind Kind, IReadOnlyList<string> Value
 
         if (normalized.Length == 0)
         {
-            throw new ArgumentException("Module-targeted push events require at least one module key.", nameof(Values));
+            throw new ArgumentException($"Push target kind '{kind.ToJsonValue()}' requires at least one key.", nameof(Values));
         }
 
         return normalized;
@@ -324,6 +327,7 @@ public enum PushTargetKind
     Role,
     Broadcast,
     Authenticated,
+    App,
     Module
 }
 
@@ -336,6 +340,7 @@ public static class PushTargetKindExtensions
             PushTargetKind.Role => "role",
             PushTargetKind.Broadcast => "broadcast",
             PushTargetKind.Authenticated => "authenticated",
+            PushTargetKind.App => "app",
             PushTargetKind.Module => "module",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported push target kind.")
         };

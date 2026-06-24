@@ -1,0 +1,146 @@
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Globalization;
+
+namespace OpenModulePlatform.Web.Shared.Notifications;
+
+internal sealed class PushEventDispatcherHostedService : BackgroundService
+{
+    private readonly SqlPushEventOutboxStore _outbox;
+    private readonly IHubContext<TopBarNotificationHub> _hubContext;
+    private readonly IOptionsMonitor<PushEventDispatcherOptions> _options;
+    private readonly ILogger<PushEventDispatcherHostedService> _logger;
+    private readonly string _leaseOwner;
+
+    public PushEventDispatcherHostedService(
+        SqlPushEventOutboxStore outbox,
+        IHubContext<TopBarNotificationHub> hubContext,
+        IOptionsMonitor<PushEventDispatcherOptions> options,
+        ILogger<PushEventDispatcherHostedService> logger,
+        IHostEnvironment environment)
+    {
+        _outbox = outbox;
+        _hubContext = hubContext;
+        _options = options;
+        _logger = logger;
+        _leaseOwner = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{environment.ApplicationName}:{Environment.MachineName}:{Environment.ProcessId}");
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var options = _options.CurrentValue;
+            if (!options.Enabled)
+            {
+                await DelayAsync(options, stoppingToken);
+                continue;
+            }
+
+            try
+            {
+                var leased = await _outbox.AcquireLeaseAsync(
+                    options,
+                    _leaseOwner,
+                    Guid.NewGuid(),
+                    stoppingToken);
+
+                if (leased.Count == 0)
+                {
+                    await DelayAsync(options, stoppingToken);
+                    continue;
+                }
+
+                foreach (var pushEvent in leased)
+                {
+                    await DispatchAsync(pushEvent, options, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to lease or dispatch OMP push events.");
+                await DelayAsync(options, stoppingToken);
+            }
+        }
+    }
+
+    private async Task DispatchAsync(
+        LeasedPushEvent pushEvent,
+        PushEventDispatcherOptions options,
+        CancellationToken ct)
+    {
+        try
+        {
+            var envelope = TopBarPushEventEnvelope.FromLeasedEvent(pushEvent);
+            var groups = ResolveTargetGroups(pushEvent).ToArray();
+            if (groups.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Push event {pushEvent.PushEventId} has no SignalR target groups.");
+            }
+
+            await _hubContext.Clients
+                .Groups(groups)
+                .SendCoreAsync(
+                    TopBarNotificationHub.StateChangedMethod,
+                    [envelope],
+                    ct);
+
+            await _outbox.MarkDispatchedAsync(pushEvent, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to dispatch OMP push event {PushEventId}.",
+                pushEvent.PushEventId);
+            await _outbox.MarkFailedAsync(pushEvent, options, ex, ct);
+        }
+    }
+
+    internal static IReadOnlyList<string> ResolveTargetGroups(LeasedPushEvent pushEvent)
+    {
+        var target = PushEventTarget.FromJson(pushEvent.TargetType, pushEvent.TargetUserId, pushEvent.TargetJson);
+        return target.Kind switch
+        {
+            "user" => target.Values.Select(ParsePositiveInt).Where(id => id.HasValue)
+                .Select(id => TopBarNotificationHub.UserGroupName(id!.Value))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
+            "role" => target.Values.Select(ParsePositiveInt).Where(id => id.HasValue)
+                .Select(id => TopBarNotificationHub.RoleGroupName(id!.Value))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
+            "broadcast" => [TopBarNotificationHub.BroadcastGroupName],
+            "authenticated" => [TopBarNotificationHub.AuthenticatedGroupName],
+            "app" => target.Values.Select(TopBarNotificationHub.AppGroupName)
+                .Where(group => !string.IsNullOrWhiteSpace(group))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
+            "module" => target.Values.Select(TopBarNotificationHub.ModuleGroupName)
+                .Where(group => !string.IsNullOrWhiteSpace(group))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
+            _ => []
+        };
+    }
+
+    private static int? ParsePositiveInt(string value)
+        => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0
+            ? id
+            : null;
+
+    private static Task DelayAsync(PushEventDispatcherOptions options, CancellationToken ct)
+        => Task.Delay(TimeSpan.FromSeconds(options.EffectivePollingIntervalSeconds), ct);
+}

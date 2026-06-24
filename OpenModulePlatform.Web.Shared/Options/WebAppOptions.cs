@@ -64,6 +64,9 @@ public sealed class WebAppOptions
     public const string DefaultSectionName = "WebApp";
 
     public string Title { get; set; } = "OpenModulePlatform";
+    public string ModuleKey { get; set; } = "";
+    public string AppKey { get; set; } = "";
+    public string AppInstanceKey { get; set; } = "";
     public string DefaultCulture { get; set; } = "sv-SE";
     public string[] SupportedCultures { get; set; } = ["sv-SE", "en-US"];
     public PortalTopBarOptions PortalTopBar { get; set; } = new();

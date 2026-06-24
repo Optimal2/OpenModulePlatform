@@ -22,6 +22,7 @@ builder.WebHost.ConfigureKestrel(options =>
 });
 
 builder.AddOmpWebDefaults<PortalResource>(optionsSectionName: "Portal");
+builder.AddOmpPushEventDispatcher();
 
 builder.Services.AddScoped<AppCatalogService>();
 builder.Services.AddSingleton<LocalPasswordHasher>();

@@ -2901,7 +2901,7 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_omp_push_event_outbox_target_type')
 BEGIN
     ALTER TABLE omp.push_event_outbox
-        ADD CONSTRAINT CK_omp_push_event_outbox_target_type CHECK(target_type IN (N'user', N'role', N'broadcast', N'authenticated', N'module'));
+        ADD CONSTRAINT CK_omp_push_event_outbox_target_type CHECK(target_type IN (N'user', N'role', N'broadcast', N'authenticated', N'app', N'module'));
 END
 GO
 

@@ -79,4 +79,18 @@ public sealed class PushEventTests
         Assert.Equal("topbar.message-state-changed", PushEventCategory.TopBarMessageStateChanged.Value);
         Assert.Equal("topbar.banner-state-changed", PushEventCategory.TopBarBannerStateChanged.Value);
     }
+
+    [Fact]
+    public void Normalize_AllowsAppAndModuleTargets()
+    {
+        var appEvent = new PushEvent(
+            PushEventCategory.ModuleStateChanged,
+            PushTarget.ForApp(" omp_portal "));
+        var moduleEvent = new PushEvent(
+            PushEventCategory.ModuleStateChanged,
+            PushTarget.ForModule(" omp_portal "));
+
+        Assert.Equal("""{"kind":"app","ids":["omp_portal"]}""", appEvent.Normalize().TargetJson);
+        Assert.Equal("""{"kind":"module","ids":["omp_portal"]}""", moduleEvent.Normalize().TargetJson);
+    }
 }
