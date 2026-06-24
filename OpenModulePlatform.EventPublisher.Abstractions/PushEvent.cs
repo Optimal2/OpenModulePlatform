@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace OpenModulePlatform.Web.Shared.Notifications;
+namespace OpenModulePlatform.EventPublisher;
 
 public sealed record PushEvent(
     string EventCategory,
@@ -118,4 +118,6 @@ public static class PushEventTargetTypes
 public static class PushEventCategories
 {
     public const string TopBarNotificationStateChanged = "topbar.notification-state-changed";
+    public const string TopBarBannerStateChanged = "topbar.banner-state-changed";
+    public const string ModuleStateChanged = "module.state-changed";
 }

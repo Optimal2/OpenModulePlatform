@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="OpenModulePlatform.Artifacts/OpenModulePlatform.Artifacts.csproj" />
+  <Project Path="OpenModulePlatform.EventPublisher.Abstractions/OpenModulePlatform.EventPublisher.Abstractions.csproj" />
+  <Project Path="OpenModulePlatform.EventPublisher.Sql/OpenModulePlatform.EventPublisher.Sql.csproj" />
   <Project Path="OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj" />
   <Project Path="OpenModulePlatform.Auth/OpenModulePlatform.Auth.csproj" />
   <Project Path="OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj" />
