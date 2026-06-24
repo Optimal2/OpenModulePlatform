@@ -1,4 +1,4 @@
-using OpenModulePlatform.Web.Shared.Notifications;
+using OpenModulePlatform.EventPublisher;
 using OpenModulePlatform.Web.Shared.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
@@ -6,6 +6,7 @@ using System.Data;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
@@ -39,16 +40,16 @@ public sealed class MessageService
 
     private readonly SqlConnectionFactory _db;
     private readonly OmpConfigurationService _configuration;
-    private readonly ITopBarNotificationStatePublisher _statePublisher;
+    private readonly IPushEventPublisher _pushEventPublisher;
 
     public MessageService(
         SqlConnectionFactory db,
         OmpConfigurationService configuration,
-        ITopBarNotificationStatePublisher statePublisher)
+        IPushEventPublisher pushEventPublisher)
     {
         _db = db;
         _configuration = configuration;
-        _statePublisher = statePublisher;
+        _pushEventPublisher = pushEventPublisher;
     }
 
     // Keep a message-service facade so message endpoints do not need to depend
@@ -694,7 +695,7 @@ ORDER BY m.message_id DESC;";
                 throw new UnauthorizedAccessException("Only conversation participants can send messages.");
             }
 
-            recipientUserIds = await GetConversationParticipantUserIdsAsync(conn, tx, conversationId, userId, ct);
+            recipientUserIds = await GetConversationParticipantUserIdsAsync(conn, tx, conversationId, excludedUserId: 0, ct);
 
             const string messageSql = @"
 INSERT INTO omp.messages(conversation_id, sender_user_id, content, message_type)
@@ -736,7 +737,9 @@ WHERE conversation_id = @conversation_id;";
 
         foreach (var recipientUserId in recipientUserIds)
         {
-            await _statePublisher.NotifyChangedAsync(recipientUserId, ct);
+            await _pushEventPublisher.PublishAsync(
+                CreateMessageSentPushEvent(recipientUserId, conversationId, messageId),
+                ct);
         }
 
         return messageId;
@@ -780,7 +783,9 @@ WHERE cp.conversation_id = @conversation_id
 
         if (unreadCount > 0)
         {
-            await _statePublisher.NotifyChangedAsync(userId, ct);
+            await _pushEventPublisher.PublishAsync(
+                CreateMessageReadPushEvent(userId, conversationId),
+                ct);
         }
     }
 
@@ -824,7 +829,9 @@ WHERE cp.user_id = @user_id
         await cmd.ExecuteNonQueryAsync(ct);
         if (messagesMarkedRead > 0)
         {
-            await _statePublisher.NotifyChangedAsync(userId, ct);
+            await _pushEventPublisher.PublishAsync(
+                CreateAllMessagesReadPushEvent(userId),
+                ct);
         }
 
         return messagesMarkedRead;
@@ -989,6 +996,45 @@ ORDER BY display_name,
 
         return rows;
     }
+
+    internal static PushEvent CreateMessageSentPushEvent(int userId, long conversationId, long messageId)
+        => PushEvent.ForUser(
+            userId,
+            PushEventCategory.TopBarMessageStateChanged,
+            JsonSerializer.Serialize(new
+            {
+                action = "sent",
+                conversationId,
+                messageId
+            }),
+            deduplicationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"message:sent:{messageId}:user:{userId}"),
+            correlationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"conversation:{conversationId}"));
+
+    internal static PushEvent CreateMessageReadPushEvent(int userId, long conversationId)
+        => PushEvent.ForUser(
+            userId,
+            PushEventCategory.TopBarMessageStateChanged,
+            JsonSerializer.Serialize(new
+            {
+                action = "read",
+                conversationId
+            }),
+            correlationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"conversation:{conversationId}"));
+
+    internal static PushEvent CreateAllMessagesReadPushEvent(int userId)
+        => PushEvent.ForUser(
+            userId,
+            PushEventCategory.TopBarMessageStateChanged,
+            JsonSerializer.Serialize(new
+            {
+                action = "read-all"
+            }));
 
     public async Task<MessageAttachmentDownload?> GetAttachmentAsync(
         int userId,

@@ -142,13 +142,17 @@ public static class OmpWebHostingExtensions
         builder.Services.AddTransient<IClaimsTransformation, ActiveRoleClaimsTransformation>();
         builder.Services.AddSingleton(cultureSelectionService);
         builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.Configure<PushEventProducerOptions>(
+            builder.Configuration.GetSection(PushEventProducerOptions.SectionName));
         builder.Services.AddSingleton<IPushEventPublisher>(sp =>
         {
             var db = sp.GetRequiredService<SqlConnectionFactory>();
             var logger = sp.GetRequiredService<ILogger<SqlPushEventPublisher>>();
             return new SqlPushEventPublisher(db.Create, logger);
         });
-        builder.Services.AddSingleton<ITopBarNotificationStatePublisher, SignalRTopBarNotificationStatePublisher>();
+        builder.Services.AddSingleton<SignalRTopBarNotificationStatePublisher>();
+        builder.Services.AddSingleton<OutboxTopBarNotificationStatePublisher>();
+        builder.Services.AddSingleton<ITopBarNotificationStatePublisher, MigratingTopBarNotificationStatePublisher>();
         builder.Services.AddScoped<OmpConfigurationService>();
         builder.Services.AddScoped<OmpBrandingService>();
         builder.Services.AddScoped<RbacService>();
