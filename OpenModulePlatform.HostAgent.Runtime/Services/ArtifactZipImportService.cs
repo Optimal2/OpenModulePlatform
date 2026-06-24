@@ -1138,9 +1138,10 @@ public sealed class ArtifactZipImportService
         try
         {
             Directory.CreateDirectory(destinationRoot);
-            var destination = Path.Join(
+            var destination = ImportFileArchiveDestination.CreateUniquePath(
                 destinationRoot,
-                $"{DateTime.UtcNow:yyyyMMdd-HHmmss-fff}-{Path.GetFileName(importPath)}");
+                importPath,
+                DateTime.UtcNow);
 
             if (File.Exists(importPath))
             {
