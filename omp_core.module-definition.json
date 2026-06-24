@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "definitionType": "platform-core",
   "moduleKey": "omp_core",
-  "definitionVersion": "0.3.88",
+  "definitionVersion": "0.3.89",
   "module": {
     "displayName": "OpenModulePlatform Core",
     "moduleType": "PlatformCore",
