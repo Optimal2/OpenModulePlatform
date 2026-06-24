@@ -160,7 +160,6 @@ internal static class ArtifactConfigurationFileWriter
         string ompConnectionString,
         HostAgentSettings settings)
     {
-        var databaseName = ResolveDatabaseName(ompConnectionString);
         var dataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
         var forwardedHeadersKnownProxies = settings.WebAppForwardedHeadersKnownProxies ?? Array.Empty<string>();
         var forwardedHeadersKnownNetworks = settings.WebAppForwardedHeadersKnownNetworks ?? Array.Empty<string>();
@@ -200,24 +199,6 @@ internal static class ArtifactConfigurationFileWriter
                     AccessDeniedPath = "/status/403",
                     ApplicationName = "OpenModulePlatform",
                     DataProtectionKeyPath = dataProtectionKeyPath
-                },
-                OpenDocViewer = new
-                {
-                    BaseUrl = "/opendocviewer/",
-                    SampleFileUrl = "/opendocviewer/sample.pdf"
-                },
-                ContentWebAppModule = new
-                {
-                    AppInstanceId = deployment.AppInstanceId,
-                    HomeSlug = "home",
-                    ServerReportsPath = "App_Data/ContentReports",
-                    HtmlFilesPath = "App_Data/ContentPages",
-                    AllowedServerReportDatabases = string.IsNullOrWhiteSpace(databaseName)
-                        ? Array.Empty<string>()
-                        : [databaseName],
-                    ServerReportDefaultMaxRows = 100,
-                    ServerReportMaxRowsLimit = 1000,
-                    ServerReportQueryTimeoutSeconds = 30
                 },
                 Logging = new
                 {
@@ -401,6 +382,7 @@ internal static class ArtifactConfigurationFileWriter
             ["Omp.ArtifactVersion"] = artifactVersion,
             ["Omp.TargetName"] = targetName ?? string.Empty,
             ["Omp.ConnectionStrings.OmpDb"] = ompConnectionString,
+            ["Omp.ConnectionStrings.OmpDb.DatabaseName"] = ResolveDatabaseName(ompConnectionString),
             ["Omp.HostAgent.CentralArtifactRoot"] = settings.CentralArtifactRoot,
             ["Omp.HostAgent.LocalArtifactCacheRoot"] = settings.LocalArtifactCacheRoot,
             ["Omp.HostAgent.WebAppsRoot"] = settings.WebAppsRoot,

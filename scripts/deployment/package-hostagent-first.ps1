@@ -460,16 +460,102 @@ function Get-ManifestPropertyValue {
         [Parameter(Mandatory = $true)][string]$Name
     )
 
-    if ($null -eq $Object) {
+    $value = Get-ManifestProperty -Object $Object -Name $Name
+    if ($null -eq $value) {
         return ''
+    }
+
+    return [string]$value
+}
+
+function Get-ManifestProperty {
+    param(
+        [object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $null
     }
 
     $property = $Object.PSObject.Properties[$Name]
     if ($null -eq $property -or $null -eq $property.Value) {
-        return ''
+        return $null
     }
 
-    return [string]$property.Value
+    return $property.Value
+}
+
+function Get-SafeArtifactConfigurationPackageSourcePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][int]$Index
+    )
+
+    $name = ($RelativePath.Replace('\', '/').Split('/') | Select-Object -Last 1)
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        $name = "config-$Index.txt"
+    }
+
+    $safeChars = foreach ($ch in $name.ToCharArray()) {
+        if ([char]::IsLetterOrDigit($ch) -or $ch -eq '.' -or $ch -eq '_' -or $ch -eq '+' -or $ch -eq '-') {
+            $ch
+        }
+        else {
+            '-'
+        }
+    }
+
+    $safe = -join $safeChars
+    if ([string]::IsNullOrWhiteSpace($safe)) {
+        $safe = "config-$Index.txt"
+    }
+
+    return ('configuration/{0:000}-{1}' -f $Index, $safe)
+}
+
+function Get-ComponentArtifactConfigurationFiles {
+    param(
+        [Parameter(Mandatory = $true)][object]$Component,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot
+    )
+
+    $result = [System.Collections.Generic.List[object]]::new()
+    $index = 1
+    foreach ($entry in @((Get-ManifestProperty -Object $Component -Name 'artifactConfigurationFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $relativePath = [string](Get-ManifestPropertyValue -Object $entry -Name 'relativePath')
+        $sourcePath = [string](Get-ManifestPropertyValue -Object $entry -Name 'sourcePath')
+        if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+            $sourcePath = [string](Get-ManifestPropertyValue -Object $entry -Name 'path')
+        }
+
+        if ([string]::IsNullOrWhiteSpace($relativePath) -or [string]::IsNullOrWhiteSpace($sourcePath)) {
+            throw "Component '$([string]$Component.componentKey)' artifactConfigurationFiles entries require relativePath and sourcePath."
+        }
+
+        $resolvedSource = Resolve-DeploymentPath -Path $sourcePath -BasePath $RepositoryRoot
+        if (-not (Test-Path -LiteralPath $resolvedSource -PathType Leaf)) {
+            throw "Component '$([string]$Component.componentKey)' artifact configuration source file was not found: $resolvedSource"
+        }
+
+        $packageSourcePath = [string](Get-ManifestPropertyValue -Object $entry -Name 'packageSourcePath')
+        if ([string]::IsNullOrWhiteSpace($packageSourcePath)) {
+            $packageSourcePath = Get-SafeArtifactConfigurationPackageSourcePath -RelativePath $relativePath -Index $index
+        }
+
+        $result.Add([ordered]@{
+            RelativePath = $relativePath
+            SourcePath = $resolvedSource
+            PackageSourcePath = $packageSourcePath
+        })
+        $index++
+    }
+
+    return $result
 }
 
 function Get-ArtifactPackageFileName {
@@ -1059,6 +1145,10 @@ foreach ($component in $components) {
             -Version ([string]$component.version)
         $destination = Join-Path $payloadRoot $artifactPackageName
         $configurationFiles = @()
+        foreach ($configurationFile in @(Get-ComponentArtifactConfigurationFiles -Component $component -RepositoryRoot $RepositoryRoot)) {
+            $configurationFiles += $configurationFile
+        }
+
         if ([string]::Equals($componentKey, 'omp-workermanager-service', [StringComparison]::OrdinalIgnoreCase)) {
             if ($null -eq $workerProcessHostComponent) {
                 throw "Component manifest must include omp-workerprocesshost before packaging omp-workermanager-service."

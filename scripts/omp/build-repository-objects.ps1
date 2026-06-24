@@ -13,8 +13,9 @@ files plus selected artifact package zips to a common output shape:
   widgets/
   widget-data/
 
-Runtime/customer configuration is supplied as command-line mappings instead of
-being stored in the source repository:
+Package-owned configuration that is neutral for every environment can be listed
+on a component in omp-components.json. Runtime/customer configuration is
+supplied as command-line mappings instead of being stored in public source:
 
   -ArtifactConfigurationFile 'component-key:relative/path.ext=C:\secure\file.ext'
   -HostConfigurationFile 'C:\secure\host.json'
@@ -307,6 +308,39 @@ function Read-ConfigurationMappings {
         }
 
         $result[$componentKey].Add("$relativePath=$sourcePath")
+    }
+
+    return $result
+}
+
+function Get-ComponentArtifactConfigurationMappings {
+    param(
+        [Parameter(Mandatory = $true)][object]$Component,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot
+    )
+
+    $result = [System.Collections.Generic.List[string]]::new()
+    foreach ($entry in @((Get-JsonPropertyValue -Object $Component -Name 'artifactConfigurationFiles'))) {
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $relativePath = [string](Get-JsonPropertyValue -Object $entry -Name 'relativePath')
+        $sourcePath = [string](Get-JsonPropertyValue -Object $entry -Name 'sourcePath')
+        if ([string]::IsNullOrWhiteSpace($sourcePath)) {
+            $sourcePath = [string](Get-JsonPropertyValue -Object $entry -Name 'path')
+        }
+
+        if ([string]::IsNullOrWhiteSpace($relativePath) -or [string]::IsNullOrWhiteSpace($sourcePath)) {
+            throw "Component '$([string]$Component.componentKey)' artifactConfigurationFiles entries require relativePath and sourcePath."
+        }
+
+        $resolvedSource = Resolve-PathFromBase -Path $sourcePath -BasePath $RepositoryRoot
+        if (-not (Test-Path -LiteralPath $resolvedSource -PathType Leaf)) {
+            throw "Component '$([string]$Component.componentKey)' artifact configuration source file was not found: $resolvedSource"
+        }
+
+        $result.Add("$relativePath=$resolvedSource")
     }
 
     return $result
@@ -845,9 +879,15 @@ try {
 
         Remove-RuntimeConfigurationFilesFromFolder -Path $payloadPath
 
-        $configurationFileArgs = @()
+        $configurationFileArgs = [System.Collections.Generic.List[string]]::new()
+        foreach ($mapping in @(Get-ComponentArtifactConfigurationMappings -Component $component -RepositoryRoot $repositoryRoot)) {
+            $configurationFileArgs.Add($mapping)
+        }
+
         if ($configurationMappings.ContainsKey([string]$component.componentKey)) {
-            $configurationFileArgs = @($configurationMappings[[string]$component.componentKey])
+            foreach ($mapping in @($configurationMappings[[string]$component.componentKey])) {
+                $configurationFileArgs.Add($mapping)
+            }
         }
 
         $artifactPackageArgs = @{
@@ -858,7 +898,7 @@ try {
             Version = [string]$component.version
             PayloadPath = $payloadPath
             OutputPath = $artifactsRoot
-            ConfigurationFile = $configurationFileArgs
+            ConfigurationFile = @($configurationFileArgs)
         }
         $minModuleDefinitionVersion = [string](Get-JsonPropertyValue -Object $component -Name 'minModuleDefinitionVersion')
         if (-not [string]::IsNullOrWhiteSpace($minModuleDefinitionVersion)) {

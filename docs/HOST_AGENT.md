@@ -333,6 +333,15 @@ uses this for deployment-owned runtime files, for example a site-local
 `odv.site.config.js`, without requiring a new artifact zip for every
 configuration change.
 
+HostAgent's built-in web-app `appsettings.json` template is intentionally
+neutral. It provides only the shared Portal/WebApp, OMP database, OMP auth, and
+logging baseline needed by normal OMP-hosted ASP.NET Core web apps. Module
+sections such as Content Web App settings, OpenDocViewer settings, and
+customer-specific values must be supplied by the artifact package's
+configuration files or by matching config overlays. The public Content Web App
+artifact package carries its `ContentWebAppModule` defaults as a package-owned
+`appsettings.json` entry.
+
 Host-specific config overlays are applied after artifact-owned configuration
 files. Matching enabled rows in `omp.ConfigOverlayDocuments` and
 `omp.ConfigOverlayConfigurationFiles` are selected for the current host and the
@@ -358,6 +367,7 @@ app-instance-specific runtime configuration:
 - `{{Omp.ArtifactVersion}}`
 - `{{Omp.TargetName}}`
 - `{{Omp.ConnectionStrings.OmpDb}}`
+- `{{Omp.ConnectionStrings.OmpDb.DatabaseName}}`
 
 For values written inside JSON strings, use the `Omp.Json.` variants, for
 example `{{Omp.Json.ConnectionStrings.OmpDb}}`. Those variants escape the value
@@ -497,11 +507,24 @@ HostAgent treats the app as needing deployment so it can stop the runtime,
 mirror the artifact, rewrite the configuration files, and start the service
 again.
 
-HostAgent does not currently rotate Windows service credentials. If a service
-already exists, its configured account is preserved. If HostAgent creates a new
-service, it uses the Windows default service account. Environment-specific
-service accounts should therefore be bootstrapped before HostAgent owns regular
-version updates, or added through a future local credential provider.
+Service app identity resolution is explicit and credential-safe. HostAgent
+first checks `HostAgent:ServiceAppIdentityOverrides` using the app instance key,
+installation name, target name, and resolved Windows service name. If no
+override applies, it uses `HostAgent:ServiceAppUserName`,
+`HostAgent:ServiceAppPassword`, and
+`HostAgent:ServiceAppPasswordCredentialKey`. When those service-app defaults are
+empty, HostAgent falls back to the self-upgrade service account settings so a
+single bootstrap identity can be reused intentionally. Password values are never
+logged.
+
+HostAgent compares the desired and current Windows service accounts with
+normalized account names. If the credential store automation mode is `Full`, it
+can apply a mismatch automatically. If the mode is `PortalAdminApproved`, it
+applies only after a Portal repair request. With automation disabled, HostAgent
+records manual action required and leaves the service account unchanged. The
+logs record the non-secret identity source, normalized desired and actual
+account names, automation mode, repair request state, and whether HostAgent will
+apply or defer the mismatch.
 
 ## HostAgent self-upgrade
 

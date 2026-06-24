@@ -473,6 +473,15 @@ public sealed class ServiceAppDeploymentService
 
         if (AccountsEqual(actualIdentity, desiredIdentity.UserName))
         {
+            _logger.LogDebug(
+                "Service app identity comparison is compliant. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, IdentitySource={IdentitySource}, DesiredIdentity={DesiredIdentity}, ActualIdentity={ActualIdentity}, AutomationMode={AutomationMode}",
+                deployment.AppInstanceId,
+                serviceName,
+                desiredIdentity.Source,
+                NormalizeAccountForAudit(desiredIdentity.UserName),
+                NormalizeAccountForAudit(actualIdentity),
+                automationMode);
+
             return new ServiceIdentityCheckResult(
                 automationMode,
                 desiredIdentity.UserName,
@@ -486,6 +495,17 @@ public sealed class ServiceAppDeploymentService
         var canApply = string.Equals(automationMode, HostAgentCredentialAutomationModes.Full, StringComparison.OrdinalIgnoreCase)
             || (string.Equals(automationMode, HostAgentCredentialAutomationModes.PortalAdminApproved, StringComparison.OrdinalIgnoreCase)
                 && deployment.IdentityRepairRequestedUtc.HasValue);
+        _logger.LogInformation(
+            "Service app identity mismatch detected. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, IdentitySource={IdentitySource}, DesiredIdentity={DesiredIdentity}, ActualIdentity={ActualIdentity}, AutomationMode={AutomationMode}, RepairRequested={RepairRequested}, WillApply={WillApply}",
+            deployment.AppInstanceId,
+            serviceName,
+            desiredIdentity.Source,
+            NormalizeAccountForAudit(desiredIdentity.UserName),
+            NormalizeAccountForAudit(actualIdentity),
+            automationMode,
+            deployment.IdentityRepairRequestedUtc.HasValue,
+            canApply);
+
         if (canApply)
         {
             if (RequiresPassword(desiredIdentity.UserName) && string.IsNullOrWhiteSpace(desiredIdentity.Password))
@@ -506,6 +526,15 @@ public sealed class ServiceAppDeploymentService
                 throw new InvalidOperationException(
                     $"Windows service '{serviceName}' was configured to run as '{desiredIdentity.UserName}', but Windows still reports '{updatedIdentity}'.");
             }
+
+            _logger.LogInformation(
+                "Service app identity repair applied. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, IdentitySource={IdentitySource}, DesiredIdentity={DesiredIdentity}, ActualIdentity={ActualIdentity}, AutomationMode={AutomationMode}",
+                deployment.AppInstanceId,
+                serviceName,
+                desiredIdentity.Source,
+                NormalizeAccountForAudit(desiredIdentity.UserName),
+                NormalizeAccountForAudit(updatedIdentity),
+                automationMode);
 
             return new ServiceIdentityCheckResult(
                 automationMode,
@@ -558,9 +587,21 @@ public sealed class ServiceAppDeploymentService
             .FirstOrDefault(identity => identity is not null && HasConfiguredServiceAppIdentity(identity));
         if (configuredOverride is not null)
         {
-            return await ResolveStoredServiceAppPasswordAsync(configuredOverride, cancellationToken);
+            var resolvedOverride = await ResolveStoredServiceAppPasswordAsync(
+                configuredOverride,
+                "Override",
+                cancellationToken);
+            LogServiceIdentityResolution(deployment, serviceName, resolvedOverride);
+            return resolvedOverride;
         }
 
+        var usesSelfUpgradeFallback =
+            (string.IsNullOrWhiteSpace(settings.ServiceAppUserName)
+                && !string.IsNullOrWhiteSpace(settings.SelfUpgrade.ServiceAccountName))
+            || (string.IsNullOrWhiteSpace(settings.ServiceAppPassword)
+                && !string.IsNullOrWhiteSpace(settings.SelfUpgrade.ServiceAccountPassword))
+            || (string.IsNullOrWhiteSpace(settings.ServiceAppPasswordCredentialKey)
+                && !string.IsNullOrWhiteSpace(settings.SelfUpgrade.ServiceAccountPasswordCredentialKey));
         var defaultIdentity = new HostAgentServiceAppIdentitySettings
         {
             UserName = string.IsNullOrWhiteSpace(settings.ServiceAppUserName)
@@ -574,11 +615,17 @@ public sealed class ServiceAppDeploymentService
                 : settings.ServiceAppPasswordCredentialKey
         };
 
-        return await ResolveStoredServiceAppPasswordAsync(defaultIdentity, cancellationToken);
+        var resolvedDefault = await ResolveStoredServiceAppPasswordAsync(
+            defaultIdentity,
+            usesSelfUpgradeFallback ? "SelfUpgradeFallback" : "ServiceAppDefault",
+            cancellationToken);
+        LogServiceIdentityResolution(deployment, serviceName, resolvedDefault);
+        return resolvedDefault;
     }
 
     private async Task<ServiceAppIdentityResolution> ResolveStoredServiceAppPasswordAsync(
         HostAgentServiceAppIdentitySettings identity,
+        string source,
         CancellationToken cancellationToken)
     {
         var userName = identity.UserName;
@@ -590,7 +637,7 @@ public sealed class ServiceAppDeploymentService
             {
                 return string.IsNullOrWhiteSpace(userName)
                     ? ServiceAppIdentityResolution.NotConfigured
-                    : new ServiceAppIdentityResolution(userName.Trim(), password);
+                    : new ServiceAppIdentityResolution(userName.Trim(), password, source);
             }
 
             if (string.IsNullOrWhiteSpace(userName))
@@ -603,7 +650,30 @@ public sealed class ServiceAppDeploymentService
 
         return string.IsNullOrWhiteSpace(userName)
             ? ServiceAppIdentityResolution.NotConfigured
-            : new ServiceAppIdentityResolution(userName.Trim(), password);
+            : new ServiceAppIdentityResolution(userName.Trim(), password, source);
+    }
+
+    private void LogServiceIdentityResolution(
+        ServiceAppDeploymentDescriptor deployment,
+        string serviceName,
+        ServiceAppIdentityResolution resolvedIdentity)
+    {
+        if (!resolvedIdentity.IsConfigured)
+        {
+            _logger.LogDebug(
+                "Service app identity is not configured. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, IdentitySource={IdentitySource}",
+                deployment.AppInstanceId,
+                serviceName,
+                resolvedIdentity.Source);
+            return;
+        }
+
+        _logger.LogInformation(
+            "Service app identity resolved. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, IdentitySource={IdentitySource}, DesiredIdentity={DesiredIdentity}",
+            deployment.AppInstanceId,
+            serviceName,
+            resolvedIdentity.Source,
+            NormalizeAccountForAudit(resolvedIdentity.UserName));
     }
 
     private static bool HasConfiguredServiceAppIdentity(HostAgentServiceAppIdentitySettings identity)
@@ -1072,6 +1142,11 @@ public sealed class ServiceAppDeploymentService
         return NormalizeAccountCandidates(actual).Any(desiredCandidates.Contains);
     }
 
+    private static string NormalizeAccountForAudit(string value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : NormalizeAccountForComparison(value);
+
     private static string NormalizeAccountForComparison(string value)
     {
         var normalized = value.Trim();
@@ -1232,9 +1307,9 @@ public sealed class ServiceAppDeploymentService
             or TimeoutException
             or System.ComponentModel.Win32Exception;
 
-    private sealed record ServiceAppIdentityResolution(string UserName, string Password)
+    private sealed record ServiceAppIdentityResolution(string UserName, string Password, string Source)
     {
-        public static ServiceAppIdentityResolution NotConfigured { get; } = new(string.Empty, string.Empty);
+        public static ServiceAppIdentityResolution NotConfigured { get; } = new(string.Empty, string.Empty, "NotConfigured");
 
         public bool IsConfigured => !string.IsNullOrWhiteSpace(UserName);
     }

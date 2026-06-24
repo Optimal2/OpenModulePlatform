@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.97",
+  "repositoryVersion": "0.3.98",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -84,7 +84,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.108",
+      "version": "0.3.109",
       "minModuleDefinitionVersion": "0.3.82",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
@@ -121,10 +121,17 @@
       "appKey": "content_webapp_webapp",
       "packageType": "web-app",
       "targetName": "content-webapp",
-      "version": "0.3.51",
+      "version": "0.3.52",
       "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
       "relativePathTemplate": "content-webapp/web/{version}",
-      "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip"
+      "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip",
+      "artifactConfigurationFiles": [
+        {
+          "relativePath": "appsettings.json",
+          "sourcePath": "OpenModulePlatform.Web.ContentWebAppModule/Packaging/appsettings.json",
+          "packageSourcePath": "configuration/appsettings.json"
+        }
+      ]
     },
     {
       "componentKey": "iframe-webapp",

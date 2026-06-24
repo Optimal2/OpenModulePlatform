@@ -137,6 +137,33 @@ refresh:
   -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'
 ```
 
+Components can list artifact-owned configuration files when the same file is
+valid in every environment. The build scripts package these files into the
+artifact envelope as `configurationFiles` entries:
+
+```json
+{
+  "componentKey": "content-webapp",
+  "moduleKey": "content_webapp",
+  "appKey": "content_webapp_webapp",
+  "packageType": "web-app",
+  "targetName": "content-webapp",
+  "version": "0.3.52",
+  "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
+  "artifactConfigurationFiles": [
+    {
+      "relativePath": "appsettings.json",
+      "sourcePath": "OpenModulePlatform.Web.ContentWebAppModule/Packaging/appsettings.json",
+      "packageSourcePath": "configuration/appsettings.json"
+    }
+  ]
+}
+```
+
+Keep customer, host, server, URL, account, or secret values out of public
+component manifests. Put those values in private host profiles, artifact
+configuration mappings, host configurations, or config overlays instead.
+
 Every OMP-compatible module repository should expose a root wrapper with the
 same command shape:
 
