@@ -2754,6 +2754,94 @@ END
 GO
 
 -------------------------------------------------------------------------------
+-- Durable push event outbox
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.push_event_outbox', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.push_event_outbox
+    (
+        push_event_id bigint IDENTITY(1,1) NOT NULL,
+
+        -- The first supported category is a wake-up event for topbar refresh.
+        -- Dispatchers must treat push events as at-least-once notifications and
+        -- keep handlers idempotent; persistent user-visible content belongs in
+        -- domain tables such as omp.notifications.
+        event_category nvarchar(80) NOT NULL,
+        target_type nvarchar(40) NOT NULL CONSTRAINT DF_omp_push_event_outbox_target_type DEFAULT(N'user'),
+        target_user_id int NULL,
+        payload_json nvarchar(max) NULL,
+        status nvarchar(40) NOT NULL CONSTRAINT DF_omp_push_event_outbox_status DEFAULT(N'pending'),
+        lease_token uniqueidentifier NULL,
+        lease_until_utc datetime2(3) NULL,
+        retry_count int NOT NULL CONSTRAINT DF_omp_push_event_outbox_retry_count DEFAULT(0),
+        max_retries int NOT NULL CONSTRAINT DF_omp_push_event_outbox_max_retries DEFAULT(3),
+        error_message nvarchar(max) NULL,
+        created_utc datetime2(3) NOT NULL CONSTRAINT DF_omp_push_event_outbox_created_utc DEFAULT SYSUTCDATETIME(),
+        scheduled_utc datetime2(3) NOT NULL CONSTRAINT DF_omp_push_event_outbox_scheduled_utc DEFAULT SYSUTCDATETIME(),
+        dispatched_utc datetime2(3) NULL,
+
+        CONSTRAINT PK_omp_push_event_outbox PRIMARY KEY(push_event_id),
+        CONSTRAINT FK_omp_push_event_outbox_user FOREIGN KEY(target_user_id) REFERENCES omp.users(user_id),
+        CONSTRAINT CK_omp_push_event_outbox_event_category CHECK(LEN(LTRIM(RTRIM(event_category))) > 0),
+        CONSTRAINT CK_omp_push_event_outbox_target_type CHECK(target_type IN (N'user', N'broadcast', N'authenticated')),
+        CONSTRAINT CK_omp_push_event_outbox_user_target CHECK
+        (
+            (target_type = N'user' AND target_user_id IS NOT NULL)
+            OR
+            (target_type <> N'user' AND target_user_id IS NULL)
+        ),
+        CONSTRAINT CK_omp_push_event_outbox_retry CHECK(retry_count >= 0 AND max_retries BETWEEN 0 AND 20),
+        CONSTRAINT CK_omp_push_event_outbox_status CHECK(status IN (N'pending', N'processing', N'dispatched', N'failed')),
+        CONSTRAINT CK_omp_push_event_outbox_payload_json CHECK(payload_json IS NULL OR ISJSON(payload_json) = 1)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_push_event_outbox_pending'
+      AND object_id = OBJECT_ID(N'omp.push_event_outbox')
+)
+BEGIN
+    CREATE INDEX IX_omp_push_event_outbox_pending
+        ON omp.push_event_outbox(status, scheduled_utc, lease_until_utc, push_event_id)
+        INCLUDE(event_category, target_type, target_user_id, retry_count, max_retries)
+        WHERE status IN (N'pending', N'processing');
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_push_event_outbox_user'
+      AND object_id = OBJECT_ID(N'omp.push_event_outbox')
+)
+BEGIN
+    CREATE INDEX IX_omp_push_event_outbox_user
+        ON omp.push_event_outbox(target_user_id, created_utc DESC, push_event_id DESC)
+        INCLUDE(status, event_category)
+        WHERE target_user_id IS NOT NULL;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_push_event_outbox_cleanup'
+      AND object_id = OBJECT_ID(N'omp.push_event_outbox')
+)
+BEGIN
+    CREATE INDEX IX_omp_push_event_outbox_cleanup
+        ON omp.push_event_outbox(status, created_utc)
+        WHERE status IN (N'dispatched', N'failed');
+END
+GO
+
+-------------------------------------------------------------------------------
 -- Banners
 -------------------------------------------------------------------------------
 IF OBJECT_ID(N'omp.banners', N'U') IS NULL
