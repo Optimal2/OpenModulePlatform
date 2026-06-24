@@ -18,6 +18,7 @@
     var TOPBAR_UPDATE_POLL_MODE = 'poll';
     var TOPBAR_UPDATE_PUSH_MODE = 'push';
     var TOPBAR_NOTIFICATION_PUSH_METHOD = 'notificationStateChanged';
+    var GENERIC_PUSH_EVENT_METHOD = 'pushEvent';
     var SIGNALR_CLIENT_SCRIPT_URL = '/_content/OpenModulePlatform.Web.Shared/js/signalr.min.js';
     var initializedTopbars = new Set();
     var scheduledTopbars = new Set();
@@ -1601,13 +1602,10 @@
         var normalized = String(category).toLowerCase();
         return normalized === 'notification'
             || normalized === 'message'
-            || normalized === 'banner'
-            || normalized === 'module-state'
             || normalized === 'topbar.notification-state-changed'
             || normalized === 'topbar.message-state-changed'
-            || normalized === 'topbar.banner-state-changed'
-            || normalized === 'module.state-changed'
-            || normalized.indexOf('topbar.') === 0;
+            || normalized.indexOf('topbar.notification-') === 0
+            || normalized.indexOf('topbar.message-') === 0;
     }
 
     function handleTopbarPushEvent(envelope) {
@@ -1681,6 +1679,9 @@
 
             var connection = builder.build();
             connection.on(TOPBAR_NOTIFICATION_PUSH_METHOD, function (envelope) {
+                handleTopbarPushEvent(envelope);
+            });
+            connection.on(GENERIC_PUSH_EVENT_METHOD, function (envelope) {
                 handleTopbarPushEvent(envelope);
             });
             connection.onreconnecting(function (error) {

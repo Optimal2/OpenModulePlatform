@@ -127,9 +127,19 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             await _hubContext.Clients
                 .Groups(groups)
                 .SendCoreAsync(
-                    TopBarNotificationHub.StateChangedMethod,
+                    TopBarNotificationHub.PushEventMethod,
                     [envelope],
                     ct);
+
+            if (IsTopBarSummaryRefreshCategory(pushEvent.EventCategory))
+            {
+                await _hubContext.Clients
+                    .Groups(groups)
+                    .SendCoreAsync(
+                        TopBarNotificationHub.StateChangedMethod,
+                        [envelope],
+                        ct);
+            }
 
             await _outbox.MarkDispatchedAsync(pushEvent, ct);
         }
@@ -178,6 +188,16 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
         => int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0
             ? id
             : null;
+
+    private static bool IsTopBarSummaryRefreshCategory(string category)
+        => string.Equals(
+               category,
+               "topbar.notification-state-changed",
+               StringComparison.OrdinalIgnoreCase)
+           || string.Equals(
+               category,
+               "topbar.message-state-changed",
+               StringComparison.OrdinalIgnoreCase);
 
     private static Task DelayAsync(PushEventDispatcherOptions options, CancellationToken ct)
         => Task.Delay(TimeSpan.FromSeconds(options.EffectivePollingIntervalSeconds), ct);

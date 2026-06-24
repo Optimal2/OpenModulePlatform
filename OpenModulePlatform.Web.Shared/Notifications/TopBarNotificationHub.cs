@@ -11,7 +11,9 @@ namespace OpenModulePlatform.Web.Shared.Notifications;
 public sealed class TopBarNotificationHub : Hub
 {
     public const string Path = "/topbar/notifications/updates";
+    public const string PushEventPath = "/push/events";
     public const string StateChangedMethod = "notificationStateChanged";
+    public const string PushEventMethod = "pushEvent";
     public const string BroadcastGroupName = "omp-broadcast";
     public const string AuthenticatedGroupName = "omp-authenticated";
 
