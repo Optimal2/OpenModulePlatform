@@ -16,6 +16,16 @@ public sealed class PushEventDispatcherOptions
 
     public int MaxErrorMessageLength { get; set; } = 2048;
 
+    public bool CleanupEnabled { get; set; } = true;
+
+    public int CleanupIntervalMinutes { get; set; } = 15;
+
+    public int CleanupBatchSize { get; set; } = 500;
+
+    public int DispatchedRetentionDays { get; set; } = 7;
+
+    public int FailedRetentionDays { get; set; } = 30;
+
     internal int EffectiveBatchSize => Math.Clamp(BatchSize, 1, 200);
 
     internal int EffectivePollingIntervalSeconds => Math.Clamp(PollingIntervalSeconds, 1, 60);
@@ -25,4 +35,12 @@ public sealed class PushEventDispatcherOptions
     internal int EffectiveRetryDelaySeconds => Math.Clamp(RetryDelaySeconds, 1, 3600);
 
     internal int EffectiveMaxErrorMessageLength => Math.Clamp(MaxErrorMessageLength, 200, 2048);
+
+    internal int EffectiveCleanupIntervalMinutes => Math.Clamp(CleanupIntervalMinutes, 1, 1440);
+
+    internal int EffectiveCleanupBatchSize => Math.Clamp(CleanupBatchSize, 1, 5000);
+
+    internal int EffectiveDispatchedRetentionDays => Math.Clamp(DispatchedRetentionDays, 1, 3650);
+
+    internal int EffectiveFailedRetentionDays => Math.Clamp(FailedRetentionDays, 1, 3650);
 }

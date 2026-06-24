@@ -135,6 +135,14 @@ then marks the row `dispatched`. Failed dispatches are retried with a scheduled
 delay until `max_retries` is exceeded, after which the row is marked
 `dead-lettered`.
 
+When the dispatcher is enabled, it also performs bounded retention cleanup for
+terminal outbox rows. By default, dispatched rows are retained for 7 days,
+failed or dead-lettered rows are retained for 30 days, and each cleanup pass
+deletes at most 500 rows every 15 minutes. These values can be adjusted under
+`PushEvents:Dispatcher` with `CleanupEnabled`, `CleanupIntervalMinutes`,
+`CleanupBatchSize`, `DispatchedRetentionDays`, and `FailedRetentionDays`.
+Cleanup never deletes `pending` or `processing` rows.
+
 Authenticated browser clients connected to `TopBarNotificationHub` receive
 SignalR messages. On connect, the hub joins per-user, effective-role,
 broadcast, authenticated, app, and module groups. The dispatcher maps outbox
