@@ -5,6 +5,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
@@ -21,6 +22,21 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     private const int MaxStatusMessageLength = 1800;
     private const string UniversalImportResultCacheKeyPrefix = "ModulePackageImport:UniversalImportResult:";
     private static readonly TimeSpan UniversalImportResultCacheDuration = TimeSpan.FromMinutes(20);
+    private static readonly Regex ModuleImportMessagePattern = new(
+        @"^Module\s+(.+?)\s+([^;\s]+);\s+artifacts imported or replaced:\s+(\d+);\s+failed artifacts:\s+(\d+)\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex HostConfigurationMessagePattern = new(
+        @"^Host\s+(.+?)\s+([^;\s]+)\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ConfigOverlayMessagePattern = new(
+        @"^Overlay\s+(.+?)\s+([^;\s]+);\s+configuration files:\s+(\d+)\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex DashboardWidgetMessagePattern = new(
+        @"^Created:\s+(\d+);\s+updated:\s+(\d+);\s+skipped:\s+(\d+);\s+permission rows:\s+(\d+)\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex WidgetRuntimeDataMessagePattern = new(
+        @"^Data documents:\s+(\d+);\s+binary rows inserted:\s+(\d+);\s+binary rows reused:\s+(\d+)\.$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly OmpAdminRepository _repo;
     private readonly PortableModulePackageService _packages;
@@ -85,6 +101,98 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     public IReadOnlyList<UniversalImportResultViewModel> UniversalImportResults { get; private set; } = [];
 
     public int UniversalImportDetailCount => UniversalImportResults.Sum(static result => result.Items.Count);
+
+    public string FormatUniversalItemKind(string? kind)
+        => NormalizeUniversalToken(kind) switch
+        {
+            "moduledefinition" or "module-definition" => P("Module definition"),
+            "artifactpackage" or "artifact-package" => P("Artifact package"),
+            "hostconfiguration" or "host-configuration" => P("Host configuration"),
+            "configoverlay" or "config-overlay" => P("Config overlay"),
+            "dashboardwidget" or "dashboard-widget" => P("Dashboard widget"),
+            "widgetruntimedata" or "widget-data" => P("Widget runtime data"),
+            "unknown" => P("Unknown"),
+            _ => kind ?? string.Empty
+        };
+
+    public string FormatUniversalImportStatus(string? status)
+        => NormalizeUniversalToken(status) switch
+        {
+            "applied" => P("Applied"),
+            "stored" => P("Stored"),
+            "imported" => P("Imported"),
+            "replaced" => P("Replaced"),
+            "updated" => P("Updated"),
+            "skipped" => P("Skipped"),
+            "failed" => P("Failed"),
+            _ => status ?? string.Empty
+        };
+
+    public string FormatUniversalImportMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return string.Empty;
+        }
+
+        var moduleMatch = ModuleImportMessagePattern.Match(message);
+        if (moduleMatch.Success)
+        {
+            return string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                P("Module {0} {1}; artifacts imported or replaced: {2}; failed artifacts: {3}."),
+                moduleMatch.Groups[1].Value,
+                moduleMatch.Groups[2].Value,
+                moduleMatch.Groups[3].Value,
+                moduleMatch.Groups[4].Value);
+        }
+
+        var hostMatch = HostConfigurationMessagePattern.Match(message);
+        if (hostMatch.Success)
+        {
+            return string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                P("Host {0} {1}."),
+                hostMatch.Groups[1].Value,
+                hostMatch.Groups[2].Value);
+        }
+
+        var overlayMatch = ConfigOverlayMessagePattern.Match(message);
+        if (overlayMatch.Success)
+        {
+            return string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                P("Overlay {0} {1}; configuration files: {2}."),
+                overlayMatch.Groups[1].Value,
+                overlayMatch.Groups[2].Value,
+                overlayMatch.Groups[3].Value);
+        }
+
+        var widgetMatch = DashboardWidgetMessagePattern.Match(message);
+        if (widgetMatch.Success)
+        {
+            return string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                P("Created: {0}; updated: {1}; skipped: {2}; permission rows: {3}."),
+                widgetMatch.Groups[1].Value,
+                widgetMatch.Groups[2].Value,
+                widgetMatch.Groups[3].Value,
+                widgetMatch.Groups[4].Value);
+        }
+
+        var widgetDataMatch = WidgetRuntimeDataMessagePattern.Match(message);
+        if (widgetDataMatch.Success)
+        {
+            return string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                P("Data documents: {0}; binary rows inserted: {1}; binary rows reused: {2}."),
+                widgetDataMatch.Groups[1].Value,
+                widgetDataMatch.Groups[2].Value,
+                widgetDataMatch.Groups[3].Value);
+        }
+
+        return P(message);
+    }
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -541,6 +649,11 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     private string P(string key)
         => _portalLocalizer[key];
+
+    private static string NormalizeUniversalToken(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().ToLowerInvariant();
 
     private IReadOnlyList<IFormFile> GetSelectedPackageFiles()
         => UniversalUploadInput.PackageFiles
