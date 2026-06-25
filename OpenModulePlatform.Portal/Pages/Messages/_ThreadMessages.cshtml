@@ -1,0 +1,107 @@
+@model OpenModulePlatform.Portal.Pages.Messages.ThreadModel
+@using OpenModulePlatform.Web.Shared.Web
+@{
+    bool IsGroupConversation()
+        => string.Equals(Model.Conversation?.ConversationType, "group", StringComparison.OrdinalIgnoreCase);
+
+    string SenderBubbleStyle(OpenModulePlatform.Web.Shared.Services.MessageRow message)
+    {
+        if (message.IsOwnMessage || !IsGroupConversation())
+        {
+            return string.Empty;
+        }
+
+        var palette = new (string Background, string Border)[]
+        {
+            ("#fef3c7", "#f59e0b"),
+            ("#ede9fe", "#8b5cf6"),
+            ("#dcfce7", "#22c55e"),
+            ("#fee2e2", "#ef4444"),
+            ("#cffafe", "#06b6d4"),
+            ("#fce7f3", "#ec4899")
+        };
+        var color = palette[Math.Abs(message.SenderUserId) % palette.Length];
+        return $"--portal-message-sender-bg: {color.Background}; --portal-message-sender-border: {color.Border};";
+    }
+}
+
+<div data-message-thread-content
+     data-latest-message-id="@Model.LatestMessageId">
+    @if (Model.HasMoreMessages && Model.Rows.Count > 0)
+    {
+        <a class="portal-message-thread__older"
+           asp-page="/Messages/Thread"
+           asp-route-conversationId="@Model.Conversation?.ConversationId"
+           asp-route-beforeMessageId="@Model.Rows[0].MessageId">@L["Load older messages"]</a>
+    }
+
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty-state">@L["No messages"]</div>
+    }
+    else
+    {
+        <div class="portal-message-thread__messages">
+            @foreach (var message in Model.Rows)
+            {
+                var avatarUrl = OmpAvatarHelper.BuildUserAvatarPath(message.SenderUserId, message.SenderProfileImageStorageKey);
+                var avatarInitials = OmpAvatarHelper.GetInitials(message.SenderDisplayName);
+                <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)"
+                         style="@SenderBubbleStyle(message)"
+                         data-message-id="@message.MessageId">
+                    @if (!message.IsOwnMessage)
+                    {
+                        <span class="portal-message-thread__avatar" aria-hidden="true">
+                            @if (!string.IsNullOrWhiteSpace(avatarUrl))
+                            {
+                                <img src="@avatarUrl" alt="" />
+                            }
+                            else
+                            {
+                                @avatarInitials
+                            }
+                        </span>
+                    }
+                    <div class="portal-message-thread__bubble">
+                        <div class="portal-message-thread__meta">
+                            <strong>@message.SenderDisplayName</strong>
+                            <span>@message.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(message.Content))
+                        {
+                            <p>@message.Content</p>
+                        }
+                        @if (message.Attachments.Count > 0)
+                        {
+                            <div class="portal-message-thread__attachments">
+                                @foreach (var attachment in message.Attachments)
+                                {
+                                    <a class="portal-message-thread__attachment" href="@attachment.DownloadUrl" data-enhance-nav="false">
+                                        @if (attachment.IsImage)
+                                        {
+                                            <img src="@attachment.DownloadUrl" alt="@attachment.FileName" loading="lazy" />
+                                        }
+                                        <span>@attachment.FileName</span>
+                                    </a>
+                                }
+                            </div>
+                        }
+                    </div>
+                    @if (message.IsOwnMessage)
+                    {
+                        <span class="portal-message-thread__avatar" aria-hidden="true">
+                            @if (!string.IsNullOrWhiteSpace(avatarUrl))
+                            {
+                                <img src="@avatarUrl" alt="" />
+                            }
+                            else
+                            {
+                                @avatarInitials
+                            }
+                        </span>
+                    }
+                </article>
+            }
+        </div>
+    }
+</div>
