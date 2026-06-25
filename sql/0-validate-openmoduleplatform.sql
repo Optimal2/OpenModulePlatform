@@ -206,10 +206,20 @@ SELECT
     CASE
         WHEN @Missing = 0 AND @InvalidArtifactBindings = 0 THEN N'Core OMP storage is healthy.'
         WHEN @Missing > 0 AND @InvalidArtifactBindings > 0
-            THEN CONCAT(N'Core OMP storage is missing ', @Missing, N' required object(s) and has ', @InvalidArtifactBindings, N' invalid runtime artifact binding(s). Run SQL repair for the omp_core module and remediate the listed bindings.')
+            THEN CONCAT(
+                N'Core OMP storage is incomplete and has invalid artifact bindings. ',
+                N'Missing objects: ', @Missing, N'. ',
+                N'Invalid bindings: ', @InvalidArtifactBindings, N'. ',
+                N'Run SQL repair, then remediate listed bindings.')
         WHEN @Missing > 0
-            THEN CONCAT(N'Core OMP storage is missing ', @Missing, N' required object(s). Run SQL repair for the omp_core module.')
-        ELSE CONCAT(N'Core OMP storage has ', @InvalidArtifactBindings, N' invalid runtime artifact binding(s). Remediate the listed bindings before artifact auto-apply or template changes.')
+            THEN CONCAT(
+                N'Core OMP storage is missing required object(s). ',
+                N'Missing objects: ', @Missing, N'. ',
+                N'Run SQL repair for the omp_core module.')
+        ELSE CONCAT(
+            N'Core OMP storage has invalid runtime artifact binding(s). ',
+            N'Invalid bindings: ', @InvalidArtifactBindings, N'. ',
+            N'Remediate the listed bindings before artifact auto-apply or template changes.')
     END AS Message;
 
 IF @InvalidArtifactBindings > 0

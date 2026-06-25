@@ -229,12 +229,10 @@ public sealed class PushEventDispatcherTests
 
     private static string GetRepositoryPath(params string[] relativePathSegments)
     {
-        foreach (var segment in relativePathSegments)
+        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
+        if (rootedSegment is not null)
         {
-            if (Path.IsPathRooted(segment))
-            {
-                throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
-            }
+            throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
         }
 
         var segments = new string[relativePathSegments.Length + 1];

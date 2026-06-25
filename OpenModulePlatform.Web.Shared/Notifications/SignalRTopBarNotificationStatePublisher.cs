@@ -33,6 +33,8 @@ public sealed class SignalRTopBarNotificationStatePublisher : ITopBarNotificatio
         {
             // Normal request/service shutdown; no notification push is needed.
         }
+        // Notification fan-out is opportunistic. Log SignalR failures, but do not fail the
+        // originating request because clients can still recover through the normal refresh path.
         catch (Exception ex)
         {
             _logger.LogWarning(

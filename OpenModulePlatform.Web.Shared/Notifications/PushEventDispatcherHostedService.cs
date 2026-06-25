@@ -67,6 +67,8 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             {
                 // Normal service shutdown; let the background service exit quietly.
             }
+            // Keep the dispatcher alive after transient SQL/SignalR failures; each failure is
+            // logged here and the polling loop retries according to PushEventDispatcherOptions.
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to lease or dispatch OMP push events.");
@@ -105,6 +107,8 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             // Normal service shutdown; preserve the caller's cancellation flow.
             throw;
         }
+        // Cleanup is best-effort maintenance. A failed cleanup must not stop dispatching fresh
+        // push events, and the next cleanup interval will try again.
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to clean up expired OMP push event outbox rows.");
@@ -156,6 +160,8 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             // Normal service shutdown; preserve the caller's cancellation flow.
             throw;
         }
+        // Dispatch errors must be recorded on the outbox row so retry/dead-letter handling can
+        // make progress without terminating the whole background dispatcher.
         catch (Exception ex)
         {
             _logger.LogWarning(
