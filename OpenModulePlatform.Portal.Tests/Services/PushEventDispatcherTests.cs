@@ -154,7 +154,24 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("connection.on(TOPBAR_NOTIFICATION_PUSH_METHOD, function (envelope)", script);
         Assert.Contains("connection.on(GENERIC_PUSH_EVENT_METHOD, function (envelope)", script);
         Assert.Contains("if (!envelope || typeof envelope !== 'object')", script);
+        Assert.Contains("window.dispatchEvent(new CustomEvent(PUSH_EVENT_RECEIVED_EVENT", script);
+        Assert.True(
+            script.IndexOf("if (rememberTopbarPushEvent(eventKey))", StringComparison.Ordinal)
+            < script.IndexOf("dispatchOmpPushEvent(envelope);", StringComparison.Ordinal));
         Assert.Contains("runTopbarSummaryRefreshSoon(true);", script);
+    }
+
+    [Fact]
+    public void PortalNotificationToastScript_RefreshesFromTopbarPushEvent()
+    {
+        var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "OpenModulePlatform.Portal", "wwwroot", "js", "portal-notification-toasts.js"));
+
+        Assert.Contains("""var pushEventName = "omp:push-event";""", script);
+        Assert.Contains("window.addEventListener(pushEventName, handlePushEvent);", script);
+        Assert.Contains("function isToastPushCategory(category)", script);
+        Assert.Contains("""topbar.notification-state-changed""", script);
+        Assert.Contains("""topbar.message-state-changed""", script);
+        Assert.Contains("scheduleNext(0);", script);
     }
 
     private static LeasedPushEvent CreateLeasedEvent(

@@ -142,6 +142,12 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             }
 
             await _outbox.MarkDispatchedAsync(pushEvent, ct);
+
+            _logger.LogDebug(
+                "Dispatched OMP push event {PushEventId} category {EventCategory} to {GroupCount} SignalR group(s).",
+                pushEvent.PushEventId,
+                pushEvent.EventCategory,
+                groups.Length);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -26,6 +26,7 @@
     var rebalanceFrameRequested = false;
     var FAVORITE_CHANGED_EVENT = 'omp:navigation-favorite-changed';
     var NOTIFICATION_CHANGED_EVENT = 'omp:notification-state-changed';
+    var PUSH_EVENT_RECEIVED_EVENT = 'omp:push-event';
     var SESSION_STATUS_WARNING_EVENT = 'omp:session-status-warning';
     var sessionStatusState = {
         root: null,
@@ -1608,11 +1609,27 @@
             || normalized.indexOf('topbar.message-') === 0;
     }
 
+    function dispatchOmpPushEvent(envelope) {
+        if (typeof window.CustomEvent !== 'function') {
+            return;
+        }
+
+        window.dispatchEvent(new CustomEvent(PUSH_EVENT_RECEIVED_EVENT, {
+            detail: {
+                envelope: envelope || null,
+                category: envelope && envelope.category ? String(envelope.category) : '',
+                payload: envelope && envelope.payload ? envelope.payload : null
+            }
+        }));
+    }
+
     function handleTopbarPushEvent(envelope) {
         var eventKey = getTopbarPushEventKey(envelope);
         if (rememberTopbarPushEvent(eventKey)) {
             return;
         }
+
+        dispatchOmpPushEvent(envelope);
 
         if (!envelope || typeof envelope !== 'object') {
             runTopbarSummaryRefreshSoon(true);
