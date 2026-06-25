@@ -600,6 +600,7 @@
         var safeCount = Math.max(0, Number(count) || 0);
         badge.textContent = notificationBadgeText(safeCount);
         badge.hidden = safeCount === 0;
+        updateNotificationMarkAllState(root, safeCount);
     }
 
     function updateMessageBadge(root, count) {
@@ -629,15 +630,27 @@
 
         var list = root.querySelector('[data-portal-topbar-notifications-list]');
         var empty = root.querySelector('[data-portal-topbar-notifications-empty]');
-        var markAll = root.querySelector('[data-portal-topbar-notification-mark-all-form]');
         var hasRows = !!(list && list.querySelector('[data-portal-topbar-notification-form]'));
 
         if (empty) {
             empty.hidden = hasRows;
         }
 
+        updateNotificationMarkAllState(root);
+    }
+
+    function updateNotificationMarkAllState(root, unreadCount) {
+        if (!root) {
+            return;
+        }
+
+        var markAll = root.querySelector('[data-portal-topbar-notification-mark-all-form]');
         if (markAll) {
-            markAll.hidden = !hasRows;
+            var safeCount = Number(unreadCount);
+            var hasUnread = Number.isFinite(safeCount)
+                ? safeCount > 0
+                : !!root.querySelector('[data-portal-topbar-notification-form].is-unread');
+            markAll.hidden = !hasUnread;
         }
     }
 
