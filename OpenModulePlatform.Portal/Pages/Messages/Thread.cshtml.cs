@@ -13,6 +13,8 @@ namespace OpenModulePlatform.Portal.Pages.Messages;
 
 public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 {
+    private const string MessagesPartialName = "_ThreadMessages";
+
     private readonly MessageService _messages;
 
     public ThreadModel(
@@ -33,6 +35,10 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
     public bool MessagesDisabled { get; private set; }
 
     public bool HasMoreMessages { get; private set; }
+
+    public long LatestMessageId => Rows.Count == 0 ? 0 : Rows[^1].MessageId;
+
+    public bool IsHistoryView { get; private set; }
 
     [BindProperty]
     [StringLength(4000)]
@@ -72,6 +78,28 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         }
 
         return Page();
+    }
+
+    public async Task<IActionResult> OnGetMessages(long conversationId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
+        var loaded = await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: true, ct);
+        if (!loaded)
+        {
+            return Forbid();
+        }
+
+        Response.Headers.CacheControl = "no-store";
+        return Partial(MessagesPartialName, this);
     }
 
     public async Task<IActionResult> OnPostSend(long conversationId, CancellationToken ct)
@@ -140,6 +168,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
             return false;
         }
 
+        IsHistoryView = beforeMessageId.HasValue;
         Rows = await _messages.GetMessagesAsync(userId, conversationId, 50, beforeMessageId, ct);
         HasMoreMessages = Rows.Count == 50;
 
