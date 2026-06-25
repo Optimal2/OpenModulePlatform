@@ -127,7 +127,7 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             if (groups.Length == 0)
             {
                 throw new InvalidOperationException(
-                    $"Push event {pushEvent.PushEventId} has no SignalR target groups.");
+                    $"Push event {pushEvent.PushEventId} has no SignalR target groups for target type '{pushEvent.TargetType}'.");
             }
 
             await _hubContext.Clients
@@ -139,6 +139,8 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
 
             if (IsTopBarSummaryRefreshCategory(pushEvent.EventCategory))
             {
+                // Modern clients accept the optional envelope for deduplication and page-specific
+                // routing; older clients still handle this method when no argument is supplied.
                 await _hubContext.Clients
                     .Groups(groups)
                     .SendCoreAsync(
