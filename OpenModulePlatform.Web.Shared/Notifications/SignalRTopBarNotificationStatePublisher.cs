@@ -31,6 +31,7 @@ public sealed class SignalRTopBarNotificationStatePublisher : ITopBarNotificatio
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            // Normal request/service shutdown; no notification push is needed.
         }
         catch (Exception ex)
         {

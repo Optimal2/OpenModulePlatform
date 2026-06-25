@@ -105,7 +105,7 @@ public sealed class PushEventDispatcherTests
     [InlineData("module.specific", false)]
     public void PortalTopbarScript_RefreshesOnlySummaryCategories(string? category, bool expectedRefresh)
     {
-        var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js"));
+        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js");
         var start = script.IndexOf("function isTopbarSummaryPushCategory(category)", StringComparison.Ordinal);
         var end = script.IndexOf("function handleTopbarPushEvent(envelope)", StringComparison.Ordinal);
         var functionBody = script[start..end];
@@ -147,7 +147,7 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void PortalTopbarScript_HandlesEnvelopeDedupAndOldNoArgumentSignal()
     {
-        var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js"));
+        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js");
 
         Assert.Contains("function handleTopbarPushEvent(envelope)", script);
         Assert.Contains("rememberTopbarPushEvent(eventKey)", script);
@@ -164,7 +164,7 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void PortalNotificationToastScript_RefreshesFromTopbarPushEvent()
     {
-        var script = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "OpenModulePlatform.Portal", "wwwroot", "js", "portal-notification-toasts.js"));
+        var script = ReadRepositoryTextFile("OpenModulePlatform.Portal", "wwwroot", "js", "portal-notification-toasts.js");
 
         Assert.Contains("""var pushEventName = "omp:push-event";""", script);
         Assert.Contains("window.addEventListener(pushEventName, handlePushEvent);", script);
@@ -177,9 +177,8 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void PortalMessageThreadPage_FollowsTopbarUpdateModeAndFiltersPushByConversation()
     {
-        var root = FindRepositoryRoot();
-        var page = File.ReadAllText(Path.Combine(root, "OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml"));
-        var pageModel = File.ReadAllText(Path.Combine(root, "OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml.cs"));
+        var page = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml");
+        var pageModel = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml.cs");
 
         Assert.Contains("data-refresh-url", page);
         Assert.Contains("data-notification-update-mode", page);
@@ -214,7 +213,7 @@ public sealed class PushEventDispatcherTests
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "OpenModulePlatform.slnx")))
+            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
             {
                 return directory.FullName;
             }
@@ -223,6 +222,25 @@ public sealed class PushEventDispatcherTests
         }
 
         throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
+    }
+
+    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
+        => File.ReadAllText(GetRepositoryPath(relativePathSegments));
+
+    private static string GetRepositoryPath(params string[] relativePathSegments)
+    {
+        foreach (var segment in relativePathSegments)
+        {
+            if (Path.IsPathRooted(segment))
+            {
+                throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
+            }
+        }
+
+        var segments = new string[relativePathSegments.Length + 1];
+        segments[0] = FindRepositoryRoot();
+        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
+        return Path.Join(segments);
     }
 
     private static void AssertParameter(SqlCommand cmd, string name, SqlDbType sqlDbType, object expectedValue)
