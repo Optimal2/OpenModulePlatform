@@ -151,6 +151,10 @@ IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.Apps', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.Artifacts', N'U') IS NOT NULL
 BEGIN
+    -- Keep the artifact/app compatibility predicate inline in each branch.
+    -- This validation script must run before repair has guaranteed helper
+    -- functions or views exist, so duplicating the CASE expression keeps the
+    -- health check self-contained during bootstrap and recovery.
     SELECT @InvalidArtifactBindings = COUNT(1)
     FROM
     (

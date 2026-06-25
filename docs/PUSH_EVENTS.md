@@ -132,9 +132,15 @@ The dispatcher leases pending rows atomically from `omp.push_event_outbox`,
 ordered by `push_event_id`, sends a lightweight SignalR envelope with method
 `pushEvent`, and then marks the row `dispatched`. The same authorized hub is
 available at `/push/events` for neutral module-owned consumers and at the
-legacy `/topbar/notifications/updates` path used by the shared topbar.
+legacy `/topbar/notifications/updates` path used by the shared topbar. Both
+paths map to the same `TopBarNotificationHub`; they are aliases for one hub
+implementation, not separate delivery systems.
 Failed dispatches are retried with a scheduled delay until `max_retries` is
 exceeded, after which the row is marked `dead-lettered`.
+
+Rows claimed by a dispatcher are marked `processing` with a short lease. If a
+Portal process exits or crashes before finishing a send, another dispatcher
+cycle can reclaim the row after the lease expires and continue retry handling.
 
 When the dispatcher is enabled, it also performs bounded retention cleanup for
 terminal outbox rows. By default, dispatched rows are retained for 7 days,
@@ -174,4 +180,7 @@ SignalR is registered without a Redis or other backplane dependency. In a
 multi-node IIS farm, enable sticky sessions for push mode or add a SignalR
 backplane in a later deployment design. The SQL outbox keeps events durable, but
 without sticky sessions or a backplane a browser connected to one node may not
-receive a SignalR send performed by another node.
+receive a SignalR send performed by another node immediately. The event is not
+lost; it remains in the outbox until a dispatcher claims it, and delivery to a
+browser connected to another node may be delayed until that node's dispatcher
+polls and sends the wake-up hint.
