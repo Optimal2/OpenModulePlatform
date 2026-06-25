@@ -18,8 +18,16 @@ public sealed class SignalRTopBarNotificationStatePublisher : ITopBarNotificatio
 
     public async Task NotifyChangedAsync(int userId, CancellationToken ct)
     {
-        if (userId <= 0 || ct.IsCancellationRequested)
+        if (ct.IsCancellationRequested)
         {
+            return;
+        }
+
+        if (userId <= 0)
+        {
+            _logger.LogDebug(
+                "Skipped topbar notification state change for invalid OMP user id {UserId}.",
+                userId);
             return;
         }
 
