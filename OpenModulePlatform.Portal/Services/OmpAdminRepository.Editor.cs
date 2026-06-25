@@ -51,9 +51,9 @@ END;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostId", hostId);
-        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
-        cmd.Parameters.AddWithValue("@requestedBy", string.IsNullOrWhiteSpace(requestedBy) ? (object)DBNull.Value : requestedBy.Trim());
+        Add(cmd, "@hostId", hostId);
+        Add(cmd, "@appInstanceId", appInstanceId);
+        Add(cmd, "@requestedBy", string.IsNullOrWhiteSpace(requestedBy) ? null : requestedBy.Trim());
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -340,7 +340,7 @@ FROM omp.AppWorkerDefinitions
 WHERE AppId = @AppId;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppId", appId);
+        Add(cmd, "@AppId", appId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -1113,7 +1113,7 @@ WHERE InstanceId = @InstanceId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@InstanceId", instanceId);
+        Add(cmd, "@InstanceId", instanceId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -1215,7 +1215,7 @@ FROM omp.Hosts
 WHERE HostId = @HostId;";
 
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@HostId", hostId);
+        Add(cmd, "@HostId", hostId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -1375,7 +1375,7 @@ WHERE ModuleId = @ModuleId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleId", moduleId);
+        Add(cmd, "@ModuleId", moduleId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -1474,7 +1474,7 @@ WHERE ModuleInstanceId = @ModuleInstanceId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleInstanceId", moduleInstanceId);
+        Add(cmd, "@ModuleInstanceId", moduleInstanceId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -1580,7 +1580,7 @@ WHERE AppId = @AppId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppId", appId);
+        Add(cmd, "@AppId", appId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -1687,7 +1687,7 @@ WHERE ar.ArtifactId = @ArtifactId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ArtifactId", artifactId);
+        Add(cmd, "@ArtifactId", artifactId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -2720,7 +2720,7 @@ WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ArtifactConfigurationFileId", artifactConfigurationFileId);
+        Add(cmd, "@ArtifactConfigurationFileId", artifactConfigurationFileId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -3196,8 +3196,8 @@ WHERE artifact.ArtifactId = @ArtifactId
         var rowIds = new List<int>();
         await using (var select = new SqlCommand(selectSql, conn))
         {
-            select.Parameters.AddWithValue("@ArtifactId", artifactId);
-            select.Parameters.AddWithValue("@AppId", appId);
+            Add(select, "@ArtifactId", artifactId);
+            Add(select, "@AppId", appId);
             await using var rdr = await select.ExecuteReaderAsync(ct);
             while (await rdr.ReadAsync(ct))
             {
@@ -3213,8 +3213,8 @@ WHERE artifact.ArtifactId = @ArtifactId
         foreach (var rowId in rowIds)
         {
             await using var update = new SqlCommand(updateSql, conn);
-            update.Parameters.AddWithValue("@ArtifactId", artifactId);
-            update.Parameters.AddWithValue("@RowId", rowId);
+            Add(update, "@ArtifactId", artifactId);
+            Add(update, "@RowId", rowId);
             updated += await update.ExecuteNonQueryAsync(ct);
         }
 
@@ -3233,8 +3233,8 @@ WHERE artifact.ArtifactId = @ArtifactId
         var rowIds = new List<Guid>();
         await using (var select = new SqlCommand(selectSql, conn))
         {
-            select.Parameters.AddWithValue("@ArtifactId", artifactId);
-            select.Parameters.AddWithValue("@AppId", appId);
+            Add(select, "@ArtifactId", artifactId);
+            Add(select, "@AppId", appId);
             await using var rdr = await select.ExecuteReaderAsync(ct);
             while (await rdr.ReadAsync(ct))
             {
@@ -3250,8 +3250,8 @@ WHERE artifact.ArtifactId = @ArtifactId
         foreach (var rowId in rowIds)
         {
             await using var update = new SqlCommand(updateSql, conn);
-            update.Parameters.AddWithValue("@ArtifactId", artifactId);
-            update.Parameters.AddWithValue("@RowId", rowId);
+            Add(update, "@ArtifactId", artifactId);
+            Add(update, "@RowId", rowId);
             updated += await update.ExecuteNonQueryAsync(ct);
         }
 
@@ -3361,15 +3361,15 @@ VALUES(@HostId, @ArtifactId, NULL, NULL, 1);";
                 }
 
                 await using var update = new SqlCommand(updateSql, conn);
-                update.Parameters.AddWithValue("@ArtifactId", artifactId);
-                update.Parameters.AddWithValue("@HostId", row.HostId);
+                Add(update, "@ArtifactId", artifactId);
+                Add(update, "@HostId", row.HostId);
                 updated += await update.ExecuteNonQueryAsync(ct);
             }
             else
             {
                 await using var insert = new SqlCommand(insertSql, conn);
-                insert.Parameters.AddWithValue("@ArtifactId", artifactId);
-                insert.Parameters.AddWithValue("@HostId", row.HostId);
+                Add(insert, "@ArtifactId", artifactId);
+                Add(insert, "@HostId", row.HostId);
                 updated += await insert.ExecuteNonQueryAsync(ct);
             }
         }
@@ -3467,7 +3467,7 @@ WHERE AppInstanceId = @AppInstanceId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppInstanceId", appInstanceId);
+        Add(cmd, "@AppInstanceId", appInstanceId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -3703,7 +3703,7 @@ WHERE mi.ModuleInstanceId = @ModuleInstanceId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@ModuleInstanceId", moduleInstanceId);
+        Add(cmd, "@ModuleInstanceId", moduleInstanceId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -3733,7 +3733,7 @@ WHERE HostId = @HostId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@HostId", hostId);
+        Add(cmd, "@HostId", hostId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))
@@ -3763,7 +3763,7 @@ WHERE AppId = @AppId;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@AppId", appId);
+        Add(cmd, "@AppId", appId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
 
         if (!await rdr.ReadAsync(ct))

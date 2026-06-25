@@ -20,6 +20,7 @@
     var TOPBAR_NOTIFICATION_PUSH_METHOD = 'notificationStateChanged';
     var GENERIC_PUSH_EVENT_METHOD = 'pushEvent';
     var SIGNALR_CLIENT_SCRIPT_URL = '/_content/OpenModulePlatform.Web.Shared/js/signalr.min.js';
+    var EDITABLE_SHORTCUT_TARGET_SELECTOR = 'input, textarea, select, button, a, [contenteditable], .toastui-editor-defaultUI, .toastui-editor, [role="dialog"], [aria-modal="true"]';
     var initializedTopbars = new Set();
     var scheduledTopbars = new Set();
     var globalHandlersRegistered = false;
@@ -390,16 +391,16 @@
 
         var button = document.createElement('button');
         button.type = 'submit';
-        button.className = 'portal-topbar__favorite-toggle is-favorite';
+        button.className = 'portal-topbar__favorite-toggle';
         button.setAttribute('data-portal-topbar-favorite-button', '');
 
         var icon = document.createElement('span');
         icon.setAttribute('aria-hidden', 'true');
-        icon.textContent = '★';
+        icon.textContent = payload.isFavorite ? '★' : '☆';
         button.appendChild(icon);
         form.appendChild(button);
 
-        setFavoriteButton(button, true, root);
+        setFavoriteButton(button, !!payload.isFavorite, root);
         initFavoriteForm(form);
         return form;
     }
@@ -663,7 +664,13 @@
         form.classList.add('is-read');
         var button = form.querySelector('.portal-topbar__notification-row');
         if (button) {
-            button.classList.add('portal-topbar__notification-row--read');
+            setNotificationRowReadClass(button, true);
+        }
+    }
+
+    function setNotificationRowReadClass(button, isRead) {
+        if (button) {
+            button.classList.toggle('portal-topbar__notification-row--read', !!isRead);
         }
     }
 
@@ -729,9 +736,7 @@
         button.type = 'submit';
         button.className = 'portal-topbar__notification-row portal-topbar__notification-row--' + notificationLevelClass(item.level);
         button.dataset.destinationUrl = item.destinationUrl || '';
-        if (!item.isUnread) {
-            button.classList.add('portal-topbar__notification-row--read');
-        }
+        setNotificationRowReadClass(button, !item.isUnread);
 
         var icon = document.createElement('span');
         icon.className = 'portal-topbar__notification-caller-icon';
@@ -793,6 +798,7 @@
 
             var root = form.closest('[data-portal-topbar-root]');
             var button = form.querySelector('button[type="submit"]');
+            var didNavigate = false;
             if (button) {
                 button.disabled = true;
             }
@@ -824,6 +830,7 @@
                     emitNotificationChanged(form.dataset.notificationId, payload.unreadCount, false);
 
                     if (payload.destinationUrl) {
+                        didNavigate = true;
                         window.location.href = payload.destinationUrl;
                     }
                 })
@@ -834,7 +841,7 @@
                 })
                 .finally(function () {
                     form.dataset.portalTopbarNotificationSubmitting = 'false';
-                    if (button) {
+                    if (button && !didNavigate) {
                         button.disabled = false;
                     }
                 });
@@ -1000,7 +1007,9 @@
                 }
 
                 updateNotificationEmptyState(root);
-                setNotificationLazyState(root, false, list.dataset.notificationEnd === 'true' && !!list.querySelector('[data-portal-topbar-notification-form]'));
+                var shouldShowEndState = list.dataset.notificationEnd === 'true'
+                    && !!list.querySelector('[data-portal-topbar-notification-form]');
+                setNotificationLazyState(root, false, shouldShowEndState);
             })
             .catch(function (error) {
                 if (window.console && typeof window.console.warn === 'function') {
@@ -1231,7 +1240,7 @@
             return true;
         }
 
-        return !!element.closest('input, textarea, select, button, a, [contenteditable], .toastui-editor-defaultUI, .toastui-editor, [role="dialog"], [aria-modal="true"]');
+        return !!element.closest(EDITABLE_SHORTCUT_TARGET_SELECTOR);
     }
 
     function normalizeShortcut(value) {
