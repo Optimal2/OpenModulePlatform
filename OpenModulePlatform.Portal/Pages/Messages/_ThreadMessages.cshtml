@@ -20,7 +20,8 @@
             ("#cffafe", "#06b6d4"),
             ("#fce7f3", "#ec4899")
         };
-        var color = palette[Math.Abs(message.SenderUserId) % palette.Length];
+        var senderColorIndex = (int)(Math.Abs((long)message.SenderUserId) % palette.Length);
+        var color = palette[senderColorIndex];
         return $"--portal-message-sender-bg: {color.Background}; --portal-message-sender-border: {color.Border};";
     }
 }
@@ -65,7 +66,7 @@
                     <div class="portal-message-thread__bubble">
                         <div class="portal-message-thread__meta">
                             <strong>@message.SenderDisplayName</strong>
-                            <span>@message.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
+                            <span>@message.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)</span>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(message.Content))
                         {
