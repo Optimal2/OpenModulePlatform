@@ -1,30 +1,6 @@
 @page "/messages/{conversationId:long}"
 @model OpenModulePlatform.Portal.Pages.Messages.ThreadModel
-@using OpenModulePlatform.Web.Shared.Web
 @{
-    bool IsGroupConversation()
-        => string.Equals(Model.Conversation?.ConversationType, "group", StringComparison.OrdinalIgnoreCase);
-
-    string SenderBubbleStyle(OpenModulePlatform.Web.Shared.Services.MessageRow message)
-    {
-        if (message.IsOwnMessage || !IsGroupConversation())
-        {
-            return string.Empty;
-        }
-
-        var palette = new (string Background, string Border)[]
-        {
-            ("#fef3c7", "#f59e0b"),
-            ("#ede9fe", "#8b5cf6"),
-            ("#dcfce7", "#22c55e"),
-            ("#fee2e2", "#ef4444"),
-            ("#cffafe", "#06b6d4"),
-            ("#fce7f3", "#ec4899")
-        };
-        var color = palette[Math.Abs(message.SenderUserId) % palette.Length];
-        return $"--portal-message-sender-bg: {color.Background}; --portal-message-sender-border: {color.Border};";
-    }
-
     var restoreScrollTop = ViewContext.HttpContext.Request.Query["restoreScrollTop"].ToString();
 }
 
@@ -70,84 +46,11 @@ else
         <section class="card portal-message-thread">
             <div class="portal-message-thread__scroll"
                  data-message-thread-scroll
-                 data-restore-scroll-top="@restoreScrollTop">
+                 data-restore-scroll-top="@restoreScrollTop"
+                 data-live-disabled="@(Model.IsHistoryView ? "true" : "false")">
                 <div asp-validation-summary="All" class="portal-message-thread__error-banner"></div>
-
-                @if (Model.HasMoreMessages && Model.Rows.Count > 0)
-                {
-                    <a class="portal-message-thread__older"
-                       asp-page="/Messages/Thread"
-                       asp-route-conversationId="@Model.Conversation.ConversationId"
-                       asp-route-beforeMessageId="@Model.Rows[0].MessageId">@L["Load older messages"]</a>
-                }
-
-                @if (Model.Rows.Count == 0)
-                {
-                    <div class="empty-state">@L["No messages"]</div>
-                }
-                else
-                {
-                    <div class="portal-message-thread__messages">
-                        @foreach (var message in Model.Rows)
-                        {
-                            var avatarUrl = OmpAvatarHelper.BuildUserAvatarPath(message.SenderUserId, message.SenderProfileImageStorageKey);
-                            var avatarInitials = OmpAvatarHelper.GetInitials(message.SenderDisplayName);
-                            <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)" style="@SenderBubbleStyle(message)">
-                                @if (!message.IsOwnMessage)
-                                {
-                                    <span class="portal-message-thread__avatar" aria-hidden="true">
-                                        @if (!string.IsNullOrWhiteSpace(avatarUrl))
-                                        {
-                                            <img src="@avatarUrl" alt="" />
-                                        }
-                                        else
-                                        {
-                                            @avatarInitials
-                                        }
-                                    </span>
-                                }
-                                <div class="portal-message-thread__bubble">
-                                    <div class="portal-message-thread__meta">
-                                        <strong>@message.SenderDisplayName</strong>
-                                        <span>@message.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
-                                    </div>
-                                    @if (!string.IsNullOrWhiteSpace(message.Content))
-                                    {
-                                        <p>@message.Content</p>
-                                    }
-                                    @if (message.Attachments.Count > 0)
-                                    {
-                                        <div class="portal-message-thread__attachments">
-                                            @foreach (var attachment in message.Attachments)
-                                            {
-                                                <a class="portal-message-thread__attachment" href="@attachment.DownloadUrl" data-enhance-nav="false">
-                                                    @if (attachment.IsImage)
-                                                    {
-                                                        <img src="@attachment.DownloadUrl" alt="@attachment.FileName" loading="lazy" />
-                                                    }
-                                                    <span>@attachment.FileName</span>
-                                                </a>
-                                            }
-                                        </div>
-                                    }
-                                </div>
-                                @if (message.IsOwnMessage)
-                                {
-                                    <span class="portal-message-thread__avatar" aria-hidden="true">
-                                        @if (!string.IsNullOrWhiteSpace(avatarUrl))
-                                        {
-                                            <img src="@avatarUrl" alt="" />
-                                        }
-                                        else
-                                        {
-                                            @avatarInitials
-                                        }
-                                    </span>
-                                }
-                            </article>
-                        }
-                    </div>
-                }
+                <partial name="_ThreadMessages" model="Model" />
+                <span class="visually-hidden" role="status" aria-live="polite" data-message-thread-status></span>
             </div>
 
             <form method="post"
@@ -156,6 +59,9 @@ else
                   asp-route-conversationId="@Model.Conversation.ConversationId"
                   class="portal-message-thread__composer"
                   data-message-thread-composer
+                  data-conversation-id="@Model.Conversation.ConversationId"
+                  data-refresh-url="@Url.Page("/Messages/Thread", "Messages", new { conversationId = Model.Conversation.ConversationId })"
+                  data-updated-text="@L["Conversation updated"]"
                   data-enhance="false">
                 <input asp-for="RestoreScrollTop" type="hidden" data-message-thread-scroll-input />
                 <div class="portal-message-thread__composer-row">
@@ -193,11 +99,22 @@ else
 @section Scripts {
     <script>
         (() => {
+            const UPDATE_MANUAL_MODE = 'manual';
+            const UPDATE_POLL_MODE = 'poll';
+            const UPDATE_PUSH_MODE = 'push';
+            const DEFAULT_POLL_INTERVAL_SECONDS = 60;
+            const MIN_POLL_INTERVAL_SECONDS = 10;
+            const MAX_POLL_INTERVAL_SECONDS = 3600;
+            const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';
+            const PUSH_EVENT_NAME = 'omp:push-event';
+            const REFRESH_DEBOUNCE_MS = 250;
+
             const scrollContainer = document.querySelector('[data-message-thread-scroll]');
             const form = document.querySelector('[data-message-thread-composer]');
             const scrollInput = document.querySelector('[data-message-thread-scroll-input]');
+            const status = document.querySelector('[data-message-thread-status]');
 
-            if (!scrollContainer) {
+            if (!scrollContainer || !form) {
                 return;
             }
 
@@ -216,6 +133,223 @@ else
                         : Math.round(scrollContainer.scrollTop).toString();
                 }
             });
+
+            if (scrollContainer.dataset.liveDisabled === 'true') {
+                return;
+            }
+
+            const conversationId = Number.parseInt(form.dataset.conversationId || '', 10);
+            const refreshUrl = form.dataset.refreshUrl || '';
+            if (!Number.isFinite(conversationId) || conversationId <= 0 || refreshUrl.length === 0) {
+                return;
+            }
+
+            let refreshTimer = 0;
+            let pollTimer = 0;
+            let refreshRunning = false;
+            let pendingRefresh = false;
+
+            const parseIntervalSeconds = (value, fallback) => {
+                const parsed = Number.parseInt(value || '', 10);
+                if (!Number.isFinite(parsed)) {
+                    return fallback;
+                }
+
+                return Math.min(MAX_POLL_INTERVAL_SECONDS, Math.max(MIN_POLL_INTERVAL_SECONDS, parsed));
+            };
+
+            const getTopbarConfig = () => {
+                const topbar = document.querySelector('[data-portal-topbar-root]');
+                const rawMode = (topbar?.getAttribute('data-notification-update-mode') || UPDATE_POLL_MODE)
+                    .trim()
+                    .toLowerCase();
+                const mode = rawMode === UPDATE_MANUAL_MODE || rawMode === UPDATE_PUSH_MODE
+                    ? rawMode
+                    : UPDATE_POLL_MODE;
+                const visibleInterval = parseIntervalSeconds(
+                    topbar?.getAttribute('data-notification-poll-interval'),
+                    DEFAULT_POLL_INTERVAL_SECONDS) * 1000;
+                const hiddenInterval = parseIntervalSeconds(
+                    topbar?.getAttribute('data-topbar-polling-hidden-interval'),
+                    visibleInterval / 1000) * 1000;
+
+                return {
+                    mode,
+                    interval: document.visibilityState === 'hidden' ? hiddenInterval : visibleInterval
+                };
+            };
+
+            const getContentRoot = () => scrollContainer.querySelector('[data-message-thread-content]');
+
+            const getLatestMessageId = () => {
+                const latest = Number.parseInt(getContentRoot()?.dataset.latestMessageId || '0', 10);
+                return Number.isFinite(latest) ? latest : 0;
+            };
+
+            const isNearBottom = () => {
+                const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.clientHeight - scrollContainer.scrollTop;
+                return distanceFromBottom <= 80;
+            };
+
+            const announceUpdated = () => {
+                if (!status) {
+                    return;
+                }
+
+                status.textContent = '';
+                window.setTimeout(() => {
+                    status.textContent = form.dataset.updatedText || 'Conversation updated';
+                }, 0);
+            };
+
+            const replaceMessages = (html) => {
+                const currentRoot = getContentRoot();
+                if (!currentRoot) {
+                    return false;
+                }
+
+                const template = document.createElement('template');
+                template.innerHTML = (html || '').trim();
+                const nextRoot = template.content.querySelector('[data-message-thread-content]');
+                if (!nextRoot) {
+                    return false;
+                }
+
+                const previousLatestMessageId = getLatestMessageId();
+                const shouldStickToBottom = isNearBottom();
+                const previousScrollTop = scrollContainer.scrollTop;
+                currentRoot.replaceWith(nextRoot);
+
+                if (shouldStickToBottom) {
+                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                } else {
+                    scrollContainer.scrollTop = previousScrollTop;
+                }
+
+                if (getLatestMessageId() > previousLatestMessageId) {
+                    announceUpdated();
+                }
+
+                return true;
+            };
+
+            const refreshMessages = async () => {
+                if (refreshRunning) {
+                    pendingRefresh = true;
+                    return;
+                }
+
+                refreshRunning = true;
+                try {
+                    const response = await fetch(refreshUrl, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'Accept': 'text/html',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (response.status === 401 || response.status === 403) {
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error('Message thread refresh failed with status ' + response.status + '.');
+                    }
+
+                    replaceMessages(await response.text());
+                } catch (error) {
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn('OMP message thread refresh failed.', error);
+                    }
+                } finally {
+                    refreshRunning = false;
+                    if (pendingRefresh) {
+                        pendingRefresh = false;
+                        scheduleRefresh(REFRESH_DEBOUNCE_MS);
+                    }
+                }
+            };
+
+            function scheduleRefresh(delay) {
+                if (refreshTimer) {
+                    window.clearTimeout(refreshTimer);
+                }
+
+                refreshTimer = window.setTimeout(() => {
+                    refreshTimer = 0;
+                    refreshMessages();
+                }, Math.max(0, delay));
+            }
+
+            const schedulePoll = () => {
+                if (pollTimer) {
+                    window.clearTimeout(pollTimer);
+                    pollTimer = 0;
+                }
+
+                const config = getTopbarConfig();
+                if (config.mode !== UPDATE_POLL_MODE) {
+                    return;
+                }
+
+                pollTimer = window.setTimeout(async () => {
+                    pollTimer = 0;
+                    await refreshMessages();
+                    schedulePoll();
+                }, config.interval);
+            };
+
+            const getPayloadConversationId = (payload) => {
+                if (!payload || typeof payload !== 'object') {
+                    return null;
+                }
+
+                const value = payload.conversationId;
+                const parsed = typeof value === 'number'
+                    ? value
+                    : Number.parseInt(value || '', 10);
+
+                return Number.isFinite(parsed) ? parsed : null;
+            };
+
+            const handlePushEvent = (event) => {
+                const detail = event?.detail || {};
+                const category = (detail.category || detail.envelope?.category || '').toString().toLowerCase();
+                if (category !== MESSAGE_PUSH_CATEGORY) {
+                    return;
+                }
+
+                const payload = detail.payload || detail.envelope?.payload || null;
+                if (getPayloadConversationId(payload) !== conversationId) {
+                    return;
+                }
+
+                const config = getTopbarConfig();
+                if (config.mode !== UPDATE_PUSH_MODE) {
+                    return;
+                }
+
+                scheduleRefresh(REFRESH_DEBOUNCE_MS);
+            };
+
+            const handleVisibilityOrFocus = () => {
+                const config = getTopbarConfig();
+                if (config.mode === UPDATE_POLL_MODE) {
+                    schedulePoll();
+                    scheduleRefresh(REFRESH_DEBOUNCE_MS);
+                }
+            };
+
+            window.addEventListener(PUSH_EVENT_NAME, handlePushEvent);
+            window.addEventListener('focus', handleVisibilityOrFocus);
+            document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+            if (getTopbarConfig().mode === UPDATE_POLL_MODE) {
+                schedulePoll();
+            }
         })();
     </script>
 }

@@ -174,6 +174,25 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("scheduleNext(0);", script);
     }
 
+    [Fact]
+    public void PortalMessageThreadPage_FollowsTopbarUpdateModeAndFiltersPushByConversation()
+    {
+        var root = FindRepositoryRoot();
+        var page = File.ReadAllText(Path.Combine(root, "OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml"));
+        var pageModel = File.ReadAllText(Path.Combine(root, "OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml.cs"));
+
+        Assert.Contains("data-refresh-url", page);
+        Assert.Contains("data-notification-update-mode", page);
+        Assert.Contains("data-notification-poll-interval", page);
+        Assert.Contains("const PUSH_EVENT_NAME = 'omp:push-event';", page);
+        Assert.Contains("const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';", page);
+        Assert.Contains("getPayloadConversationId(payload) !== conversationId", page);
+        Assert.Contains("config.mode !== UPDATE_PUSH_MODE", page);
+        Assert.Contains("config.mode !== UPDATE_POLL_MODE", page);
+        Assert.Contains("public async Task<IActionResult> OnGetMessages", pageModel);
+        Assert.Contains("return Partial(MessagesPartialName, this);", pageModel);
+    }
+
     private static LeasedPushEvent CreateLeasedEvent(
         string targetType = "user",
         string targetJson = """{"kind":"user","ids":["42"]}""",
