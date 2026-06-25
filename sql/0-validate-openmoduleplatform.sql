@@ -150,11 +150,11 @@ IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.InstanceTemplateAppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.Apps', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.Artifacts', N'U') IS NOT NULL
+   AND OBJECT_ID(N'omp.IsArtifactPackageCompatibleWithAppType', N'FN') IS NOT NULL
 BEGIN
-    -- Keep the artifact/app compatibility predicate inline in each branch.
-    -- This validation script must run before repair has guaranteed helper
-    -- functions or views exist, so duplicating the CASE expression keeps the
-    -- health check self-contained during bootstrap and recovery.
+    -- The programmable object check above treats the compatibility function as
+    -- part of the core schema, and this validation uses the same rule source as
+    -- the runtime triggers and repair logic when the function is present.
     SELECT @InvalidArtifactBindings = COUNT(1)
     FROM
     (
@@ -168,27 +168,7 @@ BEGIN
           AND
           (
               artifact.AppId <> appInstance.AppId
-              OR
-              (
-                  CASE
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
-                          THEN 1
-                      ELSE 0
-                  END
-              ) = 0
+              OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
           )
         UNION ALL
         SELECT 1 AS InvalidBinding
@@ -203,27 +183,7 @@ BEGIN
           AND
           (
               artifact.AppId <> appInstance.AppId
-              OR
-              (
-                  CASE
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
-                          THEN 1
-                      ELSE 0
-                  END
-              ) = 0
+              OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
           )
         UNION ALL
         SELECT 1 AS InvalidBinding
@@ -236,27 +196,7 @@ BEGIN
           AND
           (
               artifact.AppId <> templateAppInstance.AppId
-              OR
-              (
-                  CASE
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
-                          THEN 1
-                      ELSE 0
-                  END
-              ) = 0
+              OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
           )
     ) invalidBindings;
 END;
@@ -301,27 +241,7 @@ BEGIN
           AND
           (
               artifact.AppId <> appInstance.AppId
-              OR
-              (
-                  CASE
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
-                          THEN 1
-                      ELSE 0
-                  END
-              ) = 0
+              OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
           )
         UNION ALL
         SELECT
@@ -350,27 +270,7 @@ BEGIN
           AND
           (
               artifact.AppId <> appInstance.AppId
-              OR
-              (
-                  CASE
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
-                          THEN 1
-                      ELSE 0
-                  END
-              ) = 0
+              OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
           )
         UNION ALL
         SELECT
@@ -397,27 +297,7 @@ BEGIN
           AND
           (
               artifact.AppId <> templateAppInstance.AppId
-              OR
-              (
-                  CASE
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WEB-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') IN (N'PORTAL', N'WEBAPP', N'WEB')
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'SERVICE-APP'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'SERVICEAPP'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKER'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'HOST-AGENT'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'HOSTAGENT'
-                          THEN 1
-                      WHEN UPPER(LTRIM(RTRIM(ISNULL(artifact.PackageType, N'')))) = N'WORKER-HOST'
-                           AND REPLACE(UPPER(LTRIM(RTRIM(ISNULL(app.AppType, N'')))), N'-', N'') = N'WORKERHOST'
-                          THEN 1
-                      ELSE 0
-                  END
-              ) = 0
+              OR omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 0
           )
     ) invalidBindings
     ORDER BY BindingTable, AppKey, RowId;

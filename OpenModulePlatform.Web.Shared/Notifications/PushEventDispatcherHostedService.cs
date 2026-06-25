@@ -65,6 +65,7 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
+                // Normal service shutdown; let the background service exit quietly.
             }
             catch (Exception ex)
             {
@@ -101,6 +102,7 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            // Normal service shutdown; preserve the caller's cancellation flow.
             throw;
         }
         catch (Exception ex)
@@ -151,6 +153,7 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            // Normal service shutdown; preserve the caller's cancellation flow.
             throw;
         }
         catch (Exception ex)
