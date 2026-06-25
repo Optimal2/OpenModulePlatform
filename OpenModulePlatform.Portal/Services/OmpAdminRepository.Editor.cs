@@ -3154,11 +3154,11 @@ WHERE WorkerInstanceId = @RowId;",
         CancellationToken ct)
     {
         const string sql = @"
-SELECT ArtifactId,
-       AppId,
+SELECT artifact.ArtifactId,
+       artifact.AppId,
        app.AppKey,
-       Version,
-       PackageType,
+       artifact.Version,
+       artifact.PackageType,
        app.AppType
 FROM omp.Artifacts artifact
 INNER JOIN omp.Apps app
