@@ -422,7 +422,7 @@
                                   class="portal-topbar__notifications-mark-all-form"
                                   data-portal-topbar-notification-mark-all-form
                                   data-enhance="false"
-                                  hidden="@(Model.Notifications.Count == 0)">
+                                  hidden="@(Model.UnreadNotificationCount == 0)">
                                 <button type="submit" class="portal-topbar__tray-action portal-topbar__notifications-mark-all">
                                     @L[Model.MarkAllNotificationsReadTextKey]
                                 </button>
