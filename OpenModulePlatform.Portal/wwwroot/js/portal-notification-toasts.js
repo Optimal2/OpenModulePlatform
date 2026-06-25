@@ -10,6 +10,7 @@
     var defaultHiddenInterval = 180000;
     var defaultToastDuration = 7000;
     var dismissTransitionDuration = 180;
+    var pushEventName = "omp:push-event";
 
     var state = {
         root: null,
@@ -235,6 +236,28 @@
         }
     }
 
+    function isToastPushCategory(category) {
+        if (!category) {
+            return true;
+        }
+
+        var normalized = String(category).toLowerCase();
+        return normalized === "notification"
+            || normalized === "message"
+            || normalized === "topbar.notification-state-changed"
+            || normalized === "topbar.message-state-changed"
+            || normalized.indexOf("topbar.notification-") === 0
+            || normalized.indexOf("topbar.message-") === 0;
+    }
+
+    function handlePushEvent(event) {
+        var detail = event && event.detail ? event.detail : {};
+        var category = detail.category || (detail.envelope && detail.envelope.category) || "";
+        if (isToastPushCategory(category)) {
+            scheduleNext(0);
+        }
+    }
+
     function showToast(toast, config) {
         var element = document.createElement("article");
         element.className = "portal-notification-toast"
@@ -438,6 +461,8 @@
                 scheduleNext(0);
             }
         });
+
+        window.addEventListener(pushEventName, handlePushEvent);
 
         scheduleNext(0);
     }
