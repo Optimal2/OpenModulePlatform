@@ -2,6 +2,7 @@ SET NOCOUNT ON;
 
 DECLARE @Missing int = 0;
 DECLARE @InvalidArtifactBindings int = 0;
+DECLARE @MissingProgrammableObjects nvarchar(max) = N'';
 
 IF SCHEMA_ID(N'omp') IS NULL
 BEGIN
@@ -145,6 +146,24 @@ SELECT @Missing = @Missing + COUNT(1)
 FROM RequiredProgrammableObjects required
 WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL;
 
+;WITH RequiredProgrammableObjects(ObjectType, ObjectName) AS
+(
+    SELECT v.ObjectType, v.ObjectName
+    FROM (VALUES
+        (N'FN', N'omp.IsArtifactPackageCompatibleWithAppType'),
+        (N'TR', N'omp.TR_AppInstances_ValidateArtifactCompatibility'),
+        (N'TR', N'omp.TR_WorkerInstances_ValidateArtifactCompatibility'),
+        (N'TR', N'omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility')
+    ) AS v(ObjectType, ObjectName)
+)
+SELECT @MissingProgrammableObjects =
+    CASE
+        WHEN @MissingProgrammableObjects = N'' THEN required.ObjectName
+        ELSE CONCAT(@MissingProgrammableObjects, N', ', required.ObjectName)
+    END
+FROM RequiredProgrammableObjects required
+WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL;
+
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.InstanceTemplateAppInstances', N'U') IS NOT NULL
@@ -209,18 +228,24 @@ SELECT
             THEN CONCAT(
                 N'Core OMP storage is incomplete and has invalid artifact bindings. ',
                 N'Missing objects: ', @Missing, N'. ',
+                NULLIF(CONCAT(N'Missing programmable objects: ', @MissingProgrammableObjects, N'. '), N'Missing programmable objects: . '),
                 N'Invalid bindings: ', @InvalidArtifactBindings, N'. ',
                 N'Run SQL repair, then remediate listed bindings.')
         WHEN @Missing > 0
             THEN CONCAT(
                 N'Core OMP storage is missing required object(s). ',
                 N'Missing objects: ', @Missing, N'. ',
+                NULLIF(CONCAT(N'Missing programmable objects: ', @MissingProgrammableObjects, N'. '), N'Missing programmable objects: . '),
                 N'Run SQL repair for the omp_core module.')
         ELSE CONCAT(
             N'Core OMP storage has invalid runtime artifact binding(s). ',
             N'Invalid bindings: ', @InvalidArtifactBindings, N'. ',
             N'Remediate the listed bindings before artifact auto-apply or template changes.')
     END AS Message;
+
+-- Do not THROW or RAISERROR from module validation SQL. The installer/import pipeline expects a
+-- read-only result row with IsHealthy and Message so it can show diagnostics without aborting the
+-- module-definition reader itself.
 
 IF @InvalidArtifactBindings > 0
 BEGIN

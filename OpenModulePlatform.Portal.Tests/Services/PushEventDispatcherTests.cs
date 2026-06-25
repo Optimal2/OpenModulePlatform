@@ -6,6 +6,9 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 
 public sealed class PushEventDispatcherTests
 {
+    private const string CommandOnlyConnectionString =
+        "Server=(local);Database=OpenModulePlatform;Integrated Security=true;Encrypt=false";
+
     [Fact]
     public void CreateAcquireLeaseCommand_UsesAtomicOrderedLease()
     {
@@ -14,7 +17,7 @@ public sealed class PushEventDispatcherTests
             BatchSize = 25,
             LeaseSeconds = 45
         };
-        using var conn = new SqlConnection("Server=(local);Database=OpenModulePlatform;Integrated Security=true;TrustServerCertificate=true");
+        using var conn = CreateCommandOnlyConnection();
 
         using var cmd = SqlPushEventOutboxStore.CreateAcquireLeaseCommand(
             conn,
@@ -36,7 +39,7 @@ public sealed class PushEventDispatcherTests
     public void CreateMarkFailedCommand_RetriesThenDeadLetters()
     {
         var pushEvent = CreateLeasedEvent(targetJson: """{"kind":"user","ids":["42"]}""");
-        using var conn = new SqlConnection("Server=(local);Database=OpenModulePlatform;Integrated Security=true;TrustServerCertificate=true");
+        using var conn = CreateCommandOnlyConnection();
 
         using var cmd = SqlPushEventOutboxStore.CreateMarkFailedCommand(
             conn,
@@ -60,7 +63,7 @@ public sealed class PushEventDispatcherTests
             DispatchedRetentionDays = 3,
             FailedRetentionDays = 14
         };
-        using var conn = new SqlConnection("Server=(local);Database=OpenModulePlatform;Integrated Security=true;TrustServerCertificate=true");
+        using var conn = CreateCommandOnlyConnection();
 
         using var cmd = SqlPushEventOutboxStore.CreateCleanupExpiredCommand(conn, options);
 
@@ -226,6 +229,9 @@ public sealed class PushEventDispatcherTests
 
     private static string ReadRepositoryTextFile(params string[] relativePathSegments)
         => File.ReadAllText(GetRepositoryPath(relativePathSegments));
+
+    private static SqlConnection CreateCommandOnlyConnection()
+        => new(CommandOnlyConnectionString);
 
     private static string GetRepositoryPath(params string[] relativePathSegments)
     {
