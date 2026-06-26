@@ -8,6 +8,8 @@ public static class OmpAuthDefaults
 {
     public const string AuthenticationScheme = "OmpAuth";
     public const string OidcAuthenticationScheme = "OmpOidc";
+    public const string AdProviderDisplayName = "AD";
+    public const string AdfsProviderDisplayName = "ADFS";
     public const string OidcProviderDisplayName = "OIDC";
     public const string OidcDefaultDisplayName = "OpenID Connect";
     public const string OidcLoginPath = "/oidc";

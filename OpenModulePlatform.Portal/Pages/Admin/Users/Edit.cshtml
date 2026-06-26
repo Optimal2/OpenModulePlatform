@@ -291,6 +291,144 @@
                 }
             </div>
         }
+
+        <div class="top-gap">
+            <h4>@L["Repair duplicate ADFS user"]</h4>
+            <p class="muted">@L["Preview a duplicate ADFS-created user repair before making changes. The repair moves enabled ADFS auth links to the target user, disables this duplicate user, and does not move user-owned content."]</p>
+
+            <form method="post" asp-page-handler="PreviewMergeAdfsDuplicate" class="form-grid">
+                <div class="field-grid field-grid--2">
+                    <div class="form-field">
+                        <label asp-for="MergeAdfsDuplicate.TargetUserId">@L["Target user ID to keep"]</label>
+                        <input asp-for="MergeAdfsDuplicate.TargetUserId" type="number" min="1" autocomplete="off" />
+                        <span asp-validation-for="MergeAdfsDuplicate.TargetUserId" class="field-validation-error"></span>
+                        <small>@L["This page's user is treated as the duplicate user that will be disabled if the repair succeeds."]</small>
+                    </div>
+                </div>
+
+                <div class="toolbar">
+                    <button type="submit">@L["Preview ADFS repair"]</button>
+                </div>
+            </form>
+
+            @if (Model.MergeAdfsDuplicatePreview is { } preview)
+            {
+                <div class="status-banner top-gap">
+                    <strong>@Model.MergeAdfsDuplicateStatusText(preview.Status)</strong>
+                    <div class="muted">
+                        @string.Format(
+                            System.Globalization.CultureInfo.CurrentCulture,
+                            L["{0} ADFS auth link(s) can move. {1} auth link(s) will remain on the duplicate user."].Value,
+                            preview.AdfsLinksToMove.Count,
+                            preview.SkippedAuthLinkCount)
+                    </div>
+                </div>
+
+                <div class="field-grid field-grid--2 top-gap">
+                    <div class="form-field">
+                        <label>@L["Target user"]</label>
+                        <input value="@Model.MergeUserSummaryText(preview.TargetUser)" readonly />
+                    </div>
+                    <div class="form-field">
+                        <label>@L["Duplicate user"]</label>
+                        <input value="@Model.MergeUserSummaryText(preview.DuplicateUser)" readonly />
+                    </div>
+                </div>
+
+                <h5 class="top-gap">@L["ADFS auth links to move"]</h5>
+                @if (preview.AdfsLinksToMove.Count == 0)
+                {
+                    <div class="empty-state top-gap">@L["No enabled ADFS auth links can be moved."]</div>
+                }
+                else
+                {
+                    <table class="grid compact-grid">
+                        <thead>
+                            <tr>
+                                <th>@L["Provider"]</th>
+                                <th>@L["Provider user key"]</th>
+                                <th>@L["Status"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var link in preview.AdfsLinksToMove)
+                            {
+                                <tr>
+                                    <td>@link.ProviderDisplayName</td>
+                                    <td>@link.ProviderUserKey</td>
+                                    <td><span class="pill">@link.AuthStatus</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                @if (preview.DuplicateNonAdfsLinks.Count > 0)
+                {
+                    <h5 class="top-gap">@L["Enabled non-ADFS links blocking repair"]</h5>
+                    <p class="muted">@L["These enabled links would remain on the duplicate account. The first repair flow blocks this case so sign-ins are not stranded silently."]</p>
+                    <table class="grid compact-grid">
+                        <thead>
+                            <tr>
+                                <th>@L["Provider"]</th>
+                                <th>@L["Provider user key"]</th>
+                                <th>@L["Status"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var link in preview.DuplicateNonAdfsLinks)
+                            {
+                                <tr>
+                                    <td>@link.ProviderDisplayName</td>
+                                    <td>@link.ProviderUserKey</td>
+                                    <td><span class="pill">@link.AuthStatus</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                @if (preview.DisabledOrDeletedAdfsLinksIgnored.Count > 0)
+                {
+                    <h5 class="top-gap">@L["Disabled or deleted ADFS links ignored"]</h5>
+                    <table class="grid compact-grid">
+                        <thead>
+                            <tr>
+                                <th>@L["Provider"]</th>
+                                <th>@L["Provider user key"]</th>
+                                <th>@L["Status"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var link in preview.DisabledOrDeletedAdfsLinksIgnored)
+                            {
+                                <tr>
+                                    <td>@link.ProviderDisplayName</td>
+                                    <td>@link.ProviderUserKey</td>
+                                    <td><span class="pill">@link.AuthStatus</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                @if (preview.CanMerge)
+                {
+                    <form method="post" asp-page-handler="MergeAdfsDuplicate" class="form-grid top-gap">
+                        <input type="hidden" asp-for="MergeAdfsDuplicate.TargetUserId" />
+                        <label class="checkbox-row">
+                            <input asp-for="MergeAdfsDuplicate.ConfirmRepair" type="checkbox" />
+                            <span>@L["Move ADFS links to target user and disable this duplicate user. User-owned content will not move."]</span>
+                        </label>
+                        <span asp-validation-for="MergeAdfsDuplicate.ConfirmRepair" class="field-validation-error"></span>
+
+                        <div class="toolbar">
+                            <button type="submit" class="btn-danger-subtle">@L["Run ADFS repair"]</button>
+                        </div>
+                    </form>
+                }
+            }
+        </div>
     </section>
 
     <section class="card section-card bottom-gap">

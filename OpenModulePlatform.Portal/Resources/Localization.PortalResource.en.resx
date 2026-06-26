@@ -933,4 +933,39 @@
   <data name="Web app application-pool recycle job {0} was queued." xml:space="preserve"><value>Web app application-pool recycle job {0} was queued.</value></data>
   <data name="Select a host before requesting web app logs." xml:space="preserve"><value>Select a host before requesting web app logs.</value></data>
   <data name="Web app log collection job {0} was queued." xml:space="preserve"><value>Web app log collection job {0} was queued.</value></data>
+  <data name="Repair duplicate ADFS user" xml:space="preserve"><value>Repair duplicate ADFS user</value></data>
+  <data name="Preview a duplicate ADFS-created user repair before making changes. The repair moves enabled ADFS auth links to the target user, disables this duplicate user, and does not move user-owned content." xml:space="preserve"><value>Preview a duplicate ADFS-created user repair before making changes. The repair moves enabled ADFS auth links to the target user, disables this duplicate user, and does not move user-owned content.</value></data>
+  <data name="Target user ID to keep" xml:space="preserve"><value>Target user ID to keep</value></data>
+  <data name="This page's user is treated as the duplicate user that will be disabled if the repair succeeds." xml:space="preserve"><value>This page's user is treated as the duplicate user that will be disabled if the repair succeeds.</value></data>
+  <data name="Preview ADFS repair" xml:space="preserve"><value>Preview ADFS repair</value></data>
+  <data name="{0} ADFS auth link(s) can move. {1} auth link(s) will remain on the duplicate user." xml:space="preserve"><value>{0} ADFS auth link(s) can move. {1} auth link(s) will remain on the duplicate user.</value></data>
+  <data name="Target user" xml:space="preserve"><value>Target user</value></data>
+  <data name="Duplicate user" xml:space="preserve"><value>Duplicate user</value></data>
+  <data name="ADFS auth links to move" xml:space="preserve"><value>ADFS auth links to move</value></data>
+  <data name="No enabled ADFS auth links can be moved." xml:space="preserve"><value>No enabled ADFS auth links can be moved.</value></data>
+  <data name="Enabled non-ADFS links blocking repair" xml:space="preserve"><value>Enabled non-ADFS links blocking repair</value></data>
+  <data name="These enabled links would remain on the duplicate account. The first repair flow blocks this case so sign-ins are not stranded silently." xml:space="preserve"><value>These enabled links would remain on the duplicate account. The first repair flow blocks this case so sign-ins are not stranded silently.</value></data>
+  <data name="Disabled or deleted ADFS links ignored" xml:space="preserve"><value>Disabled or deleted ADFS links ignored</value></data>
+  <data name="Move ADFS links to target user and disable this duplicate user. User-owned content will not move." xml:space="preserve"><value>Move ADFS links to target user and disable this duplicate user. User-owned content will not move.</value></data>
+  <data name="Run ADFS repair" xml:space="preserve"><value>Run ADFS repair</value></data>
+  <data name="Confirm that ADFS links should be moved and this duplicate user disabled." xml:space="preserve"><value>Confirm that ADFS links should be moved and this duplicate user disabled.</value></data>
+  <data name="ADFS duplicate repair completed. Moved {0} ADFS auth link(s) to target user {1} and disabled duplicate user {2}." xml:space="preserve"><value>ADFS duplicate repair completed. Moved {0} ADFS auth link(s) to target user {1} and disabled duplicate user {2}.</value></data>
+  <data name="Repair completed." xml:space="preserve"><value>Repair completed.</value></data>
+  <data name="Preview is ready. Review the auth links, then confirm the repair." xml:space="preserve"><value>Preview is ready. Review the auth links, then confirm the repair.</value></data>
+  <data name="The target user was not found." xml:space="preserve"><value>The target user was not found.</value></data>
+  <data name="The duplicate user was not found." xml:space="preserve"><value>The duplicate user was not found.</value></data>
+  <data name="The target user and duplicate user must be different users." xml:space="preserve"><value>The target user and duplicate user must be different users.</value></data>
+  <data name="System or reserved users cannot be repaired here." xml:space="preserve"><value>System or reserved users cannot be repaired here.</value></data>
+  <data name="The target user must be active." xml:space="preserve"><value>The target user must be active.</value></data>
+  <data name="The duplicate user is already deleted or has an unsupported account status." xml:space="preserve"><value>The duplicate user is already deleted or has an unsupported account status.</value></data>
+  <data name="The ADFS authentication provider was not found." xml:space="preserve"><value>The ADFS authentication provider was not found.</value></data>
+  <data name="The duplicate user has no enabled ADFS auth links to move." xml:space="preserve"><value>The duplicate user has no enabled ADFS auth links to move.</value></data>
+  <data name="The duplicate user has enabled non-ADFS auth links. Remove or review those links before running this repair." xml:space="preserve"><value>The duplicate user has enabled non-ADFS auth links. Remove or review those links before running this repair.</value></data>
+  <data name="Conflicting ADFS auth links were found. No repair can run until the auth-link data is reviewed." xml:space="preserve"><value>Conflicting ADFS auth links were found. No repair can run until the auth-link data is reviewed.</value></data>
+  <data name="The duplicate user's ADFS auth links changed during the repair. Preview again before retrying." xml:space="preserve"><value>The duplicate user's ADFS auth links changed during the repair. Preview again before retrying.</value></data>
+  <data name="The ADFS duplicate repair could not be completed." xml:space="preserve"><value>The ADFS duplicate repair could not be completed.</value></data>
+  <data name="Enter the target user ID to keep." xml:space="preserve"><value>Enter the target user ID to keep.</value></data>
+  <data name="{0} (id: {1}, status: {2})" xml:space="preserve"><value>{0} (id: {1}, status: {2})</value></data>
+  <data name="Target user ID" xml:space="preserve"><value>Target user ID</value></data>
+  <data name="Confirm repair" xml:space="preserve"><value>Confirm repair</value></data>
 </root>
