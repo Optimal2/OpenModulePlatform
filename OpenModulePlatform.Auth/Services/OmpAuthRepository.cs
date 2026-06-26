@@ -143,6 +143,7 @@ public sealed class OmpAuthRepository
         return new OmpAuthenticatedUser
         {
             UserId = linkedUser?.UserId,
+            ProviderId = provider.Value.ProviderId,
             DisplayName = linkedUser?.DisplayName ?? userName,
             Provider = AdProvider,
             ProviderUserKey = userKeys[0],
@@ -222,6 +223,7 @@ public sealed class OmpAuthRepository
         return new OmpAuthenticatedUser
         {
             UserId = linkedUser?.UserId,
+            ProviderId = provider.Value.ProviderId,
             DisplayName = linkedUser?.DisplayName ?? oidcClaims.DisplayName,
             Provider = providerName,
             ProviderUserKey = userKeys[0],
@@ -284,6 +286,7 @@ public sealed class OmpAuthRepository
         return (new OmpAuthenticatedUser
         {
             UserId = linkedUser.Value.UserId,
+            ProviderId = provider.Value.ProviderId,
             DisplayName = linkedUser.Value.DisplayName,
             Provider = LocalPasswordIdentity.ProviderDisplayName,
             ProviderUserKey = normalizedUserName,
@@ -357,6 +360,7 @@ public sealed class OmpAuthRepository
             return (new OmpAuthenticatedUser
             {
                 UserId = userId,
+                ProviderId = provider.Value.ProviderId,
                 DisplayName = displayName,
                 Provider = LocalPasswordIdentity.ProviderDisplayName,
                 ProviderUserKey = normalizedUserName,
