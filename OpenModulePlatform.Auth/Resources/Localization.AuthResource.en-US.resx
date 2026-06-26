@@ -7,6 +7,9 @@
   <data name="Sign in" xml:space="preserve"><value>Sign in</value></data>
   <data name="Sign in to {0}" xml:space="preserve"><value>Sign in to {0}</value></data>
   <data name="Choose an authentication provider for this {0} instance." xml:space="preserve"><value>Choose an authentication provider for this {0} instance.</value></data>
+  <data name="Language" xml:space="preserve"><value>Language</value></data>
+  <data name="Swedish" xml:space="preserve"><value>Swedish</value></data>
+  <data name="English" xml:space="preserve"><value>English</value></data>
   <data name="Sign in with Windows / AD" xml:space="preserve"><value>Sign in with Windows / AD</value></data>
   <data name="Sign in with {0}" xml:space="preserve"><value>Sign in with {0}</value></data>
   <data name="Other sign-in options" xml:space="preserve"><value>Other options</value></data>
@@ -44,4 +47,7 @@
   <data name="The linked OMP user is disabled." xml:space="preserve"><value>The linked OMP user is disabled.</value></data>
   <data name="The OMP user account could not be created." xml:space="preserve"><value>The OMP user account could not be created.</value></data>
   <data name="Account registration is disabled." xml:space="preserve"><value>Account registration is disabled.</value></data>
+  <data name="You have been signed out of OMP." xml:space="preserve"><value>You have been signed out of OMP.</value></data>
+  <data name="You have been signed out of OMP. The external sign-in provider was also asked to end its session." xml:space="preserve"><value>You have been signed out of OMP. The external sign-in provider was also asked to end its session.</value></data>
+  <data name="You have been signed out of OMP. Windows / AD may still sign you in automatically in this browser or Windows session." xml:space="preserve"><value>You have been signed out of OMP. Windows / AD may still sign you in automatically in this browser or Windows session.</value></data>
 </root>

@@ -7,6 +7,9 @@
   <data name="Sign in" xml:space="preserve"><value>Logga in</value></data>
   <data name="Sign in to {0}" xml:space="preserve"><value>Logga in i {0}</value></data>
   <data name="Choose an authentication provider for this {0} instance." xml:space="preserve"><value>Välj inloggningssätt för den här {0}-instansen.</value></data>
+  <data name="Language" xml:space="preserve"><value>Språk</value></data>
+  <data name="Swedish" xml:space="preserve"><value>Svenska</value></data>
+  <data name="English" xml:space="preserve"><value>Engelska</value></data>
   <data name="Sign in with Windows / AD" xml:space="preserve"><value>Logga in med Windows / AD</value></data>
   <data name="Sign in with {0}" xml:space="preserve"><value>Logga in med {0}</value></data>
   <data name="Other sign-in options" xml:space="preserve"><value>Andra alternativ</value></data>
@@ -44,4 +47,7 @@
   <data name="The linked OMP user is disabled." xml:space="preserve"><value>Den kopplade OMP-användaren är inaktiverad.</value></data>
   <data name="The OMP user account could not be created." xml:space="preserve"><value>OMP-användarkontot kunde inte skapas.</value></data>
   <data name="Account registration is disabled." xml:space="preserve"><value>Registrering av konto är avstängd.</value></data>
+  <data name="You have been signed out of OMP." xml:space="preserve"><value>Du har loggats ut från OMP.</value></data>
+  <data name="You have been signed out of OMP. The external sign-in provider was also asked to end its session." xml:space="preserve"><value>Du har loggats ut från OMP. Den externa inloggningsleverantören har också ombetts avsluta sin session.</value></data>
+  <data name="You have been signed out of OMP. Windows / AD may still sign you in automatically in this browser or Windows session." xml:space="preserve"><value>Du har loggats ut från OMP. Windows / AD kan fortfarande logga in dig automatiskt i den här webbläsaren eller Windows-sessionen.</value></data>
 </root>
