@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.128",
+  "repositoryVersion": "0.3.129",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -71,7 +71,7 @@
       "appKey": "omp_auth",
       "packageType": "web-app",
       "targetName": "omp-auth",
-      "version": "0.3.49",
+      "version": "0.3.50",
       "minModuleDefinitionVersion": "0.3.10",
       "projectPath": "OpenModulePlatform.Auth",
       "relativePathTemplate": "omp-auth/web/{version}",
