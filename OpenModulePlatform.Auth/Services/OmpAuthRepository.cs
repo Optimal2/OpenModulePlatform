@@ -10,7 +10,6 @@ namespace OpenModulePlatform.Auth.Services;
 
 public sealed class OmpAuthRepository
 {
-    private const string AdProvider = "AD";
     private const int ActiveAccountStatus = 1;
     private const int DisplayNameMaxLength = 200;
     private const int ProviderUserKeyMaxLength = 1000;
@@ -57,7 +56,7 @@ public sealed class OmpAuthRepository
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
-        var provider = await EnsureProviderAsync(conn, AdProvider, ct);
+        var provider = await EnsureProviderAsync(conn, OmpAuthDefaults.AdProviderDisplayName, ct);
         if (provider is null)
         {
             return null;
@@ -145,7 +144,7 @@ public sealed class OmpAuthRepository
             UserId = linkedUser?.UserId,
             ProviderId = provider.Value.ProviderId,
             DisplayName = linkedUser?.DisplayName ?? userName,
-            Provider = AdProvider,
+            Provider = OmpAuthDefaults.AdProviderDisplayName,
             ProviderUserKey = userKeys[0],
             RolePrincipals = principals
         };
@@ -193,8 +192,51 @@ public sealed class OmpAuthRepository
         }
 
         var principals = BuildOidcRolePrincipals(oidcClaims);
+        var suppressAutoProvisioning = false;
 
         if (linkedUser is null &&
+            string.Equals(providerName, OmpAuthDefaults.AdfsProviderDisplayName, StringComparison.OrdinalIgnoreCase))
+        {
+            var adResolution = await TryResolveAdLinkedUserForOidcAsync(conn, oidcClaims, ct);
+            switch (adResolution.Status)
+            {
+                case OmpAdLinkedUserResolutionStatus.UniqueActive:
+                    linkedUser = await TryLinkOidcProviderToExistingUserAsync(
+                        conn,
+                        provider.Value.ProviderId,
+                        adResolution.User!.Value,
+                        userKeys,
+                        providerName,
+                        ct);
+                    if (linkedUser is not null && !linkedUser.Value.IsActive)
+                    {
+                        _log.LogWarning(
+                            "ADFS identity with provider user key hash {ProviderUserKeyHash} matched disabled OMP user {UserId} during AD cross-link retry. Principal fallback is blocked.",
+                            CreateLogHash(userKeys[0]),
+                            linkedUser.Value.UserId);
+                        return null;
+                    }
+
+                    break;
+                case OmpAdLinkedUserResolutionStatus.Disabled:
+                    _log.LogWarning(
+                        "ADFS identity with provider user key hash {ProviderUserKeyHash} matched disabled AD-linked OMP user {UserId}. Principal fallback is blocked.",
+                        CreateLogHash(userKeys[0]),
+                        adResolution.User?.UserId);
+                    return null;
+                case OmpAdLinkedUserResolutionStatus.AmbiguousActive:
+                    suppressAutoProvisioning = true;
+                    _log.LogWarning(
+                        "ADFS identity with provider user key hash {ProviderUserKeyHash} matched {ActiveUserCount} active AD-linked OMP users across {MatchedUserCount} total matched users. Automatic cross-linking and auto-provisioning were skipped.",
+                        CreateLogHash(userKeys[0]),
+                        adResolution.ActiveUserCount,
+                        adResolution.MatchedUserCount);
+                    break;
+            }
+        }
+
+        if (linkedUser is null &&
+            !suppressAutoProvisioning &&
             await ShouldAutoProvisionExternalUserAsync(conn, principals, ct))
         {
             linkedUser = await TryAutoProvisionLinkedUserAsync(
@@ -471,6 +513,164 @@ ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
         }
 
         return new LinkedUserRow(rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetString(2), rdr.GetInt32(3));
+    }
+
+    private async Task<OmpAdLinkedUserResolution> TryResolveAdLinkedUserForOidcAsync(
+        SqlConnection conn,
+        OmpOidcResolvedClaims oidcClaims,
+        CancellationToken ct)
+    {
+        var adKeys = OmpAdfsAdAccountLinker.BuildAdProviderLookupKeys(oidcClaims);
+        if (adKeys.Count == 0)
+        {
+            return new OmpAdLinkedUserResolution(
+                OmpAdLinkedUserResolutionStatus.NoMatch,
+                User: null,
+                MatchedUserCount: 0,
+                ActiveUserCount: 0);
+        }
+
+        var adProvider = await EnsureProviderAsync(conn, OmpAuthDefaults.AdProviderDisplayName, ct);
+        if (adProvider is null)
+        {
+            return new OmpAdLinkedUserResolution(
+                OmpAdLinkedUserResolutionStatus.NoMatch,
+                User: null,
+                MatchedUserCount: 0,
+                ActiveUserCount: 0);
+        }
+
+        var matches = await FindAdLinkedUserMatchesAsync(conn, adProvider.Value.ProviderId, adKeys, ct);
+        return OmpAdfsAdAccountLinker.Resolve(matches);
+    }
+
+    private static async Task<IReadOnlyList<OmpAdLinkedUserCandidate>> FindAdLinkedUserMatchesAsync(
+        SqlConnection conn,
+        int providerId,
+        IReadOnlyList<string> providerUserKeys,
+        CancellationToken ct)
+    {
+        var keys = providerUserKeys
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (keys.Length == 0)
+        {
+            return [];
+        }
+
+        var inList = string.Join(",", Enumerable.Range(0, keys.Length).Select(i => "@key" + i));
+        var sql = $@"
+SELECT ua.user_auth_id,
+       u.user_id,
+       u.display_name,
+       u.account_status
+FROM omp.user_auth ua
+INNER JOIN omp.users u ON u.user_id = ua.user_id
+WHERE ua.provider_id = @provider_id
+  AND ua.provider_user_key IN ({inList})
+  AND ua.auth_status = N'enabled'
+ORDER BY ua.user_auth_id;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@provider_id", providerId);
+        for (var i = 0; i < keys.Length; i++)
+        {
+            cmd.Parameters.AddWithValue("@key" + i, keys[i]);
+        }
+
+        var matches = new List<OmpAdLinkedUserCandidate>();
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            matches.Add(new OmpAdLinkedUserCandidate(
+                rdr.GetInt32(0),
+                rdr.GetInt32(1),
+                rdr.GetString(2),
+                rdr.GetInt32(3)));
+        }
+
+        return matches;
+    }
+
+    private async Task<LinkedUserRow?> TryLinkOidcProviderToExistingUserAsync(
+        SqlConnection conn,
+        int providerId,
+        OmpAdLinkedUserCandidate adLinkedUser,
+        IReadOnlyList<string> providerUserKeys,
+        string providerName,
+        CancellationToken ct)
+    {
+        var keys = providerUserKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Select(key => key.Trim())
+            .Where(key => key.Length <= ProviderUserKeyMaxLength)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (keys.Length == 0)
+        {
+            return null;
+        }
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            var existing = await TryResolveLinkedUserAsync(conn, tx, providerId, keys, ct);
+            if (existing is not null)
+            {
+                await tx.RollbackAsync(ct);
+                if (existing.Value.IsActive)
+                {
+                    await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
+                }
+
+                return existing;
+            }
+
+            var primaryUserAuthId = 0;
+            foreach (var key in keys)
+            {
+                var userAuthId = await InsertAuthLinkAsync(conn, tx, adLinkedUser.UserId, providerId, key, ct);
+                if (primaryUserAuthId == 0)
+                {
+                    primaryUserAuthId = userAuthId;
+                }
+            }
+
+            await tx.CommitAsync(ct);
+            await MarkUserAuthUsedAsync(conn, primaryUserAuthId, adLinkedUser.UserId, ct);
+
+            _log.LogInformation(
+                "Linked first {ProviderName} sign-in to existing AD-linked OMP user {UserId} with {AuthLinkCount} auth link(s).",
+                providerName,
+                adLinkedUser.UserId,
+                keys.Length);
+
+            return new LinkedUserRow(
+                primaryUserAuthId,
+                adLinkedUser.UserId,
+                adLinkedUser.DisplayName,
+                adLinkedUser.AccountStatus);
+        }
+        catch (SqlException ex) when (ex.Number is 2601 or 2627)
+        {
+            await tx.RollbackAsync(ct);
+
+            var existing = await TryResolveLinkedUserAsync(conn, providerId, keys, ct);
+            if (existing is not null && existing.Value.IsActive)
+            {
+                await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
+            }
+
+            return existing;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
     }
 
     private async Task<ExternalUserProvisioningMode> GetExternalUserProvisioningModeAsync(CancellationToken ct)
@@ -799,7 +999,7 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
-    private static async Task InsertAuthLinkAsync(
+    private static async Task<int> InsertAuthLinkAsync(
         SqlConnection conn,
         SqlTransaction tx,
         int userId,
@@ -809,14 +1009,15 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
     {
         const string sql = @"
 INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key, last_used_at, auth_status, created_at)
-VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), N'enabled', SYSUTCDATETIME());";
+VALUES(@user_id, @provider_id, @provider_user_key, SYSUTCDATETIME(), N'enabled', SYSUTCDATETIME());
+SELECT CAST(SCOPE_IDENTITY() AS int);";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("@user_id", userId);
         cmd.Parameters.AddWithValue("@provider_id", providerId);
         cmd.Parameters.AddWithValue("@provider_user_key", providerUserKey);
 
-        await cmd.ExecuteNonQueryAsync(ct);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
     private static async Task<bool> LocalPasswordUserExistsAsync(

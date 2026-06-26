@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Portal/Services/OmpUserAdminRepository.cs
+using System.Data;
+using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
@@ -11,6 +13,7 @@ namespace OpenModulePlatform.Portal.Services;
 public sealed class OmpUserAdminRepository
 {
     private const string AdProviderDisplayName = "AD";
+    private const int DisabledAccountStatus = 2;
 
     private readonly SqlConnectionFactory _db;
     private readonly LocalPasswordHasher _passwordHasher;
@@ -520,6 +523,187 @@ VALUES(@user_id, @provider_id, @provider_user_key, N'enabled', SYSUTCDATETIME())
         }
     }
 
+    public async Task<PreviewMergeAdfsDuplicateUserResult> PreviewMergeAdfsDuplicateUserAsync(
+        int duplicateUserId,
+        int targetUserId,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var providerId = await GetAuthProviderIdAsync(conn, OmpAuthDefaults.AdfsProviderDisplayName, ct);
+        var targetUser = await GetMergeUserSummaryAsync(conn, tx: null, targetUserId, useUpdateLocks: false, ct);
+        var duplicateUser = await GetMergeUserSummaryAsync(conn, tx: null, duplicateUserId, useUpdateLocks: false, ct);
+        var duplicateLinks = duplicateUser?.AuthLinks ?? [];
+        var conflictCount = providerId is null
+            ? 0
+            : await GetDuplicateAdfsIntegrityConflictCountAsync(
+                conn,
+                tx: null,
+                duplicateUserId,
+                providerId.Value,
+                useUpdateLocks: false,
+                ct);
+
+        var evaluation = OmpAdfsDuplicateUserMergeRules.Evaluate(
+            duplicateUserId,
+            targetUserId,
+            targetUser,
+            duplicateUser,
+            providerId is not null,
+            duplicateLinks,
+            conflictCount);
+
+        return new PreviewMergeAdfsDuplicateUserResult(
+            evaluation.Status,
+            evaluation.CanMerge,
+            targetUserId,
+            duplicateUserId,
+            targetUser,
+            duplicateUser,
+            evaluation.AdfsLinksToMove,
+            evaluation.DuplicateNonAdfsLinks,
+            evaluation.DisabledOrDeletedAdfsLinksIgnored,
+            evaluation.SkippedAuthLinkCount,
+            evaluation.ConflictCount,
+            evaluation.Messages);
+    }
+
+    public async Task<MergeAdfsDuplicateUserResult> MergeAdfsDuplicateUserAsync(
+        int duplicateUserId,
+        int targetUserId,
+        string actor,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        try
+        {
+            var providerId = await GetLockedAuthProviderIdAsync(conn, tx, OmpAuthDefaults.AdfsProviderDisplayName, ct);
+            var targetUser = await GetMergeUserSummaryAsync(conn, tx, targetUserId, useUpdateLocks: true, ct);
+            var duplicateUser = await GetMergeUserSummaryAsync(conn, tx, duplicateUserId, useUpdateLocks: true, ct);
+
+            if (providerId is not null)
+            {
+                await LockUserProviderAuthRowsAsync(conn, tx, targetUserId, providerId.Value, ct);
+            }
+
+            var duplicateLinks = duplicateUser?.AuthLinks ?? [];
+            var conflictCount = providerId is null
+                ? 0
+                : await GetDuplicateAdfsIntegrityConflictCountAsync(
+                    conn,
+                    tx,
+                    duplicateUserId,
+                    providerId.Value,
+                    useUpdateLocks: true,
+                    ct);
+
+            var evaluation = OmpAdfsDuplicateUserMergeRules.Evaluate(
+                duplicateUserId,
+                targetUserId,
+                targetUser,
+                duplicateUser,
+                providerId is not null,
+                duplicateLinks,
+                conflictCount);
+
+            if (!evaluation.CanMerge || providerId is null)
+            {
+                await tx.RollbackAsync(ct);
+                return new MergeAdfsDuplicateUserResult(
+                    evaluation.Status,
+                    targetUserId,
+                    duplicateUserId,
+                    0,
+                    evaluation.SkippedAuthLinkCount,
+                    evaluation.ConflictCount,
+                    [],
+                    evaluation.Messages);
+            }
+
+            var beforeJson = SerializeMergeAuditBefore(
+                targetUser!,
+                duplicateUser!,
+                evaluation.AdfsLinksToMove,
+                evaluation.DuplicateNonAdfsLinks,
+                evaluation.DisabledOrDeletedAdfsLinksIgnored);
+
+            var movedCount = await MoveEnabledAdfsAuthLinksAsync(
+                conn,
+                tx,
+                duplicateUserId,
+                targetUserId,
+                providerId.Value,
+                ct);
+
+            if (movedCount != evaluation.AdfsLinksToMove.Count)
+            {
+                await tx.RollbackAsync(ct);
+                var messages = OmpAdfsDuplicateUserMergeRules.MessagesFor(
+                    MergeAdfsDuplicateUserStatus.ConcurrencyConflict,
+                    evaluation.AdfsLinksToMove.Count,
+                    evaluation.SkippedAuthLinkCount,
+                    evaluation.ConflictCount);
+
+                return new MergeAdfsDuplicateUserResult(
+                    MergeAdfsDuplicateUserStatus.ConcurrencyConflict,
+                    targetUserId,
+                    duplicateUserId,
+                    0,
+                    evaluation.SkippedAuthLinkCount,
+                    evaluation.ConflictCount,
+                    [],
+                    messages);
+            }
+
+            await DisableDuplicateAndTouchTargetAsync(conn, tx, duplicateUserId, targetUserId, ct);
+
+            var afterJson = SerializeMergeAuditAfter(
+                targetUserId,
+                duplicateUserId,
+                DisabledAccountStatus,
+                evaluation.AdfsLinksToMove,
+                movedCount,
+                evaluation.SkippedAuthLinkCount,
+                evaluation.ConflictCount);
+
+            await InsertAuditLogAsync(
+                conn,
+                tx,
+                actor,
+                "MergeAdfsDuplicateUser",
+                "omp.users",
+                $"target={targetUserId};duplicate={duplicateUserId}",
+                beforeJson,
+                afterJson,
+                ct);
+
+            await tx.CommitAsync(ct);
+
+            return new MergeAdfsDuplicateUserResult(
+                MergeAdfsDuplicateUserStatus.Merged,
+                targetUserId,
+                duplicateUserId,
+                movedCount,
+                evaluation.SkippedAuthLinkCount,
+                evaluation.ConflictCount,
+                evaluation.AdfsLinksToMove,
+                OmpAdfsDuplicateUserMergeRules.MessagesFor(
+                    MergeAdfsDuplicateUserStatus.Merged,
+                    movedCount,
+                    evaluation.SkippedAuthLinkCount,
+                    evaluation.ConflictCount));
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     private static async Task<IReadOnlyList<OmpUserAuthLinkRow>> GetAuthLinksAsync(
         SqlConnection conn,
         int userId,
@@ -821,6 +1005,270 @@ WHERE display_name = @display_name
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is null or DBNull ? null : Convert.ToInt32(result);
     }
+
+    private static async Task<int?> GetLockedAuthProviderIdAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string displayName,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT provider_id
+FROM omp.auth_providers WITH (UPDLOCK, HOLDLOCK)
+WHERE display_name = @display_name;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@display_name", displayName);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : Convert.ToInt32(result);
+    }
+
+    private static async Task<MergeAdfsUserSummary?> GetMergeUserSummaryAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int userId,
+        bool useUpdateLocks,
+        CancellationToken ct)
+    {
+        var userLockHint = useUpdateLocks ? " WITH (UPDLOCK, HOLDLOCK)" : "";
+        var userSql = $@"
+SELECT user_id,
+       display_name,
+       account_status
+FROM omp.users{userLockHint}
+WHERE user_id = @user_id;";
+
+        int foundUserId;
+        string displayName;
+        int accountStatus;
+        await using (var cmd = tx is null
+            ? new SqlCommand(userSql, conn)
+            : new SqlCommand(userSql, conn, tx))
+        {
+            Add(cmd, "@user_id", userId);
+
+            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            if (!await rdr.ReadAsync(ct))
+            {
+                return null;
+            }
+
+            foundUserId = rdr.GetInt32(0);
+            displayName = rdr.GetString(1);
+            accountStatus = rdr.GetInt32(2);
+        }
+
+        var links = await GetMergeAuthLinksAsync(conn, tx, userId, useUpdateLocks, ct);
+        return new MergeAdfsUserSummary(foundUserId, displayName, accountStatus, links);
+    }
+
+    private static async Task<IReadOnlyList<MergeAdfsAuthLinkPreview>> GetMergeAuthLinksAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int userId,
+        bool useUpdateLocks,
+        CancellationToken ct)
+    {
+        var lockHint = useUpdateLocks ? " WITH (UPDLOCK, HOLDLOCK)" : "";
+        var sql = $@"
+SELECT ua.user_auth_id,
+       ap.display_name,
+       ua.provider_user_key,
+       ua.auth_status
+FROM omp.user_auth ua{lockHint}
+INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+WHERE ua.user_id = @user_id
+ORDER BY ap.display_name,
+         ua.provider_user_key,
+         ua.user_auth_id;";
+
+        var rows = new List<MergeAdfsAuthLinkPreview>();
+        await using var cmd = tx is null
+            ? new SqlCommand(sql, conn)
+            : new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new MergeAdfsAuthLinkPreview(
+                rdr.GetInt32(0),
+                rdr.GetString(1),
+                rdr.GetString(2),
+                rdr.GetString(3)));
+        }
+
+        return rows;
+    }
+
+    private static async Task LockUserProviderAuthRowsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        int providerId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.user_auth WITH (UPDLOCK, HOLDLOCK)
+WHERE user_id = @user_id
+  AND provider_id = @provider_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+        Add(cmd, "@provider_id", providerId);
+        await cmd.ExecuteScalarAsync(ct);
+    }
+
+    private static async Task<int> GetDuplicateAdfsIntegrityConflictCountAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int duplicateUserId,
+        int adfsProviderId,
+        bool useUpdateLocks,
+        CancellationToken ct)
+    {
+        var duplicateLockHint = useUpdateLocks ? " WITH (UPDLOCK, HOLDLOCK)" : "";
+        var otherLockHint = useUpdateLocks ? " WITH (UPDLOCK, HOLDLOCK)" : "";
+        var sql = $@"
+SELECT COUNT(1)
+FROM omp.user_auth duplicate_link{duplicateLockHint}
+INNER JOIN omp.user_auth other_link{otherLockHint}
+    ON other_link.provider_id = duplicate_link.provider_id
+   AND other_link.provider_user_hash = duplicate_link.provider_user_hash
+   AND other_link.user_auth_id <> duplicate_link.user_auth_id
+WHERE duplicate_link.user_id = @duplicate_user_id
+  AND duplicate_link.provider_id = @provider_id
+  AND duplicate_link.auth_status = N'enabled'
+  AND other_link.user_id <> @duplicate_user_id;";
+
+        await using var cmd = tx is null
+            ? new SqlCommand(sql, conn)
+            : new SqlCommand(sql, conn, tx);
+        Add(cmd, "@duplicate_user_id", duplicateUserId);
+        Add(cmd, "@provider_id", adfsProviderId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task<int> MoveEnabledAdfsAuthLinksAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int duplicateUserId,
+        int targetUserId,
+        int adfsProviderId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.user_auth
+SET user_id = @target_user_id
+WHERE user_id = @duplicate_user_id
+  AND provider_id = @provider_id
+  AND auth_status = N'enabled';";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@target_user_id", targetUserId);
+        Add(cmd, "@duplicate_user_id", duplicateUserId);
+        Add(cmd, "@provider_id", adfsProviderId);
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task DisableDuplicateAndTouchTargetAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int duplicateUserId,
+        int targetUserId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.users
+SET account_status = @disabled_status,
+    updated_at = SYSUTCDATETIME()
+WHERE user_id = @duplicate_user_id;
+
+UPDATE omp.users
+SET updated_at = SYSUTCDATETIME()
+WHERE user_id = @target_user_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@disabled_status", DisabledAccountStatus);
+        Add(cmd, "@duplicate_user_id", duplicateUserId);
+        Add(cmd, "@target_user_id", targetUserId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task InsertAuditLogAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string actor,
+        string action,
+        string targetType,
+        string targetId,
+        string? beforeJson,
+        string? afterJson,
+        CancellationToken ct)
+    {
+        const string sql = @"
+INSERT INTO omp.AuditLog(Actor, Action, TargetType, TargetId, BeforeJson, AfterJson)
+VALUES(@actor, @action, @target_type, @target_id, @before_json, @after_json);";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@actor", TruncateForAudit(string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim(), 256));
+        Add(cmd, "@action", TruncateForAudit(action, 200));
+        Add(cmd, "@target_type", TruncateForAudit(targetType, 100));
+        Add(cmd, "@target_id", TruncateForAudit(targetId, 200));
+        Add(cmd, "@before_json", beforeJson);
+        Add(cmd, "@after_json", afterJson);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static string SerializeMergeAuditBefore(
+        MergeAdfsUserSummary targetUser,
+        MergeAdfsUserSummary duplicateUser,
+        IReadOnlyList<MergeAdfsAuthLinkPreview> adfsLinksToMove,
+        IReadOnlyList<MergeAdfsAuthLinkPreview> duplicateNonAdfsLinks,
+        IReadOnlyList<MergeAdfsAuthLinkPreview> disabledOrDeletedAdfsLinksIgnored)
+        => JsonSerializer.Serialize(new
+        {
+            TargetUser = targetUser,
+            DuplicateUser = duplicateUser,
+            AdfsLinksToMove = adfsLinksToMove,
+            DuplicateNonAdfsLinks = duplicateNonAdfsLinks,
+            DisabledOrDeletedAdfsLinksIgnored = disabledOrDeletedAdfsLinksIgnored,
+            Counts = new
+            {
+                AdfsLinksToMove = adfsLinksToMove.Count,
+                DuplicateNonAdfsLinks = duplicateNonAdfsLinks.Count,
+                DisabledOrDeletedAdfsLinksIgnored = disabledOrDeletedAdfsLinksIgnored.Count
+            }
+        });
+
+    private static string SerializeMergeAuditAfter(
+        int targetUserId,
+        int duplicateUserId,
+        int duplicateFinalAccountStatus,
+        IReadOnlyList<MergeAdfsAuthLinkPreview> movedLinks,
+        int movedAuthLinkCount,
+        int skippedAuthLinkCount,
+        int conflictCount)
+        => JsonSerializer.Serialize(new
+        {
+            TargetUserId = targetUserId,
+            DuplicateUserId = duplicateUserId,
+            DuplicateFinalAccountStatus = duplicateFinalAccountStatus,
+            MovedAuthLinkIds = movedLinks.Select(link => link.UserAuthId).ToArray(),
+            MovedLinks = movedLinks,
+            Counts = new
+            {
+                MovedAuthLinkCount = movedAuthLinkCount,
+                SkippedAuthLinkCount = skippedAuthLinkCount,
+                ConflictCount = conflictCount
+            }
+        });
+
+    private static string TruncateForAudit(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength];
 
     private static async Task<ExistingAuthLink?> GetExistingAuthLinkAsync(
         SqlConnection conn,
@@ -1239,3 +1687,231 @@ public enum MigrateAdUserRoleAssignmentsStatus
     NoAdLinks,
     NoAssignments
 }
+
+public sealed record PreviewMergeAdfsDuplicateUserResult(
+    MergeAdfsDuplicateUserStatus Status,
+    bool CanMerge,
+    int TargetUserId,
+    int DuplicateUserId,
+    MergeAdfsUserSummary? TargetUser,
+    MergeAdfsUserSummary? DuplicateUser,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> AdfsLinksToMove,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> DuplicateNonAdfsLinks,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> DisabledOrDeletedAdfsLinksIgnored,
+    int SkippedAuthLinkCount,
+    int ConflictCount,
+    IReadOnlyList<string> Messages);
+
+public sealed record MergeAdfsDuplicateUserResult(
+    MergeAdfsDuplicateUserStatus Status,
+    int TargetUserId,
+    int DuplicateUserId,
+    int MovedAuthLinkCount,
+    int SkippedAuthLinkCount,
+    int ConflictCount,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> MovedLinks,
+    IReadOnlyList<string> Messages);
+
+public sealed record MergeAdfsUserSummary(
+    int UserId,
+    string DisplayName,
+    int AccountStatus,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> AuthLinks);
+
+public sealed record MergeAdfsAuthLinkPreview(
+    int UserAuthId,
+    string ProviderDisplayName,
+    string ProviderUserKey,
+    string AuthStatus);
+
+public enum MergeAdfsDuplicateUserStatus
+{
+    Merged,
+    PreviewOnly,
+    TargetMissing,
+    DuplicateMissing,
+    SameUser,
+    SystemUserNotAllowed,
+    TargetNotActive,
+    DuplicateAlreadyDeleted,
+    AdfsProviderMissing,
+    NoEnabledAdfsLinks,
+    DuplicateHasEnabledNonAdfsLinks,
+    IntegrityAnomaly,
+    ConcurrencyConflict
+}
+
+internal static class OmpAdfsDuplicateUserMergeRules
+{
+    private const int ActiveAccountStatus = 1;
+    private const int DisabledAccountStatus = 2;
+    private const int DeletedAccountStatus = 3;
+
+    public static MergeAdfsDuplicateUserEvaluation Evaluate(
+        int duplicateUserId,
+        int targetUserId,
+        MergeAdfsUserSummary? targetUser,
+        MergeAdfsUserSummary? duplicateUser,
+        bool adfsProviderExists,
+        IReadOnlyList<MergeAdfsAuthLinkPreview> duplicateAuthLinks,
+        int integrityConflictCount)
+    {
+        var adfsLinksToMove = duplicateAuthLinks
+            .Where(IsEnabledAdfsLink)
+            .OrderBy(link => link.UserAuthId)
+            .ToArray();
+        var duplicateNonAdfsLinks = duplicateAuthLinks
+            .Where(link => !IsAdfsLink(link) && IsEnabled(link))
+            .OrderBy(link => link.ProviderDisplayName)
+            .ThenBy(link => link.ProviderUserKey)
+            .ThenBy(link => link.UserAuthId)
+            .ToArray();
+        var ignoredAdfsLinks = duplicateAuthLinks
+            .Where(link => IsAdfsLink(link) && !IsEnabled(link))
+            .OrderBy(link => link.UserAuthId)
+            .ToArray();
+        var skippedAuthLinkCount = duplicateAuthLinks.Count - adfsLinksToMove.Length;
+
+        var status = ResolveStatus(
+            duplicateUserId,
+            targetUserId,
+            targetUser,
+            duplicateUser,
+            adfsProviderExists,
+            adfsLinksToMove.Length,
+            duplicateNonAdfsLinks.Length,
+            integrityConflictCount);
+
+        return new MergeAdfsDuplicateUserEvaluation(
+            status,
+            status == MergeAdfsDuplicateUserStatus.PreviewOnly,
+            adfsLinksToMove,
+            duplicateNonAdfsLinks,
+            ignoredAdfsLinks,
+            skippedAuthLinkCount,
+            integrityConflictCount,
+            MessagesFor(status, adfsLinksToMove.Length, skippedAuthLinkCount, integrityConflictCount));
+    }
+
+    public static IReadOnlyList<string> MessagesFor(
+        MergeAdfsDuplicateUserStatus status,
+        int movableAuthLinkCount,
+        int skippedAuthLinkCount,
+        int conflictCount)
+    {
+        return status switch
+        {
+            MergeAdfsDuplicateUserStatus.Merged =>
+                [$"Moved {movableAuthLinkCount} enabled ADFS auth link(s), skipped {skippedAuthLinkCount} non-movable auth link(s), and disabled the duplicate user."],
+            MergeAdfsDuplicateUserStatus.PreviewOnly =>
+                [$"Ready to move {movableAuthLinkCount} enabled ADFS auth link(s). {skippedAuthLinkCount} auth link(s) will remain on the duplicate user."],
+            MergeAdfsDuplicateUserStatus.TargetMissing =>
+                ["The target user was not found."],
+            MergeAdfsDuplicateUserStatus.DuplicateMissing =>
+                ["The duplicate user was not found."],
+            MergeAdfsDuplicateUserStatus.SameUser =>
+                ["The target user and duplicate user must be different users."],
+            MergeAdfsDuplicateUserStatus.SystemUserNotAllowed =>
+                ["System or reserved users cannot be used in an ADFS duplicate repair."],
+            MergeAdfsDuplicateUserStatus.TargetNotActive =>
+                ["The target user must be active before ADFS auth links can be moved to it."],
+            MergeAdfsDuplicateUserStatus.DuplicateAlreadyDeleted =>
+                ["The duplicate user is already deleted or has an unsupported account status."],
+            MergeAdfsDuplicateUserStatus.AdfsProviderMissing =>
+                ["The ADFS authentication provider was not found."],
+            MergeAdfsDuplicateUserStatus.NoEnabledAdfsLinks =>
+                ["The duplicate user has no enabled ADFS auth links to move."],
+            MergeAdfsDuplicateUserStatus.DuplicateHasEnabledNonAdfsLinks =>
+                ["The duplicate user has enabled non-ADFS auth links. The first repair flow blocks this so non-ADFS sign-ins are not stranded silently."],
+            MergeAdfsDuplicateUserStatus.IntegrityAnomaly =>
+                [$"Found {conflictCount} conflicting ADFS auth link(s). No changes were made."],
+            MergeAdfsDuplicateUserStatus.ConcurrencyConflict =>
+                ["The duplicate user's ADFS auth links changed during the repair. No changes were made."],
+            _ =>
+                ["The ADFS duplicate repair could not be completed."]
+        };
+    }
+
+    private static MergeAdfsDuplicateUserStatus ResolveStatus(
+        int duplicateUserId,
+        int targetUserId,
+        MergeAdfsUserSummary? targetUser,
+        MergeAdfsUserSummary? duplicateUser,
+        bool adfsProviderExists,
+        int adfsLinksToMoveCount,
+        int duplicateNonAdfsLinkCount,
+        int integrityConflictCount)
+    {
+        if (duplicateUserId == targetUserId)
+        {
+            return MergeAdfsDuplicateUserStatus.SameUser;
+        }
+
+        if (duplicateUserId <= 0 || targetUserId <= 0)
+        {
+            return MergeAdfsDuplicateUserStatus.SystemUserNotAllowed;
+        }
+
+        if (targetUser is null)
+        {
+            return MergeAdfsDuplicateUserStatus.TargetMissing;
+        }
+
+        if (duplicateUser is null)
+        {
+            return MergeAdfsDuplicateUserStatus.DuplicateMissing;
+        }
+
+        if (targetUser.AccountStatus != ActiveAccountStatus)
+        {
+            return MergeAdfsDuplicateUserStatus.TargetNotActive;
+        }
+
+        if (duplicateUser.AccountStatus is not ActiveAccountStatus and not DisabledAccountStatus ||
+            duplicateUser.AccountStatus == DeletedAccountStatus)
+        {
+            return MergeAdfsDuplicateUserStatus.DuplicateAlreadyDeleted;
+        }
+
+        if (!adfsProviderExists)
+        {
+            return MergeAdfsDuplicateUserStatus.AdfsProviderMissing;
+        }
+
+        if (adfsLinksToMoveCount == 0)
+        {
+            return MergeAdfsDuplicateUserStatus.NoEnabledAdfsLinks;
+        }
+
+        if (duplicateNonAdfsLinkCount > 0)
+        {
+            return MergeAdfsDuplicateUserStatus.DuplicateHasEnabledNonAdfsLinks;
+        }
+
+        if (integrityConflictCount > 0)
+        {
+            return MergeAdfsDuplicateUserStatus.IntegrityAnomaly;
+        }
+
+        return MergeAdfsDuplicateUserStatus.PreviewOnly;
+    }
+
+    private static bool IsEnabledAdfsLink(MergeAdfsAuthLinkPreview link)
+        => IsAdfsLink(link) && IsEnabled(link);
+
+    private static bool IsAdfsLink(MergeAdfsAuthLinkPreview link)
+        => string.Equals(link.ProviderDisplayName, OmpAuthDefaults.AdfsProviderDisplayName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsEnabled(MergeAdfsAuthLinkPreview link)
+        => string.Equals(link.AuthStatus, "enabled", StringComparison.OrdinalIgnoreCase);
+}
+
+internal sealed record MergeAdfsDuplicateUserEvaluation(
+    MergeAdfsDuplicateUserStatus Status,
+    bool CanMerge,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> AdfsLinksToMove,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> DuplicateNonAdfsLinks,
+    IReadOnlyList<MergeAdfsAuthLinkPreview> DisabledOrDeletedAdfsLinksIgnored,
+    int SkippedAuthLinkCount,
+    int ConflictCount,
+    IReadOnlyList<string> Messages);
