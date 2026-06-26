@@ -119,10 +119,12 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 
         try
         {
-            var messageId = await _messages.SendMessageAsync(userId, conversationId, MessageContent, Attachments, ct);
+            await _messages.SendMessageAsync(userId, conversationId, MessageContent, Attachments, ct);
             if (isAjaxRequest)
             {
-                return new JsonResult(new { ok = true, messageId });
+                await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: true, ct);
+                Response.Headers.CacheControl = "no-store";
+                return Partial(MessagesPartialName, this);
             }
 
             return RedirectToPage("/Messages/Thread", new { conversationId, restoreScrollTop = RestoreScrollTop });

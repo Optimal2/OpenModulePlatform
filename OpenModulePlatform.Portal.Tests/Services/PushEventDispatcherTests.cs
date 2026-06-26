@@ -187,7 +187,8 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("data-notification-update-mode", page);
         Assert.Contains("data-notification-poll-interval", page);
         Assert.Contains("form.addEventListener('submit', submitMessage);", page);
-        Assert.Contains("'Accept': 'application/json'", page);
+        Assert.Contains("'Accept': 'text/html'", page);
+        Assert.Contains("replaceMessages(html, { stickToBottom: true })", page);
         Assert.Contains("const PUSH_EVENT_NAME = 'omp:push-event';", page);
         Assert.Contains("const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';", page);
         Assert.Contains("getPayloadConversationId(payload) !== conversationId", page);
@@ -195,7 +196,7 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("config.mode !== UPDATE_POLL_MODE", page);
         Assert.Contains("public async Task<IActionResult> OnGetMessages", pageModel);
         Assert.Contains("return Partial(MessagesPartialName, this);", pageModel);
-        Assert.Contains("new JsonResult(new { ok = true, messageId })", pageModel);
+        Assert.Contains("await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: true, ct);", pageModel);
     }
 
     private static LeasedPushEvent CreateLeasedEvent(
