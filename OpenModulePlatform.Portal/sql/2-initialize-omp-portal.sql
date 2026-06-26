@@ -209,6 +209,14 @@ USING
     "UseForwardedHeaders": false,
     "PermissionMode": "Any"
   },
+  "PushEvents": {
+    "Producers": {
+      "UseOutboxForNotificationStateChanges": true
+    },
+    "Dispatcher": {
+      "Enabled": true
+    }
+  },
   "ConnectionStrings": {
     "OmpDb": "{{Omp.Json.ConnectionStrings.OmpDb}}"
   },

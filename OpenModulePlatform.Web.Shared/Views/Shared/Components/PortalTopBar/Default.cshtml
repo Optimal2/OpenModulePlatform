@@ -458,7 +458,10 @@
                         </div>
                         <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
                         <div class="portal-topbar__tray-body">
-                            <div class="portal-topbar__messages-list">
+                            <div class="portal-topbar__messages-list"
+                                 data-portal-topbar-messages-list
+                                 data-no-messages-text="@L[Model.NoMessagesTextKey]"
+                                 data-no-message-preview-text="@L["No messages"]">
                                 @foreach (var conversation in Model.MessageConversations)
                                 {
                                     <a class="portal-topbar__message-row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
@@ -488,10 +491,9 @@
                                     </a>
                                 }
                             </div>
-                            @if (Model.MessageConversations.Count == 0)
-                            {
-                                <div class="portal-topbar__messages-empty">@L[Model.NoMessagesTextKey]</div>
-                            }
+                            <div class="portal-topbar__messages-empty" data-portal-topbar-messages-empty hidden="@(Model.MessageConversations.Count > 0)">
+                                @L[Model.NoMessagesTextKey]
+                            </div>
                         </div>
                         <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
                         <div class="portal-topbar__tray-footer">

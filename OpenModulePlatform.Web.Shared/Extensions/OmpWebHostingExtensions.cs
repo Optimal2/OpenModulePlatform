@@ -8,6 +8,7 @@ using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
@@ -454,6 +455,7 @@ public static class OmpWebHostingExtensions
             HttpContext context,
             NotificationService notificationService,
             MessageService messageService,
+            IOptions<WebAppOptions> webAppOptions,
             CancellationToken ct) =>
         {
             if (context.User.Identity?.IsAuthenticated != true)
@@ -466,18 +468,58 @@ public static class OmpWebHostingExtensions
             {
                 return Results.Json(new
                 {
-                    notifications = new { unreadCount = 0 },
-                    messages = new { unreadCount = 0 }
+                    notifications = new { unreadCount = 0, items = Array.Empty<object>(), hasMore = false },
+                    messages = new { unreadCount = 0, items = Array.Empty<object>() }
                 });
             }
 
             var notificationUnreadCount = await notificationService.GetUnreadCountAsync(userId.Value, ct);
+            var notifications = await notificationService.GetRecentForUserAsync(userId.Value, DefaultNotificationPageSize, ct);
             var messageUnreadCount = await messageService.GetUnreadMessageCountAsync(userId.Value, ct);
+            var portalBaseUrl = webAppOptions.Value.PortalTopBar?.PortalBaseUrl ?? "/";
+            var messageConversations = await messageService.GetConversationsForUserAsync(
+                userId.Value,
+                ct,
+                limit: DefaultNotificationPageSize);
 
             return Results.Json(new
             {
-                notifications = new { unreadCount = notificationUnreadCount },
-                messages = new { unreadCount = messageUnreadCount }
+                notifications = new
+                {
+                    unreadCount = notificationUnreadCount,
+                    items = notifications.Select(row => new
+                    {
+                        notificationId = row.NotificationId,
+                        title = row.Title,
+                        content = row.Content,
+                        level = row.Level,
+                        destinationUrl = row.DestinationUrl ?? string.Empty,
+                        callerKey = row.CallerKey ?? string.Empty,
+                        callerDisplayName = row.CallerDisplayName ?? string.Empty,
+                        callerIcon = SharedAssetUrl(context.Request, row.CallerIcon),
+                        createdAt = row.CreatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+                        isUnread = row.IsUnread
+                    }),
+                    hasMore = notifications.Count >= DefaultNotificationPageSize
+                },
+                messages = new
+                {
+                    unreadCount = messageUnreadCount,
+                    items = messageConversations.Select(row => new
+                    {
+                        conversationId = row.ConversationId,
+                        displayTitle = row.DisplayTitle,
+                        lastMessagePreview = row.LastMessagePreview ?? string.Empty,
+                        lastMessageAt = row.LastMessageAt.HasValue
+                            ? row.LastMessageAt.Value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
+                            : string.Empty,
+                        unreadCount = row.UnreadCount,
+                        avatarUrl = BuildPortalAvatarUrl(portalBaseUrl, row.OtherUserId, row.OtherProfileImageStorageKey) ?? string.Empty,
+                        href = PortalTopBarModelFactory.CombinePortalHref(
+                            portalBaseUrl,
+                            $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}")
+                    })
+                }
             });
         }).AllowAnonymous();
 
@@ -566,6 +608,14 @@ public static class OmpWebHostingExtensions
         return trimmed.StartsWith("/_content/OpenModulePlatform.Web.Shared/", StringComparison.OrdinalIgnoreCase)
             ? $"{request.PathBase}{trimmed}"
             : trimmed;
+    }
+
+    private static string? BuildPortalAvatarUrl(string portalBaseUrl, int? userId, string? storageKey)
+    {
+        var avatarPath = OmpAvatarHelper.BuildUserAvatarPath(userId, storageKey);
+        return string.IsNullOrWhiteSpace(avatarPath)
+            ? null
+            : PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, avatarPath);
     }
 
     public static IApplicationBuilder UseOmpSecurityHeaders(this IApplicationBuilder app)

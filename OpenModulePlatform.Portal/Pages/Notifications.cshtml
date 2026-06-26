@@ -1,6 +1,7 @@
 @page "/notifications"
 @model OpenModulePlatform.Portal.Pages.NotificationsModel
 
+<div data-notifications-live-content>
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Portal"]</div>
@@ -63,4 +64,96 @@ else
             </form>
         }
     </section>
+}
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const PUSH_EVENT_NAME = 'omp:push-event';
+            const NOTIFICATION_PUSH_CATEGORY = 'topbar.notification-state-changed';
+            const REFRESH_DEBOUNCE_MS = 250;
+
+            let refreshTimer = 0;
+            let refreshRunning = false;
+            let pendingRefresh = false;
+
+            const isPushMode = () => {
+                const topbar = document.querySelector('[data-portal-topbar-root]');
+                return (topbar?.getAttribute('data-notification-update-mode') || '').toLowerCase() === 'push';
+            };
+
+            const replaceLiveContent = (html) => {
+                const current = document.querySelector('[data-notifications-live-content]');
+                if (!current) {
+                    return false;
+                }
+
+                const template = document.createElement('template');
+                template.innerHTML = (html || '').trim();
+                const next = template.content.querySelector('[data-notifications-live-content]');
+                if (!next) {
+                    return false;
+                }
+
+                current.replaceWith(next);
+                return true;
+            };
+
+            const refresh = async () => {
+                if (refreshRunning) {
+                    pendingRefresh = true;
+                    return;
+                }
+
+                refreshRunning = true;
+                try {
+                    const response = await fetch(window.location.href, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: {
+                            'Accept': 'text/html',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    replaceLiveContent(await response.text());
+                } catch (error) {
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn('OMP notifications page refresh failed.', error);
+                    }
+                } finally {
+                    refreshRunning = false;
+                    if (pendingRefresh) {
+                        pendingRefresh = false;
+                        scheduleRefresh(REFRESH_DEBOUNCE_MS);
+                    }
+                }
+            };
+
+            function scheduleRefresh(delay) {
+                if (refreshTimer) {
+                    window.clearTimeout(refreshTimer);
+                }
+
+                refreshTimer = window.setTimeout(() => {
+                    refreshTimer = 0;
+                    refresh();
+                }, Math.max(0, delay));
+            }
+
+            window.addEventListener(PUSH_EVENT_NAME, (event) => {
+                const detail = event?.detail || {};
+                const category = (detail.category || detail.envelope?.category || '').toString().toLowerCase();
+                if (category === NOTIFICATION_PUSH_CATEGORY && isPushMode()) {
+                    scheduleRefresh(REFRESH_DEBOUNCE_MS);
+                }
+            });
+        })();
+    </script>
 }
