@@ -26,6 +26,7 @@ builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddSingleton<WindowsPrincipalReader>();
 builder.Services.AddSingleton<WindowsPasswordAuthenticator>();
 builder.Services.AddScoped<OmpAuthRepository>();
+builder.Services.AddScoped<OmpAuthenticationPropertiesFactory>();
 builder.Services.AddOmpCookieAuthentication(builder.Configuration);
 var oidcProviderStatus = builder.Services.AddOmpOidcAuthentication(builder.Configuration);
 var runningUnderIis = !string.IsNullOrWhiteSpace(

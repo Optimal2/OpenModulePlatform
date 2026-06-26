@@ -30,6 +30,41 @@ The shared cookie uses:
 - path: `/`
 - shared Data Protection application name and key location from `OmpAuth`
 
+### Session Lifetime
+
+OMP Auth stores session lifetime in the global config setting
+`auth/providerSessionLifetimes`. The value is a JSON object whose property names
+are `omp.auth_providers.provider_id` values and whose property values are
+session lifetime minutes. Provider id `0` is not a real provider; it is the
+fallback used when the active provider has no provider-specific entry.
+
+The seeded default keeps the historical 10-hour behavior:
+
+```json
+{ "0": 600 }
+```
+
+An installation can shorten one provider while leaving the fallback unchanged:
+
+```json
+{
+  "0": 600,
+  "2": 120
+}
+```
+
+The setting is read from `/admin/configsettings` as a global
+`auth/providerSessionLifetimes` row. Scoped user, permission, or role values are
+not used by OMP Auth sign-in. Missing or empty values, invalid JSON, or a JSON
+value that is not an object fall back to the built-in 600-minute default.
+Invalid entries inside an otherwise valid JSON object are ignored; positive
+values below 5 minutes are clamped to 5, and values above 10080 minutes are
+clamped to 10080.
+
+The lifetime is stamped into the OMP cookie during sign-in. Changing the setting
+affects new sign-ins only; it does not rewrite or shorten existing sessions that
+already have an issued cookie.
+
 Unauthenticated users are redirected to `/auth/login?returnUrl=<local-path>`. Return URLs must be local absolute paths such as `/`, `/Admin/Rbac`, or `/SomeModule/`. Absolute URLs, protocol-relative URLs, and backslash paths are rejected.
 
 The login page is localized for Swedish and English. Windows/AD sign-in is the

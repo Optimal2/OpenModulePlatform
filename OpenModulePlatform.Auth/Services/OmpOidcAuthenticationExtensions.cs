@@ -10,8 +10,6 @@ namespace OpenModulePlatform.Auth.Services;
 
 public static class OmpOidcAuthenticationExtensions
 {
-    private const int SessionExpirationHours = 10;
-
     public static OmpOidcProviderStatus AddOmpOidcAuthentication(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -111,9 +109,12 @@ public static class OmpOidcAuthenticationExtensions
 
                         context.Principal = user.ToClaimsPrincipal();
                         context.Properties ??= new AuthenticationProperties();
-                        context.Properties.IsPersistent = true;
-                        context.Properties.IssuedUtc = DateTimeOffset.UtcNow;
-                        context.Properties.ExpiresUtc = DateTimeOffset.UtcNow.AddHours(SessionExpirationHours);
+                        var propertiesFactory = context.HttpContext.RequestServices
+                            .GetRequiredService<OmpAuthenticationPropertiesFactory>();
+                        await propertiesFactory.ApplyAsync(
+                            context.Properties,
+                            user,
+                            context.HttpContext.RequestAborted);
                     },
                     OnAuthenticationFailed = context =>
                     {

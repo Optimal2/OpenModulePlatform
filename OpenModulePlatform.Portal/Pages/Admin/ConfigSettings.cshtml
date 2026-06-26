@@ -31,12 +31,16 @@
             <label asp-for="Input.ConfigSettingId"></label>
             <select asp-for="Input.ConfigSettingId">
                 <option value="">@L["Select setting"]</option>
-                @foreach (var option in Model.SettingOptions)
+                @foreach (var definition in Model.Definitions)
                 {
-                    <option value="@option.Value">@option.Label</option>
+                    <option value="@definition.ConfigSettingId"
+                            data-description="@definition.Description">
+                        @(definition.IsEnabled ? definition.Key : $"{definition.Key} ({L["Disabled"].Value.ToLowerInvariant()})")
+                    </option>
                 }
             </select>
             <div class="field-help">@L["Definitions are seeded by OMP. Add or remove definitions through SQL upgrades, not this page."]</div>
+            <div class="field-help" data-setting-description></div>
         </div>
 
         <div class="form-field form-field--compact">
@@ -186,6 +190,8 @@
 
             const scopeSelect = form.querySelector('[data-scope-select]');
             const fields = Array.from(form.querySelectorAll('[data-scope-field]'));
+            const settingSelect = form.querySelector('#Input_ConfigSettingId');
+            const settingDescription = form.querySelector('[data-setting-description]');
 
             const syncScopeFields = () => {
                 const active = scopeSelect.value;
@@ -200,6 +206,19 @@
 
             scopeSelect.addEventListener('change', syncScopeFields);
             syncScopeFields();
+
+            const syncSettingDescription = () => {
+                if (!settingSelect || !settingDescription) {
+                    return;
+                }
+
+                const selected = settingSelect.selectedOptions[0];
+                settingDescription.textContent = selected?.dataset.description || '';
+                settingDescription.hidden = !settingDescription.textContent;
+            };
+
+            settingSelect?.addEventListener('change', syncSettingDescription);
+            syncSettingDescription();
         })();
     </script>
 }

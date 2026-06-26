@@ -16,7 +16,6 @@ namespace OpenModulePlatform.Auth.Pages;
 [AllowAnonymous]
 public sealed class LoginModel : PageModel
 {
-    private const int SessionExpirationHours = 10;
     private const int MaxRegistrationUserNameLength = 256;
     private const int MinRegistrationPasswordLength = 8;
 
@@ -27,6 +26,7 @@ public sealed class LoginModel : PageModel
     private readonly OmpConfigurationService _configuration;
     private readonly WindowsPasswordAuthenticator _windowsPasswordAuthenticator;
     private readonly OmpOidcProviderStatus _oidcProviderStatus;
+    private readonly OmpAuthenticationPropertiesFactory _authenticationPropertiesFactory;
     private readonly IStringLocalizer<AuthResource> _localizer;
 
     public LoginModel(
@@ -35,6 +35,7 @@ public sealed class LoginModel : PageModel
         OmpConfigurationService configuration,
         WindowsPasswordAuthenticator windowsPasswordAuthenticator,
         OmpOidcProviderStatus oidcProviderStatus,
+        OmpAuthenticationPropertiesFactory authenticationPropertiesFactory,
         IStringLocalizer<AuthResource> localizer)
     {
         _repository = repository;
@@ -42,6 +43,7 @@ public sealed class LoginModel : PageModel
         _configuration = configuration;
         _windowsPasswordAuthenticator = windowsPasswordAuthenticator;
         _oidcProviderStatus = oidcProviderStatus;
+        _authenticationPropertiesFactory = authenticationPropertiesFactory;
         _localizer = localizer;
     }
 
@@ -135,7 +137,7 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
-        await SignInAsync(result.User);
+        await SignInAsync(result.User, ct);
         return RedirectToSafeReturnUrl();
     }
 
@@ -172,7 +174,7 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
-        await SignInAsync(result.User);
+        await SignInAsync(result.User, ct);
         return RedirectToSafeReturnUrl();
     }
 
@@ -217,20 +219,15 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
-        await SignInAsync(user);
+        await SignInAsync(user, ct);
         return RedirectToSafeReturnUrl();
     }
 
-    private Task SignInAsync(OmpAuthenticatedUser user)
+    private async Task SignInAsync(OmpAuthenticatedUser user, CancellationToken ct)
     {
-        var properties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            IssuedUtc = DateTimeOffset.UtcNow,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(SessionExpirationHours)
-        };
+        var properties = await _authenticationPropertiesFactory.CreateAsync(user, ct);
 
-        return HttpContext.SignInAsync(
+        await HttpContext.SignInAsync(
             OmpAuthDefaults.AuthenticationScheme,
             user.ToClaimsPrincipal(),
             properties);

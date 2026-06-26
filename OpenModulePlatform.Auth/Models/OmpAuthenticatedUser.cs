@@ -7,6 +7,7 @@ namespace OpenModulePlatform.Auth.Models;
 public sealed class OmpAuthenticatedUser
 {
     public int? UserId { get; init; }
+    public int? ProviderId { get; init; }
     public string DisplayName { get; init; } = "";
     public string Provider { get; init; } = "";
     public string ProviderUserKey { get; init; } = "";

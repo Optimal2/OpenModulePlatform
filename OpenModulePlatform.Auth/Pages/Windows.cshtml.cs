@@ -15,10 +15,14 @@ namespace OpenModulePlatform.Auth.Pages;
 public sealed class WindowsModel : PageModel
 {
     private readonly OmpAuthRepository _repository;
+    private readonly OmpAuthenticationPropertiesFactory _authenticationPropertiesFactory;
 
-    public WindowsModel(OmpAuthRepository repository)
+    public WindowsModel(
+        OmpAuthRepository repository,
+        OmpAuthenticationPropertiesFactory authenticationPropertiesFactory)
     {
         _repository = repository;
+        _authenticationPropertiesFactory = authenticationPropertiesFactory;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -44,7 +48,7 @@ public sealed class WindowsModel : PageModel
             return LocalRedirect("/auth/login?error=windows");
         }
 
-        await SignInAsync(user);
+        await SignInAsync(user, ct);
         return RedirectToSafeReturnUrl();
     }
 
@@ -75,16 +79,11 @@ public sealed class WindowsModel : PageModel
         return null;
     }
 
-    private Task SignInAsync(OmpAuthenticatedUser user)
+    private async Task SignInAsync(OmpAuthenticatedUser user, CancellationToken ct)
     {
-        var properties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            IssuedUtc = DateTimeOffset.UtcNow,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(10)
-        };
+        var properties = await _authenticationPropertiesFactory.CreateAsync(user, ct);
 
-        return HttpContext.SignInAsync(
+        await HttpContext.SignInAsync(
             OmpAuthDefaults.AuthenticationScheme,
             user.ToClaimsPrincipal(),
             properties);

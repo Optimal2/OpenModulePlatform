@@ -323,6 +323,7 @@ BEGIN
     USING
     (
         VALUES
+            (N'auth', N'providerSessionLifetimes', N'Global JSON object that maps auth provider ids to OMP session lifetime minutes. Provider id 0 is the fallback for providers without an override, for example {"0":600,"2":120}. Missing, empty, or invalid values use the built-in 600-minute default. Changes apply only to new sign-ins.', 100, CONVERT(bit, 1)),
             (N'auth', N'selfRegistrationEnabled', N'Controls whether users may create their own OMP account from the login page or account settings.', 110, CONVERT(bit, 1))
     ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
     ON target.ConfigCategory = source.ConfigCategory
@@ -346,6 +347,7 @@ BEGIN
         INNER JOIN
         (
             VALUES
+                (N'auth', N'providerSessionLifetimes', N'{"0":600}'),
                 (N'auth', N'selfRegistrationEnabled', N'true')
         ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)
             ON defaults.ConfigCategory = def.ConfigCategory
