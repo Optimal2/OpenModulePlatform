@@ -86,11 +86,13 @@
                         @L[_portalTopBar.AllModulesToggleTextKey]
                     </summary>
                     <div class="portal-topbar__nav-menu" data-portal-topbar-entry-menu>
-                        <input class="portal-topbar__nav-filter"
-                               type="search"
-                               placeholder="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
-                               aria-label="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
-                               data-portal-topbar-entry-filter />
+                        <div class="portal-topbar__nav-filter-shell">
+                            <input class="portal-topbar__nav-filter"
+                                   type="search"
+                                   placeholder="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
+                                   aria-label="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
+                                   data-portal-topbar-entry-filter />
+                        </div>
                         @foreach (var group in _portalTopBar.NavigationGroups)
                         {
                             var groupFavoriteLabel = L[group.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];

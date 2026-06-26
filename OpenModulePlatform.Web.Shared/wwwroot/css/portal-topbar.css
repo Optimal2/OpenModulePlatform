@@ -303,17 +303,43 @@
 }
 
 .portal-topbar__nav-menu {
+    box-sizing: border-box;
     width: min(calc(100vw - 24px), 460px);
     max-height: min(70vh, 620px);
     overflow: auto;
     overscroll-behavior: contain;
-    scrollbar-width: none;
+    padding-right: 12px;
+    scrollbar-color: rgba(100, 113, 132, 0.32) transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
     -ms-overflow-style: none;
 }
 
+.portal-topbar__nav-menu:hover,
+.portal-topbar__nav-menu:focus-within {
+    scrollbar-color: rgba(11, 87, 208, 0.55) transparent;
+}
+
 .portal-topbar__nav-menu::-webkit-scrollbar {
-    width: 0;
-    height: 0;
+    width: 8px;
+    height: 8px;
+}
+
+.portal-topbar__nav-menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.portal-topbar__nav-menu::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background: rgba(100, 113, 132, 0.32);
+    background-clip: padding-box;
+}
+
+.portal-topbar__nav-menu:hover::-webkit-scrollbar-thumb,
+.portal-topbar__nav-menu:focus-within::-webkit-scrollbar-thumb {
+    background: rgba(11, 87, 208, 0.55);
+    background-clip: padding-box;
 }
 
 .portal-topbar__favorites-menu {
@@ -390,9 +416,19 @@
     outline: none;
 }
 
+.portal-topbar__nav-filter-shell {
+    position: sticky;
+    top: -8px;
+    z-index: 2;
+    margin: -8px 0 8px;
+    padding: 8px 0;
+    background: var(--portal-topbar-surface);
+}
+
 .portal-topbar__nav-filter {
+    box-sizing: border-box;
     width: 100%;
-    margin: 0 0 8px;
+    margin: 0;
     padding: 8px 10px;
     border: 1px solid var(--portal-topbar-border);
     border-radius: 10px;
@@ -410,6 +446,10 @@
 }
 
 .portal-topbar__nav-group:first-of-type {
+    border-top: 0;
+}
+
+.portal-topbar__nav-filter-shell + .portal-topbar__nav-group {
     border-top: 0;
 }
 
