@@ -105,6 +105,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
     public async Task<IActionResult> OnPostSend(long conversationId, CancellationToken ct)
     {
         SetTitles("Messages");
+        var isAjaxRequest = IsAjaxRequest();
 
         if (!TryGetCurrentUserId(out var userId))
         {
@@ -118,7 +119,12 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 
         try
         {
-            await _messages.SendMessageAsync(userId, conversationId, MessageContent, Attachments, ct);
+            var messageId = await _messages.SendMessageAsync(userId, conversationId, MessageContent, Attachments, ct);
+            if (isAjaxRequest)
+            {
+                return new JsonResult(new { ok = true, messageId });
+            }
+
             return RedirectToPage("/Messages/Thread", new { conversationId, restoreScrollTop = RestoreScrollTop });
         }
         catch (UnauthorizedAccessException)
@@ -130,6 +136,11 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
             ModelState.AddModelError(string.Empty, ex.Message);
             CanUseMessages = true;
             await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: false, ct);
+            if (isAjaxRequest)
+            {
+                return new BadRequestObjectResult(new { errors = GetModelStateErrors() });
+            }
+
             return Page();
         }
     }
@@ -186,4 +197,15 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         return int.TryParse(userIdClaim, NumberStyles.Integer, CultureInfo.InvariantCulture, out userId)
             && userId > 0;
     }
+
+    private bool IsAjaxRequest()
+        => string.Equals(Request.Headers["X-Requested-With"].ToString(), "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);
+
+    private string[] GetModelStateErrors()
+        => ModelState.Values
+            .SelectMany(entry => entry.Errors)
+            .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                ? T("The message could not be sent.")
+                : error.ErrorMessage)
+            .ToArray();
 }
