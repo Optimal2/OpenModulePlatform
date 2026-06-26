@@ -21,7 +21,10 @@
         running: false,
         failures: 0,
         visible: [],
-        queue: []
+        queue: [],
+        audioContext: null,
+        soundEnabled: false,
+        lastMessageSoundAt: 0
     };
 
     function parsePositiveInteger(value, fallback) {
@@ -32,6 +35,85 @@
     function formatText(template, value) {
         return (template || "").replace("{0}", String(value));
     }
+
+    function getAudioContext() {
+        var AudioContextType = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextType) {
+            return null;
+        }
+
+        if (!state.audioContext) {
+            state.audioContext = new AudioContextType();
+        }
+
+        return state.audioContext;
+    }
+
+    function isMessageComposerFocused() {
+        if (!document.hasFocus()) {
+            return false;
+        }
+
+        var active = document.activeElement;
+        return !!(active
+            && typeof active.closest === "function"
+            && active.closest("[data-message-thread-composer]"));
+    }
+
+    function playMessageNotificationSound() {
+        if (!state.soundEnabled || isMessageComposerFocused()) {
+            return;
+        }
+
+        var now = Date.now();
+        if (now - state.lastMessageSoundAt < 1500) {
+            return;
+        }
+
+        var context = getAudioContext();
+        if (!context) {
+            return;
+        }
+
+        state.lastMessageSoundAt = now;
+
+        var play = function () {
+            var start = context.currentTime;
+            var oscillator = context.createOscillator();
+            var gain = context.createGain();
+
+            oscillator.type = "sine";
+            oscillator.frequency.setValueAtTime(880, start);
+            oscillator.frequency.exponentialRampToValueAtTime(660, start + 0.16);
+
+            gain.gain.setValueAtTime(0.0001, start);
+            gain.gain.exponentialRampToValueAtTime(0.045, start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
+
+            oscillator.connect(gain);
+            gain.connect(context.destination);
+            oscillator.start(start);
+            oscillator.stop(start + 0.22);
+
+            oscillator.addEventListener("ended", function () {
+                oscillator.disconnect();
+                gain.disconnect();
+            });
+        };
+
+        if (context.state === "suspended") {
+            context.resume().then(play).catch(function () {
+                state.lastMessageSoundAt = 0;
+            });
+            return;
+        }
+
+        play();
+    }
+
+    window.ompMessageNotificationSound = {
+        play: playMessageNotificationSound
+    };
 
     function getConfig() {
         var root = state.root;
@@ -219,6 +301,10 @@
     }
 
     function enqueueToast(toast, config) {
+        if (toast && toast.isMessage) {
+            playMessageNotificationSound();
+        }
+
         if (state.visible.length < maxVisibleToasts) {
             showToast(toast, config);
             return;
@@ -451,6 +537,7 @@
         state.container = document.createElement("div");
         state.container.className = "portal-notification-toast-stack";
         document.body.appendChild(state.container);
+        state.soundEnabled = true;
 
         window.addEventListener("focus", function () {
             scheduleNext(0);
