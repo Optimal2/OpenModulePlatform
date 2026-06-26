@@ -300,9 +300,29 @@
         }
     }
 
+    function isPageActive() {
+        return document.visibilityState === "visible" && document.hasFocus();
+    }
+
+    function queueToast(toast) {
+        if (!toast) {
+            return;
+        }
+
+        state.queue.push(toast);
+        while (state.queue.length > maxQueuedToasts) {
+            state.queue.shift();
+        }
+    }
+
     function enqueueToast(toast, config) {
         if (toast && toast.isMessage) {
             playMessageNotificationSound();
+        }
+
+        if (!isPageActive()) {
+            queueToast(toast);
+            return;
         }
 
         if (state.visible.length < maxVisibleToasts) {
@@ -310,13 +330,14 @@
             return;
         }
 
-        state.queue.unshift(toast);
-        if (state.queue.length > maxQueuedToasts) {
-            state.queue.length = maxQueuedToasts;
-        }
+        queueToast(toast);
     }
 
     function drainQueue(config) {
+        if (!isPageActive()) {
+            return;
+        }
+
         while (state.visible.length < maxVisibleToasts && state.queue.length > 0) {
             showToast(state.queue.shift(), config);
         }
@@ -540,11 +561,13 @@
         state.soundEnabled = true;
 
         window.addEventListener("focus", function () {
+            drainQueue(getConfig());
             scheduleNext(0);
         });
 
         document.addEventListener("visibilitychange", function () {
             if (document.visibilityState === "visible") {
+                drainQueue(getConfig());
                 scheduleNext(0);
             }
         });

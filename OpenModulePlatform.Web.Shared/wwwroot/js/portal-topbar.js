@@ -772,6 +772,123 @@
         return form;
     }
 
+    function replaceNotificationList(root, notificationState) {
+        var list = root ? root.querySelector('[data-portal-topbar-notifications-list]') : null;
+        if (!list || !notificationState || !Array.isArray(notificationState.items)) {
+            return;
+        }
+
+        list.textContent = '';
+        notificationState.items.forEach(function (item) {
+            list.appendChild(createNotificationForm(list, item));
+        });
+
+        list.dataset.notificationLoading = 'false';
+        list.dataset.notificationEnd = notificationState.hasMore === true ? 'false' : 'true';
+        updateNotificationEmptyState(root);
+        setNotificationLazyState(root, false, false);
+    }
+
+    function messageConversationInitials(value) {
+        var text = String(value || '').trim();
+        if (!text) {
+            return '?';
+        }
+
+        var parts = text.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) {
+            return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+        }
+
+        return text.substring(0, Math.min(text.length, 2)).toUpperCase();
+    }
+
+    function formatMessageTime(value) {
+        if (!value) {
+            return '';
+        }
+
+        var date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+
+        return date.toLocaleString();
+    }
+
+    function createMessageConversationLink(list, item) {
+        var link = document.createElement('a');
+        var unreadCount = Math.max(0, Number(item.unreadCount) || 0);
+        link.className = 'portal-topbar__message-row' + (unreadCount > 0 ? ' is-unread' : '');
+        link.href = item.href || '/messages';
+        link.setAttribute('data-enhance-nav', 'false');
+
+        var avatar = document.createElement('span');
+        avatar.className = 'portal-topbar__message-avatar';
+        avatar.setAttribute('aria-hidden', 'true');
+        if (item.avatarUrl) {
+            var img = document.createElement('img');
+            img.src = item.avatarUrl;
+            img.alt = '';
+            avatar.appendChild(img);
+        } else {
+            avatar.textContent = messageConversationInitials(item.displayTitle);
+        }
+        link.appendChild(avatar);
+
+        var copy = document.createElement('span');
+        copy.className = 'portal-topbar__message-copy';
+
+        var title = document.createElement('span');
+        title.className = 'portal-topbar__message-title';
+        title.textContent = item.displayTitle || '';
+        copy.appendChild(title);
+
+        var preview = document.createElement('span');
+        preview.className = 'portal-topbar__message-preview';
+        preview.textContent = item.lastMessagePreview || list.dataset.noMessagePreviewText || '';
+        copy.appendChild(preview);
+
+        var timeText = formatMessageTime(item.lastMessageAt);
+        if (timeText) {
+            var meta = document.createElement('span');
+            meta.className = 'portal-topbar__message-meta';
+            meta.textContent = timeText;
+            copy.appendChild(meta);
+        }
+
+        link.appendChild(copy);
+
+        var badge = document.createElement('span');
+        badge.className = 'portal-topbar__message-row-badge';
+        badge.textContent = notificationBadgeText(unreadCount);
+        badge.hidden = unreadCount === 0;
+        link.appendChild(badge);
+
+        return link;
+    }
+
+    function updateMessageEmptyState(root) {
+        var list = root ? root.querySelector('[data-portal-topbar-messages-list]') : null;
+        var empty = root ? root.querySelector('[data-portal-topbar-messages-empty]') : null;
+        if (empty) {
+            empty.hidden = !!(list && list.querySelector('.portal-topbar__message-row'));
+        }
+    }
+
+    function replaceMessageList(root, messageState) {
+        var list = root ? root.querySelector('[data-portal-topbar-messages-list]') : null;
+        if (!list || !messageState || !Array.isArray(messageState.items)) {
+            return;
+        }
+
+        list.textContent = '';
+        messageState.items.forEach(function (item) {
+            list.appendChild(createMessageConversationLink(list, item));
+        });
+        updateMessageEmptyState(root);
+    }
+
     function reportNotificationSessionWarning(kind) {
         window.dispatchEvent(new CustomEvent(SESSION_STATUS_WARNING_EVENT, {
             detail: { kind: kind || 'auth' }
@@ -1459,10 +1576,12 @@
 
             if (payload.notifications) {
                 updateNotificationBadge(root, payload.notifications.unreadCount);
+                replaceNotificationList(root, payload.notifications);
             }
 
             if (payload.messages) {
                 updateMessageBadge(root, payload.messages.unreadCount);
+                replaceMessageList(root, payload.messages);
             }
         });
     }

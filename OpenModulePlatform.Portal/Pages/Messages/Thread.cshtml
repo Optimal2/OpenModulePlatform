@@ -457,6 +457,11 @@ else
                 if (config.mode === UPDATE_POLL_MODE) {
                     schedulePoll();
                     scheduleRefresh(REFRESH_DEBOUNCE_MS);
+                    return;
+                }
+
+                if (config.mode === UPDATE_PUSH_MODE && document.visibilityState === 'visible' && document.hasFocus()) {
+                    scheduleRefresh(REFRESH_DEBOUNCE_MS);
                 }
             };
 
