@@ -174,6 +174,9 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("function isToastPushCategory(category)", script);
         Assert.Contains("""topbar.notification-state-changed""", script);
         Assert.Contains("""topbar.message-state-changed""", script);
+        Assert.Contains("function playMessageNotificationSound()", script);
+        Assert.Contains("window.ompMessageNotificationSound", script);
+        Assert.Contains("""[data-message-thread-composer]""", script);
         Assert.Contains("scheduleNext(0);", script);
     }
 
@@ -188,7 +191,8 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("data-notification-poll-interval", page);
         Assert.Contains("form.addEventListener('submit', submitMessage);", page);
         Assert.Contains("'Accept': 'text/html'", page);
-        Assert.Contains("replaceMessages(html, { stickToBottom: true })", page);
+        Assert.Contains("replaceMessages(html, { stickToBottom: true, suppressSound: true })", page);
+        Assert.Contains("window.ompMessageNotificationSound?.play();", page);
         Assert.Contains("const PUSH_EVENT_NAME = 'omp:push-event';", page);
         Assert.Contains("const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';", page);
         Assert.Contains("getPayloadConversationId(payload) !== conversationId", page);

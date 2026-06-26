@@ -190,6 +190,21 @@ else
                 return Number.isFinite(latest) ? latest : 0;
             };
 
+            const isOwnMessage = (messageId) => {
+                const id = String(messageId);
+                const message = Array.from(scrollContainer.querySelectorAll('[data-message-id]'))
+                    .find((item) => item.dataset.messageId === id);
+                return message?.classList.contains('is-own') === true;
+            };
+
+            const playIncomingMessageSound = (messageId, options) => {
+                if (options.suppressSound === true || isOwnMessage(messageId)) {
+                    return;
+                }
+
+                window.ompMessageNotificationSound?.play();
+            };
+
             const isNearBottom = () => {
                 const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.clientHeight - scrollContainer.scrollTop;
                 return distanceFromBottom <= 80;
@@ -230,8 +245,10 @@ else
                     scrollContainer.scrollTop = previousScrollTop;
                 }
 
-                if (getLatestMessageId() > previousLatestMessageId) {
+                const latestMessageId = getLatestMessageId();
+                if (latestMessageId > previousLatestMessageId) {
                     announceUpdated();
+                    playIncomingMessageSound(latestMessageId, options);
                 }
 
                 return true;
@@ -351,7 +368,7 @@ else
                     }
 
                     const html = await response.text();
-                    if (!replaceMessages(html, { stickToBottom: true })) {
+                    if (!replaceMessages(html, { stickToBottom: true, suppressSound: true })) {
                         setComposerErrors([form.dataset.sendErrorText || 'The message could not be sent.']);
                         return;
                     }
