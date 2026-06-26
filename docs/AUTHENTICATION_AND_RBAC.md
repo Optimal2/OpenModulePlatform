@@ -72,7 +72,11 @@ only primary visible option. Alternate Windows credentials and local password
 sign-in are hidden behind the "Other sign-in options" disclosure and should be
 used only when the normal AD flow cannot be used.
 
-Logout is posted to `/auth/logout`. It clears the shared OMP session cookie and the active role cookie, then redirects the user to `/auth/login`. For Windows Authentication, logout does not sign the user out of Windows, the browser, or the operating system. A subsequent Windows sign-in may therefore authenticate silently again.
+Logout is posted to `/auth/logout`. It always clears the shared OMP session cookie and the active role cookie, then redirects the user back to `/auth/login`.
+
+When the current OMP session came from the configured OIDC / AD FS provider, OMP also invokes ASP.NET Core's standard OpenID Connect sign-out flow after clearing the OMP cookie. This is a best-effort federated logout redirect to the provider's published end-session endpoint. If the provider metadata does not expose an end-session endpoint, OMP completes local logout and returns to the login page.
+
+For Windows Authentication, logout cannot sign the user out of Windows, clear browser Integrated Windows Authentication credentials, or end the operating-system session. A subsequent Windows sign-in may therefore authenticate silently again. To fully change Windows identity, the user must close the browser session, use another browser/profile, or sign out of Windows depending on the workstation and browser policy.
 
 ## Built-In Providers
 

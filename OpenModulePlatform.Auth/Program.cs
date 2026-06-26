@@ -5,12 +5,19 @@ using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Auth.Services;
 using OpenModulePlatform.Web.Shared.Extensions;
+using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
+var authWebAppOptions = new WebAppOptions
+{
+    DefaultCulture = "sv-SE",
+    SupportedCultures = ["sv-SE", "en-US"]
+};
+var cultureSelectionService = new CultureSelectionService();
 
 builder.AddOmpWebLogging();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
@@ -22,6 +29,7 @@ builder.Services.AddSingleton<SqlConnectionFactory>();
 builder.Services.AddScoped<OmpConfigurationService>();
 builder.Services.AddScoped<RbacService>();
 builder.Services.AddScoped<OmpBrandingService>();
+builder.Services.AddSingleton(cultureSelectionService);
 builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddSingleton<WindowsPrincipalReader>();
 builder.Services.AddSingleton<WindowsPasswordAuthenticator>();
@@ -52,6 +60,7 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
     options.SupportedUICultures = supportedCultures;
     options.RequestCultureProviders =
     [
+        new PreferredCultureRequestCultureProvider(authWebAppOptions, cultureSelectionService),
         new CookieRequestCultureProvider(),
         new AcceptLanguageHeaderRequestCultureProvider()
     ];
@@ -66,6 +75,24 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapRazorPages();
+
+app.MapGet("/localization/set-language", (
+    HttpContext context,
+    string culture,
+    string? returnUrl,
+    CultureSelectionService cultureSelection) =>
+{
+    var preferredCulture = cultureSelection.NormalizePreferredCulture(culture, authWebAppOptions);
+    var effectiveCulture = cultureSelection.ResolveEffectiveCulture(preferredCulture, authWebAppOptions);
+    cultureSelection.ApplyCookies(context.Response, preferredCulture, effectiveCulture);
+
+    if (returnUrl is not null && IsSafeLocalReturnUrl(returnUrl))
+    {
+        return Results.LocalRedirect(returnUrl!);
+    }
+
+    return Results.LocalRedirect("/");
+}).AllowAnonymous();
 
 if (oidcProviderStatus.IsEnabled)
 {
@@ -90,16 +117,30 @@ app.MapGet("/session-status", (HttpContext context) =>
         : Results.Unauthorized();
 });
 
-app.MapPost("/logout", async (HttpContext context, IOptions<OmpAuthOptions> authOptions) =>
+app.MapPost("/logout", async (
+    HttpContext context,
+    IOptions<OmpAuthOptions> authOptions,
+    OmpOidcProviderStatus currentOidcProviderStatus) =>
 {
+    var decision = OmpLogoutDecisionFactory.Create(
+        context.User,
+        authOptions.Value,
+        currentOidcProviderStatus);
+
     await context.SignOutAsync(OmpAuthDefaults.AuthenticationScheme);
     ActiveRoleCookie.Clear(context.Response);
 
-    var loginPath = string.IsNullOrWhiteSpace(authOptions.Value.LoginPath)
-        ? OmpAuthDefaults.LoginPath
-        : authOptions.Value.LoginPath;
+    if (decision.SignOutOidc)
+    {
+        return Results.SignOut(
+            new AuthenticationProperties
+            {
+                RedirectUri = decision.RedirectUri
+            },
+            [OmpAuthDefaults.OidcAuthenticationScheme]);
+    }
 
-    return Results.LocalRedirect(loginPath);
+    return Results.LocalRedirect(decision.RedirectUri);
 });
 
 app.Run();

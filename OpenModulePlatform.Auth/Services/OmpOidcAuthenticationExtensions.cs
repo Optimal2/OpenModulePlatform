@@ -139,6 +139,26 @@ public static class OmpOidcAuthenticationExtensions
                         RedirectToLogin(context.HttpContext, "oidc");
                         context.HandleResponse();
                         return Task.CompletedTask;
+                    },
+                    OnRedirectToIdentityProviderForSignOut = context =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(context.ProtocolMessage.IssuerAddress))
+                        {
+                            return Task.CompletedTask;
+                        }
+
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("OpenModulePlatform.Auth.Oidc");
+                        var redirectUri = NormalizeLocalRedirectUri(
+                            context.Properties?.RedirectUri,
+                            OmpAuthDefaults.LoginPath);
+
+                        logger.LogInformation(
+                            "OIDC sign-out endpoint is not available in provider metadata; completed local OMP logout only.");
+                        context.Response.Redirect(redirectUri);
+                        context.HandleResponse();
+                        return Task.CompletedTask;
                     }
                 };
             });
@@ -214,6 +234,31 @@ public static class OmpOidcAuthenticationExtensions
 
     private static string NormalizeClaimType(string? claimType, string fallback)
         => string.IsNullOrWhiteSpace(claimType) ? fallback : claimType.Trim();
+
+    private static string NormalizeLocalRedirectUri(string? redirectUri, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(redirectUri) ||
+            !Uri.IsWellFormedUriString(redirectUri, UriKind.Relative) ||
+            !redirectUri.StartsWith("/", StringComparison.Ordinal) ||
+            redirectUri.StartsWith("//", StringComparison.Ordinal) ||
+            redirectUri.Contains('\\', StringComparison.Ordinal))
+        {
+            return fallback;
+        }
+
+        try
+        {
+            var unescaped = Uri.UnescapeDataString(redirectUri);
+            return !unescaped.StartsWith("//", StringComparison.Ordinal) &&
+                   !unescaped.Contains('\\', StringComparison.Ordinal)
+                ? redirectUri
+                : fallback;
+        }
+        catch (UriFormatException)
+        {
+            return fallback;
+        }
+    }
 
     private static void RedirectToLogin(HttpContext context, string error)
     {

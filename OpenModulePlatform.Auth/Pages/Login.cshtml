@@ -7,6 +7,17 @@
     var signInLabel = L["Sign in"].Value;
     var signInTitle = string.Format(L["Sign in to {0}"].Value, ompBranding.PlatformName);
     var signInLead = string.Format(L["Choose an authentication provider for this {0} instance."].Value, ompBranding.PlatformName);
+    var request = ViewContext.HttpContext.Request;
+    var languageReturnUrl = $"{request.PathBase}{request.Path}{request.QueryString}";
+    string BuildLanguageHref(string culture) => $"{request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(languageReturnUrl)}";
+    string LanguageBadgeText(string culture)
+    {
+        var separatorIndex = culture.IndexOfAny(new[] { '-', '_' });
+        var language = separatorIndex > 0 ? culture[..separatorIndex] : culture;
+        return language.Length <= 3
+            ? language.ToUpperInvariant()
+            : culture.ToUpperInvariant();
+    }
     ViewData["Title"] = signInLabel;
 }
 <!doctype html>
@@ -24,7 +35,13 @@
         h1 { margin: 0 0 1rem; font-size: 1.7rem; }
         .muted { color: #586173; line-height: 1.5; }
         .stack { display: grid; gap: 1rem; }
-        .windows-actions { display: grid; gap: .5rem; align-items: stretch; }
+        .panel-header { display: grid; gap: 1rem; }
+        .language-selector { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+        .language-selector__item { display: inline-flex; align-items: center; justify-content: center; min-width: 2.6rem; min-height: 2rem; padding: .35rem .55rem; border: 1px solid #c8d1dc; border-radius: 999px; color: #2f5fb3; font-size: .82rem; font-weight: 700; line-height: 1; text-decoration: none; }
+        .language-selector__item[aria-current="true"] { background: #2f5fb3; border-color: #2f5fb3; color: #fff; }
+        .language-selector__item:not([aria-current="true"]):hover,
+        .language-selector__item:not([aria-current="true"]):focus-visible { border-color: #2f5fb3; background: #eef4ff; }
+        .primary-actions { display: grid; gap: .5rem; align-items: stretch; }
         .auth-options { display: grid; gap: .75rem; }
         .auth-options > summary { cursor: pointer; list-style: none; }
         .auth-options > summary::-webkit-details-marker { display: none; }
@@ -43,6 +60,7 @@
         .button.subtle-link:hover,
         .button.subtle-link:focus-visible { color: #193f82; background: transparent; }
         .error { padding: .75rem; border: 1px solid #f1a9a9; border-radius: 6px; background: #fff0f0; color: #8a1f1f; }
+        .notice { padding: .75rem; border: 1px solid #b8d7c2; border-radius: 6px; background: #eefaf1; color: #1f6b34; }
         dialog { border: 1px solid #c8d1dc; border-radius: 8px; padding: 0; width: min(25rem, calc(100% - 2rem)); box-shadow: 0 18px 48px rgba(15, 23, 42, .18); }
         dialog::backdrop { background: rgba(15, 23, 42, .35); }
         .dialog-body { padding: 1.25rem; }
@@ -55,12 +73,17 @@
             .muted, .auth-options-heading { color: #b6c3d5; }
             .auth-options-heading::before,
             .auth-options-heading::after { background: #334155; }
+            .language-selector__item { border-color: #475569; color: #8bb7ff; }
+            .language-selector__item[aria-current="true"] { background: #8bb7ff; border-color: #8bb7ff; color: #0b1220; }
+            .language-selector__item:not([aria-current="true"]):hover,
+            .language-selector__item:not([aria-current="true"]):focus-visible { border-color: #8bb7ff; background: #16243a; }
             input { background: #0b1220; border-color: #475569; color: #e5edf7; }
             .button.secondary { background: #111c2d; color: #e5edf7; border-color: #475569; }
             .button.subtle-link { color: #8bb7ff; }
             .button.subtle-link:hover,
             .button.subtle-link:focus-visible { color: #b8d3ff; }
             .error { background: #3a1518; border-color: #9f3a3f; color: #ffd4d7; }
+            .notice { background: #102b1a; border-color: #2f7d46; color: #c9f2d3; }
             dialog::backdrop { background: rgba(0, 0, 0, .55); }
         }
     </style>
@@ -69,18 +92,47 @@
 <main>
     <section class="panel">
         <div class="stack">
-            <div>
-                <h1>@signInTitle</h1>
-                <p class="muted">@signInLead</p>
+            <div class="panel-header">
+                @if (Model.LanguageOptions.Count > 1)
+                {
+                    <nav class="language-selector" aria-label="@L["Language"]">
+                        @foreach (var language in Model.LanguageOptions)
+                        {
+                            @if (language.IsCurrent)
+                            {
+                                <span class="language-selector__item" aria-current="true" title="@L[language.DisplayTextKey]">@LanguageBadgeText(language.Culture)</span>
+                            }
+                            else
+                            {
+                                <a class="language-selector__item" href="@BuildLanguageHref(language.Culture)" title="@L[language.DisplayTextKey]">@LanguageBadgeText(language.Culture)</a>
+                            }
+                        }
+                    </nav>
+                }
+                <div>
+                    <h1>@signInTitle</h1>
+                    <p class="muted">@signInLead</p>
+                </div>
             </div>
 
             @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && !Model.HasOpenPrompt)
             {
                 <div class="error">@Model.ErrorMessage</div>
             }
+            @if (!string.IsNullOrWhiteSpace(Model.LogoutMessage))
+            {
+                <div class="notice">@Model.LogoutMessage</div>
+            }
 
-            <div class="windows-actions">
-                <a class="button block" href="@Model.WindowsLoginUrl">@L["Sign in with Windows / AD"]</a>
+            <div class="primary-actions">
+                @if (Model.OidcEnabled)
+                {
+                    <a class="button block" href="@Model.OidcLoginUrl">@string.Format(L["Sign in with {0}"].Value, Model.OidcDisplayName)</a>
+                }
+                else
+                {
+                    <a class="button block" href="@Model.WindowsLoginUrl">@L["Sign in with Windows / AD"]</a>
+                }
             </div>
 
             <details class="auth-options" @(Model.ShowOtherSignInOptions || Model.HasOpenPrompt ? "open" : null)>
@@ -95,7 +147,7 @@
                 <div class="auth-options-list" id="other-signin-options-list">
                     @if (Model.OidcEnabled)
                     {
-                        <a class="button secondary block" href="@Model.OidcLoginUrl">@string.Format(L["Sign in with {0}"].Value, Model.OidcDisplayName)</a>
+                        <a class="button secondary block" href="@Model.WindowsLoginUrl">@L["Sign in with Windows / AD"]</a>
                     }
                     <button
                         type="button"

@@ -5,11 +5,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Options;
 using OpenModulePlatform.Auth.Localization;
 using OpenModulePlatform.Auth.Models;
 using OpenModulePlatform.Auth.Services;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
+using System.Globalization;
 
 namespace OpenModulePlatform.Auth.Pages;
 
@@ -28,6 +30,7 @@ public sealed class LoginModel : PageModel
     private readonly OmpOidcProviderStatus _oidcProviderStatus;
     private readonly OmpAuthenticationPropertiesFactory _authenticationPropertiesFactory;
     private readonly IStringLocalizer<AuthResource> _localizer;
+    private readonly IOptions<RequestLocalizationOptions> _localizationOptions;
 
     public LoginModel(
         OmpAuthRepository repository,
@@ -36,7 +39,8 @@ public sealed class LoginModel : PageModel
         WindowsPasswordAuthenticator windowsPasswordAuthenticator,
         OmpOidcProviderStatus oidcProviderStatus,
         OmpAuthenticationPropertiesFactory authenticationPropertiesFactory,
-        IStringLocalizer<AuthResource> localizer)
+        IStringLocalizer<AuthResource> localizer,
+        IOptions<RequestLocalizationOptions> localizationOptions)
     {
         _repository = repository;
         _brandingService = brandingService;
@@ -45,10 +49,14 @@ public sealed class LoginModel : PageModel
         _oidcProviderStatus = oidcProviderStatus;
         _authenticationPropertiesFactory = authenticationPropertiesFactory;
         _localizer = localizer;
+        _localizationOptions = localizationOptions;
     }
 
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? Logout { get; set; }
 
     [BindProperty]
     public string UserName { get; set; } = "";
@@ -81,6 +89,8 @@ public sealed class LoginModel : PageModel
 
     public string? ErrorMessage { get; private set; }
 
+    public string? LogoutMessage { get; private set; }
+
     public bool ShowAlternateWindowsPrompt { get; private set; }
 
     public bool ShowLocalAccountPrompt { get; private set; }
@@ -90,6 +100,8 @@ public sealed class LoginModel : PageModel
     public bool ShowOtherSignInOptions { get; private set; }
 
     public bool SelfRegistrationEnabled { get; private set; } = true;
+
+    public IReadOnlyList<LoginCultureOption> LanguageOptions { get; private set; } = [];
 
     public bool HasOpenPrompt =>
         ShowAlternateWindowsPrompt || ShowLocalAccountPrompt || ShowRegisterAccountPrompt;
@@ -108,6 +120,13 @@ public sealed class LoginModel : PageModel
             "windowsAlternateUnavailable" => T("Alternate Windows sign-in is not available on this host."),
             "oidc" => T("External sign-in could not be completed."),
             "oidcUnavailable" => T("External sign-in is not configured."),
+            _ => null
+        };
+        LogoutMessage = Logout switch
+        {
+            OmpLogoutDecisionFactory.LogoutKindOidc => T("You have been signed out of OMP. The external sign-in provider was also asked to end its session."),
+            OmpLogoutDecisionFactory.LogoutKindWindows => T("You have been signed out of OMP. Windows / AD may still sign you in automatically in this browser or Windows session."),
+            OmpLogoutDecisionFactory.LogoutKindLocal => T("You have been signed out of OMP."),
             _ => null
         };
         ShowOtherSignInOptions = error is "windowsAlternateUnavailable" or "oidc" or "oidcUnavailable";
@@ -257,10 +276,30 @@ public sealed class LoginModel : PageModel
         OidcLoginUrl = QueryHelpers.AddQueryString(Url.Content("~/oidc"), "returnUrl", returnUrl);
     }
 
+    private void BuildLanguageOptions()
+    {
+        var currentCulture = CultureInfo.CurrentUICulture.Name;
+        var supportedCultures = _localizationOptions.Value.SupportedUICultures
+            ?.Select(culture => culture.Name)
+            .Where(culture => !string.IsNullOrWhiteSpace(culture))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(ToCultureDisplayTextKey, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(culture => culture, StringComparer.OrdinalIgnoreCase)
+            .ToArray() ?? [];
+
+        LanguageOptions = supportedCultures
+            .Select(culture => new LoginCultureOption(
+                culture,
+                ToCultureDisplayTextKey(culture),
+                string.Equals(culture, currentCulture, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+    }
+
     private async Task PreparePageAsync(CancellationToken ct)
     {
         SelfRegistrationEnabled = await GetSelfRegistrationEnabledAsync(ct);
         BuildProviderUrls();
+        BuildLanguageOptions();
     }
 
     private async Task<bool> GetSelfRegistrationEnabledAsync(CancellationToken ct)
@@ -331,4 +370,21 @@ public sealed class LoginModel : PageModel
         var branding = await _brandingService.GetBrandingAsync(ct);
         return branding.ApplyTerms(T(key));
     }
+
+    private static string ToCultureDisplayTextKey(string culture)
+    {
+        if (culture.StartsWith("sv", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Swedish";
+        }
+
+        if (culture.StartsWith("en", StringComparison.OrdinalIgnoreCase))
+        {
+            return "English";
+        }
+
+        return culture;
+    }
 }
+
+public sealed record LoginCultureOption(string Culture, string DisplayTextKey, bool IsCurrent);
