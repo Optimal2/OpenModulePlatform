@@ -15,4 +15,10 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
     <PackageReference Include="System.DirectoryServices.AccountManagement" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>OpenModulePlatform.Portal.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

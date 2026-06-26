@@ -2709,4 +2709,39 @@
   <data name="Select package type" xml:space="preserve"><value>Välj pakettyp</value></data>
   <data name="Target host: {0}" xml:space="preserve"><value>Målvärd: {0}</value></data>
   <data name="Upload one immutable artifact zip, unpack it into the central artifact store, and register it for HostAgent deployment." xml:space="preserve"><value>Ladda upp en oföränderlig artefakt-zip, packa upp den i det centrala artefaktlagret och registrera den för driftsättning via HostAgent.</value></data>
+  <data name="Repair duplicate ADFS user" xml:space="preserve"><value>Reparera duplicerad ADFS-användare</value></data>
+  <data name="Preview a duplicate ADFS-created user repair before making changes. The repair moves enabled ADFS auth links to the target user, disables this duplicate user, and does not move user-owned content." xml:space="preserve"><value>Förhandsgranska reparation av en duplicerad ADFS-skapad användare innan ändringar görs. Reparationen flyttar aktiverade ADFS-autentiseringslänkar till målanvändaren, inaktiverar den här duplicerade användaren och flyttar inget användarägt innehåll.</value></data>
+  <data name="Target user ID to keep" xml:space="preserve"><value>Målanvändar-ID att behålla</value></data>
+  <data name="This page's user is treated as the duplicate user that will be disabled if the repair succeeds." xml:space="preserve"><value>Användaren på den här sidan behandlas som den duplicerade användaren som inaktiveras om reparationen lyckas.</value></data>
+  <data name="Preview ADFS repair" xml:space="preserve"><value>Förhandsgranska ADFS-reparation</value></data>
+  <data name="{0} ADFS auth link(s) can move. {1} auth link(s) will remain on the duplicate user." xml:space="preserve"><value>{0} ADFS-autentiseringslänk(ar) kan flyttas. {1} autentiseringslänk(ar) blir kvar på den duplicerade användaren.</value></data>
+  <data name="Target user" xml:space="preserve"><value>Målanvändare</value></data>
+  <data name="Duplicate user" xml:space="preserve"><value>Duplicerad användare</value></data>
+  <data name="ADFS auth links to move" xml:space="preserve"><value>ADFS-autentiseringslänkar som flyttas</value></data>
+  <data name="No enabled ADFS auth links can be moved." xml:space="preserve"><value>Inga aktiverade ADFS-autentiseringslänkar kan flyttas.</value></data>
+  <data name="Enabled non-ADFS links blocking repair" xml:space="preserve"><value>Aktiverade icke-ADFS-länkar som blockerar reparation</value></data>
+  <data name="These enabled links would remain on the duplicate account. The first repair flow blocks this case so sign-ins are not stranded silently." xml:space="preserve"><value>Dessa aktiverade länkar skulle bli kvar på det duplicerade kontot. Det första reparationsflödet blockerar detta fall så att inloggningar inte lämnas kvar utan tydlig varning.</value></data>
+  <data name="Disabled or deleted ADFS links ignored" xml:space="preserve"><value>Inaktiverade eller borttagna ADFS-länkar som ignoreras</value></data>
+  <data name="Move ADFS links to target user and disable this duplicate user. User-owned content will not move." xml:space="preserve"><value>Flytta ADFS-länkar till målanvändaren och inaktivera den här duplicerade användaren. Användarägt innehåll flyttas inte.</value></data>
+  <data name="Run ADFS repair" xml:space="preserve"><value>Kör ADFS-reparation</value></data>
+  <data name="Confirm that ADFS links should be moved and this duplicate user disabled." xml:space="preserve"><value>Bekräfta att ADFS-länkar ska flyttas och att den här duplicerade användaren ska inaktiveras.</value></data>
+  <data name="ADFS duplicate repair completed. Moved {0} ADFS auth link(s) to target user {1} and disabled duplicate user {2}." xml:space="preserve"><value>ADFS-dubblettreparation slutförd. Flyttade {0} ADFS-autentiseringslänk(ar) till målanvändare {1} och inaktiverade duplicerad användare {2}.</value></data>
+  <data name="Repair completed." xml:space="preserve"><value>Reparation slutförd.</value></data>
+  <data name="Preview is ready. Review the auth links, then confirm the repair." xml:space="preserve"><value>Förhandsgranskningen är klar. Granska autentiseringslänkarna och bekräfta sedan reparationen.</value></data>
+  <data name="The target user was not found." xml:space="preserve"><value>Målanvändaren hittades inte.</value></data>
+  <data name="The duplicate user was not found." xml:space="preserve"><value>Den duplicerade användaren hittades inte.</value></data>
+  <data name="The target user and duplicate user must be different users." xml:space="preserve"><value>Målanvändaren och den duplicerade användaren måste vara olika användare.</value></data>
+  <data name="System or reserved users cannot be repaired here." xml:space="preserve"><value>Systemanvändare eller reserverade användare kan inte repareras här.</value></data>
+  <data name="The target user must be active." xml:space="preserve"><value>Målanvändaren måste vara aktiv.</value></data>
+  <data name="The duplicate user is already deleted or has an unsupported account status." xml:space="preserve"><value>Den duplicerade användaren är redan borttagen eller har en kontostatus som inte stöds.</value></data>
+  <data name="The ADFS authentication provider was not found." xml:space="preserve"><value>ADFS-autentiseringsleverantören hittades inte.</value></data>
+  <data name="The duplicate user has no enabled ADFS auth links to move." xml:space="preserve"><value>Den duplicerade användaren har inga aktiverade ADFS-autentiseringslänkar att flytta.</value></data>
+  <data name="The duplicate user has enabled non-ADFS auth links. Remove or review those links before running this repair." xml:space="preserve"><value>Den duplicerade användaren har aktiverade icke-ADFS-autentiseringslänkar. Ta bort eller granska dessa länkar innan reparationen körs.</value></data>
+  <data name="Conflicting ADFS auth links were found. No repair can run until the auth-link data is reviewed." xml:space="preserve"><value>Motstridiga ADFS-autentiseringslänkar hittades. Ingen reparation kan köras förrän autentiseringslänkarna har granskats.</value></data>
+  <data name="The duplicate user's ADFS auth links changed during the repair. Preview again before retrying." xml:space="preserve"><value>Den duplicerade användarens ADFS-autentiseringslänkar ändrades under reparationen. Förhandsgranska igen innan du försöker på nytt.</value></data>
+  <data name="The ADFS duplicate repair could not be completed." xml:space="preserve"><value>ADFS-dubblettreparationen kunde inte slutföras.</value></data>
+  <data name="Enter the target user ID to keep." xml:space="preserve"><value>Ange målanvändar-ID:t som ska behållas.</value></data>
+  <data name="{0} (id: {1}, status: {2})" xml:space="preserve"><value>{0} (id: {1}, status: {2})</value></data>
+  <data name="Target user ID" xml:space="preserve"><value>Målanvändar-ID</value></data>
+  <data name="Confirm repair" xml:space="preserve"><value>Bekräfta reparation</value></data>
 </root>

@@ -4,9 +4,11 @@ using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Security.Claims;
 
 namespace OpenModulePlatform.Portal.Pages.Admin.Users;
 
@@ -17,6 +19,8 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     private const string LocalLoginConfirmPasswordField = "LocalLogin.ConfirmPassword";
     private const string LocalPasswordResetPasswordField = "LocalPasswordReset.Password";
     private const string LocalPasswordResetConfirmPasswordField = "LocalPasswordReset.ConfirmPassword";
+    private const string MergeAdfsDuplicateTargetUserField = "MergeAdfsDuplicate.TargetUserId";
+    private const string MergeAdfsDuplicateConfirmField = "MergeAdfsDuplicate.ConfirmRepair";
     private const string PortalSettingDefinitionField = "PortalSettingInput.UserSettingDefinitionId";
     private const string PortalSettingValueField = "PortalSettingInput.SettingValue";
     private const int ValuePreviewLength = 120;
@@ -51,10 +55,15 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     [BindProperty]
     public PortalSettingInputModel PortalSettingInput { get; set; } = new();
 
+    [BindProperty]
+    public MergeAdfsDuplicateInputModel MergeAdfsDuplicate { get; set; } = new();
+
     [TempData]
     public string? StatusMessage { get; set; }
 
     public OmpUserDetail? UserRow { get; private set; }
+
+    public PreviewMergeAdfsDuplicateUserResult? MergeAdfsDuplicatePreview { get; private set; }
 
     public IReadOnlyList<PortalUserSettingDefinitionRow> PortalSettingDefinitions { get; private set; } = [];
 
@@ -430,6 +439,97 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         }
     }
 
+    public async Task<IActionResult> OnPostPreviewMergeAdfsDuplicate(int userId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Edit user");
+        if (!await LoadAsync(userId, ct))
+        {
+            return NotFound();
+        }
+
+        PopulateInputFromLoadedUser();
+        ModelState.Clear();
+
+        if (!ValidateMergeAdfsDuplicateTarget())
+        {
+            return Page();
+        }
+
+        MergeAdfsDuplicatePreview = await _repo.PreviewMergeAdfsDuplicateUserAsync(
+            duplicateUserId: userId,
+            targetUserId: MergeAdfsDuplicate.TargetUserId,
+            ct);
+
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostMergeAdfsDuplicate(int userId, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        SetTitles("Edit user");
+        if (!await LoadAsync(userId, ct))
+        {
+            return NotFound();
+        }
+
+        PopulateInputFromLoadedUser();
+        ModelState.Clear();
+
+        var hasValidTarget = ValidateMergeAdfsDuplicateTarget();
+        if (!MergeAdfsDuplicate.ConfirmRepair)
+        {
+            ModelState.AddModelError(MergeAdfsDuplicateConfirmField, T("Confirm that ADFS links should be moved and this duplicate user disabled."));
+        }
+
+        if (!hasValidTarget || !ModelState.IsValid)
+        {
+            if (hasValidTarget)
+            {
+                MergeAdfsDuplicatePreview = await _repo.PreviewMergeAdfsDuplicateUserAsync(
+                    duplicateUserId: userId,
+                    targetUserId: MergeAdfsDuplicate.TargetUserId,
+                    ct);
+            }
+
+            return Page();
+        }
+
+        var result = await _repo.MergeAdfsDuplicateUserAsync(
+            duplicateUserId: userId,
+            targetUserId: MergeAdfsDuplicate.TargetUserId,
+            actor: BuildMergeActor(),
+            ct);
+
+        if (result.Status == MergeAdfsDuplicateUserStatus.Merged)
+        {
+            StatusMessage = string.Format(
+                CultureInfo.CurrentCulture,
+                T("ADFS duplicate repair completed. Moved {0} ADFS auth link(s) to target user {1} and disabled duplicate user {2}."),
+                result.MovedAuthLinkCount.ToString(CultureInfo.InvariantCulture),
+                result.TargetUserId.ToString(CultureInfo.InvariantCulture),
+                result.DuplicateUserId.ToString(CultureInfo.InvariantCulture));
+            return RedirectToPage("/Admin/Users/Edit", new { userId });
+        }
+
+        MergeAdfsDuplicatePreview = await _repo.PreviewMergeAdfsDuplicateUserAsync(
+            duplicateUserId: userId,
+            targetUserId: MergeAdfsDuplicate.TargetUserId,
+            ct);
+        ModelState.AddModelError(MergeAdfsDuplicateTargetUserField, MergeAdfsDuplicateStatusText(result.Status));
+        return Page();
+    }
+
     public string AccountStatusText(int status)
         => T(AccountStatusLabelKey(status));
 
@@ -467,6 +567,35 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
             : string.Equals(row.PrincipalType, "ADUser", StringComparison.OrdinalIgnoreCase)
                 ? T("Linked AD account")
                 : row.PrincipalType;
+
+    public string MergeAdfsDuplicateStatusText(MergeAdfsDuplicateUserStatus status)
+        => status switch
+        {
+            MergeAdfsDuplicateUserStatus.Merged => T("Repair completed."),
+            MergeAdfsDuplicateUserStatus.PreviewOnly => T("Preview is ready. Review the auth links, then confirm the repair."),
+            MergeAdfsDuplicateUserStatus.TargetMissing => T("The target user was not found."),
+            MergeAdfsDuplicateUserStatus.DuplicateMissing => T("The duplicate user was not found."),
+            MergeAdfsDuplicateUserStatus.SameUser => T("The target user and duplicate user must be different users."),
+            MergeAdfsDuplicateUserStatus.SystemUserNotAllowed => T("System or reserved users cannot be repaired here."),
+            MergeAdfsDuplicateUserStatus.TargetNotActive => T("The target user must be active."),
+            MergeAdfsDuplicateUserStatus.DuplicateAlreadyDeleted => T("The duplicate user is already deleted or has an unsupported account status."),
+            MergeAdfsDuplicateUserStatus.AdfsProviderMissing => T("The ADFS authentication provider was not found."),
+            MergeAdfsDuplicateUserStatus.NoEnabledAdfsLinks => T("The duplicate user has no enabled ADFS auth links to move."),
+            MergeAdfsDuplicateUserStatus.DuplicateHasEnabledNonAdfsLinks => T("The duplicate user has enabled non-ADFS auth links. Remove or review those links before running this repair."),
+            MergeAdfsDuplicateUserStatus.IntegrityAnomaly => T("Conflicting ADFS auth links were found. No repair can run until the auth-link data is reviewed."),
+            MergeAdfsDuplicateUserStatus.ConcurrencyConflict => T("The duplicate user's ADFS auth links changed during the repair. Preview again before retrying."),
+            _ => T("The ADFS duplicate repair could not be completed.")
+        };
+
+    public string MergeUserSummaryText(MergeAdfsUserSummary? user)
+        => user is null
+            ? T("Not found")
+            : string.Format(
+                CultureInfo.CurrentCulture,
+                T("{0} (id: {1}, status: {2})"),
+                user.DisplayName,
+                user.UserId.ToString(CultureInfo.InvariantCulture),
+                AccountStatusText(user.AccountStatus));
 
     private async Task<bool> LoadAsync(int userId, CancellationToken ct)
     {
@@ -688,6 +817,41 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         return T("Auth link removed.");
     }
 
+    private bool ValidateMergeAdfsDuplicateTarget()
+    {
+        if (MergeAdfsDuplicate.TargetUserId <= 0)
+        {
+            ModelState.AddModelError(MergeAdfsDuplicateTargetUserField, T("Enter the target user ID to keep."));
+            return false;
+        }
+
+        if (UserRow is not null && MergeAdfsDuplicate.TargetUserId == UserRow.UserId)
+        {
+            ModelState.AddModelError(MergeAdfsDuplicateTargetUserField, T("The target user and duplicate user must be different users."));
+            return false;
+        }
+
+        return true;
+    }
+
+    private string BuildMergeActor()
+    {
+        var userId = User.FindFirstValue(OmpAuthDefaults.UserIdClaimType);
+        var name = User.Identity?.Name;
+
+        if (!string.IsNullOrWhiteSpace(userId) && !string.IsNullOrWhiteSpace(name))
+        {
+            return $"OmpUser|{userId}|{name.Trim()}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            return $"OmpUser|{userId}";
+        }
+
+        return string.IsNullOrWhiteSpace(name) ? "PortalAdmin" : name.Trim();
+    }
+
     private static string AccountStatusLabelKey(int status)
         => status switch
         {
@@ -763,5 +927,14 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
         public int? IntValue { get; set; }
 
         public string? StringValue { get; set; }
+    }
+
+    public sealed class MergeAdfsDuplicateInputModel
+    {
+        [Display(Name = "Target user ID")]
+        public int TargetUserId { get; set; }
+
+        [Display(Name = "Confirm repair")]
+        public bool ConfirmRepair { get; set; }
     }
 }
