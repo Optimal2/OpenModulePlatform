@@ -2744,4 +2744,5 @@
   <data name="{0} (id: {1}, status: {2})" xml:space="preserve"><value>{0} (id: {1}, status: {2})</value></data>
   <data name="Target user ID" xml:space="preserve"><value>Målanvändar-ID</value></data>
   <data name="Confirm repair" xml:space="preserve"><value>Bekräfta reparation</value></data>
+  <data name="The message could not be sent." xml:space="preserve"><value>Meddelandet kunde inte skickas.</value></data>
 </root>

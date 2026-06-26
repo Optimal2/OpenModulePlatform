@@ -2701,4 +2701,5 @@
   <data name="Select package type" xml:space="preserve"><value>Välj pakettyp</value></data>
   <data name="Target host: {0}" xml:space="preserve"><value>Målvärd: {0}</value></data>
   <data name="Upload one immutable artifact zip, unpack it into the central artifact store, and register it for HostAgent deployment." xml:space="preserve"><value>Ladda upp en oföränderlig artefakt-zip, packa upp den i det centrala artefaktlagret och registrera den för driftsättning via HostAgent.</value></data>
+  <data name="The message could not be sent." xml:space="preserve"><value>Meddelandet kunde inte skickas.</value></data>
 </root>
