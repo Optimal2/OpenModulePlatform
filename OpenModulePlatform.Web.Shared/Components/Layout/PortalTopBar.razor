@@ -86,17 +86,18 @@
                         @L[_portalTopBar.AllModulesToggleTextKey]
                     </summary>
                     <div class="portal-topbar__nav-menu" data-portal-topbar-entry-menu>
-                        <div class="portal-topbar__nav-filter-shell">
-                            <input class="portal-topbar__nav-filter"
-                                   type="search"
-                                   placeholder="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
-                                   aria-label="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
-                                   data-portal-topbar-entry-filter />
-                        </div>
-                        @foreach (var group in _portalTopBar.NavigationGroups)
-                        {
-                            var groupFavoriteLabel = L[group.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];
-                            <div class="portal-topbar__nav-group" data-portal-topbar-entry-group>
+                        <div class="portal-topbar__nav-scroll">
+                            <div class="portal-topbar__nav-filter-shell">
+                                <input class="portal-topbar__nav-filter"
+                                       type="search"
+                                       placeholder="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
+                                       aria-label="@L[_portalTopBar.NavigationFilterPlaceholderTextKey]"
+                                       data-portal-topbar-entry-filter />
+                            </div>
+                            @foreach (var group in _portalTopBar.NavigationGroups)
+                            {
+                                var groupFavoriteLabel = L[group.IsFavorite ? _portalTopBar.RemoveFavoriteTextKey : _portalTopBar.AddFavoriteTextKey];
+                                <div class="portal-topbar__nav-group" data-portal-topbar-entry-group>
                                 <div class="portal-topbar__nav-group-header"
                                      data-portal-topbar-entry-row
                                      data-entry-key="@group.EntryKey"
@@ -175,8 +176,9 @@
                                     </div>
                                 }
                                 </div>
-                            </div>
-                        }
+                                </div>
+                            }
+                        </div>
                     </div>
                 </details>
 
