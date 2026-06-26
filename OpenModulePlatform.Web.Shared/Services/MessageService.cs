@@ -2,6 +2,7 @@ using OpenModulePlatform.EventPublisher;
 using OpenModulePlatform.Web.Shared.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using System.Data;
 using System.Globalization;
 using System.Security.Claims;
@@ -41,15 +42,18 @@ public sealed class MessageService
     private readonly SqlConnectionFactory _db;
     private readonly OmpConfigurationService _configuration;
     private readonly IPushEventPublisher _pushEventPublisher;
+    private readonly ILogger<MessageService> _log;
 
     public MessageService(
         SqlConnectionFactory db,
         OmpConfigurationService configuration,
-        IPushEventPublisher pushEventPublisher)
+        IPushEventPublisher pushEventPublisher,
+        ILogger<MessageService> log)
     {
         _db = db;
         _configuration = configuration;
         _pushEventPublisher = pushEventPublisher;
+        _log = log;
     }
 
     // Keep a message-service facade so message endpoints do not need to depend
@@ -737,7 +741,7 @@ WHERE conversation_id = @conversation_id;";
 
         foreach (var recipientUserId in recipientUserIds)
         {
-            await _pushEventPublisher.PublishAsync(
+            await PublishPushEventBestEffortAsync(
                 CreateMessageSentPushEvent(recipientUserId, conversationId, messageId),
                 ct);
         }
@@ -783,7 +787,7 @@ WHERE cp.conversation_id = @conversation_id
 
         if (unreadCount > 0)
         {
-            await _pushEventPublisher.PublishAsync(
+            await PublishPushEventBestEffortAsync(
                 CreateMessageReadPushEvent(userId, conversationId),
                 ct);
         }
@@ -829,12 +833,24 @@ WHERE cp.user_id = @user_id
         await cmd.ExecuteNonQueryAsync(ct);
         if (messagesMarkedRead > 0)
         {
-            await _pushEventPublisher.PublishAsync(
+            await PublishPushEventBestEffortAsync(
                 CreateAllMessagesReadPushEvent(userId),
                 ct);
         }
 
         return messagesMarkedRead;
+    }
+
+    private async Task PublishPushEventBestEffortAsync(PushEvent pushEvent, CancellationToken ct)
+    {
+        try
+        {
+            await _pushEventPublisher.PublishAsync(pushEvent, ct);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Failed to publish OMP message push event {Category}.", pushEvent.Category);
+        }
     }
 
     private static async Task<IReadOnlyList<int>> GetConversationParticipantUserIdsAsync(
