@@ -377,7 +377,10 @@
                         </div>
                         <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
                         <div class="portal-topbar__tray-body">
-                            <div class="portal-topbar__messages-list">
+                            <div class="portal-topbar__messages-list"
+                                 data-portal-topbar-messages-list
+                                 data-no-messages-text="@L[_portalTopBar.NoMessagesTextKey]"
+                                 data-no-message-preview-text='@L["No messages"]'>
                                 @foreach (var conversation in _portalTopBar.MessageConversations)
                                 {
                                     <a class="portal-topbar__message-row@(conversation.UnreadCount > 0 ? " is-unread" : string.Empty)"
@@ -407,16 +410,16 @@
                                     </a>
                                 }
                             </div>
-                            @if (_portalTopBar.MessageConversations.Count == 0)
-                            {
-                                <div class="portal-topbar__messages-empty">@L[_portalTopBar.NoMessagesTextKey]</div>
-                            }
+                            <div class="portal-topbar__messages-empty" data-portal-topbar-messages-empty @attributes="HiddenWhen(_portalTopBar.MessageConversations.Count > 0)">
+                                @L[_portalTopBar.NoMessagesTextKey]
+                            </div>
                         </div>
                         <div class="portal-topbar__tray-separator" role="separator" aria-hidden="true"></div>
                         <div class="portal-topbar__tray-footer">
                             <form method="post"
                                   action="@_portalTopBar.MessageMarkAllReadUrl"
                                   class="portal-topbar__messages-mark-all-form"
+                                  data-portal-topbar-message-mark-all-form
                                   data-enhance="false"
                                   @attributes="HiddenWhen(_portalTopBar.UnreadMessageCount == 0)">
                                 <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />

@@ -618,7 +618,7 @@
         badge.textContent = notificationBadgeText(safeCount);
         badge.hidden = safeCount === 0;
 
-        var markAll = root.querySelector('.portal-topbar__messages-mark-all-form');
+        var markAll = root.querySelector('[data-portal-topbar-message-mark-all-form]');
         if (markAll) {
             markAll.hidden = safeCount === 0;
         }
@@ -1034,6 +1034,71 @@
                 })
                 .finally(function () {
                     form.dataset.portalTopbarNotificationMarkAllSubmitting = 'false';
+                    if (button) {
+                        button.disabled = false;
+                    }
+                });
+        };
+
+        form.addEventListener('submit', submitForm);
+        var markAllButton = form.querySelector('button[type="submit"]');
+        if (markAllButton) {
+            markAllButton.addEventListener('click', submitForm);
+        }
+    }
+
+    function initMessageMarkAllForm(form) {
+        if (!form || form.dataset.portalTopbarMessageMarkAllFormInitialized === 'true') {
+            return;
+        }
+
+        form.dataset.portalTopbarMessageMarkAllFormInitialized = 'true';
+        var submitForm = function (event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            if (form.dataset.portalTopbarMessageMarkAllSubmitting === 'true') {
+                return;
+            }
+
+            form.dataset.portalTopbarMessageMarkAllSubmitting = 'true';
+
+            var root = form.closest('[data-portal-topbar-root]');
+            var button = form.querySelector('button[type="submit"]');
+            if (button) {
+                button.disabled = true;
+            }
+
+            fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(function (response) {
+                    if (response.status === 401 || response.status === 403 || isSessionLoginResponse(response)) {
+                        reportNotificationSessionWarning('auth');
+                        throw new Error('Message action requires sign-in.');
+                    }
+
+                    if (!response.ok) {
+                        throw new Error('Message mark-all-read failed with status ' + response.status + '.');
+                    }
+
+                    updateMessageBadge(root, 0);
+                    runTopbarSummaryRefreshForRoot(root);
+                })
+                .catch(function (error) {
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn('OMP topbar message action failed.', error);
+                    }
+                })
+                .finally(function () {
+                    form.dataset.portalTopbarMessageMarkAllSubmitting = 'false';
                     if (button) {
                         button.disabled = false;
                     }
@@ -2233,6 +2298,7 @@
         topbar.querySelectorAll('[data-portal-topbar-favorite-form]').forEach(initFavoriteForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-form]').forEach(initNotificationForm);
         topbar.querySelectorAll('[data-portal-topbar-notification-mark-all-form]').forEach(initNotificationMarkAllForm);
+        topbar.querySelectorAll('[data-portal-topbar-message-mark-all-form]').forEach(initMessageMarkAllForm);
         topbar.querySelectorAll('[data-portal-topbar-notifications-list]').forEach(initNotificationLazyList);
         updateNotificationEmptyState(topbar);
         initSessionStatusCheck(topbar);

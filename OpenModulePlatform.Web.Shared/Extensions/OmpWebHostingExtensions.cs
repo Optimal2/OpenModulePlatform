@@ -447,7 +447,17 @@ public static class OmpWebHostingExtensions
                 }
             }
 
-            await messageService.MarkAllConversationsReadAsync(userId.Value, ct);
+            var markedCount = await messageService.MarkAllConversationsReadAsync(userId.Value, ct);
+            if (IsXmlHttpRequest(context.Request))
+            {
+                return Results.Json(new
+                {
+                    success = true,
+                    markedCount,
+                    unreadCount = 0
+                });
+            }
+
             return Results.Redirect(returnUrl);
         }).RequireAuthorization();
 
@@ -1042,4 +1052,10 @@ public static class OmpWebHostingExtensions
         network = new SystemNetIPNetwork(prefix, prefixLength);
         return true;
     }
+
+    private static bool IsXmlHttpRequest(HttpRequest request)
+        => string.Equals(
+            request.Headers["X-Requested-With"].ToString(),
+            "XMLHttpRequest",
+            StringComparison.OrdinalIgnoreCase);
 }
