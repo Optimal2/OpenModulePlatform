@@ -440,7 +440,9 @@ else
                 }
 
                 const payload = detail.payload || detail.envelope?.payload || null;
-                if (getPayloadConversationId(payload) !== conversationId) {
+                const payloadAction = (payload?.action || '').toString().toLowerCase();
+                const isReadAll = payloadAction === 'read-all';
+                if (!isReadAll && getPayloadConversationId(payload) !== conversationId) {
                     return;
                 }
 

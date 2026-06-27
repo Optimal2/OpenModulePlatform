@@ -2,6 +2,7 @@
 @using OpenModulePlatform.Web.Shared.Options
 @using OpenModulePlatform.Web.Shared.Localization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.AspNetCore.Http
 @using Microsoft.Extensions.Logging
 @using Microsoft.JSInterop
@@ -482,7 +483,15 @@
                                 <div class="portal-topbar__profile-switch-menu">
                                     @foreach (var role in _roleContext.AvailableRoles.Where(role => role.RoleId != _roleContext.ActiveRoleId))
                                     {
-                                        <a class="portal-topbar__profile-role-link" href="@BuildRoleHref(role.RoleId)" data-enhance-nav="false">@role.Name</a>
+                                        <form method="post"
+                                              action="@BuildRoleActionUrl()"
+                                              class="portal-topbar__profile-role-form"
+                                              data-enhance="false">
+                                            <input type="hidden" name="roleId" value="@role.RoleId" />
+                                            <input type="hidden" name="returnUrl" value="@CurrentReturnUrl()" />
+                                            <AntiforgeryToken />
+                                            <button type="submit" class="portal-topbar__profile-role-link">@role.Name</button>
+                                        </form>
                                     }
                                 </div>
                             </details>
@@ -634,12 +643,8 @@
             : $"{basePath}/{relativePath.TrimStart('/')}";
     }
 
-    private string BuildRoleHref(int? roleId)
-    {
-        var currentUri = new Uri(NavigationManager.Uri, UriKind.Absolute);
-        var returnUrl = $"{currentUri.AbsolutePath}{currentUri.Query}";
-        return $"{BuildAppBaseRelativePath("security/set-active-role")}?roleId={Uri.EscapeDataString(roleId?.ToString() ?? string.Empty)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
-    }
+    private string BuildRoleActionUrl()
+        => BuildAppBaseRelativePath("security/set-active-role");
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
         => _ = InvokeAsync(StateHasChanged);

@@ -9,6 +9,7 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
@@ -74,6 +75,8 @@ public static class OmpWebHostingExtensions
                 options.DataAnnotationLocalizerProvider = static (_, factory) =>
                     factory.Create(typeof(TAppResource));
             });
+
+        builder.Services.AddAntiforgery();
 
         ConfigureOmpAuthentication(
             builder.Services,
@@ -300,23 +303,31 @@ public static class OmpWebHostingExtensions
             return Results.LocalRedirect("/");
         });
 
-        app.MapGet("/security/set-active-role", (
+        app.MapPost("/security/set-active-role", async (
             HttpContext context,
+            IAntiforgery antiforgery,
             int? roleId,
             string? returnUrl,
             RbacService rbac,
             PortalTopBarService portalTopBarService,
             CancellationToken ct) =>
-            HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct));
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return await HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct);
+        }).RequireAuthorization();
 
-        app.MapGet("/rbac/set-active-role", (
+        app.MapPost("/rbac/set-active-role", async (
             HttpContext context,
+            IAntiforgery antiforgery,
             int? roleId,
             string? returnUrl,
             RbacService rbac,
             PortalTopBarService portalTopBarService,
             CancellationToken ct) =>
-            HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct));
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return await HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct);
+        }).RequireAuthorization();
 
         app.MapGet(PortalTopBarModel.DefaultSessionStatusPath, (HttpContext context) =>
         {
@@ -440,8 +451,7 @@ public static class OmpWebHostingExtensions
             {
                 var form = await context.Request.ReadFormAsync(ct);
                 var candidateReturnUrl = form["returnUrl"].ToString();
-                if (!string.IsNullOrWhiteSpace(candidateReturnUrl)
-                    && Uri.IsWellFormedUriString(candidateReturnUrl, UriKind.Relative))
+                if (IsSafeLocalReturnUrl(candidateReturnUrl))
                 {
                     returnUrl = candidateReturnUrl;
                 }
@@ -458,7 +468,7 @@ public static class OmpWebHostingExtensions
                 });
             }
 
-            return Results.Redirect(returnUrl);
+            return Results.LocalRedirect(returnUrl);
         }).RequireAuthorization();
 
         app.MapGet(PortalTopBarService.SummaryPath, async (
@@ -598,6 +608,7 @@ public static class OmpWebHostingExtensions
         // roles, favorites, and module navigation without requiring sign-in.
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseAntiforgery();
 
         if (mapRazorPages)
         {
