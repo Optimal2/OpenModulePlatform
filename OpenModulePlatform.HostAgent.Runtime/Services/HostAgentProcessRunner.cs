@@ -11,12 +11,14 @@ internal static class HostAgentProcessRunner
     public static HostAgentProcessResult Run(
         string fileName,
         IEnumerable<string> arguments,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        IEnumerable<string>? sensitiveValues = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentNullException.ThrowIfNull(arguments);
 
         var argumentList = arguments.ToArray();
+        var sensitiveList = sensitiveValues?.Where(value => !string.IsNullOrEmpty(value)).ToArray() ?? [];
         var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
@@ -32,7 +34,7 @@ internal static class HostAgentProcessRunner
         }
 
         using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{fileName}' with arguments: {FormatArguments(argumentList)}.");
+            ?? throw new InvalidOperationException($"Failed to start '{fileName}' with arguments: {FormatArguments(argumentList, sensitiveList)}.");
 
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
@@ -50,7 +52,7 @@ internal static class HostAgentProcessRunner
             var output = TryReadCompletedTask(outputTask);
             var error = TryReadCompletedTask(errorTask);
             throw new TimeoutException(
-                $"Process '{Path.GetFileName(fileName)}' did not exit within {effectiveTimeout.TotalSeconds:0.#} seconds. Arguments: {FormatArguments(argumentList)}.{CreateOutputDiagnostic(output, error)}");
+                $"Process '{Path.GetFileName(fileName)}' did not exit within {effectiveTimeout.TotalSeconds:0.#} seconds. Arguments: {FormatArguments(argumentList, sensitiveList)}.{CreateOutputDiagnostic(output, error, sensitiveList)}");
         }
 
         var stdOut = outputTask.GetAwaiter().GetResult();
@@ -59,11 +61,41 @@ internal static class HostAgentProcessRunner
     }
 
     public static string FormatArguments(IEnumerable<string> arguments)
-        => string.Join(
+        => FormatArguments(arguments, null);
+
+    public static string FormatArguments(IEnumerable<string> arguments, IEnumerable<string>? sensitiveValues)
+    {
+        var sensitiveList = sensitiveValues?.Where(value => !string.IsNullOrEmpty(value)).ToArray();
+        var formatted = string.Join(
             " ",
             arguments.Select(static argument => argument.Contains(' ', StringComparison.Ordinal)
                 ? '"' + argument.Replace("\"", "\\\"", StringComparison.Ordinal) + '"'
                 : argument));
+
+        return RedactSensitiveValues(formatted, sensitiveList);
+    }
+
+    internal static string RedactSensitiveValues(string value, IEnumerable<string>? sensitiveValues)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        var sensitiveList = sensitiveValues?.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+        if (sensitiveList is null || sensitiveList.Length == 0)
+        {
+            return value;
+        }
+
+        // Redact longer values first so that shorter values do not leave partial leaks.
+        foreach (var sensitive in sensitiveList.OrderByDescending(static s => s.Length))
+        {
+            value = value.Replace(sensitive, "[REDACTED]", StringComparison.Ordinal);
+        }
+
+        return value;
+    }
 
     private static int ToMilliseconds(TimeSpan timeout)
     {
@@ -117,22 +149,22 @@ internal static class HostAgentProcessRunner
         return task.GetAwaiter().GetResult();
     }
 
-    private static string CreateOutputDiagnostic(string output, string error)
+    private static string CreateOutputDiagnostic(string output, string error, string[]? sensitiveValues = null)
     {
         var builder = new StringBuilder();
-        AppendDiagnostic(builder, "stdout", output);
-        AppendDiagnostic(builder, "stderr", error);
+        AppendDiagnostic(builder, "stdout", output, sensitiveValues);
+        AppendDiagnostic(builder, "stderr", error, sensitiveValues);
         return builder.Length == 0 ? string.Empty : " " + builder;
     }
 
-    private static void AppendDiagnostic(StringBuilder builder, string name, string value)
+    private static void AppendDiagnostic(StringBuilder builder, string name, string value, string[]? sensitiveValues)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
             return;
         }
 
-        var normalized = value.Trim();
+        var normalized = RedactSensitiveValues(value.Trim(), sensitiveValues);
         const int maxLength = 1000;
         if (normalized.Length > maxLength)
         {

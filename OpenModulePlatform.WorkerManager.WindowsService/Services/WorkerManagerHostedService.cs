@@ -799,6 +799,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         try
         {
             orphanedProcesses = FindOrphanedWorkerProcesses(
+                _logger,
                 workerProcessPath,
                 Path.GetFullPath(managerProcessPath));
         }
@@ -832,10 +833,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 }
 
                 _logger.LogWarning(
-                    "WorkerManager is stopping an orphaned worker host process discovered during startup. ProcessId={ProcessId}, ParentProcessId={ParentProcessId}, WorkerProcessPath={WorkerProcessPath}",
+                    "WorkerManager is stopping an orphaned worker host process discovered during startup. ProcessId={ProcessId}, ParentProcessId={ParentProcessId}, WorkerProcessPath={WorkerProcessPath}, CommandLine={CommandLine}",
                     orphan.ProcessId,
                     orphan.ParentProcessId,
-                    workerProcessPath);
+                    workerProcessPath,
+                    orphan.CommandLine);
 
                 // WorkerProcessHost owns the plugin lifetime by default. The setting
                 // allows hosts with intentionally independent plugin children to opt out.
@@ -887,6 +889,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     [SupportedOSPlatform("windows")]
     private static IReadOnlyList<OrphanedWorkerProcess> FindOrphanedWorkerProcesses(
+        ILogger<WorkerManagerHostedService> logger,
         string workerProcessPath,
         string managerProcessPath)
     {
@@ -919,23 +922,62 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     continue;
                 }
 
+                var commandLine = process["CommandLine"] as string;
+                if (!HasWorkerHostOwnershipMarkers(commandLine))
+                {
+                    logger.LogDebug(
+                        "WorkerManager skipped a process with the worker host executable name because its command line did not match expected worker ownership markers. ProcessId={ProcessId}, ExecutablePath={ExecutablePath}",
+                        processId,
+                        executablePath);
+                    continue;
+                }
+
                 var parentProcessId = ReadManagementUInt32(process, "ParentProcessId");
                 if (IsLiveWorkerManagerParent(parentProcessId, managerProcessPath))
                 {
                     continue;
                 }
 
-                result.Add(new OrphanedWorkerProcess(processId, parentProcessId));
+                result.Add(new OrphanedWorkerProcess(
+                    processId,
+                    parentProcessId,
+                    executablePath,
+                    FormatOrphanCommandLine(commandLine)));
             }
         }
 
         return result;
     }
 
+    private static bool HasWorkerHostOwnershipMarkers(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine))
+        {
+            return false;
+        }
+
+        return commandLine.Contains("--WorkerProcess:AppInstanceId=", StringComparison.OrdinalIgnoreCase)
+            && commandLine.Contains("--WorkerProcess:WorkerInstanceId=", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FormatOrphanCommandLine(string? commandLine)
+    {
+        if (string.IsNullOrWhiteSpace(commandLine))
+        {
+            return null;
+        }
+
+        var normalized = commandLine.Trim();
+        const int maxLength = 500;
+        return normalized.Length > maxLength
+            ? normalized[..maxLength] + "..."
+            : normalized;
+    }
+
     private static string CreateWorkerProcessHostQuery()
     {
         var executableNameLiteral = CreateSafeWqlStringLiteral(WorkerProcessHostExecutableName);
-        return "SELECT ProcessId, ParentProcessId, ExecutablePath FROM Win32_Process WHERE Name = "
+        return "SELECT ProcessId, ParentProcessId, ExecutablePath, CommandLine FROM Win32_Process WHERE Name = "
             + executableNameLiteral;
     }
 
@@ -1067,5 +1109,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
     }
 
-    private sealed record OrphanedWorkerProcess(int ProcessId, int ParentProcessId);
+    private sealed record OrphanedWorkerProcess(
+        int ProcessId,
+        int ParentProcessId,
+        string ExecutablePath,
+        string? CommandLine);
 }
