@@ -5,6 +5,15 @@ using System.Text.Json.Nodes;
 
 namespace OpenModulePlatform.Artifacts;
 
+public sealed record ArtifactPackageExtractionLimits(
+    long MaxTotalUncompressedBytes,
+    long MaxEntryUncompressedBytes)
+{
+    public static ArtifactPackageExtractionLimits Default { get; } = new(
+        10L * 1024 * 1024 * 1024,
+        2L * 1024 * 1024 * 1024);
+}
+
 public sealed class ArtifactPackageExtractor
 {
     public const string ManifestEntryName = "omp-artifact-package.json";
@@ -14,16 +23,21 @@ public sealed class ArtifactPackageExtractor
     private const int MaxArchiveEntryCount = 10000;
 
     private readonly Action<string>? _validatePayloadEntry;
+    private readonly ArtifactPackageExtractionLimits _limits;
 
-    public ArtifactPackageExtractor(Action<string>? validatePayloadEntry = null)
+    public ArtifactPackageExtractor(
+        Action<string>? validatePayloadEntry = null,
+        ArtifactPackageExtractionLimits? limits = null)
     {
         _validatePayloadEntry = validatePayloadEntry;
+        _limits = limits ?? ArtifactPackageExtractionLimits.Default;
     }
 
     public ArtifactPackageExtractionResult Extract(string zipPath, string stagingPath)
     {
         using var archive = ZipFile.OpenRead(zipPath);
         ValidateArchiveEntryCount(archive, "Artifact package");
+        ValidateArchiveSizes(archive, "Artifact package", _limits);
         var manifestEntry = archive.Entries.FirstOrDefault(
             entry => string.Equals(
                 NormalizeZipEntryName(entry.FullName),
@@ -43,7 +57,8 @@ public sealed class ArtifactPackageExtractor
             archive,
             stagingPath,
             string.Empty,
-            _validatePayloadEntry);
+            _validatePayloadEntry,
+            _limits);
 
         if (fileCount == 0)
         {
@@ -79,7 +94,7 @@ public sealed class ArtifactPackageExtractor
         var artifactContentPath = Path.Join(stagingPath, "artifact-content");
         var fileCount = IsZipPayload(payloadPath, payloadType)
             ? ExtractNestedPayloadZip(archive, payloadPath, artifactContentPath, stagingPath)
-            : ExtractArchiveEntries(archive, artifactContentPath, EnsureDirectoryPrefix(payloadPath), _validatePayloadEntry);
+            : ExtractArchiveEntries(archive, artifactContentPath, EnsureDirectoryPrefix(payloadPath), _validatePayloadEntry, _limits);
 
         if (fileCount == 0)
         {
@@ -114,19 +129,20 @@ public sealed class ArtifactPackageExtractor
 
         try
         {
-            using (var source = payloadEntry.Open())
-            using (var target = File.Create(nestedZipPath))
-            {
-                source.CopyTo(target);
-            }
+            CopyEntryToFileWithLimit(
+                payloadEntry,
+                nestedZipPath,
+                _limits.MaxEntryUncompressedBytes);
 
             using var payloadArchive = ZipFile.OpenRead(nestedZipPath);
             ValidateArchiveEntryCount(payloadArchive, "Artifact package nested payload");
+            ValidateArchiveSizes(payloadArchive, "Artifact package nested payload", _limits);
             return ExtractArchiveEntries(
                 payloadArchive,
                 artifactContentPath,
                 string.Empty,
-                _validatePayloadEntry);
+                _validatePayloadEntry,
+                _limits);
         }
         finally
         {
@@ -138,9 +154,11 @@ public sealed class ArtifactPackageExtractor
         ZipArchive archive,
         string targetRoot,
         string requiredPrefix,
-        Action<string>? validateEntry)
+        Action<string>? validateEntry,
+        ArtifactPackageExtractionLimits limits)
     {
         var fileCount = 0;
+        long totalUncompressedBytes = 0;
         Directory.CreateDirectory(targetRoot);
 
         foreach (var entry in archive.Entries)
@@ -165,6 +183,19 @@ public sealed class ArtifactPackageExtractor
             {
                 Directory.CreateDirectory(entryPath);
                 continue;
+            }
+
+            if (entry.Length > limits.MaxEntryUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Artifact package entry '{entry.FullName}' uncompressed size ({entry.Length} bytes) exceeds the limit of {limits.MaxEntryUncompressedBytes} bytes.");
+            }
+
+            totalUncompressedBytes += entry.Length;
+            if (totalUncompressedBytes > limits.MaxTotalUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Artifact package total uncompressed size exceeds the limit of {limits.MaxTotalUncompressedBytes} bytes.");
             }
 
             validateEntry?.Invoke(relativeName);
@@ -286,6 +317,57 @@ public sealed class ArtifactPackageExtractor
         {
             throw new InvalidOperationException(
                 $"{packageDescription} contains {archive.Entries.Count} entries, which exceeds the limit of {MaxArchiveEntryCount}.");
+        }
+    }
+
+    private static void ValidateArchiveSizes(
+        ZipArchive archive,
+        string packageDescription,
+        ArtifactPackageExtractionLimits limits)
+    {
+        long totalUncompressedBytes = 0;
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                continue;
+            }
+
+            if (entry.Length > limits.MaxEntryUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"{packageDescription} entry '{entry.FullName}' uncompressed size ({entry.Length} bytes) exceeds the limit of {limits.MaxEntryUncompressedBytes} bytes.");
+            }
+
+            totalUncompressedBytes += entry.Length;
+            if (totalUncompressedBytes > limits.MaxTotalUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"{packageDescription} total uncompressed size exceeds the limit of {limits.MaxTotalUncompressedBytes} bytes.");
+            }
+        }
+    }
+
+    private static void CopyEntryToFileWithLimit(
+        ZipArchiveEntry entry,
+        string destinationPath,
+        long maxBytes)
+    {
+        using var source = entry.Open();
+        using var target = File.Create(destinationPath);
+        var buffer = new byte[81920];
+        long totalBytes = 0;
+        int read;
+        while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            totalBytes += read;
+            if (totalBytes > maxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Artifact package nested payload '{entry.FullName}' exceeds the limit of {maxBytes} bytes while being copied to disk.");
+            }
+
+            target.Write(buffer, 0, read);
         }
     }
 

@@ -169,7 +169,8 @@ public sealed class ArtifactZipImportService
         string extractionRoot,
         CancellationToken cancellationToken)
     {
-        var package = new UniversalModulePackageReader().ExtractToDirectory(packageZipPath, extractionRoot);
+        var package = new UniversalModulePackageReader(BuildUniversalExtractionLimits(importSettings))
+            .ExtractToDirectory(packageZipPath, extractionRoot);
         var itemResults = new List<UniversalHostAgentImportItemResult>();
         var processedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var artifactItems = package.Items
@@ -559,8 +560,6 @@ public sealed class ArtifactZipImportService
     {
         var storeRoot = Path.GetFullPath(settings.CentralArtifactRoot.Trim());
         string? finalPath = null;
-        var movedToFinal = false;
-        var artifactRegistered = false;
         var adoptedExistingContent = false;
 
         try
@@ -586,7 +585,9 @@ public sealed class ArtifactZipImportService
                 metadata.Version);
 
             finalPath = ResolveUnderRoot(storeRoot, relativePath);
-            var package = new ArtifactPackageExtractor(ValidateArtifactEntryIsNotRuntimeConfiguration)
+            var package = new ArtifactPackageExtractor(
+                    ValidateArtifactEntryIsNotRuntimeConfiguration,
+                    BuildArtifactExtractionLimits(importSettings))
                 .Extract(packagePath, stagingPath);
             ValidateModuleDefinitionRequirement(package, compatibility);
             var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
@@ -632,10 +633,34 @@ public sealed class ArtifactZipImportService
                     }
                     else
                     {
-                        MoveDirectory(package.ArtifactContentPath, existingFinalPath);
-                        finalPath = existingFinalPath;
-                        movedToFinal = true;
-                        restoredMissingContent = true;
+                        try
+                        {
+                            MoveDirectory(package.ArtifactContentPath, existingFinalPath);
+                            finalPath = existingFinalPath;
+                            restoredMissingContent = true;
+                        }
+                        catch (IOException moveEx)
+                        {
+                            if (Directory.Exists(existingFinalPath))
+                            {
+                                var existingContentHash = await ComputeDirectorySha256Async(
+                                    existingFinalPath,
+                                    cancellationToken);
+                                if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    throw new InvalidOperationException(
+                                        $"The existing artifact path was created concurrently with different content: {existingRelativePath}.",
+                                        moveEx);
+                                }
+
+                                finalPath = existingFinalPath;
+                                restoredMissingContent = true;
+                            }
+                            else
+                            {
+                                throw;
+                            }
+                        }
                     }
 
                     var completedMissingMetadata = false;
@@ -736,8 +761,29 @@ public sealed class ArtifactZipImportService
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-                MoveDirectory(package.ArtifactContentPath, finalPath);
-                movedToFinal = true;
+                try
+                {
+                    MoveDirectory(package.ArtifactContentPath, finalPath);
+                }
+                catch (IOException moveEx)
+                {
+                    if (Directory.Exists(finalPath))
+                    {
+                        var existingContentHash = await ComputeDirectorySha256Async(finalPath, cancellationToken);
+                        if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException(
+                                $"The target artifact path was created concurrently with different content below the artifact store: {relativePath}.",
+                                moveEx);
+                        }
+
+                        adoptedExistingContent = true;
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
             }
 
             var artifactId = await _repository.RegisterImportedArtifactAsync(
@@ -749,7 +795,6 @@ public sealed class ArtifactZipImportService
                 contentHash,
                 cancellationToken);
 
-            artifactRegistered = true;
             var copiedConfigurationFiles = 0;
             if (package.ConfigurationFiles.Count > 0)
             {
@@ -798,11 +843,10 @@ public sealed class ArtifactZipImportService
         }
         catch
         {
-            if (movedToFinal && !artifactRegistered && !string.IsNullOrWhiteSpace(finalPath))
-            {
-                TryDelete(finalPath);
-            }
-
+            // Do not delete content below the central artifact store on failure.
+            // The path may have been created by a concurrent import, may belong to
+            // an already-registered artifact identity, or may be re-adopted by a
+            // later retry. Staging directories are cleaned separately.
             throw;
         }
     }
@@ -1324,6 +1368,18 @@ public sealed class ArtifactZipImportService
 
     private static string AppendWarning(string current, string next)
         => string.IsNullOrWhiteSpace(current) ? next : current + " " + next;
+
+    private static ArtifactPackageExtractionLimits BuildArtifactExtractionLimits(
+        HostAgentArtifactZipImportSettings importSettings)
+        => new(
+            importSettings.MaxArtifactPackageTotalUncompressedBytes,
+            importSettings.MaxArtifactPackageEntryUncompressedBytes);
+
+    private static ArtifactPackageExtractionLimits BuildUniversalExtractionLimits(
+        HostAgentArtifactZipImportSettings importSettings)
+        => new(
+            importSettings.MaxUniversalPackageTotalUncompressedBytes,
+            importSettings.MaxUniversalPackageEntryUncompressedBytes);
 
     private sealed record UniversalHostAgentImportResult(
         string? PackageKey,

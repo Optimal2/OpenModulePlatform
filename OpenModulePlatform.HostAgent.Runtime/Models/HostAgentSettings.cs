@@ -466,6 +466,14 @@ public sealed class HostAgentArtifactZipImportSettings
 
     public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
 
+    public long MaxArtifactPackageTotalUncompressedBytes { get; set; } = 10L * 1024 * 1024 * 1024;
+
+    public long MaxArtifactPackageEntryUncompressedBytes { get; set; } = 2L * 1024 * 1024 * 1024;
+
+    public long MaxUniversalPackageTotalUncompressedBytes { get; set; } = 10L * 1024 * 1024 * 1024;
+
+    public long MaxUniversalPackageEntryUncompressedBytes { get; set; } = 2L * 1024 * 1024 * 1024;
+
     public void Validate()
     {
         if (!IsEnabled)
@@ -481,6 +489,27 @@ public sealed class HostAgentArtifactZipImportSettings
         if (MaxFilesPerCycle < 1)
         {
             throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxFilesPerCycle must be at least 1.");
+        }
+
+        const long OneMegabyte = 1024L * 1024;
+        if (MaxArtifactPackageTotalUncompressedBytes < OneMegabyte)
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxArtifactPackageTotalUncompressedBytes must be at least 1 MB.");
+        }
+
+        if (MaxArtifactPackageEntryUncompressedBytes < OneMegabyte)
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxArtifactPackageEntryUncompressedBytes must be at least 1 MB.");
+        }
+
+        if (MaxUniversalPackageTotalUncompressedBytes < OneMegabyte)
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxUniversalPackageTotalUncompressedBytes must be at least 1 MB.");
+        }
+
+        if (MaxUniversalPackageEntryUncompressedBytes < OneMegabyte)
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxUniversalPackageEntryUncompressedBytes must be at least 1 MB.");
         }
     }
 

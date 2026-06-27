@@ -53,6 +53,13 @@ public sealed class UniversalModulePackageReader
         WriteIndented = true
     };
 
+    private readonly ArtifactPackageExtractionLimits _limits;
+
+    public UniversalModulePackageReader(ArtifactPackageExtractionLimits? limits = null)
+    {
+        _limits = limits ?? ArtifactPackageExtractionLimits.Default;
+    }
+
     public static bool IsUniversalPackage(string path)
     {
         if (!Path.GetExtension(path).Equals(".zip", StringComparison.OrdinalIgnoreCase))
@@ -71,11 +78,12 @@ public sealed class UniversalModulePackageReader
         Directory.CreateDirectory(extractionRoot);
         using var archive = ZipFile.OpenRead(zipPath);
         ValidateArchiveEntryCount(archive);
+        ValidateArchiveSizes(archive);
         var manifestEntry = FindEntry(archive, ManifestEntryName)
             ?? throw new InvalidOperationException(
                 $"Universal module packages must contain {ManifestEntryName}.");
 
-        ExtractArchiveEntries(archive, extractionRoot);
+        ExtractArchiveEntries(archive, extractionRoot, _limits);
         var manifest = ReadManifest(manifestEntry);
         var formatVersion = GetInt(manifest, "formatVersion", 1);
         if (formatVersion != 1)
@@ -252,8 +260,12 @@ public sealed class UniversalModulePackageReader
         }
     }
 
-    private static void ExtractArchiveEntries(ZipArchive archive, string extractionRoot)
+    private static void ExtractArchiveEntries(
+        ZipArchive archive,
+        string extractionRoot,
+        ArtifactPackageExtractionLimits limits)
     {
+        long totalUncompressedBytes = 0;
         foreach (var entry in archive.Entries)
         {
             var entryName = NormalizePackagePath(entry.FullName);
@@ -262,6 +274,19 @@ public sealed class UniversalModulePackageReader
             {
                 Directory.CreateDirectory(destinationPath);
                 continue;
+            }
+
+            if (entry.Length > limits.MaxEntryUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Universal module package entry '{entry.FullName}' uncompressed size ({entry.Length} bytes) exceeds the limit of {limits.MaxEntryUncompressedBytes} bytes.");
+            }
+
+            totalUncompressedBytes += entry.Length;
+            if (totalUncompressedBytes > limits.MaxTotalUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Universal module package total uncompressed size exceeds the limit of {limits.MaxTotalUncompressedBytes} bytes.");
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
@@ -283,6 +308,31 @@ public sealed class UniversalModulePackageReader
         {
             throw new InvalidOperationException(
                 $"Universal module package contains {archive.Entries.Count} entries, which exceeds the limit of {MaxArchiveEntryCount}.");
+        }
+    }
+
+    private void ValidateArchiveSizes(ZipArchive archive)
+    {
+        long totalUncompressedBytes = 0;
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrEmpty(entry.Name))
+            {
+                continue;
+            }
+
+            if (entry.Length > _limits.MaxEntryUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Universal module package entry '{entry.FullName}' uncompressed size ({entry.Length} bytes) exceeds the limit of {_limits.MaxEntryUncompressedBytes} bytes.");
+            }
+
+            totalUncompressedBytes += entry.Length;
+            if (totalUncompressedBytes > _limits.MaxTotalUncompressedBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Universal module package total uncompressed size exceeds the limit of {_limits.MaxTotalUncompressedBytes} bytes.");
+            }
         }
     }
 
