@@ -1577,6 +1577,15 @@ span.portal-topbar__nav-group-link {
     font-weight: 700;
 }
 
+button.portal-topbar__profile-role-link {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
 .omp-session-status-banner {
     position: fixed;
     top: max(64px, calc(env(safe-area-inset-top, 0px) + 56px));

@@ -2793,8 +2793,19 @@ button {
     text-decoration: none;
 }
 
+button.dashboard-role-list__item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
 a.dashboard-role-list__item:hover,
-a.dashboard-role-list__item:focus-visible {
+a.dashboard-role-list__item:focus-visible,
+button.dashboard-role-list__item:hover,
+button.dashboard-role-list__item:focus-visible {
     background: var(--surface-muted);
     color: var(--text);
     outline: none;

@@ -5,7 +5,7 @@
 
 @{
     var returnUrl = string.Concat(Context.Request.PathBase, Context.Request.Path, Context.Request.QueryString);
-    string BuildRoleHref(int roleId) => $"{Context.Request.PathBase}/security/set-active-role?roleId={Uri.EscapeDataString(roleId.ToString(System.Globalization.CultureInfo.InvariantCulture))}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+    string BuildRoleActionUrl() => $"{Context.Request.PathBase}/security/set-active-role";
 }
 
 <div class="dashboard-role-list">
@@ -31,17 +31,23 @@
                 }
                 else
                 {
-                    <a class="dashboard-role-list__item"
-                       href="@BuildRoleHref(role.RoleId)"
-                       data-dashboard-role-switch
-                       data-confirm-message="@L["Switch active role to {0}?", role.Name]"
-                       data-enhance-nav="false">
-                        <span class="dashboard-role-list__name">@role.Name</span>
-                        @if (!string.IsNullOrWhiteSpace(role.Description))
-                        {
-                            <span class="dashboard-role-list__description">@role.Description</span>
-                        }
-                    </a>
+                    <form method="post"
+                          action="@BuildRoleActionUrl()"
+                          class="dashboard-role-list__form"
+                          data-dashboard-role-switch
+                          data-confirm-message="@L["Switch active role to {0}?", role.Name]"
+                          data-enhance="false">
+                        <input type="hidden" name="roleId" value="@role.RoleId" />
+                        <input type="hidden" name="returnUrl" value="@returnUrl" />
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="dashboard-role-list__item">
+                            <span class="dashboard-role-list__name">@role.Name</span>
+                            @if (!string.IsNullOrWhiteSpace(role.Description))
+                            {
+                                <span class="dashboard-role-list__description">@role.Description</span>
+                            }
+                        </button>
+                    </form>
                 }
             </div>
         }

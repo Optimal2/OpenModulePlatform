@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using OpenModulePlatform.EventPublisher;
 using OpenModulePlatform.Web.Shared.Navigation;
 using System.Data;
@@ -25,13 +26,16 @@ public sealed class BannerService
 
     private readonly SqlConnectionFactory _db;
     private readonly IPushEventPublisher _pushEventPublisher;
+    private readonly ILogger<BannerService> _logger;
 
     public BannerService(
         SqlConnectionFactory db,
-        IPushEventPublisher pushEventPublisher)
+        IPushEventPublisher pushEventPublisher,
+        ILogger<BannerService> logger)
     {
         _db = db;
         _pushEventPublisher = pushEventPublisher;
+        _logger = logger;
     }
 
     public async Task<long> CreateAsync(
@@ -482,9 +486,20 @@ ORDER BY rp.RoleId;";
         IReadOnlyCollection<BannerTargetRequest> targets,
         CancellationToken ct)
     {
-        foreach (var pushEvent in CreateBannerChangedPushEvents(action, bannerId, targets))
+        try
         {
-            await _pushEventPublisher.PublishAsync(pushEvent, ct);
+            foreach (var pushEvent in CreateBannerChangedPushEvents(action, bannerId, targets))
+            {
+                await _pushEventPublisher.PublishAsync(pushEvent, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Banner push publication failed after DB mutation. BannerId={BannerId}, Action={Action}.",
+                bannerId,
+                action);
         }
     }
 
