@@ -500,6 +500,7 @@
                             <form method="post"
                                   action="@Model.MessageMarkAllReadUrl"
                                   class="portal-topbar__messages-mark-all-form"
+                                  data-portal-topbar-message-mark-all-form
                                   data-enhance="false"
                                   hidden="@(Model.UnreadMessageCount == 0)">
                                 <input type="hidden" name="returnUrl" value="@returnUrl" />
