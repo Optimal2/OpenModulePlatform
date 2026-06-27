@@ -84,7 +84,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.111",
+      "version": "0.3.112",
       "minModuleDefinitionVersion": "0.3.82",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
@@ -97,7 +97,7 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.19",
+      "version": "0.3.20",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip"

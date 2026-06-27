@@ -1,5 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.Compression;
+using System.Management;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -821,8 +824,7 @@ public sealed class HostAgentSelfUpgradeService
     {
         if (GetServiceState(serviceName) is null)
         {
-            var createArguments = new List<string>
-            {
+            RunScChecked(
                 "create",
                 serviceName,
                 "binPath=",
@@ -830,14 +832,16 @@ public sealed class HostAgentSelfUpgradeService
                 "start=",
                 "auto",
                 "DisplayName=",
-                ResolveServiceDisplayName(serviceName, version)
-            };
-            AddServiceAccountArguments(createArguments, upgradeSettings);
-            RunScChecked(createArguments.ToArray());
+                ResolveServiceDisplayName(serviceName, version));
         }
         else
         {
-            ConfigureService(serviceName, executablePath, arguments, upgradeSettings, version);
+            ConfigureService(serviceName, executablePath, arguments, version);
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            ApplyServiceAccountIfConfigured(serviceName, upgradeSettings);
         }
 
         RunScChecked("description", serviceName, "OpenModulePlatform HostAgent runtime service.");
@@ -847,11 +851,9 @@ public sealed class HostAgentSelfUpgradeService
         string serviceName,
         string executablePath,
         IReadOnlyList<string> arguments,
-        HostAgentUpgradeSettings? upgradeSettings = null,
         string? version = null)
     {
-        var configArguments = new List<string>
-        {
+        RunScChecked(
             "config",
             serviceName,
             "binPath=",
@@ -859,14 +861,7 @@ public sealed class HostAgentSelfUpgradeService
             "start=",
             "auto",
             "DisplayName=",
-            ResolveServiceDisplayName(serviceName, version)
-        };
-        if (upgradeSettings is not null)
-        {
-            AddServiceAccountArguments(configArguments, upgradeSettings);
-        }
-
-        RunScChecked(configArguments.ToArray());
+            ResolveServiceDisplayName(serviceName, version));
     }
 
     private static string ResolveServiceDisplayName(string serviceName, string? version)
@@ -890,20 +885,85 @@ public sealed class HostAgentSelfUpgradeService
             : $"OMP {trimmed}";
     }
 
-    private static void AddServiceAccountArguments(List<string> arguments, HostAgentUpgradeSettings upgradeSettings)
+    [SupportedOSPlatform("windows")]
+    private static void ApplyServiceAccountIfConfigured(string serviceName, HostAgentUpgradeSettings upgradeSettings)
     {
         if (string.IsNullOrWhiteSpace(upgradeSettings.ServiceAccountName))
         {
             return;
         }
 
-        arguments.Add("obj=");
-        arguments.Add(upgradeSettings.ServiceAccountName.Trim());
-        if (!string.IsNullOrWhiteSpace(upgradeSettings.ServiceAccountPassword))
+        if (!OperatingSystem.IsWindows())
         {
-            arguments.Add("password=");
-            arguments.Add(upgradeSettings.ServiceAccountPassword);
+            throw new InvalidOperationException("Configuring a Windows service account requires Windows.");
         }
+
+        var startName = NormalizeAccountForSc(upgradeSettings.ServiceAccountName.Trim());
+        var startPassword = RequiresPassword(startName)
+            ? upgradeSettings.ServiceAccountPassword
+            : null;
+
+        ChangeServiceStartAccount(serviceName, startName, startPassword);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void ChangeServiceStartAccount(
+        string serviceName,
+        string startName,
+        string? startPassword)
+    {
+        using var service = GetWindowsServiceManagementObject(serviceName);
+        using var parameters = service.GetMethodParameters("Change");
+        parameters["StartName"] = startName;
+        parameters["StartPassword"] = startPassword;
+
+        using var result = service.InvokeMethod("Change", parameters, null);
+        var returnValue = Convert.ToUInt32(result?["ReturnValue"] ?? 0, CultureInfo.InvariantCulture);
+        if (returnValue != 0)
+        {
+            throw new InvalidOperationException(
+                $"Win32_Service.Change failed with return value {returnValue} for Windows service '{serviceName}'.");
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static ManagementObject GetWindowsServiceManagementObject(string serviceName)
+    {
+        using var searcher = new ManagementObjectSearcher(
+            "SELECT * FROM Win32_Service WHERE Name = " + QuoteWqlString(serviceName));
+
+        foreach (ManagementObject service in searcher.Get())
+        {
+            return service;
+        }
+
+        throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
+    }
+
+    private static string QuoteWqlString(string value)
+        => "'" + value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal) + "'";
+
+    private static string NormalizeAccountForSc(string value)
+    {
+        var normalized = value.Trim();
+        if (normalized.Equals("NT AUTHORITY\\SYSTEM", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals(".\\LocalSystem", StringComparison.OrdinalIgnoreCase))
+        {
+            return "LocalSystem";
+        }
+
+        return normalized;
+    }
+
+    private static bool RequiresPassword(string userName)
+    {
+        var normalized = NormalizeAccountForSc(userName);
+        return !normalized.Equals("LocalSystem", StringComparison.OrdinalIgnoreCase)
+            && !normalized.Equals("NT AUTHORITY\\LocalService", StringComparison.OrdinalIgnoreCase)
+            && !normalized.Equals("NT AUTHORITY\\NetworkService", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CreateBinaryPath(string executablePath, IReadOnlyList<string> arguments)
