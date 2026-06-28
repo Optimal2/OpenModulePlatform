@@ -152,12 +152,12 @@ public sealed class ArtifactZipImportService
         }
         catch (IOException ex)
         {
-            _logger.LogInformation(ex, "HostAgent import file is not ready and will be retried. File={ImportPath}", importPath);
+            _logger.LogInformation(ex, "HostAgent import file is not yet ready (in use by another process). The file will be retried automatically on the next import cycle. File={ImportPath}", importPath);
             return false;
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning(ex, "HostAgent import file is not accessible and will be retried. File={ImportPath}", importPath);
+            _logger.LogWarning(ex, "HostAgent could not open import file (access denied). It will be retried on the next import cycle; if this persists, verify NTFS permissions on the file and its directory. File={ImportPath}", importPath);
             return false;
         }
     }
@@ -1183,7 +1183,7 @@ public sealed class ArtifactZipImportService
         return fullPath;
     }
 
-    private static void MoveImportFile(string importPath, string destinationRoot, string? errorMessage)
+    private void MoveImportFile(string importPath, string destinationRoot, string? errorMessage)
     {
         try
         {
@@ -1206,15 +1206,13 @@ public sealed class ArtifactZipImportService
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            // The next HostAgent cycle can retry or reclassify a file that
-            // could not be moved after processing.
+            _logger.LogWarning(ex, "HostAgent could not move import file to archive (file in use). It will remain in place and be retried on the next import cycle. File={ImportPath}, DestinationRoot={DestinationRoot}", importPath, destinationRoot);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
-            // The next HostAgent cycle can retry or reclassify a file that
-            // could not be moved after processing.
+            _logger.LogWarning(ex, "HostAgent could not move import file to archive (access denied). It will remain in place and be retried on the next import cycle; if this persists, verify NTFS permissions on the archive directory. File={ImportPath}, DestinationRoot={DestinationRoot}", importPath, destinationRoot);
         }
     }
 
