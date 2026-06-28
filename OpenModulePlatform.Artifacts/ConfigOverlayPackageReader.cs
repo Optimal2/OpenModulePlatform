@@ -40,7 +40,8 @@ public sealed record PortableConfigOverlayDocument(
     string? TargetName,
     string? ArtifactVersion,
     string? SourceName,
-    IReadOnlyList<PortableConfigOverlayConfigurationFile> ConfigurationFiles);
+    IReadOnlyList<PortableConfigOverlayConfigurationFile> ConfigurationFiles,
+    int SqlScriptCount = 0);
 
 public sealed record PortableConfigOverlayConfigurationFile(
     string RelativePath,
@@ -54,6 +55,8 @@ public sealed class ConfigOverlayPackageReader
 {
     public const string HostConfigurationManifestEntryName = "omp-host-config.json";
     public const string ConfigOverlayManifestEntryName = "omp-config-overlay.json";
+    public const string ConfigOverlaySqlScriptsWarning =
+        "This config overlay contains sqlScripts. OpenModulePlatform does not execute SQL from config overlays; apply it manually if it is required.";
 
     private const int MaxJsonBytes = 1024 * 1024 * 5;
     private const int MaxExternalFileBytes = 1024 * 1024 * 5;
@@ -226,7 +229,7 @@ public sealed class ConfigOverlayPackageReader
         var overlayVersion = RequireString(root, "overlayVersion", "Config overlay");
         var hostKey = RequireString(root, "hostKey", "Config overlay");
         var files = NormalizeConfigurationFiles(root, archive, externalRoot);
-        NormalizeSqlScripts(root, archive, externalRoot);
+        var sqlScriptCount = NormalizeSqlScripts(root, archive, externalRoot);
 
         var normalizedJson = root.ToJsonString(JsonOptions);
         return new PortableConfigOverlayDocument(
@@ -243,7 +246,8 @@ public sealed class ConfigOverlayPackageReader
             NullIfWhiteSpace(GetString(root, "targetName")),
             NullIfWhiteSpace(GetString(root, "artifactVersion")),
             Truncate(sourceName, 400),
-            files);
+            files,
+            sqlScriptCount);
     }
 
     private static IReadOnlyList<PortableConfigOverlayConfigurationFile> NormalizeConfigurationFiles(
@@ -293,11 +297,11 @@ public sealed class ConfigOverlayPackageReader
         return files;
     }
 
-    private static void NormalizeSqlScripts(JsonObject root, ZipArchive? archive, string? externalRoot)
+    private static int NormalizeSqlScripts(JsonObject root, ZipArchive? archive, string? externalRoot)
     {
         if (root["sqlScripts"] is not JsonArray items)
         {
-            return;
+            return 0;
         }
 
         foreach (var node in items)
@@ -324,6 +328,8 @@ public sealed class ConfigOverlayPackageReader
             item.Remove("content");
             item.Remove("contentEncoding");
         }
+
+        return items.Count;
     }
 
     private static string ReadExternalText(
