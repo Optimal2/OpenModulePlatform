@@ -222,7 +222,8 @@ public sealed class ConfigOverlayObjectService
             result.Created,
             result.Replaced,
             result.WasIdentical,
-            document.ConfigurationFiles.Count);
+            document.ConfigurationFiles.Count,
+            document.SqlScriptCount > 0 ? ConfigOverlayPackageReader.ConfigOverlaySqlScriptsWarning : null);
     }
 
     private async Task<string> CopyUploadAsync(IFormFile file, string prefix, CancellationToken ct)
@@ -375,4 +376,5 @@ public sealed record ConfigObjectImportResult(
     bool Created,
     bool Replaced,
     bool WasIdentical,
-    int ConfigurationFileCount);
+    int ConfigurationFileCount,
+    string? Warning = null);
