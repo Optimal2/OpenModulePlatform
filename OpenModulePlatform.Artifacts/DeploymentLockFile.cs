@@ -187,7 +187,9 @@ public sealed record DeploymentLockStatus(
     {
         var builder = new StringBuilder();
         builder.Append(deploymentKind);
-        builder.Append(" deployment is temporarily locked.");
+        builder.Append(" deployment is skipped because a deployment lock is held. LockId=");
+        builder.Append(Document?.LockId ?? "(unknown)");
+        builder.Append('.');
 
         if (Document is not null)
         {
@@ -205,12 +207,9 @@ public sealed record DeploymentLockStatus(
                 builder.Append('.');
             }
 
-            if (!string.IsNullOrWhiteSpace(Document.Reason))
-            {
-                builder.Append(" Reason: ");
-                builder.Append(Document.Reason.Trim());
-                builder.Append('.');
-            }
+            builder.Append(" Reason: ");
+            builder.Append(string.IsNullOrWhiteSpace(Document.Reason) ? "(unspecified)" : Document.Reason.Trim());
+            builder.Append('.');
 
             builder.Append(" Expires UTC: ");
             builder.Append(Document.ExpiresUtc.UtcDateTime.ToString("u", CultureInfo.InvariantCulture));
@@ -225,6 +224,7 @@ public sealed record DeploymentLockStatus(
 
         builder.Append(" Lock file: ");
         builder.Append(Path);
+        builder.Append(". The next deployment cycle will retry automatically once the lock is released or expired.");
         return builder.ToString();
     }
 }

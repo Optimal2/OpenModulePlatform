@@ -253,7 +253,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 results.Add(result);
             }
 
-            return ShowUniversalImportResults(results);
+            return ShowUniversalImportResults(results, UniversalUploadInput.QuickImport);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
@@ -325,7 +325,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 !UniversalStagedInput.QuickImport && UniversalStagedInput.ReplaceExistingConfigObjects,
                 ct);
 
-            return ShowUniversalImportResults([result]);
+            return ShowUniversalImportResults([result], UniversalStagedInput.QuickImport);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
@@ -534,7 +534,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             .ToList();
     }
 
-    private IActionResult ShowUniversalImportResults(IReadOnlyList<UniversalPackageImportResult> results)
+    private IActionResult ShowUniversalImportResults(IReadOnlyList<UniversalPackageImportResult> results, bool quickImport)
     {
         var resultId = Guid.NewGuid().ToString("N");
         var cacheKey = CreateUniversalImportResultCacheKey(resultId);
@@ -543,7 +543,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             BuildUniversalImportResultViewModels(results),
             UniversalImportResultCacheDuration);
 
-        StatusMessage = BuildUniversalImportSummary(results);
+        StatusMessage = BuildUniversalImportSummary(results, quickImport);
         return RedirectToPage(
             "/Admin/ModulePackageImport",
             new { UniversalImportResultId = resultId });
@@ -570,7 +570,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         return BoundStatusMessage(message);
     }
 
-    private string BuildUniversalImportSummary(IReadOnlyList<UniversalPackageImportResult> results)
+    private string BuildUniversalImportSummary(IReadOnlyList<UniversalPackageImportResult> results, bool quickImport)
     {
         var imported = results.Sum(static r => r.ImportedCount);
         var skipped = results.Sum(static r => r.SkippedCount);
@@ -579,7 +579,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         var sb = new StringBuilder();
         sb.AppendFormat(
             CultureInfo.CurrentCulture,
-            P("Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
+            P("Processed {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
             results.Count,
             imported,
             skipped,
@@ -588,15 +588,22 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         var byKind = results
             .SelectMany(static r => r.Items)
             .GroupBy(item => item.Kind)
-            .Select(g => new { Kind = g.Key, Imported = g.Count(i => IsImportedStatus(i.Status)), Failed = g.Count(i => i.Status == "Failed") })
-            .Where(x => x.Imported > 0 || x.Failed > 0)
+            .Select(g => new { Kind = g.Key, Imported = g.Count(i => IsImportedStatus(i.Status)), Skipped = g.Count(i => i.Status == "Skipped"), Failed = g.Count(i => i.Status == "Failed") })
+            .Where(x => x.Imported > 0 || x.Skipped > 0 || x.Failed > 0)
             .ToList();
 
         if (byKind.Count > 0)
         {
             sb.Append(' ');
-            sb.Append(P("By kind: "));
-            sb.Append(string.Join("; ", byKind.Select(k => $"{FormatUniversalItemKind(k.Kind)} {k.Imported} applied, {k.Failed} failed")));
+            sb.Append(P("Breakdown by kind: "));
+            sb.Append(string.Join("; ", byKind.Select(k =>
+            {
+                var segments = new List<string>();
+                if (k.Imported > 0) segments.Add($"{k.Imported} applied");
+                if (k.Skipped > 0) segments.Add($"{k.Skipped} already up to date");
+                if (k.Failed > 0) segments.Add($"{k.Failed} failed");
+                return $"{FormatUniversalItemKind(k.Kind)}: {string.Join(", ", segments)}";
+            })));
             sb.Append('.');
         }
 
@@ -610,14 +617,19 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 .ToList();
 
             sb.Append(' ');
-            sb.Append(P("First failures: "));
+            sb.AppendFormat(
+                CultureInfo.CurrentCulture,
+                P("First {0} failures (see log for full list): "),
+                firstFailures.Count);
             sb.Append(string.Join("; ", firstFailures));
         }
 
         if (skipped > 0 && imported == 0 && failed == 0)
         {
             sb.Append(' ');
-            sb.Append(P("All items were already current. Use Quick import for normal catch-up."));
+            sb.Append(quickImport
+                ? P("All items were already up to date — nothing to do.")
+                : P("All items were already up to date. Enable Quick import to skip these automatically next time."));
         }
 
         return BoundStatusMessage(sb.ToString());
