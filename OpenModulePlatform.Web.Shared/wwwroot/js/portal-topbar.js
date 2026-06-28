@@ -27,6 +27,7 @@
     var rebalanceFrameRequested = false;
     var FAVORITE_CHANGED_EVENT = 'omp:navigation-favorite-changed';
     var NOTIFICATION_CHANGED_EVENT = 'omp:notification-state-changed';
+    var MESSAGE_CHANGED_EVENT = 'omp:message-state-changed';
     var PUSH_EVENT_RECEIVED_EVENT = 'omp:push-event';
     var SESSION_STATUS_WARNING_EVENT = 'omp:session-status-warning';
     var sessionStatusState = {
@@ -685,6 +686,16 @@
         }));
     }
 
+    function emitMessageChanged(unreadCount, allRead) {
+        window.dispatchEvent(new CustomEvent(MESSAGE_CHANGED_EVENT, {
+            detail: {
+                source: 'topbar',
+                unreadCount: Number.isFinite(Number(unreadCount)) ? Number(unreadCount) : null,
+                allRead: !!allRead
+            }
+        }));
+    }
+
     function notificationCallerText(item) {
         var source = item && (item.callerDisplayName || item.callerKey);
         return source ? String(source).trim().charAt(0).toUpperCase() : '!';
@@ -1090,6 +1101,7 @@
                     }
 
                     updateMessageBadge(root, 0);
+                    emitMessageChanged(0, true);
                     runTopbarSummaryRefreshForRoot(root);
                 })
                 .catch(function (error) {

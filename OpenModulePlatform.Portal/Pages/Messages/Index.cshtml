@@ -72,16 +72,24 @@ else
     <script>
         (() => {
             const PUSH_EVENT_NAME = 'omp:push-event';
+            const MESSAGE_CHANGED_EVENT_NAME = 'omp:message-state-changed';
             const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';
+            const UPDATE_POLL_MODE = 'poll';
+            const UPDATE_PUSH_MODE = 'push';
             const REFRESH_DEBOUNCE_MS = 250;
 
             let refreshTimer = 0;
             let refreshRunning = false;
             let pendingRefresh = false;
 
-            const isPushMode = () => {
+            const getTopbarConfig = () => {
                 const topbar = document.querySelector('[data-portal-topbar-root]');
-                return (topbar?.getAttribute('data-notification-update-mode') || '').toLowerCase() === 'push';
+                const mode = (topbar?.getAttribute('data-notification-update-mode') || UPDATE_POLL_MODE)
+                    .trim()
+                    .toLowerCase();
+                return {
+                    mode: mode === UPDATE_POLL_MODE || mode === UPDATE_PUSH_MODE ? mode : UPDATE_POLL_MODE
+                };
             };
 
             const replaceLiveContent = (html) => {
@@ -148,13 +156,28 @@ else
                 }, Math.max(0, delay));
             }
 
-            window.addEventListener(PUSH_EVENT_NAME, (event) => {
+            const handlePushEvent = (event) => {
                 const detail = event?.detail || {};
                 const category = (detail.category || detail.envelope?.category || '').toString().toLowerCase();
-                if (category === MESSAGE_PUSH_CATEGORY && isPushMode()) {
+                if (category === MESSAGE_PUSH_CATEGORY && getTopbarConfig().mode === UPDATE_PUSH_MODE) {
                     scheduleRefresh(REFRESH_DEBOUNCE_MS);
                 }
-            });
+            };
+
+            const handleMessageChanged = () => {
+                scheduleRefresh(REFRESH_DEBOUNCE_MS);
+            };
+
+            const handleVisibilityOrFocus = () => {
+                if (getTopbarConfig().mode === UPDATE_POLL_MODE) {
+                    scheduleRefresh(REFRESH_DEBOUNCE_MS);
+                }
+            };
+
+            window.addEventListener(PUSH_EVENT_NAME, handlePushEvent);
+            window.addEventListener(MESSAGE_CHANGED_EVENT_NAME, handleMessageChanged);
+            window.addEventListener('focus', handleVisibilityOrFocus);
+            document.addEventListener('visibilitychange', handleVisibilityOrFocus);
         })();
     </script>
 }
