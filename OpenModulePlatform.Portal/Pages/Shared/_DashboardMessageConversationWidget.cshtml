@@ -3,7 +3,9 @@
 @model DashboardMessageConversationWidget
 @inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
 
-<div class="dashboard-chat-list">
+<div class="dashboard-chat-list"
+     data-dashboard-message-conversations
+     data-load-url="@Model.LoadUrl">
     @if (Model.Conversations.Count == 0)
     {
         <div class="dashboard-chat-list__empty">

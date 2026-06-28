@@ -205,7 +205,7 @@
                             }
                             else if (widget.Payload == "message-conversations")
                             {
-                                <partial name="_DashboardMessageConversationWidget" model="new DashboardMessageConversationWidget(Model.DashboardMessageConversations)" />
+                                <partial name="_DashboardMessageConversationWidget" model='new DashboardMessageConversationWidget(Model.DashboardMessageConversations, Url.Page("/Index", "MessageConversationsPartial"))' />
                             }
                             else if (widget.Payload == "log-search-recent-jobs")
                             {
@@ -504,7 +504,7 @@
         </template>
 
         <template data-dashboard-widget-template="message-conversations">
-            <partial name="_DashboardMessageConversationWidget" model="new DashboardMessageConversationWidget(Model.DashboardMessageConversations)" />
+            <partial name="_DashboardMessageConversationWidget" model='new DashboardMessageConversationWidget(Model.DashboardMessageConversations, Url.Page("/Index", "MessageConversationsPartial"))' />
         </template>
 
         <template data-dashboard-widget-template="log-search-recent-jobs">

@@ -16,12 +16,18 @@
     const favoriteChangedEvent = 'omp:navigation-favorite-changed';
     const notificationChangedEvent = 'omp:notification-state-changed';
     const sessionStatusWarningEvent = 'omp:session-status-warning';
+    const pushEventName = 'omp:push-event';
+    const pushNotificationCategory = 'topbar.notification-state-changed';
+    const pushMessageCategory = 'topbar.message-state-changed';
+    const pushRefreshDebounceMs = 250;
     const musicObjectUrls = new Set();
     const blankImageObjectUrls = new Set();
     let activeWidgetPopup = null;
     let activeWidgetPopupDrag = null;
     let dashboardWidgetPopupId = 0;
     let blankWidgetImagesCache = null;
+    let dashboardNotificationRefreshTimer = 0;
+    let dashboardMessageRefreshTimer = 0;
 
     function openDashboardWidgetPopup(options) {
         const anchor = options?.anchor || null;
@@ -1564,6 +1570,128 @@
                 setDashboardNotificationRowsRead(root, notificationId, false);
             }
         });
+    }
+
+    function isPushNotificationMode() {
+        const topbar = document.querySelector('[data-portal-topbar-root]');
+        return (topbar?.getAttribute('data-notification-update-mode') || '').toLowerCase() === 'push';
+    }
+
+    function isDashboardMessageComposerFocused() {
+        if (!document.hasFocus()) {
+            return false;
+        }
+
+        const active = document.activeElement;
+        return !!(active
+            && typeof active.closest === 'function'
+            && active.closest('[data-message-thread-composer]'));
+    }
+
+    async function refreshDashboardNotificationFeed(feed) {
+        if (!feed || feed.dataset.notificationLoading === 'true') {
+            return;
+        }
+
+        const list = feed.querySelector('[data-dashboard-notification-list]');
+        if (!list) {
+            return;
+        }
+
+        const previousScrollTop = feed.scrollTop || 0;
+        list.innerHTML = '';
+        feed.dataset.notificationEnd = 'false';
+        updateDashboardNotificationEmptyState(feed);
+        setDashboardNotificationLazyState(feed, false, false);
+
+        await loadMoreDashboardNotifications(feed);
+        if (feed.isConnected) {
+            feed.scrollTop = previousScrollTop;
+        }
+    }
+
+    async function refreshDashboardMessageConversations(widget) {
+        const loadUrl = widget?.dataset?.loadUrl || '';
+        if (!loadUrl) {
+            return;
+        }
+
+        try {
+            const response = await fetch(loadUrl, {
+                method: 'GET',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const html = await response.text();
+            const template = document.createElement('template');
+            template.innerHTML = html.trim();
+            const next = template.content.querySelector('[data-dashboard-message-conversations]');
+            if (!next) {
+                return;
+            }
+
+            widget.replaceWith(next);
+        } catch (error) {
+            if (window.console && typeof window.console.warn === 'function') {
+                window.console.warn('OMP dashboard message conversation refresh failed.', error);
+            }
+        }
+    }
+
+    function scheduleDashboardNotificationRefresh() {
+        if (dashboardNotificationRefreshTimer) {
+            window.clearTimeout(dashboardNotificationRefreshTimer);
+        }
+
+        dashboardNotificationRefreshTimer = window.setTimeout(() => {
+            dashboardNotificationRefreshTimer = 0;
+            document.querySelectorAll('[data-dashboard-notification-feed]').forEach((feed) => {
+                refreshDashboardNotificationFeed(feed).catch(() => {});
+            });
+        }, pushRefreshDebounceMs);
+    }
+
+    function scheduleDashboardMessageRefresh() {
+        if (dashboardMessageRefreshTimer) {
+            window.clearTimeout(dashboardMessageRefreshTimer);
+        }
+
+        dashboardMessageRefreshTimer = window.setTimeout(() => {
+            dashboardMessageRefreshTimer = 0;
+            document.querySelectorAll('[data-dashboard-message-conversations]').forEach((widget) => {
+                refreshDashboardMessageConversations(widget).catch(() => {});
+            });
+        }, pushRefreshDebounceMs);
+    }
+
+    function handleDashboardPushEvent(event) {
+        if (!isPushNotificationMode()) {
+            return;
+        }
+
+        const detail = event?.detail || {};
+        const category = String(detail.category || detail.envelope?.category || '').toLowerCase();
+
+        if (category === pushNotificationCategory) {
+            scheduleDashboardNotificationRefresh();
+            return;
+        }
+
+        if (category === pushMessageCategory) {
+            scheduleDashboardMessageRefresh();
+            if (!isDashboardMessageComposerFocused()) {
+                window.ompMessageNotificationSound?.play();
+            }
+        }
     }
 
     function getDashboardNotificationCursor(feed) {
@@ -4839,6 +4967,7 @@
 
     window.addEventListener(favoriteChangedEvent, handleExternalFavoriteChanged);
     window.addEventListener(notificationChangedEvent, handleExternalNotificationChanged);
+    window.addEventListener(pushEventName, handleDashboardPushEvent);
     window.addEventListener('beforeunload', () => {
         musicObjectUrls.forEach((url) => URL.revokeObjectURL(url));
         musicObjectUrls.clear();

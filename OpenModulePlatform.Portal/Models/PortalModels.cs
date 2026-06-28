@@ -132,7 +132,9 @@ public sealed record DashboardNotificationFeedWidget(
 /// <summary>
 /// Recent personal message conversations rendered inside a dashboard widget.
 /// </summary>
-public sealed record DashboardMessageConversationWidget(IReadOnlyList<DashboardMessageConversationLink> Conversations);
+public sealed record DashboardMessageConversationWidget(
+    IReadOnlyList<DashboardMessageConversationLink> Conversations,
+    string? LoadUrl);
 
 /// <summary>
 /// One message conversation destination rendered inside a dashboard widget.

@@ -154,6 +154,23 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         };
     }
 
+    public async Task<IActionResult> OnGetMessageConversationsPartial(CancellationToken ct)
+    {
+        var loadUrl = Url.Page("/Index", "MessageConversationsPartial") ?? string.Empty;
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Partial("_DashboardMessageConversationWidget", new DashboardMessageConversationWidget([], loadUrl));
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return Partial("_DashboardMessageConversationWidget", new DashboardMessageConversationWidget([], loadUrl));
+        }
+
+        var conversations = await GetDashboardMessageConversationsAsync(userId, ct);
+        return Partial("_DashboardMessageConversationWidget", new DashboardMessageConversationWidget(conversations, loadUrl));
+    }
+
     public async Task<IActionResult> OnPostAddWidget(int widgetId, CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
