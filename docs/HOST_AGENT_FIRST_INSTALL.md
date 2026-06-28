@@ -245,6 +245,11 @@ them later through Portal.
    - `hostAgent.webAppsRoot`
    - `hostAgent.portalPhysicalPath`
    - `hostAgent.servicesRoot`
+
+   The sample `bootstrap.json` sets `sql.trustServerCertificate` to `true` for
+   local development only. Production packages should leave it at the default
+   `false` and use a trusted SQL Server certificate.
+
 4. Double-click `OpenModulePlatform.Bootstrapper.exe` in the package root, or
    run:
 

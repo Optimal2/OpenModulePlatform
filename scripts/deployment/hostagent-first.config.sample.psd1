@@ -26,6 +26,9 @@
     SqlAuthentication = 'Integrated' # Integrated or SqlLogin.
     SqlUser = ''
     SqlPassword = ''
+    # Set to $true only when the SQL Server presents a self-signed or otherwise
+    # untrusted certificate. Production environments should use a trusted cert.
+    SqlTrustServerCertificate = $false
 
     BootstrapPortalAdminPrincipals = @('DOMAIN\UserOrGroup')
     BootstrapPortalAdminPrincipalType = 'ADUser' # ADUser or ADGroup. Legacy User is normalized to ADUser.
@@ -240,6 +243,7 @@
         InstallOpenDocViewer = $true
         InstallContentWebApp = $true
         InstallIFrameWebApp = $true
+        # Must be explicitly enabled. Example apps are not installed by default.
         InstallExamples = $true
         InstallRuntimeServices = $true
         InstallExampleService = $true
