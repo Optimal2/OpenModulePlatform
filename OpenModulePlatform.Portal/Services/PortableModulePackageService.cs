@@ -653,11 +653,17 @@ public sealed class PortableModulePackageService
                 overlay,
                 replaceExisting,
                 ct);
+            var message = $"Overlay {overlay.HostKey}/{overlay.OverlayKey} {overlay.OverlayVersion}; configuration files: {overlay.ConfigurationFiles.Count}.";
+            if (overlay.SqlScriptCount > 0)
+            {
+                message = AppendWarning(message, ConfigOverlayPackageReader.ConfigOverlaySqlScriptsWarning);
+            }
+
             return new UniversalPackageImportItemResult(
                 "config-overlay",
                 item.Path,
                 result.WasIdentical ? "Skipped" : result.Replaced ? "Replaced" : result.Created ? "Imported" : "Updated",
-                $"Overlay {overlay.HostKey}/{overlay.OverlayKey} {overlay.OverlayVersion}; configuration files: {overlay.ConfigurationFiles.Count}.");
+                message);
         }
         catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
         {
