@@ -123,6 +123,10 @@ Config overlays may contain a `sqlScripts` array for legacy compatibility, but
 **OMP does not execute SQL scripts from config overlays**. Database changes
 belong in module-definition `sqlScripts` or in dedicated DBA-run scripts.
 
+Portal and HostAgent imports now surface a clear warning when a config overlay
+contains `sqlScripts`, while still storing the overlay and its configuration
+files normally.
+
 ## Installer Package Layout
 
 HostAgent-first packages use one global portable object library:
