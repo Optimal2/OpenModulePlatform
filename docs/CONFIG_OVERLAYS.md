@@ -63,8 +63,7 @@ customer-specific generation scripts decide which values are meaningful.
       "relativePath": "odv.site.config.js",
       "fileContent": "window.OpenDocViewerSiteConfig = { apiBaseUrl: '/OpenDocViewer' };"
     }
-  ],
-  "sqlScripts": []
+  ]
 }
 ```
 
@@ -110,14 +109,6 @@ The manifest can reference files with `source` or `path`:
       "relativePath": "odv.site.config.js",
       "source": "files/odv.site.config.js"
     }
-  ],
-  "sqlScripts": [
-    {
-      "key": "customer-repair",
-      "phase": "repair",
-      "execution": "idempotent",
-      "source": "sql/repair.sql"
-    }
   ]
 }
 ```
@@ -125,6 +116,12 @@ The manifest can reference files with `source` or `path`:
 Portal and HostAgent normalize referenced files into the stored JSON before the
 object is saved. The stored object is therefore self-contained even if the
 source zip used separate files for code review.
+
+## Config overlay SQL scripts
+
+Config overlays may contain a `sqlScripts` array for legacy compatibility, but
+**OMP does not execute SQL scripts from config overlays**. Database changes
+belong in module-definition `sqlScripts` or in dedicated DBA-run scripts.
 
 ## Installer Package Layout
 

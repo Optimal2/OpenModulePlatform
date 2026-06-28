@@ -4,6 +4,8 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Localization;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OpenModulePlatform.Portal.Localization;
@@ -570,21 +572,59 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     private string BuildUniversalImportSummary(IReadOnlyList<UniversalPackageImportResult> results)
     {
-        if (results.Count == 1)
-        {
-            return BuildUniversalImportSummary(results[0]);
-        }
+        var imported = results.Sum(static r => r.ImportedCount);
+        var skipped = results.Sum(static r => r.SkippedCount);
+        var failed = results.Sum(static r => r.FailedCount);
 
-        var message = string.Format(
-            System.Globalization.CultureInfo.CurrentCulture,
+        var sb = new StringBuilder();
+        sb.AppendFormat(
+            CultureInfo.CurrentCulture,
             P("Imported {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}."),
             results.Count,
-            results.Sum(static result => result.ImportedCount),
-            results.Sum(static result => result.SkippedCount),
-            results.Sum(static result => result.FailedCount));
+            imported,
+            skipped,
+            failed);
 
-        return BoundStatusMessage(message);
+        var byKind = results
+            .SelectMany(static r => r.Items)
+            .GroupBy(item => item.Kind)
+            .Select(g => new { Kind = g.Key, Imported = g.Count(i => IsImportedStatus(i.Status)), Failed = g.Count(i => i.Status == "Failed") })
+            .Where(x => x.Imported > 0 || x.Failed > 0)
+            .ToList();
+
+        if (byKind.Count > 0)
+        {
+            sb.Append(' ');
+            sb.Append(P("By kind: "));
+            sb.Append(string.Join("; ", byKind.Select(k => $"{FormatUniversalItemKind(k.Kind)} {k.Imported} applied, {k.Failed} failed")));
+            sb.Append('.');
+        }
+
+        if (failed > 0)
+        {
+            var firstFailures = results
+                .SelectMany(static r => r.Items)
+                .Where(item => item.Status == "Failed")
+                .Take(2)
+                .Select(item => $"{item.Path}: {item.Message}")
+                .ToList();
+
+            sb.Append(' ');
+            sb.Append(P("First failures: "));
+            sb.Append(string.Join("; ", firstFailures));
+        }
+
+        if (skipped > 0 && imported == 0 && failed == 0)
+        {
+            sb.Append(' ');
+            sb.Append(P("All items were already current. Use Quick import for normal catch-up."));
+        }
+
+        return BoundStatusMessage(sb.ToString());
     }
+
+    private static bool IsImportedStatus(string? status)
+        => status is "Applied" or "Stored" or "Imported" or "Replaced" or "Updated";
 
     private void LoadUniversalImportResultFromCache()
     {

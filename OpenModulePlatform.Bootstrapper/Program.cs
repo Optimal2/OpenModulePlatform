@@ -6058,7 +6058,7 @@ internal sealed class BootstrapConfig
 
     public string ArtifactStoreRoot { get; set; } = string.Empty;
 
-    public bool IncludeExampleApps { get; set; } = true;
+    public bool IncludeExampleApps { get; set; }
 
     public List<ArtifactPayloadOptions> Artifacts { get; set; } = [];
 
@@ -6102,7 +6102,7 @@ internal sealed class SqlBootstrapOptions
 
     public string? Password { get; set; }
 
-    public bool TrustServerCertificate { get; set; } = true;
+    public bool TrustServerCertificate { get; set; }
 
     public bool CreateDatabase { get; set; }
 

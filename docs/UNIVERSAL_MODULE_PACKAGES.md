@@ -429,6 +429,30 @@ The result should report imported, skipped, and failed item counts. Failed items
 belong to the package item, not to the whole package, unless the zip or manifest
 itself is unreadable.
 
+## Common developer workflow
+
+1. Build the repository universal package:
+
+   ```powershell
+   .\scripts\omp\build-universal-package.ps1
+   ```
+
+2. Open Portal as an administrator and go to **System → Import/export**.
+
+3. Select the generated zip under **Import universal module package**.
+
+4. Leave **Quick import** enabled (default) for normal catch-up. Quick import
+   skips objects whose package version is not newer than the version already in
+   the database.
+
+5. Disable **Quick import** when you need to:
+   - replace an existing config overlay or host configuration,
+   - roll back a dashboard widget, or
+   - repair an artifact whose version did not change but whose content did.
+
+6. Review the status banner for counts and first failures; expand
+   **Import details** for the full row list.
+
 ## Migration Policy
 
 The old object formats remain readable during the transition:
