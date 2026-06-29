@@ -16,4 +16,8 @@
   <ItemGroup>
     <PackageReference Include="NLog.Extensions.Hosting" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
