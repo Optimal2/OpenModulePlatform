@@ -60,12 +60,14 @@ WHEN NOT MATCHED THEN
         try
         {
             var effectiveBucketMinutes = Math.Max(1, bucketMinutes);
+            var currentSampleKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var sample in samples)
             {
                 var key = Truncate(sample.SampleKey, HostResourceSampleKeyMaxLength);
                 var minValue = sample.MinValue ?? sample.SampleValue;
                 var maxValue = sample.MaxValue ?? sample.SampleValue;
+                currentSampleKeys.Add(key);
 
                 await using (var latestCmd = new SqlCommand(mergeLatestSql, conn, tx))
                 {
@@ -91,6 +93,8 @@ WHEN NOT MATCHED THEN
                 }
             }
 
+            await DeleteMissingLatestSamplesAsync(conn, tx, hostId, currentSampleKeys, ct);
+
             await tx.CommitAsync(ct);
         }
         catch
@@ -113,5 +117,38 @@ WHEN NOT MATCHED THEN
         return result is int count
             ? count
             : Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task DeleteMissingLatestSamplesAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid hostId,
+        IReadOnlyCollection<string> currentSampleKeys,
+        CancellationToken ct)
+    {
+        if (currentSampleKeys.Count == 0)
+        {
+            return;
+        }
+
+        var parameterNames = currentSampleKeys
+            .Select(static (_, index) => $"@sampleKey{index}")
+            .ToArray();
+        var sql = $@"
+DELETE FROM omp.HostResourceLatest
+WHERE HostId = @hostId
+  AND SampleKey NOT IN ({string.Join(", ", parameterNames)});";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
+
+        var index = 0;
+        foreach (var sampleKey in currentSampleKeys)
+        {
+            Add(cmd, parameterNames[index], SqlDbType.NVarChar, HostResourceSampleKeyMaxLength, sampleKey);
+            index++;
+        }
+
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 }
