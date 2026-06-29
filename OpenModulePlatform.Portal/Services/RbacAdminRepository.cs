@@ -637,6 +637,20 @@ WHERE PermissionId = @PermissionId;";
             await DeleteByRoleAsync(
                 conn,
                 (SqlTransaction)tx,
+                "DELETE FROM omp.banner_targets WHERE role_id = @RoleId;",
+                roleId,
+                ct);
+
+            await DeleteByRoleAsync(
+                conn,
+                (SqlTransaction)tx,
+                "DELETE FROM omp.config_settings WHERE ConfigRole = @RoleId;",
+                roleId,
+                ct);
+
+            await DeleteByRoleAsync(
+                conn,
+                (SqlTransaction)tx,
                 "DELETE FROM omp.Roles WHERE RoleId = @RoleId;",
                 roleId,
                 ct);

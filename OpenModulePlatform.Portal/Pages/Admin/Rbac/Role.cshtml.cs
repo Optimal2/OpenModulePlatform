@@ -298,7 +298,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
         catch (SqlException ex)
         {
-            await LoadDetailsAsync(ct);
+            await ReloadRoleStateAfterDeleteFailureAsync(ct);
             SetTitles("Edit role");
             ModelState.AddModelError(
                 string.Empty,
@@ -317,6 +317,29 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await LoadOriginalValuesAsync(ct);
+        await LoadDetailsAsync(ct);
+    }
+
+    private async Task ReloadRoleStateAfterDeleteFailureAsync(CancellationToken ct)
+    {
+        ModelState.Clear();
+
+        var role = await _repo.GetRoleAsync(Input.RoleId, ct);
+        if (role is not null)
+        {
+            Input = new InputModel
+            {
+                RoleId = role.RoleId,
+                Name = role.Name,
+                Description = role.Description
+            };
+            SetOriginalValues(role.Name, role.Description);
+        }
+        else
+        {
+            SetOriginalValues(null, null);
+        }
+
         await LoadDetailsAsync(ct);
     }
 
