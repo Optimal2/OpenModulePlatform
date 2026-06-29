@@ -1,5 +1,41 @@
 @page
+@using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.HostDeploymentsModel
+@{
+    const string StatusSectionId = "hostdeployments-status";
+    const string LockSectionId = "hostdeployments-lock";
+    const string WebAppHealthSectionId = "hostdeployments-web-app-health";
+    const string DriftSectionId = "hostdeployments-drift";
+    const string HostAgentUpgradeSectionId = "hostdeployments-hostagent-upgrade";
+    const string AppDeploymentSectionId = "hostdeployments-app-deployments";
+    const string ArtifactHistorySectionId = "hostdeployments-artifact-history";
+
+    var statusMessage = TempData["StatusMessage"] as string;
+    var deploymentLockStatus = Model.PortalDeploymentLockStatus;
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+
+    if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+
+    if (deploymentLockStatus is { IsLocked: true })
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Deployment lock"].Value, LockSectionId));
+    }
+
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Web app health"].Value, WebAppHealthSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Template/runtime drift overview"].Value, DriftSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["HostAgent self-upgrade"].Value, HostAgentUpgradeSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["App deployment state"].Value, AppDeploymentSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact provisioning history"].Value, ArtifactHistorySectionId));
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        Items = sectionNavigatorItems
+    };
+}
 
 <section class="page-header">
     <div>
@@ -9,16 +45,20 @@
     </div>
 </section>
 
-@if (TempData["StatusMessage"] is string statusMessage && !string.IsNullOrWhiteSpace(statusMessage))
+<div class="section-navigator-layout">
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
 {
-    <section class="section-card section-card--wide">
+    <section id="@StatusSectionId" class="section-card section-card--wide section-navigator-target">
         <div class="notice">@statusMessage</div>
     </section>
 }
 
-@if (Model.PortalDeploymentLockStatus is { IsLocked: true } lockStatus)
+@if (deploymentLockStatus is { IsLocked: true } lockStatus)
 {
-    <section class="section-card section-card--wide">
+    <section id="@LockSectionId" class="section-card section-card--wide section-navigator-target">
         <div class="notice">
             <strong>@L["A deployment lock is active."]</strong>
             @L["Application-pool recycle is disabled until the active deployment finishes or the lock expires."]
@@ -40,7 +80,7 @@
     </section>
 }
 
-<section class="card section-card section-card--wide">
+<section id="@WebAppHealthSectionId" class="card section-card section-card--wide section-navigator-target">
     <h3>@L["Web app health"]</h3>
     <p class="muted">@L["Shows per-host web app probes written by HostAgent. Portal health should return a non-success status when the app cannot serve real traffic."]</p>
 
@@ -170,7 +210,7 @@
     }
 </section>
 
-<section class="card section-card section-card--wide">
+<section id="@DriftSectionId" class="card section-card section-card--wide section-navigator-target">
     <h3>@L["Template/runtime drift overview"]</h3>
     <p class="muted">@L["Compares desired template app artifacts with the latest HostAgent deployment state per host. Use this first after changing desired versions or host placement."]</p>
 
@@ -356,7 +396,7 @@
     }
 </section>
 
-<section class="card section-card section-card--wide">
+<section id="@HostAgentUpgradeSectionId" class="card section-card section-card--wide section-navigator-target">
     <h3>@L["HostAgent self-upgrade"]</h3>
     <p class="muted">@L["Select the desired HostAgent artifact per host. The active HostAgent installs the selected version and hands over to it during its next cycle."]</p>
 
@@ -502,7 +542,7 @@
     }
 </section>
 
-<section class="card section-card section-card--wide">
+<section id="@AppDeploymentSectionId" class="card section-card section-card--wide section-navigator-target">
     <h3>@L["App deployment state"]</h3>
     <p class="muted">@L["These rows show the latest HostAgent result for each host and app instance. This is usually the most useful view after a desired version has been selected."]</p>
 
@@ -620,7 +660,7 @@
     }
 </section>
 
-<section class="card section-card section-card--wide">
+<section id="@ArtifactHistorySectionId" class="card section-card section-card--wide section-navigator-target">
     <h3>@L["Artifact provisioning history"]</h3>
     <p class="muted">@L["These rows show the latest HostAgent artifact download and verification result per host. The default view shows rows from the last 24 hours that may need attention."]</p>
 
@@ -708,6 +748,9 @@
         </div>
     }
 </section>
+
+    </div>
+</div>
 
 <script>
 (() => {

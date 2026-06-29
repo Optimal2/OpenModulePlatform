@@ -2514,5 +2514,7 @@
   <data name="Web app application-pool recycle job {0} was queued." xml:space="preserve"><value>Web app application-pool recycle job {0} was queued.</value></data>
   <data name="Select a host before requesting web app logs." xml:space="preserve"><value>Select a host before requesting web app logs.</value></data>
   <data name="Web app log collection job {0} was queued." xml:space="preserve"><value>Web app log collection job {0} was queued.</value></data>
+  <data name="Deployment lock" xml:space="preserve"><value>Deployment lock</value></data>
+  <data name="Page sections" xml:space="preserve"><value>Page sections</value></data>
   <data name="The message could not be sent." xml:space="preserve"><value>The message could not be sent.</value></data>
 </root>
