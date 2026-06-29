@@ -22,7 +22,6 @@
     --section-navigator-branch-width: 16px;
     --section-navigator-item-indent: calc(var(--section-navigator-line-x) + var(--section-navigator-branch-width));
     --section-navigator-node-y: 18px;
-    --section-navigator-stem-bottom: 10px;
 }
 
 .section-navigator__nav {
@@ -59,20 +58,21 @@
     padding-left: 0;
 }
 
-.section-navigator__list::before {
+.section-navigator__item {
+    min-width: 0;
+    padding-left: var(--section-navigator-item-indent);
+    position: relative;
+}
+
+.section-navigator__item::after {
     background: var(--section-navigator-line);
-    bottom: var(--section-navigator-stem-bottom);
+    bottom: 0;
     content: "";
     left: var(--section-navigator-line-x);
     position: absolute;
     top: 0;
     width: var(--section-navigator-line-width);
-}
-
-.section-navigator__item {
-    min-width: 0;
-    padding-left: var(--section-navigator-item-indent);
-    position: relative;
+    z-index: 0;
 }
 
 .section-navigator__item::before {
@@ -86,12 +86,24 @@
     z-index: 0;
 }
 
+.section-navigator__item:first-child::after {
+    top: var(--section-navigator-node-y);
+}
+
+.section-navigator__item:last-child::after {
+    bottom: calc(100% - var(--section-navigator-node-y));
+}
+
+.section-navigator__item:only-child::after {
+    content: none;
+}
+
 .section-navigator__item--root {
     padding-left: 0;
 }
 
 .section-navigator__item--root::before,
-.section-navigator__list--root::before {
+.section-navigator__item--root::after {
     content: none;
 }
 
