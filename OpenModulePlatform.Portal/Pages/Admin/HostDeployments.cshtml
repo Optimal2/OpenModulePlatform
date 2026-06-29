@@ -38,6 +38,10 @@
     };
 }
 
+<div class="section-navigator-layout">
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
+
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["System"]</div>
@@ -45,10 +49,6 @@
         <p class="lede">@L["Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks."]</p>
     </div>
 </section>
-
-<div class="section-navigator-layout">
-    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
-    <div class="section-navigator-layout__content">
 
 @if (!string.IsNullOrWhiteSpace(statusMessage))
 {
