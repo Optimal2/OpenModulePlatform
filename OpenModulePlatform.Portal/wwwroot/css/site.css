@@ -2787,10 +2787,12 @@ button {
 .dashboard-role-list__item {
     display: grid;
     gap: 3px;
+    justify-items: start;
     min-height: var(--dashboard-role-list-item-min-height);
     padding: var(--dashboard-role-list-item-padding-block) var(--dashboard-role-list-item-padding-inline);
     color: var(--text);
     text-decoration: none;
+    text-align: left;
 }
 
 button.dashboard-role-list__item {
