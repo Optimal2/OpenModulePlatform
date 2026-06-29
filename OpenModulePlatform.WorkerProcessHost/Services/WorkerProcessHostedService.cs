@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.WorkerProcessHost/Services/WorkerProcessHostedService.cs
+using System.Diagnostics;
+using System.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,10 +39,15 @@ public sealed class WorkerProcessHostedService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         RegisteredWaitHandle? shutdownRegistration = null;
+        CancellationTokenSource? memoryGuardCts = null;
+        Task? memoryGuardTask = null;
 
         try
         {
             _settings.Validate();
+            memoryGuardCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            memoryGuardTask = RunMemoryGuardAsync(memoryGuardCts.Token);
+
             using var shutdownEvent = TryOpenShutdownEvent();
             shutdownRegistration = RegisterExternalShutdownSignal(shutdownEvent);
 
@@ -92,8 +99,140 @@ public sealed class WorkerProcessHostedService : BackgroundService
         finally
         {
             shutdownRegistration?.Unregister(null);
+            if (memoryGuardCts is not null)
+            {
+                await StopMemoryGuardAsync(memoryGuardCts, memoryGuardTask);
+            }
+
             _applicationLifetime.StopApplication();
         }
+    }
+
+    private async Task RunMemoryGuardAsync(CancellationToken cancellationToken)
+    {
+        if (_settings.MaxPrivateMemoryMegabytes <= 0)
+        {
+            return;
+        }
+
+        var thresholdBytes = _settings.MaxPrivateMemoryMegabytes * 1024L * 1024L;
+        var consecutiveSamples = 0;
+        var compactedCurrentOverage = false;
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_settings.MemoryCheckIntervalSeconds));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            try
+            {
+                var privateBytes = GetCurrentPrivateMemoryBytes();
+                if (privateBytes < thresholdBytes)
+                {
+                    consecutiveSamples = 0;
+                    compactedCurrentOverage = false;
+                    continue;
+                }
+
+                consecutiveSamples++;
+                if (!compactedCurrentOverage)
+                {
+                    _logger.LogWarning(
+                        "Worker process private memory exceeded the configured threshold; compacting managed heap before deciding whether to recycle. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PrivateMemoryMegabytes={PrivateMemoryMegabytes}, MaxPrivateMemoryMegabytes={MaxPrivateMemoryMegabytes}",
+                        _settings.AppInstanceId,
+                        _settings.WorkerTypeKey,
+                        ToMegabytes(privateBytes),
+                        _settings.MaxPrivateMemoryMegabytes);
+
+                    CompactManagedHeap();
+                    compactedCurrentOverage = true;
+                    privateBytes = GetCurrentPrivateMemoryBytes();
+
+                    if (privateBytes < thresholdBytes)
+                    {
+                        _logger.LogInformation(
+                            "Worker process private memory dropped below the configured threshold after managed heap compaction. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PrivateMemoryMegabytes={PrivateMemoryMegabytes}, MaxPrivateMemoryMegabytes={MaxPrivateMemoryMegabytes}",
+                            _settings.AppInstanceId,
+                            _settings.WorkerTypeKey,
+                            ToMegabytes(privateBytes),
+                            _settings.MaxPrivateMemoryMegabytes);
+
+                        consecutiveSamples = 0;
+                        compactedCurrentOverage = false;
+                        continue;
+                    }
+                }
+
+                if (consecutiveSamples < _settings.MemoryLimitConsecutiveSamples)
+                {
+                    _logger.LogWarning(
+                        "Worker process private memory remains above the configured threshold. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PrivateMemoryMegabytes={PrivateMemoryMegabytes}, MaxPrivateMemoryMegabytes={MaxPrivateMemoryMegabytes}, ConsecutiveSamples={ConsecutiveSamples}, RequiredSamples={RequiredSamples}",
+                        _settings.AppInstanceId,
+                        _settings.WorkerTypeKey,
+                        ToMegabytes(privateBytes),
+                        _settings.MaxPrivateMemoryMegabytes,
+                        consecutiveSamples,
+                        _settings.MemoryLimitConsecutiveSamples);
+                    continue;
+                }
+
+                _logger.LogWarning(
+                    "Worker process private memory stayed above the configured threshold; requesting a controlled process recycle. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PrivateMemoryMegabytes={PrivateMemoryMegabytes}, MaxPrivateMemoryMegabytes={MaxPrivateMemoryMegabytes}, ConsecutiveSamples={ConsecutiveSamples}",
+                    _settings.AppInstanceId,
+                    _settings.WorkerTypeKey,
+                    ToMegabytes(privateBytes),
+                    _settings.MaxPrivateMemoryMegabytes,
+                    consecutiveSamples);
+
+                _applicationLifetime.StopApplication();
+                return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Worker process memory guard failed during a sampling pass. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                    _settings.AppInstanceId,
+                    _settings.WorkerTypeKey);
+            }
+        }
+    }
+
+    private static async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task? memoryGuardTask)
+    {
+        await memoryGuardCts.CancelAsync();
+        if (memoryGuardTask is not null)
+        {
+            try
+            {
+                await memoryGuardTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the worker process stops normally.
+            }
+        }
+
+        memoryGuardCts.Dispose();
+    }
+
+    private static long GetCurrentPrivateMemoryBytes()
+    {
+        using var process = Process.GetCurrentProcess();
+        process.Refresh();
+        return process.PrivateMemorySize64;
+    }
+
+    private static long ToMegabytes(long bytes) => bytes / (1024L * 1024L);
+
+    private static void CompactManagedHeap()
+    {
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
     }
 
     private EventWaitHandle? TryOpenShutdownEvent()

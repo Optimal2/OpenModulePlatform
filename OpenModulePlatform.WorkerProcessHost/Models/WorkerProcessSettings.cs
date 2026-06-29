@@ -17,6 +17,12 @@ public sealed class WorkerProcessSettings
 
     public string ShutdownEventName { get; set; } = string.Empty;
 
+    public int MaxPrivateMemoryMegabytes { get; set; } = 1536;
+
+    public int MemoryCheckIntervalSeconds { get; set; } = 30;
+
+    public int MemoryLimitConsecutiveSamples { get; set; } = 2;
+
     public void Validate()
     {
         if (AppInstanceId == Guid.Empty)
@@ -37,6 +43,21 @@ public sealed class WorkerProcessSettings
         if (string.IsNullOrWhiteSpace(PluginAssemblyPath))
         {
             throw new InvalidOperationException("WorkerProcess:PluginAssemblyPath must be configured.");
+        }
+
+        if (MaxPrivateMemoryMegabytes < 0)
+        {
+            throw new InvalidOperationException("WorkerProcess:MaxPrivateMemoryMegabytes cannot be negative.");
+        }
+
+        if (MemoryCheckIntervalSeconds < 5)
+        {
+            throw new InvalidOperationException("WorkerProcess:MemoryCheckIntervalSeconds must be at least 5.");
+        }
+
+        if (MemoryLimitConsecutiveSamples < 1)
+        {
+            throw new InvalidOperationException("WorkerProcess:MemoryLimitConsecutiveSamples must be at least 1.");
         }
     }
 }
