@@ -1,4 +1,5 @@
 @page
+@using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.InstanceTemplateEditModel
 
 @if (Model.Template is null)
@@ -7,22 +8,52 @@
     return;
 }
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Installation"]</div>
-        <h2>@L["Installation"]</h2>
-        <p class="lede">
-            @L["This page is the desired state for the current OMP installation. HostAgent materializes these rows into concrete hosts, module instances and app instances."]
-        </p>
+@{
+    const string StatusSectionId = "instancetemplate-status";
+    const string HostsSectionId = "instancetemplate-hosts";
+    const string ModulesSectionId = "instancetemplate-modules";
+    const string AppsSectionId = "instancetemplate-apps";
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+    if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Hosts"].Value, HostsSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Module instances"].Value, ModulesSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Desired apps"].Value, AppsSectionId));
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L["Installation"].Value,
+        Items = sectionNavigatorItems
+    };
+}
+
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["Installation"]</div>
+                <h2>@L["Installation"]</h2>
+                <p class="lede">
+                    @L["This page is the desired state for the current OMP installation. HostAgent materializes these rows into concrete hosts, module instances and app instances."]
+                </p>
+            </div>
+        </section>
     </div>
-</section>
+
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
-    <div class="card status-banner">@Model.StatusMessage</div>
+    <section id="@StatusSectionId" class="card status-banner section-navigator-target">@Model.StatusMessage</section>
 }
 
-<section class="card section-card section-card--wide">
+<section id="@HostsSectionId" class="card section-card section-card--wide section-navigator-target">
     <div class="section-heading-row">
         <div>
             <h3>@L["Hosts"]</h3>
@@ -78,7 +109,7 @@
     }
 </section>
 
-<section class="card section-card section-card--wide">
+<section id="@ModulesSectionId" class="card section-card section-card--wide section-navigator-target">
     <div class="section-heading-row">
         <div>
             <h3>@L["Module instances"]</h3>
@@ -132,7 +163,7 @@
     }
 </section>
 
-<section class="card section-card section-card--wide">
+<section id="@AppsSectionId" class="card section-card section-card--wide section-navigator-target">
     <div class="section-heading-row">
         <div>
             <h3>@L["Desired apps"]</h3>
@@ -249,6 +280,9 @@
         </div>
     }
 </section>
+
+    </div>
+</div>
 
 <script>
     document.addEventListener("submit", event => {
