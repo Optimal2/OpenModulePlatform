@@ -16,6 +16,16 @@ public sealed partial class HostResourceCollector
     private const string ServiceCpuKeyPrefix = "service.";
     private const string ServiceMemoryKeyPrefix = "service.memory.";
 
+    private sealed record ProcessTelemetryTarget(
+        int ProcessId,
+        string CpuSampleKey,
+        string MemorySampleKey);
+
+    private readonly record struct ProcessTelemetrySnapshot(
+        TimeSpan TotalProcessorTime,
+        long WorkingSetBytes,
+        DateTime SampledUtc);
+
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ILogger<HostResourceCollector> _logger;
@@ -153,21 +163,25 @@ public sealed partial class HostResourceCollector
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var targets = new List<ProcessTelemetryTarget>();
+
         if (settings.CollectIisAppPools)
         {
-            CollectIisAppPoolSamples(settings, samples, cancellationToken);
+            CollectIisAppPoolTargets(settings, targets, cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         if (settings.CollectServiceProcesses)
         {
-            CollectServiceProcessSamples(settings, samples, cancellationToken);
+            CollectServiceProcessTargets(settings, targets, cancellationToken);
         }
+
+        CollectProcessTargetSamples(settings, targets, samples, cancellationToken);
     }
 
     [SupportedOSPlatform("windows")]
-    private void CollectIisAppPoolSamples(HostResourceTelemetrySettings settings, List<HostResourceSample> samples, CancellationToken cancellationToken)
+    private void CollectIisAppPoolTargets(HostResourceTelemetrySettings settings, List<ProcessTelemetryTarget> targets, CancellationToken cancellationToken)
     {
         var appCmdPath = GetAppCmdPath();
         if (appCmdPath is null)
@@ -211,47 +225,21 @@ public sealed partial class HostResourceCollector
 
             try
             {
-                using var process = Process.GetProcessById(processId);
-                var sampleTime = DateTime.UtcNow;
-                var memoryMb = process.WorkingSet64 / (1024.0 * 1024.0);
-                var cpuPercent = SampleCpuPercent(process, settings.SampleWindowSeconds, cancellationToken);
                 var normalizedPoolName = NormalizeKeySegment(appPoolName);
-
-                samples.Add(new HostResourceSample
-                {
-                    SampleKey = $"{IisAppPoolCpuKeyPrefix}{normalizedPoolName}",
-                    SampleValue = cpuPercent,
-                    SampledUtc = sampleTime
-                });
-
-                samples.Add(new HostResourceSample
-                {
-                    SampleKey = $"{IisAppPoolMemoryKeyPrefix}{normalizedPoolName}",
-                    SampleValue = memoryMb,
-                    SampledUtc = sampleTime
-                });
-            }
-            catch (ArgumentException)
-            {
-                // Process exited between enumeration and sampling.
-            }
-            catch (InvalidOperationException)
-            {
-                // Process has exited.
-            }
-            catch (Exception ex) when (ex is UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-            {
-                _logger.LogDebug(
-                    ex,
-                    "Access denied while sampling IIS worker process. ProcessId={ProcessId}, AppPoolName={AppPoolName}",
+                targets.Add(new ProcessTelemetryTarget(
                     processId,
-                    appPoolName);
+                    $"{IisAppPoolCpuKeyPrefix}{normalizedPoolName}",
+                    $"{IisAppPoolMemoryKeyPrefix}{normalizedPoolName}"));
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // Process or app pool data disappeared between enumeration and target creation.
             }
 
-            if (samples.Count >= settings.MaxSamplesPerCycle)
+            if (targets.Count * 2 >= settings.MaxSamplesPerCycle)
             {
                 _logger.LogWarning(
-                    "Host resource telemetry sample limit reached while collecting IIS app pools. Limit={Limit}",
+                    "Host resource telemetry target limit reached while collecting IIS app pools. Limit={Limit}",
                     settings.MaxSamplesPerCycle);
                 break;
             }
@@ -259,12 +247,12 @@ public sealed partial class HostResourceCollector
     }
 
     [SupportedOSPlatform("windows")]
-    private void CollectServiceProcessSamples(HostResourceTelemetrySettings settings, List<HostResourceSample> samples, CancellationToken cancellationToken)
+    private void CollectServiceProcessTargets(HostResourceTelemetrySettings settings, List<ProcessTelemetryTarget> targets, CancellationToken cancellationToken)
     {
         try
         {
             using var searcher = new ManagementObjectSearcher(
-                "SELECT Name, ProcessId, State FROM Win32_Service WHERE State = 'Running'");
+                "SELECT Name, ProcessId, PathName, State FROM Win32_Service WHERE State = 'Running'");
 
             foreach (ManagementObject service in searcher.Get())
             {
@@ -273,32 +261,24 @@ public sealed partial class HostResourceCollector
                 try
                 {
                     var serviceName = service["Name"]?.ToString() ?? string.Empty;
-                    var processId = Convert.ToInt32(service["ProcessId"], CultureInfo.InvariantCulture);
+                    var pathName = service["PathName"]?.ToString() ?? string.Empty;
+                    var processIdValue = service["ProcessId"];
+                    var processId = processIdValue is null
+                        ? 0
+                        : Convert.ToInt32(processIdValue, CultureInfo.InvariantCulture);
 
-                    if (processId <= 0 || string.IsNullOrWhiteSpace(serviceName))
+                    if (processId <= 0
+                        || string.IsNullOrWhiteSpace(serviceName)
+                        || !IsServiceTelemetryTarget(serviceName, pathName, _settings.CurrentValue.ServicesRoot))
                     {
                         continue;
                     }
 
-                    using var process = Process.GetProcessById(processId);
-                    var sampleTime = DateTime.UtcNow;
-                    var memoryMb = process.WorkingSet64 / (1024.0 * 1024.0);
-                    var cpuPercent = SampleCpuPercent(process, settings.SampleWindowSeconds, cancellationToken);
                     var normalizedServiceName = NormalizeKeySegment(serviceName);
-
-                    samples.Add(new HostResourceSample
-                    {
-                        SampleKey = $"{ServiceCpuKeyPrefix}{normalizedServiceName}",
-                        SampleValue = cpuPercent,
-                        SampledUtc = sampleTime
-                    });
-
-                    samples.Add(new HostResourceSample
-                    {
-                        SampleKey = $"{ServiceMemoryKeyPrefix}{normalizedServiceName}",
-                        SampleValue = memoryMb,
-                        SampledUtc = sampleTime
-                    });
+                    targets.Add(new ProcessTelemetryTarget(
+                        processId,
+                        $"{ServiceCpuKeyPrefix}{normalizedServiceName}",
+                        $"{ServiceMemoryKeyPrefix}{normalizedServiceName}"));
                 }
                 catch (ArgumentException)
                 {
@@ -319,10 +299,10 @@ public sealed partial class HostResourceCollector
                     service.Dispose();
                 }
 
-                if (samples.Count >= settings.MaxSamplesPerCycle)
+                if (targets.Count * 2 >= settings.MaxSamplesPerCycle)
                 {
                     _logger.LogWarning(
-                        "Host resource telemetry sample limit reached while collecting service processes. Limit={Limit}",
+                        "Host resource telemetry target limit reached while collecting service processes. Limit={Limit}",
                         settings.MaxSamplesPerCycle);
                     break;
                 }
@@ -342,35 +322,128 @@ public sealed partial class HostResourceCollector
         }
     }
 
-    private static double SampleCpuPercent(Process process, int windowSeconds, CancellationToken cancellationToken)
+    private void CollectProcessTargetSamples(
+        HostResourceTelemetrySettings settings,
+        IReadOnlyList<ProcessTelemetryTarget> targets,
+        List<HostResourceSample> samples,
+        CancellationToken cancellationToken)
     {
-        var startCpu = process.TotalProcessorTime;
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
         var startUtc = DateTime.UtcNow;
+        var uniqueProcessIds = targets
+            .Select(static target => target.ProcessId)
+            .Distinct()
+            .ToArray();
+        var startSnapshots = CaptureProcessSnapshots(uniqueProcessIds);
 
         try
         {
-            Task.Delay(TimeSpan.FromSeconds(windowSeconds), cancellationToken).GetAwaiter().GetResult();
+            Task.Delay(TimeSpan.FromSeconds(settings.SampleWindowSeconds), cancellationToken).GetAwaiter().GetResult();
         }
         catch (OperationCanceledException)
         {
-            return 0;
+            cancellationToken.ThrowIfCancellationRequested();
+            return;
         }
 
-        if (process.HasExited)
-        {
-            return 0;
-        }
+        cancellationToken.ThrowIfCancellationRequested();
 
-        var endCpu = process.TotalProcessorTime;
-        var elapsed = (DateTime.UtcNow - startUtc).TotalSeconds;
+        var endUtc = DateTime.UtcNow;
+        var endSnapshots = CaptureProcessSnapshots(uniqueProcessIds);
+        var elapsed = (endUtc - startUtc).TotalSeconds;
         if (elapsed <= 0)
         {
-            return 0;
+            return;
         }
 
-        var cpuSeconds = (endCpu - startCpu).TotalSeconds;
-        var cpuPercent = cpuSeconds / (elapsed * Environment.ProcessorCount) * 100.0;
-        return Math.Clamp(cpuPercent, 0, 100 * Environment.ProcessorCount);
+        foreach (var target in targets)
+        {
+            if (!startSnapshots.TryGetValue(target.ProcessId, out var start)
+                || !endSnapshots.TryGetValue(target.ProcessId, out var end))
+            {
+                continue;
+            }
+
+            var cpuSeconds = (end.TotalProcessorTime - start.TotalProcessorTime).TotalSeconds;
+            var cpuPercent = cpuSeconds / (elapsed * Environment.ProcessorCount) * 100.0;
+            cpuPercent = Math.Clamp(cpuPercent, 0, 100);
+            var memoryMb = end.WorkingSetBytes / (1024.0 * 1024.0);
+
+            samples.Add(new HostResourceSample
+            {
+                SampleKey = target.CpuSampleKey,
+                SampleValue = cpuPercent,
+                SampledUtc = end.SampledUtc
+            });
+
+            samples.Add(new HostResourceSample
+            {
+                SampleKey = target.MemorySampleKey,
+                SampleValue = memoryMb,
+                SampledUtc = end.SampledUtc
+            });
+
+            if (samples.Count >= settings.MaxSamplesPerCycle)
+            {
+                _logger.LogWarning(
+                    "Host resource telemetry sample limit reached while collecting process samples. Limit={Limit}",
+                    settings.MaxSamplesPerCycle);
+                break;
+            }
+        }
+    }
+
+    private static Dictionary<int, ProcessTelemetrySnapshot> CaptureProcessSnapshots(IEnumerable<int> processIds)
+    {
+        var snapshots = new Dictionary<int, ProcessTelemetrySnapshot>();
+        foreach (var processId in processIds)
+        {
+            try
+            {
+                using var process = Process.GetProcessById(processId);
+                if (process.HasExited)
+                {
+                    continue;
+                }
+
+                snapshots[processId] = new ProcessTelemetrySnapshot(
+                    process.TotalProcessorTime,
+                    process.WorkingSet64,
+                    DateTime.UtcNow);
+            }
+            catch (Exception ex) when (ex is ArgumentException
+                or InvalidOperationException
+                or UnauthorizedAccessException
+                or System.ComponentModel.Win32Exception)
+            {
+                // Processes can exit or become inaccessible between target discovery and sampling.
+            }
+        }
+
+        return snapshots;
+    }
+
+    private static bool IsServiceTelemetryTarget(string serviceName, string pathName, string servicesRoot)
+    {
+        if (serviceName.StartsWith("OMP.", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(servicesRoot) || string.IsNullOrWhiteSpace(pathName))
+        {
+            return false;
+        }
+
+        var normalizedRoot = Path.GetFullPath(servicesRoot.Trim())
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        return pathName.Contains(normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
 
     private static (int ProcessId, string? AppPoolName) ParseAppCmdListWpLine(string line)
