@@ -960,8 +960,8 @@
   <data name="Delete this role? Linked role assignments will also be removed." xml:space="preserve">
     <value>Ta bort den här rollen? Länkade rolltilldelningar tas också bort.</value>
   </data>
-  <data name="Deleting a role removes all principal and permission links for that role." xml:space="preserve">
-    <value>Om en roll tas bort försvinner alla identitets- och behörighetslänkar för den rollen.</value>
+  <data name="Deleting a role removes all principal, permission, banner, and configuration links for that role." xml:space="preserve">
+    <value>Om en roll tas bort försvinner alla identitets-, behörighets-, banner- och konfigurationslänkar för den rollen.</value>
   </data>
   <data name="Delete role" xml:space="preserve">
     <value>Ta bort roll</value>
