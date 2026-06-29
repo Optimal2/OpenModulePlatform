@@ -44,9 +44,13 @@
             <div>
                 <div class="eyebrow">@L["System"]</div>
                 <h2>@L["Operations"]</h2>
-                <p class="lede">@L["Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks."]</p>
+                <p class="lede">@L["Inspect HostAgent app deployments, artifact provisioning history, runtime identity checks, and host resource telemetry."]</p>
             </div>
         </section>
+    </div>
+
+    <div class="toolbar top-gap">
+        <a class="action-link" href="~/admin/hostresources">@L["Host resources"]</a>
     </div>
 
     @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })

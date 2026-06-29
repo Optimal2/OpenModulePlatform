@@ -1563,6 +1563,20 @@
   <data name="Runtime result" xml:space="preserve"><value>Runtime-resultat</value></data>
   <data name="Manual runtime" xml:space="preserve"><value>Manuell runtime</value></data>
   <data name="Host inventory" xml:space="preserve"><value>Värdinventering</value></data>
+  <data name="Host resources" xml:space="preserve"><value>Värdresurser</value></data>
+  <data name="Latest CPU and memory telemetry per host runtime target. Values are written by HostAgent and refreshed on each collector cycle." xml:space="preserve"><value>Senaste CPU- och minnestelemetri per värd-runtime. Värden skrivs av HostAgent och uppdateras vid varje insamlingscykel.</value></data>
+  <data name="With telemetry" xml:space="preserve"><value>Med telemetri</value></data>
+  <data name="Stale means the latest sample is older than" xml:space="preserve"><value>Föråldrad betyder att det senaste provet är äldre än</value></data>
+  <data name="Latest telemetry" xml:space="preserve"><value>Senaste telemetri</value></data>
+  <data name="Each row shows the most recent CPU and memory value for one host runtime target. Use the historical chart link for per-sample detail." xml:space="preserve"><value>Varje rad visar senaste CPU- och minnesvärdet för en värd-runtime. Använd länken till historikdiagrammet för detaljer per prov.</value></data>
+  <data name="Runtime kind" xml:space="preserve"><value>Runtime-typ</value></data>
+  <data name="Runtime name" xml:space="preserve"><value>Runtime-namn</value></data>
+  <data name="Samples" xml:space="preserve"><value>Prover</value></data>
+  <data name="Last sampled UTC" xml:space="preserve"><value>Senaste prov UTC</value></data>
+  <data name="No runtime target" xml:space="preserve"><value>Inget runtime-mål</value></data>
+  <data name="Chart" xml:space="preserve"><value>Diagram</value></data>
+  <data name="No chart" xml:space="preserve"><value>Inget diagram</value></data>
+  <data name="Host last seen" xml:space="preserve"><value>Värd senast sedd</value></data>
   <data name="Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows." xml:space="preserve"><value>Instansmallar beskriver vad som ska finnas i en OMP-instans. Ändra önskade appar här och låt sedan HostAgent materialisera runtime-raderna.</value></data>
   <data name="This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances." xml:space="preserve"><value>Den här mallen är önskat läge för OMP-instanser som använder den. HostAgent materialiserar raderna till konkreta värdar, modulinstanser och appinstanser.</value></data>
   <data name="Template hosts" xml:space="preserve"><value>Mallvärdar</value></data>
@@ -2173,7 +2187,7 @@
   <data name="Export all widgets or choose one of the widgets available in this OMP installation." xml:space="preserve"><value>Exportera alla widgetar eller välj en av de widgetar som finns i den här OMP-installationen.</value></data>
   <data name="Widget" xml:space="preserve"><value>Widget</value></data>
   <data name="All widgets" xml:space="preserve"><value>Alla widgetar</value></data>
-  <data name="Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisioneringshistorik och runtime-identitetskontroller.</value></data>
+  <data name="Inspect HostAgent app deployments, artifact provisioning history, runtime identity checks, and host resource telemetry." xml:space="preserve"><value>Granska HostAgent-deployment av appar, artefaktprovisioneringshistorik, runtime-identitetskontroller och värdresurstelemetri.</value></data>
   <data name="Filter" xml:space="preserve"><value>Filter</value></data>
   <data name="Search rows" xml:space="preserve"><value>Sök rader</value></data>
   <data name="All statuses" xml:space="preserve"><value>Alla statusar</value></data>

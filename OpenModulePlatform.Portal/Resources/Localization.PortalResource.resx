@@ -1552,6 +1552,20 @@
   <data name="Runtime result" xml:space="preserve"><value>Runtime result</value></data>
   <data name="Manual runtime" xml:space="preserve"><value>Manual runtime</value></data>
   <data name="Host inventory" xml:space="preserve"><value>Host inventory</value></data>
+  <data name="Host resources" xml:space="preserve"><value>Host resources</value></data>
+  <data name="Latest CPU and memory telemetry per host runtime target. Values are written by HostAgent and refreshed on each collector cycle." xml:space="preserve"><value>Latest CPU and memory telemetry per host runtime target. Values are written by HostAgent and refreshed on each collector cycle.</value></data>
+  <data name="With telemetry" xml:space="preserve"><value>With telemetry</value></data>
+  <data name="Stale means the latest sample is older than" xml:space="preserve"><value>Stale means the latest sample is older than</value></data>
+  <data name="Latest telemetry" xml:space="preserve"><value>Latest telemetry</value></data>
+  <data name="Each row shows the most recent CPU and memory value for one host runtime target. Use the historical chart link for per-sample detail." xml:space="preserve"><value>Each row shows the most recent CPU and memory value for one host runtime target. Use the historical chart link for per-sample detail.</value></data>
+  <data name="Runtime kind" xml:space="preserve"><value>Runtime kind</value></data>
+  <data name="Runtime name" xml:space="preserve"><value>Runtime name</value></data>
+  <data name="Samples" xml:space="preserve"><value>Samples</value></data>
+  <data name="Last sampled UTC" xml:space="preserve"><value>Last sampled UTC</value></data>
+  <data name="No runtime target" xml:space="preserve"><value>No runtime target</value></data>
+  <data name="Chart" xml:space="preserve"><value>Chart</value></data>
+  <data name="No chart" xml:space="preserve"><value>No chart</value></data>
+  <data name="Host last seen" xml:space="preserve"><value>Host last seen</value></data>
   <data name="Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows." xml:space="preserve"><value>Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows.</value></data>
   <data name="This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances." xml:space="preserve"><value>This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances.</value></data>
   <data name="Template hosts" xml:space="preserve"><value>Template hosts</value></data>
@@ -2066,7 +2080,7 @@
   <data name="Export all widgets or choose one of the widgets available in this OMP installation." xml:space="preserve"><value>Export all widgets or choose one of the widgets available in this OMP installation.</value></data>
   <data name="Widget" xml:space="preserve"><value>Widget</value></data>
   <data name="All widgets" xml:space="preserve"><value>All widgets</value></data>
-  <data name="Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks." xml:space="preserve"><value>Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks.</value></data>
+  <data name="Inspect HostAgent app deployments, artifact provisioning history, runtime identity checks, and host resource telemetry." xml:space="preserve"><value>Inspect HostAgent app deployments, artifact provisioning history, runtime identity checks, and host resource telemetry.</value></data>
   <data name="Filter" xml:space="preserve"><value>Filter</value></data>
   <data name="Search rows" xml:space="preserve"><value>Search rows</value></data>
   <data name="All statuses" xml:space="preserve"><value>All statuses</value></data>

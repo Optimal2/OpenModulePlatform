@@ -1,0 +1,179 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.HostResourcesModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Operations"]</div>
+        <h2>@L["Host resources"]</h2>
+        <p class="lede">@L["Latest CPU and memory telemetry per host runtime target. Values are written by HostAgent and refreshed on each collector cycle."]</p>
+    </div>
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/hostdeployments">@L["Back to operations"]</a>
+</div>
+
+<div class="section-grid section-grid--wide top-gap">
+    <section class="card section-card">
+        <h3>@L["Summary"]</h3>
+        <div class="metric-row">
+            <div>
+                <div class="metric__value">@Model.TotalHosts</div>
+                <div class="metric__label">@L["Hosts"]</div>
+            </div>
+            <div>
+                <div class="metric__value">@Model.HostsWithData</div>
+                <div class="metric__label">@L["With telemetry"]</div>
+            </div>
+            <div>
+                <div class="metric__value">@Model.StaleCount</div>
+                <div class="metric__label">@L["Stale"]</div>
+            </div>
+        </div>
+        <p class="muted">
+            @L["Stale means the latest sample is older than"]
+            @((int)Model.StaleThreshold.TotalMinutes)
+            @L["minutes."]
+        </p>
+    </section>
+</div>
+
+<section class="card section-card section-card--wide top-gap host-resources-latest">
+    <h3>@L["Latest telemetry"]</h3>
+    <p class="muted">@L["Each row shows the most recent CPU and memory value for one host runtime target. Use the historical chart link for per-sample detail."]</p>
+
+    @if (Model.Groups.Count == 0)
+    {
+        <div class="empty-state">@L["No enabled hosts were found."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid app-instances-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Host"]</th>
+                        <th>@L["Runtime kind"]</th>
+                        <th>@L["Runtime name"]</th>
+                        <th>@L["CPU"]</th>
+                        <th>@L["Memory"]</th>
+                        <th>@L["Samples"]</th>
+                        <th>@L["Last sampled UTC"]</th>
+                        <th>@L["State"]</th>
+                        <th>@L["Actions"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var group in Model.Groups)
+                {
+                    var stateClass = HostResourcesModel.StateClass(group, Model);
+                    <tr class="@stateClass">
+                        <td>
+                            <div><code>@group.HostKey</code></div>
+                            @if (!string.IsNullOrWhiteSpace(group.HostDisplayName))
+                            {
+                                <div class="muted">@group.HostDisplayName</div>
+                            }
+                            @if (group.HostLastSeenUtc.HasValue)
+                            {
+                                <div class="muted">@L["Host last seen"]: @group.HostLastSeenUtc.Value.ToString("u")</div>
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(group.RuntimeKind))
+                            {
+                                <span class="muted">@L["No runtime target"]</span>
+                            }
+                            else
+                            {
+                                @group.RuntimeKind
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(group.RuntimeName))
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                            else
+                            {
+                                <code>@group.RuntimeName</code>
+                            }
+                        </td>
+                        <td>
+                            @if (group.CpuValue.HasValue)
+                            {
+                                <span>@Model.FormatCpu(group.CpuValue)</span>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["No data"]</span>
+                            }
+                        </td>
+                        <td>
+                            @if (group.MemoryValue.HasValue)
+                            {
+                                <span>@Model.FormatMemory(group.MemoryValue)</span>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["No data"]</span>
+                            }
+                        </td>
+                        <td>
+                            @if (group.HasData)
+                            {
+                                @group.SampleCount
+                            }
+                            else
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                        </td>
+                        <td>
+                            @if (group.LastSampledUtc.HasValue)
+                            {
+                                @group.LastSampledUtc.Value.ToString("u")
+                            }
+                            else
+                            {
+                                <span class="muted">@L["Never"]</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!group.HasData)
+                            {
+                                <span class="pill">@L["No data"]</span>
+                            }
+                            else if (Model.IsStale(group.LastSampledUtc))
+                            {
+                                <span class="pill">@L["Stale"]</span>
+                            }
+                            else
+                            {
+                                <span class="pill">@L["Current"]</span>
+                            }
+                        </td>
+                        <td>
+                            @if (group.HasData && !string.IsNullOrWhiteSpace(group.CpuSampleKey))
+                            {
+                                <a class="action-link" href="~/admin/hostresourcedetail?hostId=@group.HostId&sampleKey=@Uri.EscapeDataString(group.CpuSampleKey)">@L["Chart"]</a>
+                            }
+                            else if (group.HasData && !string.IsNullOrWhiteSpace(group.MemorySampleKey))
+                            {
+                                <a class="action-link" href="~/admin/hostresourcedetail?hostId=@group.HostId&sampleKey=@Uri.EscapeDataString(group.MemorySampleKey)">@L["Chart"]</a>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["No chart"]</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
