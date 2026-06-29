@@ -2734,4 +2734,13 @@
   <data name="Maximum" xml:space="preserve"><value>Maximum</value></data>
   <data name="From {0} to {1}." xml:space="preserve"><value>Från {0} till {1}.</value></data>
   <data name="No historical data for the selected time range." xml:space="preserve"><value>Ingen historisk data för det valda tidsintervallet.</value></data>
+  <data name="Sample buckets" xml:space="preserve"><value>Samplade intervall</value></data>
+  <data name="Each row is one bucketed interval for the selected sample key." xml:space="preserve"><value>Varje rad är ett bucketat intervall för den valda sample-nyckeln.</value></data>
+  <data name="Sample bucket UTC" xml:space="preserve"><value>Bucket UTC</value></data>
+  <data name="Sample value" xml:space="preserve"><value>Provvärde</value></data>
+  <data name="Sample count" xml:space="preserve"><value>Antal prover</value></data>
+  <data name="Min value" xml:space="preserve"><value>Minvärde</value></data>
+  <data name="Max value" xml:space="preserve"><value>Maxvärde</value></data>
+  <data name="First sampled UTC" xml:space="preserve"><value>Första provtagning UTC</value></data>
+  <data name="Sample key" xml:space="preserve"><value>Sample-nyckel</value></data>
 </root>

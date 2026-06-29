@@ -2544,4 +2544,13 @@
   <data name="Maximum" xml:space="preserve"><value>Maximum</value></data>
   <data name="From {0} to {1}." xml:space="preserve"><value>From {0} to {1}.</value></data>
   <data name="No historical data for the selected time range." xml:space="preserve"><value>No historical data for the selected time range.</value></data>
+  <data name="Sample buckets" xml:space="preserve"><value>Sample buckets</value></data>
+  <data name="Each row is one bucketed interval for the selected sample key." xml:space="preserve"><value>Each row is one bucketed interval for the selected sample key.</value></data>
+  <data name="Sample bucket UTC" xml:space="preserve"><value>Sample bucket UTC</value></data>
+  <data name="Sample value" xml:space="preserve"><value>Sample value</value></data>
+  <data name="Sample count" xml:space="preserve"><value>Sample count</value></data>
+  <data name="Min value" xml:space="preserve"><value>Min value</value></data>
+  <data name="Max value" xml:space="preserve"><value>Max value</value></data>
+  <data name="First sampled UTC" xml:space="preserve"><value>First sampled UTC</value></data>
+  <data name="Sample key" xml:space="preserve"><value>Sample key</value></data>
 </root>

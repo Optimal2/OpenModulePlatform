@@ -15,6 +15,7 @@
                 <span class="muted">(@Model.HostDisplayName)</span>
             }
             &middot; @Model.RuntimeKind: <code>@Model.RuntimeName</code>
+            &middot; @L["Sample key"]: <code>@Model.SampleKey</code>
         </p>
     </div>
 </section>
@@ -47,3 +48,45 @@
         @await Html.PartialAsync("_HostResourceChart", Model.CounterpartChart)
     }
 </div>
+
+<section class="card section-card section-card--wide top-gap host-resource-buckets">
+    <h3>@L["Sample buckets"]</h3>
+    <p class="muted">@L["Each row is one bucketed interval for the selected sample key."]</p>
+
+    @if (Model.PrimaryRows.Count == 0)
+    {
+        <div class="empty-state">@L["No historical data for the selected time range."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid app-instances-grid">
+                <thead>
+                    <tr>
+                        <th>@L["Sample bucket UTC"]</th>
+                        <th>@L["Sample value"]</th>
+                        <th>@L["Sample count"]</th>
+                        <th>@L["Min value"]</th>
+                        <th>@L["Max value"]</th>
+                        <th>@L["First sampled UTC"]</th>
+                        <th>@L["Last sampled UTC"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.PrimaryRows.OrderByDescending(r => r.SampleBucketUtc))
+                {
+                    <tr>
+                        <td>@row.SampleBucketUtc.ToString("u")</td>
+                        <td>@Model.FormatValue(row.SampleValue)</td>
+                        <td>@row.SampleCount</td>
+                        <td>@(row.MinValue.HasValue ? Model.FormatValue(row.MinValue.Value) : "—")</td>
+                        <td>@(row.MaxValue.HasValue ? Model.FormatValue(row.MaxValue.Value) : "—")</td>
+                        <td>@row.FirstSampledUtc.ToString("u")</td>
+                        <td>@row.LastSampledUtc.ToString("u")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
