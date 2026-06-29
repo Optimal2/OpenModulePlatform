@@ -374,7 +374,7 @@
         onsubmit="return confirm('@L["Delete this role? Linked role assignments will also be removed."]');">
         <input type="hidden" asp-for="Input.RoleId" />
         <h3>@L["Danger zone"]</h3>
-        <p class="muted">@L["Deleting a role removes all principal and permission links for that role."]</p>
+        <p class="muted">@L["Deleting a role removes all principal, permission, banner, and configuration links for that role."]</p>
         <button type="submit" class="btn btn-danger">@L["Delete role"]</button>
     </form>
 }

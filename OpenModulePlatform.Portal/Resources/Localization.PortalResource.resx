@@ -957,8 +957,8 @@
   <data name="Delete this role? Linked role assignments will also be removed." xml:space="preserve">
     <value>Delete this role? Linked role assignments will also be removed.</value>
   </data>
-  <data name="Deleting a role removes all principal and permission links for that role." xml:space="preserve">
-    <value>Deleting a role removes all principal and permission links for that role.</value>
+  <data name="Deleting a role removes all principal, permission, banner, and configuration links for that role." xml:space="preserve">
+    <value>Deleting a role removes all principal, permission, banner, and configuration links for that role.</value>
   </data>
   <data name="Delete role" xml:space="preserve">
     <value>Delete role</value>
