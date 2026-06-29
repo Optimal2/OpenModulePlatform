@@ -16,15 +16,17 @@
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
-    --section-navigator-line: rgba(37, 99, 235, 0.46);
+    --section-navigator-line: rgba(37, 99, 235, 0.56);
+    --section-navigator-line-width: 2px;
     --section-navigator-node-y: 18px;
 }
 
 .section-navigator__nav {
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 16px;
     background: var(--surface);
-    padding: 12px;
+    box-shadow: var(--shadow);
+    padding: 14px;
 }
 
 .section-navigator__heading {
@@ -44,8 +46,12 @@
     position: relative;
 }
 
+.section-navigator__list--root {
+    margin-top: 2px;
+}
+
 .section-navigator__list .section-navigator__list {
-    margin: 2px 0 4px 2px;
+    margin: 2px 0 0 2px;
     padding-left: 18px;
 }
 
@@ -53,10 +59,10 @@
     background: var(--section-navigator-line);
     bottom: var(--section-navigator-node-y);
     content: "";
-    left: 9px;
+    left: 8px;
     position: absolute;
     top: 0;
-    width: 1px;
+    width: var(--section-navigator-line-width);
 }
 
 .section-navigator__item {
@@ -68,12 +74,21 @@
 .section-navigator__item::before {
     background: var(--section-navigator-line);
     content: "";
-    height: 1px;
-    left: 9px;
+    height: var(--section-navigator-line-width);
+    left: 8px;
     position: absolute;
     top: var(--section-navigator-node-y);
-    width: 14px;
+    width: 15px;
     z-index: 0;
+}
+
+.section-navigator__item--root {
+    padding-left: 0;
+}
+
+.section-navigator__item--root::before,
+.section-navigator__list--root::before {
+    content: none;
 }
 
 .section-navigator__details {
@@ -95,6 +110,10 @@
     padding: 7px 8px;
     position: relative;
     z-index: 1;
+}
+
+.section-navigator__summary--root {
+    font-weight: 700;
 }
 
 .section-navigator__summary::-webkit-details-marker {
@@ -130,9 +149,13 @@
     color: var(--text);
     font-size: 0.9rem;
     line-height: 1.25;
+    min-width: 0;
+    overflow: hidden;
     padding: 7px 8px 7px 28px;
     position: relative;
     text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     z-index: 1;
 }
 
