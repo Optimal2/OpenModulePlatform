@@ -2721,4 +2721,17 @@
   <data name="Target host: {0}" xml:space="preserve"><value>Målvärd: {0}</value></data>
   <data name="Upload one immutable artifact zip, unpack it into the central artifact store, and register it for HostAgent deployment." xml:space="preserve"><value>Ladda upp en oföränderlig artefakt-zip, packa upp den i det centrala artefaktlagret och registrera den för driftsättning via HostAgent.</value></data>
   <data name="The message could not be sent." xml:space="preserve"><value>Meddelandet kunde inte skickas.</value></data>
+  <data name="Resource detail" xml:space="preserve"><value>Resursdetalj</value></data>
+  <data name="Back to host resources" xml:space="preserve"><value>Tillbaka till hostresurser</value></data>
+  <data name="Time range" xml:space="preserve"><value>Tidsintervall</value></data>
+  <data name="Showing {0} samples over the last {1} hours." xml:space="preserve"><value>Visar {0} prover under de senaste {1} timmarna.</value></data>
+  <data name="{0}h" xml:space="preserve"><value>{0}h</value></data>
+  <data name="CPU" xml:space="preserve"><value>CPU</value></data>
+  <data name="Memory" xml:space="preserve"><value>Minne</value></data>
+  <data name="Latest" xml:space="preserve"><value>Senaste</value></data>
+  <data name="Average" xml:space="preserve"><value>Medel</value></data>
+  <data name="Minimum" xml:space="preserve"><value>Minimum</value></data>
+  <data name="Maximum" xml:space="preserve"><value>Maximum</value></data>
+  <data name="From {0} to {1}." xml:space="preserve"><value>Från {0} till {1}.</value></data>
+  <data name="No historical data for the selected time range." xml:space="preserve"><value>Ingen historisk data för det valda tidsintervallet.</value></data>
 </root>

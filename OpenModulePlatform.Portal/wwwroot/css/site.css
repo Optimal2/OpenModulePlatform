@@ -1095,6 +1095,94 @@ a:hover {
     color: var(--text-muted);
 }
 
+.host-resource-charts {
+    display: grid;
+    gap: 16px;
+}
+
+.host-resource-chart-card {
+    overflow: hidden;
+}
+
+.host-resource-chart-card .metric-row {
+    margin-bottom: 16px;
+}
+
+.host-resource-time-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.host-resource-time-filter__active {
+    border-color: var(--link);
+    background: var(--link);
+    color: #ffffff;
+}
+
+.host-resource-time-filter__active:hover,
+.host-resource-time-filter__active:focus-visible {
+    border-color: var(--link-hover);
+    background: var(--link-hover);
+    color: #ffffff;
+}
+
+.host-resource-chart__container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.host-resource-chart {
+    display: block;
+    width: 100%;
+    min-width: 760px;
+    height: auto;
+    max-height: 260px;
+}
+
+.host-resource-chart__grid {
+    stroke: var(--border);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+}
+
+.host-resource-chart__line {
+    fill: none;
+    stroke: var(--link);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.host-resource-chart__area {
+    fill: color-mix(in srgb, var(--link) 12%, transparent);
+    stroke: none;
+}
+
+.host-resource-chart__point {
+    fill: var(--link);
+    stroke: var(--surface);
+    stroke-width: 1;
+}
+
+.host-resource-chart__axis-label {
+    font-size: 0.72rem;
+    fill: var(--text-muted);
+}
+
+.host-resource-chart__axis-label--y {
+    text-anchor: end;
+}
+
+.host-resource-chart__axis-label--x {
+    text-anchor: start;
+}
+
+.host-resource-chart__axis-label--end {
+    text-anchor: end;
+}
+
 .toolbar {
     display: flex;
     flex-wrap: wrap;

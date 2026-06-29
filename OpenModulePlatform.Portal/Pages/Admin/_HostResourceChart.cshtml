@@ -1,0 +1,41 @@
+@model OpenModulePlatform.Portal.Models.ChartViewModel
+
+<section class="card section-card section-card--wide host-resource-chart-card">
+    <h3>@Model.Title</h3>
+
+    @if (Model.HasData)
+    {
+        <div class="host-resource-chart__stats metric-row">
+            <div>
+                <div class="metric__value">@Model.Stats.Latest.ToString($"F{(Model.Unit == "%" ? 1 : 0)}", System.Globalization.CultureInfo.InvariantCulture)</div>
+                <div class="metric__label">@L["Latest"] (@Model.Unit)</div>
+            </div>
+            <div>
+                <div class="metric__value">@Model.Stats.Average.ToString($"F{(Model.Unit == "%" ? 1 : 0)}", System.Globalization.CultureInfo.InvariantCulture)</div>
+                <div class="metric__label">@L["Average"] (@Model.Unit)</div>
+            </div>
+            <div>
+                <div class="metric__value">@Model.Stats.Minimum.ToString($"F{(Model.Unit == "%" ? 1 : 0)}", System.Globalization.CultureInfo.InvariantCulture)</div>
+                <div class="metric__label">@L["Minimum"] (@Model.Unit)</div>
+            </div>
+            <div>
+                <div class="metric__value">@Model.Stats.Maximum.ToString($"F{(Model.Unit == "%" ? 1 : 0)}", System.Globalization.CultureInfo.InvariantCulture)</div>
+                <div class="metric__label">@L["Maximum"] (@Model.Unit)</div>
+            </div>
+            <div>
+                <div class="metric__value">@Model.Stats.SampleCount</div>
+                <div class="metric__label">@L["Samples"]</div>
+            </div>
+        </div>
+        <div class="host-resource-chart__container">
+            @Html.Raw(Model.Svg)
+        </div>
+        <p class="muted small-text">
+            @L["From {0} to {1}.", Model.Stats.EarliestUtc.ToString("u"), Model.Stats.NewestUtc.ToString("u")]
+        </p>
+    }
+    else
+    {
+        <div class="empty-state">@L["No historical data for the selected time range."]</div>
+    }
+</section>

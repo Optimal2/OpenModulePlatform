@@ -928,4 +928,17 @@
   <data name="Select a host before requesting web app logs." xml:space="preserve"><value>Select a host before requesting web app logs.</value></data>
   <data name="Web app log collection job {0} was queued." xml:space="preserve"><value>Web app log collection job {0} was queued.</value></data>
   <data name="The message could not be sent." xml:space="preserve"><value>The message could not be sent.</value></data>
+  <data name="Resource detail" xml:space="preserve"><value>Resource detail</value></data>
+  <data name="Back to host resources" xml:space="preserve"><value>Back to host resources</value></data>
+  <data name="Time range" xml:space="preserve"><value>Time range</value></data>
+  <data name="Showing {0} samples over the last {1} hours." xml:space="preserve"><value>Showing {0} samples over the last {1} hours.</value></data>
+  <data name="{0}h" xml:space="preserve"><value>{0}h</value></data>
+  <data name="CPU" xml:space="preserve"><value>CPU</value></data>
+  <data name="Memory" xml:space="preserve"><value>Memory</value></data>
+  <data name="Latest" xml:space="preserve"><value>Latest</value></data>
+  <data name="Average" xml:space="preserve"><value>Average</value></data>
+  <data name="Minimum" xml:space="preserve"><value>Minimum</value></data>
+  <data name="Maximum" xml:space="preserve"><value>Maximum</value></data>
+  <data name="From {0} to {1}." xml:space="preserve"><value>From {0} to {1}.</value></data>
+  <data name="No historical data for the selected time range." xml:space="preserve"><value>No historical data for the selected time range.</value></data>
 </root>
