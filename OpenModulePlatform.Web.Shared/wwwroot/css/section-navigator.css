@@ -41,9 +41,59 @@
     padding: 0;
 }
 
-.section-navigator__list--children {
-    margin-top: 4px;
+.section-navigator__list .section-navigator__list {
+    border-left: 1px solid rgba(37, 99, 235, 0.24);
+    margin: 4px 0 0 10px;
     padding-left: 12px;
+}
+
+.section-navigator__item {
+    min-width: 0;
+}
+
+.section-navigator__details {
+    display: grid;
+    gap: 4px;
+}
+
+.section-navigator__summary {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr);
+    align-items: center;
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.9rem;
+    gap: 6px;
+    line-height: 1.25;
+    list-style: none;
+    padding: 7px 8px;
+}
+
+.section-navigator__summary::-webkit-details-marker {
+    display: none;
+}
+
+.section-navigator__summary:hover,
+.section-navigator__summary:focus-visible {
+    background: var(--surface-muted);
+    color: var(--text);
+    outline: none;
+}
+
+.section-navigator__chevron {
+    border-bottom: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    height: 6px;
+    justify-self: center;
+    opacity: 0.72;
+    transform: rotate(-45deg);
+    transition: transform 120ms ease;
+    width: 6px;
+}
+
+.section-navigator__details[open] > .section-navigator__summary .section-navigator__chevron {
+    transform: rotate(45deg);
 }
 
 .section-navigator__link {
@@ -52,15 +102,43 @@
     color: var(--text);
     font-size: 0.9rem;
     line-height: 1.25;
-    padding: 7px 8px;
+    padding: 7px 8px 7px 28px;
     text-decoration: none;
 }
 
+.section-navigator__summary-link,
+.section-navigator__summary-label,
+.section-navigator__label {
+    color: inherit;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.section-navigator__summary-link {
+    text-decoration: none;
+}
+
+.section-navigator__label {
+    display: block;
+    font-size: 0.9rem;
+    line-height: 1.25;
+    padding: 7px 8px 7px 28px;
+}
+
 .section-navigator__link:hover,
-.section-navigator__link:focus-visible {
+.section-navigator__link:focus-visible,
+.section-navigator__summary-link:hover,
+.section-navigator__summary-link:focus-visible {
     background: var(--surface-muted);
     color: var(--text);
     outline: none;
+}
+
+.section-navigator__summary-link:focus-visible {
+    border-radius: 4px;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.28);
 }
 
 .section-navigator-target {

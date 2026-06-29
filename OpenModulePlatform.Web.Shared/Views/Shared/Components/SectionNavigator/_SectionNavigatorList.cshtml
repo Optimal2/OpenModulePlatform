@@ -1,0 +1,35 @@
+@model IReadOnlyList<OpenModulePlatform.Web.Shared.Navigation.SectionNavigatorItem>
+
+<ol class="section-navigator__list">
+    @foreach (var item in Model)
+    {
+        var hasChildren = item.Children.Count > 0;
+        <li class="section-navigator__item @(hasChildren ? "section-navigator__item--branch" : "section-navigator__item--leaf")">
+            @if (hasChildren)
+            {
+                <details class="section-navigator__details" open="@item.InitiallyExpanded">
+                    <summary class="section-navigator__summary">
+                        <span class="section-navigator__chevron" aria-hidden="true"></span>
+                        @if (item.HasLink)
+                        {
+                            <a class="section-navigator__summary-link" href="@item.LinkHref">@item.Text</a>
+                        }
+                        else
+                        {
+                            <span class="section-navigator__summary-label">@item.Text</span>
+                        }
+                    </summary>
+                    @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", item.Children)
+                </details>
+            }
+            else if (item.HasLink)
+            {
+                <a class="section-navigator__link" href="@item.LinkHref">@item.Text</a>
+            }
+            else
+            {
+                <span class="section-navigator__label">@item.Text</span>
+            }
+        </li>
+    }
+</ol>
