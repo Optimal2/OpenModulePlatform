@@ -5,7 +5,31 @@
     <aside class="section-navigator" aria-label="@Model.Label">
         <nav class="section-navigator__nav">
             <div class="section-navigator__heading">@Model.Label</div>
-            @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", Model.Items)
+            @if (!string.IsNullOrWhiteSpace(Model.RootText))
+            {
+                <ol class="section-navigator__list section-navigator__list--root">
+                    <li class="section-navigator__item section-navigator__item--branch section-navigator__item--root">
+                        <details class="section-navigator__details" open="@Model.RootInitiallyExpanded">
+                            <summary class="section-navigator__summary section-navigator__summary--root">
+                                <span class="section-navigator__chevron" aria-hidden="true"></span>
+                                @if (!string.IsNullOrWhiteSpace(Model.RootHref))
+                                {
+                                    <a class="section-navigator__summary-link" href="@Model.RootHref" title="@Model.RootText" onclick="event.stopPropagation();">@Model.RootText</a>
+                                }
+                                else
+                                {
+                                    <span class="section-navigator__summary-label" title="@Model.RootText">@Model.RootText</span>
+                                }
+                            </summary>
+                            @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", Model.Items)
+                        </details>
+                    </li>
+                </ol>
+            }
+            else
+            {
+                @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", Model.Items)
+            }
         </nav>
     </aside>
 }
