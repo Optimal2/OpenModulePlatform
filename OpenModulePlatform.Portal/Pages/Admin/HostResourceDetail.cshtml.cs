@@ -75,7 +75,7 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
 
         if (HostId == Guid.Empty || string.IsNullOrWhiteSpace(SampleKey))
         {
-            return RedirectToPage("/Admin/HostResources");
+            return BadRequest("hostId and sampleKey are required.");
         }
 
         EffectiveHours = Math.Clamp(Hours, MinHours, MaxHours);
@@ -316,6 +316,11 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
         var cpuCeil = Math.Ceiling(cpuMax / 5.0) * 5.0;
         return (cpuMin, cpuCeil);
     }
+
+    public string FormatValue(double value)
+        => IsMemory
+            ? string.Create(CultureInfo.InvariantCulture, $"{value:F0} MB")
+            : string.Create(CultureInfo.InvariantCulture, $"{value:F1}%");
 
     private static (string RuntimeKind, string RuntimeName, bool IsMemory) ParseSampleKey(string sampleKey)
     {
