@@ -22,6 +22,7 @@
     --section-navigator-branch-width: 16px;
     --section-navigator-item-indent: calc(var(--section-navigator-line-x) + var(--section-navigator-branch-width));
     --section-navigator-node-y: 18px;
+    --section-navigator-stem-bottom: 10px;
 }
 
 .section-navigator__nav {
@@ -60,7 +61,7 @@
 
 .section-navigator__list::before {
     background: var(--section-navigator-line);
-    bottom: var(--section-navigator-node-y);
+    bottom: var(--section-navigator-stem-bottom);
     content: "";
     left: var(--section-navigator-line-x);
     position: absolute;
