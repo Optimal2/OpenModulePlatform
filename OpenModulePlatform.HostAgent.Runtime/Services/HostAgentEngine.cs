@@ -18,6 +18,7 @@ public sealed class HostAgentEngine
     private readonly HostAgentSelfUpgradeService _selfUpgradeService;
     private readonly HostAgentFileMirrorService _fileMirrorService;
     private readonly WebAppHealthMonitor _webAppHealthMonitor;
+    private readonly HostResourceCollector _resourceCollector;
     private readonly HostAgentJobProcessor _jobProcessor;
     private readonly HostAgentProcessContext _process;
     private readonly ILogger<HostAgentEngine> _logger;
@@ -33,6 +34,7 @@ public sealed class HostAgentEngine
         HostAgentSelfUpgradeService selfUpgradeService,
         HostAgentFileMirrorService fileMirrorService,
         WebAppHealthMonitor webAppHealthMonitor,
+        HostResourceCollector resourceCollector,
         HostAgentJobProcessor jobProcessor,
         HostAgentProcessContext process,
         ILogger<HostAgentEngine> logger)
@@ -46,6 +48,7 @@ public sealed class HostAgentEngine
         _selfUpgradeService = selfUpgradeService;
         _fileMirrorService = fileMirrorService;
         _webAppHealthMonitor = webAppHealthMonitor;
+        _resourceCollector = resourceCollector;
         _jobProcessor = jobProcessor;
         _process = process;
         _logger = logger;
@@ -187,6 +190,11 @@ public sealed class HostAgentEngine
                     _process.ServiceName,
                     settings.MaxHostAgentJobsPerCycle,
                     leaseRenewalCancellation.Token);
+            }
+
+            if (lease.HostId.HasValue)
+            {
+                await _resourceCollector.CollectAndPersistAsync(lease.HostId.Value, leaseRenewalCancellation.Token);
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && leaseLost.Value)

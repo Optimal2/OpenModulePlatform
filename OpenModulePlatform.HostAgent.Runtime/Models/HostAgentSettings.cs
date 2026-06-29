@@ -86,6 +86,8 @@ public sealed class HostAgentSettings
 
     public HostAgentPortalHealthCheckSettings PortalHealthCheck { get; set; } = new();
 
+    public HostResourceTelemetrySettings ResourceTelemetry { get; set; } = new();
+
     public string[] WebAppDeploymentExcludedEntries { get; set; } =
     [
         "appsettings.json",
@@ -265,6 +267,66 @@ public sealed class HostAgentSettings
         ArtifactZipImport.Validate();
         SelfUpgrade.Validate();
         CredentialStore.Validate();
+        ResourceTelemetry.Validate();
+    }
+}
+
+public sealed class HostResourceTelemetrySettings
+{
+    public bool Enabled { get; set; } = true;
+
+    public int SampleIntervalSeconds { get; set; } = 60;
+
+    public int SampleWindowSeconds { get; set; } = 1;
+
+    public int MaxSamplesPerCycle { get; set; } = 200;
+
+    public int BucketMinutes { get; set; } = 5;
+
+    public int RetainHours { get; set; } = 168;
+
+    public int PruneIntervalSeconds { get; set; } = 3600;
+
+    public bool CollectIisAppPools { get; set; } = true;
+
+    public bool CollectServiceProcesses { get; set; } = true;
+
+    public void Validate()
+    {
+        if (!Enabled)
+        {
+            return;
+        }
+
+        if (SampleIntervalSeconds < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ResourceTelemetry:SampleIntervalSeconds must be at least 1.");
+        }
+
+        if (SampleWindowSeconds < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ResourceTelemetry:SampleWindowSeconds must be at least 1.");
+        }
+
+        if (MaxSamplesPerCycle < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ResourceTelemetry:MaxSamplesPerCycle must be at least 1.");
+        }
+
+        if (BucketMinutes < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ResourceTelemetry:BucketMinutes must be at least 1.");
+        }
+
+        if (RetainHours < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ResourceTelemetry:RetainHours must be at least 1.");
+        }
+
+        if (PruneIntervalSeconds < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ResourceTelemetry:PruneIntervalSeconds must be at least 1.");
+        }
     }
 }
 
