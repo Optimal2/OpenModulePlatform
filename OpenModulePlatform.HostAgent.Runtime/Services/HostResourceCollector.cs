@@ -167,7 +167,7 @@ public sealed partial class HostResourceCollector
 
         if (settings.CollectIisAppPools)
         {
-            CollectIisAppPoolTargets(settings, targets, cancellationToken);
+            CollectIisAppPoolTargets(settings, targets, samples, cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -181,7 +181,11 @@ public sealed partial class HostResourceCollector
     }
 
     [SupportedOSPlatform("windows")]
-    private void CollectIisAppPoolTargets(HostResourceTelemetrySettings settings, List<ProcessTelemetryTarget> targets, CancellationToken cancellationToken)
+    private void CollectIisAppPoolTargets(
+        HostResourceTelemetrySettings settings,
+        List<ProcessTelemetryTarget> targets,
+        List<HostResourceSample> samples,
+        CancellationToken cancellationToken)
     {
         var appCmdPath = GetAppCmdPath();
         if (appCmdPath is null)
@@ -190,30 +194,43 @@ public sealed partial class HostResourceCollector
             return;
         }
 
-        string[] outputLines;
+        string[] appPoolLines;
+        string[] workerProcessLines;
         try
         {
-            var result = HostAgentProcessRunner.Run(appCmdPath, ["list", "wp"], TimeSpan.FromSeconds(15));
-            if (result.ExitCode != 0)
+            var appPoolResult = HostAgentProcessRunner.Run(appCmdPath, ["list", "apppool"], TimeSpan.FromSeconds(15));
+            if (appPoolResult.ExitCode != 0)
             {
                 _logger.LogWarning(
-                    "appcmd.exe list wp returned a non-zero exit code. ExitCode={ExitCode}, StdErr={StdErr}",
-                    result.ExitCode,
-                    result.StdErr);
+                    "appcmd.exe list apppool returned a non-zero exit code. ExitCode={ExitCode}, StdErr={StdErr}",
+                    appPoolResult.ExitCode,
+                    appPoolResult.StdErr);
                 return;
             }
 
-            outputLines = SplitOutput(result.StdOut);
+            var workerProcessResult = HostAgentProcessRunner.Run(appCmdPath, ["list", "wp"], TimeSpan.FromSeconds(15));
+            if (workerProcessResult.ExitCode != 0)
+            {
+                _logger.LogWarning(
+                    "appcmd.exe list wp returned a non-zero exit code. ExitCode={ExitCode}, StdErr={StdErr}",
+                    workerProcessResult.ExitCode,
+                    workerProcessResult.StdErr);
+                return;
+            }
+
+            appPoolLines = SplitOutput(appPoolResult.StdOut);
+            workerProcessLines = SplitOutput(workerProcessResult.StdOut);
         }
         catch (Exception ex) when (ex is FileNotFoundException or InvalidOperationException or TimeoutException or UnauthorizedAccessException)
         {
             _logger.LogWarning(
                 ex,
-                "Failed to run appcmd.exe list wp for IIS app pool telemetry collection.");
+                "Failed to run appcmd.exe for IIS app pool telemetry collection.");
             return;
         }
 
-        foreach (var line in outputLines)
+        var activeWorkerProcesses = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in workerProcessLines)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -223,13 +240,51 @@ public sealed partial class HostResourceCollector
                 continue;
             }
 
+            activeWorkerProcesses[appPoolName] = processId;
+        }
+
+        var appPoolNamePrefix = _settings.CurrentValue.IisAppPoolNamePrefix.Trim();
+        foreach (var line in appPoolLines)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var appPoolName = ParseAppCmdListAppPoolLine(line);
+            if (string.IsNullOrWhiteSpace(appPoolName)
+                || (!string.IsNullOrEmpty(appPoolNamePrefix)
+                    && !appPoolName.StartsWith(appPoolNamePrefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var normalizedPoolName = NormalizeKeySegment(appPoolName);
+            var cpuSampleKey = $"{IisAppPoolCpuKeyPrefix}{normalizedPoolName}";
+            var memorySampleKey = $"{IisAppPoolMemoryKeyPrefix}{normalizedPoolName}";
+
             try
             {
-                var normalizedPoolName = NormalizeKeySegment(appPoolName);
-                targets.Add(new ProcessTelemetryTarget(
-                    processId,
-                    $"{IisAppPoolCpuKeyPrefix}{normalizedPoolName}",
-                    $"{IisAppPoolMemoryKeyPrefix}{normalizedPoolName}"));
+                if (activeWorkerProcesses.TryGetValue(appPoolName, out var processId))
+                {
+                    targets.Add(new ProcessTelemetryTarget(
+                        processId,
+                        cpuSampleKey,
+                        memorySampleKey));
+                }
+                else
+                {
+                    var sampledUtc = DateTime.UtcNow;
+                    samples.Add(new HostResourceSample
+                    {
+                        SampleKey = cpuSampleKey,
+                        SampleValue = 0,
+                        SampledUtc = sampledUtc
+                    });
+                    samples.Add(new HostResourceSample
+                    {
+                        SampleKey = memorySampleKey,
+                        SampleValue = 0,
+                        SampledUtc = sampledUtc
+                    });
+                }
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
             {
@@ -471,6 +526,23 @@ public sealed partial class HostResourceCollector
 
     [GeneratedRegex(@"^WP\s+""(\d+)""\s+\(applicationPool:([^)]+)\)", RegexOptions.IgnoreCase)]
     private static partial Regex AppCmdWpRegex();
+
+    private static string? ParseAppCmdListAppPoolLine(string line)
+    {
+        // Expected format: APPPOOL "AppPoolName" (MgdVersion:,MgdMode:Integrated,state:Started)
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return null;
+        }
+
+        var match = AppCmdAppPoolRegex().Match(line);
+        return match.Success
+            ? match.Groups[1].Value.Trim()
+            : null;
+    }
+
+    [GeneratedRegex(@"^APPPOOL\s+""([^""]+)""\s+\(", RegexOptions.IgnoreCase)]
+    private static partial Regex AppCmdAppPoolRegex();
 
     private static string? GetAppCmdPath()
     {
