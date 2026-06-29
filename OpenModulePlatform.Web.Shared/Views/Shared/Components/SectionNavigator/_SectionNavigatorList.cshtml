@@ -12,11 +12,11 @@
                         <span class="section-navigator__chevron" aria-hidden="true"></span>
                         @if (item.HasLink)
                         {
-                            <a class="section-navigator__summary-link" href="@item.LinkHref" onclick="event.stopPropagation();">@item.Text</a>
+                            <a class="section-navigator__summary-link" href="@item.LinkHref" title="@item.Text" onclick="event.stopPropagation();">@item.Text</a>
                         }
                         else
                         {
-                            <span class="section-navigator__summary-label">@item.Text</span>
+                            <span class="section-navigator__summary-label" title="@item.Text">@item.Text</span>
                         }
                     </summary>
                     @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", item.Children)
@@ -24,11 +24,11 @@
             }
             else if (item.HasLink)
             {
-                <a class="section-navigator__link" href="@item.LinkHref">@item.Text</a>
+                <a class="section-navigator__link" href="@item.LinkHref" title="@item.Text">@item.Text</a>
             }
             else
             {
-                <span class="section-navigator__label">@item.Text</span>
+                <span class="section-navigator__label" title="@item.Text">@item.Text</span>
             }
         </li>
     }

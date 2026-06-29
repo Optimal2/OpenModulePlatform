@@ -7,5 +7,11 @@ public sealed class SectionNavigatorModel
 {
     public string Label { get; init; } = "Page sections";
 
+    public string? RootText { get; init; }
+
+    public string? RootHref { get; init; }
+
+    public bool RootInitiallyExpanded { get; init; } = true;
+
     public IReadOnlyList<SectionNavigatorItem> Items { get; init; } = Array.Empty<SectionNavigatorItem>();
 }
