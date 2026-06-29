@@ -12,7 +12,7 @@
                         <span class="section-navigator__chevron" aria-hidden="true"></span>
                         @if (item.HasLink)
                         {
-                            <a class="section-navigator__summary-link" href="@item.LinkHref">@item.Text</a>
+                            <a class="section-navigator__summary-link" href="@item.LinkHref" onclick="event.stopPropagation();">@item.Text</a>
                         }
                         else
                         {
