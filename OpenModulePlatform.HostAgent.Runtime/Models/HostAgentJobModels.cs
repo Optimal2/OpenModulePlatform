@@ -399,6 +399,19 @@ public sealed class CollectWebAppLogsJobResult
     public string? Message { get; set; }
 }
 
+public sealed class HostResourceSample
+{
+    public string SampleKey { get; set; } = string.Empty;
+
+    public double SampleValue { get; set; }
+
+    public DateTime SampledUtc { get; set; }
+
+    public double? MinValue { get; set; }
+
+    public double? MaxValue { get; set; }
+}
+
 public sealed class WebAppHealthProbeResult
 {
     public string HealthKey { get; set; } = string.Empty;

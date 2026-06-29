@@ -944,6 +944,96 @@ BEGIN
 END
 GO
 
+-------------------------------------------------------------------------------
+-- Host resource telemetry
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.HostResourceSamples', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostResourceSamples
+    (
+        HostId uniqueidentifier NOT NULL,
+        SampleBucketUtc datetime2(3) NOT NULL,
+        SampleKey nvarchar(100) NOT NULL,
+        SampleValue float NOT NULL,
+        SampleCount int NOT NULL CONSTRAINT DF_omp_HostResourceSamples_SampleCount DEFAULT(1),
+        FirstSampledUtc datetime2(3) NOT NULL,
+        LastSampledUtc datetime2(3) NOT NULL,
+        MinValue float NULL,
+        MaxValue float NULL,
+        CONSTRAINT PK_omp_HostResourceSamples PRIMARY KEY(HostId, SampleBucketUtc, SampleKey),
+        CONSTRAINT FK_omp_HostResourceSamples_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.HostResourceLatest', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostResourceLatest
+    (
+        HostId uniqueidentifier NOT NULL,
+        SampleKey nvarchar(100) NOT NULL,
+        SampleValue float NOT NULL,
+        SampleCount int NOT NULL CONSTRAINT DF_omp_HostResourceLatest_SampleCount DEFAULT(1),
+        FirstSampledUtc datetime2(3) NOT NULL,
+        LastSampledUtc datetime2(3) NOT NULL,
+        MinValue float NULL,
+        MaxValue float NULL,
+        CONSTRAINT PK_omp_HostResourceLatest PRIMARY KEY(HostId, SampleKey),
+        CONSTRAINT FK_omp_HostResourceLatest_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostResourceSamples')
+      AND name = N'IX_omp_HostResourceSamples_Host_Key_Bucket'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostResourceSamples_Host_Key_Bucket
+        ON omp.HostResourceSamples(HostId, SampleKey, SampleBucketUtc DESC)
+        INCLUDE(SampleValue, SampleCount, MinValue, MaxValue);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostResourceSamples')
+      AND name = N'IX_omp_HostResourceSamples_Bucket_Retention'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostResourceSamples_Bucket_Retention
+        ON omp.HostResourceSamples(SampleBucketUtc);
+END
+GO
+
+IF OBJECT_ID(N'omp.PruneHostResourceSamples', N'P') IS NULL
+    EXEC(N'CREATE PROCEDURE omp.PruneHostResourceSamples AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER PROCEDURE omp.PruneHostResourceSamples
+    @RetainHours int = 168
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    IF @RetainHours < 1
+        SET @RetainHours = 1;
+
+    DECLARE @cutoffUtc datetime2(3) = DATEADD(hour, -@RetainHours, SYSUTCDATETIME());
+
+    DELETE FROM omp.HostResourceSamples
+    WHERE SampleBucketUtc < @cutoffUtc;
+
+    SELECT @@ROWCOUNT AS DeletedSampleCount;
+END
+GO
+
 IF OBJECT_ID(N'omp.HostAgentDesiredStates', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostAgentDesiredStates
