@@ -128,7 +128,6 @@ app.MapPost("/logout", async (
         currentOidcProviderStatus);
 
     await context.SignOutAsync(OmpAuthDefaults.AuthenticationScheme);
-    ActiveRoleCookie.Clear(context.Response);
 
     if (decision.SignOutOidc)
     {
