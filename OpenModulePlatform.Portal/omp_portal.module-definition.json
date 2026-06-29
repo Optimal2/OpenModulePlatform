@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_portal",
-  "definitionVersion": "0.3.97",
+  "definitionVersion": "0.3.98",
   "module": {
     "displayName": "OpenModulePlatform Portal",
     "moduleType": "Portal",

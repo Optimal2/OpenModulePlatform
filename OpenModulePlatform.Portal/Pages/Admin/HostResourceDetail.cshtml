@@ -1,0 +1,49 @@
+@page
+@model OpenModulePlatform.Portal.Pages.Admin.HostResourceDetailModel
+@{
+    var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+}
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Operations"]</div>
+        <h2>@L["Resource detail"]</h2>
+        <p class="lede">
+            @L["Host"]: <code>@Model.HostKey</code>
+            @if (!string.IsNullOrWhiteSpace(Model.HostDisplayName))
+            {
+                <span class="muted">(@Model.HostDisplayName)</span>
+            }
+            &middot; @Model.RuntimeKind: <code>@Model.RuntimeName</code>
+        </p>
+    </div>
+</section>
+
+<div class="toolbar top-gap">
+    <a class="action-link" href="~/admin/hostresources">@L["Back to host resources"]</a>
+</div>
+
+<section class="card section-card section-card--wide top-gap">
+    <div class="split-header">
+        <h3>@L["Time range"]</h3>
+        <div class="host-resource-time-filter">
+            @foreach (var hours in Model.AvailableHours)
+            {
+                var isActive = Model.EffectiveHours == hours;
+                <a class="action-link @(isActive ? "host-resource-time-filter__active" : "")"
+                   href="~/admin/hostresourcedetail?hostId=@Model.HostId&sampleKey=@Uri.EscapeDataString(Model.SampleKey)&hours=@hours">@L["{0}h", hours]</a>
+            }
+        </div>
+    </div>
+    <p class="muted">
+        @L["Showing {0} samples over the last {1} hours.", Model.PrimaryChart.Stats.SampleCount, Model.EffectiveHours]
+    </p>
+</section>
+
+<div class="host-resource-charts top-gap">
+    @await Html.PartialAsync("_HostResourceChart", Model.PrimaryChart)
+    @if (Model.CounterpartChart is not null)
+    {
+        @await Html.PartialAsync("_HostResourceChart", Model.CounterpartChart)
+    }
+</div>

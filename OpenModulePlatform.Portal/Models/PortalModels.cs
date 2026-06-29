@@ -1502,3 +1502,39 @@ public sealed class HostResourceLatestGroupRow
 
     public bool HasData => !string.IsNullOrWhiteSpace(CpuSampleKey) || !string.IsNullOrWhiteSpace(MemorySampleKey);
 }
+
+/// <summary>
+/// View model for one host resource history chart rendered on the detail page.
+/// </summary>
+public sealed class ChartViewModel
+{
+    public string Title { get; set; } = string.Empty;
+
+    public string Unit { get; set; } = string.Empty;
+
+    public ChartStats Stats { get; set; } = new();
+
+    public string Svg { get; set; } = string.Empty;
+
+    public bool HasData { get; set; }
+}
+
+/// <summary>
+/// Summary statistics shown above a host resource history chart.
+/// </summary>
+public sealed class ChartStats
+{
+    public double Average { get; set; }
+
+    public double Minimum { get; set; }
+
+    public double Maximum { get; set; }
+
+    public double Latest { get; set; }
+
+    public int SampleCount { get; set; }
+
+    public DateTime EarliestUtc { get; set; }
+
+    public DateTime NewestUtc { get; set; }
+}
