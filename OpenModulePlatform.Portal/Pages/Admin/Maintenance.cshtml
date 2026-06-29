@@ -1,26 +1,57 @@
 @page
+@using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.MaintenanceModel
 
 @{
+    const string StatusSectionId = "maintenance-status";
+    const string ScanSectionId = "maintenance-scan";
+    const string RetentionSectionId = "maintenance-retention";
+    const string JobsSectionId = "maintenance-jobs";
+    const string PreviewSectionId = "maintenance-preview";
+
     var candidateGroups = Model.Preview.Candidates
         .GroupBy(row => row.IdentityKey)
         .OrderBy(group => group.First().ModuleKey)
         .ThenBy(group => group.First().AppKey)
         .ThenBy(group => group.First().PackageType)
         .ThenBy(group => group.First().TargetName);
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+    if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["OMP scan"].Value, ScanSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact retention"].Value, RetentionSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["HostAgent job queue"].Value, JobsSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact cleanup preview"].Value, PreviewSectionId));
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L["Maintenance"].Value,
+        Items = sectionNavigatorItems
+    };
 }
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["System"]</div>
-        <h2>@L["Maintenance"]</h2>
-        <p class="lede">@L["Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration."]</p>
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["System"]</div>
+                <h2>@L["Maintenance"]</h2>
+                <p class="lede">@L["Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration."]</p>
+            </div>
+        </section>
     </div>
-</section>
+
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
-    <div class="card status-banner">@Model.StatusMessage</div>
+    <div id="@StatusSectionId" class="card status-banner section-navigator-target">@Model.StatusMessage</div>
 }
 
 @if (!ViewContext.ModelState.IsValid)
@@ -28,7 +59,7 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
-<section class="card top-gap">
+<section id="@ScanSectionId" class="card top-gap section-navigator-target">
     <div class="split-header">
         <div>
             <h3>@L["OMP scan"]</h3>
@@ -140,7 +171,7 @@
     }
 </section>
 
-<section class="card top-gap">
+<section id="@RetentionSectionId" class="card top-gap section-navigator-target">
     <h3>@L["Artifact retention"]</h3>
     <p class="muted">@L["The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected."]</p>
 
@@ -170,7 +201,7 @@
     </form>
 </section>
 
-<section class="card top-gap">
+<section id="@JobsSectionId" class="card top-gap section-navigator-target">
     <h3>@L["HostAgent job queue"]</h3>
     <p class="muted">@L["HostAgent jobs are queued in the database and picked up by the matching host during its next cycle."]</p>
 
@@ -242,24 +273,25 @@
     }
 </section>
 
-<section class="portal-admin-metrics top-gap" aria-label="@L["Artifact cleanup preview"]">
-    <div class="metric-card">
-        <span class="metric">@Model.Preview.AffectedArtifactIdentityCount</span>
-        <span class="metric-card__label">@L["Affected artifact identities"]</span>
+<section id="@PreviewSectionId" class="section-navigator-target top-gap" aria-label="@L["Artifact cleanup preview"]">
+    <div class="portal-admin-metrics">
+        <div class="metric-card">
+            <span class="metric">@Model.Preview.AffectedArtifactIdentityCount</span>
+            <span class="metric-card__label">@L["Affected artifact identities"]</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric">@Model.Preview.CandidateCount</span>
+            <span class="metric-card__label">@L["Old version candidates"]</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric">@Model.Preview.DeletableCandidateCount</span>
+            <span class="metric-card__label">@L["Can be deleted"]</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric">@Model.Preview.ProtectedCandidateCount</span>
+            <span class="metric-card__label">@L["Protected by references"]</span>
+        </div>
     </div>
-    <div class="metric-card">
-        <span class="metric">@Model.Preview.CandidateCount</span>
-        <span class="metric-card__label">@L["Old version candidates"]</span>
-    </div>
-    <div class="metric-card">
-        <span class="metric">@Model.Preview.DeletableCandidateCount</span>
-        <span class="metric-card__label">@L["Can be deleted"]</span>
-    </div>
-    <div class="metric-card">
-        <span class="metric">@Model.Preview.ProtectedCandidateCount</span>
-        <span class="metric-card__label">@L["Protected by references"]</span>
-    </div>
-</section>
 
 @if (Model.Preview.Candidates.Count == 0)
 {
@@ -319,6 +351,10 @@ else
         </table>
     </div>
 }
+</section>
+
+    </div>
+</div>
 
 <script>
 (() => {
