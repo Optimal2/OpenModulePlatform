@@ -306,27 +306,49 @@ public static class OmpWebHostingExtensions
         app.MapPost("/security/set-active-role", async (
             HttpContext context,
             IAntiforgery antiforgery,
-            int? roleId,
-            string? returnUrl,
             RbacService rbac,
             PortalTopBarService portalTopBarService,
             CancellationToken ct) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            return await HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct);
+            var selection = await ReadActiveRoleSelectionAsync(context, ct);
+            if (!selection.IsValid)
+            {
+                return Results.BadRequest();
+            }
+
+            return await HandleSetActiveRoleAsync(
+                context,
+                selection.RoleId,
+                selection.ReturnUrl,
+                rbac,
+                portalTopBarService,
+                options,
+                ct);
         }).RequireAuthorization();
 
         app.MapPost("/rbac/set-active-role", async (
             HttpContext context,
             IAntiforgery antiforgery,
-            int? roleId,
-            string? returnUrl,
             RbacService rbac,
             PortalTopBarService portalTopBarService,
             CancellationToken ct) =>
         {
             await antiforgery.ValidateRequestAsync(context);
-            return await HandleSetActiveRoleAsync(context, roleId, returnUrl, rbac, portalTopBarService, options, ct);
+            var selection = await ReadActiveRoleSelectionAsync(context, ct);
+            if (!selection.IsValid)
+            {
+                return Results.BadRequest();
+            }
+
+            return await HandleSetActiveRoleAsync(
+                context,
+                selection.RoleId,
+                selection.ReturnUrl,
+                rbac,
+                portalTopBarService,
+                options,
+                ct);
         }).RequireAuthorization();
 
         app.MapGet(PortalTopBarModel.DefaultSessionStatusPath, (HttpContext context) =>
@@ -724,6 +746,36 @@ public static class OmpWebHostingExtensions
         }
 
         return Results.LocalRedirect(safePortalHref);
+    }
+
+    private static async Task<ActiveRoleSelection> ReadActiveRoleSelectionAsync(
+        HttpContext context,
+        CancellationToken ct)
+    {
+        if (!context.Request.HasFormContentType)
+        {
+            return ActiveRoleSelection.Invalid;
+        }
+
+        var form = await context.Request.ReadFormAsync(ct);
+        var roleIdValue = form["roleId"].ToString();
+        int? roleId = null;
+        if (!string.IsNullOrWhiteSpace(roleIdValue))
+        {
+            if (!int.TryParse(roleIdValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRoleId))
+            {
+                return ActiveRoleSelection.Invalid;
+            }
+
+            roleId = parsedRoleId;
+        }
+
+        return new ActiveRoleSelection(true, roleId, form["returnUrl"].ToString());
+    }
+
+    private readonly record struct ActiveRoleSelection(bool IsValid, int? RoleId, string? ReturnUrl)
+    {
+        public static ActiveRoleSelection Invalid { get; } = new(false, null, null);
     }
 
     private static void ConfigureOmpAuthentication(
