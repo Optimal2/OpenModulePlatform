@@ -1104,6 +1104,9 @@
   <data name="The selected artifact does not belong to the selected app." xml:space="preserve">
     <value>The selected artifact does not belong to the selected app.</value>
   </data>
+  <data name="The selected artifact package type is not compatible with the selected app type." xml:space="preserve">
+    <value>The selected artifact package type is not compatible with the selected app type.</value>
+  </data>
   <data name="The app instance could not be saved." xml:space="preserve">
     <value>The app instance could not be saved.</value>
   </data>

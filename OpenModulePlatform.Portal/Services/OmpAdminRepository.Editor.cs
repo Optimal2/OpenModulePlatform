@@ -485,6 +485,8 @@ VALUES
         const string sql = @"
 SELECT CAST(ar.ArtifactId AS nvarchar(50)),
        ar.AppId,
+       ar.PackageType,
+       CAST(omp.IsArtifactPackageCompatibleWithAppType(ar.PackageType, a.AppType) AS bit),
        a.AppKey + N' / ' + ar.Version + N' / ' + ar.PackageType
        + COALESCE(N' / ' + ar.TargetName, N'')
 FROM omp.Artifacts ar
@@ -505,7 +507,9 @@ ORDER BY a.AppKey, ar.CreatedUtc DESC, ar.ArtifactId DESC;";
                 {
                     Value = rdr.GetString(0),
                     AppId = rdr.GetInt32(1),
-                    Label = rdr.GetString(2)
+                    PackageType = rdr.GetString(2),
+                    IsCompatibleWithAppType = rdr.GetBoolean(3),
+                    Label = rdr.GetString(4)
                 });
         }
 
@@ -3846,6 +3850,26 @@ SELECT COUNT(1)
 FROM omp.Artifacts
 WHERE ArtifactId = @ArtifactId
   AND AppId = @AppId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+        Add(cmd, "@AppId", appId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct)) > 0;
+    }
+
+    public async Task<bool> ArtifactCanBindToAppAsync(int artifactId, int appId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.Artifacts artifact
+INNER JOIN omp.Apps app
+    ON app.AppId = @AppId
+WHERE artifact.ArtifactId = @ArtifactId
+  AND artifact.AppId = @AppId
+  AND omp.IsArtifactPackageCompatibleWithAppType(artifact.PackageType, app.AppType) = 1;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);

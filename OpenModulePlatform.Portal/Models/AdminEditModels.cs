@@ -466,6 +466,10 @@ public sealed class ArtifactSelectionOption
 
     public int AppId { get; set; }
 
+    public string PackageType { get; set; } = string.Empty;
+
+    public bool IsCompatibleWithAppType { get; set; }
+
     public string Label { get; set; } = string.Empty;
 }
 
