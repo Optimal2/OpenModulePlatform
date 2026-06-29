@@ -448,7 +448,23 @@ public static class OmpWebHostingExtensions
                 return Results.Forbid();
             }
 
+            var returnUrl = "/";
+            if (context.Request.HasFormContentType)
+            {
+                var form = await context.Request.ReadFormAsync(ct);
+                var candidateReturnUrl = form["returnUrl"].ToString();
+                if (IsSafeLocalReturnUrl(candidateReturnUrl))
+                {
+                    returnUrl = candidateReturnUrl;
+                }
+            }
+
             var markedCount = await notificationService.MarkAllAsReadAsync(userId.Value, ct);
+            if (!IsXmlHttpRequest(context.Request))
+            {
+                return Results.LocalRedirect(returnUrl);
+            }
+
             return Results.Json(new
             {
                 success = true,

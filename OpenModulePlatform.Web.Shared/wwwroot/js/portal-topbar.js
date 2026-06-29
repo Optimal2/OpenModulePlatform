@@ -1037,6 +1037,7 @@
                     updateNotificationBadge(root, payload.unreadCount);
                     updateNotificationEmptyState(root);
                     emitNotificationChanged('', payload.unreadCount, true);
+                    runTopbarSummaryRefreshForRoot(root);
                 })
                 .catch(function (error) {
                     if (window.console && typeof window.console.warn === 'function') {
