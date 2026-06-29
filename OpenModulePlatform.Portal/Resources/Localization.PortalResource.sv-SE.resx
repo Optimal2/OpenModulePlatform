@@ -2689,6 +2689,8 @@
   <data name="Web app application-pool recycle job {0} was queued." xml:space="preserve"><value>Jobb {0} för omstart av webbappens app-pool har köats.</value></data>
   <data name="Select a host before requesting web app logs." xml:space="preserve"><value>Välj en värd innan du begär webbappsloggar.</value></data>
   <data name="Web app log collection job {0} was queued." xml:space="preserve"><value>Jobb {0} för hämtning av webbappsloggar har köats.</value></data>
+  <data name="Deployment lock" xml:space="preserve"><value>Driftsättningslås</value></data>
+  <data name="Page sections" xml:space="preserve"><value>Sidsektioner</value></data>
   <data name="A deployment lock is active." xml:space="preserve"><value>Ett driftsättningslås är aktivt.</value></data>
   <data name="Application-pool recycle is disabled until the active deployment finishes or the lock expires." xml:space="preserve"><value>Omstart av applikationspoolen är inaktiverad tills den aktiva driftsättningen är klar eller låset löper ut.</value></data>
   <data name="Artifacts are deployable outputs of an app definition. Keep artifact metadata and HostAgent-managed configuration files precise so app instances can reference the right build." xml:space="preserve"><value>Artefakter är driftsättningsbara resultat från en appdefinition. Håll artefaktmetadata och HostAgent-hanterade konfigurationsfiler korrekta så att appinstanser kan referera till rätt bygge.</value></data>
