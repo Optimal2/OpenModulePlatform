@@ -285,6 +285,12 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
                     nameof(Input.DesiredArtifactId),
                     T("The selected artifact does not belong to the selected app."));
             }
+            else if (!await _repo.ArtifactCanBindToAppAsync(Input.DesiredArtifactId.Value, Input.AppId, ct))
+            {
+                ModelState.AddModelError(
+                    nameof(Input.DesiredArtifactId),
+                    T("The selected artifact package type is not compatible with the selected app type."));
+            }
         }
 
         if (isActiveDesired
