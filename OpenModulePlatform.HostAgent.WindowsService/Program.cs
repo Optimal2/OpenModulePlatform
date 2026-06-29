@@ -49,6 +49,7 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
                 ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
             });
         services.AddSingleton<WebAppHealthMonitor>();
+        services.AddSingleton<HostResourceCollector>();
         services.AddSingleton<HostAgentJobProcessor>();
         services.AddSingleton<HostAgentCredentialStoreService>();
         services.AddSingleton<HostAgentEngine>();
