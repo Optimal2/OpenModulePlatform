@@ -1113,6 +1113,9 @@
   <data name="The selected artifact does not belong to the selected app." xml:space="preserve">
     <value>Den valda artefakten tillhör inte den valda appen.</value>
   </data>
+  <data name="The selected artifact package type is not compatible with the selected app type." xml:space="preserve">
+    <value>Den valda artefaktens pakettyp är inte kompatibel med den valda apptypen.</value>
+  </data>
   <data name="The app instance could not be saved." xml:space="preserve">
     <value>Appinstansen kunde inte sparas.</value>
   </data>

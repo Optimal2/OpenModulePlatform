@@ -162,10 +162,13 @@ else
                 <option value="">@L["No artifact selected"]</option>
                 @foreach (var option in Model.ArtifactOptions)
                 {
-                    var isCurrentAppArtifact = Model.Input.AppId > 0 && option.AppId == Model.Input.AppId;
+                    var isCurrentAppArtifact = Model.Input.AppId > 0
+                        && option.AppId == Model.Input.AppId
+                        && option.IsCompatibleWithAppType;
                     <option
                         value="@option.Value"
                         data-app-id="@option.AppId"
+                        data-compatible="@(option.IsCompatibleWithAppType ? "true" : "false")"
                         disabled="@(!isCurrentAppArtifact)"
                         hidden="@(!isCurrentAppArtifact)">
                         @option.Label
@@ -281,7 +284,7 @@ else
                 continue;
             }
 
-            const visible = appId && option.dataset.appId === appId;
+            const visible = appId && option.dataset.appId === appId && option.dataset.compatible === 'true';
             option.hidden = !visible;
             option.disabled = !visible;
 

@@ -358,6 +358,12 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
             ModelState.AddModelError(
                 nameof(Input.ArtifactId), T("The selected artifact does not belong to the selected app."));
         }
+        else if (!await _repo.ArtifactCanBindToAppAsync(artifactId, appId, ct))
+        {
+            ModelState.AddModelError(
+                nameof(Input.ArtifactId),
+                T("The selected artifact package type is not compatible with the selected app type."));
+        }
     }
 
     private static OptionItem Opt(string value, string label)
