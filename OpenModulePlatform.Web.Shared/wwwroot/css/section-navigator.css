@@ -2,6 +2,7 @@
     --section-navigator-width: clamp(120px, calc((100vw - var(--section-navigator-content-max) - 80px) / 2), 200px);
     --section-navigator-content-max: 1400px;
     --section-navigator-gap: 16px;
+    --section-navigator-sticky-gap: 16px;
     display: grid;
     grid-template-columns:
         minmax(var(--section-navigator-width), 1fr)
@@ -37,9 +38,9 @@
     grid-row: 2;
     justify-self: end;
     position: sticky;
-    top: 92px;
+    top: calc(var(--app-header-height, 92px) + var(--section-navigator-sticky-gap));
     width: var(--section-navigator-width);
-    max-height: calc(100vh - 116px);
+    max-height: calc(100vh - var(--app-header-height, 92px) - (var(--section-navigator-sticky-gap) * 2));
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
@@ -239,7 +240,7 @@
 }
 
 .section-navigator-target {
-    scroll-margin-top: 96px;
+    scroll-margin-top: calc(var(--app-header-height, 92px) + var(--section-navigator-sticky-gap));
 }
 
 @media (max-width: 1500px) {
