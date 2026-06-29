@@ -977,6 +977,24 @@ a:hover {
     margin-bottom: 6px;
 }
 
+.metric-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 32px;
+    margin-bottom: 12px;
+}
+
+.metric__value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.metric__label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 .metric-inline {
     display: inline-block;
     min-width: 2.2rem;
@@ -1062,6 +1080,18 @@ a:hover {
 .integrity-pill--neutral {
     border-color: var(--border-strong);
     background: var(--surface-muted);
+    color: var(--text-muted);
+}
+
+.host-resources-latest .state-current td {
+    background: #e8f6ed;
+}
+
+.host-resources-latest .state-stale td {
+    background: #fff7df;
+}
+
+.host-resources-latest .state-none td {
     color: var(--text-muted);
 }
 

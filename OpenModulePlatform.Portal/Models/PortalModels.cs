@@ -1430,6 +1430,8 @@ public sealed class HostResourceLatestRow
 
     public string? HostDisplayName { get; set; }
 
+    public DateTime? HostLastSeenUtc { get; set; }
+
     public string SampleKey { get; set; } = string.Empty;
 
     public double SampleValue { get; set; }
@@ -1467,4 +1469,36 @@ public sealed class HostResourceHistoryRow
     public double? MinValue { get; set; }
 
     public double? MaxValue { get; set; }
+}
+
+/// <summary>
+/// Grouped latest CPU and memory telemetry for one host runtime target.
+/// </summary>
+public sealed class HostResourceLatestGroupRow
+{
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string? HostDisplayName { get; set; }
+
+    public DateTime? HostLastSeenUtc { get; set; }
+
+    public string RuntimeKind { get; set; } = string.Empty;
+
+    public string RuntimeName { get; set; } = string.Empty;
+
+    public string? CpuSampleKey { get; set; }
+
+    public double? CpuValue { get; set; }
+
+    public string? MemorySampleKey { get; set; }
+
+    public double? MemoryValue { get; set; }
+
+    public DateTime? LastSampledUtc { get; set; }
+
+    public int SampleCount { get; set; }
+
+    public bool HasData => !string.IsNullOrWhiteSpace(CpuSampleKey) || !string.IsNullOrWhiteSpace(MemorySampleKey);
 }
