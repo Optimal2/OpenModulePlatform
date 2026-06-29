@@ -39,16 +39,18 @@
 }
 
 <div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["System"]</div>
+                <h2>@L["Operations"]</h2>
+                <p class="lede">@L["Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks."]</p>
+            </div>
+        </section>
+    </div>
+
     @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
     <div class="section-navigator-layout__content">
-
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["System"]</div>
-        <h2>@L["Operations"]</h2>
-        <p class="lede">@L["Inspect HostAgent app deployments, artifact provisioning history, and runtime identity checks."]</p>
-    </div>
-</section>
 
 @if (!string.IsNullOrWhiteSpace(statusMessage))
 {
