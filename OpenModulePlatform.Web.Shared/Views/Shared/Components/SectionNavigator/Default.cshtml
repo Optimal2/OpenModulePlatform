@@ -1,0 +1,29 @@
+@model OpenModulePlatform.Web.Shared.Navigation.SectionNavigatorModel
+
+@if (Model.Items.Count > 0)
+{
+    <aside class="section-navigator" aria-label="@Model.Label">
+        <nav class="section-navigator__nav">
+            <div class="section-navigator__heading">@Model.Label</div>
+            <ol class="section-navigator__list">
+                @foreach (var item in Model.Items)
+                {
+                    <li class="section-navigator__item">
+                        <a class="section-navigator__link" href="@item.LinkHref">@item.Text</a>
+                        @if (item.Children.Count > 0)
+                        {
+                            <ol class="section-navigator__list section-navigator__list--children">
+                                @foreach (var child in item.Children)
+                                {
+                                    <li class="section-navigator__item">
+                                        <a class="section-navigator__link" href="@child.LinkHref">@child.Text</a>
+                                    </li>
+                                }
+                            </ol>
+                        }
+                    </li>
+                }
+            </ol>
+        </nav>
+    </aside>
+}
