@@ -6,7 +6,7 @@ namespace OpenModulePlatform.Web.Shared.Navigation;
 /// </summary>
 public sealed class SectionNavigatorItem
 {
-    public SectionNavigatorItem(string text, string anchorId)
+    public SectionNavigatorItem(string text, string? anchorId = null)
     {
         Text = text;
         AnchorId = anchorId;
@@ -14,13 +14,18 @@ public sealed class SectionNavigatorItem
 
     public string Text { get; }
 
-    public string AnchorId { get; }
+    public string? AnchorId { get; }
 
     public string? Href { get; init; }
 
     public IReadOnlyList<SectionNavigatorItem> Children { get; init; } = Array.Empty<SectionNavigatorItem>();
 
-    public bool InitiallyExpanded { get; init; }
+    public bool InitiallyExpanded { get; init; } = true;
 
-    public string LinkHref => string.IsNullOrWhiteSpace(Href) ? $"#{AnchorId}" : Href;
+    public bool HasLink => !string.IsNullOrWhiteSpace(Href) || !string.IsNullOrWhiteSpace(AnchorId);
+
+    public string? LinkHref
+        => string.IsNullOrWhiteSpace(Href)
+            ? string.IsNullOrWhiteSpace(AnchorId) ? null : $"#{AnchorId}"
+            : Href;
 }
