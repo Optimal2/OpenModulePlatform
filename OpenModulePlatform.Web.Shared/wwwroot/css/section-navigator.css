@@ -16,6 +16,8 @@
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
+    --section-navigator-line: rgba(37, 99, 235, 0.46);
+    --section-navigator-node-y: 18px;
 }
 
 .section-navigator__nav {
@@ -35,20 +37,43 @@
 
 .section-navigator__list {
     display: grid;
-    gap: 4px;
+    gap: 2px;
     list-style: none;
     margin: 0;
     padding: 0;
+    position: relative;
 }
 
 .section-navigator__list .section-navigator__list {
-    border-left: 1px solid rgba(37, 99, 235, 0.24);
-    margin: 4px 0 0 10px;
-    padding-left: 12px;
+    margin: 2px 0 4px 2px;
+    padding-left: 18px;
+}
+
+.section-navigator__list::before {
+    background: var(--section-navigator-line);
+    bottom: var(--section-navigator-node-y);
+    content: "";
+    left: 9px;
+    position: absolute;
+    top: 0;
+    width: 1px;
 }
 
 .section-navigator__item {
     min-width: 0;
+    padding-left: 22px;
+    position: relative;
+}
+
+.section-navigator__item::before {
+    background: var(--section-navigator-line);
+    content: "";
+    height: 1px;
+    left: 9px;
+    position: absolute;
+    top: var(--section-navigator-node-y);
+    width: 14px;
+    z-index: 0;
 }
 
 .section-navigator__details {
@@ -68,6 +93,8 @@
     line-height: 1.25;
     list-style: none;
     padding: 7px 8px;
+    position: relative;
+    z-index: 1;
 }
 
 .section-navigator__summary::-webkit-details-marker {
@@ -97,13 +124,16 @@
 }
 
 .section-navigator__link {
+    background: transparent;
     display: block;
     border-radius: 6px;
     color: var(--text);
     font-size: 0.9rem;
     line-height: 1.25;
     padding: 7px 8px 7px 28px;
+    position: relative;
     text-decoration: none;
+    z-index: 1;
 }
 
 .section-navigator__summary-link,
@@ -125,6 +155,8 @@
     font-size: 0.9rem;
     line-height: 1.25;
     padding: 7px 8px 7px 28px;
+    position: relative;
+    z-index: 1;
 }
 
 .section-navigator__link:hover,
