@@ -1418,3 +1418,53 @@ public sealed class HostAgentArtifactOption
 
     public DateTime CreatedUtc { get; set; }
 }
+
+/// <summary>
+/// Latest resource telemetry value for one host and sample key.
+/// </summary>
+public sealed class HostResourceLatestRow
+{
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string? HostDisplayName { get; set; }
+
+    public string SampleKey { get; set; } = string.Empty;
+
+    public double SampleValue { get; set; }
+
+    public int SampleCount { get; set; }
+
+    public DateTime FirstSampledUtc { get; set; }
+
+    public DateTime LastSampledUtc { get; set; }
+
+    public double? MinValue { get; set; }
+
+    public double? MaxValue { get; set; }
+}
+
+/// <summary>
+/// One bucketed resource telemetry sample for a host and sample key.
+/// </summary>
+public sealed class HostResourceHistoryRow
+{
+    public Guid HostId { get; set; }
+
+    public string SampleKey { get; set; } = string.Empty;
+
+    public DateTime SampleBucketUtc { get; set; }
+
+    public double SampleValue { get; set; }
+
+    public int SampleCount { get; set; }
+
+    public DateTime FirstSampledUtc { get; set; }
+
+    public DateTime LastSampledUtc { get; set; }
+
+    public double? MinValue { get; set; }
+
+    public double? MaxValue { get; set; }
+}

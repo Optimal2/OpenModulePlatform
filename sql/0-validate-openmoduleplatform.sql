@@ -53,6 +53,8 @@ END;
         (N'omp', N'HostArtifactStates'),
         (N'omp', N'HostAppDeploymentStates'),
         (N'omp', N'WebAppHealthStates'),
+        (N'omp', N'HostResourceSamples'),
+        (N'omp', N'HostResourceLatest'),
         (N'omp', N'HostAgentDesiredStates'),
         (N'omp', N'HostAgentRuntimeStates'),
         (N'omp', N'HostAgentLeases'),
