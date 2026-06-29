@@ -174,9 +174,13 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("function isToastPushCategory(category)", script);
         Assert.Contains("""topbar.notification-state-changed""", script);
         Assert.Contains("""topbar.message-state-changed""", script);
+        Assert.Contains("function playNotificationSound()", script);
         Assert.Contains("function playMessageNotificationSound()", script);
+        Assert.Contains("window.ompNotificationToastSound", script);
         Assert.Contains("window.ompMessageNotificationSound", script);
         Assert.Contains("""[data-message-thread-composer]""", script);
+        Assert.Contains("playNotificationSound();", script);
+        Assert.Contains("playMessageNotificationSound();", script);
         Assert.Contains("scheduleNext(0);", script);
     }
 

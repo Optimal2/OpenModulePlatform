@@ -24,6 +24,7 @@
         queue: [],
         audioContext: null,
         soundEnabled: false,
+        lastNotificationSoundAt: 0,
         lastMessageSoundAt: 0
     };
 
@@ -60,13 +61,16 @@
             && active.closest("[data-message-thread-composer]"));
     }
 
-    function playMessageNotificationSound() {
-        if (!state.soundEnabled || isMessageComposerFocused()) {
+    function playToastSound(soundKind, shouldSuppress) {
+        if (!state.soundEnabled || shouldSuppress) {
             return;
         }
 
         var now = Date.now();
-        if (now - state.lastMessageSoundAt < 1500) {
+        var lastSoundAt = soundKind === "message"
+            ? state.lastMessageSoundAt
+            : state.lastNotificationSoundAt;
+        if (now - lastSoundAt < 1500) {
             return;
         }
 
@@ -75,16 +79,22 @@
             return;
         }
 
-        state.lastMessageSoundAt = now;
+        if (soundKind === "message") {
+            state.lastMessageSoundAt = now;
+        } else {
+            state.lastNotificationSoundAt = now;
+        }
 
         var play = function () {
             var start = context.currentTime;
             var oscillator = context.createOscillator();
             var gain = context.createGain();
+            var startFrequency = soundKind === "message" ? 880 : 660;
+            var endFrequency = soundKind === "message" ? 660 : 880;
 
             oscillator.type = "sine";
-            oscillator.frequency.setValueAtTime(880, start);
-            oscillator.frequency.exponentialRampToValueAtTime(660, start + 0.16);
+            oscillator.frequency.setValueAtTime(startFrequency, start);
+            oscillator.frequency.exponentialRampToValueAtTime(endFrequency, start + 0.16);
 
             gain.gain.setValueAtTime(0.0001, start);
             gain.gain.exponentialRampToValueAtTime(0.045, start + 0.02);
@@ -103,13 +113,30 @@
 
         if (context.state === "suspended") {
             context.resume().then(play).catch(function () {
-                state.lastMessageSoundAt = 0;
+                if (soundKind === "message") {
+                    state.lastMessageSoundAt = 0;
+                } else {
+                    state.lastNotificationSoundAt = 0;
+                }
             });
             return;
         }
 
         play();
     }
+
+    function playNotificationSound() {
+        playToastSound("notification", false);
+    }
+
+    function playMessageNotificationSound() {
+        playToastSound("message", isMessageComposerFocused());
+    }
+
+    window.ompNotificationToastSound = {
+        playNotification: playNotificationSound,
+        playMessage: playMessageNotificationSound
+    };
 
     window.ompMessageNotificationSound = {
         play: playMessageNotificationSound
@@ -318,6 +345,8 @@
     function enqueueToast(toast, config) {
         if (toast && toast.isMessage) {
             playMessageNotificationSound();
+        } else if (toast) {
+            playNotificationSound();
         }
 
         if (!isPageActive()) {
