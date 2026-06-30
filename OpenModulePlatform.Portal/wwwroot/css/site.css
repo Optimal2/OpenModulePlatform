@@ -6147,6 +6147,28 @@ body.dashboard-widget-picker-open {
     font-size: 0.72rem;
 }
 
+.host-resources-latest th a.sortable {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.host-resources-latest th a.sortable:hover {
+    text-decoration: underline;
+}
+
+.host-resources-latest th a.sortable span {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.host-resources-latest th a.sort-asc span,
+.host-resources-latest th a.sort-desc span {
+    color: var(--text-primary);
+}
+
 @media (max-width: 720px) {
     .workflow-step {
         grid-template-columns: 1fr;
