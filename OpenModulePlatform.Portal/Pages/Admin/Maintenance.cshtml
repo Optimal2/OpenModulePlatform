@@ -274,22 +274,24 @@
 </section>
 
 <section id="@PreviewSectionId" class="section-navigator-target top-gap" aria-label="@L["Artifact cleanup preview"]">
-    <div class="portal-admin-metrics">
-        <div class="metric-card">
-            <span class="metric">@Model.Preview.AffectedArtifactIdentityCount</span>
-            <span class="metric-card__label">@L["Affected artifact identities"]</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric">@Model.Preview.CandidateCount</span>
-            <span class="metric-card__label">@L["Old version candidates"]</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric">@Model.Preview.DeletableCandidateCount</span>
-            <span class="metric-card__label">@L["Can be deleted"]</span>
-        </div>
-        <div class="metric-card">
-            <span class="metric">@Model.Preview.ProtectedCandidateCount</span>
-            <span class="metric-card__label">@L["Protected by references"]</span>
+    <div class="card maintenance-preview-summary" aria-label="@L["Artifact cleanup preview"]">
+        <div class="card-grid portal-admin-metrics">
+            <div class="metric-card maintenance-preview-summary__metric">
+                <span class="metric">@Model.Preview.AffectedArtifactIdentityCount</span>
+                <span class="metric-card__label">@L["Affected artifact identities"]</span>
+            </div>
+            <div class="metric-card maintenance-preview-summary__metric">
+                <span class="metric">@Model.Preview.CandidateCount</span>
+                <span class="metric-card__label">@L["Old version candidates"]</span>
+            </div>
+            <div class="metric-card maintenance-preview-summary__metric">
+                <span class="metric">@Model.Preview.DeletableCandidateCount</span>
+                <span class="metric-card__label">@L["Can be deleted"]</span>
+            </div>
+            <div class="metric-card maintenance-preview-summary__metric">
+                <span class="metric">@Model.Preview.ProtectedCandidateCount</span>
+                <span class="metric-card__label">@L["Protected by references"]</span>
+            </div>
         </div>
     </div>
 

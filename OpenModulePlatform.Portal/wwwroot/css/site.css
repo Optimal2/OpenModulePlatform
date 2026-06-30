@@ -772,6 +772,21 @@ a:hover {
     grid-template-columns: repeat(auto-fit, minmax(150px, 180px));
 }
 
+.maintenance-preview-summary {
+    padding: 16px;
+}
+
+.maintenance-preview-summary .portal-admin-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.maintenance-preview-summary__metric {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-muted);
+}
+
 .portal-overview-panel {
     padding: 0;
     overflow: hidden;
