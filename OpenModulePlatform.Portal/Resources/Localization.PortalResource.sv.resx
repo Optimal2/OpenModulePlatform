@@ -1577,6 +1577,12 @@
   <data name="Chart" xml:space="preserve"><value>Diagram</value></data>
   <data name="No chart" xml:space="preserve"><value>Inget diagram</value></data>
   <data name="Host last seen" xml:space="preserve"><value>Värd senast sedd</value></data>
+  <data name="Per-host summary" xml:space="preserve"><value>Sammanfattning per värd</value></data>
+  <data name="Total CPU and memory per host across all OMP runtime targets with telemetry." xml:space="preserve"><value>Total CPU och minne per värd för alla OMP-runtime-mål med telemetri.</value></data>
+  <data name="Total CPU" xml:space="preserve"><value>Total CPU</value></data>
+  <data name="Total memory" xml:space="preserve"><value>Totalt minne</value></data>
+  <data name="Components" xml:space="preserve"><value>Komponenter</value></data>
+  <data name="No telemetry for this host." xml:space="preserve"><value>Ingen telemetri för den här värden.</value></data>
   <data name="Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows." xml:space="preserve"><value>Instansmallar beskriver vad som ska finnas i en OMP-instans. Ändra önskade appar här och låt sedan HostAgent materialisera runtime-raderna.</value></data>
   <data name="This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances." xml:space="preserve"><value>Den här mallen är önskat läge för OMP-instanser som använder den. HostAgent materialiserar raderna till konkreta värdar, modulinstanser och appinstanser.</value></data>
   <data name="Template hosts" xml:space="preserve"><value>Mallvärdar</value></data>
