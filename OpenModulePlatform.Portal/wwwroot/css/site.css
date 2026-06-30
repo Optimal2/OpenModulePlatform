@@ -2904,13 +2904,25 @@ button {
 
 .dashboard-role-list__item {
     display: grid;
-    gap: 3px;
-    justify-items: start;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    grid-template-areas:
+        "name status"
+        "description status";
+    column-gap: 10px;
+    row-gap: 3px;
+    align-items: center;
+    justify-items: stretch;
+    width: 100%;
+    box-sizing: border-box;
     min-height: var(--dashboard-role-list-item-min-height);
     padding: var(--dashboard-role-list-item-padding-block) var(--dashboard-role-list-item-padding-inline);
     color: var(--text);
     text-decoration: none;
     text-align: left;
+}
+
+.dashboard-role-list__form {
+    margin: 0;
 }
 
 button.dashboard-role-list__item {
@@ -2934,22 +2946,32 @@ button.dashboard-role-list__item:focus-visible {
 .dashboard-role-list__name,
 .dashboard-role-list__description,
 .dashboard-role-list__active {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .dashboard-role-list__name {
+    grid-area: name;
+    justify-self: stretch;
     font-size: var(--dashboard-role-list-name-size);
     font-weight: 700;
+    text-align: left;
 }
 
 .dashboard-role-list__description {
+    grid-area: description;
+    justify-self: stretch;
     color: var(--text-muted);
     font-size: var(--dashboard-role-list-description-size);
+    text-align: left;
 }
 
 .dashboard-role-list__active {
+    grid-area: status;
+    align-self: center;
+    justify-self: end;
     color: #0b57d0;
     font-size: var(--dashboard-role-list-active-size);
     font-weight: 700;
