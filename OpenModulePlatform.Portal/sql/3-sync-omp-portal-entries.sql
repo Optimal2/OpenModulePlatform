@@ -15,7 +15,10 @@ GO
     SELECT N'app:' + LOWER(REPLACE(CONVERT(nvarchar(36), ai.AppInstanceId), N'-', N'')) + N':home' AS entry_key,
            ai.DisplayName AS display_name,
            ai.Description AS description,
-           N'app:' + LOWER(REPLACE(CONVERT(nvarchar(36), ai.AppInstanceId), N'-', N'')) + N':home' AS target_entry_key,
+           CASE
+               WHEN a.AppType = N'Portal' THEN CAST(NULL AS nvarchar(200))
+               ELSE N'app:' + LOWER(REPLACE(CONVERT(nvarchar(36), ai.AppInstanceId), N'-', N'')) + N':home'
+           END AS target_entry_key,
            ai.AppInstanceId AS source_app_instance_id,
            ai.SortOrder AS default_sort_order
     FROM omp.AppInstances ai
@@ -32,6 +35,7 @@ WHEN MATCHED THEN
                description = source.description,
                target_entry_key = source.target_entry_key,
                source_app_instance_id = source.source_app_instance_id,
+               is_enabled = 1,
                default_sort_order = source.default_sort_order,
                updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN
@@ -98,6 +102,7 @@ WHEN MATCHED THEN
                target_url = source.target_url,
                target_entry_key = NULL,
                source_app_instance_id = NULL,
+               is_enabled = 1,
                default_sort_order = source.default_sort_order,
                updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED BY TARGET THEN

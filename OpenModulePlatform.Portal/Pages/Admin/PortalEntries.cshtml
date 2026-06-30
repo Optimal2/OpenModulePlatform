@@ -24,15 +24,26 @@
         <div>
             <h3>@L["All modules"]</h3>
         </div>
-        <button type="button"
-                class="portal-entry-add-button admin-icon-button admin-icon-button--add"
-                data-portal-entry-create-toggle
-                aria-controls="portal-entry-create-row"
-                aria-expanded="@Model.OpenCreatePanel.ToString().ToLowerInvariant()"
-                title="@L["Add navigation entry"]"
-                aria-label="@L["Add navigation entry"]">
-            <span class="visually-hidden">@L["Add navigation entry"]</span>
-        </button>
+        <div class="toolbar">
+            <form method="post" asp-page-handler="ResetDefaults">
+                <button type="submit"
+                        class="admin-icon-button admin-icon-button--reset"
+                        onclick="return confirm('@L["Regenerate standard seeded navigation entries? Custom entries are kept."]');"
+                        title="@L["Reset default entries"]"
+                        aria-label="@L["Reset default entries"]">
+                    <span class="visually-hidden">@L["Reset default entries"]</span>
+                </button>
+            </form>
+            <button type="button"
+                    class="portal-entry-add-button admin-icon-button admin-icon-button--add"
+                    data-portal-entry-create-toggle
+                    aria-controls="portal-entry-create-row"
+                    aria-expanded="@Model.OpenCreatePanel.ToString().ToLowerInvariant()"
+                    title="@L["Add navigation entry"]"
+                    aria-label="@L["Add navigation entry"]">
+                <span class="visually-hidden">@L["Add navigation entry"]</span>
+            </button>
+        </div>
     </div>
 
     <form id="portalEntryLayoutForm" method="post" asp-page-handler="Layout"></form>
@@ -259,15 +270,28 @@
                                 aria-label="@L["Edit"]">
                             <span class="visually-hidden">@L["Edit"]</span>
                         </button>
-                        <form method="post" asp-page-handler="Delete" asp-route-portalEntryId="@row.PortalEntryId">
-                            <button type="submit"
+                        @if (row.CanDelete)
+                        {
+                            <form method="post" asp-page-handler="Delete" asp-route-portalEntryId="@row.PortalEntryId">
+                                <button type="submit"
+                                        class="btn-danger-subtle admin-icon-button admin-icon-button--delete"
+                                        data-confirm="@L["Remove this navigation entry?"]"
+                                        title="@L["Remove"]"
+                                        aria-label="@L["Remove"]">
+                                    <span class="visually-hidden">@L["Remove"]</span>
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <button type="button"
                                     class="btn-danger-subtle admin-icon-button admin-icon-button--delete"
-                                    data-confirm="@L["Remove this navigation entry?"]"
-                                    title="@L["Remove"]"
-                                    aria-label="@L["Remove"]">
-                                <span class="visually-hidden">@L["Remove"]</span>
+                                    disabled
+                                    title="@L["Seeded navigation entries cannot be deleted. Use visibility to hide them."]"
+                                    aria-label="@L["Seeded navigation entries cannot be deleted. Use visibility to hide them."]">
+                                <span class="visually-hidden">@L["Seeded navigation entries cannot be deleted. Use visibility to hide them."]</span>
                             </button>
-                        </form>
+                        }
                     </div>
 
                     <div class="portal-entry-inline-editor" id="@editorId" hidden="@(Model.OpenEditorPortalEntryId != row.PortalEntryId)">

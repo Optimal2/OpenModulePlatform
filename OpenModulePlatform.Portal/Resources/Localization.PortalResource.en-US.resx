@@ -452,6 +452,8 @@
   <data name="App entry" xml:space="preserve"><value>App entry</value></data>
   <data name="Custom link" xml:space="preserve"><value>Custom link</value></data>
   <data name="Remove this navigation entry?" xml:space="preserve"><value>Remove this navigation entry?</value></data>
+  <data name="Reset default entries" xml:space="preserve"><value>Reset default entries</value></data>
+  <data name="Regenerate standard seeded navigation entries? Custom entries are kept." xml:space="preserve"><value>Regenerate standard seeded navigation entries? Custom entries are kept.</value></data>
   <data name="Save All modules" xml:space="preserve"><value>Save All modules</value></data>
   <data name="All modules saved." xml:space="preserve"><value>All modules saved.</value></data>
   <data name="Add custom link" xml:space="preserve"><value>Add custom link</value></data>
@@ -460,6 +462,8 @@
   <data name="Custom link created." xml:space="preserve"><value>Custom link created.</value></data>
   <data name="Navigation entry removed." xml:space="preserve"><value>Navigation entry removed.</value></data>
   <data name="Navigation entry was not found." xml:space="preserve"><value>Navigation entry was not found.</value></data>
+  <data name="Seeded navigation entries cannot be deleted. Use visibility to hide them." xml:space="preserve"><value>Seeded navigation entries cannot be deleted. Use visibility to hide them.</value></data>
+  <data name="Default navigation entries regenerated." xml:space="preserve"><value>Default navigation entries regenerated.</value></data>
   <data name="Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections." xml:space="preserve"><value>Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections.</value></data>
   <data name="Open dashboard widget settings" xml:space="preserve"><value>Open dashboard widget settings</value></data>
   <data name="Admins control which entries can be selected as favorites by enabling or disabling them in All modules." xml:space="preserve"><value>Admins control which entries can be selected as favorites by enabling or disabling them in All modules.</value></data>

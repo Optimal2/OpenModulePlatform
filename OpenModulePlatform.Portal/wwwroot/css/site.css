@@ -5217,6 +5217,11 @@ body.dashboard-widget-picker-open {
     display: inline-flex;
 }
 
+.portal-entry-layout-admin .section-header .toolbar form {
+    display: inline-flex;
+    margin: 0;
+}
+
 .portal-entry-create-panel > summary {
     cursor: pointer;
     font-weight: 700;
@@ -5680,6 +5685,10 @@ body.dashboard-widget-picker-open {
 
 .admin-icon-button--add {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/add.svg");
+}
+
+.admin-icon-button--reset {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
 }
 
 .admin-icon-button--arrow-up {

@@ -203,6 +203,8 @@ public sealed class PortalEntryAdminRow
     public bool IsEnabled { get; set; }
 
     public int DefaultSortOrder { get; set; }
+
+    public bool CanDelete => EntryKey.StartsWith("custom:", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -267,6 +269,13 @@ public sealed class PortalEntryLayoutUpdate
     public bool IsEnabled { get; set; }
 
     public int SortOrder { get; set; }
+}
+
+public enum PortalEntryDeleteResult
+{
+    Deleted,
+    NotFound,
+    NotAllowed
 }
 
 /// <summary>
