@@ -2101,6 +2101,7 @@
   <data name="Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Välj en värd eller värdroll för runtime-appar. Lämna båda tomma bara för värdneutrala webbappar bakom en lastbalanserare.</value></data>
   <data name="Packages" xml:space="preserve"><value>Paket</value></data>
   <data name="Operations" xml:space="preserve"><value>Drift</value></data>
+  <data name="Resource monitor" xml:space="preserve"><value>Resursmonitor</value></data>
   <data name="Installation workflow" xml:space="preserve"><value>Installationsflöde</value></data>
   <data name="Object tools" xml:space="preserve"><value>Objektverktyg</value></data>
   <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Packages for portable objects, and Operations for HostAgent troubleshooting." xml:space="preserve"><value>Adminytan är organiserad runt en OMP-installation. Använd Installation för önskad topologi, Paket för portabla objekt och Drift för HostAgent-felsökning.</value></data>

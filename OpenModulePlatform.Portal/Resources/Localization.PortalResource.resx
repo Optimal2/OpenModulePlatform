@@ -1986,6 +1986,7 @@
   <data name="Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer." xml:space="preserve"><value>Choose a host or host role for runtime apps. Leave both empty only for host-neutral web apps behind a load balancer.</value></data>
   <data name="Packages" xml:space="preserve"><value>Packages</value></data>
   <data name="Operations" xml:space="preserve"><value>Operations</value></data>
+  <data name="Resource monitor" xml:space="preserve"><value>Resource monitor</value></data>
   <data name="Installation workflow" xml:space="preserve"><value>Installation workflow</value></data>
   <data name="Object tools" xml:space="preserve"><value>Object tools</value></data>
   <data name="The admin area is organized around one OMP installation. Use Installation for desired topology, Packages for portable objects, and Operations for HostAgent troubleshooting." xml:space="preserve"><value>The admin area is organized around one OMP installation. Use Installation for desired topology, Packages for portable objects, and Operations for HostAgent troubleshooting.</value></data>
