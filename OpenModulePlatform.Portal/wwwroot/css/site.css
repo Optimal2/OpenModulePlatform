@@ -196,6 +196,7 @@
 }
 
 .portal-message-thread-layout {
+    /* Keep vh before dvh as a fallback for browsers without dynamic viewport unit support. */
     --portal-message-thread-height: min(820px, calc(100vh - var(--app-header-height, 0px) - 60px));
     --portal-message-thread-height: min(820px, calc(100dvh - var(--app-header-height, 0px) - 60px));
     --portal-message-thread-max-height: calc(100vh - var(--app-header-height, 0px) - 60px);
@@ -509,6 +510,7 @@
     }
 
     .portal-message-thread {
+        /* Keep vh before dvh as a fallback for browsers without dynamic viewport unit support. */
         min-height: min(720px, calc(100vh - 120px));
         min-height: min(720px, calc(100dvh - 120px));
         max-height: calc(100vh - 120px);

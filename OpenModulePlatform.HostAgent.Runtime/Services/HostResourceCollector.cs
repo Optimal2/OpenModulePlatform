@@ -292,7 +292,7 @@ public sealed partial class HostResourceCollector
                 // Process or app pool data disappeared between enumeration and target creation.
             }
 
-            if (targets.Count * 2 >= settings.MaxSamplesPerCycle)
+            if (HasReachedTargetSampleCapacity(targets.Count, settings.MaxSamplesPerCycle))
             {
                 _logger.LogWarning(
                     "Host resource telemetry target limit reached while collecting IIS app pools. Limit={Limit}",
@@ -434,7 +434,11 @@ public sealed partial class HostResourceCollector
 
         try
         {
-            Task.Delay(TimeSpan.FromSeconds(settings.SampleWindowSeconds), cancellationToken).GetAwaiter().GetResult();
+            if (cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(settings.SampleWindowSeconds)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -452,6 +456,7 @@ public sealed partial class HostResourceCollector
             return;
         }
 
+        var processorCount = Math.Max(1, Environment.ProcessorCount);
         foreach (var target in targets)
         {
             if (!startSnapshots.TryGetValue(target.ProcessId, out var start)
@@ -461,7 +466,7 @@ public sealed partial class HostResourceCollector
             }
 
             var cpuSeconds = (end.TotalProcessorTime - start.TotalProcessorTime).TotalSeconds;
-            var cpuPercent = cpuSeconds / (elapsed * Environment.ProcessorCount) * 100.0;
+            var cpuPercent = cpuSeconds / (elapsed * processorCount) * 100.0;
             cpuPercent = Math.Clamp(cpuPercent, 0, 100);
             var memoryMb = end.WorkingSetBytes / (1024.0 * 1024.0);
 
@@ -531,11 +536,82 @@ public sealed partial class HostResourceCollector
             return false;
         }
 
-        var normalizedRoot = Path.GetFullPath(servicesRoot.Trim())
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
+        return TryResolveContainedServicePath(pathName, servicesRoot, out _);
+    }
 
-        return pathName.Contains(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+    private static bool HasReachedTargetSampleCapacity(int targetCount, int maxSamplesPerCycle)
+    {
+        if (targetCount <= 0)
+        {
+            return false;
+        }
+
+        var maxTargets = Math.Max(1, (maxSamplesPerCycle / 2) + (maxSamplesPerCycle % 2));
+        return targetCount >= maxTargets;
+    }
+
+    private static bool TryResolveContainedServicePath(string pathName, string servicesRoot, out string executablePath)
+    {
+        executablePath = string.Empty;
+        if (!TryExtractServiceExecutablePath(pathName, out var candidatePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var normalizedRoot = Path.GetFullPath(servicesRoot.Trim())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            var normalizedPath = Path.GetFullPath(candidatePath);
+
+            if (!normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            executablePath = normalizedPath;
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryExtractServiceExecutablePath(string pathName, out string executablePath)
+    {
+        executablePath = string.Empty;
+        var trimmed = pathName.Trim();
+        if (trimmed.Length == 0)
+        {
+            return false;
+        }
+
+        if (trimmed[0] == '"')
+        {
+            var closingQuoteIndex = trimmed.IndexOf('"', 1);
+            if (closingQuoteIndex <= 1)
+            {
+                return false;
+            }
+
+            executablePath = trimmed[1..closingQuoteIndex];
+            return !string.IsNullOrWhiteSpace(executablePath);
+        }
+
+        var exeIndex = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        if (exeIndex >= 0)
+        {
+            executablePath = trimmed[..(exeIndex + 4)];
+            return !string.IsNullOrWhiteSpace(executablePath);
+        }
+
+        var firstSpaceIndex = trimmed.IndexOf(' ');
+        executablePath = firstSpaceIndex > 0
+            ? trimmed[..firstSpaceIndex]
+            : trimmed;
+        return !string.IsNullOrWhiteSpace(executablePath);
     }
 
     private static (int ProcessId, string? AppPoolName) ParseAppCmdListWpLine(string line)
