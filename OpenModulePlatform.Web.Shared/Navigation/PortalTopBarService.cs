@@ -1418,7 +1418,8 @@ END";
         TopBarPortalEntryRow row,
         IReadOnlyDictionary<Guid, TopBarAppEntry> accessibleApps)
     {
-        if (row.SourceAppInstanceId is Guid sourceAppInstanceId
+        if (!string.IsNullOrWhiteSpace(row.TargetEntryKey)
+            && row.SourceAppInstanceId is Guid sourceAppInstanceId
             && accessibleApps.TryGetValue(sourceAppInstanceId, out var sourceApp))
         {
             return ResolveHref(request, sourceApp);
@@ -1438,7 +1439,8 @@ END";
         TopBarPortalEntryRow row,
         IReadOnlyDictionary<Guid, TopBarAppEntry> accessibleApps)
     {
-        if (row.SourceAppInstanceId is Guid sourceAppInstanceId
+        if (!string.IsNullOrWhiteSpace(row.TargetEntryKey)
+            && row.SourceAppInstanceId is Guid sourceAppInstanceId
             && accessibleApps.TryGetValue(sourceAppInstanceId, out var sourceApp))
         {
             return ResolveHref(currentUri, sourceApp);
