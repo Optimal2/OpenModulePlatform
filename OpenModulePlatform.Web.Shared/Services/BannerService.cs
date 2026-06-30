@@ -493,6 +493,8 @@ ORDER BY rp.RoleId;";
                 await _pushEventPublisher.PublishAsync(pushEvent, ct);
             }
         }
+        // Banner writes have already committed at this point; push publication is
+        // opportunistic and clients can recover through the normal refresh path.
         catch (Exception ex)
         {
             _logger.LogWarning(

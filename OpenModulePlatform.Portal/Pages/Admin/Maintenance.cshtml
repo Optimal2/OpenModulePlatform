@@ -81,7 +81,7 @@
                 <button type="submit"
                         asp-page-handler="CleanupMaintenanceFindings"
                         class="btn btn-danger"
-                        onclick="return confirm('@L["Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything."]');">
+                        data-confirm-message="@L["Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything."]">
                     @L["Queue cleanup"]
                 </button>
                 <button type="submit"
@@ -194,7 +194,7 @@
             <button type="submit"
                     asp-page-handler="CleanupArtifacts"
                     class="btn btn-danger"
-                    onclick="return confirm('@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]');">
+                    data-confirm-message="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]">
                 @L["Queue artifact cleanup"]
             </button>
         </div>
@@ -381,5 +381,16 @@ else
             box.checked = selector.checked;
         }
     });
+})();
+
+(() => {
+    for (const button of document.querySelectorAll('button[data-confirm-message]')) {
+        button.addEventListener('click', (event) => {
+            const message = button.getAttribute('data-confirm-message');
+            if (message && !window.confirm(message)) {
+                event.preventDefault();
+            }
+        });
+    }
 })();
 </script>
