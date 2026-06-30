@@ -15,6 +15,7 @@ public sealed partial class HostResourceCollector
     private const string IisAppPoolMemoryKeyPrefix = "iis.apppool.memory.";
     private const string ServiceCpuKeyPrefix = "service.";
     private const string ServiceMemoryKeyPrefix = "service.memory.";
+    private const string ServiceStateKeyPrefix = "service.state.";
 
     private sealed record ProcessTelemetryTarget(
         int ProcessId,
@@ -174,7 +175,7 @@ public sealed partial class HostResourceCollector
 
         if (settings.CollectServiceProcesses)
         {
-            CollectServiceProcessTargets(settings, targets, cancellationToken);
+            CollectServiceProcessTargets(settings, targets, samples, cancellationToken);
         }
 
         CollectProcessTargetSamples(settings, targets, samples, cancellationToken);
@@ -302,12 +303,16 @@ public sealed partial class HostResourceCollector
     }
 
     [SupportedOSPlatform("windows")]
-    private void CollectServiceProcessTargets(HostResourceTelemetrySettings settings, List<ProcessTelemetryTarget> targets, CancellationToken cancellationToken)
+    private void CollectServiceProcessTargets(
+        HostResourceTelemetrySettings settings,
+        List<ProcessTelemetryTarget> targets,
+        List<HostResourceSample> samples,
+        CancellationToken cancellationToken)
     {
         try
         {
             using var searcher = new ManagementObjectSearcher(
-                "SELECT Name, ProcessId, PathName, State FROM Win32_Service WHERE State = 'Running'");
+                "SELECT Name, ProcessId, PathName, State FROM Win32_Service");
 
             foreach (ManagementObject service in searcher.Get())
             {
@@ -317,23 +322,55 @@ public sealed partial class HostResourceCollector
                 {
                     var serviceName = service["Name"]?.ToString() ?? string.Empty;
                     var pathName = service["PathName"]?.ToString() ?? string.Empty;
+                    var state = service["State"]?.ToString() ?? string.Empty;
                     var processIdValue = service["ProcessId"];
                     var processId = processIdValue is null
                         ? 0
                         : Convert.ToInt32(processIdValue, CultureInfo.InvariantCulture);
 
-                    if (processId <= 0
-                        || string.IsNullOrWhiteSpace(serviceName)
+                    if (string.IsNullOrWhiteSpace(serviceName)
                         || !IsServiceTelemetryTarget(serviceName, pathName, _settings.CurrentValue.ServicesRoot))
                     {
                         continue;
                     }
 
                     var normalizedServiceName = NormalizeKeySegment(serviceName);
-                    targets.Add(new ProcessTelemetryTarget(
-                        processId,
-                        $"{ServiceCpuKeyPrefix}{normalizedServiceName}",
-                        $"{ServiceMemoryKeyPrefix}{normalizedServiceName}"));
+                    var isRunning = string.Equals(state, "Running", StringComparison.OrdinalIgnoreCase);
+                    var sampledUtc = DateTime.UtcNow;
+
+                    // State sample: 1 = running, 0 = stopped (or any non-running state).
+                    // This lets the Portal distinguish stopped services from idle-but-running ones.
+                    samples.Add(new HostResourceSample
+                    {
+                        SampleKey = $"{ServiceStateKeyPrefix}{normalizedServiceName}",
+                        SampleValue = isRunning ? 1 : 0,
+                        SampledUtc = sampledUtc
+                    });
+
+                    if (isRunning && processId > 0)
+                    {
+                        targets.Add(new ProcessTelemetryTarget(
+                            processId,
+                            $"{ServiceCpuKeyPrefix}{normalizedServiceName}",
+                            $"{ServiceMemoryKeyPrefix}{normalizedServiceName}"));
+                    }
+                    else
+                    {
+                        // Stopped OMP-owned services are still represented with 0 CPU and 0 RAM
+                        // so the resource monitor does not hide them.
+                        samples.Add(new HostResourceSample
+                        {
+                            SampleKey = $"{ServiceCpuKeyPrefix}{normalizedServiceName}",
+                            SampleValue = 0,
+                            SampledUtc = sampledUtc
+                        });
+                        samples.Add(new HostResourceSample
+                        {
+                            SampleKey = $"{ServiceMemoryKeyPrefix}{normalizedServiceName}",
+                            SampleValue = 0,
+                            SampledUtc = sampledUtc
+                        });
+                    }
                 }
                 catch (ArgumentException)
                 {
@@ -354,10 +391,10 @@ public sealed partial class HostResourceCollector
                     service.Dispose();
                 }
 
-                if (targets.Count * 2 >= settings.MaxSamplesPerCycle)
+                if (samples.Count >= settings.MaxSamplesPerCycle)
                 {
                     _logger.LogWarning(
-                        "Host resource telemetry target limit reached while collecting service processes. Limit={Limit}",
+                        "Host resource telemetry sample limit reached while collecting service processes. Limit={Limit}",
                         settings.MaxSamplesPerCycle);
                     break;
                 }
