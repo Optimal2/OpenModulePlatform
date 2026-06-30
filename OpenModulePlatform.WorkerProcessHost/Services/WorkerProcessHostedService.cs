@@ -203,10 +203,6 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 _applicationLifetime.StopApplication();
                 return;
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
             catch (InvalidOperationException ex)
             {
                 LogMemoryGuardSamplingFailure(ex);
