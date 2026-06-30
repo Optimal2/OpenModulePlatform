@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_workerapp",
-  "definitionVersion": "0.3.12",
+  "definitionVersion": "0.3.13",
   "module": {
     "displayName": "Example WorkerApp",
     "moduleType": "HostAppModule",

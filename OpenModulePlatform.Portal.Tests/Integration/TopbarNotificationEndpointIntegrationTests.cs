@@ -25,11 +25,13 @@ public sealed class TopbarNotificationEndpointIntegrationTests : IClassFixture<P
             "X-Test-User-Id",
             PushEventPipelineTestFixture.TestUserId.ToString(CultureInfo.InvariantCulture));
 
+        using var form = new FormUrlEncodedContent([
+            new KeyValuePair<string, string>("returnUrl", "/notifications?filter=unread")
+        ]);
+
         using var response = await client.PostAsync(
             "/notifications/mark-all-read",
-            new FormUrlEncodedContent([
-                new KeyValuePair<string, string>("returnUrl", "/notifications?filter=unread")
-            ]));
+            form);
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal("/notifications?filter=unread", response.Headers.Location?.OriginalString);
@@ -43,11 +45,13 @@ public sealed class TopbarNotificationEndpointIntegrationTests : IClassFixture<P
             AllowAutoRedirect = false
         });
 
+        using var form = new FormUrlEncodedContent([
+            new KeyValuePair<string, string>("returnUrl", "/notifications")
+        ]);
+
         using var request = new HttpRequestMessage(HttpMethod.Post, "/notifications/mark-all-read")
         {
-            Content = new FormUrlEncodedContent([
-                new KeyValuePair<string, string>("returnUrl", "/notifications")
-            ])
+            Content = form
         };
         request.Headers.Add(
             "X-Test-User-Id",

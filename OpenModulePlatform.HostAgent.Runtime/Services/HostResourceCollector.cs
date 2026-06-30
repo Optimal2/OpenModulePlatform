@@ -109,6 +109,8 @@ public sealed partial class HostResourceCollector
                 hostId,
                 timeout.TotalSeconds);
         }
+        // Resource telemetry is best-effort operational data. A collector failure
+        // should be logged without stopping the HostAgent desired-state loop.
         catch (Exception ex)
         {
             _logger.LogError(
@@ -146,6 +148,8 @@ public sealed partial class HostResourceCollector
                 deleted,
                 settings.RetainHours);
         }
+        // Pruning is maintenance cleanup; keep collection alive and retry on the
+        // next prune interval if the repository or database is temporarily unavailable.
         catch (Exception ex)
         {
             _logger.LogError(
