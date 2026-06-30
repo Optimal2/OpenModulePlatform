@@ -27,6 +27,7 @@ public sealed class PortalTopBarService
     private const byte IntValueKind = 1;
     private const string AppEntryPrefix = "app:";
     private const string AppEntrySuffix = ":home";
+    private const string ViewPermissionSuffix = ".View";
     public const string ToggleFavoritePath = "/navigation/favorites/toggle";
     public const string SummaryPath = PortalTopBarModel.DefaultTopBarSummaryPath;
 
@@ -193,15 +194,15 @@ public sealed class PortalTopBarService
                 GetLogoutUrl(),
                 GetLoginUrl());
         }
-        catch (SqlException ex)
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
-        }
-        catch (InvalidOperationException ex)
-        {
-            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
+            return CreateFallbackModelAfterTopBarFailure(
+                ex,
+                topBarOptions,
+                portalLink,
+                cultureSelection,
+                user,
+                options);
         }
     }
 
@@ -211,19 +212,11 @@ public sealed class PortalTopBarService
         IReadOnlySet<string> permissions,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(returnUrl)
-            || !Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+        if (!TryNormalizeRelativeReturnPath(returnUrl, out var normalizedPath))
         {
             return false;
         }
 
-        var path = ExtractPath(returnUrl);
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return false;
-        }
-
-        var normalizedPath = NormalizeAbsolutePath(path);
         if (string.Equals(normalizedPath, "/", StringComparison.OrdinalIgnoreCase))
         {
             return true;
@@ -253,13 +246,7 @@ public sealed class PortalTopBarService
             return HasInferredAdminAccess(app, permissions);
         }
 
-        if (IsPortalRootPath(normalizedPath, portalBasePath))
-        {
-            return true;
-        }
-
-        return !string.Equals(portalBasePath, "/", StringComparison.OrdinalIgnoreCase)
-            && IsPathMatch(normalizedPath, portalBasePath);
+        return IsPortalRelativePath(normalizedPath, portalBasePath);
     }
 
     public async Task<PortalFavoriteToggleResult> ToggleFavoriteAsync(
@@ -421,16 +408,30 @@ public sealed class PortalTopBarService
                 GetLogoutUrl(),
                 GetLoginUrl());
         }
-        catch (SqlException ex)
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
+            return CreateFallbackModelAfterTopBarFailure(
+                ex,
+                topBarOptions,
+                portalLink,
+                cultureSelection,
+                user,
+                options);
         }
-        catch (InvalidOperationException ex)
-        {
-            _log.LogWarning(ex, "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-            return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
-        }
+    }
+
+    private PortalTopBarModel CreateFallbackModelAfterTopBarFailure(
+        Exception ex,
+        PortalTopBarOptions topBarOptions,
+        PortalTopBarLink portalLink,
+        CultureSelectionResult cultureSelection,
+        ClaimsPrincipal user,
+        WebAppOptions options)
+    {
+        _log.LogWarning(
+            ex,
+            "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
+        return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
     }
 
     private static async Task<ClaimsPrincipal> ResolveRequestUserAsync(HttpContext context)
@@ -856,9 +857,7 @@ public sealed class PortalTopBarService
                 || HasInferredAdminAccess(app, permissions);
         }
 
-        return IsPortalRootPath(normalizedPath, portalBasePath)
-            || !string.Equals(portalBasePath, "/", StringComparison.OrdinalIgnoreCase)
-            && IsPathMatch(normalizedPath, portalBasePath);
+        return IsPortalRelativePath(normalizedPath, portalBasePath);
     }
 
     private static Guid? GetPortalEntryAppInstanceId(TopBarPortalEntryRow row)
@@ -1100,9 +1099,9 @@ WHERE user_id = @user_id
     {
         var candidatePermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var permission in app.RequiredPermissions.Where(permission => permission.EndsWith(".View", StringComparison.OrdinalIgnoreCase)))
+        foreach (var permission in app.RequiredPermissions.Where(permission => permission.EndsWith(ViewPermissionSuffix, StringComparison.OrdinalIgnoreCase)))
         {
-            candidatePermissions.Add($"{permission[..^5]}.Admin");
+            candidatePermissions.Add($"{permission[..^ViewPermissionSuffix.Length]}.Admin");
         }
 
         if (!string.IsNullOrWhiteSpace(app.AppKey))
@@ -1146,6 +1145,11 @@ WHERE user_id = @user_id
 
     private static bool IsPortalAdminPath(string normalizedPath, string portalBasePath)
         => IsPathMatch(normalizedPath, CombineRelativePath(portalBasePath, "admin"));
+
+    private static bool IsPortalRelativePath(string normalizedPath, string portalBasePath)
+        => IsPortalRootPath(normalizedPath, portalBasePath)
+            || !string.Equals(portalBasePath, "/", StringComparison.OrdinalIgnoreCase)
+            && IsPathMatch(normalizedPath, portalBasePath);
 
     private static bool IsPathMatch(string normalizedPath, string normalizedPrefix)
     {
@@ -1206,6 +1210,25 @@ WHERE user_id = @user_id
         return queryIndex >= 0
             ? returnUrl[..queryIndex]
             : returnUrl;
+    }
+
+    private static bool TryNormalizeRelativeReturnPath(string? returnUrl, out string normalizedPath)
+    {
+        normalizedPath = "/";
+        if (string.IsNullOrWhiteSpace(returnUrl)
+            || !Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
+        {
+            return false;
+        }
+
+        var path = ExtractPath(returnUrl);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        normalizedPath = NormalizeAbsolutePath(path);
+        return true;
     }
 
     private static string ToCultureDisplayText(string culture)

@@ -847,6 +847,8 @@ WHERE cp.user_id = @user_id
         {
             await _pushEventPublisher.PublishAsync(pushEvent, ct);
         }
+        // Message state changes are committed before this point. Push is best-effort
+        // notification fan-out and must not roll back or fail the user action.
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Failed to publish OMP message push event {Category}.", pushEvent.Category);

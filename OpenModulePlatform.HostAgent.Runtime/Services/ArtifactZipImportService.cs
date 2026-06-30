@@ -669,6 +669,8 @@ public sealed class ArtifactZipImportService
                         }
                     }
 
+                    // These flags drive the import status and message below; keep
+                    // them separate from the content/config file counters.
                     var completedMissingMetadata = false;
                     if (existingMetadataHashMissing)
                     {

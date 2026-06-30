@@ -151,15 +151,10 @@ MissingProgrammableObjects(ObjectName) AS
     WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL
 )
 SELECT @Missing = @Missing + COUNT(1),
-       @MissingProgrammableObjects =
-           COALESCE(STRING_AGG(CONVERT(nvarchar(max), ObjectName), N', '), N'')
+       @MissingProgrammableObjects = STRING_AGG(CONVERT(nvarchar(max), ObjectName), N', ')
 FROM MissingProgrammableObjects;
 
-SELECT @MissingProgrammableObjects =
-    CASE
-        WHEN @MissingProgrammableObjects IS NULL THEN N''
-        ELSE @MissingProgrammableObjects
-    END;
+SET @MissingProgrammableObjects = ISNULL(@MissingProgrammableObjects, N'');
 
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL

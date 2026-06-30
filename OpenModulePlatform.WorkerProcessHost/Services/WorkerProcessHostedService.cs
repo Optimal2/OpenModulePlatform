@@ -189,6 +189,8 @@ public sealed class WorkerProcessHostedService : BackgroundService
             {
                 throw;
             }
+            // The guard must never crash the worker host. Sampling failures are
+            // logged and the next interval gets another chance to enforce limits.
             catch (Exception ex)
             {
                 _logger.LogWarning(
