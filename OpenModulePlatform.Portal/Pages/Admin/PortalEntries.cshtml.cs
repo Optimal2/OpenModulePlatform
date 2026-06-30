@@ -212,10 +212,26 @@ public sealed class PortalEntriesModel : OmpPortalPageModel
             return guard;
         }
 
-        var deleted = await _portalEntries.DeleteAsync(portalEntryId, ct);
-        StatusMessage = deleted
-            ? T("Navigation entry removed.")
-            : T("Navigation entry was not found.");
+        var result = await _portalEntries.DeleteAsync(portalEntryId, ct);
+        StatusMessage = result switch
+        {
+            PortalEntryDeleteResult.Deleted => T("Navigation entry removed."),
+            PortalEntryDeleteResult.NotAllowed => T("Seeded navigation entries cannot be deleted. Use visibility to hide them."),
+            _ => T("Navigation entry was not found.")
+        };
+        return RedirectToPage("/Admin/PortalEntries");
+    }
+
+    public async Task<IActionResult> OnPostResetDefaults(CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        await _portalEntries.ResetDefaultEntriesAsync(ct);
+        StatusMessage = T("Default navigation entries regenerated.");
         return RedirectToPage("/Admin/PortalEntries");
     }
 

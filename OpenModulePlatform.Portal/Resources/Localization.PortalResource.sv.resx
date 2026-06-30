@@ -2140,6 +2140,8 @@
   <data name="App entry" xml:space="preserve"><value>Apppost</value></data>
   <data name="Custom link" xml:space="preserve"><value>Egen länk</value></data>
   <data name="Remove this navigation entry?" xml:space="preserve"><value>Ta bort den här navigeringsposten?</value></data>
+  <data name="Reset default entries" xml:space="preserve"><value>Återställ standardposter</value></data>
+  <data name="Regenerate standard seeded navigation entries? Custom entries are kept." xml:space="preserve"><value>Återskapa standardposter för navigering? Egna poster behålls.</value></data>
   <data name="Save All modules" xml:space="preserve"><value>Spara Alla moduler</value></data>
   <data name="All modules saved." xml:space="preserve"><value>Alla moduler har sparats.</value></data>
   <data name="Add custom link" xml:space="preserve"><value>Lägg till egen länk</value></data>
@@ -2148,6 +2150,8 @@
   <data name="Custom link created." xml:space="preserve"><value>Den egna länken har skapats.</value></data>
   <data name="Navigation entry removed." xml:space="preserve"><value>Navigeringsposten har tagits bort.</value></data>
   <data name="Navigation entry was not found." xml:space="preserve"><value>Navigeringsposten hittades inte.</value></data>
+  <data name="Seeded navigation entries cannot be deleted. Use visibility to hide them." xml:space="preserve"><value>Seedade navigeringsposter kan inte tas bort. Använd synlighet för att dölja dem.</value></data>
+  <data name="Default navigation entries regenerated." xml:space="preserve"><value>Standardposter för navigering har återskapats.</value></data>
   <data name="Favorites are personal shortcuts selected by each user from All modules. The Favorites topbar menu and favorite dashboard widgets use the same saved selections." xml:space="preserve"><value>Favoriter är personliga genvägar som varje användare väljer från Alla moduler. Favoritmenyn i toppmenyn och favoritwidgetar använder samma sparade val.</value></data>
   <data name="Open dashboard widget settings" xml:space="preserve"><value>Öppna inställningar för dashboard-widgetar</value></data>
   <data name="Admins control which entries can be selected as favorites by enabling or disabling them in All modules." xml:space="preserve"><value>Administratörer styr vilka poster som kan väljas som favoriter genom att aktivera eller inaktivera dem i Alla moduler.</value></data>
