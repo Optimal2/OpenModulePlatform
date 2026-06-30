@@ -26,6 +26,8 @@ public sealed class HostResourcesModel : OmpPortalPageModel
 
     public IReadOnlyList<HostResourceLatestGroupRow> Groups { get; private set; } = [];
 
+    public IReadOnlyList<HostResourceHostSummary> HostSummaries { get; private set; } = [];
+
     public TimeSpan StaleThreshold { get; private set; } = TimeSpan.FromMinutes(5);
 
     public int TotalHosts { get; private set; }
@@ -43,9 +45,10 @@ public sealed class HostResourcesModel : OmpPortalPageModel
         SetTitles("Host resources");
         var rows = await _repo.GetHostResourceLatestForAllHostsAsync(ct);
         Groups = BuildGroups(rows);
-        TotalHosts = Groups.Select(static g => g.HostId).Distinct().Count();
-        HostsWithData = Groups.Count(static g => g.HasData);
-        StaleCount = Groups.Count(g => g.HasData && IsStale(g.LastSampledUtc));
+        HostSummaries = BuildHostSummaries(Groups);
+        TotalHosts = HostSummaries.Count;
+        HostsWithData = HostSummaries.Count(static s => s.HasData);
+        StaleCount = HostSummaries.Count(s => s.HasData && IsStale(s.LastSampledUtc));
         return Page();
     }
 
@@ -140,6 +143,39 @@ public sealed class HostResourcesModel : OmpPortalPageModel
             .ToList();
     }
 
+    private static IReadOnlyList<HostResourceHostSummary> BuildHostSummaries(IReadOnlyList<HostResourceLatestGroupRow> groups)
+    {
+        return groups
+            .GroupBy(g => g.HostId)
+            .Select(hostGroups =>
+            {
+                var representative = hostGroups.First();
+                var components = hostGroups.Where(static g => g.HasData).ToList();
+                DateTime? lastSampledUtc = null;
+                if (components.Count > 0)
+                {
+                    lastSampledUtc = components
+                        .Where(static g => g.LastSampledUtc.HasValue)
+                        .Max(static g => g.LastSampledUtc!.Value);
+                }
+
+                return new HostResourceHostSummary
+                {
+                    HostId = hostGroups.Key,
+                    HostKey = representative.HostKey,
+                    HostDisplayName = representative.HostDisplayName,
+                    HostLastSeenUtc = representative.HostLastSeenUtc,
+                    TotalCpu = components.Sum(static g => g.CpuValue ?? 0),
+                    TotalMemory = components.Sum(static g => g.MemoryValue ?? 0),
+                    ComponentCount = components.Count,
+                    LastSampledUtc = lastSampledUtc,
+                    HasData = components.Count > 0
+                };
+            })
+            .OrderBy(s => s.HostKey, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     private static (string RuntimeKind, string RuntimeName, bool IsMemory) ParseSampleKey(string sampleKey)
     {
         if (sampleKey.StartsWith(IisAppPoolMemoryPrefix, StringComparison.OrdinalIgnoreCase))
@@ -173,7 +209,16 @@ public sealed class HostResourcesModel : OmpPortalPageModel
         => value.HasValue ? string.Create(CultureInfo.InvariantCulture, $"{value.Value:F1}%") : string.Empty;
 
     public string FormatMemory(double? value)
-        => value.HasValue ? string.Create(CultureInfo.InvariantCulture, $"{value.Value:F1} MB") : string.Empty;
+    {
+        if (!value.HasValue)
+            return string.Empty;
+
+        var mb = value.Value;
+        if (mb >= 1024)
+            return string.Create(CultureInfo.InvariantCulture, $"{mb / 1024:F2} GB");
+
+        return string.Create(CultureInfo.InvariantCulture, $"{mb:F1} MB");
+    }
 
     public static string StateClass(HostResourceLatestGroupRow group, HostResourcesModel model)
     {
@@ -183,6 +228,21 @@ public sealed class HostResourcesModel : OmpPortalPageModel
         }
 
         if (model.IsStale(group.LastSampledUtc))
+        {
+            return "state-stale";
+        }
+
+        return "state-current";
+    }
+
+    public static string StateClass(HostResourceHostSummary host, HostResourcesModel model)
+    {
+        if (!host.HasData)
+        {
+            return "state-none";
+        }
+
+        if (model.IsStale(host.LastSampledUtc))
         {
             return "state-stale";
         }
