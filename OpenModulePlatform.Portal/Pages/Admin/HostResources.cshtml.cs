@@ -16,6 +16,17 @@ public sealed class HostResourcesModel : OmpPortalPageModel
     private const string ServiceCpuPrefix = "service.";
     private const string ServiceMemoryPrefix = "service.memory.";
 
+    private static readonly string[] ValidSortColumns =
+    [
+        SortColumn.RuntimeKind,
+        SortColumn.RuntimeName,
+        SortColumn.Cpu,
+        SortColumn.Memory,
+        SortColumn.Samples,
+        SortColumn.LastSampledUtc,
+        SortColumn.State
+    ];
+
     private readonly OmpAdminRepository _repo;
 
     public HostResourcesModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
@@ -36,6 +47,12 @@ public sealed class HostResourcesModel : OmpPortalPageModel
 
     public int StaleCount { get; private set; }
 
+    [BindProperty(SupportsGet = true)]
+    public string Sort { get; set; } = string.Empty;
+
+    [BindProperty(SupportsGet = true)]
+    public string Dir { get; set; } = string.Empty;
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -44,7 +61,7 @@ public sealed class HostResourcesModel : OmpPortalPageModel
 
         SetTitles("Host resources");
         var rows = await _repo.GetHostResourceLatestForAllHostsAsync(ct);
-        Groups = BuildGroups(rows);
+        Groups = SortGroups(BuildGroups(rows), Sort, Dir);
         HostSummaries = BuildHostSummaries(Groups);
         TotalHosts = HostSummaries.Count;
         HostsWithData = HostSummaries.Count(static s => s.HasData);
@@ -174,6 +191,124 @@ public sealed class HostResourcesModel : OmpPortalPageModel
             })
             .OrderBy(s => s.HostKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private IReadOnlyList<HostResourceLatestGroupRow> SortGroups(
+        IReadOnlyList<HostResourceLatestGroupRow> groups,
+        string sort,
+        string dir)
+    {
+        var sortColumn = sort?.Trim() ?? string.Empty;
+        if (!ValidSortColumns.Contains(sortColumn, StringComparer.OrdinalIgnoreCase))
+        {
+            sortColumn = SortColumn.RuntimeName;
+        }
+
+        var descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+
+        return groups
+            .GroupBy(g => g.HostId)
+            .SelectMany(hostGroups => OrderHostGroups(hostGroups, sortColumn, descending))
+            .ToList();
+    }
+
+    private IOrderedEnumerable<HostResourceLatestGroupRow> OrderHostGroups(
+        IGrouping<Guid, HostResourceLatestGroupRow> hostGroups,
+        string sortColumn,
+        bool descending)
+    {
+        IOrderedEnumerable<HostResourceLatestGroupRow> ordered = sortColumn.ToLowerInvariant() switch
+        {
+            SortColumn.RuntimeKind => descending
+                ? hostGroups.OrderByDescending(g => g.RuntimeKind, StringComparer.OrdinalIgnoreCase)
+                : hostGroups.OrderBy(g => g.RuntimeKind, StringComparer.OrdinalIgnoreCase),
+            SortColumn.RuntimeName => descending
+                ? hostGroups.OrderByDescending(g => g.RuntimeName, StringComparer.OrdinalIgnoreCase)
+                : hostGroups.OrderBy(g => g.RuntimeName, StringComparer.OrdinalIgnoreCase),
+            SortColumn.Cpu => descending
+                ? hostGroups.OrderByDescending(g => g.CpuValue ?? double.MinValue)
+                : hostGroups.OrderBy(g => g.CpuValue ?? double.MaxValue),
+            SortColumn.Memory => descending
+                ? hostGroups.OrderByDescending(g => g.MemoryValue ?? double.MinValue)
+                : hostGroups.OrderBy(g => g.MemoryValue ?? double.MaxValue),
+            SortColumn.Samples => descending
+                ? hostGroups.OrderByDescending(g => g.HasData ? g.SampleCount : int.MinValue)
+                : hostGroups.OrderBy(g => g.HasData ? g.SampleCount : int.MaxValue),
+            SortColumn.LastSampledUtc => descending
+                ? hostGroups.OrderByDescending(g => g.LastSampledUtc ?? DateTime.MinValue)
+                : hostGroups.OrderBy(g => g.LastSampledUtc ?? DateTime.MaxValue),
+            SortColumn.State => descending
+                ? hostGroups.OrderByDescending(g => StateSortOrder(g))
+                : hostGroups.OrderBy(g => StateSortOrder(g)),
+            _ => hostGroups.OrderBy(g => g.RuntimeKind, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(g => g.RuntimeName, StringComparer.OrdinalIgnoreCase)
+        };
+
+        // Stable tie-breaker so rows with equal primary sort keys do not jump.
+        if (!string.Equals(sortColumn, SortColumn.RuntimeName, StringComparison.OrdinalIgnoreCase))
+        {
+            ordered = descending
+                ? ordered.ThenByDescending(g => g.RuntimeName, StringComparer.OrdinalIgnoreCase)
+                : ordered.ThenBy(g => g.RuntimeName, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (!string.Equals(sortColumn, SortColumn.RuntimeKind, StringComparison.OrdinalIgnoreCase))
+        {
+            ordered = descending
+                ? ordered.ThenByDescending(g => g.RuntimeKind, StringComparer.OrdinalIgnoreCase)
+                : ordered.ThenBy(g => g.RuntimeKind, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return ordered;
+    }
+
+    private int StateSortOrder(HostResourceLatestGroupRow group)
+    {
+        if (!group.HasData)
+            return 0;
+
+        if (IsStale(group.LastSampledUtc))
+            return 1;
+
+        return 2;
+    }
+
+    public string SortLink(string column)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(column);
+
+        var nextDir = string.Equals(Sort, column, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Dir, "asc", StringComparison.OrdinalIgnoreCase)
+            ? "desc"
+            : "asc";
+
+        return $"~/admin/hostresources?sort={Uri.EscapeDataString(column)}&dir={nextDir}";
+    }
+
+    public string SortClass(string column)
+    {
+        return string.Equals(Sort, column, StringComparison.OrdinalIgnoreCase)
+            ? (string.Equals(Dir, "desc", StringComparison.OrdinalIgnoreCase) ? "sortable sort-desc" : "sortable sort-asc")
+            : "sortable";
+    }
+
+    public string SortIndicator(string column)
+    {
+        if (!string.Equals(Sort, column, StringComparison.OrdinalIgnoreCase))
+            return "\u2195";
+
+        return string.Equals(Dir, "desc", StringComparison.OrdinalIgnoreCase) ? "\u2193" : "\u2191";
+    }
+
+    public static class SortColumn
+    {
+        public const string RuntimeKind = "runtimeKind";
+        public const string RuntimeName = "runtimeName";
+        public const string Cpu = "cpu";
+        public const string Memory = "memory";
+        public const string Samples = "samples";
+        public const string LastSampledUtc = "lastSampledUtc";
+        public const string State = "state";
     }
 
     private static (string RuntimeKind, string RuntimeName, bool IsMemory) ParseSampleKey(string sampleKey)
