@@ -3,18 +3,6 @@ SET NOCOUNT ON;
 DECLARE @Missing int = 0;
 DECLARE @InvalidArtifactBindings int = 0;
 DECLARE @MissingProgrammableObjects nvarchar(max) = N'';
-DECLARE @RequiredProgrammableObjects TABLE
-(
-    ObjectType nvarchar(10) NOT NULL,
-    ObjectName nvarchar(256) NOT NULL
-);
-
-INSERT INTO @RequiredProgrammableObjects(ObjectType, ObjectName)
-VALUES
-    (N'FN', N'omp.IsArtifactPackageCompatibleWithAppType'),
-    (N'TR', N'omp.TR_AppInstances_ValidateArtifactCompatibility'),
-    (N'TR', N'omp.TR_WorkerInstances_ValidateArtifactCompatibility'),
-    (N'TR', N'omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility');
 
 IF SCHEMA_ID(N'omp') IS NULL
 BEGIN
@@ -146,16 +134,36 @@ SELECT @Missing = @Missing + COUNT(1)
 FROM RequiredColumns required
 WHERE COL_LENGTH(required.SchemaName + N'.' + required.TableName, required.ColumnName) IS NULL;
 
+;WITH RequiredProgrammableObjects(ObjectType, ObjectName) AS
+(
+    SELECT v.ObjectType, v.ObjectName
+    FROM (VALUES
+        (N'FN', N'omp.IsArtifactPackageCompatibleWithAppType'),
+        (N'TR', N'omp.TR_AppInstances_ValidateArtifactCompatibility'),
+        (N'TR', N'omp.TR_WorkerInstances_ValidateArtifactCompatibility'),
+        (N'TR', N'omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility')
+    ) AS v(ObjectType, ObjectName)
+)
 SELECT @Missing = @Missing + COUNT(1)
-FROM @RequiredProgrammableObjects required
+FROM RequiredProgrammableObjects required
 WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL;
 
+;WITH RequiredProgrammableObjects(ObjectType, ObjectName) AS
+(
+    SELECT v.ObjectType, v.ObjectName
+    FROM (VALUES
+        (N'FN', N'omp.IsArtifactPackageCompatibleWithAppType'),
+        (N'TR', N'omp.TR_AppInstances_ValidateArtifactCompatibility'),
+        (N'TR', N'omp.TR_WorkerInstances_ValidateArtifactCompatibility'),
+        (N'TR', N'omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility')
+    ) AS v(ObjectType, ObjectName)
+)
 SELECT @MissingProgrammableObjects =
     CASE
         WHEN @MissingProgrammableObjects = N'' THEN required.ObjectName
         ELSE CONCAT(@MissingProgrammableObjects, N', ', required.ObjectName)
     END
-FROM @RequiredProgrammableObjects required
+FROM RequiredProgrammableObjects required
 WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL;
 
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL
