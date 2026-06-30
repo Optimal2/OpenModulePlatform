@@ -146,13 +146,13 @@
                         <table class="grid app-instances-grid">
                             <thead>
                                 <tr>
-                                    <th>@L["Runtime kind"]</th>
-                                    <th>@L["Runtime name"]</th>
-                                    <th>@L["CPU"]</th>
-                                    <th>@L["Memory"]</th>
-                                    <th>@L["Samples"]</th>
-                                    <th>@L["Last sampled UTC"]</th>
-                                    <th>@L["State"]</th>
+                                    <th><a class="@Model.SortClass("runtimeKind")" href="@Url.Content(Model.SortLink("runtimeKind"))">@L["Runtime kind"] <span aria-hidden="true">@Model.SortIndicator("runtimeKind")</span></a></th>
+                                    <th><a class="@Model.SortClass("runtimeName")" href="@Url.Content(Model.SortLink("runtimeName"))">@L["Runtime name"] <span aria-hidden="true">@Model.SortIndicator("runtimeName")</span></a></th>
+                                    <th><a class="@Model.SortClass("cpu")" href="@Url.Content(Model.SortLink("cpu"))">@L["CPU"] <span aria-hidden="true">@Model.SortIndicator("cpu")</span></a></th>
+                                    <th><a class="@Model.SortClass("memory")" href="@Url.Content(Model.SortLink("memory"))">@L["Memory"] <span aria-hidden="true">@Model.SortIndicator("memory")</span></a></th>
+                                    <th><a class="@Model.SortClass("samples")" href="@Url.Content(Model.SortLink("samples"))">@L["Samples"] <span aria-hidden="true">@Model.SortIndicator("samples")</span></a></th>
+                                    <th><a class="@Model.SortClass("lastSampledUtc")" href="@Url.Content(Model.SortLink("lastSampledUtc"))">@L["Last sampled UTC"] <span aria-hidden="true">@Model.SortIndicator("lastSampledUtc")</span></a></th>
+                                    <th><a class="@Model.SortClass("state")" href="@Url.Content(Model.SortLink("state"))">@L["State"] <span aria-hidden="true">@Model.SortIndicator("state")</span></a></th>
                                     <th>@L["Actions"]</th>
                                 </tr>
                             </thead>
