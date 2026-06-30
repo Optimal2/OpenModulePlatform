@@ -12,12 +12,6 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 
 public sealed class HostResourceDetailModel : OmpPortalPageModel
 {
-    private const string IisAppPoolCpuPrefix = "iis.apppool.";
-    private const string IisAppPoolMemoryPrefix = "iis.apppool.memory.";
-    private const string ServiceCpuPrefix = "service.";
-    private const string ServiceMemoryPrefix = "service.memory.";
-    private const string ServiceStatePrefix = "service.state.";
-
     private const int MinHours = 1;
     private const int MaxHours = 168 * 4; // ~4 weeks
     private const int DefaultHours = 24;
@@ -81,11 +75,11 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
 
         EffectiveHours = Math.Clamp(Hours, MinHours, MaxHours);
 
-        var (runtimeKind, runtimeName, isMemory) = ParseSampleKey(SampleKey);
-        RuntimeKind = runtimeKind;
-        RuntimeName = runtimeName;
-        IsMemory = isMemory;
-        CounterpartSampleKey = DeriveCounterpartSampleKey(SampleKey, isMemory);
+        var sampleKey = HostResourceSampleKeyParser.Parse(SampleKey);
+        RuntimeKind = sampleKey.RuntimeKind;
+        RuntimeName = sampleKey.RuntimeName;
+        IsMemory = sampleKey.MetricKind == HostResourceMetricKind.Memory;
+        CounterpartSampleKey = HostResourceSampleKeyParser.DeriveCounterpartSampleKey(SampleKey);
 
         var host = await _repo.GetHostAsync(HostId, ct);
         if (host is null)
@@ -104,10 +98,10 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
             CounterpartRows = await _repo.GetHostResourceHistoryAsync(HostId, CounterpartSampleKey, sinceUtc, ct);
         }
 
-        PrimaryChart = BuildChart(PrimaryRows, isMemory, T("CPU"), T("Memory"));
+        PrimaryChart = BuildChart(PrimaryRows, IsMemory, T("CPU"), T("Memory"));
         if (CounterpartRows.Count > 0)
         {
-            CounterpartChart = BuildChart(CounterpartRows, !isMemory, T("CPU"), T("Memory"));
+            CounterpartChart = BuildChart(CounterpartRows, !IsMemory, T("CPU"), T("Memory"));
         }
 
         SetTitles("Resource detail");
@@ -323,67 +317,4 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
             ? string.Create(CultureInfo.InvariantCulture, $"{value:F0} MB")
             : string.Create(CultureInfo.InvariantCulture, $"{value:F1}%");
 
-    private static (string RuntimeKind, string RuntimeName, bool IsMemory) ParseSampleKey(string sampleKey)
-    {
-        if (sampleKey.StartsWith(IisAppPoolMemoryPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("IIS app pool", sampleKey[IisAppPoolMemoryPrefix.Length..], true);
-        }
-
-        if (sampleKey.StartsWith(IisAppPoolCpuPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("IIS app pool", sampleKey[IisAppPoolCpuPrefix.Length..], false);
-        }
-
-        if (sampleKey.StartsWith(ServiceMemoryPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("Windows service", sampleKey[ServiceMemoryPrefix.Length..], true);
-        }
-
-        if (sampleKey.StartsWith(ServiceStatePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("Windows service state", sampleKey[ServiceStatePrefix.Length..], false);
-        }
-
-        if (sampleKey.StartsWith(ServiceCpuPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("Windows service", sampleKey[ServiceCpuPrefix.Length..], false);
-        }
-
-        return (string.Empty, string.Empty, false);
-    }
-
-    private static string? DeriveCounterpartSampleKey(string sampleKey, bool isMemory)
-    {
-        if (sampleKey.StartsWith(IisAppPoolCpuPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var name = sampleKey[IisAppPoolCpuPrefix.Length..];
-            return isMemory ? sampleKey : $"{IisAppPoolMemoryPrefix}{name}";
-        }
-
-        if (sampleKey.StartsWith(IisAppPoolMemoryPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var name = sampleKey[IisAppPoolMemoryPrefix.Length..];
-            return isMemory ? $"{IisAppPoolCpuPrefix}{name}" : sampleKey;
-        }
-
-        if (sampleKey.StartsWith(ServiceMemoryPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var name = sampleKey[ServiceMemoryPrefix.Length..];
-            return isMemory ? $"{ServiceCpuPrefix}{name}" : sampleKey;
-        }
-
-        if (sampleKey.StartsWith(ServiceStatePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        if (sampleKey.StartsWith(ServiceCpuPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var name = sampleKey[ServiceCpuPrefix.Length..];
-            return isMemory ? sampleKey : $"{ServiceMemoryPrefix}{name}";
-        }
-
-        return null;
-    }
 }

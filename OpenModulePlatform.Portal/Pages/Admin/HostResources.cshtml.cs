@@ -11,12 +11,6 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 
 public sealed class HostResourcesModel : OmpPortalPageModel
 {
-    private const string IisAppPoolCpuPrefix = "iis.apppool.";
-    private const string IisAppPoolMemoryPrefix = "iis.apppool.memory.";
-    private const string ServiceCpuPrefix = "service.";
-    private const string ServiceMemoryPrefix = "service.memory.";
-    private const string ServiceStatePrefix = "service.state.";
-
     private static readonly string[] ValidSortColumns =
     [
         SortColumn.RuntimeKind,
@@ -99,13 +93,16 @@ public sealed class HostResourcesModel : OmpPortalPageModel
                 continue;
             }
 
-            var (runtimeKind, runtimeName, metricKind) = ParseSampleKey(row.SampleKey);
-            if (string.IsNullOrWhiteSpace(runtimeName))
+            var sampleKey = HostResourceSampleKeyParser.Parse(row.SampleKey);
+            if (string.IsNullOrWhiteSpace(sampleKey.RuntimeName))
             {
                 continue;
             }
 
-            var key = (row.HostId, runtimeKind, runtimeName);
+            var runtimeKind = sampleKey.MetricKind == HostResourceMetricKind.State
+                ? "Windows service"
+                : sampleKey.RuntimeKind;
+            var key = (row.HostId, runtimeKind, sampleKey.RuntimeName);
             if (!groups.TryGetValue(key, out var group))
             {
                 group = new HostResourceLatestGroupRow
@@ -115,22 +112,22 @@ public sealed class HostResourcesModel : OmpPortalPageModel
                     HostDisplayName = row.HostDisplayName,
                     HostLastSeenUtc = row.HostLastSeenUtc,
                     RuntimeKind = runtimeKind,
-                    RuntimeName = runtimeName
+                    RuntimeName = sampleKey.RuntimeName
                 };
                 groups[key] = group;
             }
 
-            if (metricKind == ResourceMetricKind.Memory)
+            if (sampleKey.MetricKind == HostResourceMetricKind.Memory)
             {
                 group.MemorySampleKey = row.SampleKey;
                 group.MemoryValue = row.SampleValue;
             }
-            else if (metricKind == ResourceMetricKind.Cpu)
+            else if (sampleKey.MetricKind == HostResourceMetricKind.Cpu)
             {
                 group.CpuSampleKey = row.SampleKey;
                 group.CpuValue = row.SampleValue;
             }
-            else if (metricKind == ResourceMetricKind.State)
+            else if (sampleKey.MetricKind == HostResourceMetricKind.State)
             {
                 group.StateSampleKey = row.SampleKey;
                 group.StateValue = row.SampleValue;
@@ -204,7 +201,7 @@ public sealed class HostResourcesModel : OmpPortalPageModel
         string sort,
         string dir)
     {
-        var sortColumn = sort?.Trim() ?? string.Empty;
+        var sortColumn = sort.Trim();
         if (!ValidSortColumns.Contains(sortColumn, StringComparer.OrdinalIgnoreCase))
         {
             sortColumn = SortColumn.RuntimeName;
@@ -231,12 +228,8 @@ public sealed class HostResourcesModel : OmpPortalPageModel
             SortColumn.RuntimeName => descending
                 ? hostGroups.OrderByDescending(g => g.RuntimeName, StringComparer.OrdinalIgnoreCase)
                 : hostGroups.OrderBy(g => g.RuntimeName, StringComparer.OrdinalIgnoreCase),
-            SortColumn.Cpu => descending
-                ? hostGroups.OrderByDescending(g => g.CpuValue ?? double.MinValue)
-                : hostGroups.OrderBy(g => g.CpuValue ?? double.MaxValue),
-            SortColumn.Memory => descending
-                ? hostGroups.OrderByDescending(g => g.MemoryValue ?? double.MinValue)
-                : hostGroups.OrderBy(g => g.MemoryValue ?? double.MaxValue),
+            SortColumn.Cpu => OrderByNullableNumber(hostGroups, static g => g.CpuValue, descending),
+            SortColumn.Memory => OrderByNullableNumber(hostGroups, static g => g.MemoryValue, descending),
             SortColumn.Samples => descending
                 ? hostGroups.OrderByDescending(g => g.HasData ? g.SampleCount : int.MinValue)
                 : hostGroups.OrderBy(g => g.HasData ? g.SampleCount : int.MaxValue),
@@ -317,43 +310,17 @@ public sealed class HostResourcesModel : OmpPortalPageModel
         public const string State = "state";
     }
 
-    private enum ResourceMetricKind
-    {
-        Unknown,
-        Cpu,
-        Memory,
-        State
-    }
-
-    private static (string RuntimeKind, string RuntimeName, ResourceMetricKind MetricKind) ParseSampleKey(string sampleKey)
-    {
-        if (sampleKey.StartsWith(IisAppPoolMemoryPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("IIS app pool", sampleKey[IisAppPoolMemoryPrefix.Length..], ResourceMetricKind.Memory);
-        }
-
-        if (sampleKey.StartsWith(IisAppPoolCpuPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("IIS app pool", sampleKey[IisAppPoolCpuPrefix.Length..], ResourceMetricKind.Cpu);
-        }
-
-        if (sampleKey.StartsWith(ServiceMemoryPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("Windows service", sampleKey[ServiceMemoryPrefix.Length..], ResourceMetricKind.Memory);
-        }
-
-        if (sampleKey.StartsWith(ServiceStatePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("Windows service", sampleKey[ServiceStatePrefix.Length..], ResourceMetricKind.State);
-        }
-
-        if (sampleKey.StartsWith(ServiceCpuPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return ("Windows service", sampleKey[ServiceCpuPrefix.Length..], ResourceMetricKind.Cpu);
-        }
-
-        return (string.Empty, string.Empty, ResourceMetricKind.Unknown);
-    }
+    private static IOrderedEnumerable<HostResourceLatestGroupRow> OrderByNullableNumber(
+        IEnumerable<HostResourceLatestGroupRow> groups,
+        Func<HostResourceLatestGroupRow, double?> valueSelector,
+        bool descending)
+        => descending
+            ? groups
+                .OrderBy(g => valueSelector(g).HasValue ? 0 : 1)
+                .ThenByDescending(g => valueSelector(g) ?? 0)
+            : groups
+                .OrderBy(g => valueSelector(g).HasValue ? 0 : 1)
+                .ThenBy(g => valueSelector(g) ?? 0);
 
     public bool IsStale(DateTime? lastSampledUtc)
         => lastSampledUtc.HasValue
