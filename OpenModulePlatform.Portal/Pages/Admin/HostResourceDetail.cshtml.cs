@@ -16,6 +16,7 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
     private const string IisAppPoolMemoryPrefix = "iis.apppool.memory.";
     private const string ServiceCpuPrefix = "service.";
     private const string ServiceMemoryPrefix = "service.memory.";
+    private const string ServiceStatePrefix = "service.state.";
 
     private const int MinHours = 1;
     private const int MaxHours = 168 * 4; // ~4 weeks
@@ -339,6 +340,11 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
             return ("Windows service", sampleKey[ServiceMemoryPrefix.Length..], true);
         }
 
+        if (sampleKey.StartsWith(ServiceStatePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Windows service state", sampleKey[ServiceStatePrefix.Length..], false);
+        }
+
         if (sampleKey.StartsWith(ServiceCpuPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return ("Windows service", sampleKey[ServiceCpuPrefix.Length..], false);
@@ -361,19 +367,23 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
             return isMemory ? $"{IisAppPoolCpuPrefix}{name}" : sampleKey;
         }
 
-        if (sampleKey.StartsWith(ServiceCpuPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var name = sampleKey[ServiceCpuPrefix.Length..];
-            return isMemory ? sampleKey : $"{ServiceMemoryPrefix}{name}";
-        }
-
         if (sampleKey.StartsWith(ServiceMemoryPrefix, StringComparison.OrdinalIgnoreCase))
         {
             var name = sampleKey[ServiceMemoryPrefix.Length..];
             return isMemory ? $"{ServiceCpuPrefix}{name}" : sampleKey;
         }
 
+        if (sampleKey.StartsWith(ServiceStatePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (sampleKey.StartsWith(ServiceCpuPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var name = sampleKey[ServiceCpuPrefix.Length..];
+            return isMemory ? sampleKey : $"{ServiceMemoryPrefix}{name}";
+        }
+
         return null;
     }
 }
-

@@ -1669,6 +1669,7 @@
   <data name="Message" xml:space="preserve"><value>Meddelande</value></data>
   <data name="Pending" xml:space="preserve"><value>Väntar</value></data>
   <data name="Running" xml:space="preserve"><value>Kör</value></data>
+  <data name="Stopped" xml:space="preserve"><value>Stoppad</value></data>
   <data name="Succeeded" xml:space="preserve"><value>Lyckades</value></data>
   <data name="Failed" xml:space="preserve"><value>Misslyckades</value></data>
   <data name="Hash mismatch" xml:space="preserve"><value>Hashfel</value></data>

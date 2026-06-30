@@ -15,6 +15,7 @@ public sealed class HostResourcesModel : OmpPortalPageModel
     private const string IisAppPoolMemoryPrefix = "iis.apppool.memory.";
     private const string ServiceCpuPrefix = "service.";
     private const string ServiceMemoryPrefix = "service.memory.";
+    private const string ServiceStatePrefix = "service.state.";
 
     private static readonly string[] ValidSortColumns =
     [
@@ -98,7 +99,7 @@ public sealed class HostResourcesModel : OmpPortalPageModel
                 continue;
             }
 
-            var (runtimeKind, runtimeName, isMemory) = ParseSampleKey(row.SampleKey);
+            var (runtimeKind, runtimeName, metricKind) = ParseSampleKey(row.SampleKey);
             if (string.IsNullOrWhiteSpace(runtimeName))
             {
                 continue;
@@ -119,15 +120,20 @@ public sealed class HostResourcesModel : OmpPortalPageModel
                 groups[key] = group;
             }
 
-            if (isMemory)
+            if (metricKind == ResourceMetricKind.Memory)
             {
                 group.MemorySampleKey = row.SampleKey;
                 group.MemoryValue = row.SampleValue;
             }
-            else
+            else if (metricKind == ResourceMetricKind.Cpu)
             {
                 group.CpuSampleKey = row.SampleKey;
                 group.CpuValue = row.SampleValue;
+            }
+            else if (metricKind == ResourceMetricKind.State)
+            {
+                group.StateSampleKey = row.SampleKey;
+                group.StateValue = row.SampleValue;
             }
 
             group.SampleCount = Math.Max(group.SampleCount, row.SampleCount);
@@ -311,29 +317,42 @@ public sealed class HostResourcesModel : OmpPortalPageModel
         public const string State = "state";
     }
 
-    private static (string RuntimeKind, string RuntimeName, bool IsMemory) ParseSampleKey(string sampleKey)
+    private enum ResourceMetricKind
+    {
+        Unknown,
+        Cpu,
+        Memory,
+        State
+    }
+
+    private static (string RuntimeKind, string RuntimeName, ResourceMetricKind MetricKind) ParseSampleKey(string sampleKey)
     {
         if (sampleKey.StartsWith(IisAppPoolMemoryPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            return ("IIS app pool", sampleKey[IisAppPoolMemoryPrefix.Length..], true);
+            return ("IIS app pool", sampleKey[IisAppPoolMemoryPrefix.Length..], ResourceMetricKind.Memory);
         }
 
         if (sampleKey.StartsWith(IisAppPoolCpuPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            return ("IIS app pool", sampleKey[IisAppPoolCpuPrefix.Length..], false);
+            return ("IIS app pool", sampleKey[IisAppPoolCpuPrefix.Length..], ResourceMetricKind.Cpu);
         }
 
         if (sampleKey.StartsWith(ServiceMemoryPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            return ("Windows service", sampleKey[ServiceMemoryPrefix.Length..], true);
+            return ("Windows service", sampleKey[ServiceMemoryPrefix.Length..], ResourceMetricKind.Memory);
+        }
+
+        if (sampleKey.StartsWith(ServiceStatePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Windows service", sampleKey[ServiceStatePrefix.Length..], ResourceMetricKind.State);
         }
 
         if (sampleKey.StartsWith(ServiceCpuPrefix, StringComparison.OrdinalIgnoreCase))
         {
-            return ("Windows service", sampleKey[ServiceCpuPrefix.Length..], false);
+            return ("Windows service", sampleKey[ServiceCpuPrefix.Length..], ResourceMetricKind.Cpu);
         }
 
-        return (string.Empty, string.Empty, false);
+        return (string.Empty, string.Empty, ResourceMetricKind.Unknown);
     }
 
     public bool IsStale(DateTime? lastSampledUtc)

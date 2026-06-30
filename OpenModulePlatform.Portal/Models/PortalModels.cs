@@ -1496,11 +1496,20 @@ public sealed class HostResourceLatestGroupRow
 
     public double? MemoryValue { get; set; }
 
+    public string? StateSampleKey { get; set; }
+
+    public double? StateValue { get; set; }
+
     public DateTime? LastSampledUtc { get; set; }
 
     public int SampleCount { get; set; }
 
-    public bool HasData => !string.IsNullOrWhiteSpace(CpuSampleKey) || !string.IsNullOrWhiteSpace(MemorySampleKey);
+    public bool? IsRunning => StateValue.HasValue ? StateValue.Value >= 0.5 : null;
+
+    public bool HasData
+        => !string.IsNullOrWhiteSpace(CpuSampleKey)
+           || !string.IsNullOrWhiteSpace(MemorySampleKey)
+           || !string.IsNullOrWhiteSpace(StateSampleKey);
 }
 
 /// <summary>

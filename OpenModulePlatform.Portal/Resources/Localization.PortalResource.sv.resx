@@ -1681,6 +1681,7 @@
   <data name="The worker runtime row could not be deleted. Delete or update dependent rows first." xml:space="preserve"><value>Worker runtime-raden kunde inte tas bort. Ta bort eller ändra beroende rader först.</value></data>
   <data name="Pending" xml:space="preserve"><value>Väntar</value></data>
   <data name="Running" xml:space="preserve"><value>Kör</value></data>
+  <data name="Stopped" xml:space="preserve"><value>Stoppad</value></data>
   <data name="Succeeded" xml:space="preserve"><value>Lyckades</value></data>
   <data name="Failed" xml:space="preserve"><value>Misslyckades</value></data>
   <data name="Hash mismatch" xml:space="preserve"><value>Hashfel</value></data>
