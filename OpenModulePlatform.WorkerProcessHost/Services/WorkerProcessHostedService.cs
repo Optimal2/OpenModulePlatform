@@ -117,8 +117,10 @@ public sealed class WorkerProcessHostedService : BackgroundService
         }
         finally
         {
-            // Passing null intentionally unregisters without waiting for an in-flight callback;
-            // the worker shutdown signal only requests cooperative cancellation.
+            // Passing null means RegisteredWaitHandle.Unregister stops future callbacks without
+            // blocking this shutdown path for a callback that may already be running. That is the
+            // desired trade-off here because the external event only requests cooperative
+            // cancellation and RunAsync is awaited separately.
             shutdownRegistration?.Unregister(null);
         }
     }
@@ -235,6 +237,8 @@ public sealed class WorkerProcessHostedService : BackgroundService
     {
         await memoryGuardCts.CancelAsync();
 
+        // SuppressThrowing lets cleanup always reach the fault-inspection block below. The
+        // exception is still observed and logged explicitly through memoryGuardTask.Exception.
         await memoryGuardTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
         if (memoryGuardTask.IsFaulted && memoryGuardTask.Exception is { } exception)
@@ -262,7 +266,8 @@ public sealed class WorkerProcessHostedService : BackgroundService
     {
         // The memory guard only reaches this path after a threshold breach. The first forced
         // collection requests LOH compaction and runs finalizers; the second collection reclaims
-        // objects made collectible by those finalizers before deciding whether to recycle.
+        // objects made collectible by those finalizers before deciding whether to recycle. These
+        // aggressive collections are blocking and may take noticeable time under memory pressure.
         System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect(MaxGcGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
