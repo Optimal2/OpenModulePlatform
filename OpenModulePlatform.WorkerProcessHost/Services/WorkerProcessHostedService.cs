@@ -117,6 +117,8 @@ public sealed class WorkerProcessHostedService : BackgroundService
         }
         finally
         {
+            // Passing null intentionally unregisters without waiting for an in-flight callback;
+            // the worker shutdown signal only requests cooperative cancellation.
             shutdownRegistration?.Unregister(null);
         }
     }
