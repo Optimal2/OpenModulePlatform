@@ -787,6 +787,75 @@ a:hover {
     background: var(--surface-muted);
 }
 
+.maintenance-preview-candidate-list {
+    display: grid;
+    gap: 14px;
+}
+
+.maintenance-preview-candidate-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+.maintenance-preview-candidate-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-muted);
+}
+
+.maintenance-preview-candidate-card__header h4 {
+    margin: 0 0 8px;
+}
+
+.maintenance-preview-candidate-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.maintenance-preview-candidate-card__summary {
+    display: grid;
+    gap: 2px;
+    min-width: 120px;
+    text-align: right;
+}
+
+.maintenance-preview-candidate-card__summary > span:first-child {
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.maintenance-preview-candidate-card .table-scroll {
+    padding: 0 16px 16px;
+}
+
+.maintenance-preview-candidate-grid {
+    margin-top: 14px;
+    box-shadow: none;
+}
+
+.maintenance-preview-candidate-grid code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+    .maintenance-preview-candidate-card__header {
+        flex-direction: column;
+    }
+
+    .maintenance-preview-candidate-card__summary {
+        min-width: 0;
+        text-align: left;
+    }
+}
+
 .portal-overview-panel {
     padding: 0;
     overflow: hidden;

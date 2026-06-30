@@ -301,56 +301,66 @@
 }
 else
 {
-    <div class="table-scroll top-gap">
-        <table class="grid">
-            <thead>
-                <tr>
-                    <th>@L["Artifact identity"]</th>
-                    <th>@L["Version"]</th>
-                    <th>@L["Registered"]</th>
-                    <th>@L["Rank"]</th>
-                    <th>@L["Status"]</th>
-                    <th>@L["Relative path"]</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var group in candidateGroups)
-            {
-                var first = group.First();
-                <tr>
-                    <td colspan="6">
-                        <strong>@first.ModuleKey / @first.AppKey</strong>
-                        <span class="muted">@first.PackageType</span>
-                        @if (!string.IsNullOrWhiteSpace(first.TargetName))
-                        {
-                            <code>@first.TargetName</code>
-                        }
-                    </td>
-                </tr>
+    <div class="maintenance-preview-candidate-list top-gap">
+        @foreach (var group in candidateGroups)
+        {
+            var first = group.First();
+            <article class="card maintenance-preview-candidate-card">
+                <header class="maintenance-preview-candidate-card__header">
+                    <div>
+                        <h4>@first.ModuleKey / @first.AppKey</h4>
+                        <div class="maintenance-preview-candidate-card__meta">
+                            <span class="pill">@first.PackageType</span>
+                            @if (!string.IsNullOrWhiteSpace(first.TargetName))
+                            {
+                                <code>@first.TargetName</code>
+                            }
+                        </div>
+                    </div>
+                    <div class="maintenance-preview-candidate-card__summary">
+                        <span>@group.Count()</span>
+                        <span class="muted">@L["Old version candidates"]</span>
+                    </div>
+                </header>
 
-                @foreach (var row in group)
-                {
-                    <tr>
-                        <td><code>@row.ArtifactId</code></td>
-                        <td>@row.Version</td>
-                        <td>@row.CreatedUtc.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</td>
-                        <td>@row.RetentionRank / @row.TotalVersions</td>
-                        <td>
-                            @if (row.IsProtected)
-                            {
-                                <span class="pill">@L["Protected"] (@row.ProtectedReferenceCount)</span>
-                            }
-                            else
-                            {
-                                <span class="pill">@L["Can be deleted"]</span>
-                            }
-                        </td>
-                        <td><code>@row.RelativePath</code></td>
-                    </tr>
-                }
-            }
-            </tbody>
-        </table>
+                <div class="table-scroll">
+                    <table class="grid maintenance-preview-candidate-grid">
+                        <thead>
+                            <tr>
+                                <th>@L["Artifact"]</th>
+                                <th>@L["Version"]</th>
+                                <th>@L["Registered"]</th>
+                                <th>@L["Rank"]</th>
+                                <th>@L["Status"]</th>
+                                <th>@L["Relative path"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var row in group)
+                        {
+                            <tr>
+                                <td><code>@row.ArtifactId</code></td>
+                                <td>@row.Version</td>
+                                <td>@row.CreatedUtc.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</td>
+                                <td>@row.RetentionRank / @row.TotalVersions</td>
+                                <td>
+                                    @if (row.IsProtected)
+                                    {
+                                        <span class="pill">@L["Protected"] (@row.ProtectedReferenceCount)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pill">@L["Can be deleted"]</span>
+                                    }
+                                </td>
+                                <td><code>@row.RelativePath</code></td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+        }
     </div>
 }
 </section>
