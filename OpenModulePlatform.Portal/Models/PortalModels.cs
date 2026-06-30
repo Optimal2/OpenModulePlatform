@@ -1504,6 +1504,30 @@ public sealed class HostResourceLatestGroupRow
 }
 
 /// <summary>
+/// Aggregated latest CPU and memory telemetry summary for one host.
+/// </summary>
+public sealed class HostResourceHostSummary
+{
+    public Guid HostId { get; set; }
+
+    public string HostKey { get; set; } = string.Empty;
+
+    public string? HostDisplayName { get; set; }
+
+    public DateTime? HostLastSeenUtc { get; set; }
+
+    public double TotalCpu { get; set; }
+
+    public double TotalMemory { get; set; }
+
+    public int ComponentCount { get; set; }
+
+    public DateTime? LastSampledUtc { get; set; }
+
+    public bool HasData { get; set; }
+}
+
+/// <summary>
 /// View model for one host resource history chart rendered on the detail page.
 /// </summary>
 public sealed class ChartViewModel

@@ -1566,6 +1566,12 @@
   <data name="Chart" xml:space="preserve"><value>Chart</value></data>
   <data name="No chart" xml:space="preserve"><value>No chart</value></data>
   <data name="Host last seen" xml:space="preserve"><value>Host last seen</value></data>
+  <data name="Per-host summary" xml:space="preserve"><value>Per-host summary</value></data>
+  <data name="Total CPU and memory per host across all OMP runtime targets with telemetry." xml:space="preserve"><value>Total CPU and memory per host across all OMP runtime targets with telemetry.</value></data>
+  <data name="Total CPU" xml:space="preserve"><value>Total CPU</value></data>
+  <data name="Total memory" xml:space="preserve"><value>Total memory</value></data>
+  <data name="Components" xml:space="preserve"><value>Components</value></data>
+  <data name="No telemetry for this host." xml:space="preserve"><value>No telemetry for this host.</value></data>
   <data name="Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows." xml:space="preserve"><value>Instance templates describe what should exist in an OMP instance. Change desired apps here, then let HostAgent materialize the runtime rows.</value></data>
   <data name="This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances." xml:space="preserve"><value>This template is the desired state for OMP instances that use it. HostAgent materializes these rows into concrete hosts, module instances and app instances.</value></data>
   <data name="Template hosts" xml:space="preserve"><value>Template hosts</value></data>
