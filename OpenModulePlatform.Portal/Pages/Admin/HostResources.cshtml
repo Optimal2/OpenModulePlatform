@@ -230,6 +230,10 @@
                                         {
                                             <span class="pill">@L["Stale"]</span>
                                         }
+                                        else if (group.IsRunning.HasValue)
+                                        {
+                                            <span class="pill">@(group.IsRunning.Value ? L["Running"] : L["Stopped"])</span>
+                                        }
                                         else
                                         {
                                             <span class="pill">@L["Current"]</span>
