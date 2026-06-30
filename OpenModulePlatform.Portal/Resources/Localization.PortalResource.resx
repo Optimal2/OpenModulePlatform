@@ -1670,6 +1670,7 @@
   <data name="The worker runtime row could not be deleted. Delete or update dependent rows first." xml:space="preserve"><value>The worker runtime row could not be deleted. Delete or update dependent rows first.</value></data>
   <data name="Pending" xml:space="preserve"><value>Pending</value></data>
   <data name="Running" xml:space="preserve"><value>Running</value></data>
+  <data name="Stopped" xml:space="preserve"><value>Stopped</value></data>
   <data name="Succeeded" xml:space="preserve"><value>Succeeded</value></data>
   <data name="Failed" xml:space="preserve"><value>Failed</value></data>
   <data name="Hash mismatch" xml:space="preserve"><value>Hash mismatch</value></data>
