@@ -41,14 +41,27 @@ public sealed class SignalRTopBarNotificationStatePublisher : ITopBarNotificatio
         {
             // Normal request/service shutdown; no notification push is needed.
         }
+        catch (HubException ex)
+        {
+            LogNotificationFanOutFailure(ex, userId);
+        }
+        catch (ObjectDisposedException ex)
+        {
+            LogNotificationFanOutFailure(ex, userId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogNotificationFanOutFailure(ex, userId);
+        }
+    }
+
+    private void LogNotificationFanOutFailure(Exception ex, int userId)
+    {
         // Notification fan-out is opportunistic. Log SignalR failures, but do not fail the
         // originating request because clients can still recover through the normal refresh path.
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to publish topbar notification state change for OMP user {UserId}.",
-                userId);
-        }
+        _logger.LogWarning(
+            ex,
+            "Failed to publish topbar notification state change for OMP user {UserId}.",
+            userId);
     }
 }

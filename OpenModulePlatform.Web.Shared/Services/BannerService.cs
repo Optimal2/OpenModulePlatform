@@ -493,16 +493,29 @@ ORDER BY rp.RoleId;";
                 await _pushEventPublisher.PublishAsync(pushEvent, ct);
             }
         }
+        catch (SqlException ex)
+        {
+            LogBannerPushPublicationFailure(ex, bannerId, action);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogBannerPushPublicationFailure(ex, bannerId, action);
+        }
+        catch (ArgumentException ex)
+        {
+            LogBannerPushPublicationFailure(ex, bannerId, action);
+        }
+    }
+
+    private void LogBannerPushPublicationFailure(Exception ex, long bannerId, string action)
+    {
         // Banner writes have already committed at this point; push publication is
         // opportunistic and clients can recover through the normal refresh path.
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Banner push publication failed after DB mutation. BannerId={BannerId}, Action={Action}.",
-                bannerId,
-                action);
-        }
+        _logger.LogWarning(
+            ex,
+            "Banner push publication failed after DB mutation. BannerId={BannerId}, Action={Action}.",
+            bannerId,
+            action);
     }
 
     internal static IReadOnlyList<PushEvent> CreateBannerChangedPushEvents(

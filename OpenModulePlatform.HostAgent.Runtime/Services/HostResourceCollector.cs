@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Management;
 using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -109,14 +110,33 @@ public sealed partial class HostResourceCollector
                 hostId,
                 timeout.TotalSeconds);
         }
-        // Resource telemetry is best-effort operational data. A collector failure
-        // should be logged without stopping the HostAgent desired-state loop.
-        catch (Exception ex)
+        catch (SqlException ex)
         {
-            _logger.LogError(
-                ex,
-                "Host resource telemetry collection or persistence failed. HostId={HostId}",
-                hostId);
+            LogCollectionFailure(ex, hostId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogCollectionFailure(ex, hostId);
+        }
+        catch (IOException ex)
+        {
+            LogCollectionFailure(ex, hostId);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            LogCollectionFailure(ex, hostId);
+        }
+        catch (ManagementException ex)
+        {
+            LogCollectionFailure(ex, hostId);
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            LogCollectionFailure(ex, hostId);
+        }
+        catch (TimeoutException ex)
+        {
+            LogCollectionFailure(ex, hostId);
         }
     }
 
@@ -148,15 +168,38 @@ public sealed partial class HostResourceCollector
                 deleted,
                 settings.RetainHours);
         }
+        catch (SqlException ex)
+        {
+            LogPruneFailure(ex, hostId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogPruneFailure(ex, hostId);
+        }
+        catch (TimeoutException ex)
+        {
+            LogPruneFailure(ex, hostId);
+        }
+    }
+
+    private void LogCollectionFailure(Exception ex, Guid hostId)
+    {
+        // Resource telemetry is best-effort operational data. A collector failure
+        // should be logged without stopping the HostAgent desired-state loop.
+        _logger.LogError(
+            ex,
+            "Host resource telemetry collection or persistence failed. HostId={HostId}",
+            hostId);
+    }
+
+    private void LogPruneFailure(Exception ex, Guid hostId)
+    {
         // Pruning is maintenance cleanup; keep collection alive and retry on the
         // next prune interval if the repository or database is temporarily unavailable.
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to prune host resource telemetry samples. HostId={HostId}",
-                hostId);
-        }
+        _logger.LogError(
+            ex,
+            "Failed to prune host resource telemetry samples. HostId={HostId}",
+            hostId);
     }
 
     private void CollectSamples(HostResourceTelemetrySettings settings, List<HostResourceSample> samples, CancellationToken cancellationToken)

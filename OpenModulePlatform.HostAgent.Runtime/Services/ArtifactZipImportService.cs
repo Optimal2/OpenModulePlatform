@@ -616,58 +616,13 @@ public sealed class ArtifactZipImportService
                 {
                     var existingRelativePath = existingIdentity.RelativePath ?? relativePath;
                     var existingFinalPath = ResolveUnderRoot(storeRoot, existingRelativePath);
-                    var restoredMissingContent = false;
-                    if (File.Exists(existingFinalPath))
-                    {
-                        throw new InvalidOperationException(
-                            $"The existing artifact path is a file, not a directory below the artifact store: {existingRelativePath}.");
-                    }
-
-                    if (Directory.Exists(existingFinalPath))
-                    {
-                        var existingContentHash = await ComputeDirectorySha256Async(
-                            existingFinalPath,
-                            cancellationToken);
-                        if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
-                        {
-                            var mismatchMessage = existingMetadataHashMissing
-                                ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content: {existingRelativePath}."
-                                : $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}.";
-                            throw new InvalidOperationException(
-                                mismatchMessage);
-                        }
-                    }
-                    else
-                    {
-                        try
-                        {
-                            MoveDirectory(package.ArtifactContentPath, existingFinalPath);
-                            finalPath = existingFinalPath;
-                            restoredMissingContent = true;
-                        }
-                        catch (IOException moveEx)
-                        {
-                            if (Directory.Exists(existingFinalPath))
-                            {
-                                var existingContentHash = await ComputeDirectorySha256Async(
-                                    existingFinalPath,
-                                    cancellationToken);
-                                if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    throw new InvalidOperationException(
-                                        $"The existing artifact path was created concurrently with different content: {existingRelativePath}.",
-                                        moveEx);
-                                }
-
-                                finalPath = existingFinalPath;
-                                restoredMissingContent = true;
-                            }
-                            else
-                            {
-                                throw;
-                            }
-                        }
-                    }
+                    var restoredMissingContent = await RestoreMissingImportedArtifactContentAsync(
+                        package.ArtifactContentPath,
+                        existingFinalPath,
+                        existingRelativePath,
+                        contentHash,
+                        existingMetadataHashMissing,
+                        cancellationToken);
 
                     // These flags drive the import status and message below; keep
                     // them separate from the content/config file counters.
@@ -898,6 +853,62 @@ public sealed class ArtifactZipImportService
 
         sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
+    }
+
+    private static async Task<bool> RestoreMissingImportedArtifactContentAsync(
+        string packageArtifactContentPath,
+        string existingFinalPath,
+        string existingRelativePath,
+        string expectedContentHash,
+        bool existingMetadataHashMissing,
+        CancellationToken cancellationToken)
+    {
+        if (File.Exists(existingFinalPath))
+        {
+            throw new InvalidOperationException(
+                $"The existing artifact path is a file, not a directory below the artifact store: {existingRelativePath}.");
+        }
+
+        if (Directory.Exists(existingFinalPath))
+        {
+            var existingContentHash = await ComputeDirectorySha256Async(
+                existingFinalPath,
+                cancellationToken);
+            if (!string.Equals(existingContentHash, expectedContentHash, StringComparison.OrdinalIgnoreCase))
+            {
+                var mismatchMessage = existingMetadataHashMissing
+                    ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content: {existingRelativePath}."
+                    : $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}.";
+                throw new InvalidOperationException(mismatchMessage);
+            }
+
+            return false;
+        }
+
+        try
+        {
+            MoveDirectory(packageArtifactContentPath, existingFinalPath);
+            return true;
+        }
+        catch (IOException moveEx)
+        {
+            if (!Directory.Exists(existingFinalPath))
+            {
+                throw;
+            }
+
+            var existingContentHash = await ComputeDirectorySha256Async(
+                existingFinalPath,
+                cancellationToken);
+            if (!string.Equals(existingContentHash, expectedContentHash, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"The existing artifact path was created concurrently with different content: {existingRelativePath}.",
+                    moveEx);
+            }
+
+            return true;
+        }
     }
 
     private static async Task<ModuleDefinitionImportDocument> ReadModuleDefinitionAsync(

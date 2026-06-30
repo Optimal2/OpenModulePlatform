@@ -847,12 +847,25 @@ WHERE cp.user_id = @user_id
         {
             await _pushEventPublisher.PublishAsync(pushEvent, ct);
         }
+        catch (SqlException ex)
+        {
+            LogPushEventPublicationFailure(ex, pushEvent);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogPushEventPublicationFailure(ex, pushEvent);
+        }
+        catch (ArgumentException ex)
+        {
+            LogPushEventPublicationFailure(ex, pushEvent);
+        }
+    }
+
+    private void LogPushEventPublicationFailure(Exception ex, PushEvent pushEvent)
+    {
         // Message state changes are committed before this point. Push is best-effort
         // notification fan-out and must not roll back or fail the user action.
-        catch (Exception ex)
-        {
-            _log.LogWarning(ex, "Failed to publish OMP message push event {Category}.", pushEvent.Category);
-        }
+        _log.LogWarning(ex, "Failed to publish OMP message push event {Category}.", pushEvent.Category);
     }
 
     private static async Task<IReadOnlyList<int>> GetConversationParticipantUserIdsAsync(

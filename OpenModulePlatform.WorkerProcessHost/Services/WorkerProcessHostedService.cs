@@ -189,17 +189,30 @@ public sealed class WorkerProcessHostedService : BackgroundService
             {
                 throw;
             }
-            // The guard must never crash the worker host. Sampling failures are
-            // logged and the next interval gets another chance to enforce limits.
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
-                _logger.LogWarning(
-                    ex,
-                    "Worker process memory guard failed during a sampling pass. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
-                    _settings.AppInstanceId,
-                    _settings.WorkerTypeKey);
+                LogMemoryGuardSamplingFailure(ex);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                LogMemoryGuardSamplingFailure(ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                LogMemoryGuardSamplingFailure(ex);
             }
         }
+    }
+
+    private void LogMemoryGuardSamplingFailure(Exception ex)
+    {
+        // The guard must never crash the worker host. Sampling failures are
+        // logged and the next interval gets another chance to enforce limits.
+        _logger.LogWarning(
+            ex,
+            "Worker process memory guard failed during a sampling pass. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+            _settings.AppInstanceId,
+            _settings.WorkerTypeKey);
     }
 
     private static async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task? memoryGuardTask)

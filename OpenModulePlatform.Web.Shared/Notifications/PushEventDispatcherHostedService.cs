@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Globalization;
+using System.Text.Json;
 
 namespace OpenModulePlatform.Web.Shared.Notifications;
 
@@ -67,12 +69,17 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             {
                 // Normal service shutdown; let the background service exit quietly.
             }
-            // Keep the dispatcher alive after transient SQL/SignalR failures; each failure is
-            // logged here and the polling loop retries according to PushEventDispatcherOptions.
-            catch (Exception ex)
+            catch (SqlException ex)
             {
-                _logger.LogWarning(ex, "Failed to lease or dispatch OMP push events.");
-                await DelayAsync(options, stoppingToken);
+                await HandleDispatcherLoopFailureAsync(ex, options, stoppingToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                await HandleDispatcherLoopFailureAsync(ex, options, stoppingToken);
+            }
+            catch (TimeoutException ex)
+            {
+                await HandleDispatcherLoopFailureAsync(ex, options, stoppingToken);
             }
         }
     }
@@ -107,11 +114,17 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             // Normal service shutdown; preserve the caller's cancellation flow.
             throw;
         }
-        // Cleanup is best-effort maintenance. A failed cleanup must not stop dispatching fresh
-        // push events, and the next cleanup interval will try again.
-        catch (Exception ex)
+        catch (SqlException ex)
         {
-            _logger.LogWarning(ex, "Failed to clean up expired OMP push event outbox rows.");
+            LogCleanupFailure(ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogCleanupFailure(ex);
+        }
+        catch (TimeoutException ex)
+        {
+            LogCleanupFailure(ex);
         }
     }
 
@@ -162,16 +175,63 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             // Normal service shutdown; preserve the caller's cancellation flow.
             throw;
         }
+        catch (SqlException ex)
+        {
+            await MarkDispatchFailedAsync(pushEvent, options, ex, ct);
+        }
+        catch (HubException ex)
+        {
+            await MarkDispatchFailedAsync(pushEvent, options, ex, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await MarkDispatchFailedAsync(pushEvent, options, ex, ct);
+        }
+        catch (ArgumentException ex)
+        {
+            await MarkDispatchFailedAsync(pushEvent, options, ex, ct);
+        }
+        catch (JsonException ex)
+        {
+            await MarkDispatchFailedAsync(pushEvent, options, ex, ct);
+        }
+        catch (TimeoutException ex)
+        {
+            await MarkDispatchFailedAsync(pushEvent, options, ex, ct);
+        }
+    }
+
+    private async Task HandleDispatcherLoopFailureAsync(
+        Exception ex,
+        PushEventDispatcherOptions options,
+        CancellationToken stoppingToken)
+    {
+        // Keep the dispatcher alive after transient SQL/SignalR failures; each failure is
+        // logged here and the polling loop retries according to PushEventDispatcherOptions.
+        _logger.LogWarning(ex, "Failed to lease or dispatch OMP push events.");
+        await DelayAsync(options, stoppingToken);
+    }
+
+    private void LogCleanupFailure(Exception ex)
+    {
+        // Cleanup is best-effort maintenance. A failed cleanup must not stop dispatching fresh
+        // push events, and the next cleanup interval will try again.
+        _logger.LogWarning(ex, "Failed to clean up expired OMP push event outbox rows.");
+    }
+
+    private async Task MarkDispatchFailedAsync(
+        LeasedPushEvent pushEvent,
+        PushEventDispatcherOptions options,
+        Exception ex,
+        CancellationToken ct)
+    {
         // Dispatch errors must be recorded on the outbox row so retry/dead-letter handling can
         // make progress without terminating the whole background dispatcher.
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to dispatch OMP push event {PushEventId}.",
-                pushEvent.PushEventId);
-            await _outbox.MarkFailedAsync(pushEvent, options, ex, ct);
-        }
+        _logger.LogWarning(
+            ex,
+            "Failed to dispatch OMP push event {PushEventId}.",
+            pushEvent.PushEventId);
+        await _outbox.MarkFailedAsync(pushEvent, options, ex, ct);
     }
 
     internal static IReadOnlyList<string> ResolveTargetGroups(LeasedPushEvent pushEvent)
