@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.170",
+  "repositoryVersion": "0.3.171",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -109,7 +109,7 @@
       "appKey": "omp_workerprocesshost",
       "packageType": "worker-host",
       "targetName": "omp-workerprocesshost",
-      "version": "0.3.14",
+      "version": "0.3.15",
       "projectPath": "OpenModulePlatform.WorkerProcessHost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerProcessHost.zip"

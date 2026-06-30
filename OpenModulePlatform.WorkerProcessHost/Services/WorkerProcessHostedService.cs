@@ -293,6 +293,22 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 _settings.ShutdownEventName);
             return null;
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Configured shutdown event could not be opened because access was denied. ShutdownEventName={ShutdownEventName}",
+                _settings.ShutdownEventName);
+            return null;
+        }
+        catch (System.IO.IOException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Configured shutdown event could not be opened due to an operating system I/O error. ShutdownEventName={ShutdownEventName}",
+                _settings.ShutdownEventName);
+            return null;
+        }
     }
 
     private RegisteredWaitHandle? RegisterExternalShutdownSignal(EventWaitHandle? shutdownEvent)
