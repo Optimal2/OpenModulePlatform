@@ -37,17 +37,54 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        RegisteredWaitHandle? shutdownRegistration = null;
-        CancellationTokenSource? memoryGuardCts = null;
-        Task? memoryGuardTask = null;
-
         try
         {
             _settings.Validate();
-            memoryGuardCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-            memoryGuardTask = RunMemoryGuardAsync(memoryGuardCts.Token);
+            using var memoryGuardCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            var memoryGuardTask = RunMemoryGuardAsync(memoryGuardCts.Token);
 
-            using var shutdownEvent = TryOpenShutdownEvent();
+            try
+            {
+                await RunWorkerModuleAsync(stoppingToken);
+            }
+            finally
+            {
+                await StopMemoryGuardAsync(memoryGuardCts, memoryGuardTask);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            Environment.ExitCode = 0;
+
+            _logger.LogInformation(
+                "Worker process cancellation requested. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                _settings.AppInstanceId,
+                _settings.WorkerTypeKey);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Environment.ExitCode = 1;
+
+            _logger.LogCritical(
+                ex,
+                "Worker process failed to start or execute. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PluginAssemblyPath={PluginAssemblyPath}",
+                _settings.AppInstanceId,
+                _settings.WorkerTypeKey,
+                _settings.PluginAssemblyPath);
+        }
+        finally
+        {
+            _applicationLifetime.StopApplication();
+        }
+    }
+
+    private async Task RunWorkerModuleAsync(CancellationToken stoppingToken)
+    {
+        RegisteredWaitHandle? shutdownRegistration = null;
+        using var shutdownEvent = TryOpenShutdownEvent();
+
+        try
+        {
             shutdownRegistration = RegisterExternalShutdownSignal(shutdownEvent);
 
             var factory = _loader.LoadFactory(_settings.PluginAssemblyPath, _settings.WorkerTypeKey);
@@ -75,35 +112,9 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 context.AppInstanceId,
                 context.WorkerTypeKey);
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            Environment.ExitCode = 0;
-
-            _logger.LogInformation(
-                "Worker process cancellation requested. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
-                _settings.AppInstanceId,
-                _settings.WorkerTypeKey);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            Environment.ExitCode = 1;
-
-            _logger.LogCritical(
-                ex,
-                "Worker process failed to start or execute. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PluginAssemblyPath={PluginAssemblyPath}",
-                _settings.AppInstanceId,
-                _settings.WorkerTypeKey,
-                _settings.PluginAssemblyPath);
-        }
         finally
         {
             shutdownRegistration?.Unregister(null);
-            if (memoryGuardCts is not null)
-            {
-                await StopMemoryGuardAsync(memoryGuardCts, memoryGuardTask);
-            }
-
-            _applicationLifetime.StopApplication();
         }
     }
 
@@ -118,12 +129,13 @@ public sealed class WorkerProcessHostedService : BackgroundService
         var consecutiveOverageCount = 0;
         var compactedCurrentOverage = false;
 
+        using var process = Process.GetCurrentProcess();
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_settings.MemoryCheckIntervalSeconds));
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
             try
             {
-                var privateBytes = GetCurrentPrivateMemoryBytes();
+                var privateBytes = GetCurrentPrivateMemoryBytes(process);
                 if (privateBytes < thresholdBytes)
                 {
                     consecutiveOverageCount = 0;
@@ -143,7 +155,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
                     CompactManagedHeap();
                     compactedCurrentOverage = true;
-                    privateBytes = GetCurrentPrivateMemoryBytes();
+                    privateBytes = GetCurrentPrivateMemoryBytes(process);
 
                     if (privateBytes < thresholdBytes)
                     {
@@ -214,28 +226,30 @@ public sealed class WorkerProcessHostedService : BackgroundService
             _settings.WorkerTypeKey);
     }
 
-    private static async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task? memoryGuardTask)
+    private async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task memoryGuardTask)
     {
         await memoryGuardCts.CancelAsync();
 
-        if (memoryGuardTask is not null)
+        try
         {
-            try
-            {
-                await memoryGuardTask;
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when the worker process stops normally.
-            }
+            await memoryGuardTask;
         }
-
-        memoryGuardCts.Dispose();
+        catch (OperationCanceledException)
+        {
+            // Expected when the worker process stops normally.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Worker process memory guard stopped with an unexpected failure during cleanup. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                _settings.AppInstanceId,
+                _settings.WorkerTypeKey);
+        }
     }
 
-    private static long GetCurrentPrivateMemoryBytes()
+    private static long GetCurrentPrivateMemoryBytes(Process process)
     {
-        using var process = Process.GetCurrentProcess();
         process.Refresh();
         return process.PrivateMemorySize64;
     }
@@ -288,40 +302,26 @@ public sealed class WorkerProcessHostedService : BackgroundService
             return null;
         }
 
-        var ownsShutdownEvent = true;
-        try
-        {
-            var signalState = new ShutdownSignalState(
-                _logger,
-                _applicationLifetime,
-                _settings.AppInstanceId,
-                _settings.WorkerTypeKey);
+        var signalState = new ShutdownSignalState(
+            _logger,
+            _applicationLifetime,
+            _settings.AppInstanceId,
+            _settings.WorkerTypeKey);
 
-            var registration = ThreadPool.RegisterWaitForSingleObject(
-                shutdownEvent,
-                static (state, _) =>
-                {
-                    var signalState = (ShutdownSignalState)state!;
-                    signalState.Logger.LogInformation(
-                        "External shutdown requested. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
-                        signalState.AppInstanceId,
-                        signalState.WorkerTypeKey);
-                    signalState.ApplicationLifetime.StopApplication();
-                },
-                signalState,
-                Timeout.Infinite,
-                executeOnlyOnce: true);
-
-            ownsShutdownEvent = false;
-            return registration;
-        }
-        finally
-        {
-            if (ownsShutdownEvent)
+        return ThreadPool.RegisterWaitForSingleObject(
+            shutdownEvent,
+            static (state, _) =>
             {
-                shutdownEvent.Dispose();
-            }
-        }
+                var signalState = (ShutdownSignalState)state!;
+                signalState.Logger.LogInformation(
+                    "External shutdown requested. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                    signalState.AppInstanceId,
+                    signalState.WorkerTypeKey);
+                signalState.ApplicationLifetime.StopApplication();
+            },
+            signalState,
+            Timeout.Infinite,
+            executeOnlyOnce: true);
     }
 
     private sealed record ShutdownSignalState(
