@@ -19,6 +19,10 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 public sealed class WorkerManagerHostedService : BackgroundService
 {
     private const string WorkerProcessHostExecutableName = "OpenModulePlatform.WorkerProcessHost.exe";
+    private static readonly NamedWaitHandleOptions ShutdownEventOptions = new()
+    {
+        CurrentUserOnly = true
+    };
 
     private readonly ILogger<WorkerManagerHostedService> _logger;
     private readonly IConfiguration _configuration;
@@ -276,15 +280,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
         ValidateReadableStartupFile(managed.Definition.PluginAssemblyPath, "Worker plugin assembly");
 
-        // The named event is a cooperative same-host shutdown signal between
-        // WorkerManager and the OMP-provisioned WorkerProcessHost. The worker
-        // process and plugin assemblies still run inside the same Windows
-        // service trust boundary; process ownership and status publication are
-        // the authoritative controls.
-        using var startupResources = new WorkerStartupResources(new EventWaitHandle(
-            initialState: false,
-            mode: EventResetMode.ManualReset,
-            name: managed.Definition.ShutdownEventName));
+        using var startupResources = new WorkerStartupResources(CreateShutdownEvent(managed.Definition));
 
         var ompConnectionString = _configuration.GetConnectionString("OmpDb");
         if (string.IsNullOrWhiteSpace(ompConnectionString))
@@ -1073,6 +1069,29 @@ public sealed class WorkerManagerHostedService : BackgroundService
             or ManagementException
             or Win32Exception
             or NotSupportedException;
+
+    private static EventWaitHandle CreateShutdownEvent(DesiredWorkerInstance definition)
+    {
+        // The named event is a cooperative same-host shutdown signal between WorkerManager and
+        // the OMP-provisioned WorkerProcessHost. CurrentUserOnly scopes the object to the service
+        // identity, and createdNew protects against stale or pre-created handles with the same
+        // deterministic worker-instance name.
+        var shutdownEvent = new EventWaitHandle(
+            initialState: false,
+            mode: EventResetMode.ManualReset,
+            name: definition.ShutdownEventName,
+            options: ShutdownEventOptions,
+            createdNew: out var createdNew);
+
+        if (createdNew)
+        {
+            return shutdownEvent;
+        }
+
+        shutdownEvent.Dispose();
+        throw new InvalidOperationException(
+            $"Worker shutdown event already exists for WorkerInstanceId '{definition.WorkerInstanceId}'. Refusing to reuse named event '{definition.ShutdownEventName}'.");
+    }
 
     private sealed class WorkerStartupResources : IDisposable
     {
