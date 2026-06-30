@@ -12,6 +12,9 @@ namespace OpenModulePlatform.WorkerProcessHost.Services;
 
 public sealed class WorkerProcessHostedService : BackgroundService
 {
+    private const long BytesPerMegabyte = 1024L * 1024L;
+    private const int MaxGcGeneration = 2;
+
     private readonly ILogger<WorkerProcessHostedService> _logger;
     private readonly WorkerProcessSettings _settings;
     private readonly WorkerModuleLoader _loader;
@@ -61,6 +64,8 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 _settings.AppInstanceId,
                 _settings.WorkerTypeKey);
         }
+        // This is the worker process boundary: unexpected module startup or runtime
+        // failures must be logged and converted to a non-zero process exit code.
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Environment.ExitCode = 1;
@@ -80,13 +85,11 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
     private async Task RunWorkerModuleAsync(CancellationToken stoppingToken)
     {
-        RegisteredWaitHandle? shutdownRegistration = null;
         using var shutdownEvent = TryOpenShutdownEvent();
+        var shutdownRegistration = RegisterExternalShutdownSignal(shutdownEvent);
 
         try
         {
-            shutdownRegistration = RegisterExternalShutdownSignal(shutdownEvent);
-
             var factory = _loader.LoadFactory(_settings.PluginAssemblyPath, _settings.WorkerTypeKey);
             using var scope = _scopeFactory.CreateScope();
 
@@ -125,7 +128,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
             return;
         }
 
-        var thresholdBytes = _settings.MaxPrivateMemoryMegabytes * 1024L * 1024L;
+        var thresholdBytes = _settings.MaxPrivateMemoryMegabytes * BytesPerMegabyte;
         var consecutiveOverageCount = 0;
         var compactedCurrentOverage = false;
 
@@ -230,21 +233,18 @@ public sealed class WorkerProcessHostedService : BackgroundService
     {
         await memoryGuardCts.CancelAsync();
 
-        try
+        await memoryGuardTask.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        if (memoryGuardTask.IsFaulted && memoryGuardTask.Exception is { } exception)
         {
-            await memoryGuardTask;
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when the worker process stops normally.
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Worker process memory guard stopped with an unexpected failure during cleanup. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
-                _settings.AppInstanceId,
-                _settings.WorkerTypeKey);
+            foreach (var innerException in exception.Flatten().InnerExceptions)
+            {
+                _logger.LogWarning(
+                    innerException,
+                    "Worker process memory guard stopped with an unexpected failure during cleanup. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                    _settings.AppInstanceId,
+                    _settings.WorkerTypeKey);
+            }
         }
     }
 
@@ -254,7 +254,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
         return process.PrivateMemorySize64;
     }
 
-    private static long ToMegabytes(long bytes) => bytes / (1024L * 1024L);
+    private static long ToMegabytes(long bytes) => bytes / BytesPerMegabyte;
 
     private static void CompactManagedHeap()
     {
@@ -262,9 +262,9 @@ public sealed class WorkerProcessHostedService : BackgroundService
         // collection requests LOH compaction and runs finalizers; the second collection reclaims
         // objects made collectible by those finalizers before deciding whether to recycle.
         System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
-        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        GC.Collect(MaxGcGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
-        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        GC.Collect(MaxGcGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
     }
 
     private EventWaitHandle? TryOpenShutdownEvent()
@@ -312,7 +312,11 @@ public sealed class WorkerProcessHostedService : BackgroundService
             shutdownEvent,
             static (state, _) =>
             {
-                var signalState = (ShutdownSignalState)state!;
+                if (state is not ShutdownSignalState signalState)
+                {
+                    return;
+                }
+
                 signalState.Logger.LogInformation(
                     "External shutdown requested. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
                     signalState.AppInstanceId,
