@@ -100,15 +100,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
             shutdownRegistration?.Unregister(null);
             if (memoryGuardCts is not null)
             {
-                if (memoryGuardTask is not null)
-                {
-                    await StopMemoryGuardAsync(memoryGuardCts, memoryGuardTask);
-                }
-                else
-                {
-                    await memoryGuardCts.CancelAsync();
-                    memoryGuardCts.Dispose();
-                }
+                await StopMemoryGuardAsync(memoryGuardCts, memoryGuardTask);
             }
 
             _applicationLifetime.StopApplication();
@@ -123,7 +115,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
         }
 
         var thresholdBytes = _settings.MaxPrivateMemoryMegabytes * 1024L * 1024L;
-        var consecutiveSamples = 0;
+        var consecutiveOverageCount = 0;
         var compactedCurrentOverage = false;
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_settings.MemoryCheckIntervalSeconds));
@@ -134,12 +126,12 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 var privateBytes = GetCurrentPrivateMemoryBytes();
                 if (privateBytes < thresholdBytes)
                 {
-                    consecutiveSamples = 0;
+                    consecutiveOverageCount = 0;
                     compactedCurrentOverage = false;
                     continue;
                 }
 
-                consecutiveSamples++;
+                consecutiveOverageCount++;
                 if (!compactedCurrentOverage)
                 {
                     _logger.LogWarning(
@@ -162,13 +154,13 @@ public sealed class WorkerProcessHostedService : BackgroundService
                             ToMegabytes(privateBytes),
                             _settings.MaxPrivateMemoryMegabytes);
 
-                        consecutiveSamples = 0;
+                        consecutiveOverageCount = 0;
                         compactedCurrentOverage = false;
                         continue;
                     }
                 }
 
-                if (consecutiveSamples < _settings.MemoryLimitConsecutiveSamples)
+                if (consecutiveOverageCount < _settings.MemoryLimitConsecutiveSamples)
                 {
                     _logger.LogWarning(
                         "Worker process private memory remains above the configured threshold. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PrivateMemoryMegabytes={PrivateMemoryMegabytes}, MaxPrivateMemoryMegabytes={MaxPrivateMemoryMegabytes}, ConsecutiveSamples={ConsecutiveSamples}, RequiredSamples={RequiredSamples}",
@@ -176,7 +168,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
                         _settings.WorkerTypeKey,
                         ToMegabytes(privateBytes),
                         _settings.MaxPrivateMemoryMegabytes,
-                        consecutiveSamples,
+                        consecutiveOverageCount,
                         _settings.MemoryLimitConsecutiveSamples);
                     continue;
                 }
@@ -187,7 +179,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
                     _settings.WorkerTypeKey,
                     ToMegabytes(privateBytes),
                     _settings.MaxPrivateMemoryMegabytes,
-                    consecutiveSamples);
+                    consecutiveOverageCount);
 
                 _applicationLifetime.StopApplication();
                 return;
@@ -222,17 +214,20 @@ public sealed class WorkerProcessHostedService : BackgroundService
             _settings.WorkerTypeKey);
     }
 
-    private static async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task memoryGuardTask)
+    private static async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task? memoryGuardTask)
     {
         await memoryGuardCts.CancelAsync();
 
-        try
+        if (memoryGuardTask is not null)
         {
-            await memoryGuardTask;
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when the worker process stops normally.
+            try
+            {
+                await memoryGuardTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when the worker process stops normally.
+            }
         }
 
         memoryGuardCts.Dispose();
@@ -249,6 +244,9 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
     private static void CompactManagedHeap()
     {
+        // The memory guard only reaches this path after a threshold breach. The first forced
+        // collection requests LOH compaction and runs finalizers; the second collection reclaims
+        // objects made collectible by those finalizers before deciding whether to recycle.
         System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
