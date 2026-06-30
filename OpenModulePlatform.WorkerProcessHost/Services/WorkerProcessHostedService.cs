@@ -100,7 +100,15 @@ public sealed class WorkerProcessHostedService : BackgroundService
             shutdownRegistration?.Unregister(null);
             if (memoryGuardCts is not null)
             {
-                await StopMemoryGuardAsync(memoryGuardCts, memoryGuardTask);
+                if (memoryGuardTask is not null)
+                {
+                    await StopMemoryGuardAsync(memoryGuardCts, memoryGuardTask);
+                }
+                else
+                {
+                    await memoryGuardCts.CancelAsync();
+                    memoryGuardCts.Dispose();
+                }
             }
 
             _applicationLifetime.StopApplication();
@@ -214,19 +222,17 @@ public sealed class WorkerProcessHostedService : BackgroundService
             _settings.WorkerTypeKey);
     }
 
-    private static async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task? memoryGuardTask)
+    private static async Task StopMemoryGuardAsync(CancellationTokenSource memoryGuardCts, Task memoryGuardTask)
     {
         await memoryGuardCts.CancelAsync();
-        if (memoryGuardTask is not null)
+
+        try
         {
-            try
-            {
-                await memoryGuardTask;
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when the worker process stops normally.
-            }
+            await memoryGuardTask;
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the worker process stops normally.
         }
 
         memoryGuardCts.Dispose();
@@ -284,27 +290,45 @@ public sealed class WorkerProcessHostedService : BackgroundService
             return null;
         }
 
+        var ownsShutdownEvent = true;
         try
         {
-            return ThreadPool.RegisterWaitForSingleObject(
+            var signalState = new ShutdownSignalState(
+                _logger,
+                _applicationLifetime,
+                _settings.AppInstanceId,
+                _settings.WorkerTypeKey);
+
+            var registration = ThreadPool.RegisterWaitForSingleObject(
                 shutdownEvent,
                 static (state, _) =>
                 {
-                    var service = (WorkerProcessHostedService)state!;
-                    service._logger.LogInformation(
+                    var signalState = (ShutdownSignalState)state!;
+                    signalState.Logger.LogInformation(
                         "External shutdown requested. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}",
-                        service._settings.AppInstanceId,
-                        service._settings.WorkerTypeKey);
-                    service._applicationLifetime.StopApplication();
+                        signalState.AppInstanceId,
+                        signalState.WorkerTypeKey);
+                    signalState.ApplicationLifetime.StopApplication();
                 },
-                this,
+                signalState,
                 Timeout.Infinite,
                 executeOnlyOnce: true);
+
+            ownsShutdownEvent = false;
+            return registration;
         }
-        catch
+        finally
         {
-            shutdownEvent.Dispose();
-            throw;
+            if (ownsShutdownEvent)
+            {
+                shutdownEvent.Dispose();
+            }
         }
     }
+
+    private sealed record ShutdownSignalState(
+        ILogger<WorkerProcessHostedService> Logger,
+        IHostApplicationLifetime ApplicationLifetime,
+        Guid AppInstanceId,
+        string WorkerTypeKey);
 }
