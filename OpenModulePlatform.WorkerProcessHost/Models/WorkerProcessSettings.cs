@@ -3,6 +3,8 @@ namespace OpenModulePlatform.WorkerProcessHost.Models;
 
 public sealed class WorkerProcessSettings
 {
+    private const string ShutdownEventNamePrefix = "OpenModulePlatform.WorkerShutdown.";
+
     public Guid AppInstanceId { get; set; }
 
     public Guid WorkerInstanceId { get; set; }
@@ -35,6 +37,18 @@ public sealed class WorkerProcessSettings
             WorkerInstanceId = AppInstanceId;
         }
 
+        if (!string.IsNullOrWhiteSpace(ShutdownEventName))
+        {
+            var expectedShutdownEventName = BuildShutdownEventName(WorkerInstanceId);
+            if (!string.Equals(ShutdownEventName.Trim(), expectedShutdownEventName, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "WorkerProcess:ShutdownEventName must match the OMP worker shutdown naming convention for WorkerProcess:WorkerInstanceId.");
+            }
+
+            ShutdownEventName = expectedShutdownEventName;
+        }
+
         if (string.IsNullOrWhiteSpace(WorkerTypeKey))
         {
             throw new InvalidOperationException("WorkerProcess:WorkerTypeKey must be configured.");
@@ -59,5 +73,10 @@ public sealed class WorkerProcessSettings
         {
             throw new InvalidOperationException("WorkerProcess:MemoryLimitConsecutiveSamples must be at least 1.");
         }
+    }
+
+    private static string BuildShutdownEventName(Guid workerInstanceId)
+    {
+        return $"{ShutdownEventNamePrefix}{workerInstanceId:N}";
     }
 }

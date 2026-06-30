@@ -14,6 +14,10 @@ public sealed class WorkerProcessHostedService : BackgroundService
 {
     private const long BytesPerMegabyte = 1024L * 1024L;
     private const int MaxGcGeneration = 2;
+    private static readonly NamedWaitHandleOptions ShutdownEventOptions = new()
+    {
+        CurrentUserOnly = true
+    };
 
     private readonly ILogger<WorkerProcessHostedService> _logger;
     private readonly WorkerProcessSettings _settings;
@@ -287,7 +291,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
         try
         {
-            return EventWaitHandle.OpenExisting(_settings.ShutdownEventName);
+            return EventWaitHandle.OpenExisting(_settings.ShutdownEventName, ShutdownEventOptions);
         }
         catch (WaitHandleCannotBeOpenedException)
         {
@@ -329,10 +333,13 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
         return ThreadPool.RegisterWaitForSingleObject(
             shutdownEvent,
-            static (state, _) =>
+            (state, _) =>
             {
                 if (state is not ShutdownSignalState signalState)
                 {
+                    _logger.LogWarning(
+                        "External shutdown callback received an unexpected state object. StateType={StateType}",
+                        state?.GetType().FullName ?? "<null>");
                     return;
                 }
 
