@@ -192,10 +192,7 @@ public sealed class HostAgentEngine
                     leaseRenewalCancellation.Token);
             }
 
-            if (lease.HostId.HasValue)
-            {
-                await _resourceCollector.CollectAndPersistAsync(lease.HostId.Value, leaseRenewalCancellation.Token);
-            }
+            await _resourceCollector.CollectAndPersistAsync(lease.HostId.Value, leaseRenewalCancellation.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && leaseLost.Value)
         {

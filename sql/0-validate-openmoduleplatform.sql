@@ -143,28 +143,23 @@ WHERE COL_LENGTH(required.SchemaName + N'.' + required.TableName, required.Colum
         (N'TR', N'omp.TR_WorkerInstances_ValidateArtifactCompatibility'),
         (N'TR', N'omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility')
     ) AS v(ObjectType, ObjectName)
-)
-SELECT @Missing = @Missing + COUNT(1)
-FROM RequiredProgrammableObjects required
-WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL;
-
-;WITH RequiredProgrammableObjects(ObjectType, ObjectName) AS
+),
+MissingProgrammableObjects(ObjectName) AS
 (
-    SELECT v.ObjectType, v.ObjectName
-    FROM (VALUES
-        (N'FN', N'omp.IsArtifactPackageCompatibleWithAppType'),
-        (N'TR', N'omp.TR_AppInstances_ValidateArtifactCompatibility'),
-        (N'TR', N'omp.TR_WorkerInstances_ValidateArtifactCompatibility'),
-        (N'TR', N'omp.TR_InstanceTemplateAppInstances_ValidateArtifactCompatibility')
-    ) AS v(ObjectType, ObjectName)
+    SELECT required.ObjectName
+    FROM RequiredProgrammableObjects required
+    WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL
 )
+SELECT @Missing = @Missing + COUNT(1),
+       @MissingProgrammableObjects =
+           COALESCE(STRING_AGG(CONVERT(nvarchar(max), ObjectName), N', '), N'')
+FROM MissingProgrammableObjects;
+
 SELECT @MissingProgrammableObjects =
     CASE
-        WHEN @MissingProgrammableObjects = N'' THEN required.ObjectName
-        ELSE CONCAT(@MissingProgrammableObjects, N', ', required.ObjectName)
-    END
-FROM RequiredProgrammableObjects required
-WHERE OBJECT_ID(required.ObjectName, required.ObjectType) IS NULL;
+        WHEN @MissingProgrammableObjects IS NULL THEN N''
+        ELSE @MissingProgrammableObjects
+    END;
 
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL
    AND OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL

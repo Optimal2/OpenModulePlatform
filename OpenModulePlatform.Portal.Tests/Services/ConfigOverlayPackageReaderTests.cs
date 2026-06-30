@@ -9,7 +9,7 @@ public sealed class ConfigOverlayPackageReaderTests : IDisposable
 
     public ConfigOverlayPackageReaderTests()
     {
-        _tempRoot = Path.Combine(Path.GetTempPath(), $"omp-configoverlay-tests-{Guid.NewGuid():N}");
+        _tempRoot = Path.Join(Path.GetTempPath(), $"omp-configoverlay-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempRoot);
     }
 
@@ -22,7 +22,7 @@ public sealed class ConfigOverlayPackageReaderTests : IDisposable
                 Directory.Delete(_tempRoot, recursive: true);
             }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best-effort cleanup for temporary test files.
         }
@@ -52,7 +52,7 @@ public sealed class ConfigOverlayPackageReaderTests : IDisposable
     [Fact]
     public async Task ReadConfigOverlayAsync_WithExternalSqlScripts_SetsSqlScriptCount()
     {
-        File.WriteAllText(Path.Combine(_tempRoot, "script.sql"), "SELECT 3;");
+        File.WriteAllText(GetTempFilePath("script.sql"), "SELECT 3;");
         var path = WriteOverlayJson("""
         {
           "overlayKey": "test-overlay",
@@ -105,8 +105,23 @@ public sealed class ConfigOverlayPackageReaderTests : IDisposable
 
     private string WriteOverlayJson(string json)
     {
-        var path = Path.Combine(_tempRoot, $"overlay-{Guid.NewGuid():N}.json");
+        var path = GetTempFilePath($"overlay-{Guid.NewGuid():N}.json");
         File.WriteAllText(path, json);
         return path;
+    }
+
+    private string GetTempFilePath(string fileName)
+    {
+        var fullPath = Path.GetFullPath(Path.Join(_tempRoot, fileName));
+        var normalizedRoot = Path.GetFullPath(_tempRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+
+        if (!fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Temporary test file path escaped the test root.");
+        }
+
+        return fullPath;
     }
 }

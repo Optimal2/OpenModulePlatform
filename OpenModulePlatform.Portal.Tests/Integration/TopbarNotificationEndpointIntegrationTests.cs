@@ -17,7 +17,7 @@ public sealed class TopbarNotificationEndpointIntegrationTests : IClassFixture<P
     [Fact]
     public async Task MarkAllRead_FormPost_RedirectsBackToCurrentPage()
     {
-        var client = _fixture.Factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        using var client = _fixture.Factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false
         });
@@ -38,7 +38,7 @@ public sealed class TopbarNotificationEndpointIntegrationTests : IClassFixture<P
     [Fact]
     public async Task MarkAllRead_AjaxPost_ReturnsUnreadCountPayload()
     {
-        var client = _fixture.Factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
+        using var client = _fixture.Factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false
         });
