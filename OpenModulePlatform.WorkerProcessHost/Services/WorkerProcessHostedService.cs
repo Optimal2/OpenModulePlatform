@@ -1,6 +1,5 @@
 // File: OpenModulePlatform.WorkerProcessHost/Services/WorkerProcessHostedService.cs
 using System.Diagnostics;
-using System.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -244,7 +243,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
     private static void CompactManagedHeap()
     {
-        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
         GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
