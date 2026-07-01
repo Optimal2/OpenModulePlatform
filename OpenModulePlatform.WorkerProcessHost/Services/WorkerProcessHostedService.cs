@@ -291,10 +291,11 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
         try
         {
-            // .NET 10 exposes an OpenExisting overload that accepts NamedWaitHandleOptions.
-            // Keep this paired with WorkerManagerHostedService.CreateShutdownEvent in
-            // OpenModulePlatform.WorkerManager.WindowsService, which creates the event
-            // with the same CurrentUserOnly option.
+            // This project targets net10.0, where OpenExisting(string, NamedWaitHandleOptions)
+            // is the supported overload for named-wait-handle scoping. Keep this paired with
+            // WorkerManagerHostedService.CreateShutdownEvent in
+            // OpenModulePlatform.WorkerManager.WindowsService, which creates the event with the
+            // same CurrentUserOnly option.
             return EventWaitHandle.OpenExisting(_settings.ShutdownEventName, ShutdownEventOptions);
         }
         catch (WaitHandleCannotBeOpenedException)
