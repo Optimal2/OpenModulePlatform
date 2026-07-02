@@ -800,7 +800,7 @@ a:hover {
 .card.maintenance-preview-candidate-card {
     --maintenance-preview-card-surface: color-mix(in srgb, var(--surface-muted) 82%, var(--text-muted) 8%);
     --maintenance-preview-card-surface-strong: color-mix(in srgb, var(--surface-muted) 72%, var(--text-muted) 14%);
-    padding: 0;
+    padding: 8px;
     overflow: hidden;
     border-color: color-mix(in srgb, var(--border) 70%, var(--text-muted) 30%);
     background: var(--maintenance-preview-card-surface);
@@ -819,9 +819,10 @@ a:hover {
     padding: 16px;
     color: inherit;
     text-align: left;
+    box-sizing: border-box;
     border: 0;
     border-bottom: 1px solid var(--border);
-    border-radius: 0;
+    border-radius: 10px;
     background: var(--maintenance-preview-card-surface);
     box-shadow: none;
     cursor: pointer;
@@ -839,6 +840,11 @@ a:hover {
     padding: 10px 14px;
     border-bottom: 0;
     background: var(--maintenance-preview-card-surface-strong);
+}
+
+.maintenance-preview-candidate-card.is-expanded .maintenance-preview-candidate-card__header {
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
 }
 
 .maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__title {
