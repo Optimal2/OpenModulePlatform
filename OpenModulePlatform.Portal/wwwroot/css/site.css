@@ -798,10 +798,12 @@ a:hover {
 }
 
 .maintenance-preview-candidate-card {
+    --maintenance-preview-card-surface: color-mix(in srgb, var(--surface-muted) 82%, var(--text-muted) 8%);
+    --maintenance-preview-card-surface-strong: color-mix(in srgb, var(--surface-muted) 72%, var(--text-muted) 14%);
     padding: 0;
     overflow: hidden;
     border-color: color-mix(in srgb, var(--border) 70%, var(--text-muted) 30%);
-    background: color-mix(in srgb, var(--surface-muted) 68%, var(--surface) 32%);
+    background: var(--maintenance-preview-card-surface);
 }
 
 .maintenance-preview-candidate-card__header {
@@ -816,7 +818,7 @@ a:hover {
     border: 0;
     border-bottom: 1px solid var(--border);
     border-radius: 0;
-    background: var(--surface-muted);
+    background: var(--maintenance-preview-card-surface);
     box-shadow: none;
     cursor: pointer;
 }
@@ -832,7 +834,7 @@ a:hover {
     align-items: center;
     padding: 10px 14px;
     border-bottom: 0;
-    background: color-mix(in srgb, var(--surface-muted) 74%, var(--text-muted) 10%);
+    background: var(--maintenance-preview-card-surface-strong);
 }
 
 .maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__title {
@@ -894,6 +896,7 @@ a:hover {
 
 .maintenance-preview-candidate-card .table-scroll {
     padding: 0 16px 16px;
+    background: var(--maintenance-preview-card-surface);
 }
 
 .maintenance-preview-candidate-grid {
