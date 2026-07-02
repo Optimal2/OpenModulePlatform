@@ -791,12 +791,52 @@ a:hover {
 }
 
 .maintenance-retention-form__versions {
-    max-width: 170px;
+    max-width: 190px;
 }
 
-.maintenance-retention-form__versions input {
-    width: 8rem;
+.maintenance-retention-counter {
+    display: inline-grid;
+    grid-template-columns: 2.3rem minmax(4.5rem, 6rem) 2.3rem;
+    align-items: stretch;
     max-width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.maintenance-retention-counter input {
+    width: 100%;
+    min-width: 0;
+    padding-right: 8px;
+    padding-left: 8px;
+    text-align: center;
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+}
+
+.maintenance-retention-counter input:focus {
+    outline: 2px solid color-mix(in srgb, var(--link) 60%, transparent);
+    outline-offset: -2px;
+}
+
+.maintenance-retention-counter__step {
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--surface-muted);
+    color: var(--text);
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+
+.maintenance-retention-counter__step:hover {
+    background: var(--accent);
+    color: var(--link-hover);
 }
 
 .maintenance-retention-form__actions {
