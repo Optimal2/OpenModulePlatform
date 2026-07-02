@@ -2800,4 +2800,5 @@
   <data name="Sample key" xml:space="preserve"><value>Sample-nyckel</value></data>
   <data name="Expand all" xml:space="preserve"><value>Expandera alla</value></data>
   <data name="Minimize all" xml:space="preserve"><value>Minimera alla</value></data>
+  <data name="Confirm change" xml:space="preserve"><value>Bekräfta ändring</value></data>
 </root>
