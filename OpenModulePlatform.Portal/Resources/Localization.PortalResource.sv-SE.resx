@@ -2755,4 +2755,6 @@
   <data name="Max value" xml:space="preserve"><value>Maxvärde</value></data>
   <data name="First sampled UTC" xml:space="preserve"><value>Första provtagning UTC</value></data>
   <data name="Sample key" xml:space="preserve"><value>Sample-nyckel</value></data>
+  <data name="Expand all" xml:space="preserve"><value>Expandera alla</value></data>
+  <data name="Minimize all" xml:space="preserve"><value>Minimera alla</value></data>
 </root>
