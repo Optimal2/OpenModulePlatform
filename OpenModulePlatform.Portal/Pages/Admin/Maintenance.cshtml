@@ -337,8 +337,13 @@
 else
 {
     <div class="toolbar maintenance-preview-actions top-gap">
-        <button type="button" data-maintenance-preview-expand-all>@L["Expand all"]</button>
-        <button type="button" class="btn btn-secondary" data-maintenance-preview-collapse-all>@L["Minimize all"]</button>
+        <button type="button"
+                data-maintenance-preview-toggle-all
+                data-expand-label="@L["Expand all"]"
+                data-collapse-label="@L["Minimize all"]"
+                aria-expanded="false">
+            @L["Expand all"]
+        </button>
     </div>
 
     <div class="maintenance-preview-candidate-list top-gap">
@@ -541,6 +546,20 @@ else
     }
 
     const groups = Array.from(preview.querySelectorAll('[data-maintenance-preview-group]'));
+    const toggleAll = preview.querySelector('[data-maintenance-preview-toggle-all]');
+
+    const updateToggleAll = () => {
+        if (!toggleAll) {
+            return;
+        }
+
+        const allExpanded = groups.length > 0 && groups.every(group => group.classList.contains('is-expanded'));
+        toggleAll.textContent = allExpanded
+            ? toggleAll.dataset.collapseLabel ?? 'Minimize all'
+            : toggleAll.dataset.expandLabel ?? 'Expand all';
+        toggleAll.setAttribute('aria-expanded', allExpanded ? 'true' : 'false');
+    };
+
     const setGroupExpanded = (group, expanded) => {
         const toggle = group.querySelector('[data-maintenance-preview-toggle]');
         const body = group.querySelector('[data-maintenance-preview-body]');
@@ -564,19 +583,18 @@ else
 
         toggle.addEventListener('click', () => {
             setGroupExpanded(group, toggle.getAttribute('aria-expanded') !== 'true');
+            updateToggleAll();
         });
     }
 
-    preview.querySelector('[data-maintenance-preview-expand-all]')?.addEventListener('click', () => {
+    toggleAll?.addEventListener('click', () => {
+        const shouldExpand = !groups.every(group => group.classList.contains('is-expanded'));
         for (const group of groups) {
-            setGroupExpanded(group, true);
+            setGroupExpanded(group, shouldExpand);
         }
+        updateToggleAll();
     });
 
-    preview.querySelector('[data-maintenance-preview-collapse-all]')?.addEventListener('click', () => {
-        for (const group of groups) {
-            setGroupExpanded(group, false);
-        }
-    });
+    updateToggleAll();
 })();
 </script>
