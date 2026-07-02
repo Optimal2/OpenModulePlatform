@@ -987,4 +987,6 @@
   <data name="Maximum" xml:space="preserve"><value>Maximum</value></data>
   <data name="From {0} to {1}." xml:space="preserve"><value>From {0} to {1}.</value></data>
   <data name="No historical data for the selected time range." xml:space="preserve"><value>No historical data for the selected time range.</value></data>
+  <data name="Expand all" xml:space="preserve"><value>Expand all</value></data>
+  <data name="Minimize all" xml:space="preserve"><value>Minimize all</value></data>
 </root>

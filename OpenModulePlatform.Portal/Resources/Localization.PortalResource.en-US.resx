@@ -955,4 +955,6 @@
   <data name="Max value" xml:space="preserve"><value>Max value</value></data>
   <data name="First sampled UTC" xml:space="preserve"><value>First sampled UTC</value></data>
   <data name="Sample key" xml:space="preserve"><value>Sample key</value></data>
+  <data name="Expand all" xml:space="preserve"><value>Expand all</value></data>
+  <data name="Minimize all" xml:space="preserve"><value>Minimize all</value></data>
 </root>
