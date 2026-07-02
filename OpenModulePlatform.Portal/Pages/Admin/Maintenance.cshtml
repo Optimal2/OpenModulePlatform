@@ -249,11 +249,31 @@
 
     <form method="post"
           class="form-grid maintenance-retention-form top-gap"
-          data-maintenance-retention-form
-          data-maintenance-retention-confirmed="@Model.RetentionChangeConfirmed.ToString().ToLowerInvariant()">
+          data-maintenance-retention-form>
         <div class="form-field maintenance-retention-form__versions">
             <label asp-for="Input.MaxVersionsToKeep">@L["Versions to keep"]</label>
-            <input asp-for="Input.MaxVersionsToKeep" type="number" min="1" max="100" data-maintenance-retention-input />
+            <div class="maintenance-retention-counter">
+                <button type="button"
+                        class="maintenance-retention-counter__step"
+                        data-maintenance-retention-step="-1"
+                        aria-label="@L["Decrease"]">
+                    -
+                </button>
+                <input asp-for="Input.MaxVersionsToKeep"
+                       type="number"
+                       min="1"
+                       max="100"
+                       step="1"
+                       inputmode="numeric"
+                       required
+                       data-maintenance-retention-input />
+                <button type="button"
+                        class="maintenance-retention-counter__step"
+                        data-maintenance-retention-step="1"
+                        aria-label="@L["Increase"]">
+                    +
+                </button>
+            </div>
             <span asp-validation-for="Input.MaxVersionsToKeep"></span>
         </div>
 
@@ -434,25 +454,62 @@ else
     const confirmButton = form.querySelector('[data-maintenance-retention-confirm]');
     const cancelButton = form.querySelector('[data-maintenance-retention-cancel]');
     const queueButton = form.querySelector('[data-maintenance-retention-queue]');
-    const buttons = [confirmButton, cancelButton, queueButton].filter(Boolean);
-    const originalValue = input.defaultValue;
-    let isConfirmed = form.dataset.maintenanceRetentionConfirmed === 'true';
+    const stepButtons = Array.from(form.querySelectorAll('[data-maintenance-retention-step]'));
+    const confirmedValue = input.defaultValue;
+
+    const getNumericValue = () => {
+        const parsed = Number.parseInt(input.value, 10);
+        return Number.isFinite(parsed) ? parsed : Number.parseInt(confirmedValue, 10);
+    };
+
+    const clampValue = (value) => {
+        const min = Number.parseInt(input.min, 10);
+        const max = Number.parseInt(input.max, 10);
+        let nextValue = value;
+
+        if (Number.isFinite(min)) {
+            nextValue = Math.max(min, nextValue);
+        }
+
+        if (Number.isFinite(max)) {
+            nextValue = Math.min(max, nextValue);
+        }
+
+        return nextValue;
+    };
 
     const updateDirtyState = () => {
-        const isDirty = input.value !== originalValue;
-        const canAct = isDirty || isConfirmed;
-        form.classList.toggle('is-dirty', canAct);
+        const isDirty = input.value !== confirmedValue;
+        const isValid = input.checkValidity();
+        form.classList.toggle('is-dirty', isDirty);
 
-        for (const button of buttons) {
-            button.disabled = !canAct;
+        if (confirmButton) {
+            confirmButton.disabled = !isDirty || !isValid;
+        }
+
+        if (cancelButton) {
+            cancelButton.disabled = !isDirty;
+        }
+
+        if (queueButton) {
+            queueButton.disabled = isDirty || !isValid;
         }
     };
+
+    for (const stepButton of stepButtons) {
+        stepButton.addEventListener('click', () => {
+            const delta = Number.parseInt(stepButton.dataset.maintenanceRetentionStep ?? '0', 10);
+            const currentValue = getNumericValue();
+            input.value = clampValue(currentValue + delta).toString();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.focus();
+        });
+    }
 
     input.addEventListener('input', updateDirtyState);
     input.addEventListener('change', updateDirtyState);
     cancelButton?.addEventListener('click', () => {
-        isConfirmed = false;
-        input.value = originalValue;
+        input.value = confirmedValue;
         updateDirtyState();
         input.focus();
     });

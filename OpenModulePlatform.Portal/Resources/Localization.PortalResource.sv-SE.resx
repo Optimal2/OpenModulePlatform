@@ -2758,4 +2758,6 @@
   <data name="Expand all" xml:space="preserve"><value>Expandera alla</value></data>
   <data name="Minimize all" xml:space="preserve"><value>Minimera alla</value></data>
   <data name="Confirm change" xml:space="preserve"><value>Bekräfta ändring</value></data>
+  <data name="Decrease" xml:space="preserve"><value>Minska</value></data>
+  <data name="Increase" xml:space="preserve"><value>Öka</value></data>
 </root>

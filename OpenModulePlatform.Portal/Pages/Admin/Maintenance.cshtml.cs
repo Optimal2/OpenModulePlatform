@@ -39,8 +39,6 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         MaxVersionsToKeep = 5
     };
 
-    public bool RetentionChangeConfirmed { get; private set; }
-
     public IReadOnlyList<MaintenanceFindingRow> MaintenanceFindings { get; private set; } = [];
 
     public IReadOnlyList<HostAgentJobRow> RecentHostAgentJobs { get; private set; } = [];
@@ -73,7 +71,6 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
         SetTitles("Maintenance");
         Preview = await LoadPreviewCoreAsync(ct);
-        RetentionChangeConfirmed = ModelState.IsValid;
         await LoadOperationalListsAsync(ct);
         return Page();
     }
