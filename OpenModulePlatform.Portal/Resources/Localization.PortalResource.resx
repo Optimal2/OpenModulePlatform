@@ -2567,4 +2567,5 @@
   <data name="Sample key" xml:space="preserve"><value>Sample key</value></data>
   <data name="Expand all" xml:space="preserve"><value>Expand all</value></data>
   <data name="Minimize all" xml:space="preserve"><value>Minimize all</value></data>
+  <data name="Confirm change" xml:space="preserve"><value>Confirm change</value></data>
 </root>

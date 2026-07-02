@@ -785,6 +785,81 @@ a:hover {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
+.form-grid.maintenance-retention-form {
+    grid-template-columns: minmax(120px, 170px) minmax(0, 1fr);
+    align-items: end;
+}
+
+.maintenance-retention-form__versions {
+    max-width: 170px;
+}
+
+.maintenance-retention-form__versions input {
+    width: 8rem;
+    max-width: 100%;
+}
+
+.maintenance-retention-form__actions {
+    align-self: end;
+}
+
+.btn.maintenance-retention-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.maintenance-retention-action__icon {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    flex: 0 0 1rem;
+    background: currentColor;
+    -webkit-mask: var(--maintenance-retention-action-icon) center / contain no-repeat;
+    mask: var(--maintenance-retention-action-icon) center / contain no-repeat;
+}
+
+.btn.maintenance-retention-action--confirm {
+    --maintenance-retention-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+    border-color: #2f8f58;
+    background: #2f8f58;
+    color: #ffffff;
+}
+
+.btn.maintenance-retention-action--confirm:hover:not(:disabled) {
+    border-color: #237247;
+    background: #237247;
+    color: #ffffff;
+}
+
+.btn.maintenance-retention-action--cancel {
+    --maintenance-retention-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/cancel.svg");
+    border-color: #6d8ed8;
+    background: #edf4ff;
+    color: #2257a5;
+}
+
+.btn.maintenance-retention-action--cancel:hover:not(:disabled) {
+    border-color: #4f74c4;
+    background: #dbeafe;
+    color: #173f7a;
+}
+
+@media (max-width: 760px) {
+    .form-grid.maintenance-retention-form {
+        grid-template-columns: 1fr;
+    }
+
+    .maintenance-retention-form__versions {
+        max-width: none;
+    }
+
+    .maintenance-retention-form__actions {
+        justify-content: flex-start;
+    }
+}
+
 .maintenance-preview-summary__metric {
     padding: 12px 14px;
     border: 1px solid var(--border);
