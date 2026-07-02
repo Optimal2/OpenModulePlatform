@@ -796,7 +796,7 @@ a:hover {
 
 .maintenance-retention-counter {
     display: inline-grid;
-    grid-template-columns: 2.3rem minmax(4.5rem, 6rem) 2.3rem;
+    grid-template-columns: minmax(4.5rem, 6rem) 2.3rem;
     align-items: stretch;
     max-width: 100%;
     overflow: hidden;
@@ -812,14 +812,18 @@ a:hover {
     padding-left: 8px;
     text-align: center;
     border: 0;
-    border-right: 1px solid var(--border);
-    border-left: 1px solid var(--border);
     border-radius: 0;
 }
 
 .maintenance-retention-counter input:focus {
     outline: 2px solid color-mix(in srgb, var(--link) 60%, transparent);
     outline-offset: -2px;
+}
+
+.maintenance-retention-counter__steps {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    border-left: 1px solid var(--border);
 }
 
 .maintenance-retention-counter__step {
@@ -830,8 +834,13 @@ a:hover {
     border-radius: 0;
     background: var(--surface-muted);
     color: var(--text);
-    font-size: 1.05rem;
+    font-size: 0.9rem;
+    line-height: 1;
     font-weight: 800;
+}
+
+.maintenance-retention-counter__step + .maintenance-retention-counter__step {
+    border-top: 1px solid var(--border);
 }
 
 .maintenance-retention-counter__step:hover {
