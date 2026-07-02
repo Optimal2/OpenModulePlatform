@@ -23,8 +23,8 @@
     }
 
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["OMP scan"].Value, ScanSectionId));
-    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact retention"].Value, RetentionSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["HostAgent job queue"].Value, JobsSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact retention"].Value, RetentionSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact cleanup preview"].Value, PreviewSectionId));
 
     var sectionNavigator = new SectionNavigatorModel
@@ -171,36 +171,6 @@
     }
 </section>
 
-<section id="@RetentionSectionId" class="card top-gap section-navigator-target">
-    <h3>@L["Artifact retention"]</h3>
-    <p class="muted">@L["The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected."]</p>
-
-    <form method="post" class="form-grid top-gap">
-        <div class="form-field">
-            <label asp-for="Input.MaxVersionsToKeep">@L["Versions to keep"]</label>
-            <input asp-for="Input.MaxVersionsToKeep" type="number" min="1" max="100" />
-            <span asp-validation-for="Input.MaxVersionsToKeep"></span>
-            <div class="field-help">@L["For example, 5 keeps the five newest registered versions for each artifact identity."]</div>
-        </div>
-
-        <div class="form-field">
-            <label>@L["Artifact store cleanup"]</label>
-            <input value="@L["Queued for HostAgent"]" readonly />
-            <div class="field-help">@L["The HostAgent that claims the global retention job deletes database rows and central ArtifactStore payloads, then queues host-specific cache cleanup jobs. Portal only creates the job request."]</div>
-        </div>
-
-        <div class="toolbar">
-            <button type="submit" asp-page-handler="Preview">@L["Preview cleanup"]</button>
-            <button type="submit"
-                    asp-page-handler="CleanupArtifacts"
-                    class="btn btn-danger"
-                    data-confirm-message="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]">
-                @L["Queue artifact cleanup"]
-            </button>
-        </div>
-    </form>
-</section>
-
 <section id="@JobsSectionId" class="card top-gap section-navigator-target">
     <h3>@L["HostAgent job queue"]</h3>
     <p class="muted">@L["HostAgent jobs are queued in the database and picked up by the matching host during its next cycle."]</p>
@@ -273,8 +243,40 @@
     }
 </section>
 
-<section id="@PreviewSectionId" class="section-navigator-target top-gap" aria-label="@L["Artifact cleanup preview"]">
-    <div class="card maintenance-preview-summary" aria-label="@L["Artifact cleanup preview"]">
+<section id="@RetentionSectionId" class="card top-gap section-navigator-target">
+    <h3>@L["Artifact retention"]</h3>
+    <p class="muted">@L["The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected."]</p>
+
+    <form method="post" class="form-grid top-gap">
+        <div class="form-field">
+            <label asp-for="Input.MaxVersionsToKeep">@L["Versions to keep"]</label>
+            <input asp-for="Input.MaxVersionsToKeep" type="number" min="1" max="100" />
+            <span asp-validation-for="Input.MaxVersionsToKeep"></span>
+            <div class="field-help">@L["For example, 5 keeps the five newest registered versions for each artifact identity."]</div>
+        </div>
+
+        <div class="form-field">
+            <label>@L["Artifact store cleanup"]</label>
+            <input value="@L["Queued for HostAgent"]" readonly />
+            <div class="field-help">@L["The HostAgent that claims the global retention job deletes database rows and central ArtifactStore payloads, then queues host-specific cache cleanup jobs. Portal only creates the job request."]</div>
+        </div>
+
+        <div class="toolbar">
+            <button type="submit" asp-page-handler="Preview">@L["Preview cleanup"]</button>
+            <button type="submit"
+                    asp-page-handler="CleanupArtifacts"
+                    class="btn btn-danger"
+                    data-confirm-message="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]">
+                @L["Queue artifact cleanup"]
+            </button>
+        </div>
+    </form>
+
+    <div id="@PreviewSectionId"
+         class="maintenance-preview section-navigator-target top-gap"
+         data-maintenance-preview
+         aria-label="@L["Artifact cleanup preview"]">
+    <div class="maintenance-preview-summary" aria-label="@L["Artifact cleanup preview"]">
         <div class="card-grid portal-admin-metrics">
             <div class="metric-card maintenance-preview-summary__metric">
                 <span class="metric">@Model.Preview.AffectedArtifactIdentityCount</span>
@@ -301,29 +303,40 @@
 }
 else
 {
+    <div class="toolbar maintenance-preview-actions top-gap">
+        <button type="button" data-maintenance-preview-expand-all>@L["Expand all"]</button>
+        <button type="button" class="btn btn-secondary" data-maintenance-preview-collapse-all>@L["Minimize all"]</button>
+    </div>
+
     <div class="maintenance-preview-candidate-list top-gap">
-        @foreach (var group in candidateGroups)
+        @foreach (var groupEntry in candidateGroups.Select((group, index) => new { Group = group, Index = index }))
         {
+            var group = groupEntry.Group;
             var first = group.First();
-            <article class="card maintenance-preview-candidate-card">
-                <header class="maintenance-preview-candidate-card__header">
-                    <div>
-                        <h4>@first.ModuleKey / @first.AppKey</h4>
-                        <div class="maintenance-preview-candidate-card__meta">
+            var groupPanelId = $"maintenance-preview-group-{groupEntry.Index}";
+            <article class="card maintenance-preview-candidate-card is-collapsed" data-maintenance-preview-group>
+                <button type="button"
+                        class="maintenance-preview-candidate-card__header"
+                        data-maintenance-preview-toggle
+                        aria-expanded="false"
+                        aria-controls="@groupPanelId">
+                    <span class="maintenance-preview-candidate-card__identity">
+                        <span class="maintenance-preview-candidate-card__title">@first.ModuleKey / @first.AppKey</span>
+                        <span class="maintenance-preview-candidate-card__meta">
                             <span class="pill">@first.PackageType</span>
                             @if (!string.IsNullOrWhiteSpace(first.TargetName))
                             {
                                 <code>@first.TargetName</code>
                             }
-                        </div>
-                    </div>
-                    <div class="maintenance-preview-candidate-card__summary">
+                        </span>
+                    </span>
+                    <span class="maintenance-preview-candidate-card__summary">
                         <span>@group.Count()</span>
                         <span class="muted">@L["Old version candidates"]</span>
-                    </div>
-                </header>
+                    </span>
+                </button>
 
-                <div class="table-scroll">
+                <div id="@groupPanelId" class="table-scroll" data-maintenance-preview-body hidden>
                     <table class="grid maintenance-preview-candidate-grid">
                         <thead>
                             <tr>
@@ -363,6 +376,7 @@ else
         }
     </div>
 }
+    </div>
 </section>
 
     </div>
@@ -392,5 +406,51 @@ else
             }
         });
     }
+})();
+
+(() => {
+    const preview = document.querySelector('[data-maintenance-preview]');
+    if (!preview) {
+        return;
+    }
+
+    const groups = Array.from(preview.querySelectorAll('[data-maintenance-preview-group]'));
+    const setGroupExpanded = (group, expanded) => {
+        const toggle = group.querySelector('[data-maintenance-preview-toggle]');
+        const body = group.querySelector('[data-maintenance-preview-body]');
+        group.classList.toggle('is-expanded', expanded);
+        group.classList.toggle('is-collapsed', !expanded);
+
+        if (toggle) {
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        }
+
+        if (body) {
+            body.hidden = !expanded;
+        }
+    };
+
+    for (const group of groups) {
+        const toggle = group.querySelector('[data-maintenance-preview-toggle]');
+        if (!toggle) {
+            continue;
+        }
+
+        toggle.addEventListener('click', () => {
+            setGroupExpanded(group, toggle.getAttribute('aria-expanded') !== 'true');
+        });
+    }
+
+    preview.querySelector('[data-maintenance-preview-expand-all]')?.addEventListener('click', () => {
+        for (const group of groups) {
+            setGroupExpanded(group, true);
+        }
+    });
+
+    preview.querySelector('[data-maintenance-preview-collapse-all]')?.addEventListener('click', () => {
+        for (const group of groups) {
+            setGroupExpanded(group, false);
+        }
+    });
 })();
 </script>

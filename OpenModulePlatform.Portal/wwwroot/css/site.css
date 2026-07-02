@@ -776,6 +776,9 @@ a:hover {
 
 .maintenance-preview-summary {
     padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
 }
 
 .maintenance-preview-summary .portal-admin-metrics {
@@ -800,17 +803,40 @@ a:hover {
 }
 
 .maintenance-preview-candidate-card__header {
+    width: 100%;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
     padding: 16px;
+    color: inherit;
+    text-align: left;
+    border: 0;
     border-bottom: 1px solid var(--border);
+    border-radius: 0;
     background: var(--surface-muted);
+    box-shadow: none;
+    cursor: pointer;
 }
 
-.maintenance-preview-candidate-card__header h4 {
+.maintenance-preview-candidate-card__header:hover,
+.maintenance-preview-candidate-card__header:focus-visible {
+    color: inherit;
+    border-color: var(--border);
+    background: color-mix(in srgb, var(--surface-muted) 78%, var(--link) 22%);
+}
+
+.maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__header {
+    border-bottom: 0;
+}
+
+.maintenance-preview-candidate-card__title {
+    display: block;
     margin: 0 0 8px;
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.3;
 }
 
 .maintenance-preview-candidate-card__meta {
@@ -831,6 +857,10 @@ a:hover {
     font-size: 1.4rem;
     font-weight: 700;
     line-height: 1;
+}
+
+.maintenance-preview-candidate-card__summary .muted {
+    font-size: 0.9rem;
 }
 
 .maintenance-preview-candidate-card .table-scroll {
