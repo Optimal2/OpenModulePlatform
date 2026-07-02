@@ -797,13 +797,17 @@ a:hover {
     gap: 14px;
 }
 
-.maintenance-preview-candidate-card {
+.card.maintenance-preview-candidate-card {
     --maintenance-preview-card-surface: color-mix(in srgb, var(--surface-muted) 82%, var(--text-muted) 8%);
     --maintenance-preview-card-surface-strong: color-mix(in srgb, var(--surface-muted) 72%, var(--text-muted) 14%);
     padding: 0;
     overflow: hidden;
     border-color: color-mix(in srgb, var(--border) 70%, var(--text-muted) 30%);
     background: var(--maintenance-preview-card-surface);
+}
+
+.card.maintenance-preview-candidate-card.is-collapsed {
+    background: var(--maintenance-preview-card-surface-strong);
 }
 
 .maintenance-preview-candidate-card__header {
