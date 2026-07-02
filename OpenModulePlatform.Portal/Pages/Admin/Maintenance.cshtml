@@ -253,12 +253,6 @@
         <div class="form-field maintenance-retention-form__versions">
             <label asp-for="Input.MaxVersionsToKeep">@L["Versions to keep"]</label>
             <div class="maintenance-retention-counter">
-                <button type="button"
-                        class="maintenance-retention-counter__step"
-                        data-maintenance-retention-step="-1"
-                        aria-label="@L["Decrease"]">
-                    -
-                </button>
                 <input asp-for="Input.MaxVersionsToKeep"
                        type="number"
                        min="1"
@@ -267,12 +261,20 @@
                        inputmode="numeric"
                        required
                        data-maintenance-retention-input />
-                <button type="button"
-                        class="maintenance-retention-counter__step"
-                        data-maintenance-retention-step="1"
-                        aria-label="@L["Increase"]">
-                    +
-                </button>
+                <div class="maintenance-retention-counter__steps">
+                    <button type="button"
+                            class="maintenance-retention-counter__step"
+                            data-maintenance-retention-step="1"
+                            aria-label="@L["Increase"]">
+                        +
+                    </button>
+                    <button type="button"
+                            class="maintenance-retention-counter__step"
+                            data-maintenance-retention-step="-1"
+                            aria-label="@L["Decrease"]">
+                        -
+                    </button>
+                </div>
             </div>
             <span asp-validation-for="Input.MaxVersionsToKeep"></span>
         </div>
@@ -441,6 +443,16 @@ else
 })();
 
 (() => {
+    const scrollStorageKey = 'omp.adminMaintenance.retentionCleanupScrollY';
+    const storedScrollY = window.sessionStorage.getItem(scrollStorageKey);
+    if (storedScrollY) {
+        window.sessionStorage.removeItem(scrollStorageKey);
+        const scrollY = Number.parseInt(storedScrollY, 10);
+        if (Number.isFinite(scrollY)) {
+            window.requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: window.scrollX }));
+        }
+    }
+
     const form = document.querySelector('[data-maintenance-retention-form]');
     if (!form) {
         return;
@@ -508,6 +520,12 @@ else
 
     input.addEventListener('input', updateDirtyState);
     input.addEventListener('change', updateDirtyState);
+    form.addEventListener('submit', (event) => {
+        const submitter = event.submitter;
+        if (submitter?.matches('[data-maintenance-retention-queue]') && !submitter.disabled) {
+            window.sessionStorage.setItem(scrollStorageKey, Math.round(window.scrollY).toString());
+        }
+    });
     cancelButton?.addEventListener('click', () => {
         input.value = confirmedValue;
         updateDirtyState();
