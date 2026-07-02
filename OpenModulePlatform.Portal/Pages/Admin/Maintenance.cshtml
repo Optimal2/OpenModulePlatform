@@ -247,26 +247,38 @@
     <h3>@L["Artifact retention"]</h3>
     <p class="muted">@L["The cleanup groups artifacts by app, package type, and target. If a group contains more versions than the limit, the oldest registered versions become candidates. Candidates still referenced by desired app, worker, HostAgent, template, or host requirement rows are protected."]</p>
 
-    <form method="post" class="form-grid top-gap">
-        <div class="form-field">
+    <form method="post"
+          class="form-grid maintenance-retention-form top-gap"
+          data-maintenance-retention-form
+          data-maintenance-retention-confirmed="@Model.RetentionChangeConfirmed.ToString().ToLowerInvariant()">
+        <div class="form-field maintenance-retention-form__versions">
             <label asp-for="Input.MaxVersionsToKeep">@L["Versions to keep"]</label>
-            <input asp-for="Input.MaxVersionsToKeep" type="number" min="1" max="100" />
+            <input asp-for="Input.MaxVersionsToKeep" type="number" min="1" max="100" data-maintenance-retention-input />
             <span asp-validation-for="Input.MaxVersionsToKeep"></span>
-            <div class="field-help">@L["For example, 5 keeps the five newest registered versions for each artifact identity."]</div>
         </div>
 
-        <div class="form-field">
-            <label>@L["Artifact store cleanup"]</label>
-            <input value="@L["Queued for HostAgent"]" readonly />
-            <div class="field-help">@L["The HostAgent that claims the global retention job deletes database rows and central ArtifactStore payloads, then queues host-specific cache cleanup jobs. Portal only creates the job request."]</div>
-        </div>
-
-        <div class="toolbar">
-            <button type="submit" asp-page-handler="Preview">@L["Preview cleanup"]</button>
+        <div class="toolbar maintenance-retention-form__actions">
+            <button type="submit"
+                    asp-page-handler="Preview"
+                    class="btn maintenance-retention-action maintenance-retention-action--confirm"
+                    data-maintenance-retention-confirm
+                    disabled>
+                <span class="maintenance-retention-action__icon" aria-hidden="true"></span>
+                @L["Confirm change"]
+            </button>
+            <button type="button"
+                    class="btn maintenance-retention-action maintenance-retention-action--cancel"
+                    data-maintenance-retention-cancel
+                    disabled>
+                <span class="maintenance-retention-action__icon" aria-hidden="true"></span>
+                @L["Cancel"]
+            </button>
             <button type="submit"
                     asp-page-handler="CleanupArtifacts"
                     class="btn btn-danger"
-                    data-confirm-message="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]">
+                    data-confirm-message="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]"
+                    data-maintenance-retention-queue
+                    disabled>
                 @L["Queue artifact cleanup"]
             </button>
         </div>
@@ -406,6 +418,46 @@ else
             }
         });
     }
+})();
+
+(() => {
+    const form = document.querySelector('[data-maintenance-retention-form]');
+    if (!form) {
+        return;
+    }
+
+    const input = form.querySelector('[data-maintenance-retention-input]');
+    if (!input) {
+        return;
+    }
+
+    const confirmButton = form.querySelector('[data-maintenance-retention-confirm]');
+    const cancelButton = form.querySelector('[data-maintenance-retention-cancel]');
+    const queueButton = form.querySelector('[data-maintenance-retention-queue]');
+    const buttons = [confirmButton, cancelButton, queueButton].filter(Boolean);
+    const originalValue = input.defaultValue;
+    let isConfirmed = form.dataset.maintenanceRetentionConfirmed === 'true';
+
+    const updateDirtyState = () => {
+        const isDirty = input.value !== originalValue;
+        const canAct = isDirty || isConfirmed;
+        form.classList.toggle('is-dirty', canAct);
+
+        for (const button of buttons) {
+            button.disabled = !canAct;
+        }
+    };
+
+    input.addEventListener('input', updateDirtyState);
+    input.addEventListener('change', updateDirtyState);
+    cancelButton?.addEventListener('click', () => {
+        isConfirmed = false;
+        input.value = originalValue;
+        updateDirtyState();
+        input.focus();
+    });
+
+    updateDirtyState();
 })();
 
 (() => {
