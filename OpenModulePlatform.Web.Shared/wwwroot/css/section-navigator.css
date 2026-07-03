@@ -98,7 +98,7 @@
     content: "";
     left: var(--section-navigator-line-x);
     position: absolute;
-    top: 0;
+    top: calc(var(--section-navigator-line-width) * -1);
     width: var(--section-navigator-line-width);
     z-index: 0;
 }
