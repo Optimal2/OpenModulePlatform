@@ -47,6 +47,7 @@
     --section-navigator-line: #6b9cff;
     --section-navigator-line-width: 4px;
     --section-navigator-line-x: 8px;
+    --section-navigator-line-left: calc(var(--section-navigator-line-x) - (var(--section-navigator-line-width) / 2));
     --section-navigator-branch-width: 16px;
     --section-navigator-item-indent: calc(var(--section-navigator-line-x) + var(--section-navigator-branch-width));
     --section-navigator-node-size: 10px;
@@ -95,7 +96,7 @@
     background: var(--section-navigator-line);
     bottom: 0;
     content: "";
-    left: var(--section-navigator-line-x);
+    left: var(--section-navigator-line-left);
     position: absolute;
     top: calc(0px - var(--section-navigator-node-y) - (var(--section-navigator-node-size) / 2));
     width: var(--section-navigator-line-width);
@@ -112,10 +113,10 @@
     background: var(--section-navigator-line);
     content: "";
     height: var(--section-navigator-line-width);
-    left: var(--section-navigator-line-x);
+    left: var(--section-navigator-line-left);
     position: absolute;
     top: calc(var(--section-navigator-node-y) - (var(--section-navigator-line-width) / 2));
-    width: var(--section-navigator-branch-width);
+    width: calc(var(--section-navigator-branch-width) + (var(--section-navigator-line-width) / 2));
     z-index: 0;
 }
 
@@ -123,7 +124,7 @@
     background: var(--surface);
     bottom: 0;
     content: "";
-    left: var(--section-navigator-line-x);
+    left: var(--section-navigator-line-left);
     position: absolute;
     top: calc(var(--section-navigator-node-y) + (var(--section-navigator-line-width) / 2));
     width: var(--section-navigator-line-width);
