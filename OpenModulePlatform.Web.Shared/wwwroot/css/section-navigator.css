@@ -48,6 +48,7 @@
     --section-navigator-line-width: 4px;
     --section-navigator-line-x: 8px;
     --section-navigator-branch-width: 16px;
+    --section-navigator-child-connector-height: 13px;
     --section-navigator-item-indent: calc(var(--section-navigator-line-x) + var(--section-navigator-branch-width));
     --section-navigator-node-size: 10px;
     --section-navigator-node-y: 18px;
@@ -89,6 +90,17 @@
 
 .section-navigator__item--root > .section-navigator__details > .section-navigator__list {
     margin-left: 10px;
+}
+
+.section-navigator__list .section-navigator__list::before {
+    background: var(--section-navigator-line);
+    bottom: 0;
+    content: "";
+    left: var(--section-navigator-line-x);
+    position: absolute;
+    top: 0;
+    width: var(--section-navigator-line-width);
+    z-index: 0;
 }
 
 .section-navigator__item {
@@ -136,8 +148,8 @@
 
 .section-navigator__item--branch > .section-navigator__details[open]::before {
     background: var(--section-navigator-line);
-    bottom: 0;
     content: "";
+    height: var(--section-navigator-child-connector-height);
     left: calc(var(--section-navigator-line-width) / -2);
     pointer-events: none;
     position: absolute;
