@@ -45,7 +45,7 @@
     scrollbar-width: thin;
     scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
     --section-navigator-line: #6b9cff;
-    --section-navigator-line-width: 2px;
+    --section-navigator-line-width: 4px;
     --section-navigator-line-x: 8px;
     --section-navigator-branch-width: 16px;
     --section-navigator-item-indent: calc(var(--section-navigator-line-x) + var(--section-navigator-branch-width));
@@ -103,7 +103,7 @@
     height: var(--section-navigator-line-width);
     left: var(--section-navigator-line-x);
     position: absolute;
-    top: var(--section-navigator-node-y);
+    top: calc(var(--section-navigator-node-y) - (var(--section-navigator-line-width) / 2));
     width: var(--section-navigator-branch-width);
     z-index: 0;
 }
@@ -114,7 +114,7 @@
     content: "";
     left: var(--section-navigator-line-x);
     position: absolute;
-    top: calc(var(--section-navigator-node-y) + var(--section-navigator-line-width));
+    top: calc(var(--section-navigator-node-y) + (var(--section-navigator-line-width) / 2));
     width: var(--section-navigator-line-width);
     z-index: 0;
 }
