@@ -48,7 +48,6 @@
     --section-navigator-line-width: 4px;
     --section-navigator-line-x: 8px;
     --section-navigator-branch-width: 16px;
-    --section-navigator-child-connector-height: 13px;
     --section-navigator-item-indent: calc(var(--section-navigator-line-x) + var(--section-navigator-branch-width));
     --section-navigator-node-size: 10px;
     --section-navigator-node-y: 18px;
@@ -98,7 +97,7 @@
     content: "";
     left: var(--section-navigator-line-x);
     position: absolute;
-    top: calc(var(--section-navigator-line-width) * -1);
+    top: calc(0px - var(--section-navigator-node-y) - (var(--section-navigator-node-size) / 2));
     width: var(--section-navigator-line-width);
     z-index: 0;
 }
@@ -144,22 +143,6 @@
     display: grid;
     gap: 4px;
     position: relative;
-}
-
-.section-navigator__item--branch > .section-navigator__details[open]::before {
-    background: var(--section-navigator-line);
-    content: "";
-    height: var(--section-navigator-child-connector-height);
-    left: calc(var(--section-navigator-line-width) / -2);
-    pointer-events: none;
-    position: absolute;
-    top: calc(var(--section-navigator-node-y) + (var(--section-navigator-node-size) / 2));
-    width: var(--section-navigator-line-width);
-    z-index: 0;
-}
-
-.section-navigator__item--root > .section-navigator__details[open]::before {
-    left: calc(10px + var(--section-navigator-line-x) - (var(--section-navigator-line-width) / 2));
 }
 
 .section-navigator__summary {
