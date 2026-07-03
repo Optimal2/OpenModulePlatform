@@ -307,7 +307,6 @@ public static class OmpWebHostingExtensions
             HttpContext context,
             IAntiforgery antiforgery,
             RbacService rbac,
-            PortalTopBarService portalTopBarService,
             CancellationToken ct) =>
         {
             await antiforgery.ValidateRequestAsync(context);
@@ -322,7 +321,6 @@ public static class OmpWebHostingExtensions
                 selection.RoleId,
                 selection.ReturnUrl,
                 rbac,
-                portalTopBarService,
                 options,
                 ct);
         }).RequireAuthorization();
@@ -331,7 +329,6 @@ public static class OmpWebHostingExtensions
             HttpContext context,
             IAntiforgery antiforgery,
             RbacService rbac,
-            PortalTopBarService portalTopBarService,
             CancellationToken ct) =>
         {
             await antiforgery.ValidateRequestAsync(context);
@@ -346,7 +343,6 @@ public static class OmpWebHostingExtensions
                 selection.RoleId,
                 selection.ReturnUrl,
                 rbac,
-                portalTopBarService,
                 options,
                 ct);
         }).RequireAuthorization();
@@ -716,16 +712,11 @@ public static class OmpWebHostingExtensions
         int? roleId,
         string? returnUrl,
         RbacService rbac,
-        PortalTopBarService portalTopBarService,
         WebAppOptions options,
         CancellationToken ct)
     {
         var roleContext = await rbac.GetUserRoleContextAsync(context.User, ct);
         var validRoleIds = roleContext.AvailableRoles.Select(x => x.RoleId).ToHashSet();
-        var roleChanged = roleId is int requestedRoleId && requestedRoleId != roleContext.ActiveRoleId;
-        var targetPermissions = roleChanged
-            ? await rbac.GetPermissionsForRoleAsync(context.User, roleId, ct)
-            : roleContext.EffectivePermissions;
 
         if (roleId is int selectedRoleId && validRoleIds.Contains(selectedRoleId))
         {
@@ -747,15 +738,15 @@ public static class OmpWebHostingExtensions
             ActiveRoleCookie.Clear(context.Response);
         }
 
-        var safePortalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
-        var canReturnToRequestedUrl = IsSafeLocalReturnUrl(returnUrl)
-            && await portalTopBarService.CanAccessReturnUrlAsync(options, returnUrl, targetPermissions, ct);
-
-        if (canReturnToRequestedUrl)
+        // Keep role switching predictable across Portal, Razor Pages modules, and Blazor modules.
+        // The return URL is local-only; page authorization after the redirect decides whether the
+        // newly selected role can remain on that page or should see the normal access-denied flow.
+        if (IsSafeLocalReturnUrl(returnUrl))
         {
             return Results.LocalRedirect(returnUrl!);
         }
 
+        var safePortalHref = OmpUrlPathHelper.CombinePortalHref(options.PortalTopBar.PortalBaseUrl, "/");
         if (Uri.IsWellFormedUriString(safePortalHref, UriKind.Absolute))
         {
             return Results.Redirect(safePortalHref);
