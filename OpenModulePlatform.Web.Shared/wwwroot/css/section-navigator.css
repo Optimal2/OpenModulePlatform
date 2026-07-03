@@ -49,7 +49,7 @@
     --section-navigator-line-x: 8px;
     --section-navigator-branch-width: 16px;
     --section-navigator-item-indent: calc(var(--section-navigator-line-x) + var(--section-navigator-branch-width));
-    --section-navigator-node-size: 16px;
+    --section-navigator-node-size: 10px;
     --section-navigator-node-y: 18px;
 }
 
@@ -83,8 +83,12 @@
 }
 
 .section-navigator__list .section-navigator__list {
-    margin: 0 0 0 10px;
+    margin: 0 0 0 calc(var(--section-navigator-branch-width) - var(--section-navigator-item-indent));
     padding-left: 0;
+}
+
+.section-navigator__item--root > .section-navigator__details > .section-navigator__list {
+    margin-left: 10px;
 }
 
 .section-navigator__list .section-navigator__list::before {
@@ -178,40 +182,20 @@
     left: calc((var(--section-navigator-node-size) / -2));
     width: var(--section-navigator-node-size);
     height: var(--section-navigator-node-size);
-    border: 2px solid var(--surface);
     border-radius: 999px;
     background: var(--section-navigator-line);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--section-navigator-line) 74%, var(--surface) 26%);
-    color: #ffffff;
-    transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
-}
-
-.section-navigator__chevron::before {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 5px;
-    height: 5px;
-    border-right: 1.5px solid currentColor;
-    border-bottom: 1.5px solid currentColor;
-    content: "";
-    transform: translate(-50%, -62%) rotate(45deg);
-    transform-origin: center;
-    transition: transform 120ms ease;
-}
-
-.section-navigator__details:not([open]) > .section-navigator__summary .section-navigator__chevron::before {
-    transform: translate(-60%, -50%) rotate(-45deg);
+    box-shadow: none;
+    transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .section-navigator__summary:hover .section-navigator__chevron,
 .section-navigator__summary:focus-visible .section-navigator__chevron {
     background: color-mix(in srgb, var(--section-navigator-line) 84%, #1d4ed8 16%);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--section-navigator-line) 34%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--section-navigator-line) 22%, transparent);
 }
 
 .section-navigator__item--root > .section-navigator__details > .section-navigator__summary .section-navigator__chevron {
-    left: 6px;
+    left: calc(10px + var(--section-navigator-line-x) - (var(--section-navigator-node-size) / 2));
 }
 
 .section-navigator__link {
