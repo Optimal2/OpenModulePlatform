@@ -68,6 +68,19 @@
     color: var(--portal-topbar-text);
 }
 
+.portal-topbar__portal-link--logo {
+    min-width: 0;
+    max-width: 120px;
+}
+
+.portal-topbar__portal-logo {
+    display: block;
+    width: auto;
+    max-width: 120px;
+    max-height: 24px;
+    object-fit: contain;
+}
+
 .portal-topbar__module-link {
     position: relative;
 }

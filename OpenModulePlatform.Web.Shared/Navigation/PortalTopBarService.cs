@@ -163,6 +163,7 @@ public sealed class PortalTopBarService
             return CreateModel(
                 topBarOptions,
                 portalLink,
+                branding.HeroLogoUrl,
                 cultureSelection,
                 currentUserName,
                 currentUserProfileImageUrl,
@@ -200,6 +201,7 @@ public sealed class PortalTopBarService
                 ex,
                 topBarOptions,
                 portalLink,
+                branding.HeroLogoUrl,
                 cultureSelection,
                 user,
                 options);
@@ -377,6 +379,7 @@ public sealed class PortalTopBarService
             return CreateModel(
                 topBarOptions,
                 portalLink,
+                branding.HeroLogoUrl,
                 cultureSelection,
                 currentUserName,
                 currentUserProfileImageUrl,
@@ -414,6 +417,7 @@ public sealed class PortalTopBarService
                 ex,
                 topBarOptions,
                 portalLink,
+                branding.HeroLogoUrl,
                 cultureSelection,
                 user,
                 options);
@@ -424,6 +428,7 @@ public sealed class PortalTopBarService
         Exception ex,
         PortalTopBarOptions topBarOptions,
         PortalTopBarLink portalLink,
+        string? heroLogoUrl,
         CultureSelectionResult cultureSelection,
         ClaimsPrincipal user,
         WebAppOptions options)
@@ -431,7 +436,7 @@ public sealed class PortalTopBarService
         _log.LogWarning(
             ex,
             "Failed to build portal top bar dynamically from the database. Falling back to a portal-only top bar.");
-        return CreateFallbackModel(topBarOptions, portalLink, cultureSelection, user, options, GetLogoutUrl());
+        return CreateFallbackModel(topBarOptions, portalLink, heroLogoUrl, cultureSelection, user, options, GetLogoutUrl());
     }
 
     private static async Task<ClaimsPrincipal> ResolveRequestUserAsync(HttpContext context)
@@ -473,6 +478,7 @@ public sealed class PortalTopBarService
     private static PortalTopBarModel CreateFallbackModel(
         PortalTopBarOptions topBarOptions,
         PortalTopBarLink portalLink,
+        string? heroLogoUrl,
         CultureSelectionResult cultureSelection,
         ClaimsPrincipal user,
         WebAppOptions options,
@@ -480,6 +486,7 @@ public sealed class PortalTopBarService
         => CreateModel(
             topBarOptions,
             portalLink,
+            heroLogoUrl,
             cultureSelection,
             user.Identity?.IsAuthenticated == true ? user.Identity?.Name : null,
             null,
@@ -545,6 +552,7 @@ public sealed class PortalTopBarService
     private static PortalTopBarModel CreateModel(
         PortalTopBarOptions topBarOptions,
         PortalTopBarLink portalLink,
+        string? heroLogoUrl,
         CultureSelectionResult cultureSelection,
         string? currentUserName,
         string? currentUserProfileImageUrl,
@@ -584,6 +592,7 @@ public sealed class PortalTopBarService
         {
             IsVisible = true,
             PortalLink = portalLink,
+            HeroLogoUrl = heroLogoUrl,
             ModuleLinks = moduleLinks,
             NavigationGroups = navigationGroups,
             FavoriteEntries = favoriteEntries,

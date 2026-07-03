@@ -44,6 +44,27 @@
             ? Url.Content("~" + trimmed)
             : trimmed;
     }
+    string BrandingAssetUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("~/", StringComparison.Ordinal))
+        {
+            return Url.Content(trimmed);
+        }
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal)
+            && !trimmed.StartsWith("//", StringComparison.Ordinal))
+        {
+            return Url.Content("~" + trimmed);
+        }
+
+        return trimmed;
+    }
     string LanguageBadgeText(string? culture)
     {
         if (string.IsNullOrWhiteSpace(culture))
@@ -94,6 +115,7 @@
         .OrderBy(language => CultureText(language.DisplayText), StringComparer.CurrentCultureIgnoreCase)
         .ThenBy(language => language.Culture, StringComparer.OrdinalIgnoreCase)
         .ToArray();
+    var heroLogoUrl = BrandingAssetUrl(Model.HeroLogoUrl);
 }
 
 @if (Model.IsVisible && Model.PortalLink is not null)
@@ -126,7 +148,16 @@
          data-topbar-polling-visible-interval="@Model.TopBarPollingVisibleIntervalSeconds"
          data-topbar-polling-hidden-interval="@Model.TopBarPollingHiddenIntervalSeconds">
         <nav class="portal-topbar__nav" aria-label="@Model.PortalLink.TextKey" data-portal-topbar>
-            <a class="portal-topbar__portal-link" href="@Model.PortalLink.Href">@Model.PortalLink.TextKey</a>
+            @if (!string.IsNullOrWhiteSpace(heroLogoUrl))
+            {
+                <a class="portal-topbar__portal-link portal-topbar__portal-link--logo" href="@Model.PortalLink.Href" aria-label="@Model.PortalLink.TextKey">
+                    <img class="portal-topbar__portal-logo" src="@heroLogoUrl" alt="@Model.PortalLink.TextKey" />
+                </a>
+            }
+            else
+            {
+                <a class="portal-topbar__portal-link" href="@Model.PortalLink.Href">@Model.PortalLink.TextKey</a>
+            }
 
             @if (Model.IsPortalAdmin && Model.PortalAdminSections.Count > 0)
             {

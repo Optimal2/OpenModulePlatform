@@ -729,6 +729,8 @@ USING
     VALUES
         (N'branding', N'platformName', N'Display name for the installed OpenModulePlatform instance.', 10, CONVERT(bit, 1)),
         (N'branding', N'portalName', N'Display name for the portal concept in this installation.', 20, CONVERT(bit, 1)),
+        (N'branding', N'heroLogoUrl', N'Optional URL for an image logo shown instead of the topbar and portal brand text. Supports absolute URLs and app-relative paths.', 30, CONVERT(bit, 1)),
+        (N'branding', N'faviconUrl', N'Optional URL for the OMP favicon. Supports absolute URLs and app-relative paths.', 40, CONVERT(bit, 1)),
         (N'auth', N'externalUserProvisioningMode', N'Controls whether external/AD sign-ins may automatically create and link an OMP user. Supported values: Manual, AutoIfRole, AutoIfAuthenticated.', 100, CONVERT(bit, 1)),
         (N'rbac', N'authenticatedUsersWindowsDomains', N'Comma-, semicolon-, or newline-separated Windows account domain/workgroup/computer prefixes that may receive the built-in AuthenticatedUsers principal. Empty or * accepts any authenticated principal.', 100, CONVERT(bit, 1))
 ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
@@ -758,6 +760,8 @@ USING
         VALUES
             (N'branding', N'platformName', N'OMP', 0),
             (N'branding', N'portalName', N'Portal', 0),
+            (N'branding', N'heroLogoUrl', N'', 0),
+            (N'branding', N'faviconUrl', N'', 0),
             (N'auth', N'externalUserProvisioningMode', N'Manual', 0),
             (N'rbac', N'authenticatedUsersWindowsDomains', N'', 0)
     ) AS seed(ConfigCategory, ConfigSetting, ConfigValue, ConfigPriority)
