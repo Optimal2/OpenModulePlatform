@@ -10,6 +10,28 @@
     var request = ViewContext.HttpContext.Request;
     var languageReturnUrl = $"{request.PathBase}{request.Path}{request.QueryString}";
     string BuildLanguageHref(string culture) => $"{request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(languageReturnUrl)}";
+    string BrandingAssetUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("~/", StringComparison.Ordinal))
+        {
+            return Url.Content(trimmed);
+        }
+
+        if (trimmed.StartsWith("/", StringComparison.Ordinal)
+            && !trimmed.StartsWith("//", StringComparison.Ordinal))
+        {
+            return Url.Content("~" + trimmed);
+        }
+
+        return trimmed;
+    }
+
     string LanguageBadgeText(string culture)
     {
         var separatorIndex = culture.IndexOfAny(new[] { '-', '_' });
@@ -18,6 +40,7 @@
             ? language.ToUpperInvariant()
             : culture.ToUpperInvariant();
     }
+    var faviconUrl = BrandingAssetUrl(ompBranding.FaviconUrl);
     ViewData["Title"] = signInLabel;
 }
 <!doctype html>
@@ -26,6 +49,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@signInLabel - @ompBranding.PlatformName</title>
+    @if (!string.IsNullOrWhiteSpace(faviconUrl))
+    {
+        <link rel="icon" href="@faviconUrl" />
+    }
     <style>
         :root { color-scheme: light dark; }
         *, *::before, *::after { box-sizing: border-box; }

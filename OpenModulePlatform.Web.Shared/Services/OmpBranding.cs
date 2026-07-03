@@ -1,6 +1,10 @@
 namespace OpenModulePlatform.Web.Shared.Services;
 
-public sealed record OmpBranding(string PlatformName, string PortalName)
+public sealed record OmpBranding(
+    string PlatformName,
+    string PortalName,
+    string? HeroLogoUrl = null,
+    string? FaviconUrl = null)
 {
     public static OmpBranding Default { get; } = new("OMP", "Portal");
 

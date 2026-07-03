@@ -73,6 +73,8 @@ public sealed class PortalTopBarModel
 
     public PortalTopBarLink? PortalLink { get; init; }
 
+    public string? HeroLogoUrl { get; init; }
+
     public IReadOnlyList<PortalTopBarLink> ModuleLinks { get; init; } = Array.Empty<PortalTopBarLink>();
 
     public IReadOnlyList<PortalTopBarNavigationGroup> NavigationGroups { get; init; } = Array.Empty<PortalTopBarNavigationGroup>();

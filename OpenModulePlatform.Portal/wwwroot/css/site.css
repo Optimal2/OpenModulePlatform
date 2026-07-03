@@ -660,6 +660,10 @@ a:hover {
     text-decoration: none;
 }
 
+.brand-wrap--image {
+    justify-content: center;
+}
+
 .brand-wrap--link:hover,
 .brand-wrap--link:focus,
 .brand-wrap--link:focus-visible {
@@ -684,6 +688,14 @@ a:hover {
 .brand-subtitle {
     font-size: 0.78rem;
     color: var(--text-muted);
+}
+
+.brand-logo {
+    display: block;
+    width: auto;
+    max-width: 200px;
+    max-height: 38px;
+    object-fit: contain;
 }
 
 .nav {

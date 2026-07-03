@@ -8,6 +8,33 @@
     var documentTitle = ViewData["Title"]?.ToString();
     var showPortalNavbar = true;
     var requestPath = Context.Request.Path.Value ?? "/";
+    string BrandingAssetUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("~/", System.StringComparison.Ordinal))
+        {
+            return Url.Content(trimmed);
+        }
+
+        if (trimmed.StartsWith("/", System.StringComparison.Ordinal)
+            && !trimmed.StartsWith("//", System.StringComparison.Ordinal))
+        {
+            return Url.Content("~" + trimmed);
+        }
+
+        return trimmed;
+    }
+
+    var heroLogoUrl = BrandingAssetUrl(ompBranding.HeroLogoUrl);
+    var faviconUrl = BrandingAssetUrl(ompBranding.FaviconUrl);
+    var brandWrapClass = string.IsNullOrWhiteSpace(heroLogoUrl)
+        ? "brand-wrap brand-wrap--link"
+        : "brand-wrap brand-wrap--link brand-wrap--image";
     var isDashboardPage = string.IsNullOrEmpty(requestPath)
         || string.Equals(requestPath, "/", System.StringComparison.OrdinalIgnoreCase)
         || string.Equals(requestPath.TrimEnd('/'), "/Index", System.StringComparison.OrdinalIgnoreCase);
@@ -54,6 +81,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>@documentTitle</title>
+    @if (!string.IsNullOrWhiteSpace(faviconUrl))
+    {
+        <link rel="icon" href="@faviconUrl" />
+    }
     <link rel="stylesheet" href="~/css/site.css" />
     <link rel="stylesheet" href="~/css/portal-notification-toasts.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/section-navigator.css" />
@@ -70,9 +101,16 @@
         @if (showPortalNavbar)
         {
         <div class="topbar">
-        <a class="brand-wrap brand-wrap--link" href="~/" aria-label="@L["Home"]">
-            <div class="brand">@ompBranding.PortalDisplayName</div>
-            <div class="brand-subtitle">@ompBranding.PortalName</div>
+        <a class="@brandWrapClass" href="~/" aria-label="@L["Home"]">
+            @if (!string.IsNullOrWhiteSpace(heroLogoUrl))
+            {
+                <img class="brand-logo" src="@heroLogoUrl" alt="@ompBranding.PortalDisplayName" />
+            }
+            else
+            {
+                <div class="brand">@ompBranding.PortalDisplayName</div>
+                <div class="brand-subtitle">@ompBranding.PortalName</div>
+            }
         </a>
         <nav class="nav nav--primary">
             <a href="~/">@L["Home"]</a>

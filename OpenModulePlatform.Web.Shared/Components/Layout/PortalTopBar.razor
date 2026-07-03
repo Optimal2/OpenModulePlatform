@@ -46,7 +46,16 @@
          data-topbar-polling-visible-interval="@_portalTopBar.TopBarPollingVisibleIntervalSeconds"
          data-topbar-polling-hidden-interval="@_portalTopBar.TopBarPollingHiddenIntervalSeconds">
         <nav class="portal-topbar__nav" aria-label="@_portalTopBar.PortalLink.TextKey" data-portal-topbar>
-            <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@_portalTopBar.PortalLink.TextKey</a>
+            @if (!string.IsNullOrWhiteSpace(BrandingAssetUrl(_portalTopBar.HeroLogoUrl)))
+            {
+                <a class="portal-topbar__portal-link portal-topbar__portal-link--logo" href="@_portalTopBar.PortalLink.Href" aria-label="@_portalTopBar.PortalLink.TextKey">
+                    <img class="portal-topbar__portal-logo" src="@BrandingAssetUrl(_portalTopBar.HeroLogoUrl)" alt="@_portalTopBar.PortalLink.TextKey" />
+                </a>
+            }
+            else
+            {
+                <a class="portal-topbar__portal-link" href="@_portalTopBar.PortalLink.Href">@_portalTopBar.PortalLink.TextKey</a>
+            }
 
             @if (_portalTopBar.IsPortalAdmin && _portalTopBar.PortalAdminSections.Count > 0)
             {
@@ -733,6 +742,22 @@
         return trimmed.StartsWith("/_content/OpenModulePlatform.Web.Shared/", StringComparison.OrdinalIgnoreCase)
             ? new Uri(new Uri(NavigationManager.BaseUri), trimmed.TrimStart('/')).ToString()
             : trimmed;
+    }
+
+    private string BrandingAssetUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("~/", StringComparison.Ordinal))
+        {
+            return new Uri(new Uri(NavigationManager.BaseUri), trimmed[2..]).ToString();
+        }
+
+        return trimmed;
     }
 
     private static string LanguageBadgeText(string? culture)
