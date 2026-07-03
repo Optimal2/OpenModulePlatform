@@ -896,15 +896,28 @@ a:hover {
 
 .btn.maintenance-retention-action--cancel {
     --maintenance-retention-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/cancel.svg");
-    border-color: #6d8ed8;
-    background: #edf4ff;
-    color: #2257a5;
+    border-color: rgba(245, 158, 11, 0.9);
+    background: #f59e0b;
+    color: #ffffff;
 }
 
 .btn.maintenance-retention-action--cancel:hover:not(:disabled) {
-    border-color: #4f74c4;
-    background: #dbeafe;
-    color: #173f7a;
+    border-color: #d97706;
+    background: #d97706;
+    color: #ffffff;
+}
+
+.btn.maintenance-retention-action--queue {
+    --maintenance-retention-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/delete.svg");
+    border-color: #dc2626;
+    background: #dc2626;
+    color: #ffffff;
+}
+
+.btn.maintenance-retention-action--queue:hover:not(:disabled) {
+    border-color: #b91c1c;
+    background: #b91c1c;
+    color: #ffffff;
 }
 
 @media (max-width: 760px) {

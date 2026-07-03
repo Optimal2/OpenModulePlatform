@@ -281,6 +281,7 @@
         <div class="toolbar maintenance-retention-form__actions">
             <button type="submit"
                     asp-page-handler="Preview"
+                    asp-fragment="@RetentionSectionId"
                     class="btn maintenance-retention-action maintenance-retention-action--confirm"
                     data-maintenance-retention-confirm
                     disabled>
@@ -296,10 +297,11 @@
             </button>
             <button type="submit"
                     asp-page-handler="CleanupArtifacts"
-                    class="btn btn-danger"
+                    class="btn maintenance-retention-action maintenance-retention-action--queue"
                     data-confirm-message="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]"
                     data-maintenance-retention-queue
                     disabled>
+                <span class="maintenance-retention-action__icon" aria-hidden="true"></span>
                 @L["Queue artifact cleanup"]
             </button>
         </div>
@@ -338,11 +340,14 @@ else
 {
     <div class="toolbar maintenance-preview-actions top-gap">
         <button type="button"
-                data-maintenance-preview-toggle-all
-                data-expand-label="@L["Expand all"]"
-                data-collapse-label="@L["Minimize all"]"
-                aria-expanded="false">
+                data-maintenance-preview-expand-all>
             @L["Expand all"]
+        </button>
+        <button type="button"
+                class="btn btn-secondary"
+                data-maintenance-preview-collapse-all
+                disabled>
+            @L["Minimize all"]
         </button>
     </div>
 
@@ -546,18 +551,20 @@ else
     }
 
     const groups = Array.from(preview.querySelectorAll('[data-maintenance-preview-group]'));
-    const toggleAll = preview.querySelector('[data-maintenance-preview-toggle-all]');
+    const expandAll = preview.querySelector('[data-maintenance-preview-expand-all]');
+    const collapseAll = preview.querySelector('[data-maintenance-preview-collapse-all]');
 
-    const updateToggleAll = () => {
-        if (!toggleAll) {
-            return;
+    const updateBulkActions = () => {
+        const allExpanded = groups.length > 0 && groups.every(group => group.classList.contains('is-expanded'));
+        const allCollapsed = groups.length === 0 || groups.every(group => group.classList.contains('is-collapsed'));
+
+        if (expandAll) {
+            expandAll.disabled = allExpanded;
         }
 
-        const allExpanded = groups.length > 0 && groups.every(group => group.classList.contains('is-expanded'));
-        toggleAll.textContent = allExpanded
-            ? toggleAll.dataset.collapseLabel ?? 'Minimize all'
-            : toggleAll.dataset.expandLabel ?? 'Expand all';
-        toggleAll.setAttribute('aria-expanded', allExpanded ? 'true' : 'false');
+        if (collapseAll) {
+            collapseAll.disabled = allCollapsed;
+        }
     };
 
     const setGroupExpanded = (group, expanded) => {
@@ -583,18 +590,24 @@ else
 
         toggle.addEventListener('click', () => {
             setGroupExpanded(group, toggle.getAttribute('aria-expanded') !== 'true');
-            updateToggleAll();
+            updateBulkActions();
         });
     }
 
-    toggleAll?.addEventListener('click', () => {
-        const shouldExpand = !groups.every(group => group.classList.contains('is-expanded'));
+    expandAll?.addEventListener('click', () => {
         for (const group of groups) {
-            setGroupExpanded(group, shouldExpand);
+            setGroupExpanded(group, true);
         }
-        updateToggleAll();
+        updateBulkActions();
     });
 
-    updateToggleAll();
+    collapseAll?.addEventListener('click', () => {
+        for (const group of groups) {
+            setGroupExpanded(group, false);
+        }
+        updateBulkActions();
+    });
+
+    updateBulkActions();
 })();
 </script>
