@@ -53,13 +53,30 @@
             }
             else
             {
+                var selectedUserIds = Model.Input.ConfigUsers
+                    .Select(userId => userId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    .ToHashSet(StringComparer.Ordinal);
+
                 <label asp-for="Input.ConfigUsers"></label>
-                <select asp-for="Input.ConfigUsers" multiple size="6">
-                    @foreach (var option in Model.UserOptions)
-                    {
-                        <option value="@option.Value">@option.Label</option>
-                    }
-                </select>
+                <details class="config-settings-user-multiselect" data-config-user-multiselect>
+                    <summary class="config-settings-user-multiselect__summary">
+                        <span data-config-user-multiselect-summary data-placeholder="@L["Select users"]">@L["Select users"]</span>
+                    </summary>
+                    <div class="config-settings-user-multiselect__panel">
+                        @foreach (var option in Model.UserOptions)
+                        {
+                            <label class="config-settings-user-multiselect__option">
+                                <span class="config-settings-user-multiselect__label">@option.Label</span>
+                                <input type="checkbox"
+                                       name="Input.ConfigUsers"
+                                       value="@option.Value"
+                                       checked="@selectedUserIds.Contains(option.Value)"
+                                       data-config-user-checkbox
+                                       data-config-user-label="@option.Label" />
+                            </label>
+                        }
+                    </div>
+                </details>
                 <div class="field-help">@L["Select one or more users. Saving creates one config row per selected user."]</div>
                 <span class="field-validation-error" asp-validation-for="Input.ConfigUsers"></span>
             }

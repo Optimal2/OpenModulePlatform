@@ -135,6 +135,42 @@
             const detailDescription = form.querySelector('[data-config-setting-detail-description]');
             const saveButton = form.querySelector('[data-config-settings-save]');
             const noDescriptionLabel = form.dataset.noDescriptionLabel || '';
+            const userMultiselects = Array.from(form.querySelectorAll('[data-config-user-multiselect]'));
+
+            const syncUserMultiselectSummary = (multiselect) => {
+                const summary = multiselect.querySelector('[data-config-user-multiselect-summary]');
+                if (!summary) {
+                    return;
+                }
+
+                const checked = Array.from(multiselect.querySelectorAll('[data-config-user-checkbox]:checked'));
+                const labels = checked.map((input) => input.dataset.configUserLabel).filter(Boolean);
+                summary.textContent = labels.length === 0
+                    ? summary.dataset.placeholder || ''
+                    : labels.join(', ');
+            };
+
+            userMultiselects.forEach((multiselect) => {
+                multiselect.querySelectorAll('[data-config-user-checkbox]').forEach((checkbox) => {
+                    checkbox.addEventListener('change', () => syncUserMultiselectSummary(multiselect));
+                });
+
+                multiselect.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape') {
+                        multiselect.open = false;
+                    }
+                });
+
+                syncUserMultiselectSummary(multiselect);
+            });
+
+            document.addEventListener('click', (event) => {
+                userMultiselects.forEach((multiselect) => {
+                    if (!multiselect.contains(event.target)) {
+                        multiselect.open = false;
+                    }
+                });
+            });
 
             const syncScopeFields = () => {
                 if (!scopeSelect) {
