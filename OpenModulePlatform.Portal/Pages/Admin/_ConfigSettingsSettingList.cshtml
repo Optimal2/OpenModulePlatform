@@ -1,11 +1,12 @@
 @model OpenModulePlatform.Portal.Pages.Admin.ConfigSettingsModel
 
+<input type="hidden" asp-for="Input.ConfigSettingId" data-config-setting-selected-value />
+
 <div class="column-list-picker__list config-settings-picker__list"
      role="radiogroup"
      aria-label="@L["Select setting"]">
     @foreach (var definition in Model.Definitions)
     {
-        var optionId = $"config-setting-option-{definition.ConfigSettingId}";
         var optionLabel = definition.IsEnabled
             ? definition.Key
             : $"{definition.Key} ({L["Disabled"].Value.ToLowerInvariant()})";
@@ -14,24 +15,21 @@
             ? "column-list-picker__item config-settings-picker__item is-selected"
             : "column-list-picker__item config-settings-picker__item";
 
-        <label class="@cssClass"
-               for="@optionId"
-               data-config-setting-option-card>
-            <input id="@optionId"
-                   class="visually-hidden"
-                   asp-for="Input.ConfigSettingId"
-                   type="radio"
-                   value="@definition.ConfigSettingId"
-                   data-config-setting-option
-                   data-setting-title="@optionLabel"
-                   data-setting-description="@definition.Description" />
+        <button type="button"
+                role="radio"
+                aria-checked="@(isSelected ? "true" : "false")"
+                class="@cssClass"
+                data-config-setting-option
+                data-setting-value="@definition.ConfigSettingId"
+                data-setting-title="@optionLabel"
+                data-setting-description="@definition.Description">
             <span class="column-list-picker__item-title"><code>@optionLabel</code></span>
             <span class="column-list-picker__item-meta">@definition.ConfigCategory</span>
             @if (!string.IsNullOrWhiteSpace(definition.Description))
             {
                 <span class="column-list-picker__item-description">@definition.Description</span>
             }
-        </label>
+        </button>
     }
 </div>
 <span class="field-validation-error config-settings-picker__validation" asp-validation-for="Input.ConfigSettingId"></span>
