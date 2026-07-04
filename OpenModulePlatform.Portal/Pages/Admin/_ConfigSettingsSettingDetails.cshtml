@@ -22,20 +22,32 @@
 
     <div class="config-settings-picker__scope-row">
         <div class="form-field form-field--compact config-settings-picker__priority-field">
-            <label asp-for="Input.ConfigPriority"></label>
+            <div class="config-settings-picker__label-row">
+                <label asp-for="Input.ConfigPriority"></label>
+                <span class="info-badge"
+                      tabindex="0"
+                      role="img"
+                      title="@L["Higher priority wins within permission or role scoped rows."]"
+                      aria-label="@L["Higher priority wins within permission or role scoped rows."]">i</span>
+            </div>
             <input asp-for="Input.ConfigPriority" type="number" />
-            <div class="field-help">@L["Higher priority wins within permission or role scoped rows."]</div>
         </div>
 
         <div class="form-field config-settings-picker__scope-field">
-            <label asp-for="Input.ScopeType"></label>
+            <div class="config-settings-picker__label-row">
+                <label asp-for="Input.ScopeType"></label>
+                <span class="info-badge"
+                      tabindex="0"
+                      role="img"
+                      title="@L["Global rows apply to everyone. User scope wins over permission, permission wins over role."]"
+                      aria-label="@L["Global rows apply to everyone. User scope wins over permission, permission wins over role."]">i</span>
+            </div>
             <select asp-for="Input.ScopeType" data-scope-select>
                 @foreach (var option in Model.ScopeOptions)
                 {
                     <option value="@option.Value">@option.Label</option>
                 }
             </select>
-            <div class="field-help">@L["Global rows apply to everyone. User scope wins over permission, permission wins over role."]</div>
         </div>
 
         <div class="form-field config-settings-picker__target-field" data-scope-field="User">
