@@ -718,6 +718,10 @@
   <data name="Start a direct chat or create a group chat with OMP users." xml:space="preserve"><value>Start a direct chat or create a group chat with OMP users.</value></data>
   <data name="Search users" xml:space="preserve"><value>Search users</value></data>
   <data name="Select a user." xml:space="preserve"><value>Select a user.</value></data>
+  <data name="Select users." xml:space="preserve"><value>Select users.</value></data>
+  <data name="Select one or more users. Saving creates one config row per selected user." xml:space="preserve"><value>Select one or more users. Saving creates one config row per selected user.</value></data>
+  <data name="{0} user config setting values added." xml:space="preserve"><value>{0} user config setting values added.</value></data>
+  <data name="{0} user config setting values added. {1} already existed and were skipped." xml:space="preserve"><value>{0} user config setting values added. {1} already existed and were skipped.</value></data>
   <data name="No users found." xml:space="preserve"><value>No users found.</value></data>
   <data name="Load older messages" xml:space="preserve"><value>Load older messages</value></data>
   <data name="Profile image" xml:space="preserve"><value>Profile image</value></data>

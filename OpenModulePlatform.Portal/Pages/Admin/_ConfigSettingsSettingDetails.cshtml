@@ -39,14 +39,30 @@
         </div>
 
         <div class="form-field config-settings-picker__target-field" data-scope-field="User">
-            <label asp-for="Input.ConfigUsr"></label>
-            <select asp-for="Input.ConfigUsr">
-                <option value="">@L["Select user"]</option>
-                @foreach (var option in Model.UserOptions)
-                {
-                    <option value="@option.Value">@option.Label</option>
-                }
-            </select>
+            @if (Model.IsEdit)
+            {
+                <label asp-for="Input.ConfigUsr"></label>
+                <select asp-for="Input.ConfigUsr">
+                    <option value="">@L["Select user"]</option>
+                    @foreach (var option in Model.UserOptions)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+                <span class="field-validation-error" asp-validation-for="Input.ConfigUsr"></span>
+            }
+            else
+            {
+                <label asp-for="Input.ConfigUsers"></label>
+                <select asp-for="Input.ConfigUsers" multiple size="6">
+                    @foreach (var option in Model.UserOptions)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+                <div class="field-help">@L["Select one or more users. Saving creates one config row per selected user."]</div>
+                <span class="field-validation-error" asp-validation-for="Input.ConfigUsers"></span>
+            }
         </div>
 
         <div class="form-field config-settings-picker__target-field" data-scope-field="Permission">
