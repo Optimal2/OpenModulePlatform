@@ -69,7 +69,14 @@
                     .Select(userId => userId.ToString(System.Globalization.CultureInfo.InvariantCulture))
                     .ToHashSet(StringComparer.Ordinal);
 
-                <label asp-for="Input.ConfigUsers"></label>
+                <div class="config-settings-picker__label-row">
+                    <label asp-for="Input.ConfigUsers"></label>
+                    <span class="info-badge"
+                          tabindex="0"
+                          role="img"
+                          title="@L["Select one or more users. Saving creates one config row per selected user."]"
+                          aria-label="@L["Select one or more users. Saving creates one config row per selected user."]">i</span>
+                </div>
                 <details class="config-settings-user-multiselect" data-config-user-multiselect>
                     <summary class="config-settings-user-multiselect__summary">
                         <span data-config-user-multiselect-summary data-placeholder="@L["Select users"]">@L["Select users"]</span>
@@ -89,7 +96,6 @@
                         }
                     </div>
                 </details>
-                <div class="field-help">@L["Select one or more users. Saving creates one config row per selected user."]</div>
                 <span class="field-validation-error" asp-validation-for="Input.ConfigUsers"></span>
             }
         </div>
@@ -118,8 +124,14 @@
     </div>
 
     <div class="form-field">
-        <label asp-for="Input.ConfigValue"></label>
+        <div class="config-settings-picker__label-row">
+            <label asp-for="Input.ConfigValue"></label>
+            <span class="info-badge"
+                  tabindex="0"
+                  role="img"
+                  title="@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]"
+                  aria-label="@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]">i</span>
+        </div>
         <textarea asp-for="Input.ConfigValue" rows="5"></textarea>
-        <div class="field-help">@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]</div>
     </div>
 </div>
