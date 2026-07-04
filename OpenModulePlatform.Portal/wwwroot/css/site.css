@@ -1984,6 +1984,21 @@ code {
     max-width: 9rem;
 }
 
+.config-settings-picker__label-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.config-settings-picker__label-row label {
+    margin: 0;
+}
+
+.config-settings-picker__label-row .info-badge:focus-visible {
+    outline: 2px solid rgba(11, 87, 208, 0.28);
+    outline-offset: 2px;
+}
+
 .config-settings-picker__target-field[hidden] {
     display: none;
 }
