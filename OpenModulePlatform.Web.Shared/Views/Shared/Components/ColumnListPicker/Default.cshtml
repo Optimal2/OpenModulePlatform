@@ -1,0 +1,50 @@
+@model OpenModulePlatform.Web.Shared.Models.ColumnListPickerModel
+
+@{
+    var rootClass = string.IsNullOrWhiteSpace(Model.CssClass)
+        ? "column-list-picker"
+        : $"column-list-picker {Model.CssClass}";
+}
+
+<section class="@rootClass">
+    @if (!string.IsNullOrWhiteSpace(Model.Title) || !string.IsNullOrWhiteSpace(Model.Description))
+    {
+        <div class="column-list-picker__header">
+            @if (!string.IsNullOrWhiteSpace(Model.Title))
+            {
+                <h3>@Model.Title</h3>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.Description))
+            {
+                <p>@Model.Description</p>
+            }
+        </div>
+    }
+
+    <div class="column-list-picker__layout">
+        <aside class="column-list-picker__list-panel" aria-label="@Model.ListLabel">
+            @if (!string.IsNullOrWhiteSpace(Model.ListPartialName))
+            {
+                @await Html.PartialAsync(Model.ListPartialName, Model.ListModel)
+            }
+        </aside>
+
+        <section class="column-list-picker__details-panel" aria-label="@Model.DetailsLabel" aria-live="polite">
+            @if (!string.IsNullOrWhiteSpace(Model.DetailsPartialName))
+            {
+                @await Html.PartialAsync(Model.DetailsPartialName, Model.DetailsModel)
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.EmptyState))
+            {
+                <div class="empty-state">@Model.EmptyState</div>
+            }
+        </section>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.FooterPartialName))
+    {
+        <div class="column-list-picker__footer">
+            @await Html.PartialAsync(Model.FooterPartialName, Model.FooterModel)
+        </div>
+    }
+</section>

@@ -1,0 +1,9 @@
+@model OpenModulePlatform.Portal.Pages.Admin.ConfigSettingsModel
+
+<div class="toolbar config-settings-picker__actions">
+    <button type="submit" data-config-settings-save disabled="@(Model.Input.ConfigSettingId <= 0)">@L["Save config setting"]</button>
+    @if (Model.IsEdit)
+    {
+        <a class="action-link" href="~/admin/configsettings">@L["Cancel edit"]</a>
+    }
+</div>
