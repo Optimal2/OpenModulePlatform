@@ -20,14 +20,14 @@
         </p>
     </div>
 
-    <div class="field-grid field-grid--2">
-        <div class="form-field form-field--compact">
+    <div class="config-settings-picker__scope-row">
+        <div class="form-field form-field--compact config-settings-picker__priority-field">
             <label asp-for="Input.ConfigPriority"></label>
             <input asp-for="Input.ConfigPriority" type="number" />
             <div class="field-help">@L["Higher priority wins within permission or role scoped rows."]</div>
         </div>
 
-        <div class="form-field">
+        <div class="form-field config-settings-picker__scope-field">
             <label asp-for="Input.ScopeType"></label>
             <select asp-for="Input.ScopeType" data-scope-select>
                 @foreach (var option in Model.ScopeOptions)
@@ -37,10 +37,8 @@
             </select>
             <div class="field-help">@L["Global rows apply to everyone. User scope wins over permission, permission wins over role."]</div>
         </div>
-    </div>
 
-    <div class="field-grid field-grid--2">
-        <div class="form-field" data-scope-field="User">
+        <div class="form-field config-settings-picker__target-field" data-scope-field="User">
             <label asp-for="Input.ConfigUsr"></label>
             <select asp-for="Input.ConfigUsr">
                 <option value="">@L["Select user"]</option>
@@ -51,7 +49,7 @@
             </select>
         </div>
 
-        <div class="form-field" data-scope-field="Permission">
+        <div class="form-field config-settings-picker__target-field" data-scope-field="Permission">
             <label asp-for="Input.ConfigPermission"></label>
             <select asp-for="Input.ConfigPermission">
                 <option value="">@L["Select permission"]</option>
@@ -62,7 +60,7 @@
             </select>
         </div>
 
-        <div class="form-field" data-scope-field="Role">
+        <div class="form-field config-settings-picker__target-field" data-scope-field="Role">
             <label asp-for="Input.ConfigRole"></label>
             <select asp-for="Input.ConfigRole">
                 <option value="">@L["Select role"]</option>
