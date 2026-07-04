@@ -127,8 +127,8 @@
 
             const scopeSelect = form.querySelector('[data-scope-select]');
             const fields = Array.from(form.querySelectorAll('[data-scope-field]'));
+            const settingValue = form.querySelector('[data-config-setting-selected-value]');
             const settingOptions = Array.from(form.querySelectorAll('[data-config-setting-option]'));
-            const settingCards = Array.from(form.querySelectorAll('[data-config-setting-option-card]'));
             const detailPanel = form.querySelector('[data-config-setting-details]');
             const emptyPanel = form.querySelector('[data-config-setting-empty]');
             const detailTitle = form.querySelector('[data-config-setting-detail-title]');
@@ -137,6 +137,10 @@
             const noDescriptionLabel = form.dataset.noDescriptionLabel || '';
 
             const syncScopeFields = () => {
+                if (!scopeSelect) {
+                    return;
+                }
+
                 const active = scopeSelect.value;
                 fields.forEach((field) => {
                     const visible = field.dataset.scopeField === active;
@@ -147,14 +151,16 @@
                 });
             };
 
-            scopeSelect.addEventListener('change', syncScopeFields);
+            scopeSelect?.addEventListener('change', syncScopeFields);
             syncScopeFields();
 
             const syncSelectedSetting = () => {
-                const selected = settingOptions.find((option) => option.checked);
-                settingCards.forEach((card) => {
-                    const input = card.querySelector('[data-config-setting-option]');
-                    card.classList.toggle('is-selected', input === selected);
+                const selectedValue = settingValue?.value || '';
+                const selected = settingOptions.find((option) => option.dataset.settingValue === selectedValue);
+                settingOptions.forEach((option) => {
+                    const isSelected = option === selected;
+                    option.classList.toggle('is-selected', isSelected);
+                    option.setAttribute('aria-checked', isSelected ? 'true' : 'false');
                 });
 
                 const hasSelection = Boolean(selected);
@@ -181,10 +187,18 @@
                 if (detailDescription) {
                     detailDescription.textContent = selected.dataset.settingDescription || noDescriptionLabel;
                 }
+
+                syncScopeFields();
             };
 
             settingOptions.forEach((option) => {
-                option.addEventListener('change', syncSelectedSetting);
+                option.addEventListener('click', () => {
+                    if (settingValue) {
+                        settingValue.value = option.dataset.settingValue || '';
+                    }
+
+                    syncSelectedSetting();
+                });
             });
             syncSelectedSetting();
         })();
