@@ -1,0 +1,118 @@
+.column-list-picker {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.column-list-picker__header {
+    display: grid;
+    gap: 4px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.column-list-picker__header h3,
+.column-list-picker__header p {
+    margin: 0;
+}
+
+.column-list-picker__header p {
+    color: var(--text-muted);
+}
+
+.column-list-picker__layout {
+    display: grid;
+    grid-template-columns: minmax(260px, 34%) minmax(0, 1fr);
+    min-height: 0;
+}
+
+.column-list-picker__list-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+    background: var(--surface-muted);
+}
+
+.column-list-picker__details-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    background: var(--surface);
+}
+
+.column-list-picker__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.column-list-picker__list {
+    display: grid;
+    gap: 8px;
+    min-height: 0;
+    padding: 14px;
+    overflow: auto;
+}
+
+.column-list-picker__item {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    min-height: 66px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.column-list-picker__item:hover,
+.column-list-picker__item:focus-within,
+.column-list-picker__item.is-selected {
+    border-color: var(--link);
+    box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.12);
+}
+
+.column-list-picker__item.is-selected {
+    background: var(--accent);
+}
+
+.column-list-picker__item-title,
+.column-list-picker__item-meta,
+.column-list-picker__item-description {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.column-list-picker__item-title {
+    font-weight: 700;
+}
+
+.column-list-picker__item-meta,
+.column-list-picker__item-description {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+@media (max-width: 780px) {
+    .column-list-picker__layout {
+        grid-template-columns: 1fr;
+    }
+
+    .column-list-picker__list-panel {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+}

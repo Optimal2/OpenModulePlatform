@@ -1,0 +1,82 @@
+@model OpenModulePlatform.Portal.Pages.Admin.ConfigSettingsModel
+
+@{
+    var selectedDefinition = Model.Definitions.FirstOrDefault(definition => definition.ConfigSettingId == Model.Input.ConfigSettingId);
+    var hasSelection = selectedDefinition is not null;
+    var selectedTitle = selectedDefinition?.Key ?? L["Select setting"].Value;
+    var selectedDescription = selectedDefinition?.Description;
+}
+
+<div class="empty-state config-settings-picker__empty" data-config-setting-empty hidden="@hasSelection">
+    @L["Select setting"]
+</div>
+
+<div class="config-settings-picker__details form-grid" data-config-setting-details hidden="@(!hasSelection)">
+    <div class="config-settings-picker__summary">
+        <p class="eyebrow">@L["Setting"]</p>
+        <h4 data-config-setting-detail-title>@selectedTitle</h4>
+        <p class="muted" data-config-setting-detail-description>
+            @(string.IsNullOrWhiteSpace(selectedDescription) ? L["No description available"].Value : selectedDescription)
+        </p>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field form-field--compact">
+            <label asp-for="Input.ConfigPriority"></label>
+            <input asp-for="Input.ConfigPriority" type="number" />
+            <div class="field-help">@L["Higher priority wins within permission or role scoped rows."]</div>
+        </div>
+
+        <div class="form-field">
+            <label asp-for="Input.ScopeType"></label>
+            <select asp-for="Input.ScopeType" data-scope-select>
+                @foreach (var option in Model.ScopeOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+            <div class="field-help">@L["Global rows apply to everyone. User scope wins over permission, permission wins over role."]</div>
+        </div>
+    </div>
+
+    <div class="field-grid field-grid--2">
+        <div class="form-field" data-scope-field="User">
+            <label asp-for="Input.ConfigUsr"></label>
+            <select asp-for="Input.ConfigUsr">
+                <option value="">@L["Select user"]</option>
+                @foreach (var option in Model.UserOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field" data-scope-field="Permission">
+            <label asp-for="Input.ConfigPermission"></label>
+            <select asp-for="Input.ConfigPermission">
+                <option value="">@L["Select permission"]</option>
+                @foreach (var option in Model.PermissionOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+
+        <div class="form-field" data-scope-field="Role">
+            <label asp-for="Input.ConfigRole"></label>
+            <select asp-for="Input.ConfigRole">
+                <option value="">@L["Select role"]</option>
+                @foreach (var option in Model.RoleOptions)
+                {
+                    <option value="@option.Value">@option.Label</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label asp-for="Input.ConfigValue"></label>
+        <textarea asp-for="Input.ConfigValue" rows="5"></textarea>
+        <div class="field-help">@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]</div>
+    </div>
+</div>
