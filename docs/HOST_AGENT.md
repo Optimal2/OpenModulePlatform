@@ -630,6 +630,196 @@ The HostAgent-first package builder emits a normal bootstrap HostAgent zip for
 first install and a standard `host-agent` artifact package for later
 self-upgrades.
 
+## Operator runbook
+
+This section is for operators who need to recover from common HostAgent failure
+modes without reading source code. All SQL examples assume the `OpenModulePlatform`
+database and the `omp` schema. Take a database backup or run manual updates inside
+a transaction whenever possible.
+
+### Stuck `Pending` / `Running` HostDeployments after HostAgent crash
+
+- **Symptom:** A host deployment request is not making progress. `omp.HostDeployments`
+  shows a row in `Status = 0` (`Pending`) or `Status = 1` (`Running`) with an old
+  `RequestedUtc`/`StartedUtc` and `CompletedUtc` is `NULL`. New deployment requests
+  for the same host may not materialize.
+- **Cause:** The HostAgent Windows service crashed or was killed while the row was
+  in `Running`. The deployment row was never moved to a terminal state (`Succeeded`,
+  `Failed`, or `Warning`) because there is no attempt counter or automatic reclaim
+  for `HostDeployments`.
+- **Recovery:**
+  1. Identify the stuck row:
+     ```sql
+     SELECT HostDeploymentId, HostId, HostTemplateId, Status, RequestedUtc, StartedUtc, OutcomeMessage
+     FROM omp.HostDeployments
+     WHERE HostId = @HostId
+       AND Status IN (0, 1)
+       AND CompletedUtc IS NULL
+     ORDER BY RequestedUtc;
+     ```
+  2. Wait one or two HostAgent refresh cycles (default 30 seconds). The agent may
+     reclaim an expired `Running` row automatically.
+  3. If the row is still stuck, reset it to `Pending` so the next cycle can claim it:
+     ```sql
+     UPDATE omp.HostDeployments
+     SET Status = 0,
+         StartedUtc = NULL,
+         OutcomeMessage = NULL,
+         UpdatedUtc = SYSUTCDATETIME()
+     WHERE HostDeploymentId = @HostDeploymentId
+       AND Status = 1;
+     ```
+- **Note:** `omp.HostAgentJobs` has `MaxAttempts` (default 3) and `AttemptCount`,
+  but `omp.HostDeployments` has **no attempt counter**. If a deployment repeatedly
+  fails, investigate the underlying error in `OutcomeMessage` instead of retrying
+  indefinitely.
+- **Verification:** Within one refresh cycle the row should move to `Status = 1`
+  (`Running`), then to `Status = 2`, `3`, or `4` with `CompletedUtc` set. Check
+  `omp.HostAppDeploymentStates` and the HostAgent logs for the resulting app
+  deployment state.
+
+### HostAgent lease loss
+
+- **Symptom:** A host stops provisioning artifacts and deploying apps even though
+  the HostAgent Windows service appears to be running. No new work is processed.
+- **Cause:** HostAgent uses a per-host database lease in `omp.HostAgentLeases`. The
+  default lease duration is 90 seconds and it is renewed every 30 seconds. The lease
+  can be lost if the service loses database connectivity, if the service process is
+  hung, or if another HostAgent service took over the host. A dead process can also
+  leave the lease row appearing "held" even though it is no longer updating it.
+- **Recovery:**
+  1. Inspect the current lease:
+     ```sql
+     SELECT HostId, ServiceName, LeaseToken, RuntimeMode, LeaseUntilUtc, UpdatedUtc
+     FROM omp.HostAgentLeases
+     WHERE HostId = @HostId;
+     ```
+  2. Compare `ServiceName` with the service that is actually running on the host.
+     If `LeaseUntilUtc` is in the past and the listed service is dead, the lease is
+     orphaned.
+  3. Prefer waiting: if `LeaseUntilUtc` has expired, a healthy HostAgent on that
+     host should reclaim the lease on its next cycle. If the host is still not
+     processing work, release the stale lease manually:
+     ```sql
+     DELETE FROM omp.HostAgentLeases
+     WHERE HostId = @HostId
+       AND ServiceName = @DeadServiceName
+       AND LeaseUntilUtc < SYSUTCDATETIME();
+     ```
+     Only delete the row when you are sure the listed service is no longer running.
+     If `ServiceName` points to an unexpected live service, another host has taken
+     over and you should investigate instead of deleting the lease.
+- **Verification:** A new lease row appears with the current `ServiceName` and a
+  future `LeaseUntilUtc`, and the host resumes processing deployments within one
+  refresh cycle.
+
+### Deployment lock file left behind
+
+- **Symptom:** A single app target, such as Portal, refuses to redeploy even though
+  HostAgent ran and other apps on the same host deployed successfully. The HostAgent
+  log mentions the per-app deployment lock.
+- **Cause:** The app wrote a deployment lock file at
+  `App_Data/omp-deployment.lock.json` below its runtime root. The default TTL is
+  5 minutes. If the app process crashed while the lock was held, the file can remain
+  past its expiry and block HostAgent from replacing files or restarting the runtime.
+- **Recovery:**
+  1. Locate the lock file under the deployed app's root, for example:
+     ```text
+     D:\OMP\WebApps\portal\App_Data\omp-deployment.lock.json
+     ```
+  2. Open the file and check the expiry timestamp. The file uses the
+     `OpenModulePlatform.DeploymentLock.v1` schema and contains an `ExpiryUtc` value.
+  3. If `ExpiryUtc` is older than the current time, the lock is stale and safe to
+     remove. Delete only that lock file; do not delete other `App_Data` contents.
+- **Verification:** On the next HostAgent cycle the app deploys successfully. The
+  lock file is gone and `omp.HostAppDeploymentStates` for that host/app instance is
+  updated with a recent `LastAppliedUtc` and no lock-related warning.
+
+### Retry exhaustion on HostAgent jobs
+
+- **Symptom:** A HostAgent job, such as an artifact cleanup or health probe, is
+  stuck and HostAgent is no longer retrying it.
+- **Cause:** `omp.HostAgentJobs` has `MaxAttempts` (default 3). Each failed run
+  increments `AttemptCount`. Once `AttemptCount >= MaxAttempts`, HostAgent stops
+  retrying the job automatically.
+- **Recovery:**
+  1. Identify exhausted jobs:
+     ```sql
+     SELECT HostAgentJobId, HostId, JobType, Status, AttemptCount, MaxAttempts, LastError
+     FROM omp.HostAgentJobs
+     WHERE AttemptCount >= MaxAttempts
+       AND Status NOT IN (2, 3)   -- not already terminal success/warning
+     ORDER BY RequestedUtc;
+     ```
+  2. Review `LastError` and fix the underlying problem before retrying.
+  3. Reset the attempt counter and release the lease so HostAgent can claim the job
+     again:
+     ```sql
+     UPDATE omp.HostAgentJobs
+     SET Status = 0,
+         AttemptCount = 0,
+         ClaimedByServiceName = NULL,
+         ClaimedUtc = NULL,
+         LeaseUntilUtc = NULL,
+         LeaseToken = NULL,
+         StartedUtc = NULL,
+         CompletedUtc = NULL,
+         LastError = NULL,
+         UpdatedUtc = SYSUTCDATETIME()
+     WHERE HostAgentJobId = @HostAgentJobId;
+     ```
+- **Verification:** The next HostAgent cycle claims the job (`Status` becomes 1,
+  `StartedUtc` is set), runs it, and records a terminal result. `AttemptCount`
+  increments and the job either succeeds or fails with a fresh `LastError`.
+
+### Same-version / different-content import failure
+
+- **Symptom:** A universal package zip dropped into the import folder is moved to
+  `failed/` and an adjacent `.error.txt` reports a hash mismatch or "different
+  content for an existing identity".
+- **Cause:** HostAgent computes the SHA-256 of each imported artifact payload and
+  stores it in `omp.Artifacts.Sha256`. For a given identity
+  `(AppId, Version, PackageType, TargetName)`, HostAgent rejects a package whose
+  hash differs from the already-registered artifact. This prevents silent
+  replacement of a released version with different binaries.
+- **Recovery:** Do **not** bypass this check by editing the database or deleting
+  the existing artifact row. The correct fix is to bump the component version in
+  `omp-components.json`, rebuild the universal package, and import the new package.
+  1. Find the failed package and the error text:
+     ```text
+     E:\OMP\ArtifactImports\failed\<package-name>.zip
+     E:\OMP\ArtifactImports\failed\<package-name>.zip.error.txt
+     ```
+  2. Read the error file to confirm the identity and hash mismatch.
+  3. Update the relevant component version in `omp-components.json`, run the build
+     scripts, and drop the new universal package into the import folder.
+- **Verification:** The new package is moved to `processed/` and a row appears in
+  `omp.Artifacts` with the bumped `Version`, the same `AppId`, `PackageType`, and
+  `TargetName`, and the new `Sha256`. The desired app instances that reference that
+  artifact are updated on the next HostAgent cycle.
+
+### Load-balanced DataProtection key check
+
+- **Symptom:** Authentication works on one IIS node but users see login loops or
+  role switching fails on another node behind a load balancer.
+- **Cause:** Every OMP web app that shares a DNS name must use the same
+  `OmpAuth:DataProtectionKeyPath`. If one node points to a local-only key folder,
+  cookies created on another node cannot be decrypted there. This is an
+  operational configuration issue, not a HostAgent code bug.
+- **Manual verification (no source-code or AI Orchestrator access needed):**
+  1. On each IIS node, open the runtime `appsettings.json` for the affected app
+     (for example `D:\OMP\WebApps\portal\appsettings.json`).
+  2. Confirm that `OmpAuth:DataProtectionKeyPath` is set to the same shared path
+     on every node.
+  3. Confirm the shared folder exists and that each application pool identity has
+     read/write access to it.
+  4. Cross-reference the load-balancer scenario in
+     [`HOSTING_WINDOWS_IIS.md`](HOSTING_WINDOWS_IIS.md) for additional checks such
+     as forwarded headers, WebSockets, and sticky sessions.
+- **Verification:** After aligning the path and permissions, recycle the app pools
+  on all nodes and test authentication and role switching from each node. Auth
+  cookies should now decrypt consistently across the farm.
+
 ## Artifact layout
 
 Recommended central layout:
