@@ -622,6 +622,10 @@ public sealed class ArtifactZipImportService
                         existingRelativePath,
                         contentHash,
                         existingMetadataHashMissing,
+                        app.AppKey,
+                        metadata.Version,
+                        metadata.PackageType,
+                        metadata.TargetName,
                         cancellationToken);
 
                     // These flags drive the import status and message below; keep
@@ -708,7 +712,11 @@ public sealed class ArtifactZipImportService
                 if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
-                        $"The target artifact path already exists with different content below the artifact store: {relativePath}.");
+                        $"The target artifact path already exists with different content. " +
+                        $"Artifact: {app.AppKey} {metadata.Version} ({metadata.PackageType}, {metadata.TargetName}). " +
+                        $"Path: {relativePath}. " +
+                        $"Existing SHA-256: {existingContentHash}. Incoming SHA-256: {contentHash}. " +
+                        $"Bump the component version, rebuild the universal package, and re-import.");
                 }
 
                 adoptedExistingContent = true;
@@ -736,7 +744,11 @@ public sealed class ArtifactZipImportService
                         if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
                         {
                             throw new InvalidOperationException(
-                                $"The target artifact path was created concurrently with different content below the artifact store: {relativePath}.",
+                                $"The target artifact path was created concurrently with different content. " +
+                                $"Artifact: {app.AppKey} {metadata.Version} ({metadata.PackageType}, {metadata.TargetName}). " +
+                                $"Path: {relativePath}. " +
+                                $"Existing SHA-256: {existingContentHash}. Incoming SHA-256: {contentHash}. " +
+                                $"Bump the component version, rebuild the universal package, and re-import.",
                                 moveEx);
                         }
 
@@ -861,6 +873,10 @@ public sealed class ArtifactZipImportService
         string existingRelativePath,
         string expectedContentHash,
         bool existingMetadataHashMissing,
+        string appKey,
+        string version,
+        string packageType,
+        string targetName,
         CancellationToken cancellationToken)
     {
         if (File.Exists(existingFinalPath))
@@ -877,8 +893,16 @@ public sealed class ArtifactZipImportService
             if (!string.Equals(existingContentHash, expectedContentHash, StringComparison.OrdinalIgnoreCase))
             {
                 var mismatchMessage = existingMetadataHashMissing
-                    ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content: {existingRelativePath}."
-                    : $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}.";
+                    ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content. " +
+                      $"Artifact: {appKey} {version} ({packageType}, {targetName}). " +
+                      $"Path: {existingRelativePath}. " +
+                      $"Existing SHA-256: {existingContentHash}. Expected SHA-256: {expectedContentHash}. " +
+                      $"Bump the component version, rebuild the universal package, and re-import."
+                    : $"The existing artifact metadata matches this package, but the artifact store path contains different content. " +
+                      $"Artifact: {appKey} {version} ({packageType}, {targetName}). " +
+                      $"Path: {existingRelativePath}. " +
+                      $"Existing SHA-256: {existingContentHash}. Expected SHA-256: {expectedContentHash}. " +
+                      $"Bump the component version, rebuild the universal package, and re-import.";
                 throw new InvalidOperationException(mismatchMessage);
             }
 
@@ -903,7 +927,11 @@ public sealed class ArtifactZipImportService
             if (!string.Equals(existingContentHash, expectedContentHash, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"The existing artifact path was created concurrently with different content: {existingRelativePath}.",
+                    $"The existing artifact path was created concurrently with different content. " +
+                    $"Artifact: {appKey} {version} ({packageType}, {targetName}). " +
+                    $"Path: {existingRelativePath}. " +
+                    $"Existing SHA-256: {existingContentHash}. Expected SHA-256: {expectedContentHash}. " +
+                    $"Bump the component version, rebuild the universal package, and re-import.",
                     moveEx);
             }
 
