@@ -135,24 +135,24 @@
             const detailDescription = form.querySelector('[data-config-setting-detail-description]');
             const saveButton = form.querySelector('[data-config-settings-save]');
             const noDescriptionLabel = form.dataset.noDescriptionLabel || '';
-            const userMultiselects = Array.from(form.querySelectorAll('[data-config-user-multiselect]'));
+            const multiselects = Array.from(form.querySelectorAll('[data-config-multiselect]'));
 
-            const syncUserMultiselectSummary = (multiselect) => {
-                const summary = multiselect.querySelector('[data-config-user-multiselect-summary]');
+            const syncMultiselectSummary = (multiselect) => {
+                const summary = multiselect.querySelector('[data-config-multiselect-summary]');
                 if (!summary) {
                     return;
                 }
 
-                const checked = Array.from(multiselect.querySelectorAll('[data-config-user-checkbox]:checked'));
-                const labels = checked.map((input) => input.dataset.configUserLabel).filter(Boolean);
+                const checked = Array.from(multiselect.querySelectorAll('[data-config-multiselect-checkbox]:checked'));
+                const labels = checked.map((input) => input.dataset.configMultiselectLabel).filter(Boolean);
                 summary.textContent = labels.length === 0
                     ? summary.dataset.placeholder || ''
                     : labels.join(', ');
             };
 
-            userMultiselects.forEach((multiselect) => {
-                multiselect.querySelectorAll('[data-config-user-checkbox]').forEach((checkbox) => {
-                    checkbox.addEventListener('change', () => syncUserMultiselectSummary(multiselect));
+            multiselects.forEach((multiselect) => {
+                multiselect.querySelectorAll('[data-config-multiselect-checkbox]').forEach((checkbox) => {
+                    checkbox.addEventListener('change', () => syncMultiselectSummary(multiselect));
                 });
 
                 multiselect.addEventListener('keydown', (event) => {
@@ -161,11 +161,11 @@
                     }
                 });
 
-                syncUserMultiselectSummary(multiselect);
+                syncMultiselectSummary(multiselect);
             });
 
             document.addEventListener('click', (event) => {
-                userMultiselects.forEach((multiselect) => {
+                multiselects.forEach((multiselect) => {
                     if (!multiselect.contains(event.target)) {
                         multiselect.open = false;
                     }
