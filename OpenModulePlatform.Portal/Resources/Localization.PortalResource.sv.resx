@@ -2807,4 +2807,12 @@
   <data name="Confirm change" xml:space="preserve"><value>Bekräfta ändring</value></data>
   <data name="Decrease" xml:space="preserve"><value>Minska</value></data>
   <data name="Increase" xml:space="preserve"><value>Öka</value></data>
+  <data name="Select permissions" xml:space="preserve"><value>Välj behörigheter</value></data>
+  <data name="Select roles" xml:space="preserve"><value>Välj roller</value></data>
+  <data name="Select permissions." xml:space="preserve"><value>Välj behörigheter.</value></data>
+  <data name="Select roles." xml:space="preserve"><value>Välj roller.</value></data>
+  <data name="Select one or more permissions. Saving creates one config row per selected permission." xml:space="preserve"><value>Välj en eller flera behörigheter. När du sparar skapas en konfigurationsrad per vald behörighet.</value></data>
+  <data name="Select one or more roles. Saving creates one config row per selected role." xml:space="preserve"><value>Välj en eller flera roller. När du sparar skapas en konfigurationsrad per vald roll.</value></data>
+  <data name="{0} config setting values added." xml:space="preserve"><value>{0} konfigurationsvärden har lagts till.</value></data>
+  <data name="{0} config setting values added. {1} already existed and were skipped." xml:space="preserve"><value>{0} konfigurationsvärden har lagts till. {1} fanns redan och hoppades över.</value></data>
 </root>

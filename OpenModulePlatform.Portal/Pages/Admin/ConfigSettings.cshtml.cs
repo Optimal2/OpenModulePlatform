@@ -119,7 +119,10 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
         {
             if (!IsEdit && Input.ScopeType == ScopeUser)
             {
-                var result = await SaveUserScopedValuesAsync(ct);
+                var result = await SaveScopedValuesAsync(
+                    Input.ConfigUsers,
+                    targetId => ToEditData(configUsrOverride: targetId),
+                    ct);
                 if (result.Created == 0)
                 {
                     ModelState.AddModelError(
@@ -129,7 +132,45 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
                     return Page();
                 }
 
-                StatusMessage = BuildUserScopedBatchStatus(result.Created, result.Skipped);
+                StatusMessage = BuildScopedBatchStatus(result.Created, result.Skipped);
+                return RedirectToPage("/Admin/ConfigSettings");
+            }
+
+            if (!IsEdit && Input.ScopeType == ScopePermission)
+            {
+                var result = await SaveScopedValuesAsync(
+                    Input.ConfigPermissions,
+                    targetId => ToEditData(configPermissionOverride: targetId),
+                    ct);
+                if (result.Created == 0)
+                {
+                    ModelState.AddModelError(
+                        nameof(Input.ConfigPermissions),
+                        T("A value for the same setting and scope already exists."));
+
+                    return Page();
+                }
+
+                StatusMessage = BuildScopedBatchStatus(result.Created, result.Skipped);
+                return RedirectToPage("/Admin/ConfigSettings");
+            }
+
+            if (!IsEdit && Input.ScopeType == ScopeRole)
+            {
+                var result = await SaveScopedValuesAsync(
+                    Input.ConfigRoles,
+                    targetId => ToEditData(configRoleOverride: targetId),
+                    ct);
+                if (result.Created == 0)
+                {
+                    ModelState.AddModelError(
+                        nameof(Input.ConfigRoles),
+                        T("A value for the same setting and scope already exists."));
+
+                    return Page();
+                }
+
+                StatusMessage = BuildScopedBatchStatus(result.Created, result.Skipped);
                 return RedirectToPage("/Admin/ConfigSettings");
             }
 
@@ -285,15 +326,49 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
                 }
                 break;
             case ScopePermission:
-                if (!Input.ConfigPermission.HasValue)
+                if (IsEdit)
                 {
-                    ModelState.AddModelError(nameof(Input.ConfigPermission), T("Select a permission."));
+                    if (!Input.ConfigPermission.HasValue)
+                    {
+                        ModelState.AddModelError(nameof(Input.ConfigPermission), T("Select a permission."));
+                    }
+                }
+                else
+                {
+                    Input.ConfigPermissions = NormalizeIds(Input.ConfigPermissions);
+
+                    if (Input.ConfigPermissions.Count == 0 && Input.ConfigPermission.HasValue)
+                    {
+                        Input.ConfigPermissions.Add(Input.ConfigPermission.Value);
+                    }
+
+                    if (Input.ConfigPermissions.Count == 0)
+                    {
+                        ModelState.AddModelError(nameof(Input.ConfigPermissions), T("Select permissions."));
+                    }
                 }
                 break;
             case ScopeRole:
-                if (!Input.ConfigRole.HasValue)
+                if (IsEdit)
                 {
-                    ModelState.AddModelError(nameof(Input.ConfigRole), T("Select a role."));
+                    if (!Input.ConfigRole.HasValue)
+                    {
+                        ModelState.AddModelError(nameof(Input.ConfigRole), T("Select a role."));
+                    }
+                }
+                else
+                {
+                    Input.ConfigRoles = NormalizeIds(Input.ConfigRoles);
+
+                    if (Input.ConfigRoles.Count == 0 && Input.ConfigRole.HasValue)
+                    {
+                        Input.ConfigRoles.Add(Input.ConfigRole.Value);
+                    }
+
+                    if (Input.ConfigRoles.Count == 0)
+                    {
+                        ModelState.AddModelError(nameof(Input.ConfigRoles), T("Select roles."));
+                    }
                 }
                 break;
             default:
@@ -302,16 +377,19 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
         }
     }
 
-    private async Task<(int Created, int Skipped)> SaveUserScopedValuesAsync(CancellationToken ct)
+    private async Task<(int Created, int Skipped)> SaveScopedValuesAsync(
+        IReadOnlyCollection<int> targetIds,
+        Func<int, ConfigSettingValueEditData> createData,
+        CancellationToken ct)
     {
         var created = 0;
         var skipped = 0;
 
-        foreach (var userId in Input.ConfigUsers)
+        foreach (var targetId in targetIds)
         {
             try
             {
-                await _repo.SaveValueAsync(ToEditData(configUsrOverride: userId), ct);
+                await _repo.SaveValueAsync(createData(targetId), ct);
                 created++;
             }
             catch (SqlException ex) when (IsUniqueConstraintViolation(ex))
@@ -323,7 +401,7 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
         return (created, skipped);
     }
 
-    private string BuildUserScopedBatchStatus(int created, int skipped)
+    private string BuildScopedBatchStatus(int created, int skipped)
     {
         if (skipped == 0)
         {
@@ -331,21 +409,30 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
                 ? T("Config setting added.")
                 : string.Format(
                     CultureInfo.CurrentCulture,
-                    T("{0} user config setting values added."),
+                    T("{0} config setting values added."),
                     created);
         }
 
         return string.Format(
             CultureInfo.CurrentCulture,
-            T("{0} user config setting values added. {1} already existed and were skipped."),
+            T("{0} config setting values added. {1} already existed and were skipped."),
             created,
             skipped);
     }
 
+    private static List<int> NormalizeIds(IEnumerable<int> ids)
+        => ids
+            .Where(id => id > 0)
+            .Distinct()
+            .ToList();
+
     private static bool IsUniqueConstraintViolation(SqlException ex)
         => ex.Number is 2601 or 2627;
 
-    private ConfigSettingValueEditData ToEditData(int? configUsrOverride = null)
+    private ConfigSettingValueEditData ToEditData(
+        int? configUsrOverride = null,
+        int? configPermissionOverride = null,
+        int? configRoleOverride = null)
     {
         int? userId = null;
         int? permissionId = null;
@@ -357,10 +444,10 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
                 userId = configUsrOverride ?? Input.ConfigUsr;
                 break;
             case ScopePermission:
-                permissionId = Input.ConfigPermission;
+                permissionId = configPermissionOverride ?? Input.ConfigPermission;
                 break;
             case ScopeRole:
-                roleId = Input.ConfigRole;
+                roleId = configRoleOverride ?? Input.ConfigRole;
                 break;
         }
 
@@ -393,7 +480,9 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
             ConfigUsr = row.ConfigUsr,
             ConfigUsers = row.ConfigUsr.HasValue ? [row.ConfigUsr.Value] : [],
             ConfigPermission = row.ConfigPermission,
+            ConfigPermissions = row.ConfigPermission.HasValue ? [row.ConfigPermission.Value] : [],
             ConfigRole = row.ConfigRole,
+            ConfigRoles = row.ConfigRole.HasValue ? [row.ConfigRole.Value] : [],
             ConfigPriority = row.ConfigPriority,
             ScopeType = row.ConfigUsr.HasValue
                 ? ScopeUser
@@ -429,8 +518,14 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
         [Display(Name = "Permission")]
         public int? ConfigPermission { get; set; }
 
+        [Display(Name = "Permissions")]
+        public List<int> ConfigPermissions { get; set; } = [];
+
         [Display(Name = "Role")]
         public int? ConfigRole { get; set; }
+
+        [Display(Name = "Roles")]
+        public List<int> ConfigRoles { get; set; } = [];
 
         [Display(Name = "Priority")]
         public int ConfigPriority { get; set; }
