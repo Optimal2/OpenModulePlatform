@@ -77,21 +77,21 @@
                           title="@L["Select one or more users. Saving creates one config row per selected user."]"
                           aria-label="@L["Select one or more users. Saving creates one config row per selected user."]">i</span>
                 </div>
-                <details class="config-settings-user-multiselect" data-config-user-multiselect>
-                    <summary class="config-settings-user-multiselect__summary">
-                        <span data-config-user-multiselect-summary data-placeholder="@L["Select users"]">@L["Select users"]</span>
+                <details class="config-settings-multiselect" data-config-multiselect>
+                    <summary class="config-settings-multiselect__summary">
+                        <span data-config-multiselect-summary data-placeholder="@L["Select users"]">@L["Select users"]</span>
                     </summary>
-                    <div class="config-settings-user-multiselect__panel">
+                    <div class="config-settings-multiselect__panel">
                         @foreach (var option in Model.UserOptions)
                         {
-                            <label class="config-settings-user-multiselect__option">
-                                <span class="config-settings-user-multiselect__label">@option.Label</span>
+                            <label class="config-settings-multiselect__option">
+                                <span class="config-settings-multiselect__label">@option.Label</span>
                                 <input type="checkbox"
                                        name="Input.ConfigUsers"
                                        value="@option.Value"
                                        checked="@selectedUserIds.Contains(option.Value)"
-                                       data-config-user-checkbox
-                                       data-config-user-label="@option.Label" />
+                                       data-config-multiselect-checkbox
+                                       data-config-multiselect-label="@option.Label" />
                             </label>
                         }
                     </div>
@@ -101,25 +101,103 @@
         </div>
 
         <div class="form-field config-settings-picker__target-field" data-scope-field="Permission">
-            <label asp-for="Input.ConfigPermission"></label>
-            <select asp-for="Input.ConfigPermission">
-                <option value="">@L["Select permission"]</option>
-                @foreach (var option in Model.PermissionOptions)
-                {
-                    <option value="@option.Value">@option.Label</option>
-                }
-            </select>
+            @if (Model.IsEdit)
+            {
+                <label asp-for="Input.ConfigPermission"></label>
+                <select asp-for="Input.ConfigPermission">
+                    <option value="">@L["Select permission"]</option>
+                    @foreach (var option in Model.PermissionOptions)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+                <span class="field-validation-error" asp-validation-for="Input.ConfigPermission"></span>
+            }
+            else
+            {
+                var selectedPermissionIds = Model.Input.ConfigPermissions
+                    .Select(permissionId => permissionId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    .ToHashSet(StringComparer.Ordinal);
+
+                <div class="config-settings-picker__label-row">
+                    <label asp-for="Input.ConfigPermissions"></label>
+                    <span class="info-badge"
+                          tabindex="0"
+                          role="img"
+                          title="@L["Select one or more permissions. Saving creates one config row per selected permission."]"
+                          aria-label="@L["Select one or more permissions. Saving creates one config row per selected permission."]">i</span>
+                </div>
+                <details class="config-settings-multiselect" data-config-multiselect>
+                    <summary class="config-settings-multiselect__summary">
+                        <span data-config-multiselect-summary data-placeholder="@L["Select permissions"]">@L["Select permissions"]</span>
+                    </summary>
+                    <div class="config-settings-multiselect__panel">
+                        @foreach (var option in Model.PermissionOptions)
+                        {
+                            <label class="config-settings-multiselect__option">
+                                <span class="config-settings-multiselect__label">@option.Label</span>
+                                <input type="checkbox"
+                                       name="Input.ConfigPermissions"
+                                       value="@option.Value"
+                                       checked="@selectedPermissionIds.Contains(option.Value)"
+                                       data-config-multiselect-checkbox
+                                       data-config-multiselect-label="@option.Label" />
+                            </label>
+                        }
+                    </div>
+                </details>
+                <span class="field-validation-error" asp-validation-for="Input.ConfigPermissions"></span>
+            }
         </div>
 
         <div class="form-field config-settings-picker__target-field" data-scope-field="Role">
-            <label asp-for="Input.ConfigRole"></label>
-            <select asp-for="Input.ConfigRole">
-                <option value="">@L["Select role"]</option>
-                @foreach (var option in Model.RoleOptions)
-                {
-                    <option value="@option.Value">@option.Label</option>
-                }
-            </select>
+            @if (Model.IsEdit)
+            {
+                <label asp-for="Input.ConfigRole"></label>
+                <select asp-for="Input.ConfigRole">
+                    <option value="">@L["Select role"]</option>
+                    @foreach (var option in Model.RoleOptions)
+                    {
+                        <option value="@option.Value">@option.Label</option>
+                    }
+                </select>
+                <span class="field-validation-error" asp-validation-for="Input.ConfigRole"></span>
+            }
+            else
+            {
+                var selectedRoleIds = Model.Input.ConfigRoles
+                    .Select(roleId => roleId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    .ToHashSet(StringComparer.Ordinal);
+
+                <div class="config-settings-picker__label-row">
+                    <label asp-for="Input.ConfigRoles"></label>
+                    <span class="info-badge"
+                          tabindex="0"
+                          role="img"
+                          title="@L["Select one or more roles. Saving creates one config row per selected role."]"
+                          aria-label="@L["Select one or more roles. Saving creates one config row per selected role."]">i</span>
+                </div>
+                <details class="config-settings-multiselect" data-config-multiselect>
+                    <summary class="config-settings-multiselect__summary">
+                        <span data-config-multiselect-summary data-placeholder="@L["Select roles"]">@L["Select roles"]</span>
+                    </summary>
+                    <div class="config-settings-multiselect__panel">
+                        @foreach (var option in Model.RoleOptions)
+                        {
+                            <label class="config-settings-multiselect__option">
+                                <span class="config-settings-multiselect__label">@option.Label</span>
+                                <input type="checkbox"
+                                       name="Input.ConfigRoles"
+                                       value="@option.Value"
+                                       checked="@selectedRoleIds.Contains(option.Value)"
+                                       data-config-multiselect-checkbox
+                                       data-config-multiselect-label="@option.Label" />
+                            </label>
+                        }
+                    </div>
+                </details>
+                <span class="field-validation-error" asp-validation-for="Input.ConfigRoles"></span>
+            }
         </div>
     </div>
 
