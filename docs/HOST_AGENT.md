@@ -865,3 +865,91 @@ Path handling in `ArtifactProvisioner` now uses explicit root-bound resolution f
 The HostAgent services now use explicit expected exception types in recovery paths instead of broad catch-all handlers. RPC timeout handling remains non-fatal for the service.
 
 The legacy dev install script now creates the `omp_portal` schema and registers the `omp_portal` module with `SchemaName = 'omp_portal'`, matching the newer modular initialization scripts.
+
+## Operator checklist: OmpAuth runtime configuration
+
+This section documents the runtime rules that make cross-application sign-in and role switching work. It is grounded in `OpenModulePlatform.Web.Shared/Options/OmpAuthOptions.cs` and `OpenModulePlatform.HostAgent.Runtime/Services/ArtifactConfigurationFileWriter.cs`.
+
+### The must-match-across-apps rule
+
+Every OMP web app that shares sign-in and role switching must use identical values in its **runtime** `appsettings.json` for these `OmpAuth` fields:
+
+- `OmpAuth:CookieName` — default `.OpenModulePlatform.Auth`.
+- `OmpAuth:ApplicationName` — default `OpenModulePlatform`. This is the ASP.NET Core Data Protection application discriminator.
+- `OmpAuth:DataProtectionKeyPath` — must point to the same shared key ring folder for all apps, and for all IIS nodes in a load-balanced setup.
+
+Affected apps include the Portal, `OpenModulePlatform.Auth`, and every consumer module web app such as IbsPackager, Dokumentbibliotek, EArkivChecker, LogSearch, and VajSkrivare. See `OmpAuthOptions.cs` for the section shape and defaults.
+
+### Auth cookie vs `omp_active_role` cookie
+
+The shared auth cookie (`.OpenModulePlatform.Auth` by default) holds the authenticated identity and is encrypted/signed with the Data Protection key ring. If `ApplicationName` or `DataProtectionKeyPath` differ between two apps, one app cannot decrypt the cookie issued by the other. The user then appears logged out, or role switch fails silently when navigating from Portal to a consumer app.
+
+The active-role cookie (`omp_active_role`) is a separate, plain-text cookie that only carries the active `RoleId`. It is **not** protected by Data Protection. It only needs the same cookie name and path (`/` by default) across apps. Cross-app role switch therefore relies on **both** cookies being readable by the consumer app:
+
+1. The auth cookie must decrypt — requires matching `CookieName`, `ApplicationName`, and `DataProtectionKeyPath`.
+2. The active-role cookie must be present — requires matching `omp_active_role` name and path.
+
+### Committed vs runtime appsettings
+
+The committed `appsettings.json` files in the repositories are intentionally neutral. Most apps do not contain an `OmpAuth` section at all; `LogSearch.Web` is a known exception that still uses the same defaults.
+
+At runtime, HostAgent generates a built-in `appsettings.json` for each deployed web app. That generated file includes an `OmpAuth` section with hardcoded `CookieName`, `ApplicationName`, login/logout/access-denied paths, and a resolved `DataProtectionKeyPath` (from `HostAgent:WebAppDataProtectionKeyPath` or a host-local fallback). This is done in `ArtifactConfigurationFileWriter.cs`.
+
+Config overlays can override any `OmpAuth` field per host, app, or artifact, but there is **no validation** that the overridden values stay consistent across apps. Operators must keep overrides aligned manually.
+
+**Manual edits to the deployed runtime `appsettings.json` are overwritten by HostAgent on the next materialization cycle.** Do not edit the file directly on the server. Change the value through a config overlay or through the HostAgent setting, then let HostAgent redeploy the app.
+
+### Operator checklist for inconsistent role switch
+
+Run this on the deployed Windows server using only Notepad and folder access. For each app, the runtime content root is typically `D:\OMP\WebApps\<appInstanceKey>` for module apps or `D:\OMP\Sites\Portal` for the Portal app; use the actual runtime root for the environment.
+
+1. **Confirm the `OmpAuth` section exists.**
+   - *Where:* open `appsettings.json` in the app's runtime root.
+   - *Expected:* a top-level `"OmpAuth"` object with `CookieName`, `ApplicationName`, and `DataProtectionKeyPath`.
+   - *If wrong:* HostAgent has not materialized the file, the app is running from a different root, or an overlay has removed the section.
+
+2. **Confirm `CookieName` is identical across all apps.**
+   - *Expected:* `.OpenModulePlatform.Auth` unless the environment explicitly overrides it.
+   - *If wrong:* one app will look for a cookie that does not exist and treat the user as anonymous.
+
+3. **Confirm `ApplicationName` is identical across all apps.**
+   - *Expected:* `OpenModulePlatform` unless explicitly overridden.
+   - *If wrong:* the Data Protection application discriminator differs, so auth cookies cannot be decrypted across apps even when the key folder is the same.
+
+4. **Confirm `DataProtectionKeyPath` points to the same folder for all apps.**
+   - *Where:* compare the path in each app's `appsettings.json`.
+   - *Expected:* identical path, and the folder exists on disk.
+   - *If wrong:* apps use different key rings and cannot decrypt each other's auth cookies.
+
+5. **Confirm app pool identities can read and write the key folder.**
+   - *Where:* right-click the `DataProtectionKeyPath` folder → Security.
+   - *Expected:* every relevant IIS app pool identity has Read and Write permissions.
+   - *If wrong:* one app may fail to load keys and fall back to its own isolated key ring, breaking cookie sharing.
+
+6. **For load-balanced setups, confirm the path is shared across nodes.**
+   - *Expected:* a UNC/network path or the same SAN-mounted path on every node, not `C:\...` or `D:\...` local to a single node.
+   - *If wrong:* a cookie issued on node A cannot be decrypted on node B, causing login loops and role-switch failures.
+
+7. **Browser check: role switch follows the user across apps.**
+   - *Steps:* sign in to Portal, switch role in the topbar, then navigate to a consumer app.
+   - *Expected:* the consumer app's topbar shows the same active role.
+   - *If it reverts:* suspect a Data Protection mismatch (`ApplicationName` or `DataProtectionKeyPath`) in the consumer app.
+
+8. **Browser check: both cookies are visible.**
+   - *Steps:* open browser developer tools → Application/Storage → Cookies.
+   - *Expected:* `.OpenModulePlatform.Auth` and `omp_active_role` are both present for the site with Path `/`.
+   - *If missing:* the cookie name or path has diverged, or the app is hosted under a different domain/path.
+
+#### Symptom → cause → fix
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Role switch works in Portal but the consumer app shows the old role, or logs the user out. | `OmpAuth:DataProtectionKeyPath` or `OmpAuth:ApplicationName` differs between the apps. The consumer app cannot decrypt the auth cookie. | Align `DataProtectionKeyPath` and `ApplicationName` via a config overlay or HostAgent setting, then redeploy. |
+| Log messages mention a cookie name mismatch or the user is always anonymous in one app. | `OmpAuth:CookieName` differs between apps. | Set the same `CookieName` across apps via overlay or HostAgent setting. |
+| Role switch appears to work but the active role is not honored in the consumer app. | The `omp_active_role` cookie name or path differs (rare; normally consistent across apps). | Inspect the cookie in browser dev tools and align the active-role cookie configuration. |
+
+### Load-balanced deployments
+
+In a load-balanced IIS deployment, **every node must share the same `OmpAuth:DataProtectionKeyPath`**. A local-only folder per node means cookies issued by node A cannot be decrypted by node B. The symptom is usually a login loop or role switch that works only when the browser stays on one node.
+
+Use a UNC share or equivalent shared storage for the Data Protection key ring, grant read/write access to every relevant app pool identity, and verify the same path is configured in the runtime `appsettings.json` on every node. See the load-balancer scenario in [`HOSTING_WINDOWS_IIS.md`](HOSTING_WINDOWS_IIS.md) for additional checks such as forwarded headers, WebSockets, and sticky sessions.
