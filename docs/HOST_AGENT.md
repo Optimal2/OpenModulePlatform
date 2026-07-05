@@ -657,9 +657,10 @@ a transaction whenever possible.
        AND CompletedUtc IS NULL
      ORDER BY RequestedUtc;
      ```
-  2. Wait one or two HostAgent refresh cycles (default 30 seconds). The agent may
-     reclaim an expired `Running` row automatically.
-  3. If the row is still stuck, reset it to `Pending` so the next cycle can claim it:
+  2. Wait one or two HostAgent refresh cycles (default 30 seconds). A `Pending`
+     row should be claimed when the agent is healthy again, but a row that is
+     already `Running` is not reclaimed by the current HostDeployment queue.
+  3. If a `Running` row is still stuck, reset it to `Pending` so the next cycle can claim it:
      ```sql
      UPDATE omp.HostDeployments
      SET Status = 0,
