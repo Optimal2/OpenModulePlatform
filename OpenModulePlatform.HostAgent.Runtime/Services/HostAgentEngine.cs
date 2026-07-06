@@ -280,11 +280,13 @@ public sealed class HostAgentEngine
     {
         var settings = _settings.CurrentValue;
         var leaseSeconds = Math.Max(MinimumLeaseSeconds, settings.HostDeploymentLeaseSeconds);
+        var maxAttempts = Math.Max(1, settings.HostDeploymentMaxAttempts);
 
         var deployment = await _repository.TryClaimNextHostDeploymentAsync(
             hostKey,
             _process.ServiceName,
             leaseSeconds,
+            maxAttempts,
             cancellationToken);
         if (deployment is null)
         {

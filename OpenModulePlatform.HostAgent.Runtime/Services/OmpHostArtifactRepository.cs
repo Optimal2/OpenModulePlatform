@@ -1668,6 +1668,7 @@ EXEC omp.MaterializeInstanceTemplate
         string hostKey,
         string serviceName,
         int leaseSeconds,
+        int maxAttempts,
         CancellationToken ct)
     {
         const string sql = @"
@@ -1694,13 +1695,14 @@ SET Status = @failedStatus,
     CompletedUtc = @nowUtc,
     LeaseUntilUtc = NULL,
     LeaseToken = NULL,
+    MaxAttempts = @maxAttempts,
     OutcomeMessage = COALESCE(NULLIF(OutcomeMessage, N''), N'HostDeployment lease expired after the maximum number of attempts.'),
     UpdatedUtc = @nowUtc
 WHERE HostId = @hostId
   AND Status = @runningStatus
   AND LeaseUntilUtc IS NOT NULL
   AND LeaseUntilUtc < @nowUtc
-  AND AttemptCount >= MaxAttempts;
+  AND AttemptCount >= @maxAttempts;
 
 DECLARE @claimed TABLE
 (
@@ -1714,7 +1716,7 @@ DECLARE @claimed TABLE
     SELECT TOP (1) HostDeploymentId
     FROM omp.HostDeployments WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE HostId = @hostId
-      AND AttemptCount < MaxAttempts
+      AND AttemptCount < @maxAttempts
       AND
       (
           Status = @pendingStatus
@@ -1737,6 +1739,7 @@ SET Status = @runningStatus,
     CompletedUtc = NULL,
     OutcomeMessage = NULL,
     AttemptCount = d.AttemptCount + 1,
+    MaxAttempts = @maxAttempts,
     UpdatedUtc = @nowUtc
 OUTPUT inserted.HostDeploymentId,
        inserted.HostTemplateId,
@@ -1758,6 +1761,7 @@ LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = c.HostTemplateId;";
         cmd.Parameters.AddWithValue("@hostKey", hostKey);
         cmd.Parameters.AddWithValue("@serviceName", serviceName);
         cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(MinimumLeaseSeconds, leaseSeconds));
+        cmd.Parameters.AddWithValue("@maxAttempts", Math.Max(1, maxAttempts));
         cmd.Parameters.AddWithValue("@pendingStatus", HostDeploymentStatuses.Pending);
         cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
         cmd.Parameters.AddWithValue("@failedStatus", HostDeploymentStatuses.Failed);
