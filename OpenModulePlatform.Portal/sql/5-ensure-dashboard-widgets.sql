@@ -666,19 +666,21 @@ BEGIN
     USING
     (
         VALUES
-            (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', 100, CONVERT(bit, 1)),
-            (N'portal', N'notificationToastsEnabled', N'Controls whether Portal notification and message toast polling and display are enabled globally.', 100, CONVERT(bit, 1))
-    ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+            (N'messages', N'attachmentMaxBytes', N'Maximum size in bytes for one message attachment.', N'^\d+$', N'5242880; 10485760', 100, CONVERT(bit, 1)),
+            (N'portal', N'notificationToastsEnabled', N'Controls whether Portal notification and message toast polling and display are enabled globally.', N'(?i)^(true|false)$', N'true; false', 100, CONVERT(bit, 1))
+    ) AS source(ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
     ON target.ConfigCategory = source.ConfigCategory
        AND target.ConfigSetting = source.ConfigSetting
     WHEN MATCHED THEN
         UPDATE SET Description = source.Description,
+                   ValidationRegex = source.ValidationRegex,
+                   ExampleValues = source.ExampleValues,
                    SortOrder = source.SortOrder,
                    IsEnabled = source.IsEnabled,
                    UpdatedUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
-        INSERT(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
-        VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.SortOrder, source.IsEnabled);
+        INSERT(ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
+        VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.ValidationRegex, source.ExampleValues, source.SortOrder, source.IsEnabled);
 
     MERGE omp.config_settings AS target
     USING

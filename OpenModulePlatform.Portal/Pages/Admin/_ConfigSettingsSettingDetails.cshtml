@@ -5,6 +5,7 @@
     var hasSelection = selectedDefinition is not null;
     var selectedTitle = selectedDefinition?.Key ?? L["Select setting"].Value;
     var selectedDescription = selectedDefinition?.Description;
+    var selectedExamples = selectedDefinition?.ExampleValues;
 }
 
 <div class="empty-state config-settings-picker__empty" data-config-setting-empty hidden="@hasSelection">
@@ -211,5 +212,11 @@
                   aria-label="@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]">i</span>
         </div>
         <textarea asp-for="Input.ConfigValue" rows="5"></textarea>
+        <div class="field-help config-settings-picker__examples"
+             data-config-setting-detail-examples
+             hidden="@string.IsNullOrWhiteSpace(selectedExamples)">
+            <span>@L["Example values:"]</span>
+            <code data-config-setting-detail-examples-text>@selectedExamples</code>
+        </div>
     </div>
 </div>

@@ -3500,6 +3500,8 @@ BEGIN
         ConfigCategory nvarchar(100) NOT NULL,
         ConfigSetting nvarchar(200) NOT NULL,
         Description nvarchar(1000) NULL,
+        ValidationRegex nvarchar(1000) NULL,
+        ExampleValues nvarchar(1000) NULL,
         SortOrder int NOT NULL CONSTRAINT DF_omp_config_setting_definitions_SortOrder DEFAULT(0),
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_config_setting_definitions_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_config_setting_definitions_CreatedUtc DEFAULT SYSUTCDATETIME(),
@@ -3514,6 +3516,18 @@ GO
 IF COL_LENGTH(N'omp.config_setting_definitions', N'Description') IS NULL
 BEGIN
     ALTER TABLE omp.config_setting_definitions ADD Description nvarchar(1000) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.config_setting_definitions', N'ValidationRegex') IS NULL
+BEGIN
+    ALTER TABLE omp.config_setting_definitions ADD ValidationRegex nvarchar(1000) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.config_setting_definitions', N'ExampleValues') IS NULL
+BEGIN
+    ALTER TABLE omp.config_setting_definitions ADD ExampleValues nvarchar(1000) NULL;
 END
 GO
 
@@ -3686,10 +3700,12 @@ IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL
    AND COL_LENGTH(N'omp.config_settings', N'ConfigSetting') IS NOT NULL
 BEGIN
     EXEC sp_executesql N'
-INSERT INTO omp.config_setting_definitions(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+INSERT INTO omp.config_setting_definitions(ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
 SELECT DISTINCT cs.ConfigCategory,
        cs.ConfigSetting,
        NULL,
+       N''^[\s\S]*$'',
+       N''Custom value'',
        1000,
        1
 FROM omp.config_settings cs
@@ -3704,6 +3720,18 @@ WHERE cs.ConfigSettingId IS NULL
         AND existing.ConfigSetting = cs.ConfigSetting
   );';
 END
+GO
+
+UPDATE omp.config_setting_definitions
+SET ValidationRegex = N'^[\s\S]*$',
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ValidationRegex IS NULL;
+GO
+
+UPDATE omp.config_setting_definitions
+SET ExampleValues = N'Custom value',
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ExampleValues IS NULL;
 GO
 
 IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL

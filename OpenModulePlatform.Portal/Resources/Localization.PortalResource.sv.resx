@@ -2815,4 +2815,8 @@
   <data name="Select one or more roles. Saving creates one config row per selected role." xml:space="preserve"><value>Välj en eller flera roller. När du sparar skapas en konfigurationsrad per vald roll.</value></data>
   <data name="{0} config setting values added." xml:space="preserve"><value>{0} konfigurationsvärden har lagts till.</value></data>
   <data name="{0} config setting values added. {1} already existed and were skipped." xml:space="preserve"><value>{0} konfigurationsvärden har lagts till. {1} fanns redan och hoppades över.</value></data>
+  <data name="Example values:" xml:space="preserve"><value>Exempelvärden:</value></data>
+  <data name="Value does not match the expected format for {0}." xml:space="preserve"><value>Värdet matchar inte det förväntade formatet för {0}.</value></data>
+  <data name="The validation regex for {0} is invalid. Contact an administrator." xml:space="preserve"><value>Valideringsregexen för {0} är ogiltig. Kontakta en administratör.</value></data>
+  <data name="Validation timed out for {0}. Contact an administrator." xml:space="preserve"><value>Valideringen tog för lång tid för {0}. Kontakta en administratör.</value></data>
 </root>

@@ -62,7 +62,10 @@ its SQL in `OpenModulePlatform.Portal/sql`.
 ## Core configuration settings
 
 `omp.config_setting_definitions` stores the allowed setting keys. OMP upgrades
-seed this table; it is not meant to be edited from the Portal admin UI.
+seed this table; it is not meant to be edited from the Portal admin UI. Each
+definition can also provide `ValidationRegex` and `ExampleValues` metadata so
+the Portal admin UI can reject clearly invalid values and show compact examples
+near the value editor.
 
 `omp.config_settings` stores installation-specific configuration values as text
 so a setting can hold simple scalars such as `true` or `10`, or serialized

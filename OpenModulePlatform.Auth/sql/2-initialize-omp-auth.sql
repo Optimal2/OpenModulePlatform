@@ -323,19 +323,21 @@ BEGIN
     USING
     (
         VALUES
-            (N'auth', N'providerSessionLifetimes', N'Global JSON object that maps auth provider ids to OMP session lifetime minutes. Provider id 0 is the fallback for providers without an override, for example {"0":600,"2":120}. Missing, empty, or invalid values use the built-in 600-minute default. Changes apply only to new sign-ins.', 100, CONVERT(bit, 1)),
-            (N'auth', N'selfRegistrationEnabled', N'Controls whether users may create their own OMP account from the login page or account settings.', 110, CONVERT(bit, 1))
-    ) AS source(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
+            (N'auth', N'providerSessionLifetimes', N'Global JSON object that maps auth provider ids to OMP session lifetime minutes. Provider id 0 is the fallback for providers without an override, for example {"0":600,"2":120}. Missing, empty, or invalid values use the built-in 600-minute default. Changes apply only to new sign-ins.', N'^\s*\{[\s\S]*\}\s*$', N'{"0":600}; {"0":600,"2":120}', 100, CONVERT(bit, 1)),
+            (N'auth', N'selfRegistrationEnabled', N'Controls whether users may create their own OMP account from the login page or account settings.', N'(?i)^(true|false)$', N'true; false', 110, CONVERT(bit, 1))
+    ) AS source(ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
     ON target.ConfigCategory = source.ConfigCategory
        AND target.ConfigSetting = source.ConfigSetting
     WHEN MATCHED THEN
         UPDATE SET Description = source.Description,
+                   ValidationRegex = source.ValidationRegex,
+                   ExampleValues = source.ExampleValues,
                    SortOrder = source.SortOrder,
                    IsEnabled = source.IsEnabled,
                    UpdatedUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
-        INSERT(ConfigCategory, ConfigSetting, Description, SortOrder, IsEnabled)
-        VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.SortOrder, source.IsEnabled);
+        INSERT(ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
+        VALUES(source.ConfigCategory, source.ConfigSetting, source.Description, source.ValidationRegex, source.ExampleValues, source.SortOrder, source.IsEnabled);
 
     MERGE omp.config_settings AS target
     USING

@@ -133,6 +133,8 @@
             const emptyPanel = form.querySelector('[data-config-setting-empty]');
             const detailTitle = form.querySelector('[data-config-setting-detail-title]');
             const detailDescription = form.querySelector('[data-config-setting-detail-description]');
+            const detailExamples = form.querySelector('[data-config-setting-detail-examples]');
+            const detailExamplesText = form.querySelector('[data-config-setting-detail-examples-text]');
             const saveButton = form.querySelector('[data-config-settings-save]');
             const noDescriptionLabel = form.dataset.noDescriptionLabel || '';
             const multiselects = Array.from(form.querySelectorAll('[data-config-multiselect]'));
@@ -222,6 +224,15 @@
 
                 if (detailDescription) {
                     detailDescription.textContent = selected.dataset.settingDescription || noDescriptionLabel;
+                }
+
+                const examples = selected.dataset.settingExamples || '';
+                if (detailExamples) {
+                    detailExamples.hidden = examples.trim().length === 0;
+                }
+
+                if (detailExamplesText) {
+                    detailExamplesText.textContent = examples;
                 }
 
                 syncScopeFields();
