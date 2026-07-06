@@ -9,6 +9,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
 {
     private const string TestServiceName = "OMP.HostAgent.Test";
     private const int LeaseSeconds = 30;
+    private const int MaxAttempts = 3;
 
     private readonly string _connectionString;
     private readonly OmpHostArtifactRepository _repository;
@@ -36,6 +37,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             hostKey,
             TestServiceName,
             LeaseSeconds,
+            MaxAttempts,
             CancellationToken.None);
 
         Assert.NotNull(deployment);
@@ -67,6 +69,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             hostKey,
             TestServiceName,
             LeaseSeconds,
+            MaxAttempts,
             CancellationToken.None);
 
         Assert.NotNull(deployment);
@@ -96,6 +99,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             hostKey,
             TestServiceName,
             LeaseSeconds,
+            MaxAttempts,
             CancellationToken.None);
 
         Assert.Null(firstDeployment);
@@ -109,6 +113,35 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
     }
 
     [Fact]
+    public async Task TryClaimNextHostDeploymentAsync_UsesConfiguredMaxAttempts_WhenReclaimingExpiredRunningRow()
+    {
+        var hostKey = await GetDefaultHostKeyAsync();
+        var hostTemplateId = await GetDefaultHostTemplateIdAsync();
+        var configuredMaxAttempts = 5;
+        var deploymentId = await InsertRunningDeploymentAsync(
+            hostKey,
+            hostTemplateId,
+            attemptCount: MaxAttempts,
+            leaseUntilUtc: DateTime.UtcNow.AddMinutes(-1));
+
+        var deployment = await _repository.TryClaimNextHostDeploymentAsync(
+            hostKey,
+            TestServiceName,
+            LeaseSeconds,
+            configuredMaxAttempts,
+            CancellationToken.None);
+
+        Assert.NotNull(deployment);
+        Assert.Equal(deploymentId, deployment.HostDeploymentId);
+
+        var row = await GetDeploymentRowAsync(deploymentId);
+        Assert.Equal(HostDeploymentStatuses.Running, row.Status);
+        Assert.Equal(MaxAttempts + 1, row.AttemptCount);
+        Assert.Equal(configuredMaxAttempts, row.MaxAttempts);
+        Assert.Equal(deployment.LeaseToken, row.LeaseToken);
+    }
+
+    [Fact]
     public async Task RenewHostDeploymentLeaseAsync_ExtendsLease()
     {
         var hostKey = await GetDefaultHostKeyAsync();
@@ -119,6 +152,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             hostKey,
             TestServiceName,
             LeaseSeconds,
+            MaxAttempts,
             CancellationToken.None);
 
         Assert.NotNull(deployment);
@@ -149,6 +183,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             hostKey,
             TestServiceName,
             LeaseSeconds,
+            MaxAttempts,
             CancellationToken.None);
 
         Assert.NotNull(deployment);
