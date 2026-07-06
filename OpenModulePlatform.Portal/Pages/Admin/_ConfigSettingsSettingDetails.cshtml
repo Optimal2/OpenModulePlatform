@@ -6,6 +6,7 @@
     var selectedTitle = selectedDefinition?.Key ?? L["Select setting"].Value;
     var selectedDescription = selectedDefinition?.Description;
     var selectedExamples = selectedDefinition?.ExampleValues;
+    var hasSelectedExamples = !string.IsNullOrWhiteSpace(selectedExamples);
 }
 
 <div class="empty-state config-settings-picker__empty" data-config-setting-empty hidden="@hasSelection">
@@ -213,10 +214,11 @@
         </div>
         <textarea asp-for="Input.ConfigValue" rows="5"></textarea>
         <div class="field-help config-settings-picker__examples"
-             data-config-setting-detail-examples
-             hidden="@string.IsNullOrWhiteSpace(selectedExamples)">
-            <span>@L["Example values:"]</span>
-            <code data-config-setting-detail-examples-text>@selectedExamples</code>
+             data-config-setting-detail-examples>
+            <span data-config-setting-detail-examples-label>
+                @(hasSelectedExamples ? L["Example values:"].Value : L["No examples available."].Value)
+            </span>
+            <code data-config-setting-detail-examples-text hidden="@(!hasSelectedExamples)">@selectedExamples</code>
         </div>
     </div>
 </div>
