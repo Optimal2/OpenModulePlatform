@@ -989,6 +989,22 @@ a:hover {
     cursor: pointer;
 }
 
+.maintenance-preview-candidate-card__arrow {
+    flex: 0 0 auto;
+    width: 0.62rem;
+    height: 0.62rem;
+    margin-top: 0.2rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    opacity: 0.72;
+    transform: rotate(45deg);
+    transition: transform 140ms ease, opacity 140ms ease;
+}
+
+.maintenance-preview-candidate-card.is-expanded .maintenance-preview-candidate-card__arrow {
+    transform: rotate(-135deg);
+}
+
 .maintenance-preview-candidate-card__header:hover,
 .maintenance-preview-candidate-card__header:focus-visible {
     color: inherit;
@@ -1001,6 +1017,15 @@ a:hover {
     padding: 10px 14px;
     border-bottom: 0;
     background: var(--maintenance-preview-card-surface-strong);
+}
+
+.maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__arrow {
+    margin-top: 0;
+}
+
+.maintenance-preview-candidate-card__header:hover .maintenance-preview-candidate-card__arrow,
+.maintenance-preview-candidate-card__header:focus-visible .maintenance-preview-candidate-card__arrow {
+    opacity: 1;
 }
 
 .maintenance-preview-candidate-card.is-expanded .maintenance-preview-candidate-card__header {
