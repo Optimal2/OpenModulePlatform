@@ -212,13 +212,15 @@
                   title="@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]"
                   aria-label="@L["Values are stored as text and may contain scalar values, JSON, XML, or other serialized configuration data."]">i</span>
         </div>
-        <textarea asp-for="Input.ConfigValue" rows="5"></textarea>
+        <textarea asp-for="Input.ConfigValue" rows="5" data-config-setting-value-input></textarea>
         <div class="field-help config-settings-picker__examples"
              data-config-setting-detail-examples>
             <span data-config-setting-detail-examples-label>
                 @(hasSelectedExamples ? L["Example values:"].Value : L["No examples available."].Value)
             </span>
-            <code data-config-setting-detail-examples-text hidden="@(!hasSelectedExamples)">@selectedExamples</code>
+            <span class="config-settings-picker__example-chip-list"
+                  data-config-setting-detail-example-chips
+                  hidden="@(!hasSelectedExamples)"></span>
         </div>
     </div>
 </div>
