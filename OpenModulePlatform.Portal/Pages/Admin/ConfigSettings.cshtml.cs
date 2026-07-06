@@ -8,6 +8,7 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -112,6 +113,12 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
         if (definition is null)
         {
             ModelState.AddModelError(nameof(Input.ConfigSettingId), T("Select a registered config setting."));
+            return Page();
+        }
+
+        ValidateConfigValue(definition);
+        if (!ModelState.IsValid)
+        {
             return Page();
         }
 
@@ -425,6 +432,51 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
             .Where(id => id > 0)
             .Distinct()
             .ToList();
+
+    private void ValidateConfigValue(ConfigSettingDefinitionRow definition)
+    {
+        if (string.IsNullOrWhiteSpace(definition.ValidationRegex))
+        {
+            return;
+        }
+
+        var value = Input.ConfigValue ?? string.Empty;
+
+        try
+        {
+            if (!Regex.IsMatch(
+                value,
+                definition.ValidationRegex,
+                RegexOptions.CultureInvariant,
+                TimeSpan.FromMilliseconds(250)))
+            {
+                ModelState.AddModelError(
+                    nameof(Input.ConfigValue),
+                    string.Format(
+                        CultureInfo.CurrentCulture,
+                        T("Value does not match the expected format for {0}."),
+                        definition.Key));
+            }
+        }
+        catch (ArgumentException)
+        {
+            ModelState.AddModelError(
+                nameof(Input.ConfigValue),
+                string.Format(
+                    CultureInfo.CurrentCulture,
+                    T("The validation regex for {0} is invalid. Contact an administrator."),
+                    definition.Key));
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            ModelState.AddModelError(
+                nameof(Input.ConfigValue),
+                string.Format(
+                    CultureInfo.CurrentCulture,
+                    T("Validation timed out for {0}. Contact an administrator."),
+                    definition.Key));
+        }
+    }
 
     private static bool IsUniqueConstraintViolation(SqlException ex)
         => ex.Number is 2601 or 2627;

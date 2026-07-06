@@ -2003,6 +2003,19 @@ code {
     display: none;
 }
 
+.config-settings-picker__examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: baseline;
+}
+
+.config-settings-picker__examples code {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
 .config-settings-multiselect {
     position: relative;
     min-width: 0;

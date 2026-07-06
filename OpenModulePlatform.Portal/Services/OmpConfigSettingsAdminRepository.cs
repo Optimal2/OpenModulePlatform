@@ -26,6 +26,8 @@ SELECT ConfigSettingId,
        ConfigCategory,
        ConfigSetting,
        Description,
+       ValidationRegex,
+       ExampleValues,
        IsEnabled,
        SortOrder
 FROM omp.config_setting_definitions
@@ -54,6 +56,8 @@ SELECT ConfigSettingId,
        ConfigCategory,
        ConfigSetting,
        Description,
+       ValidationRegex,
+       ExampleValues,
        IsEnabled,
        SortOrder
 FROM omp.config_setting_definitions
@@ -76,6 +80,8 @@ SELECT cs.ConfigId,
        def.ConfigCategory,
        def.ConfigSetting,
        def.Description,
+       def.ValidationRegex,
+       def.ExampleValues,
        def.IsEnabled,
        cs.ConfigValue,
        cs.ConfigUsr,
@@ -123,6 +129,8 @@ SELECT cs.ConfigId,
        def.ConfigCategory,
        def.ConfigSetting,
        def.Description,
+       def.ValidationRegex,
+       def.ExampleValues,
        def.IsEnabled,
        cs.ConfigValue,
        cs.ConfigUsr,
@@ -268,8 +276,10 @@ WHERE ConfigId = @ConfigId;";
             ConfigCategory = rdr.GetString(1),
             ConfigSetting = rdr.GetString(2),
             Description = rdr.IsDBNull(3) ? null : rdr.GetString(3),
-            IsEnabled = rdr.GetBoolean(4),
-            SortOrder = rdr.GetInt32(5)
+            ValidationRegex = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            ExampleValues = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            IsEnabled = rdr.GetBoolean(6),
+            SortOrder = rdr.GetInt32(7)
         };
 
     private static ConfigSettingValueRow ReadValue(SqlDataReader rdr)
@@ -280,15 +290,17 @@ WHERE ConfigId = @ConfigId;";
             ConfigCategory = rdr.GetString(2),
             ConfigSetting = rdr.GetString(3),
             Description = rdr.IsDBNull(4) ? null : rdr.GetString(4),
-            IsDefinitionEnabled = rdr.GetBoolean(5),
-            ConfigValue = rdr.IsDBNull(6) ? null : rdr.GetString(6),
-            ConfigUsr = rdr.IsDBNull(7) ? null : rdr.GetInt32(7),
-            UserDisplayName = rdr.IsDBNull(8) ? null : rdr.GetString(8),
-            ConfigPermission = rdr.IsDBNull(9) ? null : rdr.GetInt32(9),
-            PermissionName = rdr.IsDBNull(10) ? null : rdr.GetString(10),
-            ConfigRole = rdr.IsDBNull(11) ? null : rdr.GetInt32(11),
-            RoleName = rdr.IsDBNull(12) ? null : rdr.GetString(12),
-            ConfigPriority = rdr.GetInt32(13)
+            ValidationRegex = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            ExampleValues = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            IsDefinitionEnabled = rdr.GetBoolean(7),
+            ConfigValue = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+            ConfigUsr = rdr.IsDBNull(9) ? null : rdr.GetInt32(9),
+            UserDisplayName = rdr.IsDBNull(10) ? null : rdr.GetString(10),
+            ConfigPermission = rdr.IsDBNull(11) ? null : rdr.GetInt32(11),
+            PermissionName = rdr.IsDBNull(12) ? null : rdr.GetString(12),
+            ConfigRole = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
+            RoleName = rdr.IsDBNull(14) ? null : rdr.GetString(14),
+            ConfigPriority = rdr.GetInt32(15)
         };
 
     private static void Bind(SqlCommand cmd, ConfigSettingValueEditData input, bool includePrimaryKey)
@@ -322,6 +334,10 @@ public sealed class ConfigSettingDefinitionRow
 
     public string? Description { get; set; }
 
+    public string? ValidationRegex { get; set; }
+
+    public string? ExampleValues { get; set; }
+
     public bool IsEnabled { get; set; }
 
     public int SortOrder { get; set; }
@@ -340,6 +356,10 @@ public sealed class ConfigSettingValueRow
     public string ConfigSetting { get; set; } = string.Empty;
 
     public string? Description { get; set; }
+
+    public string? ValidationRegex { get; set; }
+
+    public string? ExampleValues { get; set; }
 
     public bool IsDefinitionEnabled { get; set; }
 
