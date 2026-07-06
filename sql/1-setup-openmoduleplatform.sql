@@ -2330,15 +2330,106 @@ BEGIN
         HostTemplateId int NULL,
         RequestedBy nvarchar(256) NULL,
         RequestedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostDeployments_RequestedUtc DEFAULT SYSUTCDATETIME(),
+        ClaimedByServiceName nvarchar(200) NULL,
+        ClaimedUtc datetime2(3) NULL,
+        LeaseUntilUtc datetime2(3) NULL,
+        LeaseToken uniqueidentifier NULL,
         StartedUtc datetime2(3) NULL,
         CompletedUtc datetime2(3) NULL,
         Status tinyint NOT NULL CONSTRAINT DF_omp_HostDeployments_Status DEFAULT(0),
         OutcomeMessage nvarchar(max) NULL,
+        AttemptCount int NOT NULL CONSTRAINT DF_omp_HostDeployments_AttemptCount DEFAULT(0),
+        MaxAttempts int NOT NULL CONSTRAINT DF_omp_HostDeployments_MaxAttempts DEFAULT(3),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostDeployments_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostDeployments_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT FK_omp_HostDeployments_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId),
         CONSTRAINT FK_omp_HostDeployments_HostTemplate FOREIGN KEY(HostTemplateId) REFERENCES omp.HostTemplates(HostTemplateId)
     );
+END
+GO
+
+IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.HostDeployments', N'AttemptCount') IS NULL
+BEGIN
+    ALTER TABLE omp.HostDeployments
+        ADD AttemptCount int NOT NULL CONSTRAINT DF_omp_HostDeployments_AttemptCount DEFAULT(0) WITH VALUES;
+END
+GO
+
+IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.HostDeployments', N'MaxAttempts') IS NULL
+BEGIN
+    ALTER TABLE omp.HostDeployments
+        ADD MaxAttempts int NOT NULL CONSTRAINT DF_omp_HostDeployments_MaxAttempts DEFAULT(3) WITH VALUES;
+END
+GO
+
+IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.HostDeployments', N'ClaimedByServiceName') IS NULL
+BEGIN
+    ALTER TABLE omp.HostDeployments ADD ClaimedByServiceName nvarchar(200) NULL;
+END
+GO
+
+IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.HostDeployments', N'ClaimedUtc') IS NULL
+BEGIN
+    ALTER TABLE omp.HostDeployments ADD ClaimedUtc datetime2(3) NULL;
+END
+GO
+
+IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.HostDeployments', N'LeaseUntilUtc') IS NULL
+BEGIN
+    ALTER TABLE omp.HostDeployments ADD LeaseUntilUtc datetime2(3) NULL;
+END
+GO
+
+IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.HostDeployments', N'LeaseToken') IS NULL
+BEGIN
+    ALTER TABLE omp.HostDeployments ADD LeaseToken uniqueidentifier NULL;
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostDeployments')
+      AND name = N'IX_omp_HostDeployments_Host_Status'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostDeployments_Host_Status
+        ON omp.HostDeployments(HostId, Status, RequestedUtc, HostDeploymentId);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostDeployments')
+      AND name = N'IX_omp_HostDeployments_Status_LeaseUntil'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostDeployments_Status_LeaseUntil
+        ON omp.HostDeployments(Status, LeaseUntilUtc, HostId)
+        INCLUDE(AttemptCount, MaxAttempts);
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.HostDeployments')
+      AND name = N'IX_omp_HostDeployments_LeaseToken'
+)
+BEGIN
+    CREATE INDEX IX_omp_HostDeployments_LeaseToken
+        ON omp.HostDeployments(LeaseToken)
+        WHERE LeaseToken IS NOT NULL;
 END
 GO
 

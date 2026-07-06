@@ -645,12 +645,24 @@ a transaction whenever possible.
   for the same host may not materialize.
 - **Cause:** The HostAgent Windows service crashed or was killed while the row was
   in `Running`. The deployment row was never moved to a terminal state (`Succeeded`,
-  `Failed`, or `Warning`) because there is no attempt counter or automatic reclaim
-  for `HostDeployments`.
+  `Failed`, or `Warning`) because the lease expired before the agent could complete it.
+- **Automatic recovery:** `omp.HostDeployments` uses the same lease/attempt model as
+  `omp.HostAgentJobs`:
+  - `AttemptCount` starts at `0` and is incremented each time a row is claimed.
+  - `MaxAttempts` defaults to `3` and can be overridden per row.
+  - `LeaseUntilUtc` and `LeaseToken` are set when the row is claimed.
+  - A healthy HostAgent automatically reclaims a `Running` row when its lease has
+    expired, provided `AttemptCount < MaxAttempts`.
+  - If `AttemptCount >= MaxAttempts` when the lease expires, the row is moved to
+    `Status = 3` (`Failed`) with `OutcomeMessage` set to
+    "HostDeployment lease expired after the maximum number of attempts."
+  - The default lease duration is `300` seconds and is renewed while materialization
+    runs. Operators can tune `HostDeploymentLeaseSeconds` in `appsettings.json`.
 - **Recovery:**
   1. Identify the stuck row:
      ```sql
-     SELECT HostDeploymentId, HostId, HostTemplateId, Status, RequestedUtc, StartedUtc, OutcomeMessage
+     SELECT HostDeploymentId, HostId, HostTemplateId, Status, RequestedUtc, StartedUtc,
+            AttemptCount, MaxAttempts, ClaimedByServiceName, ClaimedUtc, LeaseUntilUtc, OutcomeMessage
      FROM omp.HostDeployments
      WHERE HostId = @HostId
        AND Status IN (0, 1)
@@ -658,22 +670,26 @@ a transaction whenever possible.
      ORDER BY RequestedUtc;
      ```
   2. Wait one or two HostAgent refresh cycles (default 30 seconds). A `Pending`
-     row should be claimed when the agent is healthy again, but a row that is
-     already `Running` is not reclaimed by the current HostDeployment queue.
-  3. If a `Running` row is still stuck, reset it to `Pending` so the next cycle can claim it:
+     row should be claimed when the agent is healthy again, and an expired `Running`
+     row should be reclaimed automatically if `AttemptCount < MaxAttempts`.
+  3. If a `Running` row is still stuck and `AttemptCount < MaxAttempts`, the lease
+     may not have expired yet. You can release the lease manually so the next cycle
+     can reclaim it:
      ```sql
      UPDATE omp.HostDeployments
-     SET Status = 0,
-         StartedUtc = NULL,
-         OutcomeMessage = NULL,
+     SET LeaseUntilUtc = DATEADD(second, -1, SYSUTCDATETIME()),
          UpdatedUtc = SYSUTCDATETIME()
      WHERE HostDeploymentId = @HostDeploymentId
        AND Status = 1;
      ```
-- **Note:** `omp.HostAgentJobs` has `MaxAttempts` (default 3) and `AttemptCount`,
-  but `omp.HostDeployments` has **no attempt counter**. If a deployment repeatedly
-  fails, investigate the underlying error in `OutcomeMessage` instead of retrying
-  indefinitely.
+  4. If the row has reached `MaxAttempts` and is now `Failed`, investigate the
+     underlying error in `OutcomeMessage`, fix the root cause, and then insert a
+     new deployment request. Do not manually reset a `Failed` row to `Pending`
+     unless you have resolved the failure; otherwise the same error will simply
+     repeat.
+- **Note:** `omp.HostAgentJobs` has `MaxAttempts` (default 3) and `AttemptCount`.
+  `omp.HostDeployments` now has the same counters. If a deployment repeatedly fails,
+  investigate the underlying error in `OutcomeMessage` instead of retrying indefinitely.
 - **Verification:** Within one refresh cycle the row should move to `Status = 1`
   (`Running`), then to `Status = 2`, `3`, or `4` with `CompletedUtc` set. Check
   `omp.HostAppDeploymentStates` and the HostAgent logs for the resulting app
