@@ -729,10 +729,10 @@ USING
     VALUES
         (N'branding', N'platformName', N'Display name for the installed OpenModulePlatform instance.', N'^.{1,120}$', N'OMP', 10, CONVERT(bit, 1)),
         (N'branding', N'portalName', N'Display name for the portal concept in this installation.', N'^.{1,120}$', N'Portal', 20, CONVERT(bit, 1)),
-        (N'branding', N'heroLogoUrl', N'Optional URL for an image logo shown instead of the topbar and portal brand text. Supports absolute URLs and app-relative paths.', N'^(|~?/.*|https?://.+)$', N'/images/omp-logo.png; https://example.com/logo.png', 30, CONVERT(bit, 1)),
-        (N'branding', N'faviconUrl', N'Optional URL for the OMP favicon. Supports absolute URLs and app-relative paths.', N'^(|~?/.*|https?://.+)$', N'/favicon.ico; https://example.com/favicon.ico', 40, CONVERT(bit, 1)),
+        (N'branding', N'heroLogoUrl', N'Optional URL for an image logo shown instead of the topbar and portal brand text. Supports absolute URLs and app-relative paths.', N'^(|~?/.*|https?://.+)$', N'/images/omp-logo.png; https://picsum.photos/160/44', 30, CONVERT(bit, 1)),
+        (N'branding', N'faviconUrl', N'Optional URL for the OMP favicon. Supports absolute URLs and app-relative paths.', N'^(|~?/.*|https?://.+)$', N'/favicon.ico; https://picsum.photos/32/32', 40, CONVERT(bit, 1)),
         (N'auth', N'externalUserProvisioningMode', N'Controls whether external/AD sign-ins may automatically create and link an OMP user. Supported values: Manual, AutoIfRole, AutoIfAuthenticated.', N'(?i)^(Manual|AutoIfRole|AutoIfAuthenticated)$', N'Manual; AutoIfRole; AutoIfAuthenticated', 100, CONVERT(bit, 1)),
-        (N'rbac', N'authenticatedUsersWindowsDomains', N'Comma-, semicolon-, or newline-separated Windows account domain/workgroup/computer prefixes that may receive the built-in AuthenticatedUsers principal. Empty or * accepts any authenticated principal.', N'^[A-Za-z0-9*_.\\,;\s-]*$', N'*; CONTOSO; DESKTOP-RSV5B90', 100, CONVERT(bit, 1))
+        (N'rbac', N'authenticatedUsersWindowsDomains', N'Comma-, semicolon-, or newline-separated Windows account domain/workgroup/computer prefixes that may receive the built-in AuthenticatedUsers principal. Empty or * accepts any authenticated principal.', N'^[A-Za-z0-9*_.\\,;\s-]*$', N'*', 100, CONVERT(bit, 1))
 ) AS source(ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
 ON target.ConfigCategory = source.ConfigCategory
    AND target.ConfigSetting = source.ConfigSetting
