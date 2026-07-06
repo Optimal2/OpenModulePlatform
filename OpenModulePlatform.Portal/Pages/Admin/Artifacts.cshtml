@@ -1,5 +1,6 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ArtifactsModel
+@using System.Globalization
 
 <section class="page-header">
     <div>
@@ -10,9 +11,9 @@
 </section>
 
 <div class="toolbar top-gap">
-    <a class="action-link" href="~/admin/artifactedit">@L["Create artifact"]</a>
-    <a class="action-link" href="~/admin/artifactupload">@L["Upload artifact"]</a>
-    <a class="action-link" href="~/admin/modulepackageimport">@L["Import/export module package"]</a>
+    <a class="btn btn-primary" href="~/admin/artifactedit">@L["Create artifact"]</a>
+    <a class="btn btn-secondary" href="~/admin/artifactupload">@L["Upload artifact"]</a>
+    <a class="btn btn-ghost" href="~/admin/modulepackageimport">@L["Import/export module package"]</a>
 </div>
 
 @if (Model.Rows.Count == 0)
@@ -21,16 +22,17 @@
 }
 else
 {
-    <table class="grid">
+    <table class="grid sortable-list" data-sortable-list>
         <thead>
             <tr>
-                <th>@L["App key"]</th>
-                <th>@L["Version"]</th>
-                <th>@L["Package type"]</th>
-                <th>@L["Target"]</th>
-                <th>@L["Relative path"]</th>
-                <th>@L["Enabled"]</th>
-                            <th>@L["Actions"]</th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App key"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Version"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Package type"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Target"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Relative path"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Enabled"]</button></th>
+                <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Created UTC"]</button></th>
+                <th scope="col">@L["Actions"]</th>
             </tr>
         </thead>
         <tbody>
@@ -42,7 +44,8 @@ else
                 <td>@row.PackageType</td>
                 <td>@row.TargetName</td>
                 <td><code>@row.RelativePath</code></td>
-                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td data-sort-value="@(row.IsEnabled ? "1" : "0")"><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                <td data-sort-value="@row.CreatedUtc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)">@row.CreatedUtc.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture)</td>
                 <td class="admin-action-cell">
                     <a class="action-link admin-icon-button admin-icon-button--edit"
                        href="~/admin/artifactedit?id=@row.ArtifactId"
