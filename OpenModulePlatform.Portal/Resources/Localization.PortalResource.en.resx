@@ -1008,6 +1008,7 @@
   <data name="{0} config setting values added. {1} already existed and were skipped." xml:space="preserve"><value>{0} config setting values added. {1} already existed and were skipped.</value></data>
   <data name="Example values:" xml:space="preserve"><value>Example values:</value></data>
   <data name="No examples available." xml:space="preserve"><value>No examples available.</value></data>
+  <data name="Use example value" xml:space="preserve"><value>Use example value</value></data>
   <data name="Value does not match the expected format for {0}." xml:space="preserve"><value>Value does not match the expected format for {0}.</value></data>
   <data name="The validation regex for {0} is invalid. Contact an administrator." xml:space="preserve"><value>The validation regex for {0} is invalid. Contact an administrator.</value></data>
   <data name="Validation timed out for {0}. Contact an administrator." xml:space="preserve"><value>Validation timed out for {0}. Contact an administrator.</value></data>
