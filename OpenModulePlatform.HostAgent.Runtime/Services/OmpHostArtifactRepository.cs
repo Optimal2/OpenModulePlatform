@@ -13,6 +13,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed partial class OmpHostArtifactRepository
 {
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
+    private const int MinimumLeaseSeconds = 30;
     private const int HostAgentRuntimeServiceNameMaxLength = 200;
     private const int HostAgentRuntimeVersionMaxLength = 50;
     private const int HostAgentRuntimeInstallPathMaxLength = 500;
@@ -1665,9 +1666,12 @@ EXEC omp.MaterializeInstanceTemplate
 
     public async Task<HostDeploymentWorkItem?> TryClaimNextHostDeploymentAsync(
         string hostKey,
+        string serviceName,
+        int leaseSeconds,
         CancellationToken ct)
     {
         const string sql = @"
+DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
 DECLARE @hostId uniqueidentifier;
 
 SELECT @hostId = HostId
@@ -1680,14 +1684,29 @@ BEGIN
     SELECT TOP (0)
         CAST(NULL AS bigint) AS HostDeploymentId,
         CAST(NULL AS int) AS HostTemplateId,
-        CAST(NULL AS nvarchar(100)) AS HostTemplateKey;
+        CAST(NULL AS nvarchar(100)) AS HostTemplateKey,
+        CAST(NULL AS uniqueidentifier) AS LeaseToken;
     RETURN;
 END;
+
+UPDATE omp.HostDeployments
+SET Status = @failedStatus,
+    CompletedUtc = @nowUtc,
+    LeaseUntilUtc = NULL,
+    LeaseToken = NULL,
+    OutcomeMessage = COALESCE(NULLIF(OutcomeMessage, N''), N'HostDeployment lease expired after the maximum number of attempts.'),
+    UpdatedUtc = @nowUtc
+WHERE HostId = @hostId
+  AND Status = @runningStatus
+  AND LeaseUntilUtc IS NOT NULL
+  AND LeaseUntilUtc < @nowUtc
+  AND AttemptCount >= MaxAttempts;
 
 DECLARE @claimed TABLE
 (
     HostDeploymentId bigint NOT NULL,
-    HostTemplateId int NULL
+    HostTemplateId int NULL,
+    LeaseToken uniqueidentifier NOT NULL
 );
 
 ;WITH NextDeployment AS
@@ -1695,24 +1714,41 @@ DECLARE @claimed TABLE
     SELECT TOP (1) HostDeploymentId
     FROM omp.HostDeployments WITH (UPDLOCK, READPAST, ROWLOCK)
     WHERE HostId = @hostId
-      AND Status = @pendingStatus
+      AND AttemptCount < MaxAttempts
+      AND
+      (
+          Status = @pendingStatus
+          OR
+          (
+              Status = @runningStatus
+              AND LeaseUntilUtc IS NOT NULL
+              AND LeaseUntilUtc < @nowUtc
+          )
+      )
     ORDER BY RequestedUtc, HostDeploymentId
 )
 UPDATE d
 SET Status = @runningStatus,
-    StartedUtc = COALESCE(d.StartedUtc, SYSUTCDATETIME()),
+    ClaimedByServiceName = @serviceName,
+    ClaimedUtc = @nowUtc,
+    LeaseUntilUtc = DATEADD(second, @leaseSeconds, @nowUtc),
+    LeaseToken = NEWID(),
+    StartedUtc = COALESCE(d.StartedUtc, @nowUtc),
     CompletedUtc = NULL,
     OutcomeMessage = NULL,
-    UpdatedUtc = SYSUTCDATETIME()
+    AttemptCount = d.AttemptCount + 1,
+    UpdatedUtc = @nowUtc
 OUTPUT inserted.HostDeploymentId,
-       inserted.HostTemplateId
-INTO @claimed(HostDeploymentId, HostTemplateId)
+       inserted.HostTemplateId,
+       inserted.LeaseToken
+INTO @claimed(HostDeploymentId, HostTemplateId, LeaseToken)
 FROM omp.HostDeployments d
 INNER JOIN NextDeployment n ON n.HostDeploymentId = d.HostDeploymentId;
 
 SELECT c.HostDeploymentId,
        c.HostTemplateId,
-       ht.TemplateKey
+       ht.TemplateKey,
+       c.LeaseToken
 FROM @claimed c
 LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = c.HostTemplateId;";
 
@@ -1720,8 +1756,11 @@ LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = c.HostTemplateId;";
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(MinimumLeaseSeconds, leaseSeconds));
         cmd.Parameters.AddWithValue("@pendingStatus", HostDeploymentStatuses.Pending);
         cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
+        cmd.Parameters.AddWithValue("@failedStatus", HostDeploymentStatuses.Failed);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
@@ -1732,7 +1771,37 @@ LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = c.HostTemplateId;";
         return new HostDeploymentWorkItem(
             rdr.GetInt64(0),
             rdr.IsDBNull(1) ? null : rdr.GetInt32(1),
-            rdr.IsDBNull(2) ? null : rdr.GetString(2));
+            rdr.IsDBNull(2) ? null : rdr.GetString(2),
+            rdr.GetGuid(3));
+    }
+
+    public async Task<bool> RenewHostDeploymentLeaseAsync(
+        long hostDeploymentId,
+        Guid leaseToken,
+        int leaseSeconds,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+
+UPDATE omp.HostDeployments
+SET LeaseUntilUtc = DATEADD(second, @leaseSeconds, @nowUtc),
+    UpdatedUtc = @nowUtc
+WHERE HostDeploymentId = @hostDeploymentId
+  AND Status = @runningStatus
+  AND LeaseToken = @leaseToken;
+
+SELECT @@ROWCOUNT;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostDeploymentId", hostDeploymentId);
+        cmd.Parameters.AddWithValue("@leaseToken", leaseToken);
+        cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(MinimumLeaseSeconds, leaseSeconds));
+        cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
+        var affected = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+        return affected > 0;
     }
 
     public async Task CompleteHostDeploymentAsync(
@@ -1745,18 +1814,14 @@ LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = c.HostTemplateId;";
 UPDATE omp.HostDeployments
 SET Status = @status,
     CompletedUtc = SYSUTCDATETIME(),
+    LeaseUntilUtc = NULL,
+    LeaseToken = NULL,
     OutcomeMessage = @outcomeMessage,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE HostDeploymentId = @hostDeploymentId
   AND Status = @runningStatus;";
 
-        var safeMessage = string.IsNullOrWhiteSpace(outcomeMessage)
-            ? null
-            : outcomeMessage.Trim();
-        if (safeMessage?.Length > StoredDiagnosticMessageMaxLength)
-        {
-            safeMessage = safeMessage[..StoredDiagnosticMessageMaxLength];
-        }
+        var safeMessage = SanitizeOutcomeMessage(outcomeMessage);
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -1766,6 +1831,51 @@ WHERE HostDeploymentId = @hostDeploymentId
         cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
         cmd.Parameters.AddWithValue("@outcomeMessage", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task CompleteHostDeploymentAsync(
+        long hostDeploymentId,
+        Guid leaseToken,
+        bool succeeded,
+        string outcomeMessage,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.HostDeployments
+SET Status = @status,
+    CompletedUtc = SYSUTCDATETIME(),
+    LeaseUntilUtc = NULL,
+    LeaseToken = NULL,
+    OutcomeMessage = @outcomeMessage,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE HostDeploymentId = @hostDeploymentId
+  AND Status = @runningStatus
+  AND LeaseToken = @leaseToken;";
+
+        var safeMessage = SanitizeOutcomeMessage(outcomeMessage);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostDeploymentId", hostDeploymentId);
+        cmd.Parameters.AddWithValue("@leaseToken", leaseToken);
+        cmd.Parameters.AddWithValue("@status", succeeded ? HostDeploymentStatuses.Succeeded : HostDeploymentStatuses.Failed);
+        cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
+        cmd.Parameters.AddWithValue("@outcomeMessage", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static string? SanitizeOutcomeMessage(string? outcomeMessage)
+    {
+        var safeMessage = string.IsNullOrWhiteSpace(outcomeMessage)
+            ? null
+            : outcomeMessage.Trim();
+        if (safeMessage?.Length > StoredDiagnosticMessageMaxLength)
+        {
+            safeMessage = safeMessage[..StoredDiagnosticMessageMaxLength];
+        }
+
+        return safeMessage;
     }
 
     public async Task<ArtifactRetentionCleanupExecutionResult> ExecuteArtifactRetentionCleanupAsync(

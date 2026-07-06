@@ -24,6 +24,10 @@ public sealed class HostAgentSettings
 
     public bool ProcessHostDeployments { get; set; } = true;
 
+    public int HostDeploymentLeaseSeconds { get; set; } = 300;
+
+    public int HostDeploymentMaxAttempts { get; set; } = 3;
+
     public bool ProvisionAppInstanceArtifacts { get; set; } = true;
 
     public bool ProvisionExplicitRequirements { get; set; } = true;
