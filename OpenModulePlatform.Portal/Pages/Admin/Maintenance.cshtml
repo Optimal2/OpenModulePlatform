@@ -364,7 +364,10 @@ else
                         aria-expanded="false"
                         aria-controls="@groupPanelId">
                     <span class="maintenance-preview-candidate-card__identity">
-                        <span class="maintenance-preview-candidate-card__title">@first.ModuleKey / @first.AppKey</span>
+                        <span class="maintenance-preview-candidate-card__title-row">
+                            <span class="maintenance-preview-candidate-card__title">@first.ModuleKey / @first.AppKey</span>
+                            <span class="maintenance-preview-candidate-card__arrow" aria-hidden="true"></span>
+                        </span>
                         <span class="maintenance-preview-candidate-card__meta">
                             <span class="pill">@first.PackageType</span>
                             @if (!string.IsNullOrWhiteSpace(first.TargetName))
@@ -377,7 +380,6 @@ else
                         <span>@group.Count()</span>
                         <span class="muted">@L["Old version candidates"]</span>
                     </span>
-                    <span class="maintenance-preview-candidate-card__arrow" aria-hidden="true"></span>
                 </button>
 
                 <div id="@groupPanelId" class="table-scroll" data-maintenance-preview-body hidden>
