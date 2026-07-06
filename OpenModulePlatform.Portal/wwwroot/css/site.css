@@ -975,7 +975,7 @@ a:hover {
     width: 100%;
     display: flex;
     align-items: flex-start;
-    justify-content: flex-start;
+    justify-content: space-between;
     gap: 16px;
     padding: 16px;
     color: inherit;
@@ -1048,7 +1048,7 @@ a:hover {
 }
 
 .maintenance-preview-candidate-card__identity {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
     min-width: 0;
 }
 
