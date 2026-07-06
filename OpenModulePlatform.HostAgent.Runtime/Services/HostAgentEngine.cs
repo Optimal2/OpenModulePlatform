@@ -278,7 +278,14 @@ public sealed class HostAgentEngine
         string hostKey,
         CancellationToken cancellationToken)
     {
-        var deployment = await _repository.TryClaimNextHostDeploymentAsync(hostKey, cancellationToken);
+        var settings = _settings.CurrentValue;
+        var leaseSeconds = Math.Max(MinimumLeaseSeconds, settings.HostDeploymentLeaseSeconds);
+
+        var deployment = await _repository.TryClaimNextHostDeploymentAsync(
+            hostKey,
+            _process.ServiceName,
+            leaseSeconds,
+            cancellationToken);
         if (deployment is null)
         {
             return;
@@ -290,21 +297,29 @@ public sealed class HostAgentEngine
             deployment.HostDeploymentId,
             deployment.HostTemplateKey);
 
+        using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var leaseRenewal = RenewHostDeploymentLeaseUntilProcessingCompletesAsync(
+            deployment,
+            leaseSeconds,
+            processingCancellation,
+            cancellationToken);
+
         try
         {
             var materialization = await _repository.MaterializeTemplatesForHostAsync(
                 hostKey,
                 deployment.HostTemplateId,
-                cancellationToken);
+                processingCancellation.Token);
 
             var message =
                 $"Template materialization completed. Module instance changes: {materialization.ModuleInstanceChanges}; app instance changes: {materialization.AppInstanceChanges}.";
 
             await _repository.CompleteHostDeploymentAsync(
                 deployment.HostDeploymentId,
+                deployment.LeaseToken,
                 succeeded: true,
                 outcomeMessage: message,
-                cancellationToken);
+                processingCancellation.Token);
 
             _logger.LogInformation(
                 "Completed host deployment. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}, ModuleInstanceChanges={ModuleInstanceChanges}, AppInstanceChanges={AppInstanceChanges}",
@@ -312,6 +327,22 @@ public sealed class HostAgentEngine
                 deployment.HostDeploymentId,
                 materialization.ModuleInstanceChanges,
                 materialization.AppInstanceChanges);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && processingCancellation.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Host deployment processing stopped because the deployment lease is no longer owned by this process. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}",
+                hostKey,
+                deployment.HostDeploymentId);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Host deployment processing stopped because HostAgent is shutting down. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}",
+                hostKey,
+                deployment.HostDeploymentId);
+
+            throw;
         }
         catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
         {
@@ -323,9 +354,72 @@ public sealed class HostAgentEngine
 
             await _repository.CompleteHostDeploymentAsync(
                 deployment.HostDeploymentId,
+                deployment.LeaseToken,
                 succeeded: false,
                 outcomeMessage: ex.Message,
-                cancellationToken);
+                processingCancellation.Token);
+        }
+        finally
+        {
+            await StopHostDeploymentLeaseRenewalAsync(processingCancellation, leaseRenewal);
+        }
+    }
+
+    private async Task RenewHostDeploymentLeaseUntilProcessingCompletesAsync(
+        HostDeploymentWorkItem deployment,
+        int leaseSeconds,
+        CancellationTokenSource processingCancellation,
+        CancellationToken hostAgentCancellationToken)
+    {
+        var renewalInterval = TimeSpan.FromSeconds(Math.Clamp(leaseSeconds / 3, 10, 120));
+        while (!processingCancellation.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(renewalInterval, processingCancellation.Token);
+                var renewed = await _repository.RenewHostDeploymentLeaseAsync(
+                    deployment.HostDeploymentId,
+                    deployment.LeaseToken,
+                    leaseSeconds,
+                    processingCancellation.Token);
+
+                if (!renewed)
+                {
+                    _logger.LogWarning(
+                        "Host deployment lease renewal did not update a running deployment row. Cancelling local processing. HostDeploymentId={HostDeploymentId}",
+                        deployment.HostDeploymentId);
+                    await processingCancellation.CancelAsync();
+                    return;
+                }
+            }
+            catch (OperationCanceledException) when (hostAgentCancellationToken.IsCancellationRequested || processingCancellation.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex) when (IsExpectedLeaseRenewalFailure(ex))
+            {
+                // Lease renewal is best-effort: log transient repository/SQL failures
+                // and retry on the next renewal interval while the deployment still runs.
+                _logger.LogWarning(
+                    ex,
+                    "Host deployment lease renewal failed. The next renewal attempt will retry while the deployment is still running. HostDeploymentId={HostDeploymentId}",
+                    deployment.HostDeploymentId);
+            }
+        }
+    }
+
+    private static async Task StopHostDeploymentLeaseRenewalAsync(
+        CancellationTokenSource processingCancellation,
+        Task leaseRenewal)
+    {
+        await processingCancellation.CancelAsync();
+        try
+        {
+            await leaseRenewal;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
         }
     }
 
