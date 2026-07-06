@@ -2,13 +2,17 @@
 @model OpenModulePlatform.Portal.Pages.Admin.ConfigSettingsModel
 @using OpenModulePlatform.Web.Shared.Models
 
-<section class="page-header">
+<section class="page-header config-settings-page-header">
     <div>
         <div class="eyebrow">@L["System"]</div>
-        <h2>@L["Config settings"]</h2>
-        <p class="lede">
-            @L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."]
-        </p>
+        <div class="page-header__title-row">
+            <h2>@L["Config settings"]</h2>
+            <span class="info-badge"
+                  tabindex="0"
+                  role="img"
+                  title="@L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."]"
+                  aria-label="@L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."]">i</span>
+        </div>
     </div>
 </section>
 
@@ -26,7 +30,6 @@
     var configSettingsPicker = new ColumnListPickerModel
     {
         Title = Model.IsEdit ? L["Edit config setting value"].Value : L["Add config setting value"].Value,
-        Description = L["Definitions are seeded by OMP. Add or remove definitions through SQL upgrades, not this page."].Value,
         ListLabel = L["Select setting"].Value,
         DetailsLabel = L["Config settings"].Value,
         ListPartialName = "~/Pages/Admin/_ConfigSettingsSettingList.cshtml",
