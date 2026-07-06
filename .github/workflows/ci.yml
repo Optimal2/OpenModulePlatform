@@ -60,6 +60,10 @@ jobs:
         shell: pwsh
         run: .\scripts\omp\validate-module-definitions.ps1
 
+      - name: Validate component versions
+        shell: pwsh
+        run: .\scripts\omp\validate-component-versions.ps1
+
       - name: Restore solution
         run: dotnet restore OpenModulePlatform.slnx
 

@@ -95,6 +95,43 @@ If you did not change module-definition source SQL, validation alone is enough:
 .\scripts\omp\validate-module-definitions.ps1
 ```
 
+Use `validate-component-versions.ps1` in CI or before packaging to catch
+manifest drift that would produce mismatched or unbuildable artifacts. It
+validates the `omp-components.json` manifest only; it does **not** enforce
+assembly version because `Directory.Build.props` intentionally pins assembly
+version to `0.1.0` for all projects. OMP artifact identity comes from the
+manifest component version plus SHA-256 content hash, not from assembly
+version.
+
+```powershell
+.\scripts\omp\validate-component-versions.ps1
+```
+
+What the guard protects against:
+
+- A component `projectPath` that is missing or does not contain a `.csproj`
+  file. This catches renamed/moved projects before packaging fails.
+- A missing or malformed `repositoryVersion` or component `version`. Both must
+  follow a `major.minor` or `major.minor.patch` shape.
+- `moduleDefinitions[].definitionVersion` out of sync with the referenced
+  `.module-definition.json` file. This is a fast pre-check that overlaps with
+  `validate-module-definitions.ps1`.
+- A component `moduleKey` that points to a module definition not declared in
+  `moduleDefinitions`. This catches stale or misspelled module references.
+- A component `minModuleDefinitionVersion` that is greater than the currently
+  declared module definition version. This is reported as a **warning** because
+  it means the component expects a newer module definition than the manifest
+  provides.
+
+If the guard fails:
+
+1. Verify that `bump-version.ps1` was run for every changed component and, when
+   needed, for the repository version and module definitions.
+2. Check that every `projectPath` still exists and contains the expected
+   `.csproj` file.
+3. Check that module definition files were re-embedded or re-bumped after SQL
+   changes, and that their `definitionVersion` matches the manifest entry.
+
 `build-repository-objects.ps1` reads a repository's `omp-components.json` and
 creates portable OMP objects:
 
