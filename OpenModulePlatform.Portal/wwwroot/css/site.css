@@ -975,7 +975,7 @@ a:hover {
     width: 100%;
     display: flex;
     align-items: flex-start;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 16px;
     padding: 16px;
     color: inherit;
@@ -993,7 +993,6 @@ a:hover {
     flex: 0 0 auto;
     width: 0.62rem;
     height: 0.62rem;
-    margin-top: 0.2rem;
     border-right: 2px solid currentColor;
     border-bottom: 2px solid currentColor;
     opacity: 0.72;
@@ -1019,10 +1018,6 @@ a:hover {
     background: var(--maintenance-preview-card-surface-strong);
 }
 
-.maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__arrow {
-    margin-top: 0;
-}
-
 .maintenance-preview-candidate-card__header:hover .maintenance-preview-candidate-card__arrow,
 .maintenance-preview-candidate-card__header:focus-visible .maintenance-preview-candidate-card__arrow {
     opacity: 1;
@@ -1034,14 +1029,9 @@ a:hover {
 }
 
 .maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__title {
-    margin-bottom: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__identity {
-    min-width: 0;
 }
 
 .maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__meta,
@@ -1057,9 +1047,27 @@ a:hover {
     font-size: 1.05rem;
 }
 
+.maintenance-preview-candidate-card__identity {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.maintenance-preview-candidate-card__title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+    margin: 0 0 8px;
+}
+
+.maintenance-preview-candidate-card.is-collapsed .maintenance-preview-candidate-card__title-row {
+    margin-bottom: 0;
+}
+
 .maintenance-preview-candidate-card__title {
     display: block;
-    margin: 0 0 8px;
+    min-width: 0;
+    margin: 0;
     color: var(--text);
     font-size: 1rem;
     font-weight: 700;
@@ -1075,6 +1083,7 @@ a:hover {
 
 .maintenance-preview-candidate-card__summary {
     display: grid;
+    flex: 0 0 auto;
     gap: 2px;
     min-width: 120px;
     text-align: right;
