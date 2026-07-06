@@ -44,7 +44,8 @@
       data-config-settings-form
       data-no-description-label="@L["No description available"]"
       data-example-values-label="@L["Example values:"]"
-      data-no-examples-label="@L["No examples available."]">
+      data-no-examples-label="@L["No examples available."]"
+      data-use-example-label="@L["Use example value"]">
     <input type="hidden" asp-for="Input.ConfigId" />
 
     @await Component.InvokeAsync("ColumnListPicker", configSettingsPicker)
@@ -137,12 +138,56 @@
             const detailDescription = form.querySelector('[data-config-setting-detail-description]');
             const detailExamples = form.querySelector('[data-config-setting-detail-examples]');
             const detailExamplesLabel = form.querySelector('[data-config-setting-detail-examples-label]');
-            const detailExamplesText = form.querySelector('[data-config-setting-detail-examples-text]');
+            const detailExampleChips = form.querySelector('[data-config-setting-detail-example-chips]');
+            const configValueInput = form.querySelector('[data-config-setting-value-input]');
             const saveButton = form.querySelector('[data-config-settings-save]');
             const noDescriptionLabel = form.dataset.noDescriptionLabel || '';
             const exampleValuesLabel = form.dataset.exampleValuesLabel || '';
             const noExamplesLabel = form.dataset.noExamplesLabel || '';
+            const useExampleLabel = form.dataset.useExampleLabel || '';
             const multiselects = Array.from(form.querySelectorAll('[data-config-multiselect]'));
+
+            const parseExamples = (value) => {
+                const seen = new Set();
+                return (value || '')
+                    .split(/[;\r\n]+/)
+                    .map((item) => item.trim())
+                    .filter((item) => {
+                        if (item.length === 0 || seen.has(item)) {
+                            return false;
+                        }
+
+                        seen.add(item);
+                        return true;
+                    });
+            };
+
+            const renderExampleChips = (examples) => {
+                if (!detailExampleChips) {
+                    return;
+                }
+
+                detailExampleChips.replaceChildren();
+                examples.forEach((example) => {
+                    const chip = document.createElement('button');
+                    chip.type = 'button';
+                    chip.className = 'config-settings-picker__example-chip';
+                    chip.textContent = example;
+                    chip.title = useExampleLabel ? `${useExampleLabel}: ${example}` : example;
+                    chip.addEventListener('click', () => {
+                        if (!configValueInput) {
+                            return;
+                        }
+
+                        configValueInput.value = example;
+                        configValueInput.focus();
+                        configValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        configValueInput.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+
+                    detailExampleChips.appendChild(chip);
+                });
+            };
 
             const syncMultiselectSummary = (multiselect) => {
                 const summary = multiselect.querySelector('[data-config-multiselect-summary]');
@@ -231,8 +276,8 @@
                     detailDescription.textContent = selected.dataset.settingDescription || noDescriptionLabel;
                 }
 
-                const examples = selected.dataset.settingExamples || '';
-                const hasExamples = examples.trim().length > 0;
+                const examples = parseExamples(selected.dataset.settingExamples || '');
+                const hasExamples = examples.length > 0;
                 if (detailExamples) {
                     detailExamples.hidden = false;
                 }
@@ -241,9 +286,9 @@
                     detailExamplesLabel.textContent = hasExamples ? exampleValuesLabel : noExamplesLabel;
                 }
 
-                if (detailExamplesText) {
-                    detailExamplesText.textContent = examples;
-                    detailExamplesText.hidden = !hasExamples;
+                if (detailExampleChips) {
+                    detailExampleChips.hidden = !hasExamples;
+                    renderExampleChips(examples);
                 }
 
                 syncScopeFields();
