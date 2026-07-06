@@ -22,7 +22,8 @@
                 data-config-setting-option
                 data-setting-value="@definition.ConfigSettingId"
                 data-setting-title="@optionLabel"
-                data-setting-description="@definition.Description">
+                data-setting-description="@definition.Description"
+                data-setting-examples="@definition.ExampleValues">
             <span class="column-list-picker__item-title"><code>@optionLabel</code></span>
             <span class="column-list-picker__item-meta">@definition.ConfigCategory</span>
             @if (!string.IsNullOrWhiteSpace(definition.Description))

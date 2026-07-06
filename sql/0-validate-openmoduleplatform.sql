@@ -119,6 +119,8 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp', N'push_event_outbox', N'dead_lettered_utc'),
         (N'omp', N'user_auth', N'auth_status'),
         (N'omp', N'config_setting_definitions', N'Description'),
+        (N'omp', N'config_setting_definitions', N'ValidationRegex'),
+        (N'omp', N'config_setting_definitions', N'ExampleValues'),
         (N'omp', N'config_setting_definitions', N'SortOrder'),
         (N'omp', N'config_setting_definitions', N'IsEnabled'),
         (N'omp', N'config_setting_definitions', N'CreatedUtc'),
