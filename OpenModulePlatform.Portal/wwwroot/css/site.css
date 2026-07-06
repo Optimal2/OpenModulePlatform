@@ -1274,6 +1274,10 @@ a:hover {
     margin-bottom: 0;
 }
 
+.config-settings-page-header {
+    margin-bottom: 0.5rem;
+}
+
 .eyebrow {
     font-size: 0.78rem;
     font-weight: 600;
