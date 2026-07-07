@@ -60,21 +60,39 @@
     }
     else
     {
-        <table class="grid">
+        <div class="toolbar">
+            <details class="list-filter" data-list-filter="config-values-list">
+                <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                <div class="list-filter__menu">
+                    <fieldset class="list-filter__group" data-filter-group="scope">
+                        <legend>@L["Scope"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="global" /> @L["Global"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="user" /> @L["User"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="role" /> @L["Role"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="permission" /> @L["Permission"]</label>
+                    </fieldset>
+                    <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                </div>
+            </details>
+            <input type="search" class="list-search" data-list-search="config-values-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="config-values-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="config-values-list" hidden>@L["No rows match the current filters."]</div>
+        <table id="config-values-list" class="grid sortable-list" data-sortable-list>
             <thead>
                 <tr>
-                    <th>@L["Setting"]</th>
-                    <th>@L["Scope"]</th>
-                    <th>@L["Priority"]</th>
-                    <th>@L["Value"]</th>
-                    <th>@L["Actions"]</th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Setting"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Scope"]</button></th>
+                    <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Priority"]</button></th>
+                    <th scope="col">@L["Value"]</th>
+                    <th scope="col">@L["Actions"]</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var row in Model.Rows)
                 {
                     <tr>
-                        <td>
+                        <td data-sort-value="@row.Key">
                             <code>@row.Key</code>
                             @if (!row.IsDefinitionEnabled)
                             {
@@ -85,7 +103,7 @@
                                 <div class="muted">@row.Description</div>
                             }
                         </td>
-                        <td>
+                        <td data-sort-value="@Model.ScopeKey(row)">
                             <span class="pill">@Model.ScopeText(row)</span>
                             <div class="muted">@Model.ScopeTargetText(row)</div>
                         </td>
