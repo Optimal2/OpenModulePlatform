@@ -220,9 +220,16 @@
             visibleLimit: 0,
             countNote: document.querySelector(`[data-list-count="${tableId}"]`),
             showMoreButton: document.querySelector(`[data-list-show-more="${tableId}"]`),
-            emptyNote: document.querySelector(`[data-list-empty="${tableId}"]`)
+            emptyNote: document.querySelector(`[data-list-empty="${tableId}"]`),
+            viewport: null
         };
         controller.visibleLimit = controller.pageSize;
+
+        const viewport = document.createElement('div');
+        viewport.className = 'list-viewport';
+        table.parentNode.insertBefore(viewport, table);
+        viewport.appendChild(table);
+        controller.viewport = viewport;
 
         table.addEventListener('sortable-list:sorted', () => refreshListController(controller));
         controller.showMoreButton?.addEventListener('click', () => {
@@ -407,7 +414,12 @@
         initSortableLists(document);
         initListFilters(document);
         initListEnhancements(document);
-        listControllers.forEach((controller) => refreshListController(controller));
+        listControllers.forEach((controller) => {
+            refreshListController(controller);
+            if (controller.viewport) {
+                controller.viewport.style.minHeight = `${controller.viewport.offsetHeight}px`;
+            }
+        });
     }
 
     if (document.readyState === 'loading') {
