@@ -2,13 +2,15 @@
 @model OpenModulePlatform.Portal.Pages.Admin.ArtifactsModel
 @using System.Globalization
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["System"]</div>
-        <h2>@L["Artifacts"]</h2>
-        <p class="lede">@L["Artifacts are deployable outputs of an app definition. Keep artifact metadata and HostAgent-managed configuration files precise so app instances can reference the right build."]</p>
-    </div>
-</section>
+@{
+    var pageHeader = new PageHeaderModel
+    {
+        Eyebrow = L["System"].Value,
+        Title = L["Artifacts"].Value,
+        Info = L["Artifacts are deployable outputs of an app definition. Keep artifact metadata and HostAgent-managed configuration files precise so app instances can reference the right build."].Value
+    };
+}
+<partial name="_PageHeader" model="pageHeader" />
 
 <div class="toolbar top-gap">
     <a class="btn btn-primary" href="~/admin/artifactedit">@L["Create artifact"]</a>
