@@ -1315,6 +1315,8 @@ public sealed class HostAppDeploymentStateRow
 
     public string? LastError { get; set; }
 
+    public string? LastWarning { get; set; }
+
     public string? CredentialAutomationMode { get; set; }
 
     public string? DesiredRuntimeIdentity { get; set; }

@@ -1412,6 +1412,12 @@ a:hover {
     white-space: nowrap;
 }
 
+.pill-warning {
+    border-color: #e3bc66;
+    background: #fff7df;
+    color: #7a4c00;
+}
+
 .integrity-pill {
     display: inline-flex;
     align-items: center;

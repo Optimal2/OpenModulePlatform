@@ -80,6 +80,7 @@ public sealed class WebAppDeploymentService
         string? runtimeName = null;
         var appPoolStopped = false;
         var stopMarkerWritten = false;
+        string? diagnosticWarning = null;
 
         try
         {
@@ -118,12 +119,17 @@ public sealed class WebAppDeploymentService
                     warning);
             }
 
+            diagnosticWarning = ompAuthWarnings.Count > 0
+                ? string.Join(Environment.NewLine, ompAuthWarnings)
+                : null;
+
             if (IsAlreadyApplied(deployment, targetPath, runtimeName)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
             {
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: false),
+                    AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: false)
+                        .WithDiagnosticWarning(diagnosticWarning),
                     cancellationToken);
                 return;
             }
@@ -184,7 +190,8 @@ public sealed class WebAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Running(targetPath, runtimeName),
+                AppDeploymentResult.Running(targetPath, runtimeName)
+                    .WithDiagnosticWarning(diagnosticWarning),
                 cancellationToken);
 
             if (UseAppCmdAppPoolControl(settings)
@@ -234,7 +241,8 @@ public sealed class WebAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: true),
+                AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: true)
+                    .WithDiagnosticWarning(diagnosticWarning),
                 cancellationToken);
 
             _logger.LogInformation(
@@ -267,7 +275,8 @@ public sealed class WebAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Failed(targetPath, runtimeName, ex.Message),
+                AppDeploymentResult.Failed(targetPath, runtimeName, ex.Message)
+                    .WithDiagnosticWarning(diagnosticWarning),
                 cancellationToken);
         }
     }

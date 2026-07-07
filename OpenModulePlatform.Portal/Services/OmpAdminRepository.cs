@@ -1689,7 +1689,8 @@ SELECT TOP (100)
        s.RuntimeName,
        s.LastCheckedUtc,
        s.LastAppliedUtc,
-       s.LastError
+       s.LastError,
+       s.LastWarning
        {identityColumns}
 FROM omp.HostAppDeploymentStates s
 INNER JOIN omp.Hosts h ON h.HostId = s.HostId
@@ -1716,12 +1717,13 @@ ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey,
                 LastCheckedUtc = rdr.IsDBNull(10) ? null : rdr.GetDateTime(10),
                 LastAppliedUtc = rdr.IsDBNull(11) ? null : rdr.GetDateTime(11),
                 LastError = rdr.IsDBNull(12) ? null : rdr.GetString(12),
-                CredentialAutomationMode = rdr.IsDBNull(13) ? null : rdr.GetString(13),
-                DesiredRuntimeIdentity = rdr.IsDBNull(14) ? null : rdr.GetString(14),
-                ActualRuntimeIdentity = rdr.IsDBNull(15) ? null : rdr.GetString(15),
-                IdentityCheckStatus = rdr.IsDBNull(16) ? null : rdr.GetString(16),
-                IdentityRepairRequestedUtc = rdr.IsDBNull(17) ? null : rdr.GetDateTime(17),
-                IdentityRepairRequestedBy = rdr.IsDBNull(18) ? null : rdr.GetString(18)
+                LastWarning = rdr.IsDBNull(13) ? null : rdr.GetString(13),
+                CredentialAutomationMode = rdr.IsDBNull(14) ? null : rdr.GetString(14),
+                DesiredRuntimeIdentity = rdr.IsDBNull(15) ? null : rdr.GetString(15),
+                ActualRuntimeIdentity = rdr.IsDBNull(16) ? null : rdr.GetString(16),
+                IdentityCheckStatus = rdr.IsDBNull(17) ? null : rdr.GetString(17),
+                IdentityRepairRequestedUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
+                IdentityRepairRequestedBy = rdr.IsDBNull(19) ? null : rdr.GetString(19)
             });
         }
         return rows;
