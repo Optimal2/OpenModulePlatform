@@ -24,6 +24,8 @@ public sealed class AppDeploymentResult
 
     public bool ClearIdentityRepairRequest { get; init; }
 
+    public string? DiagnosticWarningMessage { get; init; }
+
     public static AppDeploymentResult Succeeded(string targetPath, string? runtimeName, bool applied)
     {
         return new AppDeploymentResult
@@ -85,7 +87,26 @@ public sealed class AppDeploymentResult
             DesiredRuntimeIdentity = desiredRuntimeIdentity,
             ActualRuntimeIdentity = actualRuntimeIdentity,
             IdentityCheckStatus = identityCheckStatus,
-            ClearIdentityRepairRequest = clearIdentityRepairRequest
+            ClearIdentityRepairRequest = clearIdentityRepairRequest,
+            DiagnosticWarningMessage = DiagnosticWarningMessage
+        };
+    }
+
+    public AppDeploymentResult WithDiagnosticWarning(string? message)
+    {
+        return new AppDeploymentResult
+        {
+            State = State,
+            Applied = Applied,
+            TargetPath = TargetPath,
+            RuntimeName = RuntimeName,
+            ErrorMessage = ErrorMessage,
+            CredentialAutomationMode = CredentialAutomationMode,
+            DesiredRuntimeIdentity = DesiredRuntimeIdentity,
+            ActualRuntimeIdentity = ActualRuntimeIdentity,
+            IdentityCheckStatus = IdentityCheckStatus,
+            ClearIdentityRepairRequest = ClearIdentityRepairRequest,
+            DiagnosticWarningMessage = string.IsNullOrWhiteSpace(message) ? null : message.Trim()
         };
     }
 }

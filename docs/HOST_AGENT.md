@@ -886,6 +886,8 @@ The legacy dev install script now creates the `omp_portal` schema and registers 
 
 This section documents the runtime rules that make cross-application sign-in and role switching work. It is grounded in `OpenModulePlatform.Web.Shared/Options/OmpAuthOptions.cs` and `OpenModulePlatform.HostAgent.Runtime/Services/ArtifactConfigurationFileWriter.cs`.
 
+> **Portal visibility for OmpAuth warnings.** As of this implementation, non-blocking OmpAuth configuration warnings are automatically surfaced in the Portal's **HostDeployments** page as a "Warning" column. If HostAgent detects a deviation in an app's runtime `OmpAuth` configuration (for example, a value that could break cross-app sign-in or role switching), the warning appears as an amber pill badge on that row with a tooltip describing the issue. Operators should use this page as the first place to spot OmpAuth drift; the manual checklist below remains the authoritative fallback when you need to verify the underlying runtime files in depth.
+
 ### The must-match-across-apps rule
 
 Every OMP web app that shares sign-in and role switching must use identical values in its **runtime** `appsettings.json` for these `OmpAuth` fields:

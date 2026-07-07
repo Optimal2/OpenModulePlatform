@@ -3340,6 +3340,7 @@ WHEN MATCHED THEN
         LastCheckedUtc = @nowUtc,
         LastAppliedUtc = CASE WHEN @applied = 1 THEN @nowUtc ELSE target.LastAppliedUtc END,
         LastError = @lastError,
+        LastWarning = @lastWarning,
         UpdatedUtc = @nowUtc
 WHEN NOT MATCHED THEN
     INSERT
@@ -3361,6 +3362,7 @@ WHEN NOT MATCHED THEN
         LastCheckedUtc,
         LastAppliedUtc,
         LastError,
+        LastWarning,
         CreatedUtc,
         UpdatedUtc
     )
@@ -3383,6 +3385,7 @@ WHEN NOT MATCHED THEN
         @nowUtc,
         CASE WHEN @applied = 1 THEN @nowUtc ELSE NULL END,
         @lastError,
+        @lastWarning,
         @nowUtc,
         @nowUtc
     );";
@@ -3393,6 +3396,14 @@ WHEN NOT MATCHED THEN
         if (safeMessage?.Length > StoredDiagnosticMessageMaxLength)
         {
             safeMessage = safeMessage[..StoredDiagnosticMessageMaxLength];
+        }
+
+        var safeWarning = string.IsNullOrWhiteSpace(result.DiagnosticWarningMessage)
+            ? null
+            : result.DiagnosticWarningMessage.Trim();
+        if (safeWarning?.Length > StoredDiagnosticMessageMaxLength)
+        {
+            safeWarning = safeWarning[..StoredDiagnosticMessageMaxLength];
         }
 
         await using var conn = _db.Create();
@@ -3413,6 +3424,7 @@ WHEN NOT MATCHED THEN
         cmd.Parameters.AddWithValue("@clearIdentityRepairRequest", result.ClearIdentityRepairRequest);
         cmd.Parameters.AddWithValue("@applied", result.Applied);
         cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
+        cmd.Parameters.AddWithValue("@lastWarning", string.IsNullOrWhiteSpace(safeWarning) ? DBNull.Value : safeWarning);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

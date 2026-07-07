@@ -595,6 +595,7 @@
                         <th><button type="button" data-sort="text">@L["Runtime"]</button></th>
                         <th><button type="button" data-sort="text">@L["Identity"]</button></th>
                         <th><button type="button" data-sort="text">@L["Error"]</button></th>
+                        <th><button type="button" data-sort="text">@L["Warning"]</button></th>
                         <th>@L["Actions"]</th>
                     </tr>
                 </thead>
@@ -603,7 +604,7 @@
                 {
                     <tr data-state="@row.DeploymentState"
                         data-interesting="@HostDeploymentsModel.IsInterestingAppDeployment(row).ToString().ToLowerInvariant()"
-                        data-search="@($"{row.HostKey} {row.AppInstanceKey} {row.DisplayName} {row.ArtifactVersion} {row.PackageType} {row.TargetPath} {row.RuntimeName} {row.IdentityCheckStatus} {row.DesiredRuntimeIdentity} {row.ActualRuntimeIdentity} {row.LastError}")">
+                        data-search="@($"{row.HostKey} {row.AppInstanceKey} {row.DisplayName} {row.ArtifactVersion} {row.PackageType} {row.TargetPath} {row.RuntimeName} {row.IdentityCheckStatus} {row.DesiredRuntimeIdentity} {row.ActualRuntimeIdentity} {row.LastError} {row.LastWarning}")">
                         <td><code>@row.HostKey</code></td>
                         <td>
                             <div><code>@row.AppInstanceKey</code></div>
@@ -641,6 +642,16 @@
                             }
                         </td>
                         <td>@(string.IsNullOrWhiteSpace(row.LastError) ? L["None"].Value : row.LastError)</td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.LastWarning))
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                            else
+                            {
+                                <span class="pill pill-warning" title="@row.LastWarning">@(row.LastWarning.Length > 80 ? row.LastWarning[..80] + "…" : row.LastWarning)</span>
+                            }
+                        </td>
                         <td>
                             @if (row.CanRequestIdentityRepair)
                             {
