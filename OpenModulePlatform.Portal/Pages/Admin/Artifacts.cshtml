@@ -14,6 +14,26 @@
     <a class="btn btn-primary" href="~/admin/artifactedit">@L["Create artifact"]</a>
     <a class="btn btn-secondary" href="~/admin/artifactupload">@L["Upload artifact"]</a>
     <a class="btn btn-secondary" href="~/admin/modulepackageimport">@L["Import/export module package"]</a>
+    @if (Model.Rows.Count > 0)
+    {
+        <details class="list-filter" data-list-filter="artifacts-list">
+            <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+            <div class="list-filter__menu">
+                <fieldset class="list-filter__group" data-filter-group="status">
+                    <legend>@L["Status"]</legend>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="5" data-filter-equals="1" /> @L["Enabled"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="5" data-filter-equals="0" /> @L["Disabled"]</label>
+                </fieldset>
+                <fieldset class="list-filter__group" data-filter-group="created">
+                    <legend>@L["Created"]</legend>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="6" data-filter-max-age-days="7" /> @L["Last 7 days"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="6" data-filter-max-age-days="30" /> @L["Last 30 days"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="6" data-filter-min-age-days="30" /> @L["Older than 30 days"]</label>
+                </fieldset>
+                <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+            </div>
+        </details>
+    }
 </div>
 
 @if (Model.Rows.Count == 0)
@@ -22,7 +42,8 @@
 }
 else
 {
-    <table class="grid sortable-list" data-sortable-list>
+    <div class="empty-state" data-list-filter-empty="artifacts-list" hidden>@L["No rows match the current filters."]</div>
+    <table id="artifacts-list" class="grid sortable-list" data-sortable-list>
         <thead>
             <tr>
                 <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App key"]</button></th>

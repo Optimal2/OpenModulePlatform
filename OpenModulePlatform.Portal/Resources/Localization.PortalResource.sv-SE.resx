@@ -2778,4 +2778,8 @@
   <data name="Value does not match the expected format for {0}." xml:space="preserve"><value>Värdet matchar inte det förväntade formatet för {0}.</value></data>
   <data name="The validation regex for {0} is invalid. Contact an administrator." xml:space="preserve"><value>Valideringsregexen för {0} är ogiltig. Kontakta en administratör.</value></data>
   <data name="Validation timed out for {0}. Contact an administrator." xml:space="preserve"><value>Valideringen tog för lång tid för {0}. Kontakta en administratör.</value></data>
+  <data name="Created" xml:space="preserve"><value>Skapad</value></data>
+  <data name="Older than 30 days" xml:space="preserve"><value>Äldre än 30 dagar</value></data>
+  <data name="Clear filters" xml:space="preserve"><value>Rensa filter</value></data>
+  <data name="No rows match the current filters." xml:space="preserve"><value>Inga rader matchar de aktuella filtren.</value></data>
 </root>
