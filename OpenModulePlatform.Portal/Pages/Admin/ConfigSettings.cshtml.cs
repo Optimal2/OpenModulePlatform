@@ -222,6 +222,26 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
         return RedirectToPage("/Admin/ConfigSettings");
     }
 
+    public string ScopeKey(ConfigSettingValueRow row)
+    {
+        if (row.ConfigUsr.HasValue)
+        {
+            return "user";
+        }
+
+        if (row.ConfigPermission.HasValue)
+        {
+            return "permission";
+        }
+
+        if (row.ConfigRole.HasValue)
+        {
+            return "role";
+        }
+
+        return "global";
+    }
+
     public string ScopeText(ConfigSettingValueRow row)
     {
         if (row.ConfigUsr.HasValue)
