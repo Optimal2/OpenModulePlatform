@@ -1337,6 +1337,85 @@ public sealed class HostAppDeploymentStateRow
 }
 
 /// <summary>
+/// Raw row returned by <see cref="OmpAdminRepository.GetHostOmpAuthComparisonsAsync"/>.
+/// One row per host/app instance, containing the effective OmpAuth values to be compared in C#.
+/// </summary>
+public sealed class HostOmpAuthComparisonRawRow
+{
+    public Guid HostId { get; init; }
+
+    public string HostKey { get; init; } = "";
+
+    public string? HostDisplayName { get; init; }
+
+    public Guid AppInstanceId { get; init; }
+
+    public string AppInstanceKey { get; init; } = "";
+
+    public string? AppDisplayName { get; init; }
+
+    public string? ArtifactVersion { get; init; }
+
+    public string? EffectiveOmpAuthCookieName { get; init; }
+
+    public string? EffectiveOmpAuthApplicationName { get; init; }
+
+    public string? EffectiveOmpAuthDataProtectionKeyPath { get; init; }
+}
+
+/// <summary>
+/// Per-host OmpAuth consistency summary, produced by grouping and comparing raw rows in the page model.
+/// </summary>
+public sealed class HostOmpAuthComparisonHostRow
+{
+    public Guid HostId { get; init; }
+
+    public string HostKey { get; init; } = "";
+
+    public string? HostDisplayName { get; init; }
+
+    public string? ReferenceAppKey { get; init; }
+
+    public string? ReferenceAppDisplayName { get; init; }
+
+    public IReadOnlyList<HostOmpAuthComparisonAppRow> Apps { get; init; } = [];
+
+    public int MismatchAppCount { get; init; }
+
+    public bool HasMismatches => MismatchAppCount > 0;
+}
+
+/// <summary>
+/// Per-app OmpAuth comparison details within a host.
+/// </summary>
+public sealed class HostOmpAuthComparisonAppRow
+{
+    public Guid AppInstanceId { get; init; }
+
+    public string AppInstanceKey { get; init; } = "";
+
+    public string? AppDisplayName { get; init; }
+
+    public string? ArtifactVersion { get; init; }
+
+    public string? EffectiveOmpAuthCookieName { get; init; }
+
+    public string? EffectiveOmpAuthApplicationName { get; init; }
+
+    public string? EffectiveOmpAuthDataProtectionKeyPath { get; init; }
+
+    public bool IsReferenceApp { get; init; }
+
+    public bool CookieNameMatches { get; init; }
+
+    public bool ApplicationNameMatches { get; init; }
+
+    public bool DataProtectionKeyPathMatches { get; init; }
+
+    public bool HasMismatch => !CookieNameMatches || !ApplicationNameMatches || !DataProtectionKeyPathMatches;
+}
+
+/// <summary>
 /// Latest HostAgent artifact provisioning state for a host-local artifact cache entry.
 /// </summary>
 public sealed class HostArtifactStateRow

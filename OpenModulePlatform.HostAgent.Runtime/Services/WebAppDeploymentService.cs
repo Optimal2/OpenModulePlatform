@@ -81,6 +81,15 @@ public sealed class WebAppDeploymentService
         var appPoolStopped = false;
         var stopMarkerWritten = false;
         string? diagnosticWarning = null;
+        OmpAuthValidationResult? ompAuthValidation = null;
+
+        AppDeploymentResult WithExtractedOmpAuth(AppDeploymentResult result)
+        {
+            return result.WithEffectiveOmpAuth(
+                ompAuthValidation?.EffectiveCookieName,
+                ompAuthValidation?.EffectiveApplicationName,
+                ompAuthValidation?.EffectiveDataProtectionKeyPath);
+        }
 
         try
         {
@@ -109,8 +118,8 @@ public sealed class WebAppDeploymentService
                 settings);
 
             var hostDataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
-            var ompAuthWarnings = ValidateOmpAuthConfiguration(configurationFiles, hostDataProtectionKeyPath);
-            foreach (var warning in ompAuthWarnings)
+            ompAuthValidation = ValidateOmpAuthConfiguration(configurationFiles, hostDataProtectionKeyPath);
+            foreach (var warning in ompAuthValidation.Warnings)
             {
                 _logger.LogWarning(
                     "OmpAuth configuration warning for web app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
@@ -119,8 +128,8 @@ public sealed class WebAppDeploymentService
                     warning);
             }
 
-            diagnosticWarning = ompAuthWarnings.Count > 0
-                ? string.Join(Environment.NewLine, ompAuthWarnings)
+            diagnosticWarning = ompAuthValidation.Warnings.Count > 0
+                ? string.Join(Environment.NewLine, ompAuthValidation.Warnings)
                 : null;
 
             if (IsAlreadyApplied(deployment, targetPath, runtimeName)
@@ -128,8 +137,9 @@ public sealed class WebAppDeploymentService
             {
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: false)
-                        .WithDiagnosticWarning(diagnosticWarning),
+                    WithExtractedOmpAuth(
+                        AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: false)
+                            .WithDiagnosticWarning(diagnosticWarning)),
                     cancellationToken);
                 return;
             }
@@ -147,7 +157,7 @@ public sealed class WebAppDeploymentService
 
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AppDeploymentResult.Warning(targetPath, runtimeName, message),
+                    WithExtractedOmpAuth(AppDeploymentResult.Warning(targetPath, runtimeName, message)),
                     cancellationToken);
                 return;
             }
@@ -176,7 +186,7 @@ public sealed class WebAppDeploymentService
 
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AppDeploymentResult.Warning(targetPath, runtimeName, message),
+                    WithExtractedOmpAuth(AppDeploymentResult.Warning(targetPath, runtimeName, message)),
                     cancellationToken);
                 return;
             }
@@ -190,8 +200,9 @@ public sealed class WebAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Running(targetPath, runtimeName)
-                    .WithDiagnosticWarning(diagnosticWarning),
+                WithExtractedOmpAuth(
+                    AppDeploymentResult.Running(targetPath, runtimeName)
+                        .WithDiagnosticWarning(diagnosticWarning)),
                 cancellationToken);
 
             if (UseAppCmdAppPoolControl(settings)
@@ -241,8 +252,9 @@ public sealed class WebAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: true)
-                    .WithDiagnosticWarning(diagnosticWarning),
+                WithExtractedOmpAuth(
+                    AppDeploymentResult.Succeeded(targetPath, runtimeName, applied: true)
+                        .WithDiagnosticWarning(diagnosticWarning)),
                 cancellationToken);
 
             _logger.LogInformation(
@@ -275,8 +287,9 @@ public sealed class WebAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Failed(targetPath, runtimeName, ex.Message)
-                    .WithDiagnosticWarning(diagnosticWarning),
+                WithExtractedOmpAuth(
+                    AppDeploymentResult.Failed(targetPath, runtimeName, ex.Message)
+                        .WithDiagnosticWarning(diagnosticWarning)),
                 cancellationToken);
         }
     }
@@ -337,16 +350,28 @@ public sealed class WebAppDeploymentService
             && Directory.Exists(targetPath);
     }
 
-    private static List<string> ValidateOmpAuthConfiguration(
+    private sealed class OmpAuthValidationResult
+    {
+        public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
+        public string? EffectiveCookieName { get; init; }
+        public string? EffectiveApplicationName { get; init; }
+        public string? EffectiveDataProtectionKeyPath { get; init; }
+    }
+
+    private static OmpAuthValidationResult ValidateOmpAuthConfiguration(
         IReadOnlyList<ArtifactConfigurationFileDescriptor> configurationFiles,
         string hostDataProtectionKeyPath)
     {
         var warnings = new List<string>();
+        string? effectiveCookieName = null;
+        string? effectiveApplicationName = null;
+        string? effectiveDataProtectionKeyPath = null;
+
         var appSettingsFile = configurationFiles.FirstOrDefault(file =>
             string.Equals(file.RelativePath, "appsettings.json", StringComparison.OrdinalIgnoreCase));
         if (appSettingsFile is null)
         {
-            return warnings;
+            return new OmpAuthValidationResult { Warnings = warnings };
         }
 
         JsonNode? ompAuthNode;
@@ -356,12 +381,12 @@ public sealed class WebAppDeploymentService
         }
         catch (JsonException)
         {
-            return warnings;
+            return new OmpAuthValidationResult { Warnings = warnings };
         }
 
         if (ompAuthNode is null)
         {
-            return warnings;
+            return new OmpAuthValidationResult { Warnings = warnings };
         }
 
         const string DefaultCookieName = ".OpenModulePlatform.Auth";
@@ -371,6 +396,7 @@ public sealed class WebAppDeploymentService
             && cookieNameNode.GetValueKind() == JsonValueKind.String)
         {
             var cookieName = cookieNameNode.GetValue<string>();
+            effectiveCookieName = cookieName;
             if (!string.Equals(cookieName, DefaultCookieName, StringComparison.Ordinal))
             {
                 warnings.Add(
@@ -383,6 +409,7 @@ public sealed class WebAppDeploymentService
             && applicationNameNode.GetValueKind() == JsonValueKind.String)
         {
             var applicationName = applicationNameNode.GetValue<string>();
+            effectiveApplicationName = applicationName;
             if (!string.Equals(applicationName, DefaultApplicationName, StringComparison.Ordinal))
             {
                 warnings.Add(
@@ -395,6 +422,7 @@ public sealed class WebAppDeploymentService
             && dataProtectionKeyPathNode.GetValueKind() == JsonValueKind.String)
         {
             var dataProtectionKeyPath = dataProtectionKeyPathNode.GetValue<string>();
+            effectiveDataProtectionKeyPath = dataProtectionKeyPath;
             if (!string.Equals(dataProtectionKeyPath, hostDataProtectionKeyPath, StringComparison.OrdinalIgnoreCase))
             {
                 warnings.Add(
@@ -411,7 +439,13 @@ public sealed class WebAppDeploymentService
             }
         }
 
-        return warnings;
+        return new OmpAuthValidationResult
+        {
+            Warnings = warnings,
+            EffectiveCookieName = effectiveCookieName,
+            EffectiveApplicationName = effectiveApplicationName,
+            EffectiveDataProtectionKeyPath = effectiveDataProtectionKeyPath
+        };
     }
 
     private static string ResolveWebAppDataProtectionKeyPath(HostAgentSettings settings)

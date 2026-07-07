@@ -1457,6 +1457,10 @@ a:hover {
     color: var(--text-muted);
 }
 
+.ompauth-reference-row {
+    background: var(--surface-muted);
+}
+
 .host-resources-latest .state-current td {
     background: #e8f6ed;
 }

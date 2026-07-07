@@ -855,6 +855,10 @@ BEGIN
         LastError nvarchar(4000) NULL,
         -- Non-blocking diagnostic warnings (e.g. OmpAuth config deviations) that do not affect deployment state.
         LastWarning nvarchar(4000) NULL,
+        -- Effective OmpAuth settings extracted from the merged appsettings.json at deployment time, used for cross-app consistency comparison.
+        EffectiveOmpAuthCookieName nvarchar(200) NULL,
+        EffectiveOmpAuthApplicationName nvarchar(200) NULL,
+        EffectiveOmpAuthDataProtectionKeyPath nvarchar(400) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAppDeploymentStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAppDeploymentStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT PK_omp_HostAppDeploymentStates PRIMARY KEY(HostId, AppInstanceId),
@@ -905,6 +909,25 @@ GO
 IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'LastWarning') IS NULL
 BEGIN
     ALTER TABLE omp.HostAppDeploymentStates ADD LastWarning nvarchar(4000) NULL;
+END
+GO
+
+-- Effective OmpAuth settings extracted from the merged appsettings.json at deployment time, used for cross-app consistency comparison.
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'EffectiveOmpAuthCookieName') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD EffectiveOmpAuthCookieName nvarchar(200) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'EffectiveOmpAuthApplicationName') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD EffectiveOmpAuthApplicationName nvarchar(200) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'EffectiveOmpAuthDataProtectionKeyPath') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD EffectiveOmpAuthDataProtectionKeyPath nvarchar(400) NULL;
 END
 GO
 

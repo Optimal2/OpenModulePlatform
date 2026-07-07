@@ -2821,4 +2821,49 @@
   <data name="Value does not match the expected format for {0}." xml:space="preserve"><value>Värdet matchar inte det förväntade formatet för {0}.</value></data>
   <data name="The validation regex for {0} is invalid. Contact an administrator." xml:space="preserve"><value>Valideringsregexen för {0} är ogiltig. Kontakta en administratör.</value></data>
   <data name="Validation timed out for {0}. Contact an administrator." xml:space="preserve"><value>Valideringen tog för lång tid för {0}. Kontakta en administratör.</value></data>
+  <data name="OmpAuth consistency" xml:space="preserve">
+    <value>OmpAuth-konsistens</value>
+  </data>
+  <data name="OmpAuth consistency description" xml:space="preserve">
+    <value>Jämför effektiva OmpAuth-inställningar mellan appar på varje värd.</value>
+  </data>
+  <data name="Reference app" xml:space="preserve">
+    <value>Referensapp</value>
+  </data>
+  <data name="Compared apps" xml:space="preserve">
+    <value>Jämförda appar</value>
+  </data>
+  <data name="Mismatches" xml:space="preserve">
+    <value>Omatchningar</value>
+  </data>
+  <data name="Cookie name" xml:space="preserve">
+    <value>Kaknamn</value>
+  </data>
+  <data name="Application name" xml:space="preserve">
+    <value>Applikationsnamn</value>
+  </data>
+  <data name="Data protection key path" xml:space="preserve">
+    <value>Sökväg för dataskyddesnyckel</value>
+  </data>
+  <data name="No reference app" xml:space="preserve">
+    <value>Ingen referensapp</value>
+  </data>
+  <data name="No OmpAuth comparison data has been recorded yet." xml:space="preserve">
+    <value>Ingen OmpAuth-jämförelsedata har registrerats ännu.</value>
+  </data>
+  <data name="Only hosts with mismatches" xml:space="preserve">
+    <value>Endast värdar med omatchningar</value>
+  </data>
+  <data name="Show app details" xml:space="preserve">
+    <value>Visa appdetaljer</value>
+  </data>
+  <data name="Matches reference" xml:space="preserve">
+    <value>Matchar referens</value>
+  </data>
+  <data name="Consistent" xml:space="preserve">
+    <value>Konsistent</value>
+  </data>
+  <data name="Mismatch" xml:space="preserve">
+    <value>Omatchning</value>
+  </data>
 </root>
