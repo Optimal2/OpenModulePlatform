@@ -80,6 +80,7 @@ function Resolve-RepositoryPath {
 function Add-ValidationError {
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [System.Collections.Generic.List[string]]$Errors,
         [Parameter(Mandatory = $true)]
         [string]$Message
@@ -91,6 +92,7 @@ function Add-ValidationError {
 function Add-ValidationWarning {
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [System.Collections.Generic.List[string]]$Warnings,
         [Parameter(Mandatory = $true)]
         [string]$Message
@@ -205,6 +207,8 @@ $projectPathCount = 0
 $componentVersionCount = 0
 $moduleMappingCount = 0
 $minModuleVersionWarningCount = 0
+$cascadeCheckCount = 0
+$cascadeErrorCount = 0
 
 foreach ($component in @($manifest.components)) {
     if ($null -eq $component) {
@@ -287,6 +291,108 @@ foreach ($component in @($manifest.components)) {
 }
 
 # ---------------------------------------------------------------------------
+# Check 7: Shared project cascade version bumps.
+# ---------------------------------------------------------------------------
+$sharedProjects = Get-OptionalPropertyValue -Object $manifest -Name 'sharedProjects'
+if ($null -ne $sharedProjects) {
+    $originMainAvailable = $false
+    try {
+        $null = git -C $repositoryRoot rev-parse --verify origin/main 2>$null
+        $originMainAvailable = ($LASTEXITCODE -eq 0)
+    }
+    catch {
+        $originMainAvailable = $false
+    }
+
+    if (-not $originMainAvailable) {
+        Add-ValidationWarning -Warnings $warnings -Message 'origin/main could not be resolved; skipping shared-project cascade validation.'
+    }
+    else {
+        $originManifestText = (git -C $repositoryRoot show origin/main:omp-components.json 2>$null) -join "`n"
+        $originManifest = $null
+        if (-not [string]::IsNullOrWhiteSpace($originManifestText)) {
+            $originManifest = ConvertFrom-JsonDocument -Json $originManifestText -Depth $jsonDepth
+        }
+
+        $originComponentsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+        if ($null -ne $originManifest) {
+            foreach ($originComponent in @($originManifest.components)) {
+                if ($null -eq $originComponent) {
+                    continue
+                }
+
+                $key = [string](Get-OptionalPropertyValue -Object $originComponent -Name 'componentKey')
+                if (-not [string]::IsNullOrWhiteSpace($key) -and -not $originComponentsByKey.ContainsKey($key)) {
+                    $originComponentsByKey.Add($key, $originComponent)
+                }
+            }
+        }
+
+        foreach ($sharedProject in @($sharedProjects)) {
+            if ($null -eq $sharedProject) {
+                continue
+            }
+
+            $projectPath = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'projectPath')
+            if ([string]::IsNullOrWhiteSpace($projectPath)) {
+                continue
+            }
+
+            $diffPath = $projectPath
+            if ($projectPath -like '*.csproj') {
+                $diffPath = Split-Path -Parent $projectPath
+            }
+
+            $changedFiles = [string](git -C $repositoryRoot diff --name-only origin/main...HEAD -- $diffPath 2>$null)
+            if ([string]::IsNullOrWhiteSpace($changedFiles)) {
+                continue
+            }
+
+            $consumers = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'consumers')
+            if ($consumers.Count -eq 0) {
+                continue
+            }
+
+            $unbumpedConsumers = [System.Collections.Generic.List[string]]::new()
+            foreach ($consumerKey in $consumers) {
+                $currentComponent = $null
+                foreach ($component in @($manifest.components)) {
+                    if (([string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')) -eq $consumerKey) {
+                        $currentComponent = $component
+                        break
+                    }
+                }
+
+                if ($null -eq $currentComponent) {
+                    Add-ValidationWarning -Warnings $warnings -Message "Shared project '$projectPath' lists consumer '$consumerKey' which is not declared in components."
+                    continue
+                }
+
+                $originVersion = $null
+                if ($originComponentsByKey.ContainsKey($consumerKey)) {
+                    $originVersion = [string](Get-OptionalPropertyValue -Object $originComponentsByKey[$consumerKey] -Name 'version')
+                }
+
+                $currentVersion = [string](Get-OptionalPropertyValue -Object $currentComponent -Name 'version')
+
+                if (-not [string]::IsNullOrWhiteSpace($originVersion) -and $originVersion -eq $currentVersion) {
+                    $unbumpedConsumers.Add($consumerKey)
+                }
+            }
+
+            if ($unbumpedConsumers.Count -gt 0) {
+                $consumerList = ($unbumpedConsumers | Sort-Object) -join ', '
+                Add-ValidationError -Errors $errors -Message "Shared project '$projectPath' changed but the following consumers were not bumped: $consumerList. Run `.\\scripts\\omp\\bump-version.ps1 -CascadeFrom $projectPath` or manually bump the listed components."
+                $cascadeErrorCount++
+            }
+            else {
+                $cascadeCheckCount++
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Assembly version documentation (informational only, not enforced).
 # ---------------------------------------------------------------------------
 Write-Host 'Assembly version note:'
@@ -309,12 +415,21 @@ if ($null -ne $manifest.moduleDefinitions) {
     $moduleDefinitionCount = @($manifest.moduleDefinitions).Count
 }
 
+$sharedProjectCount = 0
+if ($null -ne $sharedProjects) {
+    $sharedProjectCount = @($sharedProjects).Count
+}
+
 $repositoryVersionStatus = if ([string]::IsNullOrWhiteSpace($repositoryVersion)) { 'missing' } else { 'validated' }
 Write-Host "$checkMark $projectPathCount of $componentCount component project paths validated"
 Write-Host "$checkMark Repository version $repositoryVersionStatus"
 Write-Host "$checkMark $componentVersionCount of $componentCount component versions validated"
 Write-Host "$checkMark $moduleDefinitionVersionSyncCount of $moduleDefinitionCount module definition versions synced"
 Write-Host "$checkMark $moduleMappingCount component-to-module mappings validated"
+
+if ($sharedProjectCount -gt 0 -and ($cascadeCheckCount -gt 0 -or $cascadeErrorCount -gt 0)) {
+    Write-Host "$checkMark $cascadeCheckCount of $sharedProjectCount changed shared project(s) passed cascade bump validation ($cascadeErrorCount error(s))"
+}
 
 if ($warnings.Count -gt 0) {
     Write-Host "$warningSign $($warnings.Count) warning(s):"

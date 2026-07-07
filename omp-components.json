@@ -49,6 +49,20 @@
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
+  "sharedProjects": [
+    {
+      "projectPath": "OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj",
+      "description": "Canonical OMP web integration library (topbar, role-switch, auth defaults)",
+      "consumers": [
+        "omp-portal-web",
+        "omp-auth-web",
+        "content-webapp",
+        "iframe-webapp",
+        "example-webapp",
+        "example-webapp-blazor"
+      ]
+    }
+  ],
   "components": [
     {
       "componentKey": "omp-portal-web",
