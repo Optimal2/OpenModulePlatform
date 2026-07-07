@@ -1031,4 +1031,6 @@
   <data name="Older than 30 days" xml:space="preserve"><value>Older than 30 days</value></data>
   <data name="Clear filters" xml:space="preserve"><value>Clear filters</value></data>
   <data name="No rows match the current filters." xml:space="preserve"><value>No rows match the current filters.</value></data>
+  <data name="Showing {0} of {1} rows." xml:space="preserve"><value>Showing {0} of {1} rows.</value></data>
+  <data name="Show more" xml:space="preserve"><value>Show more</value></data>
 </root>

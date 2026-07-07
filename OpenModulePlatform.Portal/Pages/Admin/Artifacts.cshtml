@@ -33,6 +33,8 @@
                 <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
             </div>
         </details>
+        <input type="search" class="list-search" data-list-search="artifacts-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+        <span class="list-count" data-list-count="artifacts-list" data-template="@L["Showing {0} of {1} rows."]"></span>
     }
 </div>
 
@@ -42,8 +44,8 @@
 }
 else
 {
-    <div class="empty-state" data-list-filter-empty="artifacts-list" hidden>@L["No rows match the current filters."]</div>
-    <table id="artifacts-list" class="grid sortable-list" data-sortable-list>
+    <div class="empty-state" data-list-empty="artifacts-list" hidden>@L["No rows match the current filters."]</div>
+    <table id="artifacts-list" class="grid sortable-list" data-sortable-list data-page-size="50">
         <thead>
             <tr>
                 <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App key"]</button></th>
@@ -52,7 +54,7 @@ else
                 <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Target"]</button></th>
                 <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Relative path"]</button></th>
                 <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Enabled"]</button></th>
-                <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Created UTC"]</button></th>
+                <th scope="col" data-sort-type="date" data-sort-default="descending"><button type="button" class="sortable-list__button">@L["Created UTC"]</button></th>
                 <th scope="col">@L["Actions"]</th>
             </tr>
         </thead>
@@ -79,4 +81,7 @@ else
         }
         </tbody>
     </table>
+    <div class="list-show-more">
+        <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="artifacts-list" hidden>@L["Show more"]</button>
+    </div>
 }
