@@ -288,6 +288,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     public static bool IsInterestingAppDeployment(HostAppDeploymentStateRow row)
         => row.DeploymentState != 2
            || !string.IsNullOrWhiteSpace(row.LastError)
+           || !string.IsNullOrWhiteSpace(row.LastWarning)
            || string.Equals(row.IdentityCheckStatus, "ManualActionRequired", StringComparison.OrdinalIgnoreCase)
            || string.Equals(row.IdentityCheckStatus, "WaitingForPortalAdminApproval", StringComparison.OrdinalIgnoreCase);
 

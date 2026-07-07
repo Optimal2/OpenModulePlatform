@@ -853,6 +853,8 @@ BEGIN
         LastCheckedUtc datetime2(3) NULL,
         LastAppliedUtc datetime2(3) NULL,
         LastError nvarchar(4000) NULL,
+        -- Non-blocking diagnostic warnings (e.g. OmpAuth config deviations) that do not affect deployment state.
+        LastWarning nvarchar(4000) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAppDeploymentStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_HostAppDeploymentStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT PK_omp_HostAppDeploymentStates PRIMARY KEY(HostId, AppInstanceId),
@@ -896,6 +898,13 @@ GO
 IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'IdentityRepairRequestedBy') IS NULL
 BEGIN
     ALTER TABLE omp.HostAppDeploymentStates ADD IdentityRepairRequestedBy nvarchar(256) NULL;
+END
+GO
+
+-- Non-blocking diagnostic warnings (e.g. OmpAuth config deviations) that do not affect deployment state.
+IF COL_LENGTH(N'omp.HostAppDeploymentStates', N'LastWarning') IS NULL
+BEGIN
+    ALTER TABLE omp.HostAppDeploymentStates ADD LastWarning nvarchar(4000) NULL;
 END
 GO
 
