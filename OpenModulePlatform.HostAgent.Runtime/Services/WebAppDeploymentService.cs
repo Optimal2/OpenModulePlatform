@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Artifacts;
@@ -104,6 +106,17 @@ public sealed class WebAppDeploymentService
                 deployment,
                 configuredConnectionString,
                 settings);
+
+            var hostDataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
+            var ompAuthWarnings = ValidateOmpAuthConfiguration(configurationFiles, hostDataProtectionKeyPath);
+            foreach (var warning in ompAuthWarnings)
+            {
+                _logger.LogWarning(
+                    "OmpAuth configuration warning for web app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    warning);
+            }
 
             if (IsAlreadyApplied(deployment, targetPath, runtimeName)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
@@ -313,6 +326,102 @@ public sealed class WebAppDeploymentService
             && string.Equals(deployment.DeployedTargetPath, targetPath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(deployment.DeployedRuntimeName ?? string.Empty, appPoolName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
             && Directory.Exists(targetPath);
+    }
+
+    private static List<string> ValidateOmpAuthConfiguration(
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> configurationFiles,
+        string hostDataProtectionKeyPath)
+    {
+        var warnings = new List<string>();
+        var appSettingsFile = configurationFiles.FirstOrDefault(file =>
+            string.Equals(file.RelativePath, "appsettings.json", StringComparison.OrdinalIgnoreCase));
+        if (appSettingsFile is null)
+        {
+            return warnings;
+        }
+
+        JsonNode? ompAuthNode;
+        try
+        {
+            ompAuthNode = JsonNode.Parse(appSettingsFile.FileContent)?["OmpAuth"];
+        }
+        catch (JsonException)
+        {
+            return warnings;
+        }
+
+        if (ompAuthNode is null)
+        {
+            return warnings;
+        }
+
+        const string DefaultCookieName = ".OpenModulePlatform.Auth";
+        const string DefaultApplicationName = "OpenModulePlatform";
+
+        if (ompAuthNode["CookieName"] is JsonNode cookieNameNode
+            && cookieNameNode.GetValueKind() == JsonValueKind.String)
+        {
+            var cookieName = cookieNameNode.GetValue<string>();
+            if (!string.Equals(cookieName, DefaultCookieName, StringComparison.Ordinal))
+            {
+                warnings.Add(
+                    $"OmpAuth:CookieName is '{cookieName}' but the expected OMP default is '{DefaultCookieName}'. " +
+                    "Shared auth cookies may break if this value differs across OMP web apps.");
+            }
+        }
+
+        if (ompAuthNode["ApplicationName"] is JsonNode applicationNameNode
+            && applicationNameNode.GetValueKind() == JsonValueKind.String)
+        {
+            var applicationName = applicationNameNode.GetValue<string>();
+            if (!string.Equals(applicationName, DefaultApplicationName, StringComparison.Ordinal))
+            {
+                warnings.Add(
+                    $"OmpAuth:ApplicationName is '{applicationName}' but the expected OMP default is '{DefaultApplicationName}'. " +
+                    "Shared auth cookies may break if this value differs across OMP web apps.");
+            }
+        }
+
+        if (ompAuthNode["DataProtectionKeyPath"] is JsonNode dataProtectionKeyPathNode
+            && dataProtectionKeyPathNode.GetValueKind() == JsonValueKind.String)
+        {
+            var dataProtectionKeyPath = dataProtectionKeyPathNode.GetValue<string>();
+            if (!string.Equals(dataProtectionKeyPath, hostDataProtectionKeyPath, StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add(
+                    $"OmpAuth:DataProtectionKeyPath is '{dataProtectionKeyPath}' but the HostAgent expects '{hostDataProtectionKeyPath}'. " +
+                    "Data protection keys must be shared across OMP web apps for auth-cookie compatibility.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(dataProtectionKeyPath)
+                && !dataProtectionKeyPath.StartsWith(@"\\", StringComparison.Ordinal))
+            {
+                warnings.Add(
+                    $"OmpAuth:DataProtectionKeyPath '{dataProtectionKeyPath}' is not a UNC path. " +
+                    "A local key path will break auth-cookie sharing in load-balanced scenarios.");
+            }
+        }
+
+        return warnings;
+    }
+
+    private static string ResolveWebAppDataProtectionKeyPath(HostAgentSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.WebAppDataProtectionKeyPath))
+        {
+            return settings.WebAppDataProtectionKeyPath.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.WebAppsRoot))
+        {
+            return string.Empty;
+        }
+
+        var webAppsRoot = Path.GetFullPath(settings.WebAppsRoot.Trim());
+        var runtimeRoot = Directory.GetParent(webAppsRoot)?.FullName;
+        return string.IsNullOrWhiteSpace(runtimeRoot)
+            ? string.Empty
+            : Path.Join(runtimeRoot, "DataProtectionKeys");
     }
 
     private static string ResolveIisAppName(
