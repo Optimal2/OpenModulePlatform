@@ -1,0 +1,25 @@
+@model OpenModulePlatform.Portal.Models.PageHeaderModel
+
+<section class="page-header@(string.IsNullOrWhiteSpace(Model.CssClass) ? "" : $" {Model.CssClass}")">
+    <div>
+        @if (!string.IsNullOrWhiteSpace(Model.Eyebrow))
+        {
+            <div class="eyebrow">@Model.Eyebrow</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Info))
+        {
+            <div class="page-header__title-row">
+                <h2>@Model.Title</h2>
+                <span class="info-badge"
+                      tabindex="0"
+                      role="img"
+                      title="@Model.Info"
+                      aria-label="@Model.Info">i</span>
+            </div>
+        }
+        else
+        {
+            <h2>@Model.Title</h2>
+        }
+    </div>
+</section>

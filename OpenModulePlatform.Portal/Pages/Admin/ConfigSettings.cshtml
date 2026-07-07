@@ -2,19 +2,16 @@
 @model OpenModulePlatform.Portal.Pages.Admin.ConfigSettingsModel
 @using OpenModulePlatform.Web.Shared.Models
 
-<section class="page-header config-settings-page-header">
-    <div>
-        <div class="eyebrow">@L["System"]</div>
-        <div class="page-header__title-row">
-            <h2>@L["Config settings"]</h2>
-            <span class="info-badge"
-                  tabindex="0"
-                  role="img"
-                  title="@L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."]"
-                  aria-label="@L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."]">i</span>
-        </div>
-    </div>
-</section>
+@{
+    var pageHeader = new PageHeaderModel
+    {
+        Eyebrow = L["System"].Value,
+        Title = L["Config settings"].Value,
+        Info = L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."].Value,
+        CssClass = "config-settings-page-header"
+    };
+}
+<partial name="_PageHeader" model="pageHeader" />
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
