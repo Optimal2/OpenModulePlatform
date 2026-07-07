@@ -186,10 +186,121 @@
         return 0;
     }
 
+    function initListFilters(root) {
+        root.querySelectorAll('[data-list-filter]').forEach((filter) => {
+            if (filter.dataset.listFilterInitialized === 'true') {
+                return;
+            }
+
+            const table = document.getElementById(filter.dataset.listFilter || '');
+            const tbody = table?.tBodies[0];
+            if (!tbody) {
+                return;
+            }
+
+            filter.dataset.listFilterInitialized = 'true';
+
+            const inputs = Array.from(filter.querySelectorAll('input[type="checkbox"][data-filter-column]'));
+            const clearButton = filter.querySelector('[data-filter-clear]');
+            const countBadge = filter.querySelector('[data-filter-count]');
+            const emptyNote = document.querySelector(`[data-list-filter-empty="${filter.dataset.listFilter}"]`);
+
+            const apply = () => {
+                const groups = new Map();
+                inputs.filter((input) => input.checked).forEach((input) => {
+                    const groupKey = input.closest('[data-filter-group]')?.getAttribute('data-filter-group') || input.dataset.filterColumn;
+                    if (!groups.has(groupKey)) {
+                        groups.set(groupKey, []);
+                    }
+
+                    groups.get(groupKey).push(input);
+                });
+
+                let visibleCount = 0;
+                Array.from(tbody.rows).forEach((row) => {
+                    const matches = Array.from(groups.values()).every((groupInputs) =>
+                        groupInputs.some((input) => rowMatchesFilter(row, input)));
+                    row.hidden = !matches;
+                    if (matches) {
+                        visibleCount += 1;
+                    }
+                });
+
+                const activeCount = Array.from(groups.values()).reduce((sum, groupInputs) => sum + groupInputs.length, 0);
+                filter.classList.toggle('list-filter--active', activeCount > 0);
+                if (countBadge) {
+                    countBadge.hidden = activeCount === 0;
+                    countBadge.textContent = String(activeCount);
+                }
+
+                if (emptyNote) {
+                    emptyNote.hidden = visibleCount > 0;
+                }
+
+                table.dispatchEvent(new CustomEvent('list-filter:applied', { bubbles: true }));
+            };
+
+            inputs.forEach((input) => input.addEventListener('change', apply));
+
+            clearButton?.addEventListener('click', () => {
+                inputs.forEach((input) => {
+                    input.checked = false;
+                });
+                apply();
+            });
+
+            document.addEventListener('click', (event) => {
+                if (filter.open && !filter.contains(event.target)) {
+                    filter.open = false;
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                    filter.open = false;
+                }
+            });
+        });
+    }
+
+    function rowMatchesFilter(row, input) {
+        const columnIndex = Number.parseInt(input.dataset.filterColumn, 10);
+        const cell = row.cells[columnIndex];
+        const rawValue = (cell?.getAttribute('data-sort-value') || cell?.textContent || '').trim();
+
+        if (input.dataset.filterEquals !== undefined) {
+            return rawValue === input.dataset.filterEquals;
+        }
+
+        const parsedDate = Date.parse(rawValue);
+        if (!Number.isFinite(parsedDate)) {
+            return false;
+        }
+
+        if (input.dataset.filterBefore !== undefined) {
+            return parsedDate < Date.parse(input.dataset.filterBefore);
+        }
+
+        if (input.dataset.filterAfter !== undefined) {
+            return parsedDate > Date.parse(input.dataset.filterAfter);
+        }
+
+        if (input.dataset.filterMaxAgeDays !== undefined) {
+            return parsedDate >= Date.now() - (Number.parseFloat(input.dataset.filterMaxAgeDays) * 86400000);
+        }
+
+        if (input.dataset.filterMinAgeDays !== undefined) {
+            return parsedDate < Date.now() - (Number.parseFloat(input.dataset.filterMinAgeDays) * 86400000);
+        }
+
+        return false;
+    }
+
     function initAll() {
         initAppHeaderOffset();
         document.querySelectorAll('[data-portal-entries-root]').forEach(initPortalEntries);
         initSortableLists(document);
+        initListFilters(document);
     }
 
     if (document.readyState === 'loading') {

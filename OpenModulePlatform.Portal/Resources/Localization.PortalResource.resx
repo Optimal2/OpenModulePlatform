@@ -2633,4 +2633,8 @@
   <data name="Mismatch" xml:space="preserve">
     <value>Mismatch</value>
   </data>
+  <data name="Created" xml:space="preserve"><value>Created</value></data>
+  <data name="Older than 30 days" xml:space="preserve"><value>Older than 30 days</value></data>
+  <data name="Clear filters" xml:space="preserve"><value>Clear filters</value></data>
+  <data name="No rows match the current filters." xml:space="preserve"><value>No rows match the current filters.</value></data>
 </root>
