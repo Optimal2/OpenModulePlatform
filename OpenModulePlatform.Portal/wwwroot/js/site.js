@@ -107,6 +107,18 @@
 
             table.dataset.sortableListInitialized = 'true';
 
+            const applySort = (header, direction) => {
+                sortTableRows(table, tbody, header.cellIndex, header.dataset.sortType || 'text', direction);
+
+                Array.from(table.tHead.querySelectorAll('th[data-sort-type]')).forEach((sortableHeader) => {
+                    sortableHeader.dataset.sortDirection = '';
+                    sortableHeader.setAttribute('aria-sort', sortableHeader === header ? direction : 'none');
+                });
+
+                header.dataset.sortDirection = direction;
+            };
+
+            let defaultHeader = null;
             Array.from(table.tHead?.querySelectorAll('th[data-sort-type]') || []).forEach((header) => {
                 const button = header.querySelector('button[type="button"]');
                 if (!button) {
@@ -115,20 +127,17 @@
 
                 header.setAttribute('aria-sort', 'none');
                 button.addEventListener('click', () => {
-                    const currentDirection = header.dataset.sortDirection === 'ascending'
-                        ? 'descending'
-                        : 'ascending';
-
-                    sortTableRows(table, tbody, header.cellIndex, header.dataset.sortType || 'text', currentDirection);
-
-                    Array.from(table.tHead.querySelectorAll('th[data-sort-type]')).forEach((sortableHeader) => {
-                        sortableHeader.dataset.sortDirection = '';
-                        sortableHeader.setAttribute('aria-sort', sortableHeader === header ? currentDirection : 'none');
-                    });
-
-                    header.dataset.sortDirection = currentDirection;
+                    applySort(header, header.dataset.sortDirection === 'ascending' ? 'descending' : 'ascending');
                 });
+
+                if (header.dataset.sortDefault) {
+                    defaultHeader = header;
+                }
             });
+
+            if (defaultHeader) {
+                applySort(defaultHeader, defaultHeader.dataset.sortDefault === 'descending' ? 'descending' : 'ascending');
+            }
         });
     }
 
@@ -186,67 +195,135 @@
         return 0;
     }
 
+    const listControllers = new Map();
+
+    function getListController(tableId) {
+        const table = document.getElementById(tableId || '');
+        const tbody = table?.tBodies[0];
+        if (!tbody) {
+            return null;
+        }
+
+        let controller = listControllers.get(table);
+        if (controller) {
+            return controller;
+        }
+
+        controller = {
+            table,
+            tbody,
+            searchTerm: '',
+            filterElement: null,
+            filterBadge: null,
+            filterInputs: [],
+            pageSize: Number.parseInt(table.dataset.pageSize || '', 10) || 0,
+            visibleLimit: 0,
+            countNote: document.querySelector(`[data-list-count="${tableId}"]`),
+            showMoreButton: document.querySelector(`[data-list-show-more="${tableId}"]`),
+            emptyNote: document.querySelector(`[data-list-empty="${tableId}"]`)
+        };
+        controller.visibleLimit = controller.pageSize;
+
+        table.addEventListener('sortable-list:sorted', () => refreshListController(controller));
+        controller.showMoreButton?.addEventListener('click', () => {
+            controller.visibleLimit += controller.pageSize;
+            refreshListController(controller);
+        });
+
+        listControllers.set(table, controller);
+        return controller;
+    }
+
+    function refreshListController(controller) {
+        const groups = new Map();
+        controller.filterInputs.filter((input) => input.checked).forEach((input) => {
+            const groupKey = input.closest('[data-filter-group]')?.getAttribute('data-filter-group') || input.dataset.filterColumn;
+            if (!groups.has(groupKey)) {
+                groups.set(groupKey, []);
+            }
+
+            groups.get(groupKey).push(input);
+        });
+
+        const rows = Array.from(controller.tbody.rows);
+        const limit = controller.pageSize > 0 ? controller.visibleLimit : Number.POSITIVE_INFINITY;
+        let matchingCount = 0;
+        let shownCount = 0;
+
+        rows.forEach((row) => {
+            const matchesSearch = !controller.searchTerm
+                || row.textContent.toLocaleLowerCase().includes(controller.searchTerm);
+            const matches = matchesSearch && Array.from(groups.values()).every((groupInputs) =>
+                groupInputs.some((input) => rowMatchesFilter(row, input)));
+
+            let show = false;
+            if (matches) {
+                show = matchingCount < limit;
+                matchingCount += 1;
+            }
+
+            row.hidden = !show;
+            if (show) {
+                shownCount += 1;
+            }
+        });
+
+        const activeFilterCount = Array.from(groups.values()).reduce((sum, groupInputs) => sum + groupInputs.length, 0);
+        if (controller.filterElement) {
+            controller.filterElement.classList.toggle('list-filter--active', activeFilterCount > 0);
+        }
+
+        if (controller.filterBadge) {
+            controller.filterBadge.hidden = activeFilterCount === 0;
+            controller.filterBadge.textContent = String(activeFilterCount);
+        }
+
+        if (controller.countNote) {
+            const template = controller.countNote.dataset.template || '{0} / {1}';
+            controller.countNote.textContent = template
+                .replace('{0}', String(shownCount))
+                .replace('{1}', String(rows.length));
+        }
+
+        if (controller.showMoreButton) {
+            controller.showMoreButton.hidden = matchingCount <= shownCount;
+        }
+
+        if (controller.emptyNote) {
+            controller.emptyNote.hidden = matchingCount > 0;
+        }
+
+        controller.table.dispatchEvent(new CustomEvent('sortable-list:updated', { bubbles: true }));
+    }
+
     function initListFilters(root) {
         root.querySelectorAll('[data-list-filter]').forEach((filter) => {
             if (filter.dataset.listFilterInitialized === 'true') {
                 return;
             }
 
-            const table = document.getElementById(filter.dataset.listFilter || '');
-            const tbody = table?.tBodies[0];
-            if (!tbody) {
+            const controller = getListController(filter.dataset.listFilter);
+            if (!controller) {
                 return;
             }
 
             filter.dataset.listFilterInitialized = 'true';
 
-            const inputs = Array.from(filter.querySelectorAll('input[type="checkbox"][data-filter-column]'));
-            const clearButton = filter.querySelector('[data-filter-clear]');
-            const countBadge = filter.querySelector('[data-filter-count]');
-            const emptyNote = document.querySelector(`[data-list-filter-empty="${filter.dataset.listFilter}"]`);
+            controller.filterElement = filter;
+            controller.filterBadge = filter.querySelector('[data-filter-count]');
+            controller.filterInputs = Array.from(filter.querySelectorAll('input[type="checkbox"][data-filter-column]'));
 
-            const apply = () => {
-                const groups = new Map();
-                inputs.filter((input) => input.checked).forEach((input) => {
-                    const groupKey = input.closest('[data-filter-group]')?.getAttribute('data-filter-group') || input.dataset.filterColumn;
-                    if (!groups.has(groupKey)) {
-                        groups.set(groupKey, []);
-                    }
+            controller.filterInputs.forEach((input) => input.addEventListener('change', () => {
+                controller.visibleLimit = controller.pageSize;
+                refreshListController(controller);
+            }));
 
-                    groups.get(groupKey).push(input);
-                });
-
-                let visibleCount = 0;
-                Array.from(tbody.rows).forEach((row) => {
-                    const matches = Array.from(groups.values()).every((groupInputs) =>
-                        groupInputs.some((input) => rowMatchesFilter(row, input)));
-                    row.hidden = !matches;
-                    if (matches) {
-                        visibleCount += 1;
-                    }
-                });
-
-                const activeCount = Array.from(groups.values()).reduce((sum, groupInputs) => sum + groupInputs.length, 0);
-                filter.classList.toggle('list-filter--active', activeCount > 0);
-                if (countBadge) {
-                    countBadge.hidden = activeCount === 0;
-                    countBadge.textContent = String(activeCount);
-                }
-
-                if (emptyNote) {
-                    emptyNote.hidden = visibleCount > 0;
-                }
-
-                table.dispatchEvent(new CustomEvent('list-filter:applied', { bubbles: true }));
-            };
-
-            inputs.forEach((input) => input.addEventListener('change', apply));
-
-            clearButton?.addEventListener('click', () => {
-                inputs.forEach((input) => {
+            filter.querySelector('[data-filter-clear]')?.addEventListener('click', () => {
+                controller.filterInputs.forEach((input) => {
                     input.checked = false;
                 });
-                apply();
+                controller.visibleLimit = controller.pageSize;
+                refreshListController(controller);
             });
 
             document.addEventListener('click', (event) => {
@@ -260,6 +337,34 @@
                     filter.open = false;
                 }
             });
+        });
+    }
+
+    function initListEnhancements(root) {
+        root.querySelectorAll('[data-list-search]').forEach((input) => {
+            if (input.dataset.listSearchInitialized === 'true') {
+                return;
+            }
+
+            const controller = getListController(input.dataset.listSearch);
+            if (!controller) {
+                return;
+            }
+
+            input.dataset.listSearchInitialized = 'true';
+            input.addEventListener('input', () => {
+                controller.searchTerm = input.value.trim().toLocaleLowerCase();
+                controller.visibleLimit = controller.pageSize;
+                refreshListController(controller);
+            });
+        });
+
+        root.querySelectorAll('table[data-page-size]').forEach((table) => {
+            getListController(table.id);
+        });
+
+        root.querySelectorAll('[data-list-count]').forEach((element) => {
+            getListController(element.getAttribute('data-list-count'));
         });
     }
 
@@ -301,6 +406,8 @@
         document.querySelectorAll('[data-portal-entries-root]').forEach(initPortalEntries);
         initSortableLists(document);
         initListFilters(document);
+        initListEnhancements(document);
+        listControllers.forEach((controller) => refreshListController(controller));
     }
 
     if (document.readyState === 'loading') {

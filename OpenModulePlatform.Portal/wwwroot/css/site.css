@@ -1798,6 +1798,31 @@ button[aria-disabled=true]:hover,
     margin: 0;
 }
 
+.list-search {
+    min-width: 200px;
+    padding: 7px 12px;
+    box-sizing: border-box;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.list-count {
+    margin-left: auto;
+    align-self: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.list-show-more {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+}
+
 .table-scroll {
     width: 100%;
     max-width: 100%;
