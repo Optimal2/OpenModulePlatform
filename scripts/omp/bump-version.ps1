@@ -23,7 +23,8 @@ param(
     [string]$Part = 'patch',
     [string]$Version = '',
     [switch]$Interactive,
-    [switch]$Pause
+    [switch]$Pause,
+    [string]$CascadeFrom = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -506,7 +507,17 @@ try {
         throw 'Use either -AllWidgets or -WidgetFile, not both.'
     }
 
-    if (-not $AllComponents -and $ComponentKey.Count -eq 0 -and -not $AllModuleDefinitions -and $ModuleKey.Count -eq 0 -and -not $AllWidgets -and $WidgetFile.Count -eq 0 -and -not $Interactive) {
+    if (-not [string]::IsNullOrWhiteSpace($CascadeFrom)) {
+        if ($AllComponents) {
+            throw '-CascadeFrom cannot be used with -AllComponents.'
+        }
+
+        if ($AllModuleDefinitions) {
+            throw '-CascadeFrom cannot be used with -AllModuleDefinitions.'
+        }
+    }
+
+    if (-not $AllComponents -and $ComponentKey.Count -eq 0 -and -not $AllModuleDefinitions -and $ModuleKey.Count -eq 0 -and -not $AllWidgets -and $WidgetFile.Count -eq 0 -and -not $Interactive -and [string]::IsNullOrWhiteSpace($CascadeFrom)) {
         $AllComponents = $true
     }
 
@@ -550,6 +561,56 @@ try {
 
             $match[0]
         })
+    }
+
+    $selectedComponents = [System.Collections.Generic.List[object]]::new($selectedComponents)
+
+    if (-not [string]::IsNullOrWhiteSpace($CascadeFrom)) {
+        $sharedProjects = Get-JsonPropertyValue -Object $manifest -Name 'sharedProjects'
+        if ($null -eq $sharedProjects) {
+            throw "sharedProjects block not found in $manifestPath. -CascadeFrom requires shared project metadata."
+        }
+
+        $matchingSharedProject = @($sharedProjects | Where-Object { [string](Get-JsonPropertyValue -Object $_ -Name 'projectPath') -eq $CascadeFrom })
+        if ($matchingSharedProject.Count -ne 1) {
+            throw "Shared project '$CascadeFrom' was not found in $manifestPath."
+        }
+
+        $consumerKeys = @((Get-JsonPropertyValue -Object $matchingSharedProject[0] -Name 'consumers'))
+        if ($consumerKeys.Count -eq 0) {
+            Write-Host "Cascade from ${CascadeFrom}: no consumers declared."
+        }
+        else {
+            $cascadeComponents = @(foreach ($key in $consumerKeys) {
+                $match = @($components | Where-Object { $_.componentKey -eq $key })
+                if ($match.Count -ne 1) {
+                    throw "Cascade consumer '$key' was not found exactly once in $manifestPath."
+                }
+
+                $match[0]
+            })
+
+            $selectedKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            foreach ($component in $selectedComponents) {
+                [void]$selectedKeys.Add([string]$component.componentKey)
+            }
+
+            $addedConsumers = [System.Collections.Generic.List[string]]::new()
+            foreach ($component in $cascadeComponents) {
+                $key = [string]$component.componentKey
+                if (-not $selectedKeys.Contains($key)) {
+                    [void]$selectedComponents.Add($component)
+                    [void]$addedConsumers.Add($key)
+                }
+            }
+
+            if ($addedConsumers.Count -gt 0) {
+                Write-Host "Cascade from ${CascadeFrom}: bumping $($addedConsumers -join ', ')"
+            }
+            else {
+                Write-Host "Cascade from ${CascadeFrom}: all consumers already selected, no additional components to bump."
+            }
+        }
     }
 
     $updates = [System.Collections.Generic.List[object]]::new()
