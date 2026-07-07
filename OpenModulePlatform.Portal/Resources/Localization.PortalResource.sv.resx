@@ -2866,4 +2866,8 @@
   <data name="Mismatch" xml:space="preserve">
     <value>Omatchning</value>
   </data>
+  <data name="Created" xml:space="preserve"><value>Skapad</value></data>
+  <data name="Older than 30 days" xml:space="preserve"><value>Äldre än 30 dagar</value></data>
+  <data name="Clear filters" xml:space="preserve"><value>Rensa filter</value></data>
+  <data name="No rows match the current filters." xml:space="preserve"><value>Inga rader matchar de aktuella filtren.</value></data>
 </root>

@@ -980,4 +980,8 @@
   <data name="Value does not match the expected format for {0}." xml:space="preserve"><value>Value does not match the expected format for {0}.</value></data>
   <data name="The validation regex for {0} is invalid. Contact an administrator." xml:space="preserve"><value>The validation regex for {0} is invalid. Contact an administrator.</value></data>
   <data name="Validation timed out for {0}. Contact an administrator." xml:space="preserve"><value>Validation timed out for {0}. Contact an administrator.</value></data>
+  <data name="Created" xml:space="preserve"><value>Created</value></data>
+  <data name="Older than 30 days" xml:space="preserve"><value>Older than 30 days</value></data>
+  <data name="Clear filters" xml:space="preserve"><value>Clear filters</value></data>
+  <data name="No rows match the current filters." xml:space="preserve"><value>No rows match the current filters.</value></data>
 </root>
