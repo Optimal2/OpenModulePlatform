@@ -1290,7 +1290,7 @@ public sealed class PortableModulePackageService
                         return new PortableModulePackageArtifactImportResult(
                             identity.FileName,
                             "Failed",
-                            "An artifact with the same identity already exists with different content.",
+                            $"An artifact with the same identity already exists with different content. Artifact: {app.AppKey} {identity.Version} ({identity.PackageType}, {identity.TargetName}). Existing SHA-256: {existingIdentity.Sha256}. Incoming SHA-256: {contentHash}. Bump the component version, rebuild the universal package, and re-import.",
                             existingIdentity.ArtifactId);
                     }
                 }
@@ -1318,8 +1318,8 @@ public sealed class PortableModulePackageService
                         if (!string.Equals(existingContentHash, contentHash, StringComparison.OrdinalIgnoreCase))
                         {
                             var mismatchMessage = existingMetadataHashMissing
-                                ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content: {existingRelativePath}"
-                                : $"The existing artifact metadata matches this package, but the artifact store path contains different content: {existingRelativePath}";
+                                ? $"The existing artifact metadata has no content hash, and the artifact store path contains different content. Artifact: {app.AppKey} {identity.Version} ({identity.PackageType}, {identity.TargetName}). Path: {existingRelativePath}. Existing content SHA-256: {existingContentHash}. Incoming SHA-256: {contentHash}. Bump the component version, rebuild the universal package, and re-import."
+                                : $"The existing artifact metadata matches this package, but the artifact store path contains different content. Artifact: {app.AppKey} {identity.Version} ({identity.PackageType}, {identity.TargetName}). Path: {existingRelativePath}. Expected SHA-256 (metadata): {existingIdentity.Sha256}. Actual SHA-256 (disk): {existingContentHash}. Bump the component version, rebuild the universal package, and re-import.";
                             return new PortableModulePackageArtifactImportResult(
                                 identity.FileName,
                                 "Failed",
@@ -1433,7 +1433,7 @@ public sealed class PortableModulePackageService
                 return new PortableModulePackageArtifactImportResult(
                     identity.FileName,
                     "Failed",
-                    "An artifact with the same identity already exists with different content.",
+                    $"An artifact with the same identity already exists with different content. Artifact: {app.AppKey} {identity.Version} ({identity.PackageType}, {identity.TargetName}). Existing SHA-256: {existingIdentity.Sha256}. Incoming SHA-256: {contentHash}. Bump the component version, rebuild the universal package, and re-import.",
                     existingIdentity.ArtifactId);
             }
 
@@ -1460,7 +1460,7 @@ public sealed class PortableModulePackageService
                     return new PortableModulePackageArtifactImportResult(
                         identity.FileName,
                         "Failed",
-                        $"The target artifact path already exists with different content: {relativePath}",
+                        $"The target artifact path already exists with different content. Artifact: {app.AppKey} {identity.Version} ({identity.PackageType}, {identity.TargetName}). Path: {relativePath}. Existing SHA-256: {existingContentHash}. Incoming SHA-256: {contentHash}. Bump the component version, rebuild the universal package, and re-import.",
                         null);
                 }
 
