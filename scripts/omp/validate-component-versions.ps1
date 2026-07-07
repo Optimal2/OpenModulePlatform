@@ -121,8 +121,13 @@ function ConvertTo-VersionOrNull {
 }
 
 $scriptDirectory = Get-ScriptDirectory
-$repositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..' '..')).Path
+$repositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..\..')).Path
 $repositoryRoot = [System.IO.Path]::GetFullPath($repositoryRoot)
+
+$checkMark = [char]0x2713
+$warningSign = [char]0x26A0
+$crossMark = [char]0x2717
+
 $manifestPath = Join-Path $repositoryRoot 'omp-components.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     throw "Component manifest not found: $manifestPath"
@@ -305,14 +310,14 @@ if ($null -ne $manifest.moduleDefinitions) {
 }
 
 $repositoryVersionStatus = if ([string]::IsNullOrWhiteSpace($repositoryVersion)) { 'missing' } else { 'validated' }
-Write-Host "`u{2713} $projectPathCount of $componentCount component project paths validated"
-Write-Host "`u{2713} Repository version $repositoryVersionStatus"
-Write-Host "`u{2713} $componentVersionCount of $componentCount component versions validated"
-Write-Host "`u{2713} $moduleDefinitionVersionSyncCount of $moduleDefinitionCount module definition versions synced"
-Write-Host "`u{2713} $moduleMappingCount component-to-module mappings validated"
+Write-Host "$checkMark $projectPathCount of $componentCount component project paths validated"
+Write-Host "$checkMark Repository version $repositoryVersionStatus"
+Write-Host "$checkMark $componentVersionCount of $componentCount component versions validated"
+Write-Host "$checkMark $moduleDefinitionVersionSyncCount of $moduleDefinitionCount module definition versions synced"
+Write-Host "$checkMark $moduleMappingCount component-to-module mappings validated"
 
 if ($warnings.Count -gt 0) {
-    Write-Host "`u{26A0} $($warnings.Count) warning(s):"
+    Write-Host "$warningSign $($warnings.Count) warning(s):"
     foreach ($warningMessage in $warnings) {
         Write-Host "   $warningMessage"
     }
@@ -321,7 +326,7 @@ if ($warnings.Count -gt 0) {
 Write-Host ''
 
 if ($errors.Count -gt 0) {
-    Write-Host "`u{2717} $($errors.Count) error(s), $($warnings.Count) warning(s) found"
+    Write-Host "$crossMark $($errors.Count) error(s), $($warnings.Count) warning(s) found"
     foreach ($errorMessage in $errors) {
         Write-Host " - $errorMessage"
     }
@@ -329,5 +334,5 @@ if ($errors.Count -gt 0) {
     exit 1
 }
 
-Write-Host "`u{2713} Component version validation passed"
+Write-Host "$checkMark Component version validation passed"
 exit 0

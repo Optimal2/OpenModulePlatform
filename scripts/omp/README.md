@@ -11,6 +11,9 @@ build-universal-package.cmd
 export-universal-package.cmd
 ```
 
+The PowerShell scripts in this directory are written to work on both Windows
+PowerShell 5.1 and PowerShell 7+.
+
 The `.cmd` files are intended for Windows double-click usage and normal command
 prompt usage. They call the matching PowerShell scripts with `-NoProfile` and
 without `-ExecutionPolicy Bypass`. `build-universal-package.cmd` and
