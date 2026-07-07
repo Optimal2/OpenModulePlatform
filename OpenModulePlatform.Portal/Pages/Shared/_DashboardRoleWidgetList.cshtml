@@ -5,7 +5,7 @@
 
 @{
     var returnUrl = string.Concat(Context.Request.PathBase, Context.Request.Path, Context.Request.QueryString);
-    string BuildRoleActionUrl() => $"{Context.Request.PathBase}/security/set-active-role";
+    string BuildRoleActionUrl() => $"{Context.Request.PathBase}{OmpAuthDefaults.SetActiveRolePath}";
 }
 
 <div class="dashboard-role-list">

@@ -1,9 +1,10 @@
 @model OpenModulePlatform.Web.Shared.Navigation.PortalTopBarModel
+@using OpenModulePlatform.Web.Shared.Security
 @inject Microsoft.Extensions.Localization.IStringLocalizer<OpenModulePlatform.Web.Shared.Localization.SharedResource> L
 @{
     var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
     string BuildLanguageHref(string culture) => $"{Context.Request.PathBase}/localization/set-language?culture={Uri.EscapeDataString(culture)}&returnUrl={Uri.EscapeDataString(returnUrl)}";
-    string BuildRoleActionUrl() => $"{Context.Request.PathBase}/security/set-active-role";
+    string BuildRoleActionUrl() => $"{Context.Request.PathBase}{OmpAuthDefaults.SetActiveRolePath}";
     string CultureText(string? value) => string.IsNullOrWhiteSpace(value) ? string.Empty : L[value];
     string EntryText(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarNavigationEntry entry) => L[entry.TextKey].Value;
     string EntryFavoriteLabel(OpenModulePlatform.Web.Shared.Navigation.PortalTopBarNavigationEntry entry)

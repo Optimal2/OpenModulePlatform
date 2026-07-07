@@ -303,7 +303,7 @@ public static class OmpWebHostingExtensions
             return Results.LocalRedirect("/");
         });
 
-        app.MapPost("/security/set-active-role", async (
+        app.MapPost(OmpAuthDefaults.SetActiveRolePath, async (
             HttpContext context,
             IAntiforgery antiforgery,
             RbacService rbac,
@@ -325,7 +325,7 @@ public static class OmpWebHostingExtensions
                 ct);
         }).RequireAuthorization();
 
-        app.MapPost("/rbac/set-active-role", async (
+        app.MapPost(OmpAuthDefaults.RbacSetActiveRolePath, async (
             HttpContext context,
             IAntiforgery antiforgery,
             RbacService rbac,
