@@ -18,6 +18,8 @@ public static class OmpAuthDefaults
     public const string LoginPath = "/auth/login";
     public const string LogoutPath = "/auth/logout";
     public const string AccessDeniedPath = "/status/403";
+    public const string SetActiveRolePath = "/security/set-active-role";
+    public const string RbacSetActiveRolePath = "/rbac/set-active-role";
 
     public const string UserIdClaimType = "omp:user_id";
     public const string ProviderClaimType = "omp:provider";

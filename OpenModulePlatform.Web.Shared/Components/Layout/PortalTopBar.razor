@@ -1,5 +1,6 @@
 @using OpenModulePlatform.Web.Shared.Navigation
 @using OpenModulePlatform.Web.Shared.Options
+@using OpenModulePlatform.Web.Shared.Security
 @using OpenModulePlatform.Web.Shared.Localization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Forms
@@ -654,7 +655,7 @@
     }
 
     private string BuildRoleActionUrl()
-        => BuildAppBaseRelativePath("security/set-active-role");
+        => BuildAppBaseRelativePath(OmpAuthDefaults.SetActiveRolePath);
 
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
         => _ = InvokeAsync(StateHasChanged);
