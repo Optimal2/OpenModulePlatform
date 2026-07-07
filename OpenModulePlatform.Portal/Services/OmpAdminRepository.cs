@@ -1729,6 +1729,56 @@ ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey,
         return rows;
     }
 
+    public async Task<IReadOnlyList<HostOmpAuthComparisonRawRow>> GetHostOmpAuthComparisonsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT h.HostId,
+       h.HostKey,
+       h.DisplayName AS HostDisplayName,
+       ai.AppInstanceId,
+       ai.AppInstanceKey,
+       ai.DisplayName AS AppDisplayName,
+       ar.Version AS ArtifactVersion,
+       s.EffectiveOmpAuthCookieName,
+       s.EffectiveOmpAuthApplicationName,
+       s.EffectiveOmpAuthDataProtectionKeyPath
+FROM omp.HostAppDeploymentStates s
+INNER JOIN omp.Hosts h ON h.HostId = s.HostId
+INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = s.AppInstanceId
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+LEFT JOIN omp.Artifacts ar ON ar.ArtifactId = s.ArtifactId
+WHERE h.IsEnabled = 1
+  AND ai.IsEnabled = 1
+  AND ai.IsAllowed = 1
+  AND ai.DesiredState = 1
+  AND a.AppType IN (N'Portal', N'WebApp', N'ServiceApp')
+ORDER BY h.HostKey, ai.AppInstanceKey;";
+
+        var rows = new List<HostOmpAuthComparisonRawRow>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new HostOmpAuthComparisonRawRow
+            {
+                HostId = rdr.GetGuid(0),
+                HostKey = rdr.GetString(1),
+                HostDisplayName = rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                AppInstanceId = rdr.GetGuid(3),
+                AppInstanceKey = rdr.GetString(4),
+                AppDisplayName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                ArtifactVersion = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                EffectiveOmpAuthCookieName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                EffectiveOmpAuthApplicationName = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                EffectiveOmpAuthDataProtectionKeyPath = rdr.IsDBNull(9) ? null : rdr.GetString(9)
+            });
+        }
+
+        return rows;
+    }
+
     public async Task<IReadOnlyList<HostArtifactStateRow>> GetHostArtifactStatesAsync(CancellationToken ct)
     {
         const string sql = @"

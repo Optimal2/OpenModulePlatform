@@ -20,6 +20,9 @@ public sealed partial class OmpHostArtifactRepository
     private const int HostAgentRuntimeModeMaxLength = 40;
     private const int HostAgentRuntimeStatusMessageMaxLength = 1000;
     private const int StoredDiagnosticMessageMaxLength = 4000;
+    private const int EffectiveOmpAuthCookieNameMaxLength = 200;
+    private const int EffectiveOmpAuthApplicationNameMaxLength = 200;
+    private const int EffectiveOmpAuthDataProtectionKeyPathMaxLength = 400;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -3341,6 +3344,9 @@ WHEN MATCHED THEN
         LastAppliedUtc = CASE WHEN @applied = 1 THEN @nowUtc ELSE target.LastAppliedUtc END,
         LastError = @lastError,
         LastWarning = @lastWarning,
+        EffectiveOmpAuthCookieName = @effectiveOmpAuthCookieName,
+        EffectiveOmpAuthApplicationName = @effectiveOmpAuthApplicationName,
+        EffectiveOmpAuthDataProtectionKeyPath = @effectiveOmpAuthDataProtectionKeyPath,
         UpdatedUtc = @nowUtc
 WHEN NOT MATCHED THEN
     INSERT
@@ -3363,6 +3369,9 @@ WHEN NOT MATCHED THEN
         LastAppliedUtc,
         LastError,
         LastWarning,
+        EffectiveOmpAuthCookieName,
+        EffectiveOmpAuthApplicationName,
+        EffectiveOmpAuthDataProtectionKeyPath,
         CreatedUtc,
         UpdatedUtc
     )
@@ -3386,6 +3395,9 @@ WHEN NOT MATCHED THEN
         CASE WHEN @applied = 1 THEN @nowUtc ELSE NULL END,
         @lastError,
         @lastWarning,
+        @effectiveOmpAuthCookieName,
+        @effectiveOmpAuthApplicationName,
+        @effectiveOmpAuthDataProtectionKeyPath,
         @nowUtc,
         @nowUtc
     );";
@@ -3404,6 +3416,30 @@ WHEN NOT MATCHED THEN
         if (safeWarning?.Length > StoredDiagnosticMessageMaxLength)
         {
             safeWarning = safeWarning[..StoredDiagnosticMessageMaxLength];
+        }
+
+        var safeEffectiveOmpAuthCookieName = string.IsNullOrWhiteSpace(result.EffectiveOmpAuthCookieName)
+            ? null
+            : result.EffectiveOmpAuthCookieName.Trim();
+        if (safeEffectiveOmpAuthCookieName?.Length > EffectiveOmpAuthCookieNameMaxLength)
+        {
+            safeEffectiveOmpAuthCookieName = safeEffectiveOmpAuthCookieName[..EffectiveOmpAuthCookieNameMaxLength];
+        }
+
+        var safeEffectiveOmpAuthApplicationName = string.IsNullOrWhiteSpace(result.EffectiveOmpAuthApplicationName)
+            ? null
+            : result.EffectiveOmpAuthApplicationName.Trim();
+        if (safeEffectiveOmpAuthApplicationName?.Length > EffectiveOmpAuthApplicationNameMaxLength)
+        {
+            safeEffectiveOmpAuthApplicationName = safeEffectiveOmpAuthApplicationName[..EffectiveOmpAuthApplicationNameMaxLength];
+        }
+
+        var safeEffectiveOmpAuthDataProtectionKeyPath = string.IsNullOrWhiteSpace(result.EffectiveOmpAuthDataProtectionKeyPath)
+            ? null
+            : result.EffectiveOmpAuthDataProtectionKeyPath.Trim();
+        if (safeEffectiveOmpAuthDataProtectionKeyPath?.Length > EffectiveOmpAuthDataProtectionKeyPathMaxLength)
+        {
+            safeEffectiveOmpAuthDataProtectionKeyPath = safeEffectiveOmpAuthDataProtectionKeyPath[..EffectiveOmpAuthDataProtectionKeyPathMaxLength];
         }
 
         await using var conn = _db.Create();
@@ -3425,6 +3461,9 @@ WHEN NOT MATCHED THEN
         cmd.Parameters.AddWithValue("@applied", result.Applied);
         cmd.Parameters.AddWithValue("@lastError", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
         cmd.Parameters.AddWithValue("@lastWarning", string.IsNullOrWhiteSpace(safeWarning) ? DBNull.Value : safeWarning);
+        cmd.Parameters.AddWithValue("@effectiveOmpAuthCookieName", string.IsNullOrWhiteSpace(safeEffectiveOmpAuthCookieName) ? DBNull.Value : safeEffectiveOmpAuthCookieName);
+        cmd.Parameters.AddWithValue("@effectiveOmpAuthApplicationName", string.IsNullOrWhiteSpace(safeEffectiveOmpAuthApplicationName) ? DBNull.Value : safeEffectiveOmpAuthApplicationName);
+        cmd.Parameters.AddWithValue("@effectiveOmpAuthDataProtectionKeyPath", string.IsNullOrWhiteSpace(safeEffectiveOmpAuthDataProtectionKeyPath) ? DBNull.Value : safeEffectiveOmpAuthDataProtectionKeyPath);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
