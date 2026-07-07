@@ -1012,4 +1012,19 @@
   <data name="Value does not match the expected format for {0}." xml:space="preserve"><value>Value does not match the expected format for {0}.</value></data>
   <data name="The validation regex for {0} is invalid. Contact an administrator." xml:space="preserve"><value>The validation regex for {0} is invalid. Contact an administrator.</value></data>
   <data name="Validation timed out for {0}. Contact an administrator." xml:space="preserve"><value>Validation timed out for {0}. Contact an administrator.</value></data>
+  <data name="OmpAuth consistency" xml:space="preserve"><value>OmpAuth consistency</value></data>
+  <data name="OmpAuth consistency description" xml:space="preserve"><value>Compares effective OmpAuth settings across apps on each host.</value></data>
+  <data name="Reference app" xml:space="preserve"><value>Reference app</value></data>
+  <data name="Compared apps" xml:space="preserve"><value>Compared apps</value></data>
+  <data name="Mismatches" xml:space="preserve"><value>Mismatches</value></data>
+  <data name="Cookie name" xml:space="preserve"><value>Cookie name</value></data>
+  <data name="Application name" xml:space="preserve"><value>Application name</value></data>
+  <data name="Data protection key path" xml:space="preserve"><value>Data protection key path</value></data>
+  <data name="No reference app" xml:space="preserve"><value>No reference app</value></data>
+  <data name="No OmpAuth comparison data has been recorded yet." xml:space="preserve"><value>No OmpAuth comparison data has been recorded yet.</value></data>
+  <data name="Only hosts with mismatches" xml:space="preserve"><value>Only hosts with mismatches</value></data>
+  <data name="Show app details" xml:space="preserve"><value>Show app details</value></data>
+  <data name="Matches reference" xml:space="preserve"><value>Matches reference</value></data>
+  <data name="Consistent" xml:space="preserve"><value>Consistent</value></data>
+  <data name="Mismatch" xml:space="preserve"><value>Mismatch</value></data>
 </root>

@@ -8,6 +8,7 @@
     const string DriftSectionId = "hostdeployments-drift";
     const string HostAgentUpgradeSectionId = "hostdeployments-hostagent-upgrade";
     const string AppDeploymentSectionId = "hostdeployments-app-deployments";
+    const string OmpAuthSectionId = "hostdeployments-ompauth";
     const string ArtifactHistorySectionId = "hostdeployments-artifact-history";
 
     var statusMessage = TempData["StatusMessage"] as string;
@@ -28,6 +29,7 @@
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["Template/runtime drift overview"].Value, DriftSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["HostAgent self-upgrade"].Value, HostAgentUpgradeSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["App deployment state"].Value, AppDeploymentSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["OmpAuth consistency"].Value, OmpAuthSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact provisioning history"].Value, ArtifactHistorySectionId));
 
     var sectionNavigator = new SectionNavigatorModel
@@ -671,6 +673,167 @@
                             }
                         </td>
                     </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section id="@OmpAuthSectionId" class="card section-card section-card--wide section-navigator-target">
+    <h3>@L["OmpAuth consistency"]</h3>
+    <p class="muted">@L["OmpAuth consistency description"]</p>
+
+    @if (Model.OmpAuthComparisons.Count == 0)
+    {
+        <div class="empty-state">@L["No OmpAuth comparison data has been recorded yet."]</div>
+    }
+    else
+    {
+        <div class="table-tools" data-ops-table-controls="ompauth-comparison">
+            <div class="form-field">
+                <label for="ompauthComparisonSearch">@L["Filter"]</label>
+                <input id="ompauthComparisonSearch" type="search" data-ops-search placeholder="@L["Search rows"]" />
+            </div>
+            <label class="checkbox-row table-tools__check">
+                <input type="checkbox" data-ops-interesting />
+                <span>@L["Only hosts with mismatches"]</span>
+            </label>
+            <span class="muted table-tools__count" data-ops-count></span>
+        </div>
+        <div class="table-scroll">
+            <table class="grid app-instances-grid ops-history-table" data-ops-table="ompauth-comparison">
+                <thead>
+                    <tr>
+                        <th>@L["Host"]</th>
+                        <th>@L["Reference app"]</th>
+                        <th>@L["Compared apps"]</th>
+                        <th>@L["Mismatches"]</th>
+                        <th>@L["Status"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var host in Model.OmpAuthComparisons)
+                {
+                    var appSearchTerms = string.Join(" ", host.Apps.Select(a => $"{a.AppInstanceKey} {a.AppDisplayName ?? ""} {a.EffectiveOmpAuthCookieName ?? ""} {a.EffectiveOmpAuthApplicationName ?? ""} {a.EffectiveOmpAuthDataProtectionKeyPath ?? ""}"));
+                    <tr data-interesting="@host.HasMismatches.ToString().ToLowerInvariant()"
+                        data-search="@($"{host.HostKey} {host.HostDisplayName ?? ""} {host.ReferenceAppKey ?? ""} {host.ReferenceAppDisplayName ?? ""} {appSearchTerms}")">
+                        <td>
+                            <div><code>@host.HostKey</code></div>
+                            @if (!string.IsNullOrWhiteSpace(host.HostDisplayName))
+                            {
+                                <div class="muted">@host.HostDisplayName</div>
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(host.ReferenceAppKey))
+                            {
+                                <span class="muted">@L["No reference app"]</span>
+                            }
+                            else
+                            {
+                                <div><code>@host.ReferenceAppKey</code></div>
+                                @if (!string.IsNullOrWhiteSpace(host.ReferenceAppDisplayName))
+                                {
+                                    <div class="muted">@host.ReferenceAppDisplayName</div>
+                                }
+                            }
+                        </td>
+                        <td>@host.Apps.Count</td>
+                        <td>@host.MismatchAppCount</td>
+                        <td>
+                            @if (host.HasMismatches)
+                            {
+                                <span class="integrity-pill integrity-pill--error">@L["Mismatch"]</span>
+                            }
+                            else
+                            {
+                                <span class="integrity-pill integrity-pill--ok">@L["Consistent"]</span>
+                            }
+                        </td>
+                    </tr>
+                    @if (host.Apps.Count > 0)
+                    {
+                        <tr>
+                            <td colspan="5">
+                                <details class="inline-details">
+                                    <summary>@L["Show app details"] (@host.Apps.Count)</summary>
+                                    <div class="table-scroll">
+                                        <table class="grid app-instances-grid">
+                                            <thead>
+                                                <tr>
+                                                    <th>@L["App instance"]</th>
+                                                    <th>@L["Cookie name"]</th>
+                                                    <th>@L["Application name"]</th>
+                                                    <th>@L["Data protection key path"]</th>
+                                                    <th>@L["Status"]</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                            @foreach (var app in host.Apps)
+                                            {
+                                                <tr class="@(app.IsReferenceApp ? "ompauth-reference-row" : null)">
+                                                    <td>
+                                                        <div><code>@app.AppInstanceKey</code></div>
+                                                        @if (!string.IsNullOrWhiteSpace(app.AppDisplayName))
+                                                        {
+                                                            <div class="muted">@app.AppDisplayName</div>
+                                                        }
+                                                        @if (!string.IsNullOrWhiteSpace(app.ArtifactVersion))
+                                                        {
+                                                            <div class="muted">@app.ArtifactVersion</div>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <div>@(app.EffectiveOmpAuthCookieName ?? "—")</div>
+                                                        @if (!app.IsReferenceApp)
+                                                        {
+                                                            <span class="integrity-pill @(app.CookieNameMatches ? "integrity-pill--ok" : "integrity-pill--error")">
+                                                                @(app.CookieNameMatches ? L["Matches reference"].Value : L["Mismatch"].Value)
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <div>@(app.EffectiveOmpAuthApplicationName ?? "—")</div>
+                                                        @if (!app.IsReferenceApp)
+                                                        {
+                                                            <span class="integrity-pill @(app.ApplicationNameMatches ? "integrity-pill--ok" : "integrity-pill--error")">
+                                                                @(app.ApplicationNameMatches ? L["Matches reference"].Value : L["Mismatch"].Value)
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        <div>@(app.EffectiveOmpAuthDataProtectionKeyPath ?? "—")</div>
+                                                        @if (!app.IsReferenceApp)
+                                                        {
+                                                            <span class="integrity-pill @(app.DataProtectionKeyPathMatches ? "integrity-pill--ok" : "integrity-pill--error")">
+                                                                @(app.DataProtectionKeyPathMatches ? L["Matches reference"].Value : L["Mismatch"].Value)
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (app.IsReferenceApp)
+                                                        {
+                                                            <span class="integrity-pill integrity-pill--neutral">@L["Reference"]</span>
+                                                        }
+                                                        else if (app.HasMismatch)
+                                                        {
+                                                            <span class="integrity-pill integrity-pill--error">@L["Mismatch"]</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="integrity-pill integrity-pill--ok">@L["Matches reference"]</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                    }
                 }
                 </tbody>
             </table>

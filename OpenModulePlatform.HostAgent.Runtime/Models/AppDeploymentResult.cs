@@ -26,6 +26,12 @@ public sealed class AppDeploymentResult
 
     public string? DiagnosticWarningMessage { get; init; }
 
+    public string? EffectiveOmpAuthCookieName { get; init; }
+
+    public string? EffectiveOmpAuthApplicationName { get; init; }
+
+    public string? EffectiveOmpAuthDataProtectionKeyPath { get; init; }
+
     public static AppDeploymentResult Succeeded(string targetPath, string? runtimeName, bool applied)
     {
         return new AppDeploymentResult
@@ -88,7 +94,10 @@ public sealed class AppDeploymentResult
             ActualRuntimeIdentity = actualRuntimeIdentity,
             IdentityCheckStatus = identityCheckStatus,
             ClearIdentityRepairRequest = clearIdentityRepairRequest,
-            DiagnosticWarningMessage = DiagnosticWarningMessage
+            DiagnosticWarningMessage = DiagnosticWarningMessage,
+            EffectiveOmpAuthCookieName = EffectiveOmpAuthCookieName,
+            EffectiveOmpAuthApplicationName = EffectiveOmpAuthApplicationName,
+            EffectiveOmpAuthDataProtectionKeyPath = EffectiveOmpAuthDataProtectionKeyPath
         };
     }
 
@@ -106,7 +115,34 @@ public sealed class AppDeploymentResult
             ActualRuntimeIdentity = ActualRuntimeIdentity,
             IdentityCheckStatus = IdentityCheckStatus,
             ClearIdentityRepairRequest = ClearIdentityRepairRequest,
-            DiagnosticWarningMessage = string.IsNullOrWhiteSpace(message) ? null : message.Trim()
+            DiagnosticWarningMessage = string.IsNullOrWhiteSpace(message) ? null : message.Trim(),
+            EffectiveOmpAuthCookieName = EffectiveOmpAuthCookieName,
+            EffectiveOmpAuthApplicationName = EffectiveOmpAuthApplicationName,
+            EffectiveOmpAuthDataProtectionKeyPath = EffectiveOmpAuthDataProtectionKeyPath
+        };
+    }
+
+    public AppDeploymentResult WithEffectiveOmpAuth(
+        string? cookieName,
+        string? applicationName,
+        string? dataProtectionKeyPath)
+    {
+        return new AppDeploymentResult
+        {
+            State = State,
+            Applied = Applied,
+            TargetPath = TargetPath,
+            RuntimeName = RuntimeName,
+            ErrorMessage = ErrorMessage,
+            CredentialAutomationMode = CredentialAutomationMode,
+            DesiredRuntimeIdentity = DesiredRuntimeIdentity,
+            ActualRuntimeIdentity = ActualRuntimeIdentity,
+            IdentityCheckStatus = IdentityCheckStatus,
+            ClearIdentityRepairRequest = ClearIdentityRepairRequest,
+            DiagnosticWarningMessage = DiagnosticWarningMessage,
+            EffectiveOmpAuthCookieName = string.IsNullOrWhiteSpace(cookieName) ? null : cookieName.Trim(),
+            EffectiveOmpAuthApplicationName = string.IsNullOrWhiteSpace(applicationName) ? null : applicationName.Trim(),
+            EffectiveOmpAuthDataProtectionKeyPath = string.IsNullOrWhiteSpace(dataProtectionKeyPath) ? null : dataProtectionKeyPath.Trim()
         };
     }
 }

@@ -55,6 +55,8 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     public IReadOnlyList<WebAppHealthStateRow> WebAppHealthStates { get; private set; } = [];
 
+    public IReadOnlyList<HostOmpAuthComparisonHostRow> OmpAuthComparisons { get; private set; } = [];
+
     public bool CanRecyclePortalAppPool
         => PortalDeploymentLockStatus is null || !PortalDeploymentLockStatus.IsLocked;
 
@@ -261,6 +263,19 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         HostAgentArtifactOptions = hostAgentArtifactOptions;
         AppDeploymentStates = await _repo.GetHostAppDeploymentStatesAsync(ct);
         ArtifactStates = await _repo.GetHostArtifactStatesAsync(ct);
+
+        try
+        {
+            var ompAuthRawRows = await _repo.GetHostOmpAuthComparisonsAsync(ct);
+            OmpAuthComparisons = BuildHostOmpAuthComparisons(ompAuthRawRows);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to load OmpAuth cross-app comparison data for HostDeployments. The page will render without the OmpAuth consistency section.");
+            OmpAuthComparisons = [];
+        }
     }
 
     public static string FormatHostDeploymentStatus(byte status)
@@ -458,4 +473,79 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         => string.IsNullOrWhiteSpace(value)
             ? null
             : value.Trim();
+
+    private static IReadOnlyList<HostOmpAuthComparisonHostRow> BuildHostOmpAuthComparisons(
+        IReadOnlyList<HostOmpAuthComparisonRawRow> rawRows)
+    {
+        var hosts = new List<HostOmpAuthComparisonHostRow>();
+
+        foreach (var hostGroup in rawRows.GroupBy(row => row.HostId))
+        {
+            var apps = hostGroup.ToList();
+            var referenceApp = apps.FirstOrDefault(app =>
+                app.AppInstanceKey.EndsWith("_portal", StringComparison.OrdinalIgnoreCase));
+
+            if (referenceApp is null)
+            {
+                var nonNullApps = apps.Where(app =>
+                    app.EffectiveOmpAuthCookieName is not null
+                    || app.EffectiveOmpAuthApplicationName is not null
+                    || app.EffectiveOmpAuthDataProtectionKeyPath is not null).ToList();
+
+                if (nonNullApps.Count == 0)
+                {
+                    continue;
+                }
+
+                referenceApp = nonNullApps
+                    .GroupBy(app =>
+                        (app.EffectiveOmpAuthCookieName,
+                         app.EffectiveOmpAuthApplicationName,
+                         app.EffectiveOmpAuthDataProtectionKeyPath))
+                    .OrderByDescending(group => group.Count())
+                    .ThenBy(group => group.First().AppInstanceKey, StringComparer.OrdinalIgnoreCase)
+                    .First()
+                    .First();
+            }
+
+            var appRows = new List<HostOmpAuthComparisonAppRow>();
+            foreach (var app in apps)
+            {
+                var isReference = app.AppInstanceId == referenceApp.AppInstanceId;
+                appRows.Add(new HostOmpAuthComparisonAppRow
+                {
+                    AppInstanceId = app.AppInstanceId,
+                    AppInstanceKey = app.AppInstanceKey,
+                    AppDisplayName = app.AppDisplayName,
+                    ArtifactVersion = app.ArtifactVersion,
+                    EffectiveOmpAuthCookieName = app.EffectiveOmpAuthCookieName,
+                    EffectiveOmpAuthApplicationName = app.EffectiveOmpAuthApplicationName,
+                    EffectiveOmpAuthDataProtectionKeyPath = app.EffectiveOmpAuthDataProtectionKeyPath,
+                    IsReferenceApp = isReference,
+                    CookieNameMatches = string.Equals(
+                        app.EffectiveOmpAuthCookieName,
+                        referenceApp.EffectiveOmpAuthCookieName),
+                    ApplicationNameMatches = string.Equals(
+                        app.EffectiveOmpAuthApplicationName,
+                        referenceApp.EffectiveOmpAuthApplicationName),
+                    DataProtectionKeyPathMatches = string.Equals(
+                        app.EffectiveOmpAuthDataProtectionKeyPath,
+                        referenceApp.EffectiveOmpAuthDataProtectionKeyPath)
+                });
+            }
+
+            hosts.Add(new HostOmpAuthComparisonHostRow
+            {
+                HostId = hostGroup.Key,
+                HostKey = apps.First().HostKey,
+                HostDisplayName = apps.First().HostDisplayName,
+                ReferenceAppKey = referenceApp.AppInstanceKey,
+                ReferenceAppDisplayName = referenceApp.AppDisplayName,
+                Apps = appRows,
+                MismatchAppCount = appRows.Count(app => app.HasMismatch)
+            });
+        }
+
+        return hosts;
+    }
 }
