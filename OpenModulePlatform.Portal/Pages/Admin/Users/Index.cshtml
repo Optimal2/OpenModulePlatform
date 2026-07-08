@@ -21,15 +21,47 @@
 }
 else
 {
-    <table class="grid">
+    var authProviders = Model.Rows
+        .SelectMany(r => r.AuthLinks)
+        .Select(l => l.ProviderDisplayName)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    <div class="toolbar top-gap">
+        <details class="list-filter" data-list-filter="users-list">
+            <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+            <div class="list-filter__menu">
+                <fieldset class="list-filter__group" data-filter-group="status">
+                    <legend>@L["Account status"]</legend>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="1" /> @L["Active"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="2" /> @L["Disabled"]</label>
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="3" /> @L["Deleted/reserved"]</label>
+                </fieldset>
+                <fieldset class="list-filter__group" data-filter-group="authlinks">
+                    <legend>@L["Auth links"]</legend>
+                    @foreach (var provider in authProviders)
+                    {
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-includes="@provider" /> @provider</label>
+                    }
+                    <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-equals="none" /> @L["No auth links"]</label>
+                </fieldset>
+                <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+            </div>
+        </details>
+        <input type="search" class="list-search" data-list-search="users-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+        <span class="list-count" data-list-count="users-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+    </div>
+    <div class="empty-state" data-list-empty="users-list" hidden>@L["No rows match the current filters."]</div>
+    <table id="users-list" class="grid sortable-list" data-sortable-list data-page-size="50">
         <thead>
             <tr>
-                <th>@L["Display name"]</th>
-                <th>@L["User ID"]</th>
-                <th>@L["Account status"]</th>
-                <th>@L["Last login UTC"]</th>
-                <th>@L["Auth links"]</th>
-                <th></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Display name"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["User ID"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Account status"]</button></th>
+                <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last login UTC"]</button></th>
+                <th scope="col">@L["Auth links"]</th>
+                <th scope="col"></th>
             </tr>
         </thead>
         <tbody>
@@ -40,9 +72,9 @@ else
                         <a href="~/admin/users/edit/@row.UserId">@row.DisplayName</a>
                     </td>
                     <td>@row.UserId</td>
-                    <td><span class="pill">@Model.AccountStatusText(row.AccountStatus)</span></td>
-                    <td>@Model.FormatUtc(row.LastLoginAt)</td>
-                    <td>
+                    <td data-sort-value="@row.AccountStatus"><span class="pill">@Model.AccountStatusText(row.AccountStatus)</span></td>
+                    <td data-sort-value="@(row.LastLoginAt?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">@Model.FormatUtc(row.LastLoginAt)</td>
+                    <td data-sort-value="@(row.AuthLinks.Count == 0 ? "none" : string.Join(" ", row.AuthLinks.Select(l => l.ProviderDisplayName)))">
                         @if (row.AuthLinks.Count == 0)
                         {
                             <span class="muted">@L["No auth links"]</span>
@@ -67,4 +99,7 @@ else
             }
         </tbody>
     </table>
+    <div class="list-show-more">
+        <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="users-list" hidden>@L["Show more"]</button>
+    </div>
 }
