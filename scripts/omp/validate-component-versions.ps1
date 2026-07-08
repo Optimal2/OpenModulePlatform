@@ -14,7 +14,10 @@ OMP artifact identity is determined by the component manifest version plus
 SHA-256 content hash, not by assembly version.
 #>
 [CmdletBinding()]
-param()
+param(
+    [Parameter(Mandatory = $false)]
+    [string]$BaseCommit = ''
+)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -292,38 +295,64 @@ foreach ($component in @($manifest.components)) {
 
 # ---------------------------------------------------------------------------
 # Check 7: Shared project cascade version bumps.
+# Exemption: Behavior-neutral refactors (identical emitted strings/IL) do not require
+# a cascade consumer bump. Only binary-affecting changes (new/removed APIs, changed
+# default values, changed serialization format, etc.) require all consumers to be bumped.
+# When running multi-phase campaigns, pass -BaseCommit to pin the diff baseline.
 # ---------------------------------------------------------------------------
 $sharedProjects = Get-OptionalPropertyValue -Object $manifest -Name 'sharedProjects'
 if ($null -ne $sharedProjects) {
-    $originMainAvailable = $false
-    try {
-        $null = git -C $repositoryRoot rev-parse --verify origin/main 2>$null
-        $originMainAvailable = ($LASTEXITCODE -eq 0)
-    }
-    catch {
-        $originMainAvailable = $false
-    }
+    $baseRef = 'origin/main'
+    $baseRefAvailable = $false
 
-    if (-not $originMainAvailable) {
-        Add-ValidationWarning -Warnings $warnings -Message 'origin/main could not be resolved; skipping shared-project cascade validation.'
+    if (-not [string]::IsNullOrWhiteSpace($BaseCommit)) {
+        try {
+            $null = git -C $repositoryRoot rev-parse --verify $BaseCommit 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $baseRef = $BaseCommit
+                $baseRefAvailable = $true
+            }
+            else {
+                Add-ValidationError -Errors $errors -Message "The specified -BaseCommit '$BaseCommit' could not be resolved. Verify the commit SHA exists in this repository."
+            }
+        }
+        catch {
+            Add-ValidationError -Errors $errors -Message "The specified -BaseCommit '$BaseCommit' could not be resolved. Verify the commit SHA exists in this repository."
+        }
     }
     else {
-        $originManifestText = (git -C $repositoryRoot show origin/main:omp-components.json 2>$null) -join "`n"
-        $originManifest = $null
-        if (-not [string]::IsNullOrWhiteSpace($originManifestText)) {
-            $originManifest = ConvertFrom-JsonDocument -Json $originManifestText -Depth $jsonDepth
+        Add-ValidationWarning -Warnings $warnings -Message 'No -BaseCommit specified; cascade diff uses origin/main. Binary-affecting shared changes committed in earlier campaign phases may not trigger cascade bumps. Pass -BaseCommit <sha> to diff against a fixed baseline.'
+
+        try {
+            $null = git -C $repositoryRoot rev-parse --verify origin/main 2>$null
+            $baseRefAvailable = ($LASTEXITCODE -eq 0)
+        }
+        catch {
+            $baseRefAvailable = $false
         }
 
-        $originComponentsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
-        if ($null -ne $originManifest) {
-            foreach ($originComponent in @($originManifest.components)) {
-                if ($null -eq $originComponent) {
+        if (-not $baseRefAvailable) {
+            Add-ValidationWarning -Warnings $warnings -Message 'origin/main could not be resolved; skipping shared-project cascade validation.'
+        }
+    }
+
+    if ($baseRefAvailable) {
+        $baseManifestText = (git -C $repositoryRoot show "$baseRef`:omp-components.json" 2>$null) -join "`n"
+        $baseManifest = $null
+        if (-not [string]::IsNullOrWhiteSpace($baseManifestText)) {
+            $baseManifest = ConvertFrom-JsonDocument -Json $baseManifestText -Depth $jsonDepth
+        }
+
+        $baseComponentsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+        if ($null -ne $baseManifest) {
+            foreach ($baseComponent in @($baseManifest.components)) {
+                if ($null -eq $baseComponent) {
                     continue
                 }
 
-                $key = [string](Get-OptionalPropertyValue -Object $originComponent -Name 'componentKey')
-                if (-not [string]::IsNullOrWhiteSpace($key) -and -not $originComponentsByKey.ContainsKey($key)) {
-                    $originComponentsByKey.Add($key, $originComponent)
+                $key = [string](Get-OptionalPropertyValue -Object $baseComponent -Name 'componentKey')
+                if (-not [string]::IsNullOrWhiteSpace($key) -and -not $baseComponentsByKey.ContainsKey($key)) {
+                    $baseComponentsByKey.Add($key, $baseComponent)
                 }
             }
         }
@@ -343,7 +372,7 @@ if ($null -ne $sharedProjects) {
                 $diffPath = Split-Path -Parent $projectPath
             }
 
-            $changedFiles = [string](git -C $repositoryRoot diff --name-only origin/main...HEAD -- $diffPath 2>$null)
+            $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $diffPath 2>$null)
             if ([string]::IsNullOrWhiteSpace($changedFiles)) {
                 continue
             }
@@ -368,14 +397,14 @@ if ($null -ne $sharedProjects) {
                     continue
                 }
 
-                $originVersion = $null
-                if ($originComponentsByKey.ContainsKey($consumerKey)) {
-                    $originVersion = [string](Get-OptionalPropertyValue -Object $originComponentsByKey[$consumerKey] -Name 'version')
+                $baseVersion = $null
+                if ($baseComponentsByKey.ContainsKey($consumerKey)) {
+                    $baseVersion = [string](Get-OptionalPropertyValue -Object $baseComponentsByKey[$consumerKey] -Name 'version')
                 }
 
                 $currentVersion = [string](Get-OptionalPropertyValue -Object $currentComponent -Name 'version')
 
-                if (-not [string]::IsNullOrWhiteSpace($originVersion) -and $originVersion -eq $currentVersion) {
+                if (-not [string]::IsNullOrWhiteSpace($baseVersion) -and $baseVersion -eq $currentVersion) {
                     $unbumpedConsumers.Add($consumerKey)
                 }
             }
