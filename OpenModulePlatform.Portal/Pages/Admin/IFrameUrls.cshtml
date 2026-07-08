@@ -89,28 +89,64 @@ else
             }
             else
             {
+                Func<string?, List<string>> parseRoles = value => (value ?? string.Empty)
+                    .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(role => role.Trim())
+                    .Where(role => role.Length > 0)
+                    .ToList();
+                var allowedRoleOptions = Model.UrlRows
+                    .SelectMany(row => parseRoles(row.AllowedRoles))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(role => role, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                <div class="toolbar">
+                    <details class="list-filter" data-list-filter="iframe-urls-list">
+                        <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                        <div class="list-filter__menu">
+                            <fieldset class="list-filter__group" data-filter-group="status">
+                                <legend>@L["Status"]</legend>
+                                <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="1" /> @L["Enabled"]</label>
+                                <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="0" /> @L["Disabled"]</label>
+                            </fieldset>
+                            <fieldset class="list-filter__group" data-filter-group="roles">
+                                <legend>@L["Allowed roles"]</legend>
+                                @foreach (var role in allowedRoleOptions)
+                                {
+                                    <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-includes="@role" /> @role</label>
+                                }
+                                <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="all" /> @L["All roles"]</label>
+                            </fieldset>
+                            <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                        </div>
+                    </details>
+                    <input type="search" class="list-search" data-list-search="iframe-urls-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+                    <span class="list-count" data-list-count="iframe-urls-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+                </div>
+                <div class="empty-state" data-list-empty="iframe-urls-list" hidden>@L["No rows match the current filters."]</div>
                 <div class="table-scroll">
-                    <table class="grid">
+                    <table id="iframe-urls-list" class="grid sortable-list" data-sortable-list data-page-size="50">
                         <thead>
                             <tr>
-                                <th>@L["Name"]</th>
-                                <th>@L["URL"]</th>
-                                <th>@L["Allowed roles"]</th>
-                                <th>@L["Status"]</th>
-                                <th class="actions-col">@L["Actions"]</th>
+                                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Name"]</button></th>
+                                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["URL"]</button></th>
+                                <th scope="col">@L["Allowed roles"]</th>
+                                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
+                                <th scope="col" class="actions-col">@L["Actions"]</th>
                             </tr>
                         </thead>
                         <tbody>
                         @foreach (var row in Model.UrlRows)
                         {
+                            var roles = parseRoles(row.AllowedRoles);
                             <tr>
-                                <td>
+                                <td data-sort-value="@row.DisplayName">
                                     <strong>@row.DisplayName</strong>
                                     <div class="small-text"><code>@row.UrlId</code></div>
                                 </td>
                                 <td><code>@row.Url</code></td>
-                                <td>@(string.IsNullOrWhiteSpace(row.AllowedRoles) ? L["All roles"] : row.AllowedRoles)</td>
-                                <td><span class="pill">@(row.Enabled ? L["Enabled"] : L["Disabled"])</span></td>
+                                <td data-sort-value="@(roles.Count == 0 ? "all" : string.Join(";", roles))">@(string.IsNullOrWhiteSpace(row.AllowedRoles) ? L["All roles"] : row.AllowedRoles)</td>
+                                <td data-sort-value="@(row.Enabled ? "1" : "0")"><span class="pill">@(row.Enabled ? L["Enabled"] : L["Disabled"])</span></td>
                                 <td class="actions-col">
                                     <form method="post" asp-page-handler="SetUrlEnabled" class="inline-form">
                                         <input type="hidden" name="urlId" value="@row.UrlId" />
@@ -127,6 +163,9 @@ else
                         }
                         </tbody>
                     </table>
+                </div>
+                <div class="list-show-more">
+                    <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="iframe-urls-list" hidden>@L["Show more"]</button>
                 </div>
             }
         </section>

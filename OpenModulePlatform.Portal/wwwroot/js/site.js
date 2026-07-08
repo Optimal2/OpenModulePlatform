@@ -385,7 +385,10 @@
         }
 
         if (input.dataset.filterIncludes !== undefined) {
-            return rawValue.split(/\s+/).includes(input.dataset.filterIncludes);
+            return rawValue.split(';')
+                .map((token) => token.trim())
+                .filter((token) => token.length > 0)
+                .includes(input.dataset.filterIncludes);
         }
 
         const parsedDate = Date.parse(rawValue);
@@ -420,7 +423,7 @@
         initListEnhancements(document);
         listControllers.forEach((controller) => {
             refreshListController(controller);
-            if (controller.viewport) {
+            if (controller.viewport && controller.viewport.offsetHeight > 0) {
                 controller.viewport.style.minHeight = `${controller.viewport.offsetHeight}px`;
             }
         });
