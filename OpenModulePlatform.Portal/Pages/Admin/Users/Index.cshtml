@@ -74,7 +74,7 @@ else
                     <td>@row.UserId</td>
                     <td data-sort-value="@row.AccountStatus"><span class="pill">@Model.AccountStatusText(row.AccountStatus)</span></td>
                     <td data-sort-value="@(row.LastLoginAt?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">@Model.FormatUtc(row.LastLoginAt)</td>
-                    <td data-sort-value="@(row.AuthLinks.Count == 0 ? "none" : string.Join(" ", row.AuthLinks.Select(l => l.ProviderDisplayName)))">
+                    <td data-sort-value="@(row.AuthLinks.Count == 0 ? "none" : string.Join(";", row.AuthLinks.Select(l => l.ProviderDisplayName)))">
                         @if (row.AuthLinks.Count == 0)
                         {
                             <span class="muted">@L["No auth links"]</span>
