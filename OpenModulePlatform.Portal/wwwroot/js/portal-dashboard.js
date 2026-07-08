@@ -1689,7 +1689,7 @@
         if (category === pushMessageCategory) {
             scheduleDashboardMessageRefresh();
             if (!isDashboardMessageComposerFocused()) {
-                window.ompMessageNotificationSound?.play();
+                window.ompToastSound?.playMessage(false);
             }
         }
     }
