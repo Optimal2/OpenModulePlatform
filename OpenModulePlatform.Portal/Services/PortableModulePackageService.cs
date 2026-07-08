@@ -451,7 +451,8 @@ public sealed class PortableModulePackageService
                         item.SourceName,
                         ct,
                         package.ExtractionRoot);
-                    if (quickImportState?.TryGetModuleDefinitionSkipMessage(definition, out var skipMessage) == true)
+                    if (quickImportState?.TryGetModuleDefinitionSkipMessage(definition, out var skipMessage) == true
+                        && !RequiresPreApplySqlRepairs(definition))
                     {
                         results.Add(new UniversalPackageImportItemResult(
                             "module-definition",
@@ -1125,37 +1126,43 @@ public sealed class PortableModulePackageService
     {
         var saveResult = await _repo.SaveModuleDefinitionDocumentAsync(
             definition,
-            options.ReplaceExistingModuleDefinition,
+            options.ReplaceExistingModuleDefinition
+                || (options.QuickImport && RequiresPreApplySqlRepairs(definition)),
             ct);
+
         var appliedDefinition = await _repo.GetAppliedModuleDefinitionDocumentAsync(definition.ModuleKey, ct);
         var keepNewerAppliedDefinition = appliedDefinition is not null
             && ArtifactVersionComparer.Compare(appliedDefinition.DefinitionVersion, definition.DefinitionVersion) > 0;
 
         var applied = false;
         var repairCount = 0;
+
+        // Platform-core schema repairs must run even when the definition itself
+        // will not be applied (installed version >= package version).
+        if (options.ExecuteSqlRepairs && RequiresPreApplySqlRepairs(definition))
+        {
+            var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                saveResult.ModuleDefinitionDocumentId,
+                ct);
+            repairCount += repairResult.ExecutedCount;
+        }
+
         if (options.ApplyModuleDefinition && !keepNewerAppliedDefinition)
         {
-            if (options.ExecuteSqlRepairs && RequiresPreApplySqlRepairs(definition))
-            {
-                var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
-                    saveResult.ModuleDefinitionDocumentId,
-                    ct);
-                repairCount += repairResult.ExecutedCount;
-            }
-
             var applyResult = await _repo.ApplyModuleDefinitionDocumentAsync(
                 saveResult.ModuleDefinitionDocumentId,
                 options.AllowTemporaryIncompatibleArtifacts,
                 ct);
             applied = applyResult.Applied;
+        }
 
-            if (applied && options.ExecuteSqlRepairs)
-            {
-                var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
-                    saveResult.ModuleDefinitionDocumentId,
-                    ct);
-                repairCount += repairResult.ExecutedCount;
-            }
+        // Non-platform-core modules keep the existing post-apply repair behavior.
+        if (applied && options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
+        {
+            var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                saveResult.ModuleDefinitionDocumentId,
+                ct);
+            repairCount += repairResult.ExecutedCount;
         }
 
         var plans = CreateArtifactImportPlans(definition, artifactPaths);
