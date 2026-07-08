@@ -139,6 +139,48 @@ function Get-Sha256Hex {
     }
 }
 
+function Get-ProjectReferences {
+    <#
+    .SYNOPSIS
+    Returns the parent directory paths of all projects referenced by the
+    specified .csproj file (or the first .csproj in the specified directory).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$CsprojPath
+    )
+
+    $resolvedCsproj = $CsprojPath
+    if (Test-Path -LiteralPath $CsprojPath -PathType Container) {
+        $csprojFiles = @(Get-ChildItem -LiteralPath $CsprojPath -Filter '*.csproj' -File -ErrorAction SilentlyContinue)
+        if ($csprojFiles.Count -eq 0) {
+            return @()
+        }
+        $resolvedCsproj = $csprojFiles[0].FullName
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedCsproj -PathType Leaf)) {
+        return @()
+    }
+
+    $csprojDir = Split-Path -Parent $resolvedCsproj
+    $csprojText = Get-Content -LiteralPath $resolvedCsproj -Raw -Encoding UTF8
+
+    $referencedDirs = [System.Collections.Generic.List[string]]::new()
+    $matches = [System.Text.RegularExpressions.Regex]::Matches($csprojText, '<ProjectReference\s+Include="([^"]+)"')
+    foreach ($match in $matches) {
+        $includePath = $match.Groups[1].Value
+        $resolvedRefPath = [System.IO.Path]::GetFullPath((Join-Path $csprojDir $includePath))
+        if (Test-Path -LiteralPath $resolvedRefPath -PathType Leaf) {
+            $refDir = [System.IO.Path]::GetFullPath((Split-Path -Parent $resolvedRefPath))
+            if (-not $referencedDirs.Contains($refDir)) {
+                [void]$referencedDirs.Add($refDir)
+            }
+        }
+    }
+
+    return $referencedDirs.ToArray()
+}
+
 function ConvertTo-NormalizedSql {
     param([Parameter(Mandatory = $true)][string]$SqlText)
 
@@ -644,6 +686,124 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# Check 9: Transitive ProjectReference lockstep bumps.
+# If a component's own project or any project it references (directly or
+# through one level of ProjectReference transitivity) changed since the base,
+# the component's version must be bumped. References already covered by
+# Check 7's sharedProjects cascade are excluded to avoid double-counting.
+# ---------------------------------------------------------------------------
+$transitiveCheckCount = 0
+$transitiveErrorCount = 0
+
+if (-not $baseRefAvailable) {
+    Add-ValidationWarning -Warnings $warnings -Message 'No valid base ref available; skipping transitive ProjectReference lockstep validation (Check 9). Pass -BaseCommit to enable it.'
+}
+else {
+    $sharedProjectDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($sharedProject in @($sharedProjects)) {
+        if ($null -eq $sharedProject) {
+            continue
+        }
+
+        $sharedProjectPath = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'projectPath')
+        if ([string]::IsNullOrWhiteSpace($sharedProjectPath)) {
+            continue
+        }
+
+        $fullSharedProjectPath = Resolve-RepositoryPath -Path $sharedProjectPath -BasePath $repositoryRoot
+        $sharedProjectDir = $fullSharedProjectPath
+        if ($fullSharedProjectPath -like '*.csproj') {
+            $sharedProjectDir = Split-Path -Parent $fullSharedProjectPath
+        }
+
+        if (Test-Path -LiteralPath $sharedProjectDir -PathType Container) {
+            [void]$sharedProjectDirs.Add([System.IO.Path]::GetFullPath($sharedProjectDir))
+        }
+    }
+
+    foreach ($component in @($manifest.components)) {
+        if ($null -eq $component) {
+            continue
+        }
+
+        $componentKey = [string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')
+        if ([string]::IsNullOrWhiteSpace($componentKey)) {
+            $componentKey = '<unknown>'
+        }
+
+        $projectPath = [string](Get-OptionalPropertyValue -Object $component -Name 'projectPath')
+        if ([string]::IsNullOrWhiteSpace($projectPath)) {
+            continue
+        }
+
+        $fullProjectPath = Resolve-RepositoryPath -Path $projectPath -BasePath $repositoryRoot
+        $csprojPath = $fullProjectPath
+        if (Test-Path -LiteralPath $fullProjectPath -PathType Container) {
+            $csprojFiles = @(Get-ChildItem -LiteralPath $fullProjectPath -Filter '*.csproj' -File -ErrorAction SilentlyContinue)
+            if ($csprojFiles.Count -eq 0) {
+                continue
+            }
+            $csprojPath = $csprojFiles[0].FullName
+        }
+
+        if (-not (Test-Path -LiteralPath $csprojPath -PathType Leaf)) {
+            continue
+        }
+
+        $directRefDirs = @(Get-ProjectReferences -CsprojPath $csprojPath)
+        $allRefDirs = [System.Collections.Generic.List[string]]::new()
+        foreach ($directRefDir in $directRefDirs) {
+            if (-not $allRefDirs.Contains($directRefDir)) {
+                [void]$allRefDirs.Add($directRefDir)
+            }
+
+            $directRefCsprojFiles = @(Get-ChildItem -LiteralPath $directRefDir -Filter '*.csproj' -File -ErrorAction SilentlyContinue)
+            if ($directRefCsprojFiles.Count -gt 0) {
+                $transitiveRefDirs = @(Get-ProjectReferences -CsprojPath $directRefCsprojFiles[0].FullName)
+                foreach ($transitiveRefDir in $transitiveRefDirs) {
+                    if (-not $allRefDirs.Contains($transitiveRefDir)) {
+                        [void]$allRefDirs.Add($transitiveRefDir)
+                    }
+                }
+            }
+        }
+
+        $changedRefDirs = [System.Collections.Generic.List[string]]::new()
+        foreach ($refDir in $allRefDirs) {
+            if ($sharedProjectDirs.Contains($refDir)) {
+                continue
+            }
+
+            $relRefDir = $refDir.Substring($repositoryRoot.Length).TrimStart('\', '/')
+            $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $relRefDir 2>$null)
+            if (-not [string]::IsNullOrWhiteSpace($changedFiles)) {
+                [void]$changedRefDirs.Add($relRefDir)
+            }
+        }
+
+        if ($changedRefDirs.Count -eq 0) {
+            continue
+        }
+
+        $baseVersion = $null
+        if ($baseComponentsByKey.ContainsKey($componentKey)) {
+            $baseVersion = [string](Get-OptionalPropertyValue -Object $baseComponentsByKey[$componentKey] -Name 'version')
+        }
+
+        $currentVersion = [string](Get-OptionalPropertyValue -Object $component -Name 'version')
+
+        if (-not [string]::IsNullOrWhiteSpace($baseVersion) -and [string]::Equals($baseVersion, $currentVersion, [StringComparison]::Ordinal)) {
+            $changedRefList = ($changedRefDirs | Sort-Object) -join ', '
+            Add-ValidationError -Errors $errors -Message "Component '$componentKey' references changed project(s) ($changedRefList) since $baseRef but its version was not bumped. Bump the component version."
+            $transitiveErrorCount++
+        }
+        else {
+            $transitiveCheckCount++
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Assembly version documentation (informational only, not enforced).
 # ---------------------------------------------------------------------------
 Write-Host 'Assembly version note:'
@@ -684,6 +844,10 @@ if ($sharedProjectCount -gt 0 -and ($cascadeCheckCount -gt 0 -or $cascadeErrorCo
 
 if ($sqlFilesChecked -gt 0) {
     Write-Host "$checkMark $sqlFilesPassed of $sqlFilesChecked owned SQL file(s) passed diff validation ($sqlFilesChanged changed)"
+}
+
+if ($transitiveCheckCount -gt 0 -or $transitiveErrorCount -gt 0) {
+    Write-Host "$checkMark $transitiveCheckCount component(s) passed transitive ProjectReference lockstep validation ($transitiveErrorCount error(s))"
 }
 
 if ($warnings.Count -gt 0) {
