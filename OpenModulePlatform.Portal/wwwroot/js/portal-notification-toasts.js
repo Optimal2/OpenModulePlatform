@@ -25,7 +25,8 @@
         audioContext: null,
         soundEnabled: false,
         lastNotificationSoundAt: 0,
-        lastMessageSoundAt: 0
+        lastMessageSoundAt: 0,
+        hiddenAt: null
     };
 
     function parsePositiveInteger(value, fallback) {
@@ -59,6 +60,11 @@
         return !!(active
             && typeof active.closest === "function"
             && active.closest("[data-message-thread-composer]"));
+    }
+
+    function isMessageThreadPageActive() {
+        return document.visibilityState === "visible"
+            && !!document.querySelector("[data-message-thread-composer]");
     }
 
     function playToastSound(soundKind, shouldSuppress) {
@@ -344,7 +350,9 @@
 
     function enqueueToast(toast, config) {
         if (toast && toast.isMessage) {
-            playMessageNotificationSound();
+            if (!isMessageThreadPageActive()) {
+                playMessageNotificationSound();
+            }
         } else if (toast) {
             playNotificationSound();
         }
@@ -370,6 +378,56 @@
         while (state.visible.length < maxVisibleToasts && state.queue.length > 0) {
             showToast(state.queue.shift(), config);
         }
+    }
+
+    function collapseQueuedToasts(config) {
+        var notificationCount = 0;
+        var messageCount = 0;
+
+        state.queue.forEach(function (toast) {
+            if (toast && toast.isMessage) {
+                messageCount += 1;
+            } else if (toast) {
+                notificationCount += 1;
+            }
+        });
+
+        state.queue = [];
+
+        if (notificationCount > 0) {
+            enqueueToast({
+                title: config.summaryTitle,
+                content: formatText(config.summaryTemplate, notificationCount),
+                targetUrl: config.notificationsUrl,
+                isSummary: true
+            }, config);
+        }
+
+        if (messageCount > 0) {
+            enqueueToast({
+                title: config.messageSummaryTitle,
+                content: formatText(config.messageSummaryTemplate, messageCount),
+                targetUrl: config.messagesUrl,
+                isSummary: true,
+                isMessage: true
+            }, config);
+        }
+    }
+
+    function handleReactivation(config) {
+        if (state.hiddenAt) {
+            var hiddenDuration = Date.now() - state.hiddenAt;
+            state.hiddenAt = null;
+
+            if (hiddenDuration > 1000 && state.queue.length > 0) {
+                collapseQueuedToasts(config);
+                scheduleNext(0);
+                return;
+            }
+        }
+
+        drainQueue(config);
+        scheduleNext(0);
     }
 
     function isToastPushCategory(category) {
@@ -590,15 +648,16 @@
         state.soundEnabled = true;
 
         window.addEventListener("focus", function () {
-            drainQueue(getConfig());
-            scheduleNext(0);
+            handleReactivation(getConfig());
         });
 
         document.addEventListener("visibilitychange", function () {
-            if (document.visibilityState === "visible") {
-                drainQueue(getConfig());
-                scheduleNext(0);
+            if (document.visibilityState === "hidden") {
+                state.hiddenAt = Date.now();
+                return;
             }
+
+            handleReactivation(getConfig());
         });
 
         window.addEventListener(pushEventName, handlePushEvent);
