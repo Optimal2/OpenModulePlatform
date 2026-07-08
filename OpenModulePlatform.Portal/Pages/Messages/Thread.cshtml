@@ -203,7 +203,7 @@ else
                     return;
                 }
 
-                window.ompMessageNotificationSound?.play();
+                window.ompToastSound?.playMessage(false);
             };
 
             const isNearBottom = () => {
