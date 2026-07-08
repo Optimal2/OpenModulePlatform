@@ -384,6 +384,10 @@
             return rawValue === input.dataset.filterEquals;
         }
 
+        if (input.dataset.filterIncludes !== undefined) {
+            return rawValue.split(/\s+/).includes(input.dataset.filterIncludes);
+        }
+
         const parsedDate = Date.parse(rawValue);
         if (!Number.isFinite(parsedDate)) {
             return false;
