@@ -10,12 +10,14 @@
     <link rel="stylesheet" href="_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
     <link rel="stylesheet" href="_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
     <link rel="stylesheet" href="_content/OpenModulePlatform.Web.Shared/css/odv-demo.css" />
+    <link rel="stylesheet" href="_content/OpenModulePlatform.Web.Shared/css/omp-toasts.css" />
     <HeadOutlet />
 </head>
-<body>
+<body data-omp-toasts="true">
     <Routes @rendermode="InteractiveServer" />
     <script src="_content/OpenModulePlatform.Web.Shared/js/portal-topbar.js"></script>
     <script src="_content/OpenModulePlatform.Web.Shared/js/omp-secure-page-navigation.js"></script>
+    <script src="_content/OpenModulePlatform.Web.Shared/js/omp-toasts.js"></script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 </html>
