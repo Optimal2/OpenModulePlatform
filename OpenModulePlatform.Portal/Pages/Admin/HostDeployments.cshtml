@@ -605,8 +605,7 @@
                 <tbody>
                 @foreach (var row in Model.AppDeploymentStates)
                 {
-                    <tr data-state="@row.DeploymentState"
-                        data-interesting="@HostDeploymentsModel.IsInterestingAppDeployment(row).ToString().ToLowerInvariant()"
+                    <tr data-interesting="@HostDeploymentsModel.IsInterestingAppDeployment(row).ToString().ToLowerInvariant()"
                         data-search="@($"{row.HostKey} {row.AppInstanceKey} {row.DisplayName} {row.ArtifactVersion} {row.PackageType} {row.TargetPath} {row.RuntimeName} {row.IdentityCheckStatus} {row.DesiredRuntimeIdentity} {row.ActualRuntimeIdentity} {row.LastError} {row.LastWarning}")">
                         <td><code>@row.HostKey</code></td>
                         <td>
@@ -694,19 +693,17 @@
     }
     else
     {
-        <div class="table-tools" data-ops-table-controls="ompauth-comparison">
-            <div class="form-field">
-                <label for="ompauthComparisonSearch">@L["Filter"]</label>
-                <input id="ompauthComparisonSearch" type="search" data-ops-search placeholder="@L["Search rows"]" />
-            </div>
-            <label class="checkbox-row table-tools__check">
-                <input type="checkbox" data-ops-interesting />
+        <div class="toolbar">
+            <label class="checkbox-row">
+                <input type="checkbox" data-list-toggle="ompauth-comparison-list" data-filter-row-attr="interesting" data-filter-equals="true" data-filter-group="interesting" />
                 <span>@L["Only hosts with mismatches"]</span>
             </label>
-            <span class="muted table-tools__count" data-ops-count></span>
+            <input type="search" class="list-search" data-list-search="ompauth-comparison-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="ompauth-comparison-list" data-template="@L["Showing {0} of {1} rows."]"></span>
         </div>
+        <div class="empty-state" data-list-empty="ompauth-comparison-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid ops-history-table" data-ops-table="ompauth-comparison">
+            <table id="ompauth-comparison-list" class="grid app-instances-grid" data-page-size="50">
                 <thead>
                     <tr>
                         <th>@L["Host"]</th>
@@ -758,7 +755,7 @@
                     </tr>
                     @if (host.Apps.Count > 0)
                     {
-                        <tr>
+                        <tr data-list-follow>
                             <td colspan="5">
                                 <details class="inline-details">
                                     <summary>@L["Show app details"] (@host.Apps.Count)</summary>
@@ -842,6 +839,9 @@
                 </tbody>
             </table>
         </div>
+        <div class="list-show-more">
+            <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="ompauth-comparison-list" hidden>@L["Show more"]</button>
+        </div>
     }
 </section>
 
@@ -855,63 +855,57 @@
     }
     else
     {
-        <div class="table-tools" data-ops-table-controls="artifact-history">
-            <div class="form-field">
-                <label for="artifactStateSearch">@L["Filter"]</label>
-                <input id="artifactStateSearch" type="search" data-ops-search placeholder="@L["Search rows"]" />
-            </div>
-            <div class="form-field">
-                <label for="artifactStateStatus">@L["Status"]</label>
-                <select id="artifactStateStatus" data-ops-status>
-                    <option value="">@L["All statuses"]</option>
-                    <option value="0">@L["Unknown"]</option>
-                    <option value="1">@L["Pending"]</option>
-                    <option value="2">@L["Succeeded"]</option>
-                    <option value="3">@L["Failed"]</option>
-                    <option value="4">@L["Hash mismatch"]</option>
-                </select>
-            </div>
-            <div class="form-field">
-                <label for="artifactStateSince">@L["Time span"]</label>
-                <select id="artifactStateSince" data-ops-since>
-                    <option value="">@L["All time"]</option>
-                    <option value="24" selected>@L["Last 24 hours"]</option>
-                    <option value="168">@L["Last 7 days"]</option>
-                    <option value="720">@L["Last 30 days"]</option>
-                </select>
-            </div>
-            <div class="table-tools__checks">
-                <label class="checkbox-row table-tools__check">
-                    <input type="checkbox" data-ops-interesting checked />
-                    <span>@L["Only rows that need attention"]</span>
-                </label>
-                <label class="checkbox-row table-tools__check">
-                    <input type="checkbox" data-ops-current checked />
-                    <span>@L["Only currently desired artifacts"]</span>
-                </label>
-            </div>
-            <span class="muted table-tools__count" data-ops-count></span>
+        <div class="toolbar">
+            <details class="list-filter" data-list-filter="artifact-history-list">
+                <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                <div class="list-filter__menu">
+                    <fieldset class="list-filter__group" data-filter-group="status">
+                        <legend>@L["Status"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="0" /> @L["Unknown"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="1" /> @L["Pending"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="2" /> @L["Succeeded"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="3" /> @L["Failed"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="4" /> @L["Hash mismatch"]</label>
+                    </fieldset>
+                    <fieldset class="list-filter__group" data-filter-group="timespan">
+                        <legend>@L["Time span"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-max-age-days="1" checked /> @L["Last 24 hours"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-max-age-days="7" /> @L["Last 7 days"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-max-age-days="30" /> @L["Last 30 days"]</label>
+                    </fieldset>
+                    <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                </div>
+            </details>
+            <label class="checkbox-row">
+                <input type="checkbox" data-list-toggle="artifact-history-list" data-filter-row-attr="interesting" data-filter-equals="true" data-filter-group="interesting" checked />
+                <span>@L["Only rows that need attention"]</span>
+            </label>
+            <label class="checkbox-row">
+                <input type="checkbox" data-list-toggle="artifact-history-list" data-filter-row-attr="current" data-filter-equals="true" data-filter-group="current" checked />
+                <span>@L["Only currently desired artifacts"]</span>
+            </label>
+            <input type="search" class="list-search" data-list-search="artifact-history-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="artifact-history-list" data-template="@L["Showing {0} of {1} rows."]"></span>
         </div>
+        <div class="empty-state" data-list-empty="artifact-history-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid ops-history-table" data-ops-table="artifact-history">
+            <table id="artifact-history-list" class="grid app-instances-grid sortable-list" data-sortable-list data-page-size="50">
                 <thead>
                     <tr>
-                        <th><button type="button" data-sort="text">@L["Host key"]</button></th>
-                        <th><button type="button" data-sort="text">@L["App"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Artifact"]</button></th>
-                        <th><button type="button" data-sort="number">@L["Status"]</button></th>
-                        <th><button type="button" data-sort="date">@L["Last checked UTC"]</button></th>
-                        <th><button type="button" data-sort="date">@L["Last provisioned UTC"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Local path"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Error"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host key"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Artifact"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last checked UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last provisioned UTC"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Local path"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Error"]</button></th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach (var row in Model.ArtifactStates)
                 {
-                    <tr data-state="@row.ProvisioningState"
-                        data-row-time="@HostDeploymentsModel.ToUnixTimeMilliseconds(row.LastCheckedUtc)"
-                        data-interesting="@HostDeploymentsModel.IsInterestingArtifactState(row).ToString().ToLowerInvariant()"
+                    <tr data-interesting="@HostDeploymentsModel.IsInterestingArtifactState(row).ToString().ToLowerInvariant()"
                         data-current="@row.IsCurrentlyDesired.ToString().ToLowerInvariant()"
                         data-search="@($"{row.HostKey} {row.AppKey} {row.ArtifactVersion} {row.PackageType} {row.TargetName} {row.LocalPath} {row.LastError}")">
                         <td><code>@row.HostKey</code></td>
@@ -921,7 +915,7 @@
                             <div class="muted">@row.PackageType</div>
                             <div class="muted">@row.TargetName</div>
                         </td>
-                        <td><span class="pill">@L[HostDeploymentsModel.FormatArtifactProvisioningStatus(row.ProvisioningState)]</span></td>
+                        <td data-sort-value="@row.ProvisioningState"><span class="pill">@L[HostDeploymentsModel.FormatArtifactProvisioningStatus(row.ProvisioningState)]</span></td>
                         <td>@row.LastCheckedUtc?.ToString("u")</td>
                         <td>@row.LastProvisionedUtc?.ToString("u")</td>
                         <td><code>@row.LocalPath</code></td>
@@ -931,107 +925,11 @@
                 </tbody>
             </table>
         </div>
+        <div class="list-show-more">
+            <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="artifact-history-list" hidden>@L["Show more"]</button>
+        </div>
     }
 </section>
 
     </div>
 </div>
-
-<script>
-(() => {
-    const now = Date.now();
-
-    const normalize = value => (value || '').toString().trim().toLocaleLowerCase();
-
-    const updateTable = tableName => {
-        const controls = document.querySelector(`[data-ops-table-controls="${tableName}"]`);
-        const table = document.querySelector(`[data-ops-table="${tableName}"]`);
-        if (!controls || !table) {
-            return;
-        }
-
-        const search = normalize(controls.querySelector('[data-ops-search]')?.value);
-        const status = controls.querySelector('[data-ops-status]')?.value ?? '';
-        const sinceHours = Number(controls.querySelector('[data-ops-since]')?.value || 0);
-        const onlyInteresting = controls.querySelector('[data-ops-interesting]')?.checked ?? false;
-        const onlyCurrent = controls.querySelector('[data-ops-current]')?.checked ?? false;
-        const threshold = sinceHours > 0 ? now - (sinceHours * 60 * 60 * 1000) : 0;
-        let visible = 0;
-        let total = 0;
-
-        table.querySelectorAll('tbody tr').forEach(row => {
-            total++;
-            const rowTime = Number(row.dataset.rowTime || 0);
-            const matchesSearch = !search || normalize(row.dataset.search).includes(search);
-            const matchesStatus = !status || row.dataset.state === status;
-            const matchesInteresting = !onlyInteresting || row.dataset.interesting === 'true';
-            const matchesCurrent = !onlyCurrent || row.dataset.current === 'true';
-            const matchesTime = !sinceHours || (rowTime > 0 && rowTime >= threshold);
-            const show = matchesSearch && matchesStatus && matchesInteresting && matchesCurrent && matchesTime;
-            row.hidden = !show;
-            if (show) {
-                visible++;
-            }
-        });
-
-        const count = controls.querySelector('[data-ops-count]');
-        if (count) {
-            count.textContent = `${visible} / ${total}`;
-        }
-    };
-
-    const getCellValue = (row, index, type) => {
-        const text = row.cells[index]?.innerText.trim() ?? '';
-        if (type === 'number') {
-            return Number(row.dataset.state || 0);
-        }
-
-        if (type === 'date') {
-            const parsed = Date.parse(text);
-            return Number.isNaN(parsed) ? 0 : parsed;
-        }
-
-        return normalize(text);
-    };
-
-    document.querySelectorAll('[data-ops-table-controls]').forEach(controls => {
-        const tableName = controls.dataset.opsTableControls;
-        controls.querySelectorAll('input, select').forEach(input => {
-            input.addEventListener('input', () => updateTable(tableName));
-            input.addEventListener('change', () => updateTable(tableName));
-        });
-        updateTable(tableName);
-    });
-
-    document.querySelectorAll('[data-ops-table] th button[data-sort]').forEach(button => {
-        button.addEventListener('click', () => {
-            const table = button.closest('table');
-            const tbody = table?.querySelector('tbody');
-            if (!table || !tbody) {
-                return;
-            }
-
-            const header = button.closest('th');
-            const index = Array.from(header.parentElement.children).indexOf(header);
-            const type = button.dataset.sort;
-            const ascending = button.dataset.direction !== 'asc';
-            button.dataset.direction = ascending ? 'asc' : 'desc';
-
-            const rows = Array.from(tbody.rows);
-            rows.sort((left, right) => {
-                const leftValue = getCellValue(left, index, type);
-                const rightValue = getCellValue(right, index, type);
-                if (leftValue < rightValue) {
-                    return ascending ? -1 : 1;
-                }
-                if (leftValue > rightValue) {
-                    return ascending ? 1 : -1;
-                }
-                return 0;
-            });
-
-            rows.forEach(row => tbody.appendChild(row));
-        });
-    });
-})();
-</script>

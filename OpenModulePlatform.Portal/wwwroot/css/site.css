@@ -7025,75 +7025,6 @@ body.dashboard-widget-picker-open {
     color: var(--text-muted);
 }
 
-.table-tools {
-    display: grid;
-    grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(140px, 1fr)) minmax(260px, 1.4fr) auto;
-    gap: 10px;
-    align-items: end;
-    margin: 14px 0;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface-muted);
-}
-
-.table-tools .form-field {
-    gap: 3px;
-}
-
-.table-tools input,
-.table-tools select {
-    padding: 7px 9px;
-    border-radius: 8px;
-}
-
-.table-tools__check {
-    min-height: 34px;
-    align-self: end;
-    white-space: nowrap;
-}
-
-.table-tools__checks {
-    display: grid;
-    gap: 4px;
-    align-self: end;
-}
-
-.table-tools__checks .table-tools__check {
-    align-self: stretch;
-    min-height: 0;
-    white-space: normal;
-}
-
-.table-tools__count {
-    align-self: center;
-    justify-self: end;
-    min-width: 5.5rem;
-    text-align: right;
-}
-
-.ops-history-table th button[data-sort] {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    width: 100%;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
-    font-weight: 700;
-    padding: 0;
-    text-align: left;
-}
-
-.ops-history-table th button[data-sort]::after {
-    content: "\2195";
-    color: var(--text-muted);
-    font-size: 0.72rem;
-}
-
 .host-resources-latest th a.sortable {
     display: inline-flex;
     align-items: center;
@@ -7143,15 +7074,6 @@ body.dashboard-widget-picker-open {
 
     .file-drop-area__content {
         align-items: flex-start;
-    }
-
-    .table-tools {
-        grid-template-columns: 1fr;
-    }
-
-    .table-tools__count {
-        justify-self: start;
-        text-align: left;
     }
 
     .workers-grid th:last-child,

@@ -141,14 +141,27 @@
         });
     }
 
+    function getListRowGroups(tbody) {
+        const groups = [];
+        Array.from(tbody.rows).forEach((row) => {
+            if (row.hasAttribute('data-list-follow') && groups.length > 0) {
+                groups[groups.length - 1].push(row);
+            } else {
+                groups.push([row]);
+            }
+        });
+
+        return groups;
+    }
+
     function sortTableRows(table, tbody, columnIndex, sortType, direction) {
         const multiplier = direction === 'descending' ? -1 : 1;
-        const rows = Array.from(tbody.rows).map((row, index) => ({ row, index }));
+        const groups = getListRowGroups(tbody).map((group, index) => ({ group, index }));
 
-        rows.sort((left, right) => {
+        groups.sort((left, right) => {
             const comparison = compareSortableValues(
-                getSortableCellValue(left.row.cells[columnIndex], sortType),
-                getSortableCellValue(right.row.cells[columnIndex], sortType),
+                getSortableCellValue(left.group[0].cells[columnIndex], sortType),
+                getSortableCellValue(right.group[0].cells[columnIndex], sortType),
                 sortType);
 
             return comparison === 0
@@ -157,7 +170,7 @@
         });
 
         const fragment = document.createDocumentFragment();
-        rows.forEach(({ row }) => fragment.appendChild(row));
+        groups.forEach(({ group }) => group.forEach((row) => fragment.appendChild(row)));
         tbody.appendChild(fragment);
         table.dispatchEvent(new CustomEvent('sortable-list:sorted', { bubbles: true }));
     }
@@ -254,12 +267,13 @@
             groups.get(groupKey).push(input);
         });
 
-        const rows = Array.from(controller.tbody.rows);
+        const rowGroups = getListRowGroups(controller.tbody);
         const limit = controller.pageSize > 0 ? controller.visibleLimit : Number.POSITIVE_INFINITY;
         let matchingCount = 0;
         let shownCount = 0;
 
-        rows.forEach((row) => {
+        rowGroups.forEach((rowGroup) => {
+            const row = rowGroup[0];
             const matchesSearch = !controller.searchTerm
                 || `${row.getAttribute('data-search') || ''} ${row.textContent}`.toLocaleLowerCase().includes(controller.searchTerm);
             const matches = matchesSearch && Array.from(groups.values()).every((groupInputs) =>
@@ -271,7 +285,9 @@
                 matchingCount += 1;
             }
 
-            row.hidden = !show;
+            rowGroup.forEach((groupRow) => {
+                groupRow.hidden = !show;
+            });
             if (show) {
                 shownCount += 1;
             }
@@ -291,7 +307,7 @@
             const template = controller.countNote.dataset.template || '{0} / {1}';
             controller.countNote.textContent = template
                 .replace('{0}', String(shownCount))
-                .replace('{1}', String(rows.length));
+                .replace('{1}', String(rowGroups.length));
         }
 
         if (controller.showMoreButton) {
