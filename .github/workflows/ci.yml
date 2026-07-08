@@ -18,6 +18,20 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine base commit
+        id: base
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            echo "sha=$env:GITHUB_EVENT_PULL_REQUEST_BASE_SHA" >> $env:GITHUB_OUTPUT
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'push') {
+            echo "sha=$env:GITHUB_EVENT_BEFORE" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "sha=origin/main" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v5
@@ -62,7 +76,7 @@ jobs:
 
       - name: Validate component versions
         shell: pwsh
-        run: .\scripts\omp\validate-component-versions.ps1
+        run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit ${{ steps.base.outputs.sha }}
 
       - name: Restore solution
         run: dotnet restore OpenModulePlatform.slnx

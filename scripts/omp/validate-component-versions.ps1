@@ -125,6 +125,42 @@ function ConvertTo-VersionOrNull {
     return $null
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha256.ComputeHash($bytes)
+        return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+
+function ConvertTo-NormalizedSql {
+    param([Parameter(Mandatory = $true)][string]$SqlText)
+
+    # Strip the historical local development database switch so the same
+    # SQL can be compared across branches/installations.
+    $normalized = [System.Text.RegularExpressions.Regex]::Replace(
+        $SqlText,
+        '(?im)^\s*USE\s+\[OpenModulePlatform\]\s*;\s*\r?\n\s*GO\s*(?:--.*)?\s*(?:\r?\n)?',
+        '')
+
+    # Strip single-line comments.
+    $normalized = [System.Text.RegularExpressions.Regex]::Replace($normalized, '--[^\r\n]*', '')
+
+    # Strip block comments.
+    $normalized = [System.Text.RegularExpressions.Regex]::Replace($normalized, '/\*[\s\S]*?\*/', '')
+
+    # Collapse all whitespace to a single space and trim.
+    $normalized = [System.Text.RegularExpressions.Regex]::Replace($normalized, '\s+', ' ').Trim()
+
+    return $normalized
+}
+
 $scriptDirectory = Get-ScriptDirectory
 $repositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..\..')).Path
 $repositoryRoot = [System.IO.Path]::GetFullPath($repositoryRoot)
@@ -422,6 +458,192 @@ if ($null -ne $sharedProjects) {
 }
 
 # ---------------------------------------------------------------------------
+# Check 8: Module-definition SQL diff enforcement.
+# If an owned SQL script referenced by a production module definition changes
+# in a material way (not just comments or whitespace), the module's
+# definitionVersion must be bumped in both omp-components.json and the
+# .module-definition.json file.
+# ---------------------------------------------------------------------------
+$sqlFilesChecked = 0
+$sqlFilesPassed = 0
+$sqlFilesChanged = 0
+
+if (-not $baseRefAvailable) {
+    Add-ValidationWarning -Warnings $warnings -Message 'No valid base ref available; skipping module-definition SQL diff enforcement (Check 8). Pass -BaseCommit to enable it.'
+}
+else {
+    $baseModuleDefinitionsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    if ($null -ne $baseManifest) {
+        foreach ($baseDefinition in @($baseManifest.moduleDefinitions)) {
+            if ($null -eq $baseDefinition) {
+                continue
+            }
+
+            $key = [string](Get-OptionalPropertyValue -Object $baseDefinition -Name 'moduleKey')
+            if (-not [string]::IsNullOrWhiteSpace($key) -and -not $baseModuleDefinitionsByKey.ContainsKey($key)) {
+                $baseModuleDefinitionsByKey.Add($key, $baseDefinition)
+            }
+        }
+    }
+
+    $ownedSqlFiles = [System.Collections.Generic.List[System.Collections.Hashtable]]::new()
+    foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
+        if ($null -eq $manifestDefinition) {
+            continue
+        }
+
+        $moduleKey = [string](Get-OptionalPropertyValue -Object $manifestDefinition -Name 'moduleKey')
+        $relativeDefinitionPath = [string](Get-OptionalPropertyValue -Object $manifestDefinition -Name 'path')
+
+        if ([string]::IsNullOrWhiteSpace($moduleKey) -or [string]::IsNullOrWhiteSpace($relativeDefinitionPath)) {
+            continue
+        }
+
+        $definitionPath = Resolve-RepositoryPath -Path $relativeDefinitionPath -BasePath $repositoryRoot
+        if (-not (Test-Path -LiteralPath $definitionPath -PathType Leaf)) {
+            continue
+        }
+
+        $definitionText = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+        $definition = ConvertFrom-JsonDocument -Json $definitionText -Depth $jsonDepth
+
+        foreach ($script in @($definition.sqlScripts)) {
+            if ($null -eq $script) {
+                continue
+            }
+
+            $sqlPath = [string](Get-OptionalPropertyValue -Object $script -Name 'path')
+            if ([string]::IsNullOrWhiteSpace($sqlPath)) {
+                continue
+            }
+
+            $alreadyOwned = $false
+            foreach ($ownedSqlFile in $ownedSqlFiles) {
+                if ([string]::Equals($ownedSqlFile.sqlPath, $sqlPath, [StringComparison]::OrdinalIgnoreCase)) {
+                    $alreadyOwned = $true
+                    break
+                }
+            }
+
+            if (-not $alreadyOwned) {
+                $ownedSqlFiles.Add(@{
+                    moduleKey = $moduleKey
+                    relativeDefinitionPath = $relativeDefinitionPath
+                    sqlPath = $sqlPath
+                })
+            }
+        }
+    }
+
+    foreach ($ownedSqlFile in $ownedSqlFiles) {
+        $moduleKey = $ownedSqlFile.moduleKey
+        $relativeDefinitionPath = $ownedSqlFile.relativeDefinitionPath
+        $sqlPath = $ownedSqlFile.sqlPath
+        $fullSqlPath = Resolve-RepositoryPath -Path $sqlPath -BasePath $repositoryRoot
+
+        $sqlFilesChecked++
+
+        if (-not (Test-Path -LiteralPath $fullSqlPath -PathType Leaf)) {
+            Add-ValidationError -Errors $errors -Message "SQL script referenced by module '$moduleKey' was not found: $sqlPath"
+            continue
+        }
+
+        $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $sqlPath 2>$null)
+        if ([string]::IsNullOrWhiteSpace($changedFiles)) {
+            $sqlFilesPassed++
+            continue
+        }
+
+        $headText = Get-Content -LiteralPath $fullSqlPath -Raw -Encoding UTF8
+
+        $baseTextLines = @(git -C $repositoryRoot show "$baseRef`:$sqlPath" 2>$null)
+        $baseText = $baseTextLines -join "`n"
+        $isNewFile = [string]::IsNullOrWhiteSpace($baseText)
+
+        $headNormalized = ConvertTo-NormalizedSql -SqlText $headText
+        $baseNormalized = ConvertTo-NormalizedSql -SqlText $baseText
+
+        $headHash = Get-Sha256Hex -Text $headNormalized
+        $baseHash = Get-Sha256Hex -Text $baseNormalized
+
+        if (-not $isNewFile -and $headHash -eq $baseHash) {
+            $sqlFilesPassed++
+            continue
+        }
+
+        $sqlFilesChanged++
+
+        $headManifestDefinitionVersion = [string](Get-OptionalPropertyValue -Object $moduleDefinitionsByKey[$moduleKey] -Name 'definitionVersion')
+        $baseManifestDefinitionVersion = $null
+        if ($baseModuleDefinitionsByKey.ContainsKey($moduleKey)) {
+            $baseManifestDefinitionVersion = [string](Get-OptionalPropertyValue -Object $baseModuleDefinitionsByKey[$moduleKey] -Name 'definitionVersion')
+        }
+
+        $manifestBumpPresent = $false
+        if ([string]::IsNullOrWhiteSpace($baseManifestDefinitionVersion)) {
+            $manifestBumpPresent = -not [string]::IsNullOrWhiteSpace($headManifestDefinitionVersion)
+        }
+        else {
+            $manifestBumpPresent = -not [string]::Equals($baseManifestDefinitionVersion, $headManifestDefinitionVersion, [StringComparison]::Ordinal)
+        }
+
+        $headDefinitionText = Get-Content -LiteralPath (Resolve-RepositoryPath -Path $relativeDefinitionPath -BasePath $repositoryRoot) -Raw -Encoding UTF8
+        $headDefinition = ConvertFrom-JsonDocument -Json $headDefinitionText -Depth $jsonDepth
+        $headDefinitionVersion = [string](Get-OptionalPropertyValue -Object $headDefinition -Name 'definitionVersion')
+
+        $baseDefinitionTextLines = @(git -C $repositoryRoot show "$baseRef`:$relativeDefinitionPath" 2>$null)
+        $baseDefinitionText = $baseDefinitionTextLines -join "`n"
+        $baseDefinitionVersion = $null
+        if (-not [string]::IsNullOrWhiteSpace($baseDefinitionText)) {
+            $baseDefinition = ConvertFrom-JsonDocument -Json $baseDefinitionText -Depth $jsonDepth
+            $baseDefinitionVersion = [string](Get-OptionalPropertyValue -Object $baseDefinition -Name 'definitionVersion')
+        }
+
+        $definitionBumpPresent = $false
+        if ([string]::IsNullOrWhiteSpace($baseDefinitionVersion)) {
+            $definitionBumpPresent = -not [string]::IsNullOrWhiteSpace($headDefinitionVersion)
+        }
+        else {
+            $definitionBumpPresent = -not [string]::Equals($baseDefinitionVersion, $headDefinitionVersion, [StringComparison]::Ordinal)
+        }
+
+        if (-not $manifestBumpPresent -or -not $definitionBumpPresent) {
+            Add-ValidationError -Errors $errors -Message "SQL '$sqlPath' changed (module '$moduleKey') but definitionVersion was not bumped in omp-components.json and/or the module-definition JSON. Bump definitionVersion, re-run scripts/dev/embed-module-definition-sql.ps1, and update relevant minModuleDefinitionVersion values."
+        }
+        else {
+            $newDefinitionVersion = $headManifestDefinitionVersion
+            $newDefinitionVersionObj = ConvertTo-VersionOrNull -Value $newDefinitionVersion
+
+            foreach ($component in @($manifest.components)) {
+                if ($null -eq $component) {
+                    continue
+                }
+
+                $componentModuleKey = [string](Get-OptionalPropertyValue -Object $component -Name 'moduleKey')
+                if (-not [string]::Equals($componentModuleKey, $moduleKey, [StringComparison]::Ordinal)) {
+                    continue
+                }
+
+                $minModuleDefinitionVersion = [string](Get-OptionalPropertyValue -Object $component -Name 'minModuleDefinitionVersion')
+                if ([string]::IsNullOrWhiteSpace($minModuleDefinitionVersion)) {
+                    continue
+                }
+
+                $minVersionObj = ConvertTo-VersionOrNull -Value $minModuleDefinitionVersion
+                if ($null -ne $minVersionObj -and $null -ne $newDefinitionVersionObj -and $minVersionObj -lt $newDefinitionVersionObj) {
+                    $componentKey = [string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')
+                    if ([string]::IsNullOrWhiteSpace($componentKey)) {
+                        $componentKey = '<unknown>'
+                    }
+
+                    Add-ValidationWarning -Warnings $warnings -Message "Component '$componentKey' has minModuleDefinitionVersion '$minModuleDefinitionVersion' which is less than the new definitionVersion '$newDefinitionVersion' for module '$moduleKey'. Consider updating minModuleDefinitionVersion."
+                }
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Assembly version documentation (informational only, not enforced).
 # ---------------------------------------------------------------------------
 Write-Host 'Assembly version note:'
@@ -458,6 +680,10 @@ Write-Host "$checkMark $moduleMappingCount component-to-module mappings validate
 
 if ($sharedProjectCount -gt 0 -and ($cascadeCheckCount -gt 0 -or $cascadeErrorCount -gt 0)) {
     Write-Host "$checkMark $cascadeCheckCount of $sharedProjectCount changed shared project(s) passed cascade bump validation ($cascadeErrorCount error(s))"
+}
+
+if ($sqlFilesChecked -gt 0) {
+    Write-Host "$checkMark $sqlFilesPassed of $sqlFilesChecked owned SQL file(s) passed diff validation ($sqlFilesChanged changed)"
 }
 
 if ($warnings.Count -gt 0) {
