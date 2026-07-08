@@ -244,7 +244,9 @@
     function refreshListController(controller) {
         const groups = new Map();
         controller.filterInputs.filter((input) => input.checked).forEach((input) => {
-            const groupKey = input.closest('[data-filter-group]')?.getAttribute('data-filter-group') || input.dataset.filterColumn;
+            const groupKey = input.closest('[data-filter-group]')?.getAttribute('data-filter-group')
+                || input.dataset.filterColumn
+                || input.dataset.filterRowAttr;
             if (!groups.has(groupKey)) {
                 groups.set(groupKey, []);
             }
@@ -259,7 +261,7 @@
 
         rows.forEach((row) => {
             const matchesSearch = !controller.searchTerm
-                || row.textContent.toLocaleLowerCase().includes(controller.searchTerm);
+                || `${row.getAttribute('data-search') || ''} ${row.textContent}`.toLocaleLowerCase().includes(controller.searchTerm);
             const matches = matchesSearch && Array.from(groups.values()).every((groupInputs) =>
                 groupInputs.some((input) => rowMatchesFilter(row, input)));
 
@@ -318,9 +320,10 @@
 
             controller.filterElement = filter;
             controller.filterBadge = filter.querySelector('[data-filter-count]');
-            controller.filterInputs = Array.from(filter.querySelectorAll('input[type="checkbox"][data-filter-column]'));
+            const filterInputs = Array.from(filter.querySelectorAll('input[type="checkbox"][data-filter-column]'));
+            controller.filterInputs.push(...filterInputs);
 
-            controller.filterInputs.forEach((input) => input.addEventListener('change', () => {
+            filterInputs.forEach((input) => input.addEventListener('change', () => {
                 controller.visibleLimit = controller.pageSize;
                 refreshListController(controller);
             }));
@@ -366,6 +369,24 @@
             });
         });
 
+        root.querySelectorAll('input[type="checkbox"][data-list-toggle]').forEach((toggle) => {
+            if (toggle.dataset.listToggleInitialized === 'true') {
+                return;
+            }
+
+            const controller = getListController(toggle.dataset.listToggle);
+            if (!controller) {
+                return;
+            }
+
+            toggle.dataset.listToggleInitialized = 'true';
+            controller.filterInputs.push(toggle);
+            toggle.addEventListener('change', () => {
+                controller.visibleLimit = controller.pageSize;
+                refreshListController(controller);
+            });
+        });
+
         root.querySelectorAll('table[data-page-size]').forEach((table) => {
             getListController(table.id);
         });
@@ -376,9 +397,14 @@
     }
 
     function rowMatchesFilter(row, input) {
-        const columnIndex = Number.parseInt(input.dataset.filterColumn, 10);
-        const cell = row.cells[columnIndex];
-        const rawValue = (cell?.getAttribute('data-sort-value') || cell?.textContent || '').trim();
+        let rawValue;
+        if (input.dataset.filterRowAttr !== undefined) {
+            rawValue = (row.getAttribute(`data-${input.dataset.filterRowAttr}`) || '').trim();
+        } else {
+            const columnIndex = Number.parseInt(input.dataset.filterColumn, 10);
+            const cell = row.cells[columnIndex];
+            rawValue = (cell?.getAttribute('data-sort-value') || cell?.textContent || '').trim();
+        }
 
         if (input.dataset.filterEquals !== undefined) {
             return rawValue === input.dataset.filterEquals;
