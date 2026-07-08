@@ -10,12 +10,13 @@
     <link rel="stylesheet" href="~/css/site.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
+    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-toasts.css" />
     @if (ViewData["OmpPreventBackCache"] is true)
     {
         <meta name="omp-prevent-back-cache" content="true" />
     }
 </head>
-<body class="@(hideModuleTopbar ? "iframe-layout iframe-layout--standalone" : "iframe-layout")">
+<body class="@(hideModuleTopbar ? "iframe-layout iframe-layout--standalone" : "iframe-layout")" data-omp-toasts="true">
     <header class="app-header">
         @await Component.InvokeAsync("PortalTopBar")
         @if (!hideModuleTopbar)
@@ -39,5 +40,6 @@
     </main>
     <script src="~/_content/OpenModulePlatform.Web.Shared/js/portal-topbar.js"></script>
     <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-secure-page-navigation.js"></script>
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-toasts.js"></script>
 </body>
 </html>
