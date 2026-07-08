@@ -510,6 +510,8 @@ public static class OmpWebHostingExtensions
             NotificationService notificationService,
             MessageService messageService,
             IOptions<WebAppOptions> webAppOptions,
+            long? afterNotificationId,
+            long? afterMessageId,
             CancellationToken ct) =>
         {
             if (context.User.Identity?.IsAuthenticated != true)
@@ -536,9 +538,9 @@ public static class OmpWebHostingExtensions
                 ct,
                 limit: DefaultNotificationPageSize);
 
-            return Results.Json(new
+            var response = new Dictionary<string, object>
             {
-                notifications = new
+                ["notifications"] = new
                 {
                     unreadCount = notificationUnreadCount,
                     items = notifications.Select(row => new
@@ -556,7 +558,7 @@ public static class OmpWebHostingExtensions
                     }),
                     hasMore = notifications.Count >= DefaultNotificationPageSize
                 },
-                messages = new
+                ["messages"] = new
                 {
                     unreadCount = messageUnreadCount,
                     items = messageConversations.Select(row => new
@@ -574,7 +576,48 @@ public static class OmpWebHostingExtensions
                             $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}")
                     })
                 }
-            });
+            };
+
+            if (afterNotificationId.HasValue)
+            {
+                var notificationSummary = await notificationService.GetToastSummaryForUserAsync(
+                    userId.Value,
+                    afterNotificationId,
+                    limit: 5,
+                    ct);
+
+                response["latestNotificationId"] = notificationSummary.LatestNotificationId;
+                response["newNotificationCount"] = notificationSummary.NewNotificationCount;
+                response["newNotifications"] = notificationSummary.NewNotifications.Select(row => new
+                {
+                    notificationId = row.NotificationId,
+                    title = row.Title,
+                    content = ToToastSnippet(row.Content),
+                    targetUrl = IsSafeLocalDestination(row.DestinationUrl) ? row.DestinationUrl : "/notifications"
+                });
+            }
+
+            if (afterMessageId.HasValue)
+            {
+                var messageSummary = await messageService.GetToastSummaryForUserAsync(
+                    userId.Value,
+                    afterMessageId,
+                    limit: 5,
+                    ct);
+
+                response["latestMessageId"] = messageSummary.LatestMessageId;
+                response["newMessageCount"] = messageSummary.NewMessageCount;
+                response["newMessages"] = messageSummary.NewMessages.Select(row => new
+                {
+                    messageId = row.MessageId,
+                    conversationId = row.ConversationId,
+                    title = row.Title,
+                    content = ToToastSnippet(row.Content),
+                    targetUrl = $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}"
+                });
+            }
+
+            return Results.Json(response);
         }).AllowAnonymous();
 
         app.MapGet(NotificationService.RecentPath, async (
@@ -930,6 +973,23 @@ public static class OmpWebHostingExtensions
         {
             return false;
         }
+    }
+
+    private static bool IsSafeLocalDestination(string? destinationUrl)
+        => !string.IsNullOrWhiteSpace(destinationUrl)
+           && destinationUrl.StartsWith("/", StringComparison.Ordinal)
+           && !destinationUrl.StartsWith("//", StringComparison.Ordinal)
+           && !destinationUrl.Contains('\\', StringComparison.Ordinal);
+
+    private static string ToToastSnippet(string value)
+    {
+        var normalized = string.Join(
+            " ",
+            value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        return normalized.Length <= 180
+            ? normalized
+            : string.Concat(normalized.AsSpan(0, 177), "...");
     }
 
     private static Guid? TryParseGuid(string? value)
