@@ -194,22 +194,21 @@
 .section-navigator__chevron::before,
 .section-navigator__chevron::after {
     position: absolute;
-    top: 50%;
-    left: 50%;
+    inset: 0;
+    margin: auto;
     content: "";
     border-radius: 999px;
     background: var(--surface);
-    transform: translate(-50%, -50%);
 }
 
 .section-navigator__chevron::before {
-    width: 5px;
-    height: 1.5px;
+    width: 6px;
+    height: 2px;
 }
 
 .section-navigator__chevron::after {
-    width: 1.5px;
-    height: 5px;
+    width: 2px;
+    height: 6px;
     opacity: 1;
     transition: opacity 120ms ease;
 }
