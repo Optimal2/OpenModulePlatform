@@ -1659,6 +1659,7 @@ ORDER BY HostKey,
         await conn.OpenAsync(ct);
 
         var hasIdentityColumns = await ColumnExistsAsync(conn, "omp.HostAppDeploymentStates", "IdentityCheckStatus", ct);
+        var hasLastWarningColumn = await ColumnExistsAsync(conn, "omp.HostAppDeploymentStates", "LastWarning", ct);
         var identityColumns = hasIdentityColumns
             ? @",
        s.CredentialAutomationMode,
@@ -1674,6 +1675,9 @@ ORDER BY HostKey,
        CAST(NULL AS nvarchar(40)) AS IdentityCheckStatus,
        CAST(NULL AS datetime2(3)) AS IdentityRepairRequestedUtc,
        CAST(NULL AS nvarchar(256)) AS IdentityRepairRequestedBy";
+        var lastWarningColumn = hasLastWarningColumn
+            ? "s.LastWarning"
+            : "CAST(NULL AS nvarchar(4000)) AS LastWarning";
 
         var sql = $@"
 SELECT TOP (100)
@@ -1690,7 +1694,7 @@ SELECT TOP (100)
        s.LastCheckedUtc,
        s.LastAppliedUtc,
        s.LastError,
-       s.LastWarning
+       {lastWarningColumn}
        {identityColumns}
 FROM omp.HostAppDeploymentStates s
 INNER JOIN omp.Hosts h ON h.HostId = s.HostId
@@ -1731,6 +1735,19 @@ ORDER BY COALESCE(s.LastCheckedUtc, s.UpdatedUtc, s.CreatedUtc) DESC, h.HostKey,
 
     public async Task<IReadOnlyList<HostOmpAuthComparisonRawRow>> GetHostOmpAuthComparisonsAsync(CancellationToken ct)
     {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var hasEffectiveOmpAuthColumns =
+            await ColumnExistsAsync(conn, "omp.HostAppDeploymentStates", "EffectiveOmpAuthCookieName", ct)
+            && await ColumnExistsAsync(conn, "omp.HostAppDeploymentStates", "EffectiveOmpAuthApplicationName", ct)
+            && await ColumnExistsAsync(conn, "omp.HostAppDeploymentStates", "EffectiveOmpAuthDataProtectionKeyPath", ct);
+
+        if (!hasEffectiveOmpAuthColumns)
+        {
+            return Array.Empty<HostOmpAuthComparisonRawRow>();
+        }
+
         const string sql = @"
 SELECT h.HostId,
        h.HostKey,
@@ -1755,8 +1772,6 @@ WHERE h.IsEnabled = 1
 ORDER BY h.HostKey, ai.AppInstanceKey;";
 
         var rows = new List<HostOmpAuthComparisonRawRow>();
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
