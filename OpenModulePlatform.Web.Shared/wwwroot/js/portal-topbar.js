@@ -42,6 +42,7 @@
         root: null,
         timer: 0,
         running: false,
+        summaryPollInFlight: false,
         failures: 0,
         handlersRegistered: false,
         mode: TOPBAR_UPDATE_MANUAL_MODE,
@@ -589,6 +590,53 @@
             : String(Math.max(0, count));
     }
 
+    function parseBadgeCount(badge) {
+        if (!badge) {
+            return 0;
+        }
+
+        var text = badge.textContent || '';
+        if (text.slice(-1) === '+') {
+            return Number(text.slice(0, -1)) || 0;
+        }
+
+        return Number(text) || 0;
+    }
+
+    function decrementBadgeCount(root, badgeSelector, afterUpdate) {
+        if (!root) {
+            return;
+        }
+
+        var badge = root.querySelector(badgeSelector);
+        if (!badge) {
+            return;
+        }
+
+        var next = Math.max(0, parseBadgeCount(badge) - 1);
+        badge.textContent = notificationBadgeText(next);
+        badge.hidden = next === 0;
+
+        if (typeof afterUpdate === 'function') {
+            afterUpdate(root, next);
+        }
+    }
+
+    function decrementNotificationBadge(root) {
+        decrementBadgeCount(root, '[data-portal-topbar-notification-badge]', function (badgeRoot, nextCount) {
+            updateNotificationMarkAllState(badgeRoot, nextCount);
+        });
+    }
+
+    function decrementMessageBadge(root) {
+        decrementBadgeCount(root, '[data-portal-topbar-message-badge]', function (badgeRoot, nextCount) {
+            var markAll = badgeRoot.querySelector('[data-portal-topbar-message-mark-all-form]');
+            if (markAll) {
+                markAll.hidden = nextCount === 0;
+            }
+        });
+    }
+
     function updateNotificationBadge(root, count) {
         if (!root) {
             return;
@@ -927,6 +975,11 @@
             var root = form.closest('[data-portal-topbar-root]');
             var button = form.querySelector('button[type="submit"]');
             var didNavigate = false;
+            var wasUnread = form.classList.contains('is-unread');
+            if (wasUnread) {
+                decrementNotificationBadge(root);
+            }
+
             if (button) {
                 button.disabled = true;
             }
@@ -1002,6 +1055,14 @@
 
             var root = form.closest('[data-portal-topbar-root]');
             var button = form.querySelector('button[type="submit"]');
+            var list = root ? root.querySelector('[data-portal-topbar-notifications-list]') : null;
+            if (list) {
+                list.querySelectorAll('[data-portal-topbar-notification-form]').forEach(markNotificationRowRead);
+            }
+
+            updateNotificationBadge(root, 0);
+            updateNotificationEmptyState(root);
+
             if (button) {
                 button.disabled = true;
             }
@@ -1079,6 +1140,8 @@
 
             var root = form.closest('[data-portal-topbar-root]');
             var button = form.querySelector('button[type="submit"]');
+            updateMessageBadge(root, 0);
+
             if (button) {
                 button.disabled = true;
             }
@@ -1625,11 +1688,12 @@
 
     async function runTopbarSummaryRefreshForRoot(root) {
         var config = getTopbarPollingConfig(root);
-        if (!config.url || topbarPollingState.running) {
+        if (!config.url || topbarPollingState.summaryPollInFlight) {
             return;
         }
 
         topbarPollingState.running = true;
+        topbarPollingState.summaryPollInFlight = true;
         try {
             var payload = await fetchTopbarJson(config.url);
             applyTopbarSummary(payload);
@@ -1639,6 +1703,7 @@
             }
         } finally {
             topbarPollingState.running = false;
+            topbarPollingState.summaryPollInFlight = false;
         }
     }
 
@@ -1699,12 +1764,12 @@
             return;
         }
 
-        if (topbarPollingState.running) {
-            scheduleTopbarSummaryRefresh(force ? 250 : config.visibleInterval, !!force);
+        if (topbarPollingState.summaryPollInFlight) {
             return;
         }
 
         topbarPollingState.running = true;
+        topbarPollingState.summaryPollInFlight = true;
         try {
             var payload = await fetchTopbarJson(config.url);
             topbarPollingState.failures = 0;
@@ -1716,6 +1781,7 @@
             }
         } finally {
             topbarPollingState.running = false;
+            topbarPollingState.summaryPollInFlight = false;
             if (isTopbarAutomaticRefreshActive(getTopbarPollingConfig(topbarPollingState.root))) {
                 scheduleTopbarSummaryRefresh(getTopbarPollingDelay(config), false);
             }
