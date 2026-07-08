@@ -508,24 +508,30 @@ public sealed class ArtifactZipImportService
         var appliedVersion = await _repository.GetAppliedModuleDefinitionVersionAsync(
             definition.ModuleKey,
             cancellationToken);
-        if (!string.IsNullOrWhiteSpace(appliedVersion)
-            && ArtifactVersionComparer.Compare(appliedVersion, definition.DefinitionVersion) > 0)
+        var installedVersionIsStrictlyNewer = !string.IsNullOrWhiteSpace(appliedVersion)
+            && ArtifactVersionComparer.Compare(appliedVersion, definition.DefinitionVersion) > 0;
+
+        var requiresPreApplySqlRepairs = RequiresPreApplySqlRepairs(definition);
+        var repairs = 0;
+
+        // Platform-core schema repairs must run even when the installed definition
+        // version is newer than the package version, so old installations can bridge
+        // schema gaps such as newly introduced columns.
+        if (requiresPreApplySqlRepairs)
+        {
+            repairs = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+                saveResult.ModuleDefinitionDocumentId,
+                cancellationToken);
+        }
+
+        if (installedVersionIsStrictlyNewer)
         {
             return new ModuleDefinitionImportResult(
                 definition.ModuleKey,
                 definition.DefinitionVersion,
                 saveResult.ModuleDefinitionDocumentId,
                 Applied: false,
-                SqlRepairCount: 0);
-        }
-
-        var requiresPreApplySqlRepairs = RequiresPreApplySqlRepairs(definition);
-        var repairs = 0;
-        if (requiresPreApplySqlRepairs)
-        {
-            repairs = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
-                saveResult.ModuleDefinitionDocumentId,
-                cancellationToken);
+                repairs);
         }
 
         var applied = await _repository.ApplyImportedModuleDefinitionAsync(
