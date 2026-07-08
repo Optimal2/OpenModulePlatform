@@ -418,6 +418,47 @@ schema, Portal, and HostAgent. Remaining modules can then be added from Portal,
 from a controlled installer, or from an import folder without coupling every
 module to the base installer.
 
+### Import is version-gated, not schema-gated
+
+A common operator mistake is to assume that importing the latest artifact zip
+automatically brings the database schema up to date. It does not. Artifact
+import only creates or updates `omp.Artifacts` rows; it never executes
+module-definition SQL. Schema changes are applied only when a module
+definition with a **newer** `definitionVersion` is applied.
+
+The version gate works like this:
+
+- Portal and HostAgent record the latest applied `definitionVersion` per
+  module. That version is the contract currently in force.
+- When an artifact zip is imported, the import validates the artifact against
+  the already-applied definition. It does not re-evaluate the module SQL
+  scripts.
+- If the SQL in the source repository has changed but `definitionVersion` was
+  not bumped, the new SQL is present in the package but ignored, because the
+  applied definition version is already equal or newer.
+
+This means uploading a package with "all latest code" can still leave the
+database schema behind if the definition version was already bumped in a
+previous import. The safe operator mental model is:
+
+> Uploading a package does NOT guarantee schema migration; it only runs SQL if
+> the package's `definitionVersion` is newer than what is registered.
+
+When schema is behind:
+
+1. Verify the symptom in Portal (`/admin/moduledefinitions`) or with the
+   module-specific validation script. Missing columns, unhealthy validation
+   results, or runtime errors in module code can all indicate a stale schema.
+2. Re-run the module's idempotent setup/repair SQL. For the OMP core schema
+   this is `sql/1-setup-openmoduleplatform.sql`. Module-owned scripts are
+   listed in the module definition's `sqlScripts` array.
+3. After the SQL succeeds, refresh or re-apply the module definition so the
+   applied version matches the intended contract and the integrity matrix
+   shows green.
+
+Because the setup script is idempotent, running it again is safe and is the
+expected recovery path.
+
 ## Portal Administration
 
 Portal admins can upload module definition JSON files from
