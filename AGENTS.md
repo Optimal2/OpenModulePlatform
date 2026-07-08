@@ -29,6 +29,24 @@ Parallel file reads and searches are fine. Build/publish/package work must be
 sequential: build OpenModulePlatform first when shared platform projects may be
 involved, then build one dependent repository at a time.
 
+## Module-definition SQL changes
+
+When a module-definition-owned SQL file changes, the same commit/change must
+also:
+
+1. Bump the `definitionVersion` of the affected `.module-definition.json`.
+2. Re-run `scripts/dev/embed-module-definition-sql.ps1` so the embedded
+   `inlineSql`/`content` and `sha256` reflect the new SQL.
+3. Update `minModuleDefinitionVersion` in `omp-components.json` for every
+   component that requires the new module contract.
+
+This rule applies to platform-core definitions (for example
+`omp_core.module-definition.json`) as well as module-specific definitions.
+Never change module SQL and rely on a later artifact import to "pick it up";
+artifact import is version-gated and will skip the new SQL unless
+`definitionVersion` is newer than the version already applied in the target
+database.
+
 ## Security / antivirus compatibility
 
 This environment uses Bitdefender on Windows. PowerShell-heavy or suspicious command lines may be blocked.
