@@ -170,7 +170,7 @@
         </div>
         <div class="empty-state" data-list-empty="banners-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table id="banners-list" class="data-table sortable-list" data-sortable-list data-page-size="50">
+            <table id="banners-list" class="grid sortable-list" data-sortable-list data-page-size="50">
                 <thead>
                     <tr>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Title"]</button></th>
@@ -197,20 +197,22 @@
                                 <div>@L["Starts"]: @(row.StartsAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
                                 <div>@L["Expires"]: @(row.ExpiresAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
                             </td>
-                            <td class="actions-cell">
-                                <a class="admin-icon-button admin-icon-button--edit" asp-page="/Admin/Banners" asp-route-bannerId="@row.BannerId" title="@L["Edit"]" aria-label="@L["Edit"]">
-                                    <span class="visually-hidden">@L["Edit"]</span>
-                                </a>
-                                @if (!string.Equals(row.Status, "disabled", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    <form method="post" asp-page-handler="Disable" asp-route-bannerId="@row.BannerId" data-enhance="false">
-                                        <button type="submit"
-                                                class="btn-danger-subtle"
-                                                data-confirm="@L["Disable this banner?"]">
-                                            @L["Disable"]
-                                        </button>
-                                    </form>
-                                }
+                            <td class="admin-action-cell">
+                                <div class="admin-icon-actions">
+                                    <a class="admin-icon-button admin-icon-button--edit" asp-page="/Admin/Banners" asp-route-bannerId="@row.BannerId" title="@L["Edit"]" aria-label="@L["Edit"]">
+                                        <span class="visually-hidden">@L["Edit"]</span>
+                                    </a>
+                                    @if (!string.Equals(row.Status, "disabled", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <form method="post" asp-page-handler="Disable" asp-route-bannerId="@row.BannerId" data-enhance="false">
+                                            <button type="submit"
+                                                    class="btn-danger-subtle"
+                                                    data-confirm="@L["Disable this banner?"]">
+                                                @L["Disable"]
+                                            </button>
+                                        </form>
+                                    }
+                                </div>
                             </td>
                         </tr>
                     }
