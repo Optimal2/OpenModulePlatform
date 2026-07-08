@@ -2405,6 +2405,27 @@ code {
     cursor: help;
 }
 
+.info-badge.is-open {
+    border-color: var(--link);
+    background: var(--accent);
+    color: var(--link-hover);
+}
+
+.info-popover {
+    position: fixed;
+    max-width: 340px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 400;
+    line-height: 1.4;
+    box-shadow: var(--shadow);
+    z-index: 100;
+}
+
 .example-token {
     display: inline-block;
     margin: 0.1rem 0.2rem 0.1rem 0;

@@ -415,12 +415,78 @@
         return false;
     }
 
+    let activeInfoPopover = null;
+    let activeInfoBadge = null;
+
+    function closeInfoPopover() {
+        activeInfoPopover?.remove();
+        activeInfoBadge?.classList.remove('is-open');
+        activeInfoPopover = null;
+        activeInfoBadge = null;
+    }
+
+    function openInfoPopover(badge, text) {
+        closeInfoPopover();
+
+        const popover = document.createElement('div');
+        popover.className = 'info-popover';
+        popover.textContent = text;
+        document.body.appendChild(popover);
+
+        const rect = badge.getBoundingClientRect();
+        const maxLeft = window.innerWidth - popover.offsetWidth - 8;
+        popover.style.top = `${rect.bottom + 6}px`;
+        popover.style.left = `${Math.max(8, Math.min(rect.left, maxLeft))}px`;
+
+        badge.classList.add('is-open');
+        activeInfoPopover = popover;
+        activeInfoBadge = badge;
+    }
+
+    function initInfoBadges(root) {
+        root.querySelectorAll('.info-badge').forEach((badge) => {
+            if (badge.dataset.infoBadgeInitialized === 'true') {
+                return;
+            }
+
+            const text = (badge.getAttribute('title') || badge.getAttribute('aria-label') || '').trim();
+            if (!text) {
+                return;
+            }
+
+            badge.dataset.infoBadgeInitialized = 'true';
+            badge.addEventListener('click', (event) => {
+                event.stopPropagation();
+                if (activeInfoBadge === badge) {
+                    closeInfoPopover();
+                } else {
+                    openInfoPopover(badge, text);
+                }
+            });
+
+            badge.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    badge.click();
+                }
+            });
+        });
+    }
+
+    document.addEventListener('click', closeInfoPopover);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeInfoPopover();
+        }
+    });
+
     function initAll() {
         initAppHeaderOffset();
         document.querySelectorAll('[data-portal-entries-root]').forEach(initPortalEntries);
         initSortableLists(document);
         initListFilters(document);
         initListEnhancements(document);
+        initInfoBadges(document);
         listControllers.forEach((controller) => {
             refreshListController(controller);
             if (controller.viewport && controller.viewport.offsetHeight > 0) {
