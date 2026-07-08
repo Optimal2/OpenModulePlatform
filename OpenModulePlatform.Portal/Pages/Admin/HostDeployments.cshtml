@@ -561,44 +561,45 @@
     }
     else
     {
-        <div class="table-tools" data-ops-table-controls="app-deployments">
-            <div class="form-field">
-                <label for="appDeploymentSearch">@L["Filter"]</label>
-                <input id="appDeploymentSearch" type="search" data-ops-search placeholder="@L["Search rows"]" />
-            </div>
-            <div class="form-field">
-                <label for="appDeploymentStatus">@L["Status"]</label>
-                <select id="appDeploymentStatus" data-ops-status>
-                    <option value="">@L["All statuses"]</option>
-                    <option value="0">@L["Pending"]</option>
-                    <option value="1">@L["Running"]</option>
-                    <option value="2">@L["Succeeded"]</option>
-                    <option value="3">@L["Failed"]</option>
-                    <option value="4">@L["Warning"]</option>
-                </select>
-            </div>
-            <label class="checkbox-row table-tools__check">
-                <input type="checkbox" data-ops-interesting />
+        <div class="toolbar">
+            <details class="list-filter" data-list-filter="app-deployments-list">
+                <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                <div class="list-filter__menu">
+                    <fieldset class="list-filter__group" data-filter-group="status">
+                        <legend>@L["Status"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="0" /> @L["Pending"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="1" /> @L["Running"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="2" /> @L["Succeeded"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="3" /> @L["Failed"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="4" /> @L["Warning"]</label>
+                    </fieldset>
+                    <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                </div>
+            </details>
+            <label class="checkbox-row">
+                <input type="checkbox" data-list-toggle="app-deployments-list" data-filter-row-attr="interesting" data-filter-equals="true" data-filter-group="interesting" />
                 <span>@L["Only rows that need attention"]</span>
             </label>
-            <span class="muted table-tools__count" data-ops-count></span>
+            <input type="search" class="list-search" data-list-search="app-deployments-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="app-deployments-list" data-template="@L["Showing {0} of {1} rows."]"></span>
         </div>
+        <div class="empty-state" data-list-empty="app-deployments-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid ops-history-table" data-ops-table="app-deployments">
+            <table id="app-deployments-list" class="grid app-instances-grid sortable-list" data-sortable-list data-page-size="50">
                 <thead>
                     <tr>
-                        <th><button type="button" data-sort="text">@L["Host key"]</button></th>
-                        <th><button type="button" data-sort="text">@L["App instance"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Artifact"]</button></th>
-                        <th><button type="button" data-sort="number">@L["Status"]</button></th>
-                        <th><button type="button" data-sort="date">@L["Last checked UTC"]</button></th>
-                        <th><button type="button" data-sort="date">@L["Last applied UTC"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Target path"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Runtime"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Identity"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Error"]</button></th>
-                        <th><button type="button" data-sort="text">@L["Warning"]</button></th>
-                        <th>@L["Actions"]</th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host key"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App instance"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Artifact"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last checked UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last applied UTC"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Target path"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Runtime"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Identity"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Error"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Warning"]</button></th>
+                        <th scope="col">@L["Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -616,7 +617,7 @@
                             <div>@row.ArtifactVersion</div>
                             <div class="muted">@row.PackageType</div>
                         </td>
-                        <td><span class="pill">@L[HostDeploymentsModel.FormatHostDeploymentStatus(row.DeploymentState)]</span></td>
+                        <td data-sort-value="@row.DeploymentState"><span class="pill">@L[HostDeploymentsModel.FormatHostDeploymentStatus(row.DeploymentState)]</span></td>
                         <td>@row.LastCheckedUtc?.ToString("u")</td>
                         <td>@row.LastAppliedUtc?.ToString("u")</td>
                         <td><code>@row.TargetPath</code></td>
@@ -676,6 +677,9 @@
                 }
                 </tbody>
             </table>
+        </div>
+        <div class="list-show-more">
+            <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="app-deployments-list" hidden>@L["Show more"]</button>
         </div>
     }
 </section>
