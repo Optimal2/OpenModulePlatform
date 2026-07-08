@@ -24,11 +24,14 @@ jobs:
       - name: Determine base commit
         id: base
         shell: pwsh
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            echo "sha=$env:GITHUB_EVENT_PULL_REQUEST_BASE_SHA" >> $env:GITHUB_OUTPUT
-          } elseif ($env:GITHUB_EVENT_NAME -eq 'push') {
-            echo "sha=$env:GITHUB_EVENT_BEFORE" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request' -and $env:PR_BASE_SHA) {
+            echo "sha=$env:PR_BASE_SHA" >> $env:GITHUB_OUTPUT
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:PUSH_BEFORE -and $env:PUSH_BEFORE -notmatch '^0+$') {
+            echo "sha=$env:PUSH_BEFORE" >> $env:GITHUB_OUTPUT
           } else {
             echo "sha=origin/main" >> $env:GITHUB_OUTPUT
           }
@@ -76,7 +79,7 @@ jobs:
 
       - name: Validate component versions
         shell: pwsh
-        run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit ${{ steps.base.outputs.sha }}
+        run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit '${{ steps.base.outputs.sha }}'
 
       - name: Restore solution
         run: dotnet restore OpenModulePlatform.slnx
