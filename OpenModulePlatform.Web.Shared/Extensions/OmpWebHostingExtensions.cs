@@ -578,44 +578,40 @@ public static class OmpWebHostingExtensions
                 }
             };
 
-            if (afterNotificationId.HasValue)
+            // Always include the latest ids so first polls without an "after" baseline
+            // can initialize their client-side baseline from real values instead of 0.
+            var notificationSummary = await notificationService.GetToastSummaryForUserAsync(
+                userId.Value,
+                afterNotificationId,
+                limit: 5,
+                ct);
+
+            response["latestNotificationId"] = notificationSummary.LatestNotificationId;
+            response["newNotificationCount"] = notificationSummary.NewNotificationCount;
+            response["newNotifications"] = notificationSummary.NewNotifications.Select(row => new
             {
-                var notificationSummary = await notificationService.GetToastSummaryForUserAsync(
-                    userId.Value,
-                    afterNotificationId,
-                    limit: 5,
-                    ct);
+                notificationId = row.NotificationId,
+                title = row.Title,
+                content = ToToastSnippet(row.Content),
+                targetUrl = IsSafeLocalDestination(row.DestinationUrl) ? row.DestinationUrl : "/notifications"
+            });
 
-                response["latestNotificationId"] = notificationSummary.LatestNotificationId;
-                response["newNotificationCount"] = notificationSummary.NewNotificationCount;
-                response["newNotifications"] = notificationSummary.NewNotifications.Select(row => new
-                {
-                    notificationId = row.NotificationId,
-                    title = row.Title,
-                    content = ToToastSnippet(row.Content),
-                    targetUrl = IsSafeLocalDestination(row.DestinationUrl) ? row.DestinationUrl : "/notifications"
-                });
-            }
+            var messageSummary = await messageService.GetToastSummaryForUserAsync(
+                userId.Value,
+                afterMessageId,
+                limit: 5,
+                ct);
 
-            if (afterMessageId.HasValue)
+            response["latestMessageId"] = messageSummary.LatestMessageId;
+            response["newMessageCount"] = messageSummary.NewMessageCount;
+            response["newMessages"] = messageSummary.NewMessages.Select(row => new
             {
-                var messageSummary = await messageService.GetToastSummaryForUserAsync(
-                    userId.Value,
-                    afterMessageId,
-                    limit: 5,
-                    ct);
-
-                response["latestMessageId"] = messageSummary.LatestMessageId;
-                response["newMessageCount"] = messageSummary.NewMessageCount;
-                response["newMessages"] = messageSummary.NewMessages.Select(row => new
-                {
-                    messageId = row.MessageId,
-                    conversationId = row.ConversationId,
-                    title = row.Title,
-                    content = ToToastSnippet(row.Content),
-                    targetUrl = $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}"
-                });
-            }
+                messageId = row.MessageId,
+                conversationId = row.ConversationId,
+                title = row.Title,
+                content = ToToastSnippet(row.Content),
+                targetUrl = $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}"
+            });
 
             return Results.Json(response);
         }).AllowAnonymous();

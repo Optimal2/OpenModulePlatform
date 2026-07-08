@@ -29,6 +29,8 @@ public sealed class NotificationsModel : OmpSecurePageModel<PortalResource>
 
     public bool CanUseNotifications { get; private set; }
 
+    public int UnreadCount { get; private set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -83,6 +85,7 @@ public sealed class NotificationsModel : OmpSecurePageModel<PortalResource>
 
         CanUseNotifications = true;
         Rows = await _notifications.GetRecentForUserAsync(userId, 50, ct);
+        UnreadCount = await _notifications.GetUnreadCountAsync(userId, ct);
     }
 
     private bool TryGetCurrentUserId(out int userId)

@@ -11,7 +11,7 @@
     @if (Model.CanUseNotifications && Model.Rows.Count > 0)
     {
         <form method="post" asp-page-handler="MarkAllRead" data-enhance="false">
-            <button type="submit" class="btn btn-primary">@L["Mark all as read"]</button>
+            <button type="submit" class="btn btn-primary" disabled="@(Model.UnreadCount == 0)">@L["Mark all as read"]</button>
         </form>
     }
 </section>

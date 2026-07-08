@@ -272,27 +272,29 @@
             return;
         }
 
-        var latestNotificationId = Number(payload.latestNotificationId || 0);
-        var latestMessageId = Number(payload.latestMessageId || 0);
+        // Only trust latest ids that are actually present in the payload. Falling
+        // back to 0 would seed the baseline with 0 and make the next poll report
+        // every historical notification as new.
+        var latestNotificationId = Number(payload.latestNotificationId);
+        var hasNotificationPayload = Number.isFinite(latestNotificationId) && latestNotificationId >= 0;
+        var latestMessageId = Number(payload.latestMessageId);
+        var hasMessagePayload = Number.isFinite(latestMessageId) && latestMessageId >= 0;
+
         var hasNotificationBaseline = state.baselineNotificationId !== null;
         var hasMessageBaseline = state.baselineMessageId !== null;
 
-        if (!hasNotificationBaseline) {
+        if (hasNotificationPayload && !hasNotificationBaseline) {
             state.baselineNotificationId = latestNotificationId;
         }
 
-        if (!hasMessageBaseline) {
+        if (hasMessagePayload && !hasMessageBaseline) {
             state.baselineMessageId = latestMessageId;
         }
 
-        if (!hasNotificationBaseline && !hasMessageBaseline) {
-            return;
-        }
+        if (hasNotificationPayload && hasNotificationBaseline) {
+            var items = Array.isArray(payload.newNotifications) ? payload.newNotifications : [];
+            var newNotificationCount = Number(payload.newNotificationCount || items.length || 0);
 
-        var items = Array.isArray(payload.newNotifications) ? payload.newNotifications : [];
-        var newNotificationCount = Number(payload.newNotificationCount || items.length || 0);
-
-        if (hasNotificationBaseline) {
             if (newNotificationCount >= summaryThreshold) {
                 enqueueToast({
                     title: config.summaryTitle,
@@ -312,14 +314,14 @@
             }
         }
 
-        if (latestNotificationId > state.baselineNotificationId) {
+        if (hasNotificationPayload && latestNotificationId > state.baselineNotificationId) {
             state.baselineNotificationId = latestNotificationId;
         }
 
-        var messageItems = Array.isArray(payload.newMessages) ? payload.newMessages : [];
-        var newMessageCount = Number(payload.newMessageCount || messageItems.length || 0);
+        if (hasMessagePayload && hasMessageBaseline) {
+            var messageItems = Array.isArray(payload.newMessages) ? payload.newMessages : [];
+            var newMessageCount = Number(payload.newMessageCount || messageItems.length || 0);
 
-        if (hasMessageBaseline) {
             if (newMessageCount >= summaryThreshold) {
                 enqueueToast({
                     title: config.messageSummaryTitle,
@@ -341,7 +343,7 @@
             }
         }
 
-        if (latestMessageId > state.baselineMessageId) {
+        if (hasMessagePayload && latestMessageId > state.baselineMessageId) {
             state.baselineMessageId = latestMessageId;
         }
     }
