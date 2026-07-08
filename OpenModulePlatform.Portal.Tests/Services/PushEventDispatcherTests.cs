@@ -167,7 +167,7 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void PortalNotificationToastScript_RefreshesFromTopbarPushEvent()
     {
-        var script = ReadRepositoryTextFile("OpenModulePlatform.Portal", "wwwroot", "js", "portal-notification-toasts.js");
+        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-toasts.js");
 
         Assert.Contains("""var pushEventName = "omp:push-event";""", script);
         Assert.Contains("window.addEventListener(pushEventName, handlePushEvent);", script);
@@ -176,8 +176,7 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("""topbar.message-state-changed""", script);
         Assert.Contains("function playNotificationSound()", script);
         Assert.Contains("function playMessageNotificationSound()", script);
-        Assert.Contains("window.ompNotificationToastSound", script);
-        Assert.Contains("window.ompMessageNotificationSound", script);
+        Assert.Contains("window.ompToastSound", script);
         Assert.Contains("""[data-message-thread-composer]""", script);
         Assert.Contains("playNotificationSound();", script);
         Assert.Contains("playMessageNotificationSound();", script);
@@ -196,7 +195,7 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("form.addEventListener('submit', submitMessage);", page);
         Assert.Contains("'Accept': 'text/html'", page);
         Assert.Contains("replaceMessages(html, { stickToBottom: true, suppressSound: true })", page);
-        Assert.Contains("window.ompMessageNotificationSound?.play();", page);
+        Assert.Contains("window.ompToastSound?.playMessage(false);", page);
         Assert.Contains("const PUSH_EVENT_NAME = 'omp:push-event';", page);
         Assert.Contains("const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';", page);
         Assert.Contains("getPayloadConversationId(payload) !== conversationId", page);
