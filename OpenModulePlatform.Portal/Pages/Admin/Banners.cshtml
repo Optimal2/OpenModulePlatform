@@ -126,30 +126,74 @@
     }
     else
     {
+        Func<string?, List<string>> parseTargets = value => (value ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(target => target.Trim())
+            .Where(target => target.Length > 0)
+            .ToList();
+        var targetOptions = Model.Rows
+            .SelectMany(row => parseTargets(row.TargetSummary))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(target => target, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        <div class="toolbar">
+            <details class="list-filter" data-list-filter="banners-list">
+                <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                <div class="list-filter__menu">
+                    <fieldset class="list-filter__group" data-filter-group="level">
+                        <legend>@L["Level"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="1" /> @L["Announcement"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="2" /> @L["Warning"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="3" /> @L["Critical"]</label>
+                    </fieldset>
+                    <fieldset class="list-filter__group" data-filter-group="status">
+                        <legend>@L["Status"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="active" /> @L["Active"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="scheduled" /> @L["Scheduled"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="expired" /> @L["Expired"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="disabled" /> @L["Disabled"]</label>
+                    </fieldset>
+                    <fieldset class="list-filter__group" data-filter-group="targets">
+                        <legend>@L["Targets"]</legend>
+                        @foreach (var target in targetOptions)
+                        {
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-includes="@target" /> @target</label>
+                        }
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="none" /> @L["No targets"]</label>
+                    </fieldset>
+                    <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                </div>
+            </details>
+            <input type="search" class="list-search" data-list-search="banners-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="banners-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="banners-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table class="data-table">
+            <table id="banners-list" class="data-table sortable-list" data-sortable-list data-page-size="50">
                 <thead>
                     <tr>
-                        <th>@L["Title"]</th>
-                        <th>@L["Level"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Targets"]</th>
-                        <th>@L["Window"]</th>
-                        <th></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Title"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Level"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
+                        <th scope="col">@L["Targets"]</th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Window"]</button></th>
+                        <th scope="col"></th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var row in Model.Rows)
                     {
+                        var targets = parseTargets(row.TargetSummary);
                         <tr>
-                            <td>
+                            <td data-sort-value="@row.Title">
                                 <strong>@row.Title</strong>
                                 <div class="muted small-text">@row.Content</div>
                             </td>
-                            <td>@Model.LevelText(row.Level)</td>
-                            <td>@Model.StateText(row.DisplayState)</td>
-                            <td>@(string.IsNullOrWhiteSpace(row.TargetSummary) ? L["No targets"] : row.TargetSummary)</td>
-                            <td class="small-text">
+                            <td data-sort-value="@row.Level">@Model.LevelText(row.Level)</td>
+                            <td data-sort-value="@row.DisplayState">@Model.StateText(row.DisplayState)</td>
+                            <td data-sort-value="@(targets.Count == 0 ? "none" : string.Join(";", targets))">@(string.IsNullOrWhiteSpace(row.TargetSummary) ? L["No targets"] : row.TargetSummary)</td>
+                            <td class="small-text" data-sort-value="@(row.StartsAtUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">
                                 <div>@L["Starts"]: @(row.StartsAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
                                 <div>@L["Expires"]: @(row.ExpiresAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
                             </td>
@@ -172,6 +216,9 @@
                     }
                 </tbody>
             </table>
+        </div>
+        <div class="list-show-more">
+            <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="banners-list" hidden>@L["Show more"]</button>
         </div>
     }
 </section>
