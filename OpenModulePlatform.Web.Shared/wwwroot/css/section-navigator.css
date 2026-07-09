@@ -65,9 +65,9 @@
 .section-navigator__resize-handle {
     position: absolute;
     top: 0;
-    right: -4px;
+    right: -7px;
     bottom: 0;
-    width: 8px;
+    width: 14px;
     cursor: col-resize;
     touch-action: none;
     z-index: 2;
@@ -76,13 +76,15 @@
 .section-navigator__resize-handle::before {
     content: "";
     position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 3px;
-    width: 2px;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 30px;
+    transform: translate(-50%, -50%);
+    border: 1px solid var(--border-strong);
     border-radius: 999px;
-    background: transparent;
-    transition: background-color 120ms ease;
+    background: var(--surface);
+    transition: border-color 120ms ease;
 }
 
 .section-navigator__resize-handle::after {
@@ -100,12 +102,12 @@
 
 .section-navigator__resize-handle:hover::before,
 body.section-navigator-resizing .section-navigator__resize-handle::before {
-    background: var(--section-navigator-line);
+    border-color: var(--section-navigator-line);
 }
 
 .section-navigator__resize-handle:hover::after,
 body.section-navigator-resizing .section-navigator__resize-handle::after {
-    background-image: radial-gradient(circle, #fff 1.1px, transparent 1.2px);
+    background-image: radial-gradient(circle, var(--section-navigator-line) 1.1px, transparent 1.2px);
 }
 
 body.section-navigator-resizing {
