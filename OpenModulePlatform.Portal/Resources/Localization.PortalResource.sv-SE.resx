@@ -2790,6 +2790,4 @@
   <data name="Banner enabled." xml:space="preserve"><value>Bannern aktiverades.</value></data>
   <data name="Enable banner" xml:space="preserve"><value>Aktivera banner</value></data>
   <data name="Disable banner" xml:space="preserve"><value>Inaktivera banner</value></data>
-  <data name="Check" xml:space="preserve"><value>Kontrollera</value></data>
-  <data name="Recycle" xml:space="preserve"><value>Starta om</value></data>
 </root>

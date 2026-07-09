@@ -2671,8 +2671,8 @@ button {
     --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
 }
 
-.btn-leading-icon--inbox {
-    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/inbox.svg");
+.btn-leading-icon--clarify {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/clarify.svg");
 }
 
 .btn:disabled,
