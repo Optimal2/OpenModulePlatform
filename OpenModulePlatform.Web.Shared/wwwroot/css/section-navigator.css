@@ -85,9 +85,27 @@
     transition: background-color 120ms ease;
 }
 
+.section-navigator__resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 18px;
+    transform: translate(-50%, -50%);
+    background-image: radial-gradient(circle, rgba(100, 116, 139, 0.45) 1.1px, transparent 1.2px);
+    background-size: 4px 6px;
+    transition: background-image 120ms ease;
+}
+
 .section-navigator__resize-handle:hover::before,
 body.section-navigator-resizing .section-navigator__resize-handle::before {
     background: var(--section-navigator-line);
+}
+
+.section-navigator__resize-handle:hover::after,
+body.section-navigator-resizing .section-navigator__resize-handle::after {
+    background-image: radial-gradient(circle, #fff 1.1px, transparent 1.2px);
 }
 
 body.section-navigator-resizing {
