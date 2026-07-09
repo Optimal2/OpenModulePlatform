@@ -1,20 +1,58 @@
 @page "{userId:int}"
+@using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.Users.EditModel
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+
+    const string StatusSectionId = "user-edit-status";
+    const string DetailsSectionId = "user-edit-details";
+    const string RolesSectionId = "user-edit-roles";
+    const string PortalSettingsSectionId = "user-edit-portal-settings";
+    const string AuthLinksSectionId = "user-edit-auth-links";
+    const string LocalLoginSectionId = "user-edit-local-login";
+    const string LinkAdSectionId = "user-edit-link-ad";
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+    if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+
+    if (Model.UserRow is not null)
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["User details"].Value, DetailsSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Roles"].Value, RolesSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(ompBranding.ApplyTerms(L["Portal settings"].Value), PortalSettingsSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Auth links"].Value, AuthLinksSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Local login"].Value, LocalLoginSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Link AD account"].Value, LinkAdSectionId));
+    }
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L["Edit user"].Value,
+        Items = sectionNavigatorItems
+    };
 }
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Security and access"]</div>
-        <h2>@L["Edit user"]</h2>
-        <p class="lede">@ompBranding.ApplyPlatformName(L["Update the OMP user record and link AD identities that Windows sign-in can resolve."].Value)</p>
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["Security and access"]</div>
+                <h2>@L["Edit user"]</h2>
+                <p class="lede">@ompBranding.ApplyPlatformName(L["Update the OMP user record and link AD identities that Windows sign-in can resolve."].Value)</p>
+            </div>
+        </section>
     </div>
-</section>
+
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
-    <div class="card status-banner">@Model.StatusMessage</div>
+    <div id="@StatusSectionId" class="card status-banner section-navigator-target">@Model.StatusMessage</div>
 }
 
 @if (!ViewContext.ModelState.IsValid)
@@ -24,7 +62,7 @@
 
 @if (Model.UserRow is not null)
 {
-    <section class="card form-grid bottom-gap">
+    <section id="@DetailsSectionId" class="card form-grid bottom-gap section-navigator-target">
         <div class="field-grid field-grid--3">
             <div class="form-field">
                 <label>@L["User ID"]</label>
@@ -79,7 +117,7 @@
         </div>
     </form>
 
-    <section class="card section-card bottom-gap">
+    <section id="@RolesSectionId" class="card section-card bottom-gap section-navigator-target">
         <div class="eyebrow">@L["Security and access"]</div>
         <h3>@L["Roles"]</h3>
         <p class="muted">@ompBranding.ApplyPlatformName(L["Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here."].Value)</p>
@@ -116,7 +154,7 @@
         }
     </section>
 
-    <section class="card section-card bottom-gap">
+    <section id="@PortalSettingsSectionId" class="card section-card bottom-gap section-navigator-target">
         <div class="eyebrow">@ompBranding.PortalName</div>
         <h3>@ompBranding.ApplyTerms(L["Portal settings"].Value)</h3>
         <p class="muted">@ompBranding.ApplyTerms(L["Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user."].Value)</p>
@@ -225,7 +263,7 @@
         }
     </section>
 
-    <section class="card section-card bottom-gap">
+    <section id="@AuthLinksSectionId" class="card section-card bottom-gap section-navigator-target">
         <div class="eyebrow">@L["Authentication"]</div>
         <h3>@L["Auth links"]</h3>
         <p class="muted">@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added."].Value)</p>
@@ -431,7 +469,7 @@
         </div>
     </section>
 
-    <section class="card section-card bottom-gap">
+    <section id="@LocalLoginSectionId" class="card section-card bottom-gap section-navigator-target">
         <div class="eyebrow">@L["Authentication"]</div>
         <h3>@L["Local login"]</h3>
 
@@ -494,7 +532,7 @@
         }
     </section>
 
-    <form method="post" asp-page-handler="LinkAdAccount" class="card form-grid">
+    <form id="@LinkAdSectionId" method="post" asp-page-handler="LinkAdAccount" class="card form-grid section-navigator-target">
         <div class="eyebrow">@L["Authentication"]</div>
         <h3>@L["Link AD account"]</h3>
         <p class="muted">@L["Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-..."]</p>
@@ -512,3 +550,6 @@
         </div>
     </form>
 }
+
+    </div>
+</div>
