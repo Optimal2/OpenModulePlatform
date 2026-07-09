@@ -190,7 +190,9 @@
                             <form method="post" asp-page-handler="ProbeWebAppHealth" class="inline-form">
                                 <input type="hidden" name="hostId" value="@row.HostId" />
                                 <input type="hidden" name="healthKey" value="@row.HealthKey" />
-                                <button type="submit" class="btn btn-secondary">@L["Probe now"]</button>
+                                <button type="submit"
+                                        class="btn btn-secondary btn-leading-icon btn-leading-icon--check"
+                                        title="@L["Probe now"]">@L["Check"]</button>
                             </form>
                             <form method="post"
                                   asp-page-handler="RecycleWebAppAppPool"
@@ -200,15 +202,17 @@
                                 <input type="hidden" name="healthKey" value="@row.HealthKey" />
                                 <input type="hidden" name="appPoolName" value="@row.AppPoolName" />
                                 <button type="submit"
-                                        class="btn btn-secondary"
+                                        class="btn btn-secondary btn-leading-icon btn-leading-icon--reset"
+                                        title="@L["Recycle app pool"]"
                                         disabled="@(!Model.CanRecyclePortalAppPool || string.IsNullOrWhiteSpace(row.AppPoolName))">
-                                    @L["Recycle app pool"]
+                                    @L["Recycle"]
                                 </button>
                             </form>
                             <form method="post" asp-page-handler="CollectWebAppLogs" class="inline-form">
                                 <input type="hidden" name="hostId" value="@row.HostId" />
                                 <input type="hidden" name="healthKey" value="@row.HealthKey" />
-                                <button type="submit" class="btn btn-secondary">@L["Collect logs"]</button>
+                                <button type="submit"
+                                        class="btn btn-secondary btn-leading-icon btn-leading-icon--inbox">@L["Collect logs"]</button>
                             </form>
                         </td>
                     </tr>
