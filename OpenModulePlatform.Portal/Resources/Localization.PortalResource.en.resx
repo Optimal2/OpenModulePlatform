@@ -1039,6 +1039,4 @@
   <data name="Banner enabled." xml:space="preserve"><value>Banner enabled.</value></data>
   <data name="Enable banner" xml:space="preserve"><value>Enable banner</value></data>
   <data name="Disable banner" xml:space="preserve"><value>Disable banner</value></data>
-  <data name="Check" xml:space="preserve"><value>Check</value></data>
-  <data name="Recycle" xml:space="preserve"><value>Recycle</value></data>
 </root>
