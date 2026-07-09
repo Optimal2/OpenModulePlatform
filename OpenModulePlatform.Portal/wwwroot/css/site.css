@@ -818,7 +818,9 @@ a:hover {
     background: var(--surface);
 }
 
-.maintenance-retention-counter input {
+/* [type=number] keeps this rule more specific than the global input[type=number]
+   styling further down, which would otherwise re-add the border inside the frame. */
+.maintenance-retention-counter input[type=number] {
     width: 100%;
     min-width: 0;
     padding-right: 8px;
