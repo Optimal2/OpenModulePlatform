@@ -5,7 +5,7 @@
     --section-navigator-sticky-gap: 16px;
     display: grid;
     grid-template-columns:
-        minmax(var(--section-navigator-width), 1fr)
+        minmax(var(--section-navigator-pane-width, var(--section-navigator-width)), 1fr)
         minmax(0, var(--section-navigator-content-max))
         minmax(var(--section-navigator-width), 1fr);
     column-gap: var(--section-navigator-gap);
@@ -39,11 +39,7 @@
     justify-self: end;
     position: sticky;
     top: calc(var(--app-header-height, 92px) + var(--section-navigator-sticky-gap));
-    width: var(--section-navigator-width);
-    max-height: calc(100vh - var(--app-header-height, 92px) - (var(--section-navigator-sticky-gap) * 2));
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
+    width: var(--section-navigator-pane-width, var(--section-navigator-width));
     --section-navigator-line: #6b9cff;
     --section-navigator-line-width: 4px;
     --section-navigator-line-x: 8px;
@@ -60,6 +56,43 @@
     background: var(--surface);
     box-shadow: var(--shadow);
     padding: 14px;
+    max-height: calc(100vh - var(--app-header-height, 92px) - (var(--section-navigator-sticky-gap) * 2));
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
+}
+
+.section-navigator__resize-handle {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 2;
+}
+
+.section-navigator__resize-handle::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 2px;
+    border-radius: 999px;
+    background: transparent;
+    transition: background-color 120ms ease;
+}
+
+.section-navigator__resize-handle:hover::before,
+body.section-navigator-resizing .section-navigator__resize-handle::before {
+    background: var(--section-navigator-line);
+}
+
+body.section-navigator-resizing {
+    cursor: col-resize;
+    user-select: none;
 }
 
 .section-navigator__heading {
