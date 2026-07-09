@@ -88,17 +88,22 @@
     }
     else
     {
+        <div class="toolbar">
+            <input type="search" class="list-search" data-list-search="sample-buckets-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="sample-buckets-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="sample-buckets-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid">
+            <table id="sample-buckets-list" class="grid app-instances-grid sortable-list" data-sortable-list data-page-size="50">
                 <thead>
                     <tr>
-                        <th>@L["Sample bucket UTC"]</th>
-                        <th>@L["Sample value"]</th>
-                        <th>@L["Sample count"]</th>
-                        <th>@L["Min value"]</th>
-                        <th>@L["Max value"]</th>
-                        <th>@L["First sampled UTC"]</th>
-                        <th>@L["Last sampled UTC"]</th>
+                        <th scope="col" data-sort-type="date" data-sort-default="descending"><button type="button" class="sortable-list__button">@L["Sample bucket UTC"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Sample value"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Sample count"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Min value"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Max value"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["First sampled UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last sampled UTC"]</button></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -106,16 +111,19 @@
                 {
                     <tr>
                         <td>@row.SampleBucketUtc.ToString("u")</td>
-                        <td>@Model.FormatValue(row.SampleValue)</td>
+                        <td data-sort-value="@row.SampleValue.ToString(System.Globalization.CultureInfo.InvariantCulture)">@Model.FormatValue(row.SampleValue)</td>
                         <td>@row.SampleCount</td>
-                        <td>@(row.MinValue.HasValue ? Model.FormatValue(row.MinValue.Value) : "—")</td>
-                        <td>@(row.MaxValue.HasValue ? Model.FormatValue(row.MaxValue.Value) : "—")</td>
+                        <td data-sort-value="@(row.MinValue?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")">@(row.MinValue.HasValue ? Model.FormatValue(row.MinValue.Value) : "—")</td>
+                        <td data-sort-value="@(row.MaxValue?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")">@(row.MaxValue.HasValue ? Model.FormatValue(row.MaxValue.Value) : "—")</td>
                         <td>@row.FirstSampledUtc.ToString("u")</td>
                         <td>@row.LastSampledUtc.ToString("u")</td>
                     </tr>
                 }
                 </tbody>
             </table>
+        </div>
+        <div class="list-show-more">
+            <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="sample-buckets-list" hidden>@L["Show more"]</button>
         </div>
     }
 </section>

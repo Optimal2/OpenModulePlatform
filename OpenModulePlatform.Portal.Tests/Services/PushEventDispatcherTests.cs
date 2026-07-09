@@ -175,11 +175,11 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("""topbar.notification-state-changed""", script);
         Assert.Contains("""topbar.message-state-changed""", script);
         Assert.Contains("function playNotificationSound()", script);
-        Assert.Contains("function playMessageNotificationSound()", script);
+        Assert.Contains("function playMessageNotificationSound(shouldSuppress)", script);
         Assert.Contains("window.ompToastSound", script);
         Assert.Contains("""[data-message-thread-composer]""", script);
         Assert.Contains("playNotificationSound();", script);
-        Assert.Contains("playMessageNotificationSound();", script);
+        Assert.Contains("playMessageNotificationSound(false);", script);
         Assert.Contains("scheduleNext(0);", script);
     }
 
