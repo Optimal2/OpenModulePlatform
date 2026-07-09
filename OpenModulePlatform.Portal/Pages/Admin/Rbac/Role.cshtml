@@ -1,20 +1,55 @@
 @page
+@using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.Rbac.RoleModel
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
+
+    const string StatusSectionId = "role-status";
+    const string PermissionsSectionId = "role-permissions";
+    const string PrincipalsSectionId = "role-principals";
+    const string AddPrincipalsSectionId = "role-add-principals";
+    const string DangerZoneSectionId = "role-danger-zone";
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+    if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Role details"].Value, "role-details-form"));
+    if (!Model.IsCreate)
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Assigned permissions"].Value, PermissionsSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Assigned principals"].Value, PrincipalsSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Add principals"].Value, AddPrincipalsSectionId));
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Danger zone"].Value, DangerZoneSectionId));
+    }
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = (Model.IsCreate ? L["Create role"] : L["Edit role"]).Value,
+        Items = sectionNavigatorItems
+    };
 }
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Security and access"]</div>
-        <h2>@(Model.IsCreate ? L["Create role"] : L["Edit role"])</h2>
-        <p class="lede">@L["Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable."]</p>
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["Security and access"]</div>
+                <h2>@(Model.IsCreate ? L["Create role"] : L["Edit role"])</h2>
+                <p class="lede">@L["Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable."]</p>
+            </div>
+        </section>
     </div>
-</section>
+
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
-    <div class="card status-banner">@Model.StatusMessage</div>
+    <div id="@StatusSectionId" class="card status-banner section-navigator-target">@Model.StatusMessage</div>
 }
 
 @if (!ViewContext.ModelState.IsValid)
@@ -22,7 +57,7 @@
     <div class="card validation-summary-errors" asp-validation-summary="All"></div>
 }
 
-<form method="post" class="card form-grid bottom-gap" id="role-details-form">
+<form method="post" class="card form-grid bottom-gap section-navigator-target" id="role-details-form">
     <input type="hidden" asp-for="Input.RoleId" />
     <input type="hidden" asp-for="ReturnUrl" />
 
@@ -196,7 +231,7 @@
 @if (!Model.IsCreate)
 {
     <div class="section-grid section-grid--wide bottom-gap">
-        <section class="card section-card">
+        <section id="@PermissionsSectionId" class="card section-card section-navigator-target">
             <div class="eyebrow">@L["Role administration"]</div>
             <h3>@L["Assigned permissions"]</h3>
             <p class="muted">
@@ -252,7 +287,7 @@
             </form>
         </section>
 
-        <section class="card section-card">
+        <section id="@PrincipalsSectionId" class="card section-card section-navigator-target">
             <div class="eyebrow">@L["Principals"]</div>
             <h3>@L["Assigned principals"]</h3>
             <p class="muted">@ompBranding.ApplyPlatformName(L["Bind OMP users, AD users or AD groups to the role."].Value)</p>
@@ -294,7 +329,7 @@
         </section>
     </div>
 
-    <section class="card section-card role-principal-add-section bottom-gap">
+    <section id="@AddPrincipalsSectionId" class="card section-card role-principal-add-section bottom-gap section-navigator-target">
         <div class="eyebrow">@L["Principals"]</div>
         <h3>@L["Add principals"]</h3>
         <p class="muted">@ompBranding.ApplyPlatformName(L["Choose OMP users from the checklist or paste AD users/groups as newline-separated text."].Value)</p>
@@ -368,9 +403,10 @@
     </section>
 
     <form
+        id="@DangerZoneSectionId"
         method="post"
         asp-page-handler="Delete"
-        class="card danger-zone"
+        class="card danger-zone section-navigator-target"
         onsubmit="return confirm('@L["Delete this role? Linked role assignments will also be removed."]');">
         <input type="hidden" asp-for="Input.RoleId" />
         <h3>@L["Danger zone"]</h3>
@@ -378,3 +414,6 @@
         <button type="submit" class="btn btn-danger">@L["Delete role"]</button>
     </form>
 }
+
+    </div>
+</div>
