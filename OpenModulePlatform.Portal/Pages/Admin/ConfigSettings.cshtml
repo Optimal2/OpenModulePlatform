@@ -1,8 +1,15 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ConfigSettingsModel
 @using OpenModulePlatform.Web.Shared.Models
+@using OpenModulePlatform.Web.Shared.Navigation
 
 @{
+    const string StatusSectionId = "config-settings-status";
+    const string EditorSectionId = "config-settings-editor";
+    const string ValuesSectionId = "config-settings-values";
+
+    var editorTitle = Model.IsEdit ? L["Edit config setting value"].Value : L["Add config setting value"].Value;
+
     var pageHeader = new PageHeaderModel
     {
         Eyebrow = L["System"].Value,
@@ -10,12 +17,35 @@
         Info = L["Manage installation-specific values for config settings registered by OMP upgrades. The allowed setting list is controlled by the platform schema and is not edited here."].Value,
         CssClass = "config-settings-page-header"
     };
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+    if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+
+    sectionNavigatorItems.Add(new SectionNavigatorItem(editorTitle, EditorSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Configured values"].Value, ValuesSectionId));
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L["Config settings"].Value,
+        Items = sectionNavigatorItems
+    };
 }
-<partial name="_PageHeader" model="pageHeader" />
+
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <partial name="_PageHeader" model="pageHeader" />
+    </div>
+
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
 
 @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
 {
-    <div class="card status-banner">@Model.StatusMessage</div>
+    <div id="@StatusSectionId" class="card status-banner section-navigator-target">@Model.StatusMessage</div>
 }
 
 @if (!ViewContext.ModelState.IsValid)
@@ -39,8 +69,9 @@
     };
 }
 
-<form method="post"
-      class="config-settings-form"
+<form id="@EditorSectionId"
+      method="post"
+      class="config-settings-form section-navigator-target"
       data-config-settings-form
       data-no-description-label="@L["No description available"]"
       data-example-values-label="@L["Example values:"]"
@@ -51,7 +82,7 @@
     @await Component.InvokeAsync("ColumnListPicker", configSettingsPicker)
 </form>
 
-<section class="top-gap">
+<section id="@ValuesSectionId" class="top-gap section-navigator-target">
     <h3>@L["Configured values"]</h3>
 
     @if (Model.Rows.Count == 0)
@@ -137,6 +168,9 @@
         </table>
     }
 </section>
+
+    </div>
+</div>
 
 @section Scripts {
     <script>
