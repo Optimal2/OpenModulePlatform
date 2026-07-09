@@ -133,7 +133,7 @@ public sealed class BannersModel : OmpPortalPageModel
         }
     }
 
-    public async Task<IActionResult> OnPostDisable(long bannerId, CancellationToken ct)
+    public async Task<IActionResult> OnPostSetEnabled(long bannerId, bool enabled, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
@@ -141,8 +141,10 @@ public sealed class BannersModel : OmpPortalPageModel
             return guard;
         }
 
-        var disabled = await _banners.DisableAsync(bannerId, ct);
-        StatusMessage = disabled ? T("Banner disabled.") : T("Banner was not found.");
+        var updated = await _banners.SetEnabledAsync(bannerId, enabled, ct);
+        StatusMessage = updated
+            ? T(enabled ? "Banner enabled." : "Banner disabled.")
+            : T("Banner was not found.");
         return RedirectToPage("/Admin/Banners");
     }
 
