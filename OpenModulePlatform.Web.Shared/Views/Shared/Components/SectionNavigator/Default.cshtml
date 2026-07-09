@@ -3,6 +3,7 @@
 @if (Model.Items.Count > 0)
 {
     <aside class="section-navigator" aria-label="@Model.Label">
+        <span class="section-navigator__resize-handle" data-section-navigator-resize aria-hidden="true"></span>
         <nav class="section-navigator__nav">
             <div class="section-navigator__heading">@Model.Label</div>
             @if (!string.IsNullOrWhiteSpace(Model.RootText))
