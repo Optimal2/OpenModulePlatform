@@ -515,6 +515,43 @@
         });
     }
 
+    function markListMessageTruncation() {
+        document.querySelectorAll('.list-message').forEach((message) => {
+            message.classList.toggle('list-message--truncated', message.scrollWidth > message.clientWidth);
+        });
+    }
+
+    function initListMessages(root) {
+        root.querySelectorAll('.list-message').forEach((message) => {
+            if (message.dataset.listMessageInitialized === 'true') {
+                return;
+            }
+
+            message.dataset.listMessageInitialized = 'true';
+            message.addEventListener('click', (event) => {
+                const isOwnPopover = activeInfoBadge === message;
+                if (!isOwnPopover && message.scrollWidth <= message.clientWidth) {
+                    return;
+                }
+
+                event.stopPropagation();
+                if (isOwnPopover) {
+                    closeInfoPopover();
+                } else {
+                    openInfoPopover(message, (message.textContent || '').trim());
+                }
+            });
+        });
+
+        markListMessageTruncation();
+    }
+
+    let listMessageResizeTimer = 0;
+    window.addEventListener('resize', () => {
+        window.clearTimeout(listMessageResizeTimer);
+        listMessageResizeTimer = window.setTimeout(markListMessageTruncation, 150);
+    });
+
     document.addEventListener('click', closeInfoPopover);
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
@@ -529,6 +566,7 @@
         initListFilters(document);
         initListEnhancements(document);
         initInfoBadges(document);
+        initListMessages(document);
         listControllers.forEach((controller) => {
             refreshListController(controller);
             if (controller.viewport && controller.viewport.offsetHeight > 0) {
