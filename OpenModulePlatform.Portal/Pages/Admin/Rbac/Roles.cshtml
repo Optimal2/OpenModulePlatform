@@ -18,14 +18,19 @@
 }
 else
 {
-    <table class="grid">
+    <div class="toolbar top-gap">
+        <input type="search" class="list-search" data-list-search="roles-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+        <span class="list-count" data-list-count="roles-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+    </div>
+    <div class="empty-state" data-list-empty="roles-list" hidden>@L["No rows match the current filters."]</div>
+    <table id="roles-list" class="grid sortable-list" data-sortable-list data-page-size="50">
         <thead>
             <tr>
-                <th>@L["Name"]</th>
-                <th>@L["Description"]</th>
-                <th>@L["Permissions"]</th>
-                <th>@L["Principals"]</th>
-                <th></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Name"]</button></th>
+                <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Description"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Permissions"]</button></th>
+                <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Principals"]</button></th>
+                <th scope="col"></th>
             </tr>
         </thead>
         <tbody>
@@ -50,4 +55,7 @@ else
             }
         </tbody>
     </table>
+    <div class="list-show-more">
+        <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="roles-list" hidden>@L["Show more"]</button>
+    </div>
 }

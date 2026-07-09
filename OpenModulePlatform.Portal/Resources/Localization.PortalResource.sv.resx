@@ -2872,4 +2872,5 @@
   <data name="No rows match the current filters." xml:space="preserve"><value>Inga rader matchar de aktuella filtren.</value></data>
   <data name="Showing {0} of {1} rows." xml:space="preserve"><value>Visar {0} av {1} rader.</value></data>
   <data name="Show more" xml:space="preserve"><value>Visa fler</value></data>
+  <data name="Restricted" xml:space="preserve"><value>Begränsad</value></data>
 </root>
