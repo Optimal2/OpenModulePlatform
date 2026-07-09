@@ -2875,4 +2875,7 @@
   <data name="Restricted" xml:space="preserve"><value>Begränsad</value></data>
   <data name="User details" xml:space="preserve"><value>Användaruppgifter</value></data>
   <data name="Role details" xml:space="preserve"><value>Rolluppgifter</value></data>
+  <data name="Banner enabled." xml:space="preserve"><value>Bannern aktiverades.</value></data>
+  <data name="Enable banner" xml:space="preserve"><value>Aktivera banner</value></data>
+  <data name="Disable banner" xml:space="preserve"><value>Inaktivera banner</value></data>
 </root>
