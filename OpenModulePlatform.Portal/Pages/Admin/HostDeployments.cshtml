@@ -99,32 +99,60 @@
     }
     else
     {
+        <div class="toolbar">
+            <details class="list-filter" data-list-filter="web-app-health-list">
+                <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                <div class="list-filter__menu">
+                    <fieldset class="list-filter__group" data-filter-group="status">
+                        <legend>@L["Status"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="1" /> @L["Healthy"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="2" /> @L["Degraded"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="3" /> @L["Unhealthy"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="0" /> @L["Unknown"]</label>
+                    </fieldset>
+                    <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                </div>
+            </details>
+            <input type="search" class="list-search" data-list-search="web-app-health-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="web-app-health-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="web-app-health-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid">
+            <table id="web-app-health-list" class="grid app-instances-grid web-app-health-grid sortable-list" data-sortable-list data-page-size="50">
+                <colgroup>
+                    <col class="web-app-health-grid__host" />
+                    <col class="web-app-health-grid__app" />
+                    <col class="web-app-health-grid__status" />
+                    <col class="web-app-health-grid__probe" />
+                    <col class="web-app-health-grid__failures" />
+                    <col class="web-app-health-grid__last-action" />
+                    <col class="web-app-health-grid__message" />
+                    <col class="web-app-health-grid__actions" />
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>@L["Host"]</th>
-                        <th>@L["App"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Probe"]</th>
-                        <th>@L["Failures"]</th>
-                        <th>@L["Last action"]</th>
-                        <th>@L["Message"]</th>
-                        <th>@L["Actions"]</th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
+                        <th scope="col">@L["Probe"]</th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Failures"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last action"]</button></th>
+                        <th scope="col">@L["Message"]</th>
+                        <th scope="col">@L["Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach (var row in Model.WebAppHealthStates)
                 {
                     <tr>
-                        <td>
+                        <td data-sort-value="@row.HostKey">
                             <div><code>@row.HostKey</code></div>
                             @if (!string.IsNullOrWhiteSpace(row.HostDisplayName))
                             {
                                 <div class="muted">@row.HostDisplayName</div>
                             }
                         </td>
-                        <td>
+                        <td data-sort-value="@(string.IsNullOrWhiteSpace(row.DisplayName) ? row.HealthKey : row.DisplayName)">
                             <div>@(string.IsNullOrWhiteSpace(row.DisplayName) ? row.HealthKey : row.DisplayName)</div>
                             <div class="muted"><code>@row.HealthKey</code></div>
                             @if (!string.IsNullOrWhiteSpace(row.AppPoolName))
@@ -132,7 +160,7 @@
                                 <div class="muted">@L["App pool"]: <code>@row.AppPoolName</code></div>
                             }
                         </td>
-                        <td>
+                        <td data-sort-value="@row.Status">
                             <span class="pill">@L[HostDeploymentsModel.FormatWebAppHealthStatus(row.Status)]</span>
                             @if (row.HttpStatusCode.HasValue)
                             {
@@ -158,7 +186,7 @@
                             }
                         </td>
                         <td>@row.ConsecutiveFailures</td>
-                        <td>
+                        <td data-sort-value="@(row.LastActionUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">
                             @if (row.LastActionUtc.HasValue)
                             {
                                 <div>@row.LastActionUtc.Value.ToString("u")</div>
@@ -229,6 +257,9 @@
                 }
                 </tbody>
             </table>
+        </div>
+        <div class="list-show-more">
+            <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="web-app-health-list" hidden>@L["Show more"]</button>
         </div>
     }
 </section>
