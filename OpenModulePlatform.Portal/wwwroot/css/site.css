@@ -2675,6 +2675,35 @@ button {
     --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/clarify.svg");
 }
 
+.web-app-health-grid__host {
+    width: 12%;
+}
+
+.web-app-health-grid__app {
+    width: 15%;
+}
+
+.web-app-health-grid__status {
+    width: 8%;
+}
+
+.web-app-health-grid__probe {
+    width: 20%;
+}
+
+.web-app-health-grid__failures {
+    width: 5%;
+}
+
+.web-app-health-grid__last-action {
+    width: 13%;
+}
+
+/* The message column has no width and absorbs the remaining space. */
+.web-app-health-grid__actions {
+    width: 140px;
+}
+
 .btn:disabled,
 .btn[aria-disabled=true] {
     cursor: not-allowed;
