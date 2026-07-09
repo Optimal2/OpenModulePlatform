@@ -202,16 +202,19 @@
                                     <a class="admin-icon-button admin-icon-button--edit" asp-page="/Admin/Banners" asp-route-bannerId="@row.BannerId" title="@L["Edit"]" aria-label="@L["Edit"]">
                                         <span class="visually-hidden">@L["Edit"]</span>
                                     </a>
-                                    @if (!string.Equals(row.Status, "disabled", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        <form method="post" asp-page-handler="Disable" asp-route-bannerId="@row.BannerId" data-enhance="false">
-                                            <button type="submit"
-                                                    class="btn-danger-subtle"
-                                                    data-confirm="@L["Disable this banner?"]">
-                                                @L["Disable"]
-                                            </button>
-                                        </form>
+                                    @{
+                                        var isEnabled = !string.Equals(row.Status, "disabled", StringComparison.OrdinalIgnoreCase);
                                     }
+                                    <form method="post" asp-page-handler="SetEnabled" class="inline-form" data-enhance="false">
+                                        <input type="hidden" name="bannerId" value="@row.BannerId" />
+                                        <input type="hidden" name="enabled" value="@(!isEnabled)" />
+                                        <button type="submit"
+                                                class="admin-icon-button @(isEnabled ? "admin-icon-button--visible-off" : "admin-icon-button--visible")"
+                                                title="@(isEnabled ? L["Disable banner"] : L["Enable banner"])"
+                                                aria-label="@(isEnabled ? L["Disable banner"] : L["Enable banner"])">
+                                            <span class="visually-hidden">@(isEnabled ? L["Disable banner"] : L["Enable banner"])</span>
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
                         </tr>

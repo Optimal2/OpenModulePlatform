@@ -989,4 +989,7 @@
   <data name="Restricted" xml:space="preserve"><value>Restricted</value></data>
   <data name="User details" xml:space="preserve"><value>User details</value></data>
   <data name="Role details" xml:space="preserve"><value>Role details</value></data>
+  <data name="Banner enabled." xml:space="preserve"><value>Banner enabled.</value></data>
+  <data name="Enable banner" xml:space="preserve"><value>Enable banner</value></data>
+  <data name="Disable banner" xml:space="preserve"><value>Disable banner</value></data>
 </root>

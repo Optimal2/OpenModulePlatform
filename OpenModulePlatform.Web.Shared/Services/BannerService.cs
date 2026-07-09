@@ -158,7 +158,10 @@ WHERE banner_id = @banner_id;";
         return updated;
     }
 
-    public async Task<bool> DisableAsync(long bannerId, CancellationToken ct)
+    public Task<bool> DisableAsync(long bannerId, CancellationToken ct)
+        => SetEnabledAsync(bannerId, enabled: false, ct);
+
+    public async Task<bool> SetEnabledAsync(long bannerId, bool enabled, CancellationToken ct)
     {
         if (bannerId <= 0)
         {
@@ -177,19 +180,20 @@ WHERE banner_id = @banner_id;";
 
         const string sql = @"
 UPDATE omp.banners
-SET status = N'disabled',
+SET status = @status,
     updated_at = SYSUTCDATETIME()
 WHERE banner_id = @banner_id;";
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.Add("@banner_id", SqlDbType.BigInt).Value = bannerId;
-        var disabled = await cmd.ExecuteNonQueryAsync(ct) > 0;
-        if (disabled)
+        cmd.Parameters.Add("@status", SqlDbType.NVarChar, 40).Value = enabled ? StatusActive : StatusDisabled;
+        var updated = await cmd.ExecuteNonQueryAsync(ct) > 0;
+        if (updated)
         {
-            await PublishBannerChangedAsync("disabled", bannerId, targets, ct);
+            await PublishBannerChangedAsync(enabled ? "enabled" : "disabled", bannerId, targets, ct);
         }
 
-        return disabled;
+        return updated;
     }
 
     public async Task<IReadOnlyList<PortalTopBarBanner>> GetActiveForRolesAsync(
