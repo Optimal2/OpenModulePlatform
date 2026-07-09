@@ -135,8 +135,8 @@
         playToastSound("notification", false);
     }
 
-    function playMessageNotificationSound() {
-        playToastSound("message", isMessageComposerFocused());
+    function playMessageNotificationSound(shouldSuppress) {
+        playToastSound("message", shouldSuppress || isMessageComposerFocused());
     }
 
     function setSoundEnabled(value) {
@@ -366,7 +366,7 @@
     function enqueueToast(toast, config) {
         if (toast && toast.isMessage) {
             if (!isMessageThreadPageActive()) {
-                playMessageNotificationSound();
+                playMessageNotificationSound(false);
             }
         } else if (toast) {
             playNotificationSound();
