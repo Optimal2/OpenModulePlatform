@@ -572,7 +572,7 @@
                     const parsed = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
                     return Array.isArray(parsed)
                         && parsed.length === columnCount
-                        && parsed.every((value) => Number.isFinite(value) && value > 0)
+                        && parsed.every((value) => Number.isFinite(value) && value > 0 && value <= 100)
                         ? parsed
                         : null;
                 } catch (error) {
@@ -606,16 +606,23 @@
                 return Array.from(colgroup.children);
             };
 
-            const applyWidths = (widths) => {
+            // Column widths are managed as percentages of the table width so the
+            // table itself never grows or shrinks; neighbours trade space instead.
+            const applyPercents = (percents) => {
                 const cols = ensureCols();
                 cols.forEach((col, index) => {
-                    col.style.width = `${widths[index]}px`;
+                    col.style.width = `${percents[index]}%`;
                 });
                 table.style.tableLayout = 'fixed';
-                table.style.width = `${widths.reduce((sum, value) => sum + value, 0)}px`;
+                table.style.width = '100%';
             };
 
-            const currentWidths = () => Array.from(headerRow.cells).map((cell) => Math.round(cell.getBoundingClientRect().width));
+            const currentPixelWidths = () => Array.from(headerRow.cells).map((cell) => cell.getBoundingClientRect().width);
+
+            const toPercents = (pixelWidths) => {
+                const total = pixelWidths.reduce((sum, value) => sum + value, 0);
+                return total > 0 ? pixelWidths.map((value) => (value / total) * 100) : null;
+            };
 
             const resetWidths = () => {
                 table.querySelectorAll(':scope > colgroup > col').forEach((col) => {
@@ -629,10 +636,17 @@
 
             const storedWidths = readStoredWidths();
             if (storedWidths) {
-                applyWidths(storedWidths);
+                applyPercents(storedWidths);
             }
 
+            const minColumnWidth = 60;
+
             Array.from(headerRow.cells).forEach((cell, index) => {
+                // The last column has no right-hand neighbour to trade space with.
+                if (index >= columnCount - 1) {
+                    return;
+                }
+
                 cell.classList.add('list-column-resize-host');
                 const handle = document.createElement('span');
                 handle.className = 'list-column-resize';
@@ -652,8 +666,14 @@
                     event.preventDefault();
                     event.stopPropagation();
                     startX = event.clientX;
-                    startWidths = currentWidths();
-                    applyWidths(startWidths);
+                    startWidths = currentPixelWidths();
+                    const startPercents = toPercents(startWidths);
+                    if (!startPercents) {
+                        startWidths = null;
+                        return;
+                    }
+
+                    applyPercents(startPercents);
                     handle.setPointerCapture(event.pointerId);
                     handle.classList.add('is-resizing');
                     document.body.classList.add('list-column-resizing');
@@ -664,9 +684,21 @@
                         return;
                     }
 
+                    const pairTotal = startWidths[index] + startWidths[index + 1];
+                    if (pairTotal < minColumnWidth * 2) {
+                        return;
+                    }
+
                     const widths = startWidths.slice();
-                    widths[index] = Math.max(60, Math.round(startWidths[index] + (event.clientX - startX)));
-                    applyWidths(widths);
+                    widths[index] = Math.min(
+                        pairTotal - minColumnWidth,
+                        Math.max(minColumnWidth, startWidths[index] + (event.clientX - startX)));
+                    widths[index + 1] = pairTotal - widths[index];
+
+                    const percents = toPercents(widths);
+                    if (percents) {
+                        applyPercents(percents);
+                    }
                 });
 
                 const endDrag = (event) => {
@@ -678,7 +710,11 @@
                     handle.classList.remove('is-resizing');
                     document.body.classList.remove('list-column-resizing');
                     startWidths = null;
-                    storeWidths(currentWidths());
+                    const percents = toPercents(currentPixelWidths());
+                    if (percents) {
+                        storeWidths(percents);
+                    }
+
                     markListMessageTruncation();
                 };
 
