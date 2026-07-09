@@ -2785,4 +2785,6 @@
   <data name="Showing {0} of {1} rows." xml:space="preserve"><value>Visar {0} av {1} rader.</value></data>
   <data name="Show more" xml:space="preserve"><value>Visa fler</value></data>
   <data name="Restricted" xml:space="preserve"><value>Begränsad</value></data>
+  <data name="User details" xml:space="preserve"><value>Användaruppgifter</value></data>
+  <data name="Role details" xml:space="preserve"><value>Rolluppgifter</value></data>
 </root>

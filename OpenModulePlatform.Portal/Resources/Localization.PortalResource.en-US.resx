@@ -987,4 +987,6 @@
   <data name="Showing {0} of {1} rows." xml:space="preserve"><value>Showing {0} of {1} rows.</value></data>
   <data name="Show more" xml:space="preserve"><value>Show more</value></data>
   <data name="Restricted" xml:space="preserve"><value>Restricted</value></data>
+  <data name="User details" xml:space="preserve"><value>User details</value></data>
+  <data name="Role details" xml:space="preserve"><value>Role details</value></data>
 </root>

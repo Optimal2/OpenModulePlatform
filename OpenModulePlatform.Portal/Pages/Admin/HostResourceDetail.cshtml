@@ -1,27 +1,59 @@
 @page
+@using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.HostResourceDetailModel
+@{
+    const string TimeRangeSectionId = "hostresourcedetail-time-range";
+    const string ChartsSectionId = "hostresourcedetail-charts";
+    const string BucketsSectionId = "hostresourcedetail-buckets";
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Operations"]</div>
-        <h2>@L["Resource detail"]</h2>
-        <p class="lede">
-            @L["Host"]: <code>@Model.HostKey</code>
-            @if (!string.IsNullOrWhiteSpace(Model.HostDisplayName))
-            {
-                <span class="muted">(@Model.HostDisplayName)</span>
-            }
-            &middot; @Model.RuntimeKind: <code>@Model.RuntimeName</code>
-            &middot; @L["Sample key"]: <code>@Model.SampleKey</code>
-        </p>
+    var chartTitles = new List<string> { Model.PrimaryChart.Title };
+    if (Model.CounterpartChart is not null)
+    {
+        chartTitles.Add(Model.CounterpartChart.Title);
+    }
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>
+    {
+        new(L["Time range"].Value, TimeRangeSectionId),
+        new(string.Join(" / ", chartTitles), ChartsSectionId),
+        new(L["Sample buckets"].Value, BucketsSectionId)
+    };
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L["Resource detail"].Value,
+        Items = sectionNavigatorItems
+    };
+}
+
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["Operations"]</div>
+                <h2>@L["Resource detail"]</h2>
+                <p class="lede">
+                    @L["Host"]: <code>@Model.HostKey</code>
+                    @if (!string.IsNullOrWhiteSpace(Model.HostDisplayName))
+                    {
+                        <span class="muted">(@Model.HostDisplayName)</span>
+                    }
+                    &middot; @Model.RuntimeKind: <code>@Model.RuntimeName</code>
+                    &middot; @L["Sample key"]: <code>@Model.SampleKey</code>
+                </p>
+            </div>
+        </section>
     </div>
-</section>
+
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
 
 <div class="toolbar top-gap">
     <a class="action-link" href="~/admin/hostresources">@L["Back to host resources"]</a>
 </div>
 
-<section class="card section-card section-card--wide top-gap">
+<section id="@TimeRangeSectionId" class="card section-card section-card--wide top-gap section-navigator-target">
     <div class="split-header">
         <h3>@L["Time range"]</h3>
         <div class="host-resource-time-filter">
@@ -38,7 +70,7 @@
     </p>
 </section>
 
-<div class="host-resource-charts top-gap">
+<div id="@ChartsSectionId" class="host-resource-charts top-gap section-navigator-target">
     @await Html.PartialAsync("_HostResourceChart", Model.PrimaryChart)
     @if (Model.CounterpartChart is not null)
     {
@@ -46,7 +78,7 @@
     }
 </div>
 
-<section class="card section-card section-card--wide top-gap host-resource-buckets">
+<section id="@BucketsSectionId" class="card section-card section-card--wide top-gap host-resource-buckets section-navigator-target">
     <h3>@L["Sample buckets"]</h3>
     <p class="muted">@L["Each row is one bucketed interval for the selected sample key."]</p>
 
@@ -87,3 +119,6 @@
         </div>
     }
 </section>
+
+    </div>
+</div>
