@@ -2653,6 +2653,28 @@ button {
     padding: 0;
 }
 
+.btn-leading-icon::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: var(--btn-leading-icon) center / contain no-repeat;
+    mask: var(--btn-leading-icon) center / contain no-repeat;
+}
+
+.btn-leading-icon--check {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+}
+
+.btn-leading-icon--reset {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
+}
+
+.btn-leading-icon--inbox {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/inbox.svg");
+}
+
 .btn:disabled,
 .btn[aria-disabled=true] {
     cursor: not-allowed;
