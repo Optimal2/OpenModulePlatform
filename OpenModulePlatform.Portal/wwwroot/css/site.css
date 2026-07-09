@@ -2704,6 +2704,42 @@ button {
     width: 140px;
 }
 
+.list-message {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.list-message.muted {
+    color: var(--text-muted);
+}
+
+.list-message--truncated {
+    cursor: pointer;
+}
+
+.list-message--truncated:hover,
+.list-message--truncated:focus-visible,
+.list-message.is-open {
+    color: var(--link-hover);
+    text-decoration: underline dotted;
+    outline: none;
+}
+
+.pill.list-message {
+    display: inline-block;
+    width: auto;
+}
+
 .btn:disabled,
 .btn[aria-disabled=true] {
     cursor: not-allowed;

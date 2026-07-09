@@ -193,7 +193,7 @@
                             }
                             @if (!string.IsNullOrWhiteSpace(row.LastActionMessage))
                             {
-                                <div class="muted">@row.LastActionMessage</div>
+                                <button type="button" class="list-message muted">@row.LastActionMessage</button>
                             }
                             @if (!row.LastActionUtc.HasValue && string.IsNullOrWhiteSpace(row.LastActionMessage))
                             {
@@ -203,11 +203,11 @@
                         <td>
                             @if (!string.IsNullOrWhiteSpace(row.LastError))
                             {
-                                <div>@row.LastError</div>
+                                <button type="button" class="list-message">@row.LastError</button>
                             }
                             else if (!string.IsNullOrWhiteSpace(row.ResponseSummary))
                             {
-                                <div class="muted">@row.ResponseSummary</div>
+                                <button type="button" class="list-message muted">@row.ResponseSummary</button>
                             }
                             else
                             {
@@ -688,7 +688,16 @@
                                 }
                             }
                         </td>
-                        <td>@(string.IsNullOrWhiteSpace(row.LastError) ? L["None"].Value : row.LastError)</td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.LastError))
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="list-message">@row.LastError</button>
+                            }
+                        </td>
                         <td>
                             @if (string.IsNullOrWhiteSpace(row.LastWarning))
                             {
@@ -696,7 +705,7 @@
                             }
                             else
                             {
-                                <span class="pill pill-warning" title="@row.LastWarning">@(row.LastWarning.Length > 80 ? row.LastWarning[..80] + "…" : row.LastWarning)</span>
+                                <button type="button" class="pill pill-warning list-message">@row.LastWarning</button>
                             }
                         </td>
                         <td>
@@ -964,7 +973,16 @@
                         <td>@row.LastCheckedUtc?.ToString("u")</td>
                         <td>@row.LastProvisionedUtc?.ToString("u")</td>
                         <td><code>@row.LocalPath</code></td>
-                        <td>@(string.IsNullOrWhiteSpace(row.LastError) ? L["None"].Value : row.LastError)</td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.LastError))
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="list-message">@row.LastError</button>
+                            }
+                        </td>
                     </tr>
                 }
                 </tbody>
