@@ -1669,25 +1669,30 @@ button[aria-disabled=true]:hover,
 
 .sortable-list__button {
     appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
+    display: block;
+    position: relative;
     width: 100%;
     min-height: 40px;
-    padding: 10px 12px;
+    padding: 10px 30px 10px 12px;
     border: 0;
     border-radius: 0;
     background: transparent;
     color: inherit;
     font: inherit;
     font-weight: inherit;
+    line-height: 20px;
     text-align: left;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .sortable-list__button::after {
     content: "\2195";
-    margin-left: auto;
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
     color: var(--text-muted);
     font-size: 0.72rem;
     opacity: 0.75;
@@ -2744,6 +2749,13 @@ button {
     overflow-x: auto;
 }
 
+table[data-sortable-list] > thead th,
+table[data-page-size] > thead th {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
 th.list-column-resize-host {
     position: relative;
 }
@@ -2751,7 +2763,7 @@ th.list-column-resize-host {
 .list-column-resize {
     position: absolute;
     top: 0;
-    right: -4px;
+    right: 0;
     bottom: 0;
     width: 8px;
     cursor: col-resize;
