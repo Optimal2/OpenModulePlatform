@@ -552,6 +552,147 @@
         listMessageResizeTimer = window.setTimeout(markListMessageTruncation, 150);
     });
 
+    function initColumnResize(root) {
+        root.querySelectorAll('table[data-sortable-list], table[data-page-size]').forEach((table) => {
+            if (!table.id || table.dataset.columnResizeInitialized === 'true') {
+                return;
+            }
+
+            const headerRow = table.tHead?.rows[0];
+            if (!headerRow) {
+                return;
+            }
+
+            table.dataset.columnResizeInitialized = 'true';
+            const columnCount = headerRow.cells.length;
+            const storageKey = `omp.list-columns.${table.id}`;
+
+            const readStoredWidths = () => {
+                try {
+                    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
+                    return Array.isArray(parsed)
+                        && parsed.length === columnCount
+                        && parsed.every((value) => Number.isFinite(value) && value > 0)
+                        ? parsed
+                        : null;
+                } catch (error) {
+                    return null;
+                }
+            };
+
+            const storeWidths = (widths) => {
+                try {
+                    if (widths === null) {
+                        window.localStorage.removeItem(storageKey);
+                    } else {
+                        window.localStorage.setItem(storageKey, JSON.stringify(widths));
+                    }
+                } catch (error) {
+                    // Storage may be unavailable; resizing still works for the current page.
+                }
+            };
+
+            const ensureCols = () => {
+                let colgroup = table.querySelector(':scope > colgroup');
+                if (!colgroup) {
+                    colgroup = document.createElement('colgroup');
+                    for (let i = 0; i < columnCount; i += 1) {
+                        colgroup.appendChild(document.createElement('col'));
+                    }
+
+                    table.insertBefore(colgroup, table.firstChild);
+                }
+
+                return Array.from(colgroup.children);
+            };
+
+            const applyWidths = (widths) => {
+                const cols = ensureCols();
+                cols.forEach((col, index) => {
+                    col.style.width = `${widths[index]}px`;
+                });
+                table.style.tableLayout = 'fixed';
+                table.style.width = `${widths.reduce((sum, value) => sum + value, 0)}px`;
+            };
+
+            const currentWidths = () => Array.from(headerRow.cells).map((cell) => Math.round(cell.getBoundingClientRect().width));
+
+            const resetWidths = () => {
+                table.querySelectorAll(':scope > colgroup > col').forEach((col) => {
+                    col.style.removeProperty('width');
+                });
+                table.style.removeProperty('table-layout');
+                table.style.removeProperty('width');
+                storeWidths(null);
+                markListMessageTruncation();
+            };
+
+            const storedWidths = readStoredWidths();
+            if (storedWidths) {
+                applyWidths(storedWidths);
+            }
+
+            Array.from(headerRow.cells).forEach((cell, index) => {
+                cell.classList.add('list-column-resize-host');
+                const handle = document.createElement('span');
+                handle.className = 'list-column-resize';
+                handle.setAttribute('aria-hidden', 'true');
+                cell.appendChild(handle);
+
+                let startX = 0;
+                let startWidths = null;
+
+                handle.addEventListener('click', (event) => event.stopPropagation());
+
+                handle.addEventListener('pointerdown', (event) => {
+                    if (!event.isPrimary) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    startX = event.clientX;
+                    startWidths = currentWidths();
+                    applyWidths(startWidths);
+                    handle.setPointerCapture(event.pointerId);
+                    handle.classList.add('is-resizing');
+                    document.body.classList.add('list-column-resizing');
+                });
+
+                handle.addEventListener('pointermove', (event) => {
+                    if (!startWidths || !handle.hasPointerCapture(event.pointerId)) {
+                        return;
+                    }
+
+                    const widths = startWidths.slice();
+                    widths[index] = Math.max(60, Math.round(startWidths[index] + (event.clientX - startX)));
+                    applyWidths(widths);
+                });
+
+                const endDrag = (event) => {
+                    if (!startWidths || !handle.hasPointerCapture(event.pointerId)) {
+                        return;
+                    }
+
+                    handle.releasePointerCapture(event.pointerId);
+                    handle.classList.remove('is-resizing');
+                    document.body.classList.remove('list-column-resizing');
+                    startWidths = null;
+                    storeWidths(currentWidths());
+                    markListMessageTruncation();
+                };
+
+                handle.addEventListener('pointerup', endDrag);
+                handle.addEventListener('pointercancel', endDrag);
+
+                handle.addEventListener('dblclick', (event) => {
+                    event.stopPropagation();
+                    resetWidths();
+                });
+            });
+        });
+    }
+
     document.addEventListener('click', closeInfoPopover);
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
@@ -565,6 +706,7 @@
         initSortableLists(document);
         initListFilters(document);
         initListEnhancements(document);
+        initColumnResize(document);
         initInfoBadges(document);
         initListMessages(document);
         listControllers.forEach((controller) => {

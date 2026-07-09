@@ -2740,6 +2740,48 @@ button {
     width: auto;
 }
 
+.list-viewport {
+    overflow-x: auto;
+}
+
+th.list-column-resize-host {
+    position: relative;
+}
+
+.list-column-resize {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+    z-index: 3;
+}
+
+.list-column-resize::before {
+    content: "";
+    position: absolute;
+    top: 20%;
+    bottom: 20%;
+    left: 3px;
+    width: 2px;
+    border-radius: 999px;
+    background: transparent;
+    transition: background-color 120ms ease;
+}
+
+.list-column-resize:hover::before,
+.list-column-resize.is-resizing::before {
+    background: var(--link);
+}
+
+body.list-column-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
 .btn:disabled,
 .btn[aria-disabled=true] {
     cursor: not-allowed;
