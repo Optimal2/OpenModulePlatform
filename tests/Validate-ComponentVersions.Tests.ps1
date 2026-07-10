@@ -185,26 +185,25 @@ Describe 'Check 6: minModuleDefinitionVersion sanity' {
 Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion bump' {
     It 'Passes when minModuleDefinitionVersion is bumped with definitionVersion' {
         $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
-        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0' -SqlContent 'SELECT 1;'
-
         $originalLocation = Get-Location
         try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0' -SqlContent 'SELECT 1;'
             Set-Location -LiteralPath $repoRoot
             $baseCommit = (& git rev-parse HEAD).Trim()
 
             # Change SQL, bump module definition version, and keep minVersion in sync.
-            Set-Content -LiteralPath (Join-Path $repoRoot 'TestModule/sql/init.sql') -Value 'SELECT 2;' -Encoding UTF8 -NoNewline
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestModule/sql/init.sql'), 'SELECT 2;', [System.Text.Encoding]::UTF8)
 
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $moduleDefinition.definitionVersion = '2.0.0'
-            $moduleDefinition | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $moduleDefinitionPath -Encoding UTF8 -NoNewline
+            [System.IO.File]::WriteAllText($moduleDefinitionPath, ($moduleDefinition | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
 
             $manifestPath = Join-Path $repoRoot 'omp-components.json'
             $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $manifest.moduleDefinitions[0].definitionVersion = '2.0.0'
             $manifest.components[0].minModuleDefinitionVersion = '2.0.0'
-            $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8 -NoNewline
+            [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
 
             & git add -A
             if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
@@ -212,36 +211,36 @@ Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion 
             if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
 
             $exitCode = Invoke-Validator -ValidatorPath $validatorPath -BaseCommit $baseCommit
+
+            $exitCode | Should Be 0
         }
         finally {
             Set-Location $originalLocation
+            Remove-TemporaryTestRepository -RootPath $repoRoot
         }
-
-        $exitCode | Should Be 0
     }
 
     It 'Fails when minModuleDefinitionVersion lags a bumped definitionVersion' {
         $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
-        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0' -SqlContent 'SELECT 1;'
-
         $originalLocation = Get-Location
         try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0' -SqlContent 'SELECT 1;'
             Set-Location -LiteralPath $repoRoot
             $baseCommit = (& git rev-parse HEAD).Trim()
 
             # Change SQL and bump module definition version, but leave minVersion behind.
-            Set-Content -LiteralPath (Join-Path $repoRoot 'TestModule/sql/init.sql') -Value 'SELECT 2;' -Encoding UTF8 -NoNewline
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestModule/sql/init.sql'), 'SELECT 2;', [System.Text.Encoding]::UTF8)
 
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $moduleDefinition.definitionVersion = '2.0.0'
-            $moduleDefinition | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $moduleDefinitionPath -Encoding UTF8 -NoNewline
+            [System.IO.File]::WriteAllText($moduleDefinitionPath, ($moduleDefinition | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
 
             $manifestPath = Join-Path $repoRoot 'omp-components.json'
             $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $manifest.moduleDefinitions[0].definitionVersion = '2.0.0'
             # minModuleDefinitionVersion intentionally remains 1.0.0.
-            $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8 -NoNewline
+            [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
 
             & git add -A
             if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
@@ -249,11 +248,12 @@ Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion 
             if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
 
             $exitCode = Invoke-Validator -ValidatorPath $validatorPath -BaseCommit $baseCommit
+
+            $exitCode | Should Not Be 0
         }
         finally {
             Set-Location $originalLocation
+            Remove-TemporaryTestRepository -RootPath $repoRoot
         }
-
-        $exitCode | Should Not Be 0
     }
 }
