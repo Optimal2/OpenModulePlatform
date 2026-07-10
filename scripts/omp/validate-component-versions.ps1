@@ -16,7 +16,10 @@ SHA-256 content hash, not by assembly version.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string]$BaseCommit = ''
+    [string]$BaseCommit = '',
+
+    [Parameter(Mandatory = $false)]
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = 'Stop'
@@ -149,10 +152,19 @@ function Remove-Utf8Bom {
     Removes a leading UTF-8 BOM from a string so it can be parsed as JSON or SQL.
     Git may preserve BOMs written by some editors/encodings, and ConvertFrom-Json
     treats a BOM as an unexpected character.
-    #>
-    param([Parameter(Mandatory = $true)][string]$Text)
 
-    if ($Text.StartsWith([char]0xFEFF)) {
+    IMPORTANT: Must use $Text[0] -eq [char]0xFEFF (not StartsWith) because
+    StartsWith([char]) is culture-sensitive in Windows PowerShell 5.1 (.NET Framework)
+    where U+FEFF is an "ignorable" character — it returns true for ANY string,
+    silently stripping the first character.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    if ($Text.Length -gt 0 -and $Text[0] -eq [char]0xFEFF) {
         return $Text.Substring(1)
     }
 
@@ -223,13 +235,56 @@ function ConvertTo-NormalizedSql {
     return $normalized
 }
 
-$scriptDirectory = Get-ScriptDirectory
-$repositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..\..')).Path
-$repositoryRoot = [System.IO.Path]::GetFullPath($repositoryRoot)
-
 $checkMark = [char]0x2713
 $warningSign = [char]0x26A0
 $crossMark = [char]0x2717
+
+if ($SelfTest) {
+    <#
+    Self-test entry point. Runs targeted checks for PowerShell 5.1 compatibility
+    pitfalls without requiring a real omp-components.json or git repository.
+    #>
+    $selfTestErrors = [System.Collections.Generic.List[string]]::new()
+
+    # Remove-Utf8Bom must strip the BOM but must not strip the first character
+    # of a no-BOM string. Under PS5.1, StartsWith([char]0xFEFF) returns true for
+    # any string because U+FEFF is an ignorable character in culture-sensitive
+    # comparison.
+    $bomInput = [char]0xFEFF + '{"a":1}'
+    $noBomInput = '{"a":1}'
+    $emptyInput = ''
+
+    $bomOutput = Remove-Utf8Bom -Text $bomInput
+    $noBomOutput = Remove-Utf8Bom -Text $noBomInput
+    $emptyOutput = Remove-Utf8Bom -Text $emptyInput
+
+    if ($bomOutput -ne '{"a":1}') {
+        $selfTestErrors.Add("Remove-Utf8Bom failed to strip BOM: '$bomOutput'")
+    }
+
+    if ($noBomOutput -ne '{"a":1}') {
+        $selfTestErrors.Add("Remove-Utf8Bom incorrectly stripped first character of no-BOM input: '$noBomOutput'")
+    }
+
+    if ($emptyOutput -ne '') {
+        $selfTestErrors.Add("Remove-Utf8Bom failed on empty string: '$emptyOutput'")
+    }
+
+    if ($selfTestErrors.Count -gt 0) {
+        Write-Host "$crossMark Self-test failed:"
+        foreach ($selfTestError in $selfTestErrors) {
+            Write-Host " - $selfTestError"
+        }
+        exit 1
+    }
+
+    Write-Host "$checkMark Self-test passed (Remove-Utf8Bom is PS5.1-safe)."
+    exit 0
+}
+
+$scriptDirectory = Get-ScriptDirectory
+$repositoryRoot = (Resolve-Path (Join-Path $scriptDirectory '..\..')).Path
+$repositoryRoot = [System.IO.Path]::GetFullPath($repositoryRoot)
 
 $manifestPath = Join-Path $repositoryRoot 'omp-components.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
@@ -641,7 +696,7 @@ else {
 
             $alreadyOwned = $false
             foreach ($ownedSqlFile in $ownedSqlFiles) {
-                if ([string]::Equals($ownedSqlFile.sqlPath, $sqlPath, [StringComparison]::OrdinalIgnoreCase)) {
+                if ([string]::Equals($ownedSqlFile.sqlPath, $sqlPath, [StringComparison]::Ordinal)) {
                     $alreadyOwned = $true
                     break
                 }
