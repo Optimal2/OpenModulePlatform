@@ -11,7 +11,6 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class ServiceAppDeploymentService
 {
     private const int ScAccessDeniedExitCode = 5;
-    private static readonly char[] InvalidServiceNameCharacters = ['\\', '/', ':', '*', '?', '"', '<', '>', '|'];
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
@@ -57,16 +56,22 @@ public sealed class ServiceAppDeploymentService
             hostKey,
             deployments.Count);
 
+        var resolvedServiceNames = deployments
+            .ToDictionary(
+                d => d.AppInstanceId,
+                d => ServiceAppDeploymentNaming.ResolveServiceName(d, ResolveExecutableRelativePath(d)));
+
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, cancellationToken);
+            await DeployAsync(settings, deployment, resolvedServiceNames, cancellationToken);
         }
     }
 
     private async Task DeployAsync(
         HostAgentSettings settings,
         ServiceAppDeploymentDescriptor deployment,
+        IReadOnlyDictionary<Guid, string> resolvedServiceNames,
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
@@ -77,8 +82,8 @@ public sealed class ServiceAppDeploymentService
         try
         {
             var executableRelativePath = ResolveExecutableRelativePath(deployment);
-            serviceName = ResolveServiceName(deployment, executableRelativePath);
-            targetPath = ResolveTargetPath(settings, deployment, serviceName);
+            serviceName = ServiceAppDeploymentNaming.ResolveServiceName(deployment, executableRelativePath);
+            targetPath = ServiceAppDeploymentNaming.ResolveTargetPath(settings, deployment, serviceName);
             var targetExecutablePath = DeploymentPath.CombineUnderRoot(
                 targetPath,
                 executableRelativePath,
@@ -211,6 +216,47 @@ public sealed class ServiceAppDeploymentService
                 }
             }
 
+            var renameCleanup = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
+                settings,
+                deployment,
+                executableRelativePath,
+                serviceName,
+                resolvedServiceNames);
+            if (renameCleanup.ShouldCleanUp
+                && !string.IsNullOrWhiteSpace(renameCleanup.OldServiceName)
+                && !string.IsNullOrWhiteSpace(renameCleanup.OldTargetPath))
+            {
+                try
+                {
+                    CleanUpRenamedService(renameCleanup.OldServiceName, renameCleanup.OldTargetPath, targetPath);
+                    _logger.LogInformation(
+                        "Cleaned up renamed service app runtime. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}, NewServiceName={NewServiceName}, NewTargetPath={NewTargetPath}",
+                        deployment.AppInstanceId,
+                        renameCleanup.OldServiceName,
+                        renameCleanup.OldTargetPath,
+                        serviceName,
+                        targetPath);
+                }
+                catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to clean up renamed service app runtime; continuing with deployment. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}",
+                        deployment.AppInstanceId,
+                        renameCleanup.OldServiceName,
+                        renameCleanup.OldTargetPath);
+                }
+            }
+            else if (renameCleanup.OldServiceName is not null && !renameCleanup.ShouldCleanUp)
+            {
+                _logger.LogWarning(
+                    "Service app runtime name changed but old service was not cleaned up. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, NewServiceName={NewServiceName}, Reason={Reason}",
+                    deployment.AppInstanceId,
+                    renameCleanup.OldServiceName,
+                    serviceName,
+                    renameCleanup.Reason);
+            }
+
             ArtifactDirectoryMirror.MirrorDirectory(
                 deployment.SourceLocalPath,
                 targetPath,
@@ -314,8 +360,8 @@ public sealed class ServiceAppDeploymentService
             return executables[0];
         }
 
-        var installationName = Clean(deployment.InstallationName);
-        if (!IsGenericInstallationName(installationName))
+        var installationName = ServiceAppDeploymentNaming.Clean(deployment.InstallationName);
+        if (!ServiceAppDeploymentNaming.IsGenericInstallationName(installationName))
         {
             var expected = installationName + ".exe";
             var match = executables.FirstOrDefault(
@@ -328,43 +374,6 @@ public sealed class ServiceAppDeploymentService
 
         throw new InvalidOperationException(
             $"Service app artifact '{deployment.ArtifactId}' contains more than one root executable. Set AppInstances.InstallationName to the Windows service/executable name.");
-    }
-
-    private static string ResolveServiceName(ServiceAppDeploymentDescriptor deployment, string executableRelativePath)
-    {
-        var configuredName = Clean(deployment.InstallationName);
-        var serviceName = IsGenericInstallationName(configuredName)
-            ? Path.GetFileNameWithoutExtension(executableRelativePath)
-            : configuredName!;
-
-        ValidateServiceName(serviceName, deployment.AppInstanceKey);
-        return serviceName;
-    }
-
-    private static string ResolveTargetPath(
-        HostAgentSettings settings,
-        ServiceAppDeploymentDescriptor deployment,
-        string serviceName)
-    {
-        var installPath = Clean(deployment.InstallPath);
-        if (!string.IsNullOrWhiteSpace(installPath))
-        {
-            if (Path.IsPathRooted(installPath))
-            {
-                return Path.GetFullPath(installPath);
-            }
-
-            return DeploymentPath.CombineUnderRoot(
-                settings.ServicesRoot.Trim(),
-                installPath,
-                $"Service app instance '{deployment.AppInstanceKey}' InstallPath");
-        }
-
-        var folderName = SanitizeFolderName(serviceName);
-        return DeploymentPath.CombineUnderRoot(
-            settings.ServicesRoot.Trim(),
-            folderName,
-            $"Service app instance '{deployment.AppInstanceKey}' folder name");
     }
 
     private static bool IsAlreadyApplied(
@@ -381,6 +390,18 @@ public sealed class ServiceAppDeploymentService
             && Directory.Exists(targetPath)
             && File.Exists(targetExecutablePath)
             && GetServiceState(serviceName) is not null;
+    }
+
+    private static void CleanUpRenamedService(string oldServiceName, string oldTargetPath, string newTargetPath)
+    {
+        StopServiceIfRunning(oldServiceName, timeoutSeconds: 30);
+        RunScChecked("delete", oldServiceName);
+
+        if (Directory.Exists(oldTargetPath)
+            && !string.Equals(oldTargetPath, newTargetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.Delete(oldTargetPath, recursive: true);
+        }
     }
 
     private static void EnsureWindowsService(
@@ -1107,34 +1128,6 @@ public sealed class ServiceAppDeploymentService
 
         return scPath;
     }
-
-    private static void ValidateServiceName(string serviceName, string appInstanceKey)
-    {
-        if (string.IsNullOrWhiteSpace(serviceName)
-            || serviceName.IndexOfAny(InvalidServiceNameCharacters) >= 0
-            || serviceName.Any(char.IsControl))
-        {
-            throw new InvalidOperationException(
-                $"App instance '{appInstanceKey}' resolved an invalid Windows service name.");
-        }
-    }
-
-    private static string SanitizeFolderName(string value)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var chars = value.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray();
-        var sanitized = new string(chars).Trim('.', ' ');
-        return string.IsNullOrWhiteSpace(sanitized) ? "service-app" : sanitized;
-    }
-
-    private static string? Clean(string? value)
-        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private static bool IsGenericInstallationName(string? value)
-        => string.IsNullOrWhiteSpace(value)
-            || value.Equals("default", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("service", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("serviceapp", StringComparison.OrdinalIgnoreCase);
 
     private static bool AccountsEqual(string actual, string desired)
     {

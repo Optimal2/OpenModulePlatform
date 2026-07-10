@@ -25,5 +25,8 @@
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
       <_Parameter1>OpenModulePlatform.Portal.Tests</_Parameter1>
     </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>OpenModulePlatform.HostAgent.Runtime.Tests</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 </Project>
