@@ -234,6 +234,13 @@ table[data-page-size] > thead th {
     text-overflow: ellipsis;
 }
 
+/* Clip cell content at the column edge so narrow (user-resized) columns never
+   let unbreakable content overlap the neighbouring column. */
+table[data-sortable-list] > tbody > tr > td,
+table[data-page-size] > tbody > tr > td {
+    overflow: hidden;
+}
+
 th.list-column-resize-host {
     position: relative;
 }
