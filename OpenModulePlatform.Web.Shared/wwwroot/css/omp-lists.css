@@ -232,6 +232,15 @@ table[data-page-size] > thead th {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+/* Non-sortable headers keep the host app's th styling but get the same box
+   metrics as the sort buttons so all header texts align on one baseline. */
+table[data-sortable-list] > thead th:not([data-sort-type]),
+table[data-page-size] > thead th:not([data-sort-type]) {
+    padding: 10px 12px;
+    line-height: 20px;
 }
 
 /* Clip cell content at the column edge so narrow (user-resized) columns never
