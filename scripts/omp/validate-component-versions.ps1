@@ -22,6 +22,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Ensure git output is decoded as UTF-8 so embedded BOMs and non-ASCII
+# characters are preserved exactly as stored in the repository.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 function Get-ScriptDirectory {
     if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
         return $PSScriptRoot
@@ -139,6 +143,22 @@ function Get-Sha256Hex {
     }
 }
 
+function Remove-Utf8Bom {
+    <#
+    .SYNOPSIS
+    Removes a leading UTF-8 BOM from a string so it can be parsed as JSON or SQL.
+    Git may preserve BOMs written by some editors/encodings, and ConvertFrom-Json
+    treats a BOM as an unexpected character.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    if ($Text.StartsWith([char]0xFEFF)) {
+        return $Text.Substring(1)
+    }
+
+    return $Text
+}
+
 function Get-ProjectReferences {
     <#
     .SYNOPSIS
@@ -240,6 +260,7 @@ elseif (-not (Test-SemverLikeVersion -Value $repositoryVersion)) {
 # Build a lookup of module definitions for mapping and version checks.
 # ---------------------------------------------------------------------------
 $moduleDefinitionsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+$moduleDefinitionObjectsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
 $moduleDefinitionVersionSyncCount = 0
 
 foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
@@ -278,6 +299,10 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
     }
     else {
         $moduleDefinitionVersionSyncCount++
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($moduleKey) -and -not $moduleDefinitionObjectsByKey.ContainsKey($moduleKey)) {
+        $moduleDefinitionObjectsByKey.Add($moduleKey, $definition)
     }
 }
 
@@ -372,6 +397,52 @@ foreach ($component in @($manifest.components)) {
                     $minModuleVersionErrorCount++
                 }
             }
+
+            # -------------------------------------------------------------------
+            # Check 10: compatibleArtifacts range sanity — HARD ERROR.
+            # A component's version must fall within the minVersion/maxVersion
+            # range declared in its module's compatibleArtifacts entry for the
+            # same appKey, otherwise the produced artifact cannot be imported.
+            # -------------------------------------------------------------------
+            $componentAppKey = [string](Get-OptionalPropertyValue -Object $component -Name 'appKey')
+            if (-not [string]::IsNullOrWhiteSpace($componentAppKey) -and $moduleDefinitionObjectsByKey.ContainsKey($moduleKey)) {
+                $definitionObject = $moduleDefinitionObjectsByKey[$moduleKey]
+                $compatibleArtifacts = Get-OptionalPropertyValue -Object $definitionObject -Name 'compatibleArtifacts'
+                if ($null -ne $compatibleArtifacts) {
+                    $matchingArtifact = $null
+                    foreach ($artifact in @($compatibleArtifacts)) {
+                        if ($null -eq $artifact) {
+                            continue
+                        }
+
+                        $artifactAppKey = [string](Get-OptionalPropertyValue -Object $artifact -Name 'appKey')
+                        if ([string]::Equals($artifactAppKey, $componentAppKey, [StringComparison]::Ordinal)) {
+                            $matchingArtifact = $artifact
+                            break
+                        }
+                    }
+
+                    if ($null -ne $matchingArtifact) {
+                        $componentVersionObj = ConvertTo-VersionOrNull -Value $componentVersion
+                        $maxArtifactVersion = [string](Get-OptionalPropertyValue -Object $matchingArtifact -Name 'maxVersion')
+                        $minArtifactVersion = [string](Get-OptionalPropertyValue -Object $matchingArtifact -Name 'minVersion')
+
+                        if (-not [string]::IsNullOrWhiteSpace($maxArtifactVersion)) {
+                            $maxVersionObj = ConvertTo-VersionOrNull -Value $maxArtifactVersion
+                            if ($null -ne $componentVersionObj -and $null -ne $maxVersionObj -and $componentVersionObj -gt $maxVersionObj) {
+                                Add-ValidationError -Errors $errors -Message "Component '$componentKey' version '$componentVersion' exceeds compatibleArtifacts maxVersion '$maxArtifactVersion' for appKey '$componentAppKey'. Bump maxVersion to at least '$componentVersion'."
+                            }
+                        }
+
+                        if (-not [string]::IsNullOrWhiteSpace($minArtifactVersion)) {
+                            $minVersionObj = ConvertTo-VersionOrNull -Value $minArtifactVersion
+                            if ($null -ne $componentVersionObj -and $null -ne $minVersionObj -and $componentVersionObj -lt $minVersionObj) {
+                                Add-ValidationError -Errors $errors -Message "Component '$componentKey' version '$componentVersion' is below compatibleArtifacts minVersion '$minArtifactVersion' for appKey '$componentAppKey'. Bump minVersion to at most '$componentVersion'."
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -420,7 +491,7 @@ else {
 $baseManifest = $null
 $baseComponentsByKey = $null
 if ($baseRefAvailable) {
-    $baseManifestText = (git -C $repositoryRoot show "$baseRef`:omp-components.json" 2>$null) -join "`n"
+    $baseManifestText = Remove-Utf8Bom -Text ((git -C $repositoryRoot show "$baseRef`:omp-components.json" 2>$null) -join "`n")
     if (-not [string]::IsNullOrWhiteSpace($baseManifestText)) {
         $baseManifest = ConvertFrom-JsonDocument -Json $baseManifestText -Depth $jsonDepth
     }
@@ -608,7 +679,7 @@ else {
         $headText = Get-Content -LiteralPath $fullSqlPath -Raw -Encoding UTF8
 
         $baseTextLines = @(git -C $repositoryRoot show "$baseRef`:$sqlPath" 2>$null)
-        $baseText = $baseTextLines -join "`n"
+        $baseText = Remove-Utf8Bom -Text ($baseTextLines -join "`n")
         $isNewFile = [string]::IsNullOrWhiteSpace($baseText)
 
         $headNormalized = ConvertTo-NormalizedSql -SqlText $headText
@@ -643,7 +714,7 @@ else {
         $headDefinitionVersion = [string](Get-OptionalPropertyValue -Object $headDefinition -Name 'definitionVersion')
 
         $baseDefinitionTextLines = @(git -C $repositoryRoot show "$baseRef`:$relativeDefinitionPath" 2>$null)
-        $baseDefinitionText = $baseDefinitionTextLines -join "`n"
+        $baseDefinitionText = Remove-Utf8Bom -Text ($baseDefinitionTextLines -join "`n")
         $baseDefinitionVersion = $null
         if (-not [string]::IsNullOrWhiteSpace($baseDefinitionText)) {
             $baseDefinition = ConvertFrom-JsonDocument -Json $baseDefinitionText -Depth $jsonDepth
