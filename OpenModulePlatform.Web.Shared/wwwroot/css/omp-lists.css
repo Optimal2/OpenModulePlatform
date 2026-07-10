@@ -235,12 +235,16 @@ table[data-page-size] > thead th {
     vertical-align: middle;
 }
 
-/* Non-sortable headers keep the host app's th styling but get the same box
-   metrics as the sort buttons so all header texts align on one baseline. */
+/* Non-sortable headers get the same box metrics and text rendering as the
+   sort buttons (browsers reset text-transform/letter-spacing on buttons, so
+   host th styles like uppercase would otherwise only hit non-sortable headers). */
 table[data-sortable-list] > thead th:not([data-sort-type]),
 table[data-page-size] > thead th:not([data-sort-type]) {
     padding: 10px 12px;
     line-height: 20px;
+    text-transform: none;
+    letter-spacing: normal;
+    word-spacing: normal;
 }
 
 /* Clip cell content at the column edge so narrow (user-resized) columns never
