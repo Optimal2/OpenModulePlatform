@@ -513,6 +513,7 @@ public sealed class ArtifactZipImportService
 
         var requiresPreApplySqlRepairs = RequiresPreApplySqlRepairs(definition);
         var repairs = 0;
+        var healedScripts = new List<string>();
 
         // Platform-core schema repairs must run even when the installed definition
         // version is newer than the package version, so old installations can bridge
@@ -524,6 +525,33 @@ public sealed class ArtifactZipImportService
                 cancellationToken);
         }
 
+        // For non-core modules, verify the physical schema against integrity.requiredTables
+        // /requiredSchemas and re-run only the idempotent scripts whose declared objects
+        // are missing. This heals stale schema even when the version gate would otherwise
+        // skip or ignore the definition.
+        if (!requiresPreApplySqlRepairs)
+        {
+            var missingByScript = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(
+                definition.DefinitionJson,
+                cancellationToken);
+            if (missingByScript.Count > 0)
+            {
+                var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var healedCount = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+                    saveResult.ModuleDefinitionDocumentId,
+                    scriptKeys,
+                    cancellationToken);
+                repairs += healedCount;
+                healedScripts.AddRange(missingByScript.Keys);
+
+                _logger.LogWarning(
+                    "Schema drift healed for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s). Missing objects: {MissingObjects}.",
+                    definition.ModuleKey,
+                    healedCount,
+                    string.Join(", ", missingByScript.SelectMany(static item => item.Value)));
+            }
+        }
+
         if (installedVersionIsStrictlyNewer)
         {
             return new ModuleDefinitionImportResult(
@@ -531,13 +559,19 @@ public sealed class ArtifactZipImportService
                 definition.DefinitionVersion,
                 saveResult.ModuleDefinitionDocumentId,
                 Applied: false,
-                repairs);
+                repairs)
+            {
+                HealedScripts = healedScripts
+            };
         }
 
         var applied = await _repository.ApplyImportedModuleDefinitionAsync(
             saveResult.ModuleDefinitionDocumentId,
             cancellationToken);
-        if (applied && !requiresPreApplySqlRepairs)
+
+        // The missing-object repair above already executed the required scripts, so skip
+        // the broad post-apply repair pass for this non-core module to avoid duplicating work.
+        if (applied && !requiresPreApplySqlRepairs && healedScripts.Count == 0)
         {
             repairs += await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
                 saveResult.ModuleDefinitionDocumentId,
@@ -549,7 +583,10 @@ public sealed class ArtifactZipImportService
             definition.DefinitionVersion,
             saveResult.ModuleDefinitionDocumentId,
             applied,
-            repairs);
+            repairs)
+        {
+            HealedScripts = healedScripts
+        };
     }
 
     private static bool RequiresPreApplySqlRepairs(ModuleDefinitionImportDocument definition)

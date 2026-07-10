@@ -2634,6 +2634,16 @@ WHERE ModuleKey = @ModuleKey;";
     public async Task<ModuleDefinitionSqlRepairResult> ExecuteModuleDefinitionSqlRepairsAsync(
         int moduleDefinitionDocumentId,
         CancellationToken ct)
+        => await ExecuteModuleDefinitionSqlRepairsAsync(moduleDefinitionDocumentId, scriptKeysToRepair: null, ct);
+
+    /// <summary>
+    /// Executes idempotent module-definition SQL repairs. When <paramref name="scriptKeysToRepair"/>
+    /// is provided, only those script keys are considered; otherwise all repairable scripts run.
+    /// </summary>
+    public async Task<ModuleDefinitionSqlRepairResult> ExecuteModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        IReadOnlySet<string>? scriptKeysToRepair,
+        CancellationToken ct)
     {
         var definition = await GetModuleDefinitionDocumentAsync(moduleDefinitionDocumentId, ct)
             ?? throw new InvalidOperationException("Module definition document was not found.");
@@ -2651,6 +2661,11 @@ WHERE ModuleKey = @ModuleKey;";
             .Where(static item => item.NeedsExecution && item.CanExecute)
             .Select(static item => item.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (scriptKeysToRepair is { Count: > 0 })
+        {
+            repairableKeys.IntersectWith(scriptKeysToRepair);
+        }
+
         if (repairableKeys.Count == 0)
         {
             return new ModuleDefinitionSqlRepairResult
@@ -2704,7 +2719,11 @@ WHERE ModuleKey = @ModuleKey;";
         return new ModuleDefinitionSqlRepairResult
         {
             ExecutedCount = executed,
-            RemainingProblems = refreshed.Where(static item => item.NeedsExecution).ToList()
+            RemainingProblems = refreshed.Where(static item => item.NeedsExecution).ToList(),
+            HealedScripts = scripts
+                .Where(script => repairableKeys.Contains(script.Key))
+                .Select(static script => script.Key)
+                .ToList()
         };
     }
 
@@ -5057,6 +5076,33 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
 
     private static string ToSqlUnicodeLiteral(string value)
         => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+
+    /// <summary>
+    /// Reads the module definition JSON and returns any required database objects
+    /// declared in <c>integrity.requiredTables</c>/<c>integrity.requiredSchemas</c>
+    /// that are missing from the current database, grouped by the script key that
+    /// owns them.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
+        string definitionJson,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(definitionJson))
+        {
+            return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var scripts = ReadPortableSqlScripts(definitionJson);
+        var requiredObjects = ReadRequiredDatabaseObjects(definitionJson);
+        if (requiredObjects.Count == 0)
+        {
+            return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        return await GetMissingRequiredObjectsByScriptKeyAsync(conn, scripts, requiredObjects, ct);
+    }
 
     private static async Task<Dictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
         SqlConnection conn,
