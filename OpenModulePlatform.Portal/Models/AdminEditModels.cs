@@ -331,6 +331,11 @@ public sealed class ModuleDefinitionSqlRepairResult
     public int ExecutedCount { get; set; }
 
     public IReadOnlyList<ModuleDefinitionSqlCheckRow> RemainingProblems { get; set; } = [];
+
+    /// <summary>
+    /// The script keys that were re-executed to heal stale schema objects.
+    /// </summary>
+    public IReadOnlyList<string> HealedScripts { get; set; } = [];
 }
 
 /// <summary>
