@@ -184,21 +184,63 @@
     }
     else
     {
+        var appTypes = Model.Apps
+            .Select(row => row.AppType)
+            .Where(type => !string.IsNullOrWhiteSpace(type))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var desiredStates = Model.Apps
+            .Select(row => row.DesiredState)
+            .Distinct()
+            .OrderBy(state => state)
+            .ToList();
+
+        <div class="toolbar">
+            <details class="list-filter" data-list-filter="desired-apps-list">
+                <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                <div class="list-filter__menu">
+                    <fieldset class="list-filter__group" data-filter-group="apptype">
+                        <legend>@L["App type"]</legend>
+                        @foreach (var appType in appTypes)
+                        {
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="@appType" /> @L[appType]</label>
+                        }
+                    </fieldset>
+                    <fieldset class="list-filter__group" data-filter-group="allowed">
+                        <legend>@L["Allowed"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="8" data-filter-equals="1" /> @L["Allowed"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="8" data-filter-equals="0" /> @L["Blocked"]</label>
+                    </fieldset>
+                    <fieldset class="list-filter__group" data-filter-group="desiredstate">
+                        <legend>@L["Desired state"]</legend>
+                        @foreach (var desiredState in desiredStates)
+                        {
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="9" data-filter-equals="@desiredState" /> @desiredState</label>
+                        }
+                    </fieldset>
+                    <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                </div>
+            </details>
+            <input type="search" class="list-search" data-list-search="desired-apps-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="desired-apps-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="desired-apps-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table class="grid app-instances-grid">
+            <table id="desired-apps-list" class="grid app-instances-grid sortable-list" data-sortable-list data-page-size="50">
                 <thead>
                     <tr>
-                        <th>@L["Module instance"]</th>
-                        <th>@L["Host"]</th>
-                        <th>@L["App"]</th>
-                        <th>@L["App type"]</th>
-                        <th>@L["App instance key"]</th>
-                        <th>@L["Artifact"]</th>
-                        <th>@L["Route"]</th>
-                        <th>@L["Installation"]</th>
-                        <th>@L["Allowed"]</th>
-                        <th>@L["Desired state"]</th>
-                        <th>@L["Actions"]</th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module instance"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App type"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App instance key"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Artifact"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Route"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Installation"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Allowed"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Desired state"]</button></th>
+                        <th scope="col">@L["Actions"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -221,9 +263,9 @@
                             }
                         </td>
                         <td><code>@row.AppKey</code></td>
-                        <td>@L[row.AppType]</td>
+                        <td data-sort-value="@row.AppType">@L[row.AppType]</td>
                         <td><code>@row.AppInstanceKey</code></td>
-                        <td>
+                        <td data-sort-value="@(row.ArtifactVersion ?? "")">
                             <div class="artifact-version-cell">
                                 <span>@(row.ArtifactVersion ?? L["None"].Value)</span>
                                 @if (row.HasNewerArtifact)
@@ -248,8 +290,8 @@
                         </td>
                         <td>@row.RoutePath</td>
                         <td>@row.InstallationName</td>
-                        <td><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
-                        <td><span class="pill">@row.DesiredState</span></td>
+                        <td data-sort-value="@(row.IsAllowed ? "1" : "0")"><span class="pill">@(row.IsAllowed ? L["Allowed"] : L["Blocked"])</span></td>
+                        <td data-sort-value="@row.DesiredState"><span class="pill">@row.DesiredState</span></td>
                         <td>
                             <div class="admin-icon-actions">
                                 <a class="action-link admin-icon-button admin-icon-button--edit"
@@ -277,6 +319,9 @@
                 }
                 </tbody>
             </table>
+        </div>
+        <div class="list-show-more">
+            <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="desired-apps-list" hidden>@L["Show more"]</button>
         </div>
     }
 </section>
