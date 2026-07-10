@@ -287,7 +287,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
 $projectPathCount = 0
 $componentVersionCount = 0
 $moduleMappingCount = 0
-$minModuleVersionWarningCount = 0
+$minModuleVersionErrorCount = 0
 $cascadeCheckCount = 0
 $cascadeErrorCount = 0
 
@@ -354,7 +354,12 @@ foreach ($component in @($manifest.components)) {
             $moduleMappingCount++
 
             # -------------------------------------------------------------------
-            # Check 6: minModuleDefinitionVersion sanity (warning only).
+            # Check 6: minModuleDefinitionVersion sanity — HARD ERROR.
+            # A component requiring a definition version higher than what the
+            # module declares produces an internally inconsistent manifest. Any
+            # package built from this state would carry a minVersion requirement
+            # that no existing module definition can satisfy, so import would
+            # always fail at runtime.
             # -------------------------------------------------------------------
             $minModuleDefinitionVersion = [string](Get-OptionalPropertyValue -Object $component -Name 'minModuleDefinitionVersion')
             if (-not [string]::IsNullOrWhiteSpace($minModuleDefinitionVersion)) {
@@ -363,8 +368,8 @@ foreach ($component in @($manifest.components)) {
                 $actualVersionObj = ConvertTo-VersionOrNull -Value $actualVersion
 
                 if ($null -ne $minVersionObj -and $null -ne $actualVersionObj -and $minVersionObj -gt $actualVersionObj) {
-                    Add-ValidationWarning -Warnings $warnings -Message "Component '$componentKey' requires minModuleDefinitionVersion '$minModuleDefinitionVersion' which is greater than the declared module definition version '$actualVersion' for moduleKey '$moduleKey'."
-                    $minModuleVersionWarningCount++
+                    Add-ValidationError -Errors $errors -Message "Component '$componentKey' requires minModuleDefinitionVersion '$minModuleDefinitionVersion' which is greater than the declared module definition version '$actualVersion' for moduleKey '$moduleKey'."
+                    $minModuleVersionErrorCount++
                 }
             }
         }
@@ -372,129 +377,133 @@ foreach ($component in @($manifest.components)) {
 }
 
 # ---------------------------------------------------------------------------
-# Check 7: Shared project cascade version bumps.
+# Resolve base ref for diff-based checks (Check 7 and Check 8).
 # Exemption: Behavior-neutral refactors (identical emitted strings/IL) do not require
 # a cascade consumer bump. Only binary-affecting changes (new/removed APIs, changed
 # default values, changed serialization format, etc.) require all consumers to be bumped.
 # When running multi-phase campaigns, pass -BaseCommit to pin the diff baseline.
 # ---------------------------------------------------------------------------
-$sharedProjects = Get-OptionalPropertyValue -Object $manifest -Name 'sharedProjects'
-if ($null -ne $sharedProjects) {
-    $baseRef = 'origin/main'
-    $baseRefAvailable = $false
+$baseRef = 'origin/main'
+$baseRefAvailable = $false
 
-    if (-not [string]::IsNullOrWhiteSpace($BaseCommit)) {
-        try {
-            $null = git -C $repositoryRoot rev-parse --verify $BaseCommit 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                $baseRef = $BaseCommit
-                $baseRefAvailable = $true
-            }
-            else {
-                Add-ValidationError -Errors $errors -Message "The specified -BaseCommit '$BaseCommit' could not be resolved. Verify the commit SHA exists in this repository."
-            }
+if (-not [string]::IsNullOrWhiteSpace($BaseCommit)) {
+    try {
+        $null = git -C $repositoryRoot rev-parse --verify $BaseCommit 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $baseRef = $BaseCommit
+            $baseRefAvailable = $true
         }
-        catch {
+        else {
             Add-ValidationError -Errors $errors -Message "The specified -BaseCommit '$BaseCommit' could not be resolved. Verify the commit SHA exists in this repository."
         }
     }
-    else {
-        Add-ValidationWarning -Warnings $warnings -Message 'No -BaseCommit specified; cascade diff uses origin/main. Binary-affecting shared changes committed in earlier campaign phases may not trigger cascade bumps. Pass -BaseCommit <sha> to diff against a fixed baseline.'
+    catch {
+        Add-ValidationError -Errors $errors -Message "The specified -BaseCommit '$BaseCommit' could not be resolved. Verify the commit SHA exists in this repository."
+    }
+}
+else {
+    Add-ValidationWarning -Warnings $warnings -Message 'No -BaseCommit specified; cascade diff uses origin/main. Binary-affecting shared changes committed in earlier campaign phases may not trigger cascade bumps. Pass -BaseCommit <sha> to diff against a fixed baseline.'
 
-        try {
-            $null = git -C $repositoryRoot rev-parse --verify origin/main 2>$null
-            $baseRefAvailable = ($LASTEXITCODE -eq 0)
-        }
-        catch {
-            $baseRefAvailable = $false
-        }
-
-        if (-not $baseRefAvailable) {
-            Add-ValidationWarning -Warnings $warnings -Message 'origin/main could not be resolved; skipping shared-project cascade validation.'
-        }
+    try {
+        $null = git -C $repositoryRoot rev-parse --verify origin/main 2>$null
+        $baseRefAvailable = ($LASTEXITCODE -eq 0)
+    }
+    catch {
+        $baseRefAvailable = $false
     }
 
-    if ($baseRefAvailable) {
-        $baseManifestText = (git -C $repositoryRoot show "$baseRef`:omp-components.json" 2>$null) -join "`n"
-        $baseManifest = $null
-        if (-not [string]::IsNullOrWhiteSpace($baseManifestText)) {
-            $baseManifest = ConvertFrom-JsonDocument -Json $baseManifestText -Depth $jsonDepth
+    if (-not $baseRefAvailable) {
+        Add-ValidationWarning -Warnings $warnings -Message 'origin/main could not be resolved; skipping shared-project cascade validation.'
+    }
+}
+
+$baseManifest = $null
+$baseComponentsByKey = $null
+if ($baseRefAvailable) {
+    $baseManifestText = (git -C $repositoryRoot show "$baseRef`:omp-components.json" 2>$null) -join "`n"
+    if (-not [string]::IsNullOrWhiteSpace($baseManifestText)) {
+        $baseManifest = ConvertFrom-JsonDocument -Json $baseManifestText -Depth $jsonDepth
+    }
+
+    $baseComponentsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    if ($null -ne $baseManifest) {
+        foreach ($baseComponent in @($baseManifest.components)) {
+            if ($null -eq $baseComponent) {
+                continue
+            }
+
+            $key = [string](Get-OptionalPropertyValue -Object $baseComponent -Name 'componentKey')
+            if (-not [string]::IsNullOrWhiteSpace($key) -and -not $baseComponentsByKey.ContainsKey($key)) {
+                $baseComponentsByKey.Add($key, $baseComponent)
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Check 7: Shared project cascade version bumps.
+# ---------------------------------------------------------------------------
+$sharedProjects = Get-OptionalPropertyValue -Object $manifest -Name 'sharedProjects'
+if ($null -ne $sharedProjects -and $baseRefAvailable) {
+    foreach ($sharedProject in @($sharedProjects)) {
+        if ($null -eq $sharedProject) {
+            continue
         }
 
-        $baseComponentsByKey = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
-        if ($null -ne $baseManifest) {
-            foreach ($baseComponent in @($baseManifest.components)) {
-                if ($null -eq $baseComponent) {
-                    continue
-                }
+        $projectPath = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'projectPath')
+        if ([string]::IsNullOrWhiteSpace($projectPath)) {
+            continue
+        }
 
-                $key = [string](Get-OptionalPropertyValue -Object $baseComponent -Name 'componentKey')
-                if (-not [string]::IsNullOrWhiteSpace($key) -and -not $baseComponentsByKey.ContainsKey($key)) {
-                    $baseComponentsByKey.Add($key, $baseComponent)
+        $diffPath = $projectPath
+        if ($projectPath -like '*.csproj') {
+            $diffPath = Split-Path -Parent $projectPath
+        }
+
+        $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $diffPath 2>$null)
+        if ([string]::IsNullOrWhiteSpace($changedFiles)) {
+            continue
+        }
+
+        $consumers = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'consumers')
+        if ($consumers.Count -eq 0) {
+            continue
+        }
+
+        $unbumpedConsumers = [System.Collections.Generic.List[string]]::new()
+        foreach ($consumerKey in $consumers) {
+            $currentComponent = $null
+            foreach ($component in @($manifest.components)) {
+                if (([string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')) -eq $consumerKey) {
+                    $currentComponent = $component
+                    break
                 }
+            }
+
+            if ($null -eq $currentComponent) {
+                Add-ValidationWarning -Warnings $warnings -Message "Shared project '$projectPath' lists consumer '$consumerKey' which is not declared in components."
+                continue
+            }
+
+            $baseVersion = $null
+            if ($baseComponentsByKey.ContainsKey($consumerKey)) {
+                $baseVersion = [string](Get-OptionalPropertyValue -Object $baseComponentsByKey[$consumerKey] -Name 'version')
+            }
+
+            $currentVersion = [string](Get-OptionalPropertyValue -Object $currentComponent -Name 'version')
+
+            if (-not [string]::IsNullOrWhiteSpace($baseVersion) -and $baseVersion -eq $currentVersion) {
+                $unbumpedConsumers.Add($consumerKey)
             }
         }
 
-        foreach ($sharedProject in @($sharedProjects)) {
-            if ($null -eq $sharedProject) {
-                continue
-            }
-
-            $projectPath = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'projectPath')
-            if ([string]::IsNullOrWhiteSpace($projectPath)) {
-                continue
-            }
-
-            $diffPath = $projectPath
-            if ($projectPath -like '*.csproj') {
-                $diffPath = Split-Path -Parent $projectPath
-            }
-
-            $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $diffPath 2>$null)
-            if ([string]::IsNullOrWhiteSpace($changedFiles)) {
-                continue
-            }
-
-            $consumers = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'consumers')
-            if ($consumers.Count -eq 0) {
-                continue
-            }
-
-            $unbumpedConsumers = [System.Collections.Generic.List[string]]::new()
-            foreach ($consumerKey in $consumers) {
-                $currentComponent = $null
-                foreach ($component in @($manifest.components)) {
-                    if (([string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')) -eq $consumerKey) {
-                        $currentComponent = $component
-                        break
-                    }
-                }
-
-                if ($null -eq $currentComponent) {
-                    Add-ValidationWarning -Warnings $warnings -Message "Shared project '$projectPath' lists consumer '$consumerKey' which is not declared in components."
-                    continue
-                }
-
-                $baseVersion = $null
-                if ($baseComponentsByKey.ContainsKey($consumerKey)) {
-                    $baseVersion = [string](Get-OptionalPropertyValue -Object $baseComponentsByKey[$consumerKey] -Name 'version')
-                }
-
-                $currentVersion = [string](Get-OptionalPropertyValue -Object $currentComponent -Name 'version')
-
-                if (-not [string]::IsNullOrWhiteSpace($baseVersion) -and $baseVersion -eq $currentVersion) {
-                    $unbumpedConsumers.Add($consumerKey)
-                }
-            }
-
-            if ($unbumpedConsumers.Count -gt 0) {
-                $consumerList = ($unbumpedConsumers | Sort-Object) -join ', '
-                Add-ValidationError -Errors $errors -Message "Shared project '$projectPath' changed but the following consumers were not bumped: $consumerList. Run `.\\scripts\\omp\\bump-version.ps1 -CascadeFrom $projectPath` or manually bump the listed components."
-                $cascadeErrorCount++
-            }
-            else {
-                $cascadeCheckCount++
-            }
+        if ($unbumpedConsumers.Count -gt 0) {
+            $consumerList = ($unbumpedConsumers | Sort-Object) -join ', '
+            Add-ValidationError -Errors $errors -Message "Shared project '$projectPath' changed but the following consumers were not bumped: $consumerList. Run `.\\scripts\\omp\\bump-version.ps1 -CascadeFrom $projectPath` or manually bump the listed components."
+            $cascadeErrorCount++
+        }
+        else {
+            $cascadeCheckCount++
         }
     }
 }
@@ -678,7 +687,13 @@ else {
                         $componentKey = '<unknown>'
                     }
 
-                    Add-ValidationWarning -Warnings $warnings -Message "Component '$componentKey' has minModuleDefinitionVersion '$minModuleDefinitionVersion' which is less than the new definitionVersion '$newDefinitionVersion' for module '$moduleKey'. Consider updating minModuleDefinitionVersion."
+                    # Check 8b: minModuleDefinitionVersion lags a bumped definitionVersion — HARD ERROR.
+                    # The module's SQL contract changed and the definitionVersion was raised. Any
+                    # component that exposes a minModuleDefinitionVersion for the same module must
+                    # be updated to at least the new version, otherwise packages can be imported
+                    # into environments with an older definition and fail at runtime due to missing
+                    # schema/metadata.
+                    Add-ValidationError -Errors $errors -Message "Component '$componentKey' has minModuleDefinitionVersion '$minModuleDefinitionVersion' which is less than the new definitionVersion '$newDefinitionVersion' for module '$moduleKey'. Update minModuleDefinitionVersion to at least '$newDefinitionVersion'."
                 }
             }
         }
