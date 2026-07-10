@@ -320,6 +320,15 @@ body.section-navigator-resizing {
     z-index: 1;
 }
 
+.section-navigator__label--disabled {
+    color: var(--text-muted);
+    opacity: 0.55;
+    cursor: not-allowed;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .section-navigator__link:hover,
 .section-navigator__link:focus-visible,
 .section-navigator__summary-link:hover,
