@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    Make the OMP web defaults analyzer run automatically for every ASP.NET Core
+    web project in the repository that uses Microsoft.NET.Sdk.Web.
+    OpenModulePlatform.Auth is excluded at the analyzer level because it
+    deliberately uses its own pipeline.
+  -->
+  <ItemGroup Condition="'$(UsingMicrosoftNETSdkWeb)' == 'true'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)OpenModulePlatform.Web.Shared.Analyzers\OpenModulePlatform.Web.Shared.Analyzers.csproj">
+      <OutputItemType>Analyzer</OutputItemType>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>
