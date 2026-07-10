@@ -451,8 +451,13 @@ public sealed class PortableModulePackageService
                         item.SourceName,
                         ct,
                         package.ExtractionRoot);
+                    var missingObjectsByScriptKey = quickImportState is not null
+                        ? await _repo.GetMissingRequiredObjectsByScriptKeyAsync(definition.DefinitionJson, ct)
+                        : null;
+                    var hasMissingRequiredObjects = missingObjectsByScriptKey is { Count: > 0 };
                     if (quickImportState?.TryGetModuleDefinitionSkipMessage(definition, out var skipMessage) == true
-                        && !RequiresPreApplySqlRepairs(definition))
+                        && !RequiresPreApplySqlRepairs(definition)
+                        && !hasMissingRequiredObjects)
                     {
                         results.Add(new UniversalPackageImportItemResult(
                             "module-definition",
@@ -478,11 +483,17 @@ public sealed class PortableModulePackageService
                         processedArtifactPaths.Add(artifactItem.ExtractedPath);
                     }
 
+                    var moduleResultMessage = $"Module {importResult.ModuleKey} {importResult.DefinitionVersion}; artifacts imported or replaced: {importResult.ImportedArtifactCount}; failed artifacts: {importResult.FailedArtifactCount}.";
+                    foreach (var warning in importResult.Warnings)
+                    {
+                        moduleResultMessage = AppendWarning(moduleResultMessage, warning);
+                    }
+
                     results.Add(new UniversalPackageImportItemResult(
                         "module-definition",
                         item.Path,
                         importResult.Applied ? "Applied" : "Stored",
-                        $"Module {importResult.ModuleKey} {importResult.DefinitionVersion}; artifacts imported or replaced: {importResult.ImportedArtifactCount}; failed artifacts: {importResult.FailedArtifactCount}."));
+                        moduleResultMessage));
 
                     foreach (var artifactResult in importResult.Artifacts)
                     {
@@ -1136,6 +1147,7 @@ public sealed class PortableModulePackageService
 
         var applied = false;
         var repairCount = 0;
+        var warnings = new List<string>();
 
         // Platform-core schema repairs must run even when the definition itself
         // will not be applied (installed version >= package version).
@@ -1147,6 +1159,29 @@ public sealed class PortableModulePackageService
             repairCount += repairResult.ExecutedCount;
         }
 
+        // For non-core modules, verify declared required objects and re-run only the
+        // idempotent scripts whose objects are missing. This heals stale schema even
+        // when the installed definition version is newer than or equal to the package.
+        if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
+        {
+            var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
+                definition.DefinitionJson,
+                ct);
+            if (missingByScript.Count > 0)
+            {
+                var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                    saveResult.ModuleDefinitionDocumentId,
+                    scriptKeys,
+                    ct);
+                repairCount += repairResult.ExecutedCount;
+                var missingObjects = missingByScript.SelectMany(static item => item.Value).ToList();
+                warnings.Add(
+                    $"Schema drift healed: re-executed {repairResult.ExecutedCount} script(s) for module '{definition.ModuleKey}'. "
+                    + $"Missing objects: {string.Join(", ", missingObjects)}.");
+            }
+        }
+
         if (options.ApplyModuleDefinition && !keepNewerAppliedDefinition)
         {
             var applyResult = await _repo.ApplyModuleDefinitionDocumentAsync(
@@ -1156,8 +1191,9 @@ public sealed class PortableModulePackageService
             applied = applyResult.Applied;
         }
 
-        // Non-platform-core modules keep the existing post-apply repair behavior.
-        if (applied && options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
+        // Non-platform-core modules keep the existing post-apply repair behavior,
+        // but only when the missing-object heal above did not already run.
+        if (applied && options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition) && warnings.Count == 0)
         {
             var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
                 saveResult.ModuleDefinitionDocumentId,
@@ -1215,7 +1251,10 @@ public sealed class PortableModulePackageService
             saveResult.ModuleDefinitionDocumentId,
             applied,
             repairCount,
-            artifactResults);
+            artifactResults)
+        {
+            Warnings = warnings
+        };
     }
 
     private static bool RequiresPreApplySqlRepairs(ModuleDefinitionDocumentEditData definition)
@@ -2720,6 +2759,11 @@ public sealed record PortableModulePackageImportResult(
     public int ImportedArtifactCount => Artifacts.Count(item => item.Status is "Imported" or "Replaced" or "Updated");
 
     public int FailedArtifactCount => Artifacts.Count(item => item.Status == "Failed");
+
+    /// <summary>
+    /// Human-readable warnings about schema drift or other recoverable issues encountered during import.
+    /// </summary>
+    public IReadOnlyList<string> Warnings { get; init; } = [];
 }
 
 public sealed record PortableModulePackageArtifactImportResult(

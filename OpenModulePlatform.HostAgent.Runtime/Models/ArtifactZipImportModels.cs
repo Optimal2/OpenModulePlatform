@@ -65,4 +65,10 @@ public sealed record ModuleDefinitionImportResult(
     string DefinitionVersion,
     int ModuleDefinitionDocumentId,
     bool Applied,
-    int SqlRepairCount);
+    int SqlRepairCount)
+{
+    /// <summary>
+    /// The script keys that were re-executed to heal stale schema objects.
+    /// </summary>
+    public IReadOnlyList<string> HealedScripts { get; init; } = [];
+}

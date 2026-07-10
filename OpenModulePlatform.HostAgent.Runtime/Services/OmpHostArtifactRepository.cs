@@ -981,6 +981,17 @@ WHERE ModuleKey = @ModuleKey;";
     public async Task<int> ExecuteImportedModuleDefinitionSqlRepairsAsync(
         int moduleDefinitionDocumentId,
         CancellationToken ct)
+        => await ExecuteImportedModuleDefinitionSqlRepairsAsync(moduleDefinitionDocumentId, scriptKeysToRepair: null, ct);
+
+    /// <summary>
+    /// Executes idempotent module-definition SQL repairs. When <paramref name="scriptKeysToRepair"/>
+    /// is provided, only those script keys are executed; otherwise all repairable scripts run
+    /// using the existing validation-driven path.
+    /// </summary>
+    public async Task<int> ExecuteImportedModuleDefinitionSqlRepairsAsync(
+        int moduleDefinitionDocumentId,
+        IReadOnlySet<string>? scriptKeysToRepair,
+        CancellationToken ct)
     {
         var definitionJson = await GetModuleDefinitionJsonAsync(moduleDefinitionDocumentId, ct);
         if (string.IsNullOrWhiteSpace(definitionJson))
@@ -1003,49 +1014,61 @@ WHERE ModuleKey = @ModuleKey;";
         await conn.OpenAsync(ct);
         await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
 
-        var validationScripts = scripts.Where(IsValidationScript).ToList();
-        if (validationScripts.Count > 0)
+        List<PortableModuleDefinitionSqlScript> repairScripts;
+        if (scriptKeysToRepair is { Count: > 0 })
         {
-            var needsRepair = false;
-            foreach (var validationScript in validationScripts)
+            repairScripts = scripts
+                .Where(script => !IsValidationScript(script) && scriptKeysToRepair.Contains(script.Key))
+                .ToList();
+        }
+        else
+        {
+            var validationScripts = scripts.Where(IsValidationScript).ToList();
+            if (validationScripts.Count > 0)
             {
-                var validationSql = ResolvePortableSqlText(validationScript)
-                    ?? throw new InvalidOperationException(
-                        $"Module definition validation script '{validationScript.Key}' has no SQL content.");
-                var validationSha256 = ComputeTextSha256(validationSql);
-                if (!string.IsNullOrWhiteSpace(validationScript.Sha256)
-                    && !string.Equals(validationScript.Sha256, validationSha256, StringComparison.OrdinalIgnoreCase))
+                var needsRepair = false;
+                foreach (var validationScript in validationScripts)
                 {
-                    throw new InvalidOperationException(
-                        $"Module definition validation script '{validationScript.Key}' content does not match its declared SHA-256.");
+                    var validationSql = ResolvePortableSqlText(validationScript)
+                        ?? throw new InvalidOperationException(
+                            $"Module definition validation script '{validationScript.Key}' has no SQL content.");
+                    var validationSha256 = ComputeTextSha256(validationSql);
+                    if (!string.IsNullOrWhiteSpace(validationScript.Sha256)
+                        && !string.Equals(validationScript.Sha256, validationSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException(
+                            $"Module definition validation script '{validationScript.Key}' content does not match its declared SHA-256.");
+                    }
+
+                    var validationSafety = ValidateReadOnlyModuleDefinitionSql(validationSql);
+                    if (validationSafety is not null)
+                    {
+                        throw new InvalidOperationException(
+                            $"Module definition validation script '{validationScript.Key}' was blocked: {validationSafety}");
+                    }
+
+                    try
+                    {
+                        var validation = await ExecuteModuleDefinitionValidationSqlAsync(conn, validationSql, ct);
+                        needsRepair = needsRepair || !validation.IsHealthy;
+                    }
+                    catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+                    {
+                        needsRepair = true;
+                    }
                 }
 
-                var validationSafety = ValidateReadOnlyModuleDefinitionSql(validationSql);
-                if (validationSafety is not null)
+                if (!needsRepair)
                 {
-                    throw new InvalidOperationException(
-                        $"Module definition validation script '{validationScript.Key}' was blocked: {validationSafety}");
-                }
-
-                try
-                {
-                    var validation = await ExecuteModuleDefinitionValidationSqlAsync(conn, validationSql, ct);
-                    needsRepair = needsRepair || !validation.IsHealthy;
-                }
-                catch (Exception ex) when (ex is SqlException or InvalidOperationException)
-                {
-                    needsRepair = true;
+                    return 0;
                 }
             }
 
-            if (!needsRepair)
-            {
-                return 0;
-            }
+            repairScripts = scripts.Where(static script => !IsValidationScript(script)).ToList();
         }
 
         var executed = 0;
-        foreach (var script in scripts.Where(static script => !IsValidationScript(script)))
+        foreach (var script in repairScripts)
         {
             if (!string.Equals(script.Execution, "idempotent", StringComparison.OrdinalIgnoreCase))
             {
@@ -3917,6 +3940,159 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
         return scripts;
     }
 
+    private static IReadOnlyList<RequiredDatabaseObject> ReadRequiredDatabaseObjects(string definitionJson)
+    {
+        var root = JsonNode.Parse(definitionJson);
+        var integrity = root?["integrity"] as JsonObject;
+        if (integrity is null)
+        {
+            return [];
+        }
+
+        var required = new List<RequiredDatabaseObject>();
+        if (integrity["requiredSchemas"] is JsonArray schemas)
+        {
+            // Malformed/null JSON entries are ignored rather than failing the whole definition.
+            required.AddRange(schemas
+                .Select(item => item?.GetValue<string>())
+                .Where(schema => !string.IsNullOrWhiteSpace(schema))
+                .Select(schema => new RequiredDatabaseObject("schema", schema!.Trim(), null, null)));
+        }
+
+        if (integrity["requiredTables"] is JsonArray tables)
+        {
+            required.AddRange(tables
+                .OfType<JsonObject>()
+                .Select(item => new
+                {
+                    Schema = GetJsonString(item, "schema"),
+                    Name = GetJsonString(item, "name"),
+                    Source = NullIfWhiteSpace(GetJsonString(item, "source"))
+                })
+                .Where(item => !string.IsNullOrWhiteSpace(item.Schema) && !string.IsNullOrWhiteSpace(item.Name))
+                .Select(item => new RequiredDatabaseObject("table", item.Schema, item.Name, item.Source)));
+        }
+
+        return required;
+    }
+
+    /// <summary>
+    /// Reads the module definition JSON and returns any required database objects
+    /// declared in <c>integrity.requiredTables</c>/<c>integrity.requiredSchemas</c>
+    /// that are missing from the current database, grouped by the script key that
+    /// owns them.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
+        string definitionJson,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(definitionJson))
+        {
+            return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var scripts = ReadPortableSqlScripts(definitionJson);
+        var requiredObjects = ReadRequiredDatabaseObjects(definitionJson);
+        if (requiredObjects.Count == 0)
+        {
+            return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        return await GetMissingRequiredObjectsByScriptKeyAsync(conn, scripts, requiredObjects, ct);
+    }
+
+    private static async Task<Dictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
+        SqlConnection conn,
+        IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
+        IReadOnlyList<RequiredDatabaseObject> requiredObjects,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var repairScripts = scripts
+            .Where(static item => !IsValidationScript(item))
+            .ToList();
+        var fallbackScript = repairScripts
+            .OrderBy(static item => string.Equals(item.Phase, "setup", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(static item => item.Order)
+            .FirstOrDefault();
+
+        foreach (var required in requiredObjects)
+        {
+            var exists = required.Kind switch
+            {
+                "schema" => await SchemaExistsAsync(conn, required.Schema, ct),
+                "table" when required.Name is not null => await TableExistsAsync(conn, required.Schema, required.Name, ct),
+                _ => true
+            };
+            if (exists)
+            {
+                continue;
+            }
+
+            var owningScript = repairScripts.FirstOrDefault(script => RequiredObjectMatchesScriptSource(required, script))
+                ?? fallbackScript;
+            if (owningScript is null)
+            {
+                continue;
+            }
+
+            var list = result.GetValueOrDefault(owningScript.Key);
+            if (list is null)
+            {
+                list = [];
+                result[owningScript.Key] = list;
+            }
+
+            list.Add(required.Kind == "schema"
+                ? $"schema {required.Schema}"
+                : $"table {required.Schema}.{required.Name}");
+        }
+
+        return result.ToDictionary(
+            static item => item.Key,
+            static item => (IReadOnlyList<string>)item.Value,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static async Task<bool> SchemaExistsAsync(SqlConnection conn, string schema, CancellationToken ct)
+    {
+        const string sql = "SELECT 1 FROM sys.schemas WHERE name = @schema;";
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static async Task<bool> TableExistsAsync(SqlConnection conn, string schema, string table, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT 1
+FROM sys.tables t
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+WHERE s.name = @schema
+  AND t.name = @table;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        Add(cmd, "@table", table);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static bool RequiredObjectMatchesScriptSource(
+        RequiredDatabaseObject required,
+        PortableModuleDefinitionSqlScript script)
+    {
+        if (string.IsNullOrWhiteSpace(required.Source))
+        {
+            return false;
+        }
+
+        return string.Equals(required.Source, script.Path, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(required.Source, script.Source, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(required.Source, script.Key, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsValidationScript(PortableModuleDefinitionSqlScript script)
         => string.Equals(script.Phase, "validate", StringComparison.OrdinalIgnoreCase)
             || string.Equals(script.Phase, "validation", StringComparison.OrdinalIgnoreCase)
@@ -5141,6 +5317,12 @@ VALUES(@widget_id, @permission_id, @role_id);";
                 var max = string.IsNullOrWhiteSpace(slot.MaxArtifactVersion) ? "*" : slot.MaxArtifactVersion;
                 return $"{min}..{max}";
             }));
+
+    private sealed record RequiredDatabaseObject(
+        string Kind,
+        string Schema,
+        string? Name,
+        string? Source);
 
     private sealed record PortableModuleDefinitionSqlScript(
         string Key,
