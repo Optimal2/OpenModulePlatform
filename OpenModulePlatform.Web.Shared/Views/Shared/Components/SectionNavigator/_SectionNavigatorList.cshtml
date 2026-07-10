@@ -28,7 +28,7 @@
             }
             else
             {
-                <span class="section-navigator__label" title="@item.Text">@item.Text</span>
+                <span class="section-navigator__label @(item.IsDisabled ? "section-navigator__label--disabled" : null)" title="@item.Text">@item.Text</span>
             }
         </li>
     }
