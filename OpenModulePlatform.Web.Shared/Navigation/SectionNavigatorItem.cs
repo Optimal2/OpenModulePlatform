@@ -22,7 +22,13 @@ public sealed class SectionNavigatorItem
 
     public bool InitiallyExpanded { get; init; } = true;
 
-    public bool HasLink => !string.IsNullOrWhiteSpace(Href) || !string.IsNullOrWhiteSpace(AnchorId);
+    /// <summary>
+    /// Renders the item as a greyed-out, non-clickable label. Pages use this for
+    /// sections that are temporarily not rendered, for example due to an active filter.
+    /// </summary>
+    public bool IsDisabled { get; init; }
+
+    public bool HasLink => !IsDisabled && (!string.IsNullOrWhiteSpace(Href) || !string.IsNullOrWhiteSpace(AnchorId));
 
     public string? LinkHref
         => string.IsNullOrWhiteSpace(Href)
