@@ -24,14 +24,26 @@ function New-TemporaryTestRepository {
         [Parameter(Mandatory = $true)]
         [string]$RootPath,
 
-        [Parameter(Mandatory = $true)]
-        [string]$ComponentMinVersion,
+        [Parameter(Mandatory = $false)]
+        [string]$ComponentMinVersion = '1.0.0',
 
         [Parameter(Mandatory = $false)]
         [string]$ModuleDefinitionVersion = '1.0.0',
 
         [Parameter(Mandatory = $false)]
-        [string]$SqlContent = 'SELECT 1;'
+        [string]$SqlContent = 'SELECT 1;',
+
+        [Parameter(Mandatory = $false)]
+        [string]$ComponentVersion = '1.0.0',
+
+        [Parameter(Mandatory = $false)]
+        [string]$ComponentAppKey = 'test_app',
+
+        [Parameter(Mandatory = $false)]
+        [string]$CompatibleArtifactMaxVersion = '',
+
+        [Parameter(Mandatory = $false)]
+        [string]$CompatibleArtifactMinVersion = ''
     )
 
     if (Test-Path -LiteralPath $RootPath -PathType Container) {
@@ -66,10 +78,34 @@ function New-TemporaryTestRepository {
             }
         )
     }
+
+    $compatibleArtifact = @{}
+    if (-not [string]::IsNullOrWhiteSpace($CompatibleArtifactMaxVersion)) {
+        $compatibleArtifact['maxVersion'] = $CompatibleArtifactMaxVersion
+    }
+    if (-not [string]::IsNullOrWhiteSpace($CompatibleArtifactMinVersion)) {
+        $compatibleArtifact['minVersion'] = $CompatibleArtifactMinVersion
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ComponentAppKey) -and $compatibleArtifact.Count -gt 0) {
+        $compatibleArtifact['appKey'] = $ComponentAppKey
+        $moduleDefinition['compatibleArtifacts'] = @($compatibleArtifact)
+    }
+
     $moduleDefinitionJson = $moduleDefinition | ConvertTo-Json -Depth 10
     [System.IO.File]::WriteAllText((Join-Path $moduleDir 'test.module-definition.json'), $moduleDefinitionJson, [System.Text.Encoding]::UTF8)
 
     # Create the component manifest.
+    $componentEntry = @{
+        componentKey = 'test_app'
+        version = $ComponentVersion
+        projectPath = 'TestApp/TestApp.csproj'
+        moduleKey = 'test_module'
+        minModuleDefinitionVersion = $ComponentMinVersion
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ComponentAppKey)) {
+        $componentEntry['appKey'] = $ComponentAppKey
+    }
+
     $manifest = @{
         repositoryVersion = '1.0.0'
         moduleDefinitions = @(
@@ -80,13 +116,7 @@ function New-TemporaryTestRepository {
             }
         )
         components = @(
-            @{
-                componentKey = 'test_app'
-                version = '1.0.0'
-                projectPath = 'TestApp/TestApp.csproj'
-                moduleKey = 'test_module'
-                minModuleDefinitionVersion = $ComponentMinVersion
-            }
+            $componentEntry
         )
     }
     $manifestJson = $manifest | ConvertTo-Json -Depth 10
@@ -255,5 +285,44 @@ Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion 
             Set-Location $originalLocation
             Remove-TemporaryTestRepository -RootPath $repoRoot
         }
+    }
+}
+
+
+Describe 'Check 10: compatibleArtifacts range sanity' {
+    It 'Passes when component version is within maxVersion' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -ComponentAppKey 'test_app' -CompatibleArtifactMaxVersion '2.0.0'
+
+        $exitCode = Invoke-Validator -ValidatorPath $validatorPath
+
+        $exitCode | Should Be 0
+    }
+
+    It 'Passes when component version equals maxVersion' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -ComponentAppKey 'test_app' -CompatibleArtifactMaxVersion '1.0.0'
+
+        $exitCode = Invoke-Validator -ValidatorPath $validatorPath
+
+        $exitCode | Should Be 0
+    }
+
+    It 'Fails when component version exceeds maxVersion' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentVersion '2.0.0' -ComponentAppKey 'test_app' -CompatibleArtifactMaxVersion '1.0.0'
+
+        $exitCode = Invoke-Validator -ValidatorPath $validatorPath
+
+        $exitCode | Should Not Be 0
+    }
+
+    It 'Fails when component version is below minVersion' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentVersion '0.5.0' -ComponentAppKey 'test_app' -CompatibleArtifactMinVersion '1.0.0'
+
+        $exitCode = Invoke-Validator -ValidatorPath $validatorPath
+
+        $exitCode | Should Not Be 0
     }
 }
