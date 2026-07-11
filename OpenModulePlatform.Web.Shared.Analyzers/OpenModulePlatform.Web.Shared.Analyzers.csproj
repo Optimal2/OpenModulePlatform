@@ -15,4 +15,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <CompilerVisibleProperty Include="OmpWebDefaultsAnalyzerSkipProjects" />
+  </ItemGroup>
+
 </Project>

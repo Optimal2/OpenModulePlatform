@@ -42,7 +42,9 @@ namespace OpenModulePlatform.Web.Shared
             string source,
             bool isWebHost = true,
             bool isAuth = false,
-            bool includeWebShared = true)
+            bool includeWebShared = true,
+            string? assemblyName = null,
+            string? skipProjects = null)
         {
             var test = new CSharpAnalyzerTest<OmpWebDefaultsAnalyzer, DefaultVerifier>
             {
@@ -69,10 +71,18 @@ namespace OpenModulePlatform.Web.Shared
                 test.TestState.AdditionalProjectReferences.Add("OpenModulePlatform.Web.Shared");
             }
 
-            if (isAuth)
+            var targetAssemblyName = isAuth ? "OpenModulePlatform.Auth" : assemblyName;
+            if (!string.IsNullOrEmpty(targetAssemblyName))
             {
                 test.SolutionTransforms.Add((solution, projectId) =>
-                    solution.WithProjectAssemblyName(projectId, "OpenModulePlatform.Auth"));
+                    solution.WithProjectAssemblyName(projectId, targetAssemblyName!));
+            }
+
+            if (!string.IsNullOrEmpty(skipProjects))
+            {
+                test.TestState.AnalyzerConfigFiles.Add(("/.globalconfig",
+                    $"is_global = true{Environment.NewLine}" +
+                    $"build_property.OmpWebDefaultsAnalyzerSkipProjects = {skipProjects}{Environment.NewLine}"));
             }
 
             return test;
@@ -138,6 +148,58 @@ class Program
 ";
 
             var test = CreateTest(source, isAuth: true);
+            await test.RunAsync();
+        }
+
+        [Fact]
+        public async Task CustomSkipList_SkipsNamedProject_NoDiagnostics()
+        {
+            const string source = @"
+#nullable disable
+using OpenModulePlatform.Web.Shared.Extensions;
+using Microsoft.AspNetCore.Builder;
+
+class Program
+{
+    static void Main()
+    {
+        WebApplicationBuilder builder = null;
+        WebApplication app = null;
+    }
+}
+";
+
+            var test = CreateTest(source, assemblyName: "MyCustomProject", skipProjects: "MyCustomProject");
+            await test.RunAsync();
+        }
+
+        [Fact]
+        public async Task CustomSkipList_DoesNotSkipOtherProject_DiagnosticsReported()
+        {
+            const string source = @"
+#nullable disable
+using OpenModulePlatform.Web.Shared.Extensions;
+using Microsoft.AspNetCore.Builder;
+
+class Program
+{
+    static void Main()
+    {
+        WebApplicationBuilder builder = null;
+        WebApplication app = null;
+    }
+}
+";
+
+            var expectedAdd = new DiagnosticResult("OMPWEB001", DiagnosticSeverity.Warning)
+                .WithMessage("Web host 'OtherProject' references OpenModulePlatform.Web.Shared but does not call AddOmpWebDefaults. This may result in missing topbar, auth, or shared web integration.");
+
+            var expectedUse = new DiagnosticResult("OMPWEB002", DiagnosticSeverity.Warning)
+                .WithMessage("Web host 'OtherProject' references OpenModulePlatform.Web.Shared but does not call UseOmpWebDefaults. This may result in missing topbar, auth, or shared web integration.");
+
+            var test = CreateTest(source, assemblyName: "OtherProject", skipProjects: "SkippedProject");
+            test.ExpectedDiagnostics.Add(expectedAdd);
+            test.ExpectedDiagnostics.Add(expectedUse);
             await test.RunAsync();
         }
 
