@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
-public sealed class SqlConnectionFactory
+public sealed class SqlConnectionFactory : ISqlConnectionFactory
 {
     private readonly IConfiguration _configuration;
 
