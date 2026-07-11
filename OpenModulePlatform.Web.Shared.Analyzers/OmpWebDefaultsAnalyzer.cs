@@ -12,6 +12,14 @@ namespace OpenModulePlatform.Web.Shared.Analyzers
     /// Reports when an ASP.NET Core web host references OpenModulePlatform.Web.Shared
     /// but does not call AddOmpWebDefaults (OMPWEB001) or UseOmpWebDefaults (OMPWEB002).
     /// </summary>
+    /// <remarks>
+    /// No CodeFixProvider is implemented for these diagnostics. A fix would need to insert
+    /// AddOmpWebDefaults/UseOmpWebDefaults calls into Program.cs, but the diagnostics are
+    /// reported at compilation start with <see cref="Location.None"/>, and real projects use
+    /// varying patterns (top-level statements, generic TAppResource, named arguments),
+    /// making a low-risk generic fix impractical. Configuration of skipped projects is
+    /// supported via the MSBuild property <c>OmpWebDefaultsAnalyzerSkipProjects</c>.
+    /// </remarks>
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public sealed class OmpWebDefaultsAnalyzer : DiagnosticAnalyzer
     {
@@ -61,8 +69,10 @@ namespace OpenModulePlatform.Web.Shared.Analyzers
         {
             var compilation = startContext.Compilation;
 
-            // OpenModulePlatform.Auth deliberately uses its own pipeline.
-            if (string.Equals(compilation.AssemblyName, AuthAssemblyName, StringComparison.Ordinal))
+            // Skip projects configured to opt out. When the MSBuild property is unset,
+            // fall back to the legacy behavior of skipping only OpenModulePlatform.Auth.
+            var skipProjects = GetSkipProjects(startContext.Options);
+            if (skipProjects.Contains(compilation.AssemblyName))
             {
                 return;
             }
@@ -142,6 +152,29 @@ namespace OpenModulePlatform.Web.Shared.Analyzers
             return originalInvocation.Equals(originalTarget, SymbolEqualityComparer.Default)
                 || (originalInvocation.ReducedFrom != null
                     && originalInvocation.ReducedFrom.Equals(originalTarget, SymbolEqualityComparer.Default));
+        }
+
+        private static string[] GetSkipProjects(AnalyzerOptions options)
+        {
+            if (options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue(
+                "build_property.OmpWebDefaultsAnalyzerSkipProjects",
+                out var skipList) && !string.IsNullOrWhiteSpace(skipList))
+            {
+                var entries = skipList
+                    .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim())
+                    .Where(s => s.Length > 0)
+                    .ToArray();
+
+                if (entries.Length > 0)
+                {
+                    return entries;
+                }
+            }
+
+            // Backward compatibility: when no MSBuild property is provided, only skip
+            // OpenModulePlatform.Auth, which deliberately uses its own pipeline.
+            return new[] { AuthAssemblyName };
         }
     }
 }
