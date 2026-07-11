@@ -696,7 +696,7 @@ else {
 
             $alreadyOwned = $false
             foreach ($ownedSqlFile in $ownedSqlFiles) {
-                if ([string]::Equals($ownedSqlFile.sqlPath, $sqlPath, [StringComparison]::Ordinal)) {
+                if ([string]::Equals($ownedSqlFile.sqlPath, $sqlPath, [StringComparison]::OrdinalIgnoreCase)) {
                     $alreadyOwned = $true
                     break
                 }
