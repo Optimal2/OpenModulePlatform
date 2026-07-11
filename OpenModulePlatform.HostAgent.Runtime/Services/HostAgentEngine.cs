@@ -10,7 +10,7 @@ public sealed class HostAgentEngine
     private const int MinimumLeaseSeconds = 30;
     private readonly object _leaseStateLock = new();
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
-    private readonly OmpHostArtifactRepository _repository;
+    private readonly IOmpHostArtifactRepository _repository;
     private readonly ArtifactProvisioner _provisioner;
     private readonly ArtifactZipImportService _artifactZipImportService;
     private readonly WebAppDeploymentService _webAppDeploymentService;
@@ -21,12 +21,13 @@ public sealed class HostAgentEngine
     private readonly HostResourceCollector _resourceCollector;
     private readonly HostAgentJobProcessor _jobProcessor;
     private readonly HostAgentProcessContext _process;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<HostAgentEngine> _logger;
     private HostAgentLeaseResult? _activeLease;
 
     public HostAgentEngine(
         IOptionsMonitor<HostAgentSettings> settings,
-        OmpHostArtifactRepository repository,
+        IOmpHostArtifactRepository repository,
         ArtifactProvisioner provisioner,
         ArtifactZipImportService artifactZipImportService,
         WebAppDeploymentService webAppDeploymentService,
@@ -37,6 +38,7 @@ public sealed class HostAgentEngine
         HostResourceCollector resourceCollector,
         HostAgentJobProcessor jobProcessor,
         HostAgentProcessContext process,
+        TimeProvider timeProvider,
         ILogger<HostAgentEngine> logger)
     {
         _settings = settings;
@@ -51,6 +53,7 @@ public sealed class HostAgentEngine
         _resourceCollector = resourceCollector;
         _jobProcessor = jobProcessor;
         _process = process;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -274,7 +277,7 @@ public sealed class HostAgentEngine
         return await EnsureAndPublishAsync(artifact, cancellationToken);
     }
 
-    private async Task ProcessNextHostDeploymentAsync(
+    internal async Task ProcessNextHostDeploymentAsync(
         string hostKey,
         CancellationToken cancellationToken)
     {
@@ -367,7 +370,7 @@ public sealed class HostAgentEngine
         }
     }
 
-    private async Task RenewHostDeploymentLeaseUntilProcessingCompletesAsync(
+    internal async Task RenewHostDeploymentLeaseUntilProcessingCompletesAsync(
         HostDeploymentWorkItem deployment,
         int leaseSeconds,
         CancellationTokenSource processingCancellation,
@@ -378,7 +381,7 @@ public sealed class HostAgentEngine
         {
             try
             {
-                await Task.Delay(renewalInterval, processingCancellation.Token);
+                await Task.Delay(renewalInterval, _timeProvider, processingCancellation.Token);
                 var renewed = await _repository.RenewHostDeploymentLeaseAsync(
                     deployment.HostDeploymentId,
                     deployment.LeaseToken,
@@ -442,7 +445,7 @@ public sealed class HostAgentEngine
         {
             try
             {
-                await Task.Delay(renewalInterval, cycleCancellation.Token);
+                await Task.Delay(renewalInterval, _timeProvider, cycleCancellation.Token);
                 var renewed = await _repository.RenewHostAgentLeaseAsync(
                     lease.HostId.Value,
                     lease.LeaseToken.Value,
