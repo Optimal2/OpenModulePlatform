@@ -10,6 +10,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class HostAgentJobProcessor
 {
     private const int DirectoryDeleteMaxAttempts = 20;
+    private const int MaxServiceAppDeploymentsForOrphanScan = 10000;
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
     // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
     // older installs without exposing any customer-specific configuration.
@@ -408,7 +409,7 @@ public sealed class HostAgentJobProcessor
                 job.HostId.Value,
                 hostKey,
                 cancellationToken));
-            findings.AddRange(await BuildOrphanServiceAppFindingsAsync(
+            findings.AddRange(await BuildOrphanServiceAppFindings(
                 job.HostId.Value,
                 hostKey,
                 _settings.CurrentValue,
@@ -1157,7 +1158,7 @@ public sealed class HostAgentJobProcessor
         return findings;
     }
 
-    private async Task<IReadOnlyList<MaintenanceFindingUpsert>> BuildOrphanServiceAppFindingsAsync(
+    private async Task<IReadOnlyList<MaintenanceFindingUpsert>> BuildOrphanServiceAppFindings(
         Guid hostId,
         string hostKey,
         HostAgentSettings settings,
@@ -1165,10 +1166,10 @@ public sealed class HostAgentJobProcessor
     {
         var deployments = await _repository.GetDesiredServiceAppDeploymentsAsync(
             hostKey,
-            maxDeployments: 10000,
+            MaxServiceAppDeploymentsForOrphanScan,
             cancellationToken);
 
-        return BuildOrphanServiceAppFindings(
+        return BuildOrphanServiceAppFindingsCore(
             hostId,
             hostKey,
             settings,
@@ -1177,7 +1178,7 @@ public sealed class HostAgentJobProcessor
             cancellationToken);
     }
 
-    internal static IReadOnlyList<MaintenanceFindingUpsert> BuildOrphanServiceAppFindings(
+    internal static IReadOnlyList<MaintenanceFindingUpsert> BuildOrphanServiceAppFindingsCore(
         Guid hostId,
         string hostKey,
         HostAgentSettings settings,

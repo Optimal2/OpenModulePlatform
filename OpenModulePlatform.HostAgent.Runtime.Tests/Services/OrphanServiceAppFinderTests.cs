@@ -14,7 +14,7 @@ public sealed class OrphanServiceAppFinderTests
         var settings = CreateSettings(root.Path);
         var hostId = Guid.NewGuid();
 
-        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindings(
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             hostId,
             "TEST",
             settings,
@@ -48,7 +48,7 @@ public sealed class OrphanServiceAppFinderTests
 
         var settings = CreateSettings(root.Path);
 
-        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindings(
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             Guid.NewGuid(),
             "TEST",
             settings,
@@ -69,7 +69,7 @@ public sealed class OrphanServiceAppFinderTests
         var settings = CreateSettings(root.Path);
         settings.SelfUpgrade.InstallRoot = hostAgentDirectory;
 
-        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindings(
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             Guid.NewGuid(),
             "TEST",
             settings,
@@ -92,7 +92,7 @@ public sealed class OrphanServiceAppFinderTests
         var settings = CreateSettings(root.Path);
         var hostId = Guid.NewGuid();
 
-        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindings(
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             hostId,
             "TEST",
             settings,
@@ -128,7 +128,7 @@ public sealed class OrphanServiceAppFinderTests
     {
         var settings = CreateSettings(servicesRoot ?? string.Empty);
 
-        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindings(
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             Guid.NewGuid(),
             "TEST",
             settings,
@@ -156,7 +156,7 @@ public sealed class OrphanServiceAppFinderTests
 
         var settings = CreateSettings(root.Path);
 
-        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindings(
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             Guid.NewGuid(),
             "TEST",
             settings,
@@ -176,7 +176,7 @@ public sealed class OrphanServiceAppFinderTests
 
         var settings = CreateSettings(root.Path);
 
-        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindings(
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             Guid.NewGuid(),
             "TEST",
             settings,
@@ -185,6 +185,78 @@ public sealed class OrphanServiceAppFinderTests
             CancellationToken.None);
 
         Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_SkipsWorkerManagerDirectory()
+    {
+        using var root = new TempServicesRoot();
+        Directory.CreateDirectory(Path.Combine(root.Path, "OMP.WorkerManager"));
+        Directory.CreateDirectory(Path.Combine(root.Path, "EMP.WorkerManager.v2"));
+
+        var settings = CreateSettings(root.Path);
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_SkipsHostAgentServiceNameDirectory()
+    {
+        using var root = new TempServicesRoot();
+        Directory.CreateDirectory(Path.Combine(root.Path, "OMP.HostAgent"));
+
+        var settings = CreateSettings(root.Path);
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_AbsoluteInstallPathOutsideServicesRoot_FlagsSameNamedFolderUnderServicesRoot()
+    {
+        using var servicesRoot = new TempServicesRoot();
+        using var externalRoot = new TempServicesRoot();
+        var externalActivePath = Path.Combine(externalRoot.Path, "ActiveCustom");
+        var orphanSameNamePath = Path.Combine(servicesRoot.Path, "ActiveCustom");
+        Directory.CreateDirectory(externalActivePath);
+        Directory.CreateDirectory(orphanSameNamePath);
+
+        var deployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "absolute-path-instance",
+            InstallationName = "ActiveCustom",
+            InstallPath = externalActivePath
+        };
+
+        var settings = CreateSettings(servicesRoot.Path);
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { deployment },
+            _ => null,
+            CancellationToken.None);
+
+        var directoryFinding = Assert.Single(findings);
+        Assert.Equal(MaintenanceTargetKinds.Directory, directoryFinding.TargetKind);
+        Assert.Equal(orphanSameNamePath, directoryFinding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
     }
 
     private static HostAgentSettings CreateSettings(string servicesRoot)
