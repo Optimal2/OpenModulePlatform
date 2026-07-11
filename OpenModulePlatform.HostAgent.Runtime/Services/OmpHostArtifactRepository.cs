@@ -10,7 +10,7 @@ using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
-public sealed partial class OmpHostArtifactRepository
+public sealed partial class OmpHostArtifactRepository : IOmpHostArtifactRepository
 {
     private const string BootstrapPortalAdminPrincipalPlaceholder = "__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__";
     private const int MinimumLeaseSeconds = 30;
@@ -32,9 +32,9 @@ public sealed partial class OmpHostArtifactRepository
     };
 
     // Short repository-local alias for the SQL connection factory; all database access still creates scoped SqlConnection instances.
-    private readonly SqlConnectionFactory _db;
+    private readonly ISqlConnectionFactory _db;
 
-    public OmpHostArtifactRepository(SqlConnectionFactory db)
+    public OmpHostArtifactRepository(ISqlConnectionFactory db)
     {
         _db = db;
     }

@@ -35,7 +35,9 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.Configure<HostAgentSettings>(context.Configuration.GetSection("HostAgent"));
         services.AddSingleton(_ => CreateProcessContext(args, context.Configuration.GetSection("HostAgent").Get<HostAgentSettings>()));
         services.AddSingleton<SqlConnectionFactory>();
+        services.AddSingleton<ISqlConnectionFactory>(static sp => sp.GetRequiredService<SqlConnectionFactory>());
         services.AddSingleton<OmpHostArtifactRepository>();
+        services.AddSingleton<IOmpHostArtifactRepository>(static sp => sp.GetRequiredService<OmpHostArtifactRepository>());
         services.AddSingleton<ArtifactProvisioner>();
         services.AddSingleton<ArtifactZipImportService>();
         services.AddSingleton<WebAppDeploymentService>();
@@ -52,6 +54,7 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddSingleton<HostResourceCollector>();
         services.AddSingleton<HostAgentJobProcessor>();
         services.AddSingleton<HostAgentCredentialStoreService>();
+        services.AddSingleton(TimeProvider.System);
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
         if (OperatingSystem.IsWindows())
