@@ -408,6 +408,11 @@ public sealed class HostAgentJobProcessor
                 job.HostId.Value,
                 hostKey,
                 cancellationToken));
+            findings.AddRange(await BuildOrphanServiceAppFindingsAsync(
+                job.HostId.Value,
+                hostKey,
+                _settings.CurrentValue,
+                cancellationToken));
 
             await _repository.UpsertMaintenanceFindingsAsync(
                 findings,
@@ -1150,6 +1155,250 @@ public sealed class HostAgentJobProcessor
         }
 
         return findings;
+    }
+
+    private async Task<IReadOnlyList<MaintenanceFindingUpsert>> BuildOrphanServiceAppFindingsAsync(
+        Guid hostId,
+        string hostKey,
+        HostAgentSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var deployments = await _repository.GetDesiredServiceAppDeploymentsAsync(
+            hostKey,
+            maxDeployments: 10000,
+            cancellationToken);
+
+        return BuildOrphanServiceAppFindings(
+            hostId,
+            hostKey,
+            settings,
+            deployments,
+            serviceLookup: null,
+            cancellationToken);
+    }
+
+    internal static IReadOnlyList<MaintenanceFindingUpsert> BuildOrphanServiceAppFindings(
+        Guid hostId,
+        string hostKey,
+        HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
+        Func<string, (string? State, string? ExecutablePath)?>? serviceLookup,
+        CancellationToken cancellationToken)
+    {
+        var findings = new List<MaintenanceFindingUpsert>();
+
+        if (string.IsNullOrWhiteSpace(settings.ServicesRoot))
+        {
+            return findings;
+        }
+
+        var servicesRoot = Path.GetFullPath(settings.ServicesRoot.Trim());
+        var hostAgentInstallRoot = Path.GetFullPath(ResolveHostAgentInstallRoot(settings))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        var expectedTargetPaths = new HashSet<string>(GetPathComparer());
+        var expectedServiceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var deployment in activeDeployments)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var serviceName = ResolveExpectedServiceAppServiceName(deployment);
+            if (!string.IsNullOrWhiteSpace(serviceName))
+            {
+                expectedServiceNames.Add(serviceName);
+            }
+
+            var targetPath = ResolveExpectedServiceAppTargetPath(settings, deployment, serviceName);
+            if (!string.IsNullOrWhiteSpace(targetPath))
+            {
+                expectedTargetPaths.Add(
+                    Path.GetFullPath(targetPath)
+                        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            }
+        }
+
+        if (!Directory.Exists(servicesRoot))
+        {
+            return findings;
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(servicesRoot))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var fullDirectory = Path.GetFullPath(directory)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            if (string.Equals(fullDirectory, hostAgentInstallRoot, GetPathComparison()))
+            {
+                continue;
+            }
+
+            if (expectedTargetPaths.Contains(fullDirectory))
+            {
+                continue;
+            }
+
+            var folderName = Path.GetFileName(fullDirectory);
+            if (string.IsNullOrWhiteSpace(folderName))
+            {
+                continue;
+            }
+
+            // Extra safety: never flag WorkerManager services or directories, and never flag
+            // a directory that shares the active HostAgent service name.
+            if (IsServiceNameWithKnownPrefix(folderName, KnownWorkerManagerServiceNamePrefixes)
+                || string.Equals(folderName, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var (serviceState, serviceExecutablePath) = LookupServiceCandidate(
+                folderName,
+                serviceLookup);
+
+            // A running service under this directory is a strong signal the folder is still
+            // owned by an active deployment that was not captured above. Skip it entirely.
+            if (!string.IsNullOrWhiteSpace(serviceState)
+                && string.Equals(serviceState, "RUNNING", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var hasStoppedService = false;
+            if (!string.IsNullOrWhiteSpace(serviceState)
+                && !string.IsNullOrWhiteSpace(serviceExecutablePath))
+            {
+                var fullExecutablePath = Path.GetFullPath(serviceExecutablePath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                if (IsSameOrChildPath(fullDirectory, fullExecutablePath))
+                {
+                    hasStoppedService = true;
+                }
+            }
+
+            var directoryDetail =
+                $"Host '{hostKey}' has a service-app directory '{fullDirectory}' that is not owned by any active enabled AppInstance.";
+            var directoryAction = JsonSerializer.Serialize(new MaintenanceFindingAction
+            {
+                TargetKind = MaintenanceTargetKinds.Directory,
+                HostId = hostId,
+                Path = fullDirectory,
+                InstallRoot = servicesRoot
+            }, JsonOptions);
+
+            findings.Add(new MaintenanceFindingUpsert
+            {
+                FindingKey = $"orphan-serviceapp-directory:{hostId:D}:{fullDirectory}",
+                Scope = MaintenanceScanScopes.Host,
+                HostId = hostId,
+                Category = "OrphanServiceApp",
+                TargetKind = MaintenanceTargetKinds.Directory,
+                TargetIdentifier = fullDirectory,
+                Title = "Orphan service-app directory",
+                Detail = directoryDetail,
+                RecommendedAction = "Remove the orphan service-app directory after confirming it is no longer needed.",
+                SafetyNotes = "The directory is not owned by any active enabled AppInstance on this host, is not the HostAgent install directory, and is not a WorkerManager directory.",
+                ActionJson = directoryAction,
+                Severity = 2,
+                Confidence = hasStoppedService ? (byte)90 : (byte)80
+            });
+
+            if (hasStoppedService)
+            {
+                var serviceDetail =
+                    $"Host '{hostKey}' has a stopped Windows service '{folderName}' whose executable is located in the orphan service-app directory '{fullDirectory}'.";
+                var serviceAction = JsonSerializer.Serialize(new MaintenanceFindingAction
+                {
+                    TargetKind = MaintenanceTargetKinds.WindowsService,
+                    HostId = hostId,
+                    ServiceName = folderName
+                }, JsonOptions);
+
+                findings.Add(new MaintenanceFindingUpsert
+                {
+                    FindingKey = $"orphan-serviceapp-service:{hostId:D}:{folderName}",
+                    Scope = MaintenanceScanScopes.Host,
+                    HostId = hostId,
+                    Category = "OrphanServiceApp",
+                    TargetKind = MaintenanceTargetKinds.WindowsService,
+                    TargetIdentifier = folderName,
+                    Title = "Orphan service-app Windows service",
+                    Detail = serviceDetail,
+                    RecommendedAction = $"Delete the stopped Windows service '{folderName}' and remove the orphan service-app directory.",
+                    SafetyNotes = "The service is stopped, its executable is inside an orphan service-app directory, and it is not owned by any active enabled AppInstance, HostAgent, or WorkerManager.",
+                    ActionJson = serviceAction,
+                    Severity = 2,
+                    Confidence = 90
+                });
+            }
+        }
+
+        return findings;
+    }
+
+    private static string? ResolveExpectedServiceAppServiceName(ServiceAppDeploymentDescriptor deployment)
+    {
+        var runtimeName = ServiceAppDeploymentNaming.Clean(deployment.DeployedRuntimeName);
+        if (!string.IsNullOrWhiteSpace(runtimeName))
+        {
+            return runtimeName;
+        }
+
+        var installationName = ServiceAppDeploymentNaming.Clean(deployment.InstallationName);
+        if (!string.IsNullOrWhiteSpace(installationName)
+            && !ServiceAppDeploymentNaming.IsGenericInstallationName(installationName))
+        {
+            return installationName;
+        }
+
+        return null;
+    }
+
+    private static string? ResolveExpectedServiceAppTargetPath(
+        HostAgentSettings settings,
+        ServiceAppDeploymentDescriptor deployment,
+        string? serviceName)
+    {
+        var deployedTargetPath = ServiceAppDeploymentNaming.Clean(deployment.DeployedTargetPath);
+        if (!string.IsNullOrWhiteSpace(deployedTargetPath))
+        {
+            return deployedTargetPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(serviceName))
+        {
+            return null;
+        }
+
+        return ServiceAppDeploymentNaming.ResolveTargetPath(settings, deployment, serviceName);
+    }
+
+    private static (string? State, string? ExecutablePath) LookupServiceCandidate(
+        string serviceName,
+        Func<string, (string? State, string? ExecutablePath)?>? serviceLookup)
+    {
+        if (serviceLookup is not null)
+        {
+            return serviceLookup(serviceName) ?? (null, null);
+        }
+
+        if (IsServiceNameWithKnownPrefix(serviceName, KnownWorkerManagerServiceNamePrefixes)
+            || IsServiceNameWithKnownPrefix(serviceName, KnownHostAgentServiceNamePrefixes))
+        {
+            return (null, null);
+        }
+
+        var state = GetServiceState(serviceName);
+        if (state is null)
+        {
+            return (null, null);
+        }
+
+        var executablePath = TryGetServiceExecutablePath(serviceName);
+        return (state, executablePath);
     }
 
     private static IReadOnlyList<MaintenanceFindingUpsert> BuildWorkerManagerLeftoverServiceFindings(
