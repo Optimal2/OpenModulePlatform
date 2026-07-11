@@ -147,7 +147,8 @@ The document shape is versioned. Version 1 uses these top-level fields:
       "targetName": "example-module-web",
       "relativePath": "appsettings.json",
       "contentSource": "host-agent-generated",
-      "purpose": "Runtime configuration generated when a matching artifact is imported or deployed."
+      "purpose": "Runtime configuration generated when a matching artifact is imported or deployed.",
+      "requiredRootSections": ["Portal", "OmpAuth", "ConnectionStrings", "Logging"]
     }
   ],
   "sqlScripts": [
@@ -342,6 +343,40 @@ and module-owned tables, but they are rejected for runtime bindings.
 slot but should not live inside the immutable zip. These descriptors are also
 applied when a concrete artifact exists; they are not proof that the artifact
 payload has already been imported.
+
+`requiredRootSections` is an optional array of JSON root keys that the final
+resolved `appsettings.json` must contain after HostAgent has merged built-in
+configuration and any overlay. When one or more of the listed sections are
+missing, HostAgent still deploys the config but records a diagnostic warning
+on the deployment result. The warning is persisted in
+`omp.HostAppDeploymentStates.LastWarning` and shown as a yellow warning pill on
+the Portal HostDeployments page so operators can fix the overlay before the app
+fails at runtime.
+
+Example for a module whose overlay replaces the entire `appsettings.json` file
+and therefore must provide every required section (based on VajSkrivare):
+
+```json
+"artifactConfigurationFiles": [
+  {
+    "appKey": "vajskrivare_web",
+    "packageType": "web-app",
+    "targetName": "vajskrivare-web",
+    "relativePath": "appsettings.json",
+    "contentSource": "host-agent-generated",
+    "purpose": "Complete runtime configuration generated or overlaid for the target host.",
+    "requiredRootSections": [
+      "Portal",
+      "OmpAuth",
+      "ConnectionStrings",
+      "NLog",
+      "PrinterDatabases",
+      "ZebraConfig",
+      "AuditLog"
+    ]
+  }
+]
+```
 
 `moduleDependencies` is optional. Use it when a module needs another module's
 metadata, schemas, or runtime integration contract to be present. For example,
