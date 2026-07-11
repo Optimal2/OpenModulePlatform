@@ -2785,6 +2785,48 @@ ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFi
             .ToList();
     }
 
+    public async Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT app.AppKey,
+       ar.PackageType,
+       ar.TargetName,
+       m.ModuleKey,
+       (SELECT TOP 1 d.DefinitionJson
+        FROM omp.ModuleDefinitionDocuments d
+        WHERE d.ModuleKey = m.ModuleKey
+          AND d.IsApplied = 1
+        ORDER BY d.AppliedUtc DESC, d.UpdatedUtc DESC, d.ModuleDefinitionDocumentId DESC) AS DefinitionJson
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps app ON app.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = app.ModuleId
+WHERE ar.ArtifactId = @artifactId;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@artifactId", artifactId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return [];
+        }
+
+        var appKey = rdr.GetString(0);
+        var packageType = rdr.GetString(1);
+        var targetName = rdr.IsDBNull(2) ? null : rdr.GetString(2);
+        var definitionJson = rdr.IsDBNull(4) ? null : rdr.GetString(4);
+
+        if (string.IsNullOrWhiteSpace(definitionJson))
+        {
+            return [];
+        }
+
+        return ReadRequiredRootSections(definitionJson, appKey, packageType, targetName);
+    }
+
     public async Task<IReadOnlyList<ArtifactDescriptor>> GetDesiredArtifactsAsync(
         string hostKey,
         bool includeAppInstanceArtifacts,
@@ -4505,6 +4547,69 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
 
     private static string? NullIfWhiteSpace(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static IReadOnlyList<string> ReadRequiredRootSections(
+        string definitionJson,
+        string appKey,
+        string packageType,
+        string? targetName)
+    {
+        JsonNode? root;
+        try
+        {
+            root = JsonNode.Parse(definitionJson);
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+
+        if (root?["artifactConfigurationFiles"] is not JsonArray files)
+        {
+            return [];
+        }
+
+        foreach (var item in files.OfType<JsonObject>())
+        {
+            var itemAppKey = GetJsonString(item, "appKey");
+            var itemPackageType = GetJsonString(item, "packageType");
+            var itemTargetName = GetJsonString(item, "targetName");
+            var itemRelativePath = GetJsonString(item, "relativePath");
+
+            if (!string.Equals(itemAppKey, appKey, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(itemPackageType, packageType, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(itemTargetName, targetName, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(itemRelativePath, "appsettings.json", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return ReadStringArray(item, "requiredRootSections");
+        }
+
+        return [];
+    }
+
+    private static IReadOnlyList<string> ReadStringArray(JsonObject obj, string propertyName)
+    {
+        if (obj[propertyName] is not JsonArray array)
+        {
+            return [];
+        }
+
+        var result = new List<string>();
+        foreach (var node in array)
+        {
+            if (node is JsonValue value
+                && value.TryGetValue<string>(out var text)
+                && !string.IsNullOrWhiteSpace(text))
+            {
+                result.Add(text);
+            }
+        }
+
+        return result;
+    }
 
     private async Task<ArtifactAutoApplyTarget?> ReadArtifactAutoApplyTargetAsync(
         SqlConnection conn,

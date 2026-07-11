@@ -132,6 +132,25 @@ public sealed class WebAppDeploymentService
                 ? string.Join(Environment.NewLine, ompAuthValidation.Warnings)
                 : null;
 
+            var requiredRootSections = await _repository.GetRequiredConfigRootSectionsAsync(
+                deployment.ArtifactId,
+                cancellationToken);
+            var missingRequiredSectionsWarning = RequiredConfigSectionsValidator.Validate(
+                configurationFiles,
+                requiredRootSections);
+            if (!string.IsNullOrWhiteSpace(missingRequiredSectionsWarning))
+            {
+                _logger.LogWarning(
+                    "Required config section warning for web app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    missingRequiredSectionsWarning);
+
+                diagnosticWarning = string.IsNullOrWhiteSpace(diagnosticWarning)
+                    ? missingRequiredSectionsWarning
+                    : diagnosticWarning + Environment.NewLine + missingRequiredSectionsWarning;
+            }
+
             if (IsAlreadyApplied(deployment, targetPath, runtimeName)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
             {
