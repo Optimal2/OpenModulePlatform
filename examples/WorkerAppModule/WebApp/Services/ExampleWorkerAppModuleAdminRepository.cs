@@ -2,6 +2,7 @@
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Web.ExampleWorkerAppModule.ViewModels;
+using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Services;
 
 namespace OpenModulePlatform.Web.ExampleWorkerAppModule.Services;
@@ -131,7 +132,7 @@ ORDER BY h.HostKey, ai.AppInstanceKey;";
                 LastVerifiedUtc = rdr.IsDBNull(12) ? null : rdr.GetDateTime(12),
                 IsAllowed = rdr.GetBoolean(13),
                 DesiredState = rdr.GetByte(14),
-                ConfigId = rdr.IsDBNull(15) ? null : rdr.GetInt32(15),
+                ConfigId = ModuleConfigId.FromNullable(rdr.IsDBNull(15) ? null : rdr.GetInt32(15)),
                 ArtifactId = rdr.IsDBNull(16) ? null : rdr.GetInt32(16),
                 ArtifactVersion = rdr.IsDBNull(17) ? null : rdr.GetString(17),
                 ArtifactTargetName = rdr.IsDBNull(18) ? null : rdr.GetString(18),
@@ -162,7 +163,7 @@ ORDER BY h.HostKey, ai.AppInstanceKey;";
         Guid appInstanceId,
         bool isAllowed,
         byte desiredState,
-        int? configId,
+        ModuleConfigId? configId,
         int? artifactId,
         string actor,
         CancellationToken ct)
@@ -186,7 +187,7 @@ WHERE ai.AppInstanceId = @appInstanceId
         cmd.Parameters.AddWithValue("@workerAppKey", WorkerAppKey);
         cmd.Parameters.AddWithValue("@isAllowed", isAllowed);
         cmd.Parameters.AddWithValue("@desiredState", desiredState);
-        cmd.Parameters.AddWithValue("@configId", (object?)configId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@configId", (object?)configId?.ToNullable() ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@artifactId", (object?)artifactId ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
 
@@ -201,12 +202,13 @@ VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
             audit.Parameters.AddWithValue("@action", WorkerAppKey + ".appinstance.update");
             audit.Parameters.AddWithValue("@targetType", "AppInstance");
             audit.Parameters.AddWithValue("@targetId", appInstanceId.ToString());
+            var configIdValue = configId?.ToNullable();
             var afterJson = JsonSerializer.Serialize(new
             {
                 appInstanceId,
                 isAllowed,
                 desiredState,
-                configId,
+                configId = configIdValue,
                 artifactId
             });
 
@@ -253,7 +255,7 @@ ORDER BY c.ConfigId DESC;";
         {
             rows.Add(new ConfigurationRow
             {
-                ConfigId = rdr.GetInt32(0),
+                ConfigId = new ModuleConfigId(rdr.GetInt32(0)),
                 VersionNo = rdr.GetInt32(1),
                 ConfigJson = rdr.GetString(2),
                 Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
@@ -266,7 +268,7 @@ ORDER BY c.ConfigId DESC;";
         return rows;
     }
 
-    public async Task<ConfigurationRow?> GetConfigurationAsync(int configId, CancellationToken ct)
+    public async Task<ConfigurationRow?> GetConfigurationAsync(ModuleConfigId configId, CancellationToken ct)
     {
         const string sql = @"
 SELECT ConfigId, VersionNo, ConfigJson, Comment, CreatedUtc, CreatedBy
@@ -285,7 +287,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
 
         return new ConfigurationRow
         {
-            ConfigId = rdr.GetInt32(0),
+            ConfigId = new ModuleConfigId(rdr.GetInt32(0)),
             VersionNo = rdr.GetInt32(1),
             ConfigJson = rdr.GetString(2),
             Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
@@ -294,7 +296,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         };
     }
 
-    public async Task UpdateConfigurationAsync(int configId, string configJson, string? comment, string actor, CancellationToken ct)
+    public async Task UpdateConfigurationAsync(ModuleConfigId configId, string configJson, string? comment, string actor, CancellationToken ct)
     {
         const string sql = @"
 UPDATE omp_example_workerapp.Configurations

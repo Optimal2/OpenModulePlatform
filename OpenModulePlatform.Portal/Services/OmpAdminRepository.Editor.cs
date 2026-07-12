@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Web.Shared.Configuration;
 
 namespace OpenModulePlatform.Portal.Services;
 
@@ -646,7 +647,7 @@ WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             InstallPath = rdr.IsDBNull(11) ? null : rdr.GetString(11),
             InstallationName = rdr.IsDBNull(12) ? null : rdr.GetString(12),
             DesiredArtifactId = rdr.IsDBNull(13) ? null : rdr.GetInt32(13),
-            DesiredConfigId = rdr.IsDBNull(14) ? null : rdr.GetInt32(14),
+            DesiredConfigId = ModuleConfigId.FromNullable(rdr.IsDBNull(14) ? null : rdr.GetInt32(14)),
             ExpectedLogin = rdr.IsDBNull(15) ? null : rdr.GetString(15),
             ExpectedClientHostName = rdr.IsDBNull(16) ? null : rdr.GetString(16),
             ExpectedClientIp = rdr.IsDBNull(17) ? null : rdr.GetString(17),
@@ -3512,7 +3513,7 @@ WHERE AppInstanceId = @AppInstanceId;";
             InstallPath = rdr.IsDBNull(9) ? null : rdr.GetString(9),
             InstallationName = rdr.IsDBNull(10) ? null : rdr.GetString(10),
             ArtifactId = rdr.IsDBNull(11) ? null : rdr.GetInt32(11),
-            ConfigId = rdr.IsDBNull(12) ? null : rdr.GetInt32(12),
+            ConfigId = ModuleConfigId.FromNullable(rdr.IsDBNull(12) ? null : rdr.GetInt32(12)),
             ExpectedLogin = rdr.IsDBNull(13) ? null : rdr.GetString(13),
             ExpectedClientHostName = rdr.IsDBNull(14) ? null : rdr.GetString(14),
             ExpectedClientIp = rdr.IsDBNull(15) ? null : rdr.GetString(15),
@@ -4613,7 +4614,7 @@ VALUES
         Add(cmd, "@InstallPath", input.InstallPath);
         Add(cmd, "@InstallationName", input.InstallationName);
         Add(cmd, "@ArtifactId", input.ArtifactId);
-        Add(cmd, "@ConfigId", input.ConfigId);
+        Add(cmd, "@ConfigId", input.ConfigId?.ToNullable());
         Add(cmd, "@ExpectedLogin", input.ExpectedLogin);
         Add(cmd, "@ExpectedClientHostName", input.ExpectedClientHostName);
         Add(cmd, "@ExpectedClientIp", input.ExpectedClientIp);
@@ -4645,7 +4646,7 @@ VALUES
         Add(cmd, "@InstallPath", input.InstallPath);
         Add(cmd, "@InstallationName", input.InstallationName);
         Add(cmd, "@DesiredArtifactId", input.DesiredArtifactId);
-        Add(cmd, "@DesiredConfigId", input.DesiredConfigId);
+        Add(cmd, "@DesiredConfigId", input.DesiredConfigId?.ToNullable());
         Add(cmd, "@ExpectedLogin", input.ExpectedLogin);
         Add(cmd, "@ExpectedClientHostName", input.ExpectedClientHostName);
         Add(cmd, "@ExpectedClientIp", input.ExpectedClientIp);

@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.ExampleServiceAppModule/Services/ExampleServiceAppModuleAdminRepository.cs
 using OpenModulePlatform.Web.ExampleServiceAppModule.ViewModels;
+using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
 using System.Text.Json;
@@ -116,7 +117,7 @@ ORDER BY h.HostKey, ai.AppInstanceKey;";
                 LastVerifiedUtc = rdr.IsDBNull(15) ? null : rdr.GetDateTime(15),
                 IsAllowed = rdr.GetBoolean(16),
                 DesiredState = rdr.GetByte(17),
-                ConfigId = rdr.IsDBNull(18) ? null : rdr.GetInt32(18),
+                ConfigId = ModuleConfigId.FromNullable(rdr.IsDBNull(18) ? null : rdr.GetInt32(18)),
                 ArtifactId = rdr.IsDBNull(19) ? null : rdr.GetInt32(19),
                 ArtifactVersion = rdr.IsDBNull(20) ? null : rdr.GetString(20),
                 ArtifactTargetName = rdr.IsDBNull(21) ? null : rdr.GetString(21),
@@ -136,7 +137,7 @@ ORDER BY h.HostKey, ai.AppInstanceKey;";
         Guid appInstanceId,
         bool isAllowed,
         byte desiredState,
-        int? configId,
+        ModuleConfigId? configId,
         int? artifactId,
         string actor,
         CancellationToken ct)
@@ -160,7 +161,7 @@ WHERE ai.AppInstanceId = @appInstanceId
         cmd.Parameters.AddWithValue("@serviceAppKey", ServiceAppKey);
         cmd.Parameters.AddWithValue("@isAllowed", isAllowed);
         cmd.Parameters.AddWithValue("@desiredState", desiredState);
-        cmd.Parameters.AddWithValue("@configId", (object?)configId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@configId", (object?)configId?.ToNullable() ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@artifactId", (object?)artifactId ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
 
@@ -175,12 +176,13 @@ VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
             audit.Parameters.AddWithValue("@action", ServiceAppKey + ".appinstance.update");
             audit.Parameters.AddWithValue("@targetType", "AppInstance");
             audit.Parameters.AddWithValue("@targetId", appInstanceId.ToString());
+            var configIdValue = configId?.ToNullable();
             var afterJson = JsonSerializer.Serialize(new
             {
                 appInstanceId,
                 isAllowed,
                 desiredState,
-                configId,
+                configId = configIdValue,
                 artifactId
             });
 
@@ -227,7 +229,7 @@ ORDER BY c.ConfigId DESC;";
         {
             rows.Add(new ConfigurationRow
             {
-                ConfigId = rdr.GetInt32(0),
+                ConfigId = new ModuleConfigId(rdr.GetInt32(0)),
                 VersionNo = rdr.GetInt32(1),
                 ConfigJson = rdr.GetString(2),
                 Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
@@ -239,7 +241,7 @@ ORDER BY c.ConfigId DESC;";
         return rows;
     }
 
-    public async Task<ConfigurationRow?> GetConfigurationAsync(int configId, CancellationToken ct)
+    public async Task<ConfigurationRow?> GetConfigurationAsync(ModuleConfigId configId, CancellationToken ct)
     {
         const string sql = @"
 SELECT ConfigId, VersionNo, ConfigJson, Comment, CreatedUtc, CreatedBy
@@ -256,7 +258,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
 
         return new ConfigurationRow
         {
-            ConfigId = rdr.GetInt32(0),
+            ConfigId = new ModuleConfigId(rdr.GetInt32(0)),
             VersionNo = rdr.GetInt32(1),
             ConfigJson = rdr.GetString(2),
             Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
@@ -265,7 +267,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         };
     }
 
-    public async Task UpdateConfigurationAsync(int configId, string configJson, string? comment, string actor, CancellationToken ct)
+    public async Task UpdateConfigurationAsync(ModuleConfigId configId, string configJson, string? comment, string actor, CancellationToken ct)
     {
         const string sql = @"
 UPDATE omp_example_serviceapp.Configurations

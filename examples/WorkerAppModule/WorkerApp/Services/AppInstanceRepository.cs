@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Worker.ExampleWorkerAppModule/Services/AppInstanceRepository.cs
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Web.Shared.Configuration;
 
 namespace OpenModulePlatform.Worker.ExampleWorkerAppModule.Services;
 
@@ -24,7 +25,7 @@ public sealed class AppInstanceRepository
         string AppKey,
         bool IsAllowed,
         byte DesiredState,
-        int? ConfigId);
+        ModuleConfigId? ConfigId);
 
     public async Task<AppInstanceRuntime?> GetRuntimeAsync(
         Guid appInstanceId,
@@ -59,6 +60,6 @@ WHERE ai.AppInstanceId = @appInstanceId;";
             rdr.GetString(2),
             rdr.GetBoolean(3),
             rdr.GetByte(4),
-            rdr.IsDBNull(5) ? null : rdr.GetInt32(5));
+            ModuleConfigId.FromNullable(rdr.IsDBNull(5) ? null : rdr.GetInt32(5)));
     }
 }

@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.ExampleWorkerAppModule/Pages/AppInstances/Edit.cshtml.cs
 using OpenModulePlatform.Web.ExampleWorkerAppModule.Services;
+using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -76,7 +77,7 @@ public sealed class EditModel : ExampleWorkerAppModulePageModel
         public byte DesiredState { get; set; }
 
         [Display(Name = "ConfigId")]
-        public int? ConfigId { get; set; }
+        public ModuleConfigId? ConfigId { get; set; }
 
         [Display(Name = "ArtifactId")]
         public int? ArtifactId { get; set; }

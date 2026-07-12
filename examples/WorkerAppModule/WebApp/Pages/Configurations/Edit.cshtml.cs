@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.ExampleWorkerAppModule/Pages/Configurations/Edit.cshtml.cs
 using OpenModulePlatform.Web.ExampleWorkerAppModule.Services;
+using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -30,7 +31,7 @@ public sealed class EditModel : ExampleWorkerAppModulePageModel
             return guard;
 
         SetTitles("Edit configuration");
-        var row = await _repo.GetConfigurationAsync(configId, ct);
+        var row = await _repo.GetConfigurationAsync(new ModuleConfigId(configId), ct);
         if (row is null)
             return NotFound();
 
@@ -58,7 +59,7 @@ public sealed class EditModel : ExampleWorkerAppModulePageModel
 
     public sealed class EditInput
     {
-        public int ConfigId { get; set; }
+        public ModuleConfigId ConfigId { get; set; }
 
         [Display(Name = "Comment")]
         public string? Comment { get; set; }

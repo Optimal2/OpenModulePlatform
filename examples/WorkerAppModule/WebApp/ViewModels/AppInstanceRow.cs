@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Web.ExampleWorkerAppModule/ViewModels/AppInstanceRow.cs
+using OpenModulePlatform.Web.Shared.Configuration;
+
 namespace OpenModulePlatform.Web.ExampleWorkerAppModule.ViewModels;
 
 public sealed class AppInstanceRow
@@ -18,7 +20,7 @@ public sealed class AppInstanceRow
     public DateTime? LastVerifiedUtc { get; set; }
     public bool IsAllowed { get; set; }
     public byte DesiredState { get; set; }
-    public int? ConfigId { get; set; }
+    public ModuleConfigId? ConfigId { get; set; }
     public int? ArtifactId { get; set; }
     public string? ArtifactVersion { get; set; }
     public string? ArtifactTargetName { get; set; }
