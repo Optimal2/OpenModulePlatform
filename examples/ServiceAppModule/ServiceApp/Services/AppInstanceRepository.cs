@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Service.ExampleServiceAppModule/Services/AppInstanceRepository.cs
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Web.Shared.Configuration;
 
 namespace OpenModulePlatform.Service.ExampleServiceAppModule.Services;
 
@@ -30,7 +31,7 @@ public sealed class AppInstanceRepository
         string AppKey,
         bool IsAllowed,
         byte DesiredState,
-        int? ConfigId,
+        ModuleConfigId? ConfigId,
         string? ExpectedLogin,
         string? ExpectedClientHostName,
         string? ExpectedClientIp);
@@ -78,7 +79,7 @@ WHERE ai.AppInstanceId = @appInstanceId;";
             rdr.GetString(3),
             rdr.GetBoolean(4),
             rdr.GetByte(5),
-            rdr.IsDBNull(6) ? null : rdr.GetInt32(6),
+            ModuleConfigId.FromNullable(rdr.IsDBNull(6) ? null : rdr.GetInt32(6)),
             rdr.IsDBNull(7) ? null : rdr.GetString(7),
             rdr.IsDBNull(8) ? null : rdr.GetString(8),
             rdr.IsDBNull(9) ? null : rdr.GetString(9));

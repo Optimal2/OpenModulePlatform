@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Web.ExampleServiceAppModule/Program.cs
 using OpenModulePlatform.Web.ExampleServiceAppModule.Localization;
 using OpenModulePlatform.Web.ExampleServiceAppModule.Services;
+using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.OpenDocViewer;
 
@@ -10,6 +11,7 @@ builder.AddOmpWebDefaults<ExampleServiceAppModuleResource>(optionsSectionName: "
 builder.Services.Configure<OpenDocViewerExampleOptions>(
     builder.Configuration.GetSection(OpenDocViewerExampleOptions.DefaultSectionName));
 builder.Services.AddScoped<ExampleServiceAppModuleAdminRepository>();
+builder.Services.AddScoped<IModuleConfigIdValidator, ExampleServiceAppModuleConfigIdValidator>();
 
 var app = builder.Build();
 

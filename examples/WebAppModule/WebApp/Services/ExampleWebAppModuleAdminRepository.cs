@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.ExampleWebAppModule/Services/ExampleWebAppModuleAdminRepository.cs
 using OpenModulePlatform.Web.ExampleWebAppModule.ViewModels;
+using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.Data.SqlClient;
 
@@ -72,7 +73,7 @@ ORDER BY ConfigId DESC;";
         {
             rows.Add(new ConfigurationRow
             {
-                ConfigId = rdr.GetInt32(0),
+                ConfigId = new ModuleConfigId(rdr.GetInt32(0)),
                 VersionNo = rdr.GetInt32(1),
                 ConfigJson = rdr.GetString(2),
                 Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
@@ -84,7 +85,7 @@ ORDER BY ConfigId DESC;";
         return rows;
     }
 
-    public async Task<ConfigurationRow?> GetConfigurationAsync(int configId, CancellationToken ct)
+    public async Task<ConfigurationRow?> GetConfigurationAsync(ModuleConfigId configId, CancellationToken ct)
     {
         const string sql = @"
 SELECT ConfigId,
@@ -111,7 +112,7 @@ WHERE ConfigId = @configId
 
         return new ConfigurationRow
         {
-            ConfigId = rdr.GetInt32(0),
+            ConfigId = new ModuleConfigId(rdr.GetInt32(0)),
             VersionNo = rdr.GetInt32(1),
             ConfigJson = rdr.GetString(2),
             Comment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
@@ -121,7 +122,7 @@ WHERE ConfigId = @configId
     }
 
     public async Task UpdateConfigurationAsync(
-        int configId,
+        ModuleConfigId configId,
         string configJson,
         string? comment,
         string actor,

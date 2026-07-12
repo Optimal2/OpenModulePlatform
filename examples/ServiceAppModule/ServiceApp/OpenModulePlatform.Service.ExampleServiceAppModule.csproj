@@ -11,4 +11,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="NLog.Extensions.Hosting" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
+  </ItemGroup>
 </Project>
