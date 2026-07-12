@@ -1,6 +1,8 @@
 @using OpenModulePlatform.Web.Shared.Navigation
+@using OpenModulePlatform.Web.Shared.Options
 @inject OpenModulePlatform.Portal.Services.PortalUserSettingsService PortalUserSettingsService
 @inject OpenModulePlatform.Web.Shared.Services.OmpConfigurationService OmpConfigurationService
+@inject Microsoft.Extensions.Options.IOptions<WebAppOptions> WebAppOptions
 @* File: OpenModulePlatform.Portal/Pages/Shared/_Layout.cshtml *@
 @{
     var ompBranding = await OmpBrandingService.GetBrandingAsync(Context.RequestAborted);
@@ -150,8 +152,8 @@
              data-summary-url="@Url.Content("~/topbar/summary")"
              data-notifications-url="@Url.Content("~/notifications")"
              data-messages-url="@Url.Content("~/messages")"
-             data-visible-interval="60000"
-             data-hidden-interval="180000"
+             data-visible-interval="@(WebAppOptions.Value.ToastPolling.VisibleIntervalSeconds * 1000)"
+             data-hidden-interval="@(WebAppOptions.Value.ToastPolling.HiddenIntervalSeconds * 1000)"
              data-toast-duration="7000"
              data-close-label="@L["Close notification"]"
              data-summary-title="@L["New notifications"]"
