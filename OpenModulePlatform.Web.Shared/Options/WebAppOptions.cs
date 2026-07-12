@@ -59,6 +59,13 @@ public sealed class TopBarPollingOptions
     public int HiddenIntervalSeconds { get; set; } = 180;
 }
 
+public sealed class ToastPollingOptions
+{
+    public int VisibleIntervalSeconds { get; set; } = 60;
+
+    public int HiddenIntervalSeconds { get; set; } = 180;
+}
+
 public sealed class WebAppOptions
 {
     public const string DefaultSectionName = "WebApp";
@@ -73,6 +80,7 @@ public sealed class WebAppOptions
     public TopbarShortcutsOptions TopbarShortcuts { get; set; } = new();
     public SessionStatusCheckOptions SessionStatusCheck { get; set; } = new();
     public TopBarPollingOptions TopBarPolling { get; set; } = new();
+    public ToastPollingOptions ToastPolling { get; set; } = new();
     public bool AllowAnonymous { get; set; }
     public bool UseForwardedHeaders { get; set; }
     public PermissionMode PermissionMode { get; set; } = PermissionMode.Any;

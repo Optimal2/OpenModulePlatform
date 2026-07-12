@@ -79,7 +79,9 @@ public static class PortalTopBarModelFactory
             TopBarPollingEnabled = notificationUpdateOptions.UsesPolling,
             TopBarSummaryUrl = PortalTopBarModel.DefaultTopBarSummaryPath,
             TopBarPollingVisibleIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
-            TopBarPollingHiddenIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds
+            TopBarPollingHiddenIntervalSeconds = options.TopBarPolling?.HiddenIntervalSeconds ?? notificationUpdateOptions.PollIntervalSeconds,
+            ToastPollingVisibleIntervalSeconds = options.ToastPolling?.VisibleIntervalSeconds ?? 60,
+            ToastPollingHiddenIntervalSeconds = options.ToastPolling?.HiddenIntervalSeconds ?? 180
         };
     }
 
