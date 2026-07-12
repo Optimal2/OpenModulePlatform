@@ -149,6 +149,12 @@ else if (Model.IsActiveTab(SettingsModel.PortalTab))
                 <label for="PortalInput_NotificationToastsMuted">@L["Mute toast notifications"]</label>
             </div>
             <p class="muted">@L["When this is turned on, notification and message toasts are not shown."]</p>
+
+            <div class="form-field checkbox-row checkbox-row--boxed">
+                <input asp-for="PortalInput.NotificationSoundsEnabled" type="checkbox" />
+                <label for="PortalInput_NotificationSoundsEnabled">@L["Play notification sounds"]</label>
+            </div>
+            <p class="muted">@L["When this is turned off, notification and message toasts are shown silently."]</p>
         }
 
         <div class="toolbar">
