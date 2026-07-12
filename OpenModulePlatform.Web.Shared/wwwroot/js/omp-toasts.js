@@ -34,6 +34,23 @@
         return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
     }
 
+    function parseBoolean(value, fallback) {
+        if (value === null || value === undefined) {
+            return fallback;
+        }
+
+        var normalized = String(value).trim().toLowerCase();
+        if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+            return true;
+        }
+
+        if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+            return false;
+        }
+
+        return fallback;
+    }
+
     function formatText(template, value) {
         return (template || "").replace("{0}", String(value));
     }
@@ -666,7 +683,7 @@
         state.container = document.createElement("div");
         state.container.className = "omp-toast-stack";
         document.body.appendChild(state.container);
-        state.soundEnabled = true;
+        state.soundEnabled = parseBoolean(state.root.getAttribute("data-sounds-enabled"), true);
 
         window.addEventListener("focus", function () {
             handleReactivation(getConfig());

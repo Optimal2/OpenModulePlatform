@@ -66,6 +66,7 @@
     var notificationToastsEnabled = User.Identity?.IsAuthenticated == true
         && notificationToastsGloballyEnabled
         && portalLayoutSettings?.NotificationToastsMuted != true;
+    var notificationSoundsEnabled = portalLayoutSettings?.NotificationSoundsEnabled ?? true;
 
     if (string.IsNullOrWhiteSpace(documentTitle))
     {
@@ -149,6 +150,7 @@
     @if (notificationToastsEnabled)
     {
         <div data-omp-toasts="true"
+             data-sounds-enabled="@notificationSoundsEnabled.ToString().ToLowerInvariant()"
              data-summary-url="@Url.Content("~/topbar/summary")"
              data-notifications-url="@Url.Content("~/notifications")"
              data-messages-url="@Url.Content("~/messages")"
