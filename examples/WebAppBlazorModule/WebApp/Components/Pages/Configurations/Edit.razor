@@ -1,6 +1,7 @@
 @page "/configurations/edit"
 @page "/configurations/edit/{ConfigId:int}"
 @using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization
+@using OpenModulePlatform.Web.Shared.Configuration
 @inherits ExampleWebAppBlazorModuleComponentBase
 @inject ExampleWebAppBlazorModuleAdminRepository Repo
 
@@ -78,7 +79,7 @@ else
             return;
         }
 
-        var row = await Repo.GetConfigurationAsync(effectiveConfigId.Value, CancellationToken.None);
+        var row = await Repo.GetConfigurationAsync(new ModuleConfigId(effectiveConfigId.Value), CancellationToken.None);
         if (row is null)
         {
             ShowNotFoundError(L["The configuration was not found."].Value);
@@ -113,7 +114,7 @@ else
 
     private sealed class EditInput
     {
-        public int ConfigId { get; set; }
+        public ModuleConfigId ConfigId { get; set; }
 
         [Display(Name = "Comment")]
         public string? Comment { get; set; }

@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 
@@ -444,7 +445,7 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
         public int? DesiredArtifactId { get; set; }
 
         [Display(Name = "ConfigId")]
-        public int? DesiredConfigId { get; set; }
+        public ModuleConfigId? DesiredConfigId { get; set; }
 
         [StringLength(256)]
         [Display(Name = "Expected login")]

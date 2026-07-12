@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Portal/Models/AdminEditModels.cs
+using OpenModulePlatform.Web.Shared.Configuration;
+
 namespace OpenModulePlatform.Portal.Models;
 
 /// <summary>
@@ -527,7 +529,7 @@ public sealed class InstanceTemplateAppInstanceEditData
 
     public int? DesiredArtifactId { get; set; }
 
-    public int? DesiredConfigId { get; set; }
+    public ModuleConfigId? DesiredConfigId { get; set; }
 
     public string? ExpectedLogin { get; set; }
 
@@ -620,7 +622,7 @@ public sealed class AppInstanceEditData
 
     public int? ArtifactId { get; set; }
 
-    public int? ConfigId { get; set; }
+    public ModuleConfigId? ConfigId { get; set; }
 
     public string? ExpectedLogin { get; set; }
 

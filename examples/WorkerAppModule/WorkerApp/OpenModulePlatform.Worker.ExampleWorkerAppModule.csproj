@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
     <ProjectReference Include="..\..\..\OpenModulePlatform.Worker.Abstractions\OpenModulePlatform.Worker.Abstractions.csproj" />
   </ItemGroup>
 </Project>

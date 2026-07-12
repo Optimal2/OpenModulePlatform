@@ -186,7 +186,9 @@ load-balanced identity.
 1. The worker starts with a configured `AppInstanceId`.
 2. `AppInstanceRepository` reads runtime state from `omp.AppInstances`.
 3. Heartbeat updates observed state on both `AppInstance` and, when possible, `Host`.
-4. Configuration is loaded from a module-owned table using `ConfigId` as the bridge.
+4. Configuration is loaded from a module-owned table using the `ModuleConfigId` bridge
+   (`omp.AppInstances.ConfigId` / `omp.InstanceTemplateAppInstances.DesiredConfigId`).
+   This is separate from the global `omp.config_settings.ConfigId` primary key.
 5. The job processor works only when the app instance is active, allowed, and verified against the expected runtime identity.
 
 ## Request flow in the manager-driven worker example
@@ -211,7 +213,8 @@ load-balanced identity.
 - the schema can represent several installation profiles, but Portal currently
   exposes one default installation profile
 - origin tracking between template rows and materialized runtime rows is not yet explicit
-- `ConfigId` is functional but still semantically thin at the core-model level
+- `ConfigId` is now represented by the typed `ModuleConfigId` bridge, but validation of the
+  bridge is opt-in per module because the target table is module-owned
 - the Portal administrative workflows are better than before but still table-centric
 - deeper drift reporting between desired topology and actual runtime state is
   still evolving

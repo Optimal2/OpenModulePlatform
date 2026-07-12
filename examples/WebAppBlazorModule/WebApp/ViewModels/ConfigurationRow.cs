@@ -1,9 +1,11 @@
 // File: OpenModulePlatform.Web.ExampleWebAppBlazorModule/ViewModels/ConfigurationRow.cs
+using OpenModulePlatform.Web.Shared.Configuration;
+
 namespace OpenModulePlatform.Web.ExampleWebAppBlazorModule.ViewModels;
 
 public sealed class ConfigurationRow
 {
-    public int ConfigId { get; set; }
+    public ModuleConfigId ConfigId { get; set; }
     public int VersionNo { get; set; }
     public string ConfigJson { get; set; } = string.Empty;
     public string? Comment { get; set; }

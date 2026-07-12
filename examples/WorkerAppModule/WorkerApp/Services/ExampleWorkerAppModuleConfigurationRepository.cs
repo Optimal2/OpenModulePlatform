@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Worker.ExampleWorkerAppModule/Services/ExampleWorkerAppModuleConfigurationRepository.cs
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Web.Shared.Configuration;
 
 namespace OpenModulePlatform.Worker.ExampleWorkerAppModule.Services;
 
@@ -12,7 +13,7 @@ public sealed class ExampleWorkerAppModuleConfigurationRepository
         _db = db;
     }
 
-    public async Task<string?> GetConfigurationJsonAsync(int configId, CancellationToken ct)
+    public async Task<string?> GetConfigurationJsonAsync(ModuleConfigId configId, CancellationToken ct)
     {
         const string sql = @"
 SELECT c.ConfigJson
