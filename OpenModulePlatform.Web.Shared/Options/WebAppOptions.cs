@@ -57,6 +57,10 @@ public sealed class TopBarPollingOptions
     public int VisibleIntervalSeconds { get; set; } = 60;
 
     public int HiddenIntervalSeconds { get; set; } = 180;
+
+    public int PushReconnectBaseMs { get; set; } = 2000;
+
+    public int PushReconnectMaxMs { get; set; } = 60000;
 }
 
 public sealed class ToastPollingOptions

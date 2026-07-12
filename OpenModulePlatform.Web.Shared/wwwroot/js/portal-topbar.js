@@ -14,6 +14,9 @@
     var MAX_TOPBAR_POLL_INTERVAL_SECONDS = 3600;
     var MAX_TOPBAR_PUSH_DEDUP_KEYS = 200;
     var TOPBAR_PUSH_DEDUP_RETENTION_MS = 5 * 60 * 1000;
+    var DEFAULT_PUSH_RECONNECT_BASE_MS = 2000;
+    var DEFAULT_PUSH_RECONNECT_MAX_MS = 60000;
+    var MAX_PUSH_RECONNECT_ATTEMPTS = 8;
     var TOPBAR_UPDATE_MANUAL_MODE = 'manual';
     var TOPBAR_UPDATE_POLL_MODE = 'poll';
     var TOPBAR_UPDATE_PUSH_MODE = 'push';
@@ -52,6 +55,7 @@
         pushFallbackActive: false,
         pushFallbackWarned: false,
         pushReconnectTimer: 0,
+        pushReconnectAttempts: 0,
         signalRClientPromise: null,
         recentPushEventIds: new Map()
     };
@@ -1618,6 +1622,16 @@
             : fallback;
     }
 
+    function parsePushReconnectMs(value, fallback) {
+        var text = (value || '').trim();
+        if (!/^\d+$/.test(text)) {
+            return fallback;
+        }
+
+        var parsed = Number(text);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+    }
+
     function getTopbarPollingConfig(root) {
         var pollInterval = parseTopbarPollIntervalSeconds(
             root ? root.getAttribute('data-notification-poll-interval') : '',
@@ -1626,6 +1640,12 @@
             root ? root.getAttribute('data-topbar-polling-hidden-interval') : '',
             pollInterval);
         var mode = normalizeTopbarUpdateMode(root ? root.getAttribute('data-notification-update-mode') : '');
+        var pushReconnectBaseMs = parsePushReconnectMs(
+            root ? root.getAttribute('data-push-reconnect-base-ms') : '',
+            DEFAULT_PUSH_RECONNECT_BASE_MS);
+        var pushReconnectMaxMs = parsePushReconnectMs(
+            root ? root.getAttribute('data-push-reconnect-max-ms') : '',
+            DEFAULT_PUSH_RECONNECT_MAX_MS);
 
         return {
             enabled: !!root && mode !== TOPBAR_UPDATE_MANUAL_MODE,
@@ -1633,7 +1653,9 @@
             url: root ? root.getAttribute('data-topbar-summary-url') || '/topbar/summary' : '/topbar/summary',
             pushUrl: root ? root.getAttribute('data-notification-push-url') || '/topbar/notifications/updates' : '/topbar/notifications/updates',
             visibleInterval: pollInterval * 1000,
-            hiddenInterval: hiddenInterval * 1000
+            hiddenInterval: hiddenInterval * 1000,
+            pushReconnectBaseMs: pushReconnectBaseMs,
+            pushReconnectMaxMs: Math.max(pushReconnectBaseMs, pushReconnectMaxMs)
         };
     }
 
@@ -1931,13 +1953,22 @@
             return;
         }
 
+        var delayMs = computePushReconnectDelayMs(
+            topbarPollingState.pushReconnectAttempts,
+            config.pushReconnectBaseMs,
+            config.pushReconnectMaxMs);
+        if (delayMs === null) {
+            return;
+        }
+
+        topbarPollingState.pushReconnectAttempts += 1;
         topbarPollingState.pushReconnectTimer = window.setTimeout(function () {
             topbarPollingState.pushReconnectTimer = 0;
             var currentConfig = getTopbarPollingConfig(topbarPollingState.root);
             if (currentConfig.mode === TOPBAR_UPDATE_PUSH_MODE) {
                 startTopbarPush(currentConfig);
             }
-        }, Math.max(config.visibleInterval, DEFAULT_TOPBAR_POLL_INTERVAL_SECONDS * 1000));
+        }, delayMs);
     }
 
     function clearTopbarPushReconnect() {
@@ -1953,10 +1984,34 @@
         topbarPollingState.pushConnection = null;
         topbarPollingState.pushStarting = false;
         topbarPollingState.pushFallbackActive = false;
+        topbarPollingState.pushReconnectAttempts = 0;
         if (connection && typeof connection.stop === 'function') {
             connection.stop().catch(function () {
             });
         }
+    }
+
+    function computePushReconnectDelayMs(attempts, baseMs, maxMs) {
+        if (attempts >= MAX_PUSH_RECONNECT_ATTEMPTS) {
+            return null;
+        }
+
+        return Math.min(maxMs, baseMs * Math.pow(2, attempts));
+    }
+
+    function createPushRetryPolicy(config) {
+        var baseMs = config.pushReconnectBaseMs || DEFAULT_PUSH_RECONNECT_BASE_MS;
+        var maxMs = Math.max(baseMs, config.pushReconnectMaxMs || DEFAULT_PUSH_RECONNECT_MAX_MS);
+
+        return {
+            nextRetryDelayInMilliseconds: function (retryContext) {
+                if (retryContext.previousRetryCount === 0) {
+                    return 0;
+                }
+
+                return computePushReconnectDelayMs(retryContext.previousRetryCount - 1, baseMs, maxMs);
+            }
+        };
     }
 
     async function startTopbarPush(config) {
@@ -1974,7 +2029,7 @@
 
             var builder = new signalR.HubConnectionBuilder()
                 .withUrl(config.pushUrl)
-                .withAutomaticReconnect();
+                .withAutomaticReconnect(createPushRetryPolicy(config));
             if (signalR.LogLevel && typeof builder.configureLogging === 'function') {
                 builder.configureLogging(signalR.LogLevel.Warning);
             }
@@ -1991,6 +2046,7 @@
             });
             connection.onreconnected(function () {
                 topbarPollingState.pushFallbackActive = false;
+                topbarPollingState.pushReconnectAttempts = 0;
                 topbarPollingState.failures = 0;
                 stopTopbarSummaryTimer();
                 runTopbarSummaryRefreshSoon(true);
@@ -2011,6 +2067,7 @@
             await connection.start();
             topbarPollingState.pushFallbackActive = false;
             topbarPollingState.pushFallbackWarned = false;
+            topbarPollingState.pushReconnectAttempts = 0;
             topbarPollingState.failures = 0;
             stopTopbarSummaryTimer();
         } catch (error) {

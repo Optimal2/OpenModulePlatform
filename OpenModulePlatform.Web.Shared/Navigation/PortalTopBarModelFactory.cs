@@ -80,6 +80,8 @@ public static class PortalTopBarModelFactory
             TopBarSummaryUrl = PortalTopBarModel.DefaultTopBarSummaryPath,
             TopBarPollingVisibleIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
             TopBarPollingHiddenIntervalSeconds = options.TopBarPolling?.HiddenIntervalSeconds ?? notificationUpdateOptions.PollIntervalSeconds,
+            TopBarPollingPushReconnectBaseMs = PositiveOrDefault(options.TopBarPolling?.PushReconnectBaseMs, 2000),
+            TopBarPollingPushReconnectMaxMs = PositiveOrDefault(options.TopBarPolling?.PushReconnectMaxMs, 60000),
             ToastPollingVisibleIntervalSeconds = options.ToastPolling?.VisibleIntervalSeconds ?? 60,
             ToastPollingHiddenIntervalSeconds = options.ToastPolling?.HiddenIntervalSeconds ?? 180
         };
