@@ -143,6 +143,15 @@ USING
            N'Controls whether notification and message toasts are muted for the signed-in user.' AS description,
            40 AS sort_order,
            CAST(1 AS bit) AS is_enabled
+    UNION ALL
+    SELECT N'Portal' AS setting_category,
+           N'NotificationSoundsEnabled' AS setting_name,
+           CAST(1 AS tinyint) AS value_kind,
+           CAST(1 AS int) AS default_int_value,
+           CAST(NULL AS nvarchar(max)) AS default_string_value,
+           N'Controls whether notification and message toast sounds are played for the signed-in user.' AS description,
+           50 AS sort_order,
+           CAST(1 AS bit) AS is_enabled
 ) AS source
 ON target.setting_category = source.setting_category
 AND target.setting_name = source.setting_name

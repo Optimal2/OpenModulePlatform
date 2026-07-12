@@ -19,6 +19,7 @@ public sealed class PortalUserSettingsService
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
     private const string ShowPortalNavbarSetting = "ShowPortalNavbar";
     private const string NotificationToastsMutedSetting = "NotificationToastsMuted";
+    private const string NotificationSoundsEnabledSetting = "NotificationSoundsEnabled";
     private const byte IntValueKind = 1;
 
     private readonly SqlConnectionFactory _db;
@@ -37,7 +38,8 @@ SELECT u.display_name,
        CAST(COALESCE(admin_v.setting_value, admin_d.default_int_value, 0) AS bit),
        CAST(COALESCE(hover_v.setting_value, hover_d.default_int_value, 1) AS bit),
        CAST(COALESCE(navbar_v.setting_value, navbar_d.default_int_value, 1) AS bit),
-       CAST(COALESCE(toasts_v.setting_value, toasts_d.default_int_value, 0) AS bit)
+       CAST(COALESCE(toasts_v.setting_value, toasts_d.default_int_value, 0) AS bit),
+       CAST(COALESCE(sounds_v.setting_value, sounds_d.default_int_value, 1) AS bit)
 FROM omp.users u
 LEFT JOIN omp_portal.user_setting_definitions admin_d
     ON admin_d.setting_category = @setting_category
@@ -71,6 +73,14 @@ LEFT JOIN omp_portal.user_setting_definitions toasts_d
 LEFT JOIN omp_portal.user_setting_int_values toasts_v
     ON toasts_v.user_id = u.user_id
    AND toasts_v.user_setting_definition_id = toasts_d.user_setting_definition_id
+LEFT JOIN omp_portal.user_setting_definitions sounds_d
+    ON sounds_d.setting_category = @setting_category
+   AND sounds_d.setting_name = @notification_sounds_enabled_setting_name
+   AND sounds_d.value_kind = @value_kind
+   AND sounds_d.is_enabled = 1
+LEFT JOIN omp_portal.user_setting_int_values sounds_v
+    ON sounds_v.user_id = u.user_id
+   AND sounds_v.user_setting_definition_id = sounds_d.user_setting_definition_id
 WHERE u.user_id = @user_id
   AND u.account_status = 1;";
 
@@ -93,7 +103,8 @@ WHERE u.user_id = @user_id
             rdr.GetBoolean(3),
             rdr.GetBoolean(4),
             rdr.GetBoolean(5),
-            rdr.GetBoolean(6));
+            rdr.GetBoolean(6),
+            rdr.GetBoolean(7));
     }
 
     public async Task<PortalUserSettings> GetForUserAsync(int userId, CancellationToken ct)
@@ -124,12 +135,19 @@ WHERE u.user_id = @user_id
             NotificationToastsMutedSetting,
             defaultValue: false,
             ct);
+        var notificationSoundsEnabled = await GetPortalBoolSettingAsync(
+            conn,
+            userId,
+            NotificationSoundsEnabledSetting,
+            defaultValue: true,
+            ct);
 
         return new PortalUserSettings(
             adminMetricsCollapsed,
             topbarDropdownsOpenOnHover,
             showPortalNavbar,
-            notificationToastsMuted);
+            notificationToastsMuted,
+            notificationSoundsEnabled);
     }
 
     public static bool ParseNotificationToastsEnabled(string? value)
@@ -344,6 +362,16 @@ END;";
             missingDefinitionMessage: "Portal user setting definition is missing: Portal/NotificationToastsMuted.",
             ct);
 
+    public Task UpsertNotificationSoundsEnabledAsync(int userId, bool value, CancellationToken ct)
+        => UpsertPortalBoolSettingAsync(
+            userId,
+            NotificationSoundsEnabledSetting,
+            value,
+            defaultValue: true,
+            missingDefinitionErrorNumber: 52015,
+            missingDefinitionMessage: "Portal user setting definition is missing: Portal/NotificationSoundsEnabled.",
+            ct);
+
     private async Task UpsertPortalBoolSettingAsync(
         int userId,
         string settingName,
@@ -446,6 +474,7 @@ WHERE d.setting_category = @setting_category
         cmd.Parameters.Add("@topbar_dropdowns_setting_name", SqlDbType.NVarChar, 200).Value = TopbarDropdownsOpenOnHoverSetting;
         cmd.Parameters.Add("@show_portal_navbar_setting_name", SqlDbType.NVarChar, 200).Value = ShowPortalNavbarSetting;
         cmd.Parameters.Add("@notification_toasts_muted_setting_name", SqlDbType.NVarChar, 200).Value = NotificationToastsMutedSetting;
+        cmd.Parameters.Add("@notification_sounds_enabled_setting_name", SqlDbType.NVarChar, 200).Value = NotificationSoundsEnabledSetting;
         cmd.Parameters.Add("@value_kind", SqlDbType.TinyInt).Value = IntValueKind;
     }
 
@@ -563,13 +592,15 @@ public sealed record PortalAccountSettings(
     bool AdminMetricsCollapsed,
     bool TopbarDropdownsOpenOnHover,
     bool ShowPortalNavbar,
-    bool NotificationToastsMuted);
+    bool NotificationToastsMuted,
+    bool NotificationSoundsEnabled);
 
 public sealed record PortalUserSettings(
     bool AdminMetricsCollapsed,
     bool TopbarDropdownsOpenOnHover,
     bool ShowPortalNavbar,
-    bool NotificationToastsMuted);
+    bool NotificationToastsMuted,
+    bool NotificationSoundsEnabled);
 
 public sealed record CreateSelfServiceAdAccountResult(
     CreateSelfServiceAdAccountStatus Status,
