@@ -147,7 +147,9 @@
          data-topbar-polling-enabled="@Model.TopBarPollingEnabled.ToString().ToLowerInvariant()"
          data-topbar-summary-url="@Model.TopBarSummaryUrl"
          data-topbar-polling-visible-interval="@Model.TopBarPollingVisibleIntervalSeconds"
-         data-topbar-polling-hidden-interval="@Model.TopBarPollingHiddenIntervalSeconds">
+         data-topbar-polling-hidden-interval="@Model.TopBarPollingHiddenIntervalSeconds"
+         data-push-reconnect-base-ms="@Model.TopBarPollingPushReconnectBaseMs"
+         data-push-reconnect-max-ms="@Model.TopBarPollingPushReconnectMaxMs">
         <nav class="portal-topbar__nav" aria-label="@Model.PortalLink.TextKey" data-portal-topbar>
             @if (!string.IsNullOrWhiteSpace(heroLogoUrl))
             {

@@ -618,6 +618,8 @@ public sealed class PortalTopBarService
             TopBarSummaryUrl = topBarSummaryUrl,
             TopBarPollingVisibleIntervalSeconds = notificationUpdateOptions.PollIntervalSeconds,
             TopBarPollingHiddenIntervalSeconds = options.TopBarPolling?.HiddenIntervalSeconds ?? notificationUpdateOptions.PollIntervalSeconds,
+            TopBarPollingPushReconnectBaseMs = PositiveOrDefault(options.TopBarPolling?.PushReconnectBaseMs, 2000),
+            TopBarPollingPushReconnectMaxMs = PositiveOrDefault(options.TopBarPolling?.PushReconnectMaxMs, 60000),
             ToastPollingVisibleIntervalSeconds = options.ToastPolling?.VisibleIntervalSeconds ?? 60,
             ToastPollingHiddenIntervalSeconds = options.ToastPolling?.HiddenIntervalSeconds ?? 180,
             Links = [portalLink, .. moduleLinks],

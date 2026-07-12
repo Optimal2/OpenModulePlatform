@@ -45,7 +45,9 @@
          data-topbar-polling-enabled="@_portalTopBar.TopBarPollingEnabled.ToString().ToLowerInvariant()"
          data-topbar-summary-url="@_portalTopBar.TopBarSummaryUrl"
          data-topbar-polling-visible-interval="@_portalTopBar.TopBarPollingVisibleIntervalSeconds"
-         data-topbar-polling-hidden-interval="@_portalTopBar.TopBarPollingHiddenIntervalSeconds">
+         data-topbar-polling-hidden-interval="@_portalTopBar.TopBarPollingHiddenIntervalSeconds"
+         data-push-reconnect-base-ms="@_portalTopBar.TopBarPollingPushReconnectBaseMs"
+         data-push-reconnect-max-ms="@_portalTopBar.TopBarPollingPushReconnectMaxMs">
         <nav class="portal-topbar__nav" aria-label="@_portalTopBar.PortalLink.TextKey" data-portal-topbar>
             @if (!string.IsNullOrWhiteSpace(BrandingAssetUrl(_portalTopBar.HeroLogoUrl)))
             {

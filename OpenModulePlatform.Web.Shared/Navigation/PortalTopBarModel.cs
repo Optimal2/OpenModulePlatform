@@ -62,6 +62,8 @@ public sealed class PortalTopBarModel
         TopBarSummaryUrl = DefaultTopBarSummaryPath,
         TopBarPollingVisibleIntervalSeconds = 60,
         TopBarPollingHiddenIntervalSeconds = 180,
+        TopBarPollingPushReconnectBaseMs = 2000,
+        TopBarPollingPushReconnectMaxMs = 60000,
         ToastPollingVisibleIntervalSeconds = 60,
         ToastPollingHiddenIntervalSeconds = 180
     };
@@ -212,6 +214,10 @@ public sealed class PortalTopBarModel
     public int TopBarPollingVisibleIntervalSeconds { get; init; } = 60;
 
     public int TopBarPollingHiddenIntervalSeconds { get; init; } = 180;
+
+    public int TopBarPollingPushReconnectBaseMs { get; init; } = 2000;
+
+    public int TopBarPollingPushReconnectMaxMs { get; init; } = 60000;
 
     public int ToastPollingVisibleIntervalSeconds { get; init; } = 60;
 
