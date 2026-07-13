@@ -5,6 +5,42 @@
    (--border, --border-strong, --surface, --surface-muted, --text,
    --text-muted, --link, --link-hover, --shadow). */
 
+/* Opt-in table skin matching the OMP Portal ".grid" look, expressed with the
+   shared tokens so consumer apps can adopt the same visual style. */
+.omp-grid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+.omp-grid th,
+.omp-grid td {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+    vertical-align: top;
+    text-align: left;
+}
+
+.omp-grid th {
+    background: var(--surface-muted);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.omp-grid tbody tr:hover {
+    background: color-mix(in srgb, var(--surface-muted) 50%, var(--surface));
+}
+
+.omp-grid tbody tr:last-child td {
+    border-bottom: none;
+}
+
 .sortable-list th[data-sort-type] {
     padding: 0;
 }
