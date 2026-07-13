@@ -177,6 +177,42 @@ The repository includes:
 - repository hygiene checks for common local IDE files and generated artifacts
 - central version metadata for the `0.1.0` release line
 
+## Git hooks (tracked pre-push CI gate)
+
+This repository ships tracked git hooks under `.githooks/`.
+Activate them once per clone:
+
+```powershell
+.\scripts\setup-hooks.ps1
+```
+
+This sets `core.hooksPath` to the tracked `.githooks` directory.
+
+### What runs where
+
+- **pre-commit** — fast static checks only:
+  - `omp-components.json` must still be valid JSON when changed.
+  - Staged `.ps1` files must not contain tab characters.
+  - No build or test here; commits stay fast.
+
+- **pre-push** — full CI-equivalent gate (heavy, run at push time):
+  - `dotnet build OpenModulePlatform.slnx -c Release`
+  - `dotnet test` across all test projects
+  - `scripts/omp/validate-component-versions.ps1 -BaseCommit <upstream-tracking-parent>`
+  - `scripts/omp/validate-module-definitions.ps1`
+
+The pre-push hook reads the remote ref's current SHA from git's stdin and uses
+that as the diff baseline for cascade/version validators. If the remote ref does
+not exist yet (new branch), it falls back to `origin/main`.
+
+### Important caveats
+
+- A **local green gate does not guarantee CI will pass**. SDKs, tooling, and
+  environment can differ between your workstation and the GitHub Actions runner.
+- For this public repository, verify auto-CI on `main` after pushing:
+  `gh run list --branch main --workflow=ci.yml`
+- Emergency bypass (operator's choice, not default): `git push --no-verify`
+
 ## License
 
 The project is published under the MIT License.
