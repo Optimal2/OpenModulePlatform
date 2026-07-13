@@ -329,3 +329,104 @@ body.list-column-resizing {
     cursor: col-resize;
     user-select: none;
 }
+
+/* Shared icon action buttons used in list action cells. */
+.admin-icon-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.admin-icon-actions form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.admin-icon-button {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/edit.svg");
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-muted);
+    color: var(--text);
+    text-decoration: none;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.admin-icon-button:hover,
+.admin-icon-button:focus-visible {
+    border-color: var(--link);
+    color: var(--link-hover);
+}
+
+.admin-icon-button::before {
+    content: "";
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    -webkit-mask: var(--admin-action-icon) center / contain no-repeat;
+    mask: var(--admin-action-icon) center / contain no-repeat;
+}
+
+.admin-icon-button--edit {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/edit.svg");
+}
+
+.admin-icon-button--clarify {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/clarify.svg");
+}
+
+.admin-icon-button--delete {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/delete.svg");
+}
+
+.admin-icon-button--add {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/add.svg");
+}
+
+.admin-icon-button--reset {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/reset.svg");
+}
+
+.admin-icon-button--arrow-up {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/arrow-up.svg");
+}
+
+.admin-icon-button--subdir-arrow {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/subdir-arrow.svg");
+}
+
+.admin-icon-button--drag {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/drag.svg");
+}
+
+.admin-icon-button--visible {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/visible.svg");
+}
+
+.admin-icon-button--visible-off {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/visible_off.svg");
+}
+
+.admin-icon-button:disabled,
+.admin-icon-button[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.42;
+    pointer-events: none;
+}
+
+.admin-action-cell {
+    width: 1%;
+    white-space: nowrap;
+}
