@@ -44,7 +44,8 @@ public sealed record ModuleDefinitionImportDocument(
     string DefinitionJson,
     string DefinitionSha256,
     string? SourceName,
-    IReadOnlyList<ModuleDefinitionArtifactCompatibilityEntry> CompatibleArtifacts);
+    IReadOnlyList<ModuleDefinitionArtifactCompatibilityEntry> CompatibleArtifacts,
+    IReadOnlyList<ModuleDefinitionConsistentArtifactSetEntry> ConsistentArtifactSets);
 
 public sealed record ModuleDefinitionArtifactCompatibilityEntry(
     string AppKey,

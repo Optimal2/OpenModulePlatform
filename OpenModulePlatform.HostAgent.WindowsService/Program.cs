@@ -54,6 +54,7 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddSingleton<HostResourceCollector>();
         services.AddSingleton<HostAgentJobProcessor>();
         services.AddSingleton<HostAgentCredentialStoreService>();
+        services.AddSingleton<DeploySetConsistencyService>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
