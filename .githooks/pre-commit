@@ -1,0 +1,5 @@
+#!/bin/sh
+# OMP pre-commit hook wrapper (Git Bash / MSYS).
+# The real implementation lives in pre-commit.ps1 and must be PowerShell 5.1-safe.
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+exec powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "$SCRIPT_DIR/pre-commit.ps1"
