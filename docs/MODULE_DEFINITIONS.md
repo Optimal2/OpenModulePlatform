@@ -339,6 +339,33 @@ runtime `AppType` (`web-app` -> `Portal`/`WebApp`, `service-app` -> `ServiceApp`
 Metadata-only package types such as `channel-type` may still appear in `compatibleArtifacts`
 and module-owned tables, but they are rejected for runtime bindings.
 
+The optional `consistentArtifactSets` array declares groups of artifacts that
+must be deployed together at the same version. HostAgent evaluates these sets
+after resolving the desired artifacts for a host and before deploying them.
+Each set is scoped to one module instance and checked against the currently
+applied module definition for that instance.
+
+```json
+"consistentArtifactSets": [
+  {
+    "setKey": "default",
+    "description": "Mutually consistent web and service artifacts for this module.",
+    "expectedArtifacts": [
+      { "appKey": "example_web", "packageType": "web-app", "targetName": "example-web" },
+      { "appKey": "example_service", "packageType": "service-app", "targetName": "example-service" }
+    ],
+    "versionMatchRule": "exact"
+  }
+]
+```
+
+`versionMatchRule` currently supports only `exact`: every matched set member
+selected for the module instance must have the same version. HostAgent logs a
+high-severity warning when a mismatch is detected. When `HostAgent:DeploySetConsistencyMode`
+is set to `Block`, HostAgent refuses to deploy the inconsistent set. The default
+mode is `Warn`. A module definition without `consistentArtifactSets` keeps the
+previous behavior and performs no set check.
+
 `artifactConfigurationFiles` describes runtime files that belong to an artifact
 slot but should not live inside the immutable zip. These descriptors are also
 applied when a concrete artifact exists; they are not proof that the artifact

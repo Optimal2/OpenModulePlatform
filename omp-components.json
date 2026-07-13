@@ -5,7 +5,7 @@
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.101",
+      "definitionVersion": "0.3.102",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -40,7 +40,7 @@
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.13",
+      "definitionVersion": "0.3.14",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
@@ -100,8 +100,8 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.139",
-      "minModuleDefinitionVersion": "0.3.100",
+      "version": "0.3.140",
+      "minModuleDefinitionVersion": "0.3.102",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"

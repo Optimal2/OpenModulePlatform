@@ -27,6 +27,8 @@ END;
         (N'omp', N'AppPermissions'),
         (N'omp', N'ModuleDefinitionDocuments'),
         (N'omp', N'ModuleDefinitionArtifactCompatibility'),
+        (N'omp', N'ModuleDefinitionConsistentArtifactSets'),
+        (N'omp', N'ModuleDefinitionConsistentArtifactSetMembers'),
         (N'omp', N'ModuleDefinitionSqlExecutions'),
         (N'omp', N'Artifacts'),
         (N'omp', N'ArtifactConfigurationFiles'),

@@ -116,6 +116,14 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         CancellationToken ct)
         => Task.FromResult<IReadOnlyList<DeploymentRuntimeRecoveryCandidate>>([]);
 
+    public IReadOnlyList<DeploySetConsistencyCheckResult> ConsistencyResults { get; set; } = [];
+
+    public Task<IReadOnlyList<DeploySetConsistencyCheckResult>> GetDeploySetConsistencyResultsAsync(
+        string hostKey,
+        IReadOnlyList<int> artifactIds,
+        CancellationToken ct)
+        => Task.FromResult(ConsistencyResults);
+
     public Task<HostDeploymentWorkItem?> TryClaimNextHostDeploymentAsync(
         string hostKey,
         string serviceName,

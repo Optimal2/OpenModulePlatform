@@ -148,6 +148,8 @@ public sealed class HostAgentSettings
 
     public int RpcRequestTimeoutSeconds { get; set; } = 60;
 
+    public string DeploySetConsistencyMode { get; set; } = DeploySetConsistencyModes.Warn;
+
     public string ResolveHostKey()
     {
         if (!string.IsNullOrWhiteSpace(HostKey))

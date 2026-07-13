@@ -1022,7 +1022,8 @@ public sealed class ArtifactZipImportService
             normalizedJson,
             sha256,
             Truncate(sourceName, 400),
-            ReadCompatibleArtifacts(root));
+            ReadCompatibleArtifacts(root),
+            ReadConsistentArtifactSets(root));
     }
 
     private static IReadOnlyList<ModuleDefinitionArtifactCompatibilityEntry> ReadCompatibleArtifacts(JsonNode root)
@@ -1049,6 +1050,64 @@ public sealed class ArtifactZipImportService
                 NullIfWhiteSpace(GetJsonStringProperty(item, "relativePathTemplate")),
                 NullIfWhiteSpace(GetJsonStringProperty(item, "minVersion")),
                 NullIfWhiteSpace(GetJsonStringProperty(item, "maxVersion"))));
+        }
+
+        return entries;
+    }
+
+    private static IReadOnlyList<ModuleDefinitionConsistentArtifactSetEntry> ReadConsistentArtifactSets(JsonNode root)
+    {
+        if (root["consistentArtifactSets"] is not JsonArray sets)
+        {
+            return [];
+        }
+
+        var entries = new List<ModuleDefinitionConsistentArtifactSetEntry>();
+        foreach (var set in sets.OfType<JsonObject>())
+        {
+            var setKey = GetJsonStringProperty(set, "setKey");
+            if (string.IsNullOrWhiteSpace(setKey))
+            {
+                throw new InvalidOperationException("Each consistentArtifactSets item must contain setKey.");
+            }
+
+            var versionMatchRule = GetJsonStringProperty(set, "versionMatchRule");
+            if (string.IsNullOrWhiteSpace(versionMatchRule))
+            {
+                versionMatchRule = "exact";
+            }
+
+            if (!string.Equals(versionMatchRule, "exact", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"consistentArtifactSets set '{setKey}' uses unsupported versionMatchRule '{versionMatchRule}'. Only 'exact' is supported.");
+            }
+
+            var members = new List<ModuleDefinitionConsistentArtifactSetMemberEntry>();
+            if (set["expectedArtifacts"] is JsonArray expectedArtifacts)
+            {
+                foreach (var item in expectedArtifacts.OfType<JsonObject>())
+                {
+                    var appKey = GetJsonStringProperty(item, "appKey");
+                    var packageType = GetJsonStringProperty(item, "packageType");
+                    if (string.IsNullOrWhiteSpace(appKey) || string.IsNullOrWhiteSpace(packageType))
+                    {
+                        throw new InvalidOperationException(
+                            "Each consistentArtifactSets expectedArtifacts item must contain appKey and packageType.");
+                    }
+
+                    members.Add(new ModuleDefinitionConsistentArtifactSetMemberEntry(
+                        appKey,
+                        packageType,
+                        NullIfWhiteSpace(GetJsonStringProperty(item, "targetName"))));
+                }
+            }
+
+            entries.Add(new ModuleDefinitionConsistentArtifactSetEntry(
+                setKey,
+                NullIfWhiteSpace(GetJsonStringProperty(set, "description")),
+                versionMatchRule,
+                members));
         }
 
         return entries;
