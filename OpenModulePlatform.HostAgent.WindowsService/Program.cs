@@ -41,6 +41,7 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddSingleton<ArtifactProvisioner>();
         services.AddSingleton<ArtifactZipImportService>();
         services.AddSingleton<WebAppDeploymentService>();
+        services.AddSingleton<IWindowsServiceControl>(static _ => WindowsServiceControl.Instance);
         services.AddSingleton<ServiceAppDeploymentService>();
         services.AddSingleton<HostAgentSelfUpgradeService>();
         services.AddSingleton<HostAgentFileMirrorService>();

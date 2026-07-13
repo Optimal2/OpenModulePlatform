@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Management;
 using System.Runtime.Versioning;
@@ -11,22 +12,27 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class ServiceAppDeploymentService
 {
     private const int ScAccessDeniedExitCode = 5;
+    private const int MaxConsecutiveStartAttempts = 3;
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly IOmpHostArtifactRepository _repository;
     private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<ServiceAppDeploymentService> _logger;
+    private readonly IWindowsServiceControl _serviceControl;
+    private readonly ConcurrentDictionary<string, int> _consecutiveStartAttemptsByServiceName = new(StringComparer.OrdinalIgnoreCase);
 
     public ServiceAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
         IOmpHostArtifactRepository repository,
         HostAgentCredentialStoreService credentialStore,
-        ILogger<ServiceAppDeploymentService> logger)
+        ILogger<ServiceAppDeploymentService> logger,
+        IWindowsServiceControl? serviceControl = null)
     {
         _settings = settings;
         _repository = repository;
         _credentialStore = credentialStore;
         _logger = logger;
+        _serviceControl = serviceControl ?? WindowsServiceControl.Instance;
     }
 
     public async Task DeployDesiredServiceAppsAsync(string hostKey, CancellationToken cancellationToken)
@@ -173,6 +179,22 @@ public sealed class ServiceAppDeploymentService
                             AddIdentityCheck(
                                 AppDeploymentResult.Warning(targetPath, serviceName, identityCheck.WarningMessage),
                                 identityCheck)),
+                        cancellationToken);
+                    return;
+                }
+
+                var reconcileRunningResult = await EnsureServiceRunningIfDesiredAsync(
+                    settings,
+                    deployment,
+                    targetPath,
+                    serviceName,
+                    identityCheck,
+                    cancellationToken);
+                if (reconcileRunningResult is not null)
+                {
+                    await _repository.PublishAppDeploymentResultAsync(
+                        deployment,
+                        WithDeploySetWarning(AddIdentityCheck(reconcileRunningResult, identityCheck)),
                         cancellationToken);
                     return;
                 }
@@ -368,6 +390,80 @@ public sealed class ServiceAppDeploymentService
         }
     }
 
+    private async Task<AppDeploymentResult?> EnsureServiceRunningIfDesiredAsync(
+        HostAgentSettings settings,
+        ServiceAppDeploymentDescriptor deployment,
+        string targetPath,
+        string serviceName,
+        ServiceIdentityCheckResult identityCheck,
+        CancellationToken cancellationToken)
+    {
+        if (!settings.StartServiceAfterServiceAppDeployment)
+        {
+            // The deployment is configured to leave the service state alone.
+            return null;
+        }
+
+        // A runtime stop-marker means the service was intentionally stopped for a
+        // deployment that has not yet finished (or was interrupted). The recovery
+        // path handles those; reconcile must not fight an intentional stop.
+        // There is no other per-service "desired=Stopped" signal in this codebase.
+        if (DeploymentRuntimeStopMarker.Exists(targetPath))
+        {
+            _logger.LogDebug(
+                "Service app reconcile skipped auto-start because a runtime stop-marker is present. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, TargetPath={TargetPath}",
+                deployment.AppInstanceId,
+                serviceName,
+                targetPath);
+            return null;
+        }
+
+        if (_serviceControl.IsServiceRunning(serviceName))
+        {
+            _consecutiveStartAttemptsByServiceName.TryRemove(serviceName, out _);
+            return null;
+        }
+
+        var attempts = _consecutiveStartAttemptsByServiceName.AddOrUpdate(serviceName, 1, static (_, count) => count + 1);
+        if (attempts > MaxConsecutiveStartAttempts)
+        {
+            var persistentWarning = $"Service '{serviceName}' was stopped during reconcile and has exceeded the maximum number of restart attempts ({MaxConsecutiveStartAttempts}). Manual intervention required.";
+            _logger.LogWarning(
+                "Service app reconcile detected a stopped service but will not restart it because the crash-loop threshold has been reached. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, Attempts={Attempts}",
+                deployment.AppInstanceId,
+                serviceName,
+                attempts);
+            return AppDeploymentResult.Warning(targetPath, serviceName, persistentWarning);
+        }
+
+        _logger.LogWarning(
+            "Service app reconcile detected a stopped service and will attempt to start it. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, Attempt={Attempt}",
+            deployment.AppInstanceId,
+            serviceName,
+            attempts);
+
+        try
+        {
+            _serviceControl.StartServiceIfStopped(serviceName, settings.ServiceAppStartTimeoutSeconds);
+            return AppDeploymentResult.Warning(
+                targetPath,
+                serviceName,
+                $"Service '{serviceName}' was stopped during reconcile; attempted restart. Verify service health.");
+        }
+        catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Service app reconcile failed to restart a stopped service. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}",
+                deployment.AppInstanceId,
+                serviceName);
+            return AppDeploymentResult.Warning(
+                targetPath,
+                serviceName,
+                $"Service '{serviceName}' was stopped during reconcile; attempted restart failed. {ex.Message}");
+        }
+    }
+
     private static string ResolveExecutableRelativePath(ServiceAppDeploymentDescriptor deployment)
     {
         if (!Directory.Exists(deployment.SourceLocalPath))
@@ -407,7 +503,7 @@ public sealed class ServiceAppDeploymentService
             $"Service app artifact '{deployment.ArtifactId}' contains more than one root executable. Set AppInstances.InstallationName to the Windows service/executable name.");
     }
 
-    private static bool IsAlreadyApplied(
+    private bool IsAlreadyApplied(
         ServiceAppDeploymentDescriptor deployment,
         string targetPath,
         string serviceName,
@@ -420,10 +516,10 @@ public sealed class ServiceAppDeploymentService
             && string.Equals(deployment.DeployedRuntimeName, serviceName, StringComparison.OrdinalIgnoreCase)
             && Directory.Exists(targetPath)
             && File.Exists(targetExecutablePath)
-            && GetServiceState(serviceName) is not null;
+            && _serviceControl.GetServiceState(serviceName) is not null;
     }
 
-    private static void CleanUpRenamedService(string oldServiceName, string oldTargetPath, string newTargetPath)
+    private void CleanUpRenamedService(string oldServiceName, string oldTargetPath, string newTargetPath)
     {
         StopServiceIfRunning(oldServiceName, timeoutSeconds: 30);
         RunScChecked("delete", oldServiceName);
@@ -435,7 +531,7 @@ public sealed class ServiceAppDeploymentService
         }
     }
 
-    private static void EnsureWindowsService(
+    private void EnsureWindowsService(
         ServiceAppDeploymentDescriptor deployment,
         string serviceName,
         string executablePath)
@@ -445,38 +541,12 @@ public sealed class ServiceAppDeploymentService
             throw new FileNotFoundException($"Service executable was not found after deployment: '{executablePath}'.", executablePath);
         }
 
-        var binaryPath = Quote(executablePath);
         var displayName = ResolveServiceDisplayName(deployment, serviceName);
         var description = string.IsNullOrWhiteSpace(deployment.Description)
             ? $"OMP service app instance {deployment.AppInstanceKey}."
             : deployment.Description.Trim();
 
-        if (GetServiceState(serviceName) is null)
-        {
-            RunScChecked(
-                "create",
-                serviceName,
-                "binPath=",
-                binaryPath,
-                "start=",
-                "auto",
-                "DisplayName=",
-                displayName);
-        }
-        else
-        {
-            RunScChecked(
-                "config",
-                serviceName,
-                "binPath=",
-                binaryPath,
-                "start=",
-                "auto",
-                "DisplayName=",
-                displayName);
-        }
-
-        RunScChecked("description", serviceName, description);
+        _serviceControl.EnsureServiceConfigured(serviceName, executablePath, displayName, description);
     }
 
     private static string ResolveServiceDisplayName(ServiceAppDeploymentDescriptor deployment, string serviceName)
@@ -794,7 +864,7 @@ public sealed class ServiceAppDeploymentService
             identityCheck.ClearRepairRequest);
 
     [SupportedOSPlatform("windows")]
-    private static void ApplyDesiredServiceIdentity(
+    private void ApplyDesiredServiceIdentity(
         HostAgentSettings settings,
         string serviceName,
         ServiceAppIdentityResolution desiredIdentity)
@@ -823,45 +893,16 @@ public sealed class ServiceAppDeploymentService
         }
     }
 
-    private static bool StopServiceIfRunning(string serviceName, int timeoutSeconds)
-    {
-        var state = GetServiceState(serviceName);
-        if (state is null)
-        {
-            return false;
-        }
+    private bool StopServiceIfRunning(string serviceName, int timeoutSeconds)
+        => _serviceControl.StopServiceIfRunning(serviceName, timeoutSeconds);
 
-        if (string.Equals(state, "STOPPED", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
+    private void StartServiceIfStopped(string serviceName, int timeoutSeconds)
+        => _serviceControl.StartServiceIfStopped(serviceName, timeoutSeconds);
 
-        RunScChecked("stop", serviceName);
-        WaitForServiceState(serviceName, "STOPPED", timeoutSeconds);
-        return true;
-    }
+    private bool IsServiceRunning(string serviceName)
+        => _serviceControl.IsServiceRunning(serviceName);
 
-    private static void StartServiceIfStopped(string serviceName, int timeoutSeconds)
-    {
-        var state = GetServiceState(serviceName);
-        if (state is null)
-        {
-            throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
-        }
-
-        if (string.Equals(state, "RUNNING", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        RunScChecked("start", serviceName);
-        WaitForServiceState(serviceName, "RUNNING", timeoutSeconds);
-    }
-
-    private static bool IsServiceRunning(string serviceName)
-        => string.Equals(GetServiceState(serviceName), "RUNNING", StringComparison.OrdinalIgnoreCase);
-
-    private static bool TryStartService(string serviceName, int timeoutSeconds, ILogger logger)
+    private bool TryStartService(string serviceName, int timeoutSeconds, ILogger logger)
     {
         // The original deployment failure is the actionable error. Restart
         // recovery is best-effort and should not mask that primary failure.
@@ -941,66 +982,6 @@ public sealed class ServiceAppDeploymentService
                     candidate.TargetPath);
             }
         }
-    }
-
-    private static void WaitForServiceState(string serviceName, string desiredState, int timeoutSeconds)
-    {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            var state = GetServiceState(serviceName);
-            if (string.Equals(state, desiredState, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            Thread.Sleep(250);
-        }
-
-        throw new TimeoutException($"Windows service '{serviceName}' did not reach state '{desiredState}' within {timeoutSeconds} seconds.");
-    }
-
-    private static string? GetServiceState(string serviceName)
-    {
-        var result = RunSc("query", serviceName);
-        if (result.ExitCode != 0)
-        {
-            if (result.IsServiceNotFound())
-            {
-                return null;
-            }
-
-            throw new InvalidOperationException(CreateScFailureMessage(
-                result.ExitCode,
-                result.Output,
-                result.Error,
-                "query",
-                serviceName));
-        }
-
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var stateIndex = line.IndexOf("STATE", StringComparison.OrdinalIgnoreCase);
-            if (stateIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', stateIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            var stateText = line[(separatorIndex + 1)..].Trim();
-            var parts = stateText.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length > 0)
-            {
-                return parts[^1];
-            }
-        }
-
-        return null;
     }
 
     [SupportedOSPlatform("windows")]
@@ -1313,9 +1294,6 @@ public sealed class ServiceAppDeploymentService
 
         return HostAgentCredentialAutomationModes.Disabled;
     }
-
-    private static string Quote(string value)
-        => '"' + value.Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
 
     private static bool IsExpectedDeploymentFailure(Exception exception)
         => exception is InvalidOperationException
