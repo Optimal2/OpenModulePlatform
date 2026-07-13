@@ -288,87 +288,6 @@ function Save-JsonFile {
     }
 }
 
-function Get-FileSha256Hex {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        throw "File not found for SHA-256 computation: $Path"
-    }
-
-    $stream = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
-    try {
-        $sha256 = [System.Security.Cryptography.SHA256]::Create()
-        $hash = $sha256.ComputeHash($stream)
-        return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
-    }
-    finally {
-        $sha256.Dispose()
-        $stream.Dispose()
-    }
-}
-
-function Update-WebSharedHashManifest {
-    <#
-    .SYNOPSIS
-    Builds OpenModulePlatform.Web.Shared with deterministic settings and writes
-    the resulting DLL SHA-256 hash to .webshared-build-hash.txt.
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-        [Parameter(Mandatory = $true)][string]$ProjectPath
-    )
-
-    $normalizedProjectPath = $ProjectPath.Replace('\', '/')
-    $webSharedProjectPath = 'OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj'
-    if (-not [string]::Equals($normalizedProjectPath, $webSharedProjectPath, [StringComparison]::OrdinalIgnoreCase)) {
-        return
-    }
-
-    $projectFile = Join-Path $RepositoryRoot $normalizedProjectPath
-    if (-not (Test-Path -LiteralPath $projectFile -PathType Leaf)) {
-        throw "Web.Shared project file was not found: $projectFile"
-    }
-
-    Write-Host 'Building OpenModulePlatform.Web.Shared with deterministic settings to refresh the hash manifest...'
-    $buildOutputRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-webshared-hash-' + [Guid]::NewGuid().ToString('N'))
-    $pathMap = '{0}={1}' -f $RepositoryRoot.TrimEnd('\', '/'), '/_/openmoduleplatform'
-    try {
-        & dotnet build $projectFile `
-            -c Release `
-            -o $buildOutputRoot `
-            --verbosity minimal `
-            -p:ContinuousIntegrationBuild=true `
-            -p:Deterministic=true `
-            "-p:PathMap=$pathMap" | ForEach-Object { Write-Host $_ }
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to build OpenModulePlatform.Web.Shared. The hash manifest was not updated."
-        }
-
-        $dllPath = Join-Path $buildOutputRoot 'OpenModulePlatform.Web.Shared.dll'
-        if (-not (Test-Path -LiteralPath $dllPath -PathType Leaf)) {
-            throw "Build succeeded but OpenModulePlatform.Web.Shared.dll was not found at '$dllPath'."
-        }
-
-        $hash = Get-FileSha256Hex -Path $dllPath
-        $manifestPath = Join-Path $RepositoryRoot '.webshared-build-hash.txt'
-        if ($PSCmdlet.ShouldProcess($manifestPath, 'Update Web.Shared hash manifest')) {
-            [System.IO.File]::WriteAllText($manifestPath, $hash + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
-            Write-Host "Updated .webshared-build-hash.txt with Web.Shared hash $hash."
-        }
-    }
-    finally {
-        if (Test-Path -LiteralPath $buildOutputRoot) {
-            try {
-                Remove-Item -LiteralPath $buildOutputRoot -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            catch {
-                # Best-effort cleanup of the temporary deterministic build output.
-            }
-        }
-    }
-}
-
 function Convert-KeyInput {
     param([string]$Value)
 
@@ -692,8 +611,6 @@ try {
                 Write-Host "Cascade from ${CascadeFrom}: all consumers already selected, no additional components to bump."
             }
         }
-
-        Update-WebSharedHashManifest -RepositoryRoot $repositoryRoot -ProjectPath $CascadeFrom
     }
 
     $updates = [System.Collections.Generic.List[object]]::new()
