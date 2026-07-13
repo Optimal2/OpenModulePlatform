@@ -573,6 +573,7 @@ WHERE ModuleKey = @moduleKey
             }
 
             await ReplaceModuleDefinitionCompatibilityAsync(conn, tx, documentId, input.CompatibleArtifacts, ct);
+            await ReplaceModuleDefinitionConsistentArtifactSetsAsync(conn, tx, documentId, input.ConsistentArtifactSets, ct);
             await tx.CommitAsync(ct);
 
             return new ModuleDefinitionSaveResult(
@@ -3011,6 +3012,260 @@ ORDER BY PackageType, TargetName, Version, ArtifactId;";
         return result;
     }
 
+    public async Task<IReadOnlyList<DeploySetConsistencyCheckResult>> GetDeploySetConsistencyResultsAsync(
+        string hostKey,
+        IReadOnlyList<int> artifactIds,
+        CancellationToken ct)
+    {
+        if (artifactIds.Count == 0)
+        {
+            return [];
+        }
+
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS uniqueidentifier) AS ModuleInstanceId,
+        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey,
+        CAST(NULL AS nvarchar(100)) AS ModuleKey,
+        CAST(NULL AS nvarchar(100)) AS SetKey,
+        CAST(NULL AS nvarchar(100)) AS VersionMatchRule,
+        CAST(NULL AS nvarchar(100)) AS AppKey,
+        CAST(NULL AS nvarchar(50)) AS PackageType,
+        CAST(NULL AS nvarchar(100)) AS TargetName,
+        CAST(NULL AS nvarchar(50)) AS Version,
+        CAST(NULL AS int) AS ArtifactId;
+    RETURN;
+END;
+
+DECLARE @DesiredArtifactIds TABLE (ArtifactId int PRIMARY KEY);
+INSERT INTO @DesiredArtifactIds (ArtifactId)
+SELECT DISTINCT TRY_CONVERT(int, value)
+FROM STRING_SPLIT(@artifactIds, ',')
+WHERE TRY_CONVERT(int, value) IS NOT NULL;
+
+WITH DesiredAppInstances AS
+(
+    SELECT
+        ai.ModuleInstanceId,
+        ai.AppInstanceId,
+        ai.AppId,
+        ar.ArtifactId,
+        ar.Version,
+        ar.PackageType,
+        ar.TargetName,
+        app.AppKey
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+    INNER JOIN omp.Apps app ON app.AppId = ai.AppId
+    WHERE ai.ArtifactId IN (SELECT ArtifactId FROM @DesiredArtifactIds)
+      AND ai.IsEnabled = 1
+      AND ai.IsAllowed = 1
+      AND
+      (
+          ai.HostId = @hostId
+          OR (ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL)
+          OR
+          (
+              ai.HostId IS NULL
+              AND ai.TargetHostTemplateId IS NOT NULL
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostDeploymentAssignments hda
+                  WHERE hda.HostId = @hostId
+                    AND hda.HostTemplateId = ai.TargetHostTemplateId
+                    AND hda.IsActive = 1
+              )
+          )
+      )
+
+    UNION ALL
+
+    SELECT
+        ai.ModuleInstanceId,
+        ai.AppInstanceId,
+        ai.AppId,
+        ar.ArtifactId,
+        ar.Version,
+        ar.PackageType,
+        ar.TargetName,
+        app.AppKey
+    FROM omp.WorkerInstances wi
+    INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
+    INNER JOIN omp.Artifacts ar ON ar.ArtifactId = COALESCE(wi.ArtifactId, ai.ArtifactId)
+    INNER JOIN omp.Apps app ON app.AppId = ai.AppId
+    WHERE COALESCE(wi.ArtifactId, ai.ArtifactId) IN (SELECT ArtifactId FROM @DesiredArtifactIds)
+      AND ai.IsEnabled = 1
+      AND ai.IsAllowed = 1
+      AND wi.IsEnabled = 1
+      AND wi.IsAllowed = 1
+      AND
+      (
+          wi.HostId = @hostId
+          OR (wi.HostId IS NULL AND ai.HostId = @hostId)
+          OR
+          (
+              wi.HostId IS NULL
+              AND ai.HostId IS NULL
+              AND ai.TargetHostTemplateId IS NOT NULL
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM omp.HostDeploymentAssignments hda
+                  WHERE hda.HostId = @hostId
+                    AND hda.HostTemplateId = ai.TargetHostTemplateId
+                    AND hda.IsActive = 1
+              )
+          )
+      )
+),
+AppliedDefinitions AS
+(
+    SELECT
+        m.ModuleKey,
+        mi.ModuleInstanceId,
+        mi.ModuleInstanceKey,
+        (
+            SELECT TOP 1 d.ModuleDefinitionDocumentId
+            FROM omp.ModuleDefinitionDocuments d
+            WHERE d.ModuleKey = m.ModuleKey
+              AND d.IsApplied = 1
+            ORDER BY d.AppliedUtc DESC, d.UpdatedUtc DESC, d.ModuleDefinitionDocumentId DESC
+        ) AS ModuleDefinitionDocumentId
+    FROM omp.ModuleInstances mi
+    INNER JOIN omp.Modules m ON m.ModuleId = mi.ModuleId
+    WHERE mi.ModuleInstanceId IN (SELECT DISTINCT ModuleInstanceId FROM DesiredAppInstances)
+)
+SELECT
+    ad.ModuleInstanceId,
+    ad.ModuleInstanceKey,
+    ad.ModuleKey,
+    sets.SetKey,
+    sets.VersionMatchRule,
+    members.AppKey,
+    members.PackageType,
+    members.TargetName,
+    dai.Version,
+    dai.ArtifactId
+FROM AppliedDefinitions ad
+INNER JOIN omp.ModuleDefinitionDocuments mdd ON mdd.ModuleDefinitionDocumentId = ad.ModuleDefinitionDocumentId
+INNER JOIN omp.ModuleDefinitionConsistentArtifactSets sets ON sets.ModuleDefinitionDocumentId = mdd.ModuleDefinitionDocumentId
+INNER JOIN omp.ModuleDefinitionConsistentArtifactSetMembers members ON members.ModuleDefinitionConsistentArtifactSetId = sets.ModuleDefinitionConsistentArtifactSetId
+LEFT JOIN DesiredAppInstances dai
+    ON dai.ModuleInstanceId = ad.ModuleInstanceId
+    AND dai.AppKey = members.AppKey
+    AND dai.PackageType = members.PackageType
+    AND (members.TargetName IS NULL OR dai.TargetName = members.TargetName)
+ORDER BY ad.ModuleInstanceId, sets.SetKey, members.AppKey, members.PackageType, members.TargetName;";
+
+        var artifactIdList = string.Join(",", artifactIds);
+        var rows = new List<DeploySetConsistencyRow>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@artifactIds", artifactIdList);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            rows.Add(new DeploySetConsistencyRow
+            {
+                ModuleInstanceId = rdr.GetGuid(0),
+                ModuleInstanceKey = rdr.GetString(1),
+                ModuleKey = rdr.GetString(2),
+                SetKey = rdr.GetString(3),
+                VersionMatchRule = rdr.GetString(4),
+                AppKey = rdr.GetString(5),
+                PackageType = rdr.GetString(6),
+                TargetName = rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                Version = rdr.IsDBNull(8) ? null : rdr.GetString(8),
+                ArtifactId = rdr.IsDBNull(9) ? null : rdr.GetInt32(9)
+            });
+        }
+
+        return BuildConsistencyResults(rows);
+    }
+
+    private static IReadOnlyList<DeploySetConsistencyCheckResult> BuildConsistencyResults(IReadOnlyList<DeploySetConsistencyRow> rows)
+    {
+        var results = new List<DeploySetConsistencyCheckResult>();
+        foreach (var group in rows.GroupBy(r => new { r.ModuleInstanceId, r.SetKey }))
+        {
+            var first = group.First();
+            var matched = group.Where(r => r.Version is not null).ToList();
+            var total = group.Count();
+
+            bool isConsistent;
+            string? expectedVersion = null;
+            string? actualVersions = null;
+
+            if (matched.Count == 0)
+            {
+                isConsistent = true;
+            }
+            else
+            {
+                var versions = matched
+                    .Select(r => r.Version!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                isConsistent = versions.Count <= 1;
+                expectedVersion = versions.FirstOrDefault();
+                actualVersions = string.Join(", ", matched
+                    .Select(r => $"{r.AppKey}/{r.PackageType}{(r.TargetName is null ? "" : $"/{r.TargetName}")}={r.Version}")
+                    .Distinct()
+                    .OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
+            }
+
+            results.Add(new DeploySetConsistencyCheckResult(
+                first.ModuleInstanceId,
+                first.ModuleInstanceKey,
+                first.ModuleKey,
+                first.SetKey,
+                isConsistent,
+                expectedVersion,
+                actualVersions,
+                matched.Count,
+                total));
+        }
+
+        return results;
+    }
+
+    private sealed class DeploySetConsistencyRow
+    {
+        public Guid ModuleInstanceId { get; init; }
+
+        public string ModuleInstanceKey { get; init; } = string.Empty;
+
+        public string ModuleKey { get; init; } = string.Empty;
+
+        public string SetKey { get; init; } = string.Empty;
+
+        public string VersionMatchRule { get; init; } = string.Empty;
+
+        public string AppKey { get; init; } = string.Empty;
+
+        public string PackageType { get; init; } = string.Empty;
+
+        public string? TargetName { get; init; }
+
+        public string? Version { get; init; }
+
+        public int? ArtifactId { get; init; }
+    }
+
     public async Task<IReadOnlyList<WebAppDeploymentDescriptor>> GetDesiredWebAppDeploymentsAsync(
         string hostKey,
         int maxDeployments,
@@ -3705,6 +3960,97 @@ VALUES
             Add(insert, "@minArtifactVersion", entry.MinArtifactVersion);
             Add(insert, "@maxArtifactVersion", entry.MaxArtifactVersion);
             await insert.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static async Task ReplaceModuleDefinitionConsistentArtifactSetsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int documentId,
+        IReadOnlyList<ModuleDefinitionConsistentArtifactSetEntry> sets,
+        CancellationToken ct)
+    {
+        const string deleteMembersSql = @"
+DELETE FROM omp.ModuleDefinitionConsistentArtifactSetMembers
+WHERE ModuleDefinitionConsistentArtifactSetId IN
+(
+    SELECT ModuleDefinitionConsistentArtifactSetId
+    FROM omp.ModuleDefinitionConsistentArtifactSets
+    WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId
+);";
+
+        await using (var deleteMembers = new SqlCommand(deleteMembersSql, conn, tx))
+        {
+            Add(deleteMembers, "@moduleDefinitionDocumentId", documentId);
+            await deleteMembers.ExecuteNonQueryAsync(ct);
+        }
+
+        const string deleteSetsSql = @"
+DELETE FROM omp.ModuleDefinitionConsistentArtifactSets
+WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
+
+        await using (var deleteSets = new SqlCommand(deleteSetsSql, conn, tx))
+        {
+            Add(deleteSets, "@moduleDefinitionDocumentId", documentId);
+            await deleteSets.ExecuteNonQueryAsync(ct);
+        }
+
+        const string insertSetSql = @"
+INSERT INTO omp.ModuleDefinitionConsistentArtifactSets
+(
+    ModuleDefinitionDocumentId,
+    SetKey,
+    Description,
+    VersionMatchRule
+)
+VALUES
+(
+    @moduleDefinitionDocumentId,
+    @setKey,
+    @description,
+    @versionMatchRule
+);
+
+SELECT CAST(SCOPE_IDENTITY() AS int);";
+
+        const string insertMemberSql = @"
+INSERT INTO omp.ModuleDefinitionConsistentArtifactSetMembers
+(
+    ModuleDefinitionConsistentArtifactSetId,
+    AppKey,
+    PackageType,
+    TargetName
+)
+VALUES
+(
+    @setId,
+    @appKey,
+    @packageType,
+    @targetName
+);";
+
+        foreach (var set in sets)
+        {
+            int setId;
+            await using (var insertSet = new SqlCommand(insertSetSql, conn, tx))
+            {
+                Add(insertSet, "@moduleDefinitionDocumentId", documentId);
+                Add(insertSet, "@setKey", set.SetKey);
+                Add(insertSet, "@description", set.Description);
+                Add(insertSet, "@versionMatchRule", set.VersionMatchRule);
+                var value = await insertSet.ExecuteScalarAsync(ct);
+                setId = value is int intValue ? intValue : Convert.ToInt32(value);
+            }
+
+            foreach (var member in set.Members)
+            {
+                await using var insertMember = new SqlCommand(insertMemberSql, conn, tx);
+                Add(insertMember, "@setId", setId);
+                Add(insertMember, "@appKey", member.AppKey);
+                Add(insertMember, "@packageType", member.PackageType);
+                Add(insertMember, "@targetName", member.TargetName);
+                await insertMember.ExecuteNonQueryAsync(ct);
+            }
         }
     }
 

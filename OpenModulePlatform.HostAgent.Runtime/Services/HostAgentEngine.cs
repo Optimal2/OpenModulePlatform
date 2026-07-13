@@ -20,6 +20,7 @@ public sealed class HostAgentEngine
     private readonly WebAppHealthMonitor _webAppHealthMonitor;
     private readonly HostResourceCollector _resourceCollector;
     private readonly HostAgentJobProcessor _jobProcessor;
+    private readonly DeploySetConsistencyService _deploySetConsistencyService;
     private readonly HostAgentProcessContext _process;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<HostAgentEngine> _logger;
@@ -37,6 +38,7 @@ public sealed class HostAgentEngine
         WebAppHealthMonitor webAppHealthMonitor,
         HostResourceCollector resourceCollector,
         HostAgentJobProcessor jobProcessor,
+        DeploySetConsistencyService deploySetConsistencyService,
         HostAgentProcessContext process,
         TimeProvider timeProvider,
         ILogger<HostAgentEngine> logger)
@@ -52,6 +54,7 @@ public sealed class HostAgentEngine
         _webAppHealthMonitor = webAppHealthMonitor;
         _resourceCollector = resourceCollector;
         _jobProcessor = jobProcessor;
+        _deploySetConsistencyService = deploySetConsistencyService;
         _process = process;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -170,6 +173,12 @@ public sealed class HostAgentEngine
                 "Resolved desired artifacts. HostKey={HostKey}, Count={Count}",
                 hostKey,
                 artifacts.Count);
+
+            var consistencySummary = await _deploySetConsistencyService.CheckAsync(
+                hostKey,
+                artifacts,
+                leaseRenewalCancellation.Token);
+            _deploySetConsistencyService.ThrowIfBlocked(consistencySummary);
 
             foreach (var artifact in artifacts)
             {

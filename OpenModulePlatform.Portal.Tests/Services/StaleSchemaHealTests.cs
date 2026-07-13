@@ -172,6 +172,7 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             definitionJson,
             ComputeSha256(definitionJson),
             "test",
+            [],
             []);
 
         var task = (Task)importMethod.Invoke(service, [document, CancellationToken.None])!;

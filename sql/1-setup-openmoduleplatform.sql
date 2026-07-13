@@ -453,6 +453,48 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID(N'omp.ModuleDefinitionConsistentArtifactSets', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ModuleDefinitionConsistentArtifactSets
+    (
+        ModuleDefinitionConsistentArtifactSetId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ModuleDefinitionConsistentArtifactSets PRIMARY KEY,
+        ModuleDefinitionDocumentId int NOT NULL,
+        SetKey nvarchar(100) NOT NULL,
+        Description nvarchar(500) NULL,
+        VersionMatchRule nvarchar(50) NOT NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleDefinitionConsistentArtifactSets_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_ModuleDefinitionConsistentArtifactSets_Document
+            FOREIGN KEY(ModuleDefinitionDocumentId)
+            REFERENCES omp.ModuleDefinitionDocuments(ModuleDefinitionDocumentId)
+            ON DELETE CASCADE,
+        CONSTRAINT UQ_omp_ModuleDefinitionConsistentArtifactSets_SetKey
+            UNIQUE(ModuleDefinitionDocumentId, SetKey)
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp.ModuleDefinitionConsistentArtifactSetMembers', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.ModuleDefinitionConsistentArtifactSetMembers
+    (
+        ModuleDefinitionConsistentArtifactSetMemberId int IDENTITY(1,1) NOT NULL
+            CONSTRAINT PK_omp_ModuleDefinitionConsistentArtifactSetMembers PRIMARY KEY,
+        ModuleDefinitionConsistentArtifactSetId int NOT NULL,
+        AppKey nvarchar(100) NOT NULL,
+        PackageType nvarchar(50) NOT NULL,
+        TargetName nvarchar(100) NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ModuleDefinitionConsistentArtifactSetMembers_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_ModuleDefinitionConsistentArtifactSetMembers_Set
+            FOREIGN KEY(ModuleDefinitionConsistentArtifactSetId)
+            REFERENCES omp.ModuleDefinitionConsistentArtifactSets(ModuleDefinitionConsistentArtifactSetId)
+            ON DELETE CASCADE,
+        CONSTRAINT UQ_omp_ModuleDefinitionConsistentArtifactSetMembers_Member
+            UNIQUE(ModuleDefinitionConsistentArtifactSetId, AppKey, PackageType, TargetName)
+    );
+END
+GO
+
 IF COL_LENGTH(N'omp.ModuleDefinitionArtifactCompatibility', N'RelativePathTemplate') IS NULL
 BEGIN
     ALTER TABLE omp.ModuleDefinitionArtifactCompatibility

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_serviceapp",
-  "definitionVersion": "0.3.13",
+  "definitionVersion": "0.3.14",
   "module": {
     "displayName": "Example ServiceApp",
     "moduleType": "HostAppModule",
@@ -44,6 +44,25 @@
       "relativePathTemplate": "example-serviceapp/service/{version}",
       "minVersion": "0.3.3",
       "maxVersion": null
+    }
+  ],
+  "consistentArtifactSets": [
+    {
+      "setKey": "default",
+      "description": "Example ServiceApp web and service artifacts must be deployed at the same version.",
+      "expectedArtifacts": [
+        {
+          "appKey": "example_serviceapp_webapp",
+          "packageType": "web-app",
+          "targetName": "example-serviceapp-web"
+        },
+        {
+          "appKey": "example_serviceapp_service",
+          "packageType": "service-app",
+          "targetName": "example-serviceapp-service"
+        }
+      ],
+      "versionMatchRule": "exact"
     }
   ],
   "sqlScripts": [

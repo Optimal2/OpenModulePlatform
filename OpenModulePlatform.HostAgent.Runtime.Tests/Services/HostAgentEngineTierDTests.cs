@@ -25,6 +25,11 @@ public sealed class HostAgentEngineTierDTests
             }
         };
 
+        var consistencyService = new DeploySetConsistencyService(
+            optionsMonitor,
+            repository,
+            NullLogger<DeploySetConsistencyService>.Instance);
+
         return new HostAgentEngine(
             optionsMonitor,
             repository,
@@ -37,6 +42,7 @@ public sealed class HostAgentEngineTierDTests
             webAppHealthMonitor: null!,
             resourceCollector: null!,
             jobProcessor: null!,
+            consistencyService,
             new HostAgentProcessContext(ServiceName, "0.0.0", HostAgentRuntimeMode.Normal, null),
             timeProvider ?? TimeProvider.System,
             NullLogger<HostAgentEngine>.Instance);

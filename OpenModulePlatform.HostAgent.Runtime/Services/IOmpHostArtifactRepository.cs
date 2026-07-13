@@ -66,6 +66,11 @@ public interface IOmpHostArtifactRepository
         string hostKey,
         CancellationToken ct);
 
+    Task<IReadOnlyList<DeploySetConsistencyCheckResult>> GetDeploySetConsistencyResultsAsync(
+        string hostKey,
+        IReadOnlyList<int> artifactIds,
+        CancellationToken ct);
+
     Task<HostDeploymentWorkItem?> TryClaimNextHostDeploymentAsync(
         string hostKey,
         string serviceName,
