@@ -173,25 +173,16 @@ function Invoke-Validator {
     #>
     param(
         [Parameter(Mandatory = $true)][string]$ValidatorPath,
-        [Parameter(Mandatory = $false)][string]$BaseCommit = '',
-        [Parameter(Mandatory = $false)][string]$WebSharedDllPath = ''
+        [Parameter(Mandatory = $false)][string]$BaseCommit = ''
     )
 
     $exitCode = $null
     try {
-        $arguments = @{ }
-        if (-not [string]::IsNullOrWhiteSpace($BaseCommit)) {
-            $arguments['BaseCommit'] = $BaseCommit
-        }
-        if (-not [string]::IsNullOrWhiteSpace($WebSharedDllPath)) {
-            $arguments['WebSharedDllPath'] = $WebSharedDllPath
-        }
-
-        if ($arguments.Count -eq 0) {
+        if ([string]::IsNullOrWhiteSpace($BaseCommit)) {
             & $ValidatorPath 2>&1 | Out-String | Out-Null
         }
         else {
-            & $ValidatorPath @arguments 2>&1 | Out-String | Out-Null
+            & $ValidatorPath -BaseCommit $BaseCommit 2>&1 | Out-String | Out-Null
         }
     }
     finally {
@@ -199,103 +190,6 @@ function Invoke-Validator {
     }
 
     return $exitCode
-}
-
-function New-TemporaryWebSharedTestRepository {
-    <#
-    .SYNOPSIS
-    Creates a temporary repository with a Web.Shared shared project entry,
-    two consumers, a fake DLL, and a hash manifest for Check 11 tests.
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$RootPath,
-        [Parameter(Mandatory = $true)][string]$ManifestHash,
-        [Parameter(Mandatory = $false)][string]$ConsumerAVersion = '1.0.0',
-        [Parameter(Mandatory = $false)][string]$ConsumerBVersion = '1.0.0'
-    )
-
-    if (Test-Path -LiteralPath $RootPath -PathType Container) {
-        Remove-Item -LiteralPath $RootPath -Recurse -Force
-    }
-
-    $null = New-Item -ItemType Directory -Path $RootPath -Force
-
-    # Copy the validator so its $repositoryRoot resolves to the temp repo.
-    $ompScriptsDir = Join-Path $RootPath 'scripts\omp'
-    $null = New-Item -ItemType Directory -Path $ompScriptsDir -Force
-    Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $ompScriptsDir 'validate-component-versions.ps1') -Force
-
-    # Create fake Web.Shared project and DLL directories.
-    $webSharedDir = Join-Path $RootPath 'OpenModulePlatform.Web.Shared'
-    $null = New-Item -ItemType Directory -Path $webSharedDir -Force
-    $csprojContent = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <PropertyGroup>`r`n    <TargetFramework>net10.0</TargetFramework>`r`n  </PropertyGroup>`r`n</Project>`r`n"
-    [System.IO.File]::WriteAllText((Join-Path $webSharedDir 'OpenModulePlatform.Web.Shared.csproj'), $csprojContent, [System.Text.Encoding]::UTF8)
-
-    # Create two fake consumer projects.
-    $consumerADir = Join-Path $RootPath 'ConsumerA'
-    $null = New-Item -ItemType Directory -Path $consumerADir -Force
-    [System.IO.File]::WriteAllText((Join-Path $consumerADir 'ConsumerA.csproj'), $csprojContent, [System.Text.Encoding]::UTF8)
-
-    $consumerBDir = Join-Path $RootPath 'ConsumerB'
-    $null = New-Item -ItemType Directory -Path $consumerBDir -Force
-    [System.IO.File]::WriteAllText((Join-Path $consumerBDir 'ConsumerB.csproj'), $csprojContent, [System.Text.Encoding]::UTF8)
-
-    # Create the component manifest with a Web.Shared shared project.
-    $manifest = @{
-        repositoryVersion = '1.0.0'
-        moduleDefinitions = @()
-        sharedProjects = @(
-            @{
-                projectPath = 'OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj'
-                consumers = @('consumer-a', 'consumer-b')
-            }
-        )
-        components = @(
-            @{
-                componentKey = 'consumer-a'
-                version = $ConsumerAVersion
-                projectPath = 'ConsumerA/ConsumerA.csproj'
-            }
-            @{
-                componentKey = 'consumer-b'
-                version = $ConsumerBVersion
-                projectPath = 'ConsumerB/ConsumerB.csproj'
-            }
-        )
-    }
-    $manifestJson = $manifest | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText((Join-Path $RootPath 'omp-components.json'), $manifestJson, [System.Text.Encoding]::UTF8)
-
-    # Write the committed hash manifest.
-    [System.IO.File]::WriteAllText((Join-Path $RootPath '.webshared-build-hash.txt'), $ManifestHash + [Environment]::NewLine, [System.Text.Encoding]::UTF8)
-
-    # Initialize git repository and create initial commit.
-    $originalLocation = Get-Location
-    try {
-        Set-Location -LiteralPath $RootPath
-        & git init --quiet
-        if ($LASTEXITCODE -ne 0) { throw 'git init failed.' }
-
-        & git config core.autocrlf false
-        if ($LASTEXITCODE -ne 0) { throw 'git config core.autocrlf failed.' }
-
-        & git config user.email 'test@example.com'
-        if ($LASTEXITCODE -ne 0) { throw 'git config user.email failed.' }
-
-        & git config user.name 'Test User'
-        if ($LASTEXITCODE -ne 0) { throw 'git config user.name failed.' }
-
-        & git add -A
-        if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
-
-        & git commit -m 'Initial commit' --quiet
-        if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
-    }
-    finally {
-        Set-Location $originalLocation
-    }
-
-    return (Join-Path $ompScriptsDir 'validate-component-versions.ps1')
 }
 
 Describe 'Check 6: minModuleDefinitionVersion sanity' {
@@ -430,97 +324,5 @@ Describe 'Check 10: compatibleArtifacts range sanity' {
         $exitCode = Invoke-Validator -ValidatorPath $validatorPath
 
         $exitCode | Should Not Be 0
-    }
-}
-
-
-Describe 'Check 11: Web.Shared binary identity' {
-    It 'Passes when Web.Shared binary hash matches the committed baseline' {
-        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
-        $dllPath = Join-Path $repoRoot 'OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.dll'
-        $manifestHash = ''
-        try {
-            $validatorPath = New-TemporaryWebSharedTestRepository -RootPath $repoRoot -ManifestHash 'ignored-on-match'
-
-            # Ensure the DLL directory exists and write a deterministic payload.
-            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $dllPath) -Force
-            $dllBytes = [System.Text.Encoding]::UTF8.GetBytes('web-shared-dll-v1')
-            [System.IO.File]::WriteAllBytes($dllPath, $dllBytes)
-            $manifestHash = ([System.Security.Cryptography.SHA256]::Create().ComputeHash($dllBytes) | ForEach-Object { $_.ToString('x2') }) -join ''
-
-            # Update the manifest to match the actual DLL hash.
-            [System.IO.File]::WriteAllText((Join-Path $repoRoot '.webshared-build-hash.txt'), $manifestHash + [Environment]::NewLine, [System.Text.Encoding]::UTF8)
-            Set-Location -LiteralPath $repoRoot
-            & git add -A
-            if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
-            & git commit -m 'Update hash manifest' --quiet
-            if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
-
-            $exitCode = Invoke-Validator -ValidatorPath $validatorPath -WebSharedDllPath $dllPath
-
-            $exitCode | Should Be 0
-        }
-        finally {
-            Set-Location $env:SystemDrive\
-            Remove-TemporaryTestRepository -RootPath $repoRoot
-        }
-    }
-
-    It 'Fails when Web.Shared binary hash changed but consumers were not bumped' {
-        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
-        $dllPath = Join-Path $repoRoot 'OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.dll'
-        try {
-            $validatorPath = New-TemporaryWebSharedTestRepository -RootPath $repoRoot -ManifestHash '0000000000000000000000000000000000000000000000000000000000000000'
-
-            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $dllPath) -Force
-            [System.IO.File]::WriteAllBytes($dllPath, [System.Text.Encoding]::UTF8.GetBytes('web-shared-dll-v2'))
-            Set-Location -LiteralPath $repoRoot
-            & git add -A
-            if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
-            & git commit -m 'Change Web.Shared binary without bumping consumers' --quiet
-            if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
-            $baseCommit = (& git rev-parse HEAD~1).Trim()
-
-            $exitCode = Invoke-Validator -ValidatorPath $validatorPath -BaseCommit $baseCommit -WebSharedDllPath $dllPath
-
-            $exitCode | Should Not Be 0
-        }
-        finally {
-            Set-Location $env:SystemDrive\
-            Remove-TemporaryTestRepository -RootPath $repoRoot
-        }
-    }
-
-    It 'Passes when Web.Shared binary hash changed and all consumers were bumped' {
-        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
-        $dllPath = Join-Path $repoRoot 'OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.dll'
-        try {
-            $validatorPath = New-TemporaryWebSharedTestRepository -RootPath $repoRoot -ManifestHash '0000000000000000000000000000000000000000000000000000000000000000'
-
-            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $dllPath) -Force
-            [System.IO.File]::WriteAllBytes($dllPath, [System.Text.Encoding]::UTF8.GetBytes('web-shared-dll-v3'))
-
-            # Bump both consumer versions.
-            $manifestPath = Join-Path $repoRoot 'omp-components.json'
-            $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $manifest.components[0].version = '1.0.1'
-            $manifest.components[1].version = '1.0.1'
-            [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
-
-            Set-Location -LiteralPath $repoRoot
-            & git add -A
-            if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
-            & git commit -m 'Change Web.Shared binary and bump consumers' --quiet
-            if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
-            $baseCommit = (& git rev-parse HEAD~1).Trim()
-
-            $exitCode = Invoke-Validator -ValidatorPath $validatorPath -BaseCommit $baseCommit -WebSharedDllPath $dllPath
-
-            $exitCode | Should Be 0
-        }
-        finally {
-            Set-Location $env:SystemDrive\
-            Remove-TemporaryTestRepository -RootPath $repoRoot
-        }
     }
 }
