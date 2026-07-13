@@ -122,7 +122,8 @@ VALUES
         var result = await cmd.ExecuteScalarAsync(ct);
         var notificationId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
 
-        await _statePublisher.NotifyChangedAsync(userId, ct);
+        var unreadCount = await GetUnreadCountAsync(conn, userId, ct);
+        await _statePublisher.NotifyChangedAsync(userId, unreadCount, ct);
 
         return notificationId;
     }
@@ -286,7 +287,7 @@ WHERE notification_id = @notification_id
 
         if (markedCount > 0)
         {
-            await _statePublisher.NotifyChangedAsync(userId, ct);
+            await _statePublisher.NotifyChangedAsync(userId, unreadCount, ct);
         }
 
         return new NotificationMarkReadResult(true, destinationUrl, unreadCount);
@@ -321,7 +322,7 @@ WHERE user_id = @user_id
         var markedCount = await cmd.ExecuteNonQueryAsync(ct);
         if (markedCount > 0)
         {
-            await _statePublisher.NotifyChangedAsync(userId, ct);
+            await _statePublisher.NotifyChangedAsync(userId, 0, ct);
         }
 
         return markedCount;

@@ -11,6 +11,7 @@
     var defaultToastDuration = 7000;
     var dismissTransitionDuration = 180;
     var pushEventName = "omp:push-event";
+    var pushDebounceMs = 350;
 
     var state = {
         root: null,
@@ -26,7 +27,8 @@
         soundEnabled: false,
         lastNotificationSoundAt: 0,
         lastMessageSoundAt: 0,
-        hiddenAt: null
+        hiddenAt: null,
+        pushDebounceTimer: null
     };
 
     function parsePositiveInteger(value, fallback) {
@@ -476,12 +478,56 @@
             || normalized.indexOf("topbar.message-") === 0;
     }
 
+    function tryApplyToastSummaryFromPushPayload(detail) {
+        var payload = detail && detail.payload ? detail.payload
+            : (detail.envelope && detail.envelope.payload ? detail.envelope.payload : null);
+        if (!payload || typeof payload !== "object") {
+            return false;
+        }
+
+        var latestNotificationId = Number(payload.latestNotificationId);
+        var latestMessageId = Number(payload.latestMessageId);
+        var hasNotificationData = Number.isFinite(latestNotificationId) && latestNotificationId >= 0;
+        var hasMessageData = Number.isFinite(latestMessageId) && latestMessageId >= 0;
+        if (!hasNotificationData && !hasMessageData) {
+            return false;
+        }
+
+        var syntheticPayload = {};
+        if (hasNotificationData) {
+            syntheticPayload.latestNotificationId = latestNotificationId;
+            syntheticPayload.newNotificationCount = payload.newNotificationCount;
+            syntheticPayload.newNotifications = payload.newNotifications;
+        }
+        if (hasMessageData) {
+            syntheticPayload.latestMessageId = latestMessageId;
+            syntheticPayload.newMessageCount = payload.newMessageCount;
+            syntheticPayload.newMessages = payload.newMessages;
+        }
+
+        applySummary(syntheticPayload, getConfig());
+        return true;
+    }
+
     function handlePushEvent(event) {
         var detail = event && event.detail ? event.detail : {};
         var category = detail.category || (detail.envelope && detail.envelope.category) || "";
-        if (isToastPushCategory(category)) {
-            scheduleNext(0);
+        if (!isToastPushCategory(category)) {
+            return;
         }
+
+        if (tryApplyToastSummaryFromPushPayload(detail)) {
+            return;
+        }
+
+        if (state.pushDebounceTimer) {
+            window.clearTimeout(state.pushDebounceTimer);
+        }
+
+        state.pushDebounceTimer = window.setTimeout(function () {
+            state.pushDebounceTimer = null;
+            scheduleNext(0);
+        }, pushDebounceMs);
     }
 
     function showToast(toast, config) {
