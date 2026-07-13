@@ -218,6 +218,9 @@ load-balanced identity.
 - the Portal administrative workflows are better than before but still table-centric
 - deeper drift reporting between desired topology and actual runtime state is
   still evolving
+- HostAgent verifies each artifact's hash independently; it does not yet check
+  that all artifacts deployed together for a module came from the same
+  consistent build (see `docs/adr/0002-deploy-set-consistency-check.md`)
 
 ## Recommended direction
 
