@@ -124,6 +124,55 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         CancellationToken ct)
         => Task.FromResult(ConsistencyResults);
 
+    public List<WebAppDeploymentDescriptor> DesiredWebAppDeployments { get; set; } = [];
+
+    public List<WebAppDeploymentResult> PublishedWebAppResults { get; } = [];
+
+    public List<ServiceAppDeploymentDescriptor> DesiredServiceAppDeployments { get; set; } = [];
+
+    public List<ServiceAppDeploymentResult> PublishedServiceAppResults { get; } = [];
+
+    public Task<IReadOnlyList<WebAppDeploymentDescriptor>> GetDesiredWebAppDeploymentsAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<WebAppDeploymentDescriptor>>(DesiredWebAppDeployments);
+
+    public Task<IReadOnlyList<ServiceAppDeploymentDescriptor>> GetDesiredServiceAppDeploymentsAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ServiceAppDeploymentDescriptor>>(DesiredServiceAppDeployments);
+
+    public Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
+        int artifactId,
+        string hostKey,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ArtifactConfigurationFileDescriptor>>([]);
+
+    public Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
+        int artifactId,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<string>>([]);
+
+    public Task PublishAppDeploymentResultAsync(
+        WebAppDeploymentDescriptor deployment,
+        AppDeploymentResult result,
+        CancellationToken ct)
+    {
+        PublishedWebAppResults.Add(new WebAppDeploymentResult(deployment, result));
+        return Task.CompletedTask;
+    }
+
+    public Task PublishAppDeploymentResultAsync(
+        ServiceAppDeploymentDescriptor deployment,
+        AppDeploymentResult result,
+        CancellationToken ct)
+    {
+        PublishedServiceAppResults.Add(new ServiceAppDeploymentResult(deployment, result));
+        return Task.CompletedTask;
+    }
+
     public Task<HostDeploymentWorkItem?> TryClaimNextHostDeploymentAsync(
         string hostKey,
         string serviceName,
@@ -172,4 +221,12 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         Guid LeaseToken,
         bool Succeeded,
         string OutcomeMessage);
+
+    public sealed record WebAppDeploymentResult(
+        WebAppDeploymentDescriptor Deployment,
+        AppDeploymentResult Result);
+
+    public sealed record ServiceAppDeploymentResult(
+        ServiceAppDeploymentDescriptor Deployment,
+        AppDeploymentResult Result);
 }

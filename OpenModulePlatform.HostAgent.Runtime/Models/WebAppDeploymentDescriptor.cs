@@ -10,6 +10,8 @@ public sealed class WebAppDeploymentDescriptor
 
     public string AppInstanceKey { get; init; } = string.Empty;
 
+    public string ModuleInstanceKey { get; init; } = string.Empty;
+
     public string DisplayName { get; init; } = string.Empty;
 
     public string? RoutePath { get; init; }
