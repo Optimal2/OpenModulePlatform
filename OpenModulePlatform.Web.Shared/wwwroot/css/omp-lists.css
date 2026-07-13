@@ -366,8 +366,12 @@ body.list-column-resizing {
 
 .admin-icon-button:hover,
 .admin-icon-button:focus-visible {
+    /* Explicit background so host app global button hover styles cannot
+       repaint the whole button. */
     border-color: var(--link);
+    background: var(--surface-muted);
     color: var(--link-hover);
+    outline: none;
 }
 
 .admin-icon-button::before {
