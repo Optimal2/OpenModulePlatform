@@ -10,6 +10,8 @@ public sealed class ServiceAppDeploymentDescriptor
 
     public string AppInstanceKey { get; init; } = string.Empty;
 
+    public string ModuleInstanceKey { get; init; } = string.Empty;
+
     public string DisplayName { get; init; } = string.Empty;
 
     public string? Description { get; init; }

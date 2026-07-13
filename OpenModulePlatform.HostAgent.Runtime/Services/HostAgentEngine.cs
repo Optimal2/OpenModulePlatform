@@ -179,6 +179,7 @@ public sealed class HostAgentEngine
                 artifacts,
                 leaseRenewalCancellation.Token);
             _deploySetConsistencyService.ThrowIfBlocked(consistencySummary);
+            var deploySetWarningsByModuleInstanceKey = BuildDeploySetWarningsByModuleInstanceKey(consistencySummary);
 
             foreach (var artifact in artifacts)
             {
@@ -186,12 +187,18 @@ public sealed class HostAgentEngine
                 await EnsureAndPublishAsync(artifact, leaseRenewalCancellation.Token);
             }
 
-            await _webAppDeploymentService.DeployDesiredWebAppsAsync(hostKey, leaseRenewalCancellation.Token);
+            await _webAppDeploymentService.DeployDesiredWebAppsAsync(
+                hostKey,
+                deploySetWarningsByModuleInstanceKey,
+                leaseRenewalCancellation.Token);
             await _webAppHealthMonitor.ProbePortalAsync(
                 lease.HostId.Value,
                 recycleIfUnhealthy: false,
                 leaseRenewalCancellation.Token);
-            await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(hostKey, leaseRenewalCancellation.Token);
+            await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(
+                hostKey,
+                deploySetWarningsByModuleInstanceKey,
+                leaseRenewalCancellation.Token);
             await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, leaseRenewalCancellation.Token);
             await _fileMirrorService.MirrorConfiguredFilesAsync(leaseRenewalCancellation.Token);
 
@@ -620,6 +627,27 @@ public sealed class HostAgentEngine
             or DbException
             or UnauthorizedAccessException
             or TimeoutException;
+
+    private static IReadOnlyDictionary<string, string> BuildDeploySetWarningsByModuleInstanceKey(
+        DeploySetConsistencyCheckSummary summary)
+    {
+        if (!summary.HasDeviations)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return summary.Deviations
+            .GroupBy(d => d.ModuleInstanceKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => string.Join(
+                    Environment.NewLine,
+                    g.Select(d =>
+                        $"Deploy-set inconsistency in set '{d.SetKey}' for module instance '{d.ModuleInstanceKey}' " +
+                        $"({d.ModuleKey}): versions differ — {d.ActualVersions ?? "unknown"}. " +
+                        "All artifacts in the set should use the same version.")),
+                StringComparer.OrdinalIgnoreCase);
+    }
 
     private void SetActiveLease(HostAgentLeaseResult lease)
     {

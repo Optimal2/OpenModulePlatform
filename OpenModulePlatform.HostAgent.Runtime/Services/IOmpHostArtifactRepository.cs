@@ -71,6 +71,35 @@ public interface IOmpHostArtifactRepository
         IReadOnlyList<int> artifactIds,
         CancellationToken ct);
 
+    Task<IReadOnlyList<WebAppDeploymentDescriptor>> GetDesiredWebAppDeploymentsAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<ServiceAppDeploymentDescriptor>> GetDesiredServiceAppDeploymentsAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
+        int artifactId,
+        string hostKey,
+        CancellationToken ct);
+
+    Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
+        int artifactId,
+        CancellationToken ct);
+
+    Task PublishAppDeploymentResultAsync(
+        WebAppDeploymentDescriptor deployment,
+        AppDeploymentResult result,
+        CancellationToken ct);
+
+    Task PublishAppDeploymentResultAsync(
+        ServiceAppDeploymentDescriptor deployment,
+        AppDeploymentResult result,
+        CancellationToken ct);
+
     Task<HostDeploymentWorkItem?> TryClaimNextHostDeploymentAsync(
         string hostKey,
         string serviceName,
