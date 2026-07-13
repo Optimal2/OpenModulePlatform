@@ -14,6 +14,7 @@
     var MAX_TOPBAR_POLL_INTERVAL_SECONDS = 3600;
     var MAX_TOPBAR_PUSH_DEDUP_KEYS = 200;
     var TOPBAR_PUSH_DEDUP_RETENTION_MS = 5 * 60 * 1000;
+    var TOPBAR_PUSH_DEBOUNCE_MS = 350;
     var DEFAULT_PUSH_RECONNECT_BASE_MS = 2000;
     var DEFAULT_PUSH_RECONNECT_MAX_MS = 60000;
     var MAX_PUSH_RECONNECT_ATTEMPTS = 8;
@@ -56,6 +57,7 @@
         pushFallbackWarned: false,
         pushReconnectTimer: 0,
         pushReconnectAttempts: 0,
+        pushDebounceTimer: 0,
         signalRClientPromise: null,
         recentPushEventIds: new Map()
     };
@@ -1705,7 +1707,14 @@
             return;
         }
 
-        scheduleTopbarSummaryRefresh(0, !!force);
+        if (topbarPollingState.pushDebounceTimer) {
+            window.clearTimeout(topbarPollingState.pushDebounceTimer);
+        }
+
+        topbarPollingState.pushDebounceTimer = window.setTimeout(function () {
+            topbarPollingState.pushDebounceTimer = 0;
+            scheduleTopbarSummaryRefresh(0, !!force);
+        }, TOPBAR_PUSH_DEBOUNCE_MS);
     }
 
     async function runTopbarSummaryRefreshForRoot(root) {
@@ -1930,6 +1939,41 @@
         }));
     }
 
+    function tryApplyTopbarSummaryFromPushPayload(envelope) {
+        if (!envelope || typeof envelope !== 'object' || !envelope.payload || typeof envelope.payload !== 'object') {
+            return false;
+        }
+
+        var payload = envelope.payload;
+        var summary = {};
+        var hasData = false;
+
+        if (payload.notifications && typeof payload.notifications === 'object' &&
+            (Array.isArray(payload.notifications.items) || Number.isFinite(Number(payload.notifications.unreadCount)))) {
+            summary.notifications = payload.notifications;
+            hasData = true;
+        } else if (Number.isFinite(Number(payload.unreadNotificationCount))) {
+            summary.notifications = { unreadCount: payload.unreadNotificationCount };
+            hasData = true;
+        }
+
+        if (payload.messages && typeof payload.messages === 'object' &&
+            (Array.isArray(payload.messages.items) || Number.isFinite(Number(payload.messages.unreadCount)))) {
+            summary.messages = payload.messages;
+            hasData = true;
+        } else if (Number.isFinite(Number(payload.unreadMessageCount))) {
+            summary.messages = { unreadCount: payload.unreadMessageCount };
+            hasData = true;
+        }
+
+        if (!hasData) {
+            return false;
+        }
+
+        applyTopbarSummary(summary);
+        return true;
+    }
+
     function handleTopbarPushEvent(envelope) {
         var eventKey = getTopbarPushEventKey(envelope);
         if (rememberTopbarPushEvent(eventKey)) {
@@ -1944,7 +1988,9 @@
         }
 
         if (isTopbarSummaryPushCategory(envelope.category)) {
-            runTopbarSummaryRefreshSoon(true);
+            if (!tryApplyTopbarSummaryFromPushPayload(envelope)) {
+                runTopbarSummaryRefreshSoon(true);
+            }
         }
     }
 
@@ -1980,6 +2026,10 @@
 
     function stopTopbarPushConnection() {
         clearTopbarPushReconnect();
+        if (topbarPollingState.pushDebounceTimer) {
+            window.clearTimeout(topbarPollingState.pushDebounceTimer);
+            topbarPollingState.pushDebounceTimer = 0;
+        }
         var connection = topbarPollingState.pushConnection;
         topbarPollingState.pushConnection = null;
         topbarPollingState.pushStarting = false;

@@ -19,10 +19,13 @@ internal sealed class MigratingTopBarNotificationStatePublisher : ITopBarNotific
     }
 
     public Task NotifyChangedAsync(int userId, CancellationToken ct)
+        => NotifyChangedAsync(userId, null, ct);
+
+    public Task NotifyChangedAsync(int userId, int? unreadCount, CancellationToken ct)
     {
         var options = _options.CurrentValue;
         return options.UseOutboxForNotificationStateChanges
-            ? _outboxPublisher.NotifyChangedAsync(userId, ct)
-            : _signalRPublisher.NotifyChangedAsync(userId, ct);
+            ? _outboxPublisher.NotifyChangedAsync(userId, unreadCount, ct)
+            : _signalRPublisher.NotifyChangedAsync(userId, unreadCount, ct);
     }
 }
