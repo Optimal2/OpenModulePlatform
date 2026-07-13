@@ -125,6 +125,19 @@ What the guard protects against:
   declared module definition version. This is reported as a **warning** because
   it means the component expects a newer module definition than the manifest
   provides.
+- A changed `OpenModulePlatform.Web.Shared` binary whose declared consumers
+  were not cascade-bumped. Check 11 computes the SHA-256 hash of
+  `OpenModulePlatform.Web.Shared.dll` and compares it to the committed baseline
+  in `.webshared-build-hash.txt`. If the binary differs but the consumers were
+  not bumped, validation fails. This is the binary complement to Check 7's
+  source-diff cascade check and catches binary-affecting changes (dependency
+  updates, build-tooling changes) that do not appear as source diffs.
+
+When `bump-version.ps1 -CascadeFrom OpenModulePlatform.Web.Shared/...csproj` is
+used, the script builds Web.Shared with deterministic settings and refreshes
+`.webshared-build-hash.txt` automatically. In CI, the validator reuses a
+pre-built DLL when one exists, or builds Release with the same deterministic
+flags. Pass `-WebSharedDllPath <path>` to point the validator at a specific DLL.
 
 If the guard fails:
 

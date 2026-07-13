@@ -19,7 +19,10 @@ param(
     [string]$BaseCommit = '',
 
     [Parameter(Mandatory = $false)]
-    [switch]$SelfTest
+    [switch]$SelfTest,
+
+    [Parameter(Mandatory = $false)]
+    [string]$WebSharedDllPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -143,6 +146,25 @@ function Get-Sha256Hex {
     }
     finally {
         $sha256.Dispose()
+    }
+}
+
+function Get-FileSha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "File not found for SHA-256 computation: $Path"
+    }
+
+    $stream = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $hash = $sha256.ComputeHash($stream)
+        return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+        $stream.Dispose()
     }
 }
 
@@ -635,6 +657,161 @@ if ($null -ne $sharedProjects -and $baseRefAvailable) {
 }
 
 # ---------------------------------------------------------------------------
+# Check 11: Web.Shared binary identity.
+# Builds (or reuses a built) OpenModulePlatform.Web.Shared.dll, computes its
+# SHA-256 hash, and compares it to the committed baseline in
+# .webshared-build-hash.txt. If the binary changed since the baseline but none
+# of the declared consumers were cascade-bumped, the check fails. This catches
+# binary-affecting changes that do not show up as source diffs in Check 7
+# (for example dependency updates, build-tooling changes, or non-deterministic
+# output drift) and ensures every consumer version is raised when the shared
+# binary identity changes.
+# ---------------------------------------------------------------------------
+$webSharedHashCheckPassed = $false
+$webSharedHashCheckMessage = ''
+
+$webSharedProject = $null
+$normalizedWebSharedProjectPath = 'OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj'
+foreach ($sharedProject in @($sharedProjects)) {
+    if ($null -eq $sharedProject) {
+        continue
+    }
+
+    $projectPath = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'projectPath')
+    if ([string]::Equals($projectPath, $normalizedWebSharedProjectPath, [StringComparison]::OrdinalIgnoreCase)) {
+        $webSharedProject = $sharedProject
+        break
+    }
+}
+
+if ($null -eq $webSharedProject) {
+    Add-ValidationWarning -Warnings $warnings -Message "Shared project '$normalizedWebSharedProjectPath' was not found in omp-components.json; skipping Web.Shared binary identity check (Check 11)."
+}
+else {
+    $resolvedDllPath = $null
+    $webSharedBuildOutputRoot = $null
+    if (-not [string]::IsNullOrWhiteSpace($WebSharedDllPath)) {
+        $resolvedDllPath = Resolve-RepositoryPath -Path $WebSharedDllPath -BasePath $repositoryRoot
+    }
+    else {
+        $projectFile = Join-Path $repositoryRoot $normalizedWebSharedProjectPath
+        if (Test-Path -LiteralPath $projectFile -PathType Leaf) {
+            Write-Host 'Check 11: Building OpenModulePlatform.Web.Shared with deterministic settings for hash comparison...'
+            $webSharedBuildOutputRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-webshared-hash-' + [Guid]::NewGuid().ToString('N'))
+            $pathMap = '{0}={1}' -f $repositoryRoot.TrimEnd('\', '/'), '/_/openmoduleplatform'
+            & dotnet build $projectFile `
+                -c Release `
+                -o $webSharedBuildOutputRoot `
+                --verbosity minimal `
+                -p:ContinuousIntegrationBuild=true `
+                -p:Deterministic=true `
+                "-p:PathMap=$pathMap" 2>&1 | ForEach-Object { Write-Host $_ }
+
+            if ($LASTEXITCODE -ne 0) {
+                Add-ValidationError -Errors $errors -Message "Check 11: Failed to build OpenModulePlatform.Web.Shared. Verify the project compiles or pass -WebSharedDllPath."
+            }
+            else {
+                $resolvedDllPath = Join-Path $webSharedBuildOutputRoot 'OpenModulePlatform.Web.Shared.dll'
+                if (-not (Test-Path -LiteralPath $resolvedDllPath -PathType Leaf)) {
+                    Add-ValidationError -Errors $errors -Message "Check 11: Build succeeded but OpenModulePlatform.Web.Shared.dll was not found at the expected path."
+                }
+            }
+        }
+        else {
+            Add-ValidationError -Errors $errors -Message "Check 11: OpenModulePlatform.Web.Shared project file was not found."
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($resolvedDllPath)) {
+        try {
+            $currentHash = Get-FileSha256Hex -Path $resolvedDllPath
+            $hashManifestPath = Join-Path $repositoryRoot '.webshared-build-hash.txt'
+
+            if (-not (Test-Path -LiteralPath $hashManifestPath -PathType Leaf)) {
+                Add-ValidationWarning -Warnings $warnings -Message "Check 11: Hash manifest '$hashManifestPath' was not found. Create it by running `.\scripts\omp\bump-version.ps1 -CascadeFrom '$normalizedWebSharedProjectPath'` after changing Web.Shared."
+            }
+            else {
+                $manifestHash = ([string](Get-Content -LiteralPath $hashManifestPath -Raw -Encoding UTF8)).Trim()
+                # Permit a leading comment line for documentation; use the first non-comment, non-blank line.
+                $manifestHashLines = @($manifestHash -split "`r?`n" | Where-Object { $_.Trim().Length -gt 0 -and -not $_.Trim().StartsWith('#') })
+                if ($manifestHashLines.Count -gt 0) {
+                    $manifestHash = $manifestHashLines[0].Trim()
+                }
+                else {
+                    $manifestHash = ''
+                }
+
+                if ([string]::Equals($currentHash, $manifestHash, [StringComparison]::OrdinalIgnoreCase)) {
+                    $webSharedHashCheckPassed = $true
+                    $webSharedHashCheckMessage = "Web.Shared binary hash matches baseline ($currentHash)."
+                }
+                else {
+                    # Determine whether all declared consumers have been bumped since the base ref.
+                    $consumerKeys = @(Get-OptionalPropertyValue -Object $webSharedProject -Name 'consumers')
+                    $unbumpedConsumers = [System.Collections.Generic.List[string]]::new()
+                    $missingConsumers = [System.Collections.Generic.List[string]]::new()
+
+                    foreach ($consumerKey in $consumerKeys) {
+                        $currentComponent = $null
+                        foreach ($component in @($manifest.components)) {
+                            if (([string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')) -eq $consumerKey) {
+                                $currentComponent = $component
+                                break
+                            }
+                        }
+
+                        if ($null -eq $currentComponent) {
+                            [void]$missingConsumers.Add($consumerKey)
+                            continue
+                        }
+
+                        $baseVersion = $null
+                        if ($baseComponentsByKey.ContainsKey($consumerKey)) {
+                            $baseVersion = [string](Get-OptionalPropertyValue -Object $baseComponentsByKey[$consumerKey] -Name 'version')
+                        }
+
+                        $currentVersion = [string](Get-OptionalPropertyValue -Object $currentComponent -Name 'version')
+
+                        if (-not [string]::IsNullOrWhiteSpace($baseVersion) -and $baseVersion -eq $currentVersion) {
+                            [void]$unbumpedConsumers.Add($consumerKey)
+                        }
+                    }
+
+                    if ($unbumpedConsumers.Count -gt 0 -or $missingConsumers.Count -gt 0) {
+                        $details = [System.Collections.Generic.List[string]]::new()
+                        if ($unbumpedConsumers.Count -gt 0) {
+                            $details.Add("unbumped consumers: $(($unbumpedConsumers | Sort-Object) -join ', ')")
+                        }
+                        if ($missingConsumers.Count -gt 0) {
+                            $details.Add("missing consumers: $(($missingConsumers | Sort-Object) -join ', ')")
+                        }
+
+                        Add-ValidationError -Errors $errors -Message "Web.Shared binary differs from previous release (hash $manifestHash -> $currentHash) but no cascade-bump was detected. Verify all consumer components are bumped. $(($details | Sort-Object) -join '; '). Run `.\scripts\omp\bump-version.ps1 -CascadeFrom '$normalizedWebSharedProjectPath'` to bump consumers and refresh the hash manifest."
+                    }
+                    else {
+                        $webSharedHashCheckPassed = $true
+                        $webSharedHashCheckMessage = "Web.Shared binary hash changed ($manifestHash -> $currentHash) but all declared consumers were bumped."
+                    }
+                }
+            }
+        }
+        catch {
+            Add-ValidationError -Errors $errors -Message "Check 11: Failed to compute or compare Web.Shared hash: $_"
+        }
+        finally {
+            if (-not [string]::IsNullOrWhiteSpace($webSharedBuildOutputRoot) -and (Test-Path -LiteralPath $webSharedBuildOutputRoot)) {
+                try {
+                    Remove-Item -LiteralPath $webSharedBuildOutputRoot -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                catch {
+                    # Best-effort cleanup of the temporary deterministic build output.
+                }
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Check 8: Module-definition SQL diff enforcement.
 # If an owned SQL script referenced by a production module definition changes
 # in a material way (not just comments or whitespace), the module's
@@ -981,6 +1158,10 @@ Write-Host "$checkMark $moduleMappingCount component-to-module mappings validate
 
 if ($sharedProjectCount -gt 0 -and ($cascadeCheckCount -gt 0 -or $cascadeErrorCount -gt 0)) {
     Write-Host "$checkMark $cascadeCheckCount of $sharedProjectCount changed shared project(s) passed cascade bump validation ($cascadeErrorCount error(s))"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($webSharedHashCheckMessage)) {
+    Write-Host "$checkMark $webSharedHashCheckMessage"
 }
 
 if ($sqlFilesChecked -gt 0) {
