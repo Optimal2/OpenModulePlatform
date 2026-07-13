@@ -46,6 +46,11 @@ function Get-ScriptDirectory {
     return Split-Path -Parent $scriptPath
 }
 
+$helpersPath = Join-Path (Get-ScriptDirectory) 'validate-component-versions.helpers.ps1'
+if (Test-Path -LiteralPath $helpersPath -PathType Leaf) {
+    . $helpersPath
+}
+
 function ConvertFrom-JsonDocument {
     param(
         [Parameter(Mandatory = $true)][string]$Json,
@@ -144,6 +149,41 @@ function Get-Sha256Hex {
     finally {
         $sha256.Dispose()
     }
+}
+
+function Build-WebSharedForBinaryIdentity {
+    <#
+    .SYNOPSIS
+    Builds OpenModulePlatform.Web.Shared.dll with deterministic settings for
+    the binary identity check. Returns the full path to the emitted DLL.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$ProjectPath,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$OutputRoot
+    )
+
+    $pathMap = '{0}={1}' -f $RepositoryRoot.TrimEnd('\', '/'), '/_/openmoduleplatform'
+    & dotnet build $ProjectPath `
+        -c Release `
+        -o $OutputRoot `
+        --verbosity minimal `
+        -p:ContinuousIntegrationBuild=true `
+        -p:Deterministic=true `
+        -p:DeterministicSourcePaths=true `
+        -p:IncludeSourceRevisionInInformationalVersion=false `
+        "-p:PathMap=$pathMap" 2>&1 | ForEach-Object { Write-Host $_ }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet build failed for $ProjectPath"
+    }
+
+    $dllPath = Join-Path $OutputRoot 'OpenModulePlatform.Web.Shared.dll'
+    if (-not (Test-Path -LiteralPath $dllPath -PathType Leaf)) {
+        throw "Build succeeded but OpenModulePlatform.Web.Shared.dll was not found at $dllPath"
+    }
+
+    return $dllPath
 }
 
 function Remove-Utf8Bom {
@@ -635,6 +675,167 @@ if ($null -ne $sharedProjects -and $baseRefAvailable) {
 }
 
 # ---------------------------------------------------------------------------
+# Check 11: Web.Shared binary identity (environment-stable parent-vs-HEAD).
+# Check 7 forces cascade-bumps when Web.Shared SOURCE changes. This check
+# catches when the Web.Shared BINARY changes without its own source changing
+# (for example a change in a referenced project or dependency). It builds
+# OpenModulePlatform.Web.Shared.dll from BOTH the parent commit and HEAD with
+# identical settings in the SAME environment, then compares the two hashes.
+# Because both hashes come from the same runner, environment differences are
+# eliminated and no absolute committed baseline is required.
+# ---------------------------------------------------------------------------
+$webSharedBinaryCheckPassed = $false
+$webSharedBinaryCheckMessage = ''
+
+$normalizedWebSharedProjectPath = 'OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj'
+
+$webSharedProject = $null
+foreach ($sharedProject in @($sharedProjects)) {
+    if ($null -eq $sharedProject) {
+        continue
+    }
+
+    $projectPath = [string](Get-OptionalPropertyValue -Object $sharedProject -Name 'projectPath')
+    if ([string]::Equals($projectPath, $normalizedWebSharedProjectPath, [StringComparison]::OrdinalIgnoreCase)) {
+        $webSharedProject = $sharedProject
+        break
+    }
+}
+
+if ($null -eq $webSharedProject) {
+    Add-ValidationWarning -Warnings $warnings -Message "Shared project '$normalizedWebSharedProjectPath' was not found in omp-components.json; skipping Web.Shared binary identity check (Check 11)."
+}
+elseif (-not $baseRefAvailable) {
+    Add-ValidationWarning -Warnings $warnings -Message 'No valid base ref available; skipping Web.Shared binary identity check (Check 11). Pass -BaseCommit to enable it.'
+}
+else {
+    Write-Host 'Check 11: Comparing OpenModulePlatform.Web.Shared.dll binary identity between parent and HEAD...'
+
+    $sourceRoot = $null
+    $parentOutputRoot = $null
+    $headOutputRoot = $null
+    $archivePath = $null
+
+    try {
+        # Both commits are extracted into the SAME temporary source directory
+        # (sequentially) so the absolute source path is identical for both
+        # builds. This eliminates path-dependent binary differences that can
+        # leak even with PathMap/DeterministicSourcePaths. Using git archive
+        # also excludes .git metadata so embedded commit hashes cannot differ
+        # between the parent and HEAD builds.
+        $sourceRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-webshared-src-' + [Guid]::NewGuid().ToString('N'))
+        $parentOutputRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-webshared-parent-out-' + [Guid]::NewGuid().ToString('N'))
+        $headOutputRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-webshared-head-out-' + [Guid]::NewGuid().ToString('N'))
+        $archivePath = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-webshared-src-' + [Guid]::NewGuid().ToString('N') + '.zip')
+
+        New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
+
+        function Export-CommitSource {
+            param(
+                [Parameter(Mandatory = $true)][string]$Commit,
+                [Parameter(Mandatory = $true)][string]$Destination
+            )
+
+            if (Test-Path -LiteralPath $archivePath) {
+                Remove-Item -LiteralPath $archivePath -Force
+            }
+
+            & git -C $repositoryRoot archive --format=zip -o $archivePath $Commit
+            if ($LASTEXITCODE -ne 0) {
+                throw "git archive failed for $Commit"
+            }
+
+            if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+                throw "git archive did not produce $archivePath for $Commit"
+            }
+
+            Expand-Archive -LiteralPath $archivePath -DestinationPath $Destination -Force
+        }
+
+        Export-CommitSource -Commit $baseRef -Destination $sourceRoot
+
+        $parentProjectPath = Join-Path $sourceRoot $normalizedWebSharedProjectPath
+        if (-not (Test-Path -LiteralPath $parentProjectPath -PathType Leaf)) {
+            throw "Web.Shared project was not found in archived parent source: $parentProjectPath"
+        }
+
+        $parentDllPath = Build-WebSharedForBinaryIdentity -ProjectPath $parentProjectPath -RepositoryRoot $sourceRoot -OutputRoot $parentOutputRoot
+
+        # Clean the shared source directory so HEAD can be extracted to the same path.
+        Get-ChildItem -LiteralPath $sourceRoot | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+        Export-CommitSource -Commit 'HEAD' -Destination $sourceRoot
+
+        $headProjectPath = Join-Path $sourceRoot $normalizedWebSharedProjectPath
+        if (-not (Test-Path -LiteralPath $headProjectPath -PathType Leaf)) {
+            throw "Web.Shared project was not found in archived HEAD source: $headProjectPath"
+        }
+
+        $headDllPath = Build-WebSharedForBinaryIdentity -ProjectPath $headProjectPath -RepositoryRoot $sourceRoot -OutputRoot $headOutputRoot
+
+        $parentHash = Get-FileSha256Hex -Path $parentDllPath
+        $headHash = Get-FileSha256Hex -Path $headDllPath
+
+        $consumerKeys = @(Get-OptionalPropertyValue -Object $webSharedProject -Name 'consumers')
+        $unbumpedConsumers = [System.Collections.Generic.List[string]]::new()
+        foreach ($consumerKey in $consumerKeys) {
+            $currentComponent = $null
+            foreach ($component in @($manifest.components)) {
+                if (([string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')) -eq $consumerKey) {
+                    $currentComponent = $component
+                    break
+                }
+            }
+
+            if ($null -eq $currentComponent) {
+                Add-ValidationWarning -Warnings $warnings -Message "Check 11: Web.Shared consumer '$consumerKey' was not found in components."
+                continue
+            }
+
+            $baseVersion = $null
+            if ($baseComponentsByKey.ContainsKey($consumerKey)) {
+                $baseVersion = [string](Get-OptionalPropertyValue -Object $baseComponentsByKey[$consumerKey] -Name 'version')
+            }
+
+            $currentVersion = [string](Get-OptionalPropertyValue -Object $currentComponent -Name 'version')
+
+            if (-not [string]::IsNullOrWhiteSpace($baseVersion) -and $baseVersion -eq $currentVersion) {
+                [void]$unbumpedConsumers.Add($consumerKey)
+            }
+        }
+
+        $cascadeBumped = $unbumpedConsumers.Count -eq 0
+
+        $comparison = Compare-WebSharedBinaryIdentity -ParentHash $parentHash -HeadHash $headHash -CascadeBumped $cascadeBumped
+        if ($comparison.Result -eq 'Pass') {
+            $webSharedBinaryCheckPassed = $true
+            $webSharedBinaryCheckMessage = $comparison.Message
+        }
+        elseif ($comparison.Result -eq 'Fail') {
+            Add-ValidationError -Errors $errors -Message $comparison.Message
+        }
+        else {
+            Add-ValidationWarning -Warnings $warnings -Message "Check 11: $($comparison.Message)"
+        }
+    }
+    catch {
+        Add-ValidationWarning -Warnings $warnings -Message "Check 11: Could not perform Web.Shared binary identity comparison (infra or build issue): $_"
+    }
+    finally {
+        foreach ($pathToClean in @($sourceRoot, $parentOutputRoot, $headOutputRoot, $archivePath)) {
+            if (-not [string]::IsNullOrWhiteSpace($pathToClean) -and (Test-Path -LiteralPath $pathToClean)) {
+                try {
+                    Remove-Item -LiteralPath $pathToClean -Recurse -Force -ErrorAction SilentlyContinue
+                }
+                catch {
+                    # Best-effort cleanup of temporary build artifacts.
+                }
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Check 8: Module-definition SQL diff enforcement.
 # If an owned SQL script referenced by a production module definition changes
 # in a material way (not just comments or whitespace), the module's
@@ -981,6 +1182,10 @@ Write-Host "$checkMark $moduleMappingCount component-to-module mappings validate
 
 if ($sharedProjectCount -gt 0 -and ($cascadeCheckCount -gt 0 -or $cascadeErrorCount -gt 0)) {
     Write-Host "$checkMark $cascadeCheckCount of $sharedProjectCount changed shared project(s) passed cascade bump validation ($cascadeErrorCount error(s))"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($webSharedBinaryCheckMessage)) {
+    Write-Host "$checkMark $webSharedBinaryCheckMessage"
 }
 
 if ($sqlFilesChecked -gt 0) {

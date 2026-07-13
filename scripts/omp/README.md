@@ -125,6 +125,13 @@ What the guard protects against:
   declared module definition version. This is reported as a **warning** because
   it means the component expects a newer module definition than the manifest
   provides.
+- A change to the `OpenModulePlatform.Web.Shared` binary that is not matched
+  by a cascade-bump of its declared consumers (Check 11). The validator builds
+  `OpenModulePlatform.Web.Shared.dll` from both the parent commit and HEAD with
+  identical settings in the same environment and compares the two SHA-256
+  hashes. Because both hashes come from the same runner, the comparison is
+  environment-stable and does not rely on a committed absolute baseline. If the
+  binary changed and no consumer was bumped, the check fails.
 
 If the guard fails:
 
