@@ -23,7 +23,9 @@ WHERE c.ConfigId = @configId AND c.VersionNo = 0;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@configId", configId);
+        // Pass the underlying int: SqlClient has no mapping for the ModuleConfigId struct
+        // and throws ArgumentException, which stops the whole service host.
+        cmd.Parameters.AddWithValue("@configId", configId.Value);
         var value = await cmd.ExecuteScalarAsync(ct);
         if (value is null || value is DBNull)
             return null;

@@ -10,6 +10,10 @@ public sealed partial class OmpAdminRepository
     // Large installations can legitimately need a long-running query while the result is still bounded in C#.
     private const int ArtifactRetentionCommandTimeoutSeconds = 3600;
 
+    // The marker is replaced with protection clauses for module-owned foreign keys that reference
+    // omp.Artifacts, so the preview counts the same pinned artifacts as protected that the HostAgent
+    // cleanup job excludes. Twin logic lives in
+    // OpenModulePlatform.HostAgent.Runtime/Services/ArtifactRetentionProtectedReferences.cs.
     private const string ArtifactRetentionCandidateSql = @"
 WITH RankedArtifacts AS
 (
@@ -79,7 +83,7 @@ WITH RankedArtifacts AS
             SELECT 1
             FROM omp.HostAgentRuntimeStates hars
             WHERE hars.ArtifactId = ar.ArtifactId
-              AND hars.IsActive = 1
+              AND hars.IsActive = 1/*EXTERNAL_ARTIFACT_REFERENCES*/
         ) protectedRefs
     ) pr
 )
@@ -109,8 +113,12 @@ ORDER BY ModuleKey,
         int maxVersionsToKeep,
         CancellationToken ct)
     {
+        var sql = ArtifactRetentionCandidateSql.Replace(
+            ExternalArtifactReferenceMarker,
+            BuildExternalArtifactReferenceClauses(await DiscoverExternalArtifactReferencesAsync(ct)));
+
         var candidates = await ReadArtifactRetentionCandidatesAsync(
-            ArtifactRetentionCandidateSql,
+            sql,
             maxVersionsToKeep,
             ct);
 
@@ -120,6 +128,87 @@ ORDER BY ModuleKey,
             Candidates = candidates
         };
     }
+
+    private const string ExternalArtifactReferenceMarker = "/*EXTERNAL_ARTIFACT_REFERENCES*/";
+
+    // Twin of ArtifactRetentionProtectedReferences.DiscoverySql in HostAgent.Runtime: finds
+    // foreign keys referencing omp.Artifacts(ArtifactId) from tables the retention SQL does not
+    // already handle, so module-pinned artifacts count as protected in the preview.
+    private const string ExternalArtifactReferenceDiscoverySql = @"
+SELECT s.name AS SchemaName,
+       t.name AS TableName,
+       c.name AS ColumnName
+FROM sys.foreign_keys fk
+INNER JOIN sys.foreign_key_columns fkc ON fkc.constraint_object_id = fk.object_id
+INNER JOIN sys.tables t ON t.object_id = fk.parent_object_id
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+INNER JOIN sys.columns c ON c.object_id = fkc.parent_object_id AND c.column_id = fkc.parent_column_id
+INNER JOIN sys.tables rt ON rt.object_id = fk.referenced_object_id
+INNER JOIN sys.schemas rs ON rs.schema_id = rt.schema_id
+INNER JOIN sys.columns rc ON rc.object_id = fkc.referenced_object_id AND rc.column_id = fkc.referenced_column_id
+WHERE rs.name = N'omp'
+  AND rt.name = N'Artifacts'
+  AND rc.name = N'ArtifactId'
+  AND NOT
+  (
+      s.name = N'omp'
+      AND t.name IN
+      (
+          N'AppInstances',
+          N'WorkerInstances',
+          N'InstanceTemplateAppInstances',
+          N'HostArtifactRequirements',
+          N'HostAgentDesiredStates',
+          N'HostAppDeploymentStates',
+          N'HostAgentRuntimeStates',
+          N'HostArtifactStates',
+          N'ArtifactConfigurationFiles'
+      )
+  )
+ORDER BY s.name, t.name, c.name;";
+
+    private async Task<IReadOnlyList<(string SchemaName, string TableName, string ColumnName)>> DiscoverExternalArtifactReferencesAsync(
+        CancellationToken ct)
+    {
+        var references = new List<(string SchemaName, string TableName, string ColumnName)>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(ExternalArtifactReferenceDiscoverySql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            references.Add((rdr.GetString(0), rdr.GetString(1), rdr.GetString(2)));
+        }
+
+        return references;
+    }
+
+    private static string BuildExternalArtifactReferenceClauses(
+        IReadOnlyList<(string SchemaName, string TableName, string ColumnName)> references)
+    {
+        if (references.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var reference in references)
+        {
+            builder.AppendLine();
+            builder.AppendLine();
+            builder.AppendLine("            UNION ALL");
+            builder.AppendLine();
+            builder.AppendLine("            SELECT 1");
+            builder.AppendLine($"            FROM {QuoteSqlIdentifier(reference.SchemaName)}.{QuoteSqlIdentifier(reference.TableName)} extref");
+            builder.Append($"            WHERE extref.{QuoteSqlIdentifier(reference.ColumnName)} = ar.ArtifactId");
+        }
+
+        return builder.ToString();
+    }
+
+    private static string QuoteSqlIdentifier(string identifier)
+        => "[" + identifier.Replace("]", "]]") + "]";
 
     public async Task<long> QueueArtifactRetentionCleanupAsync(
         int maxVersionsToKeep,

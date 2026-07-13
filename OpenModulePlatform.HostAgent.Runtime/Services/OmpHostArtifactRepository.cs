@@ -1914,7 +1914,9 @@ WHERE HostDeploymentId = @hostDeploymentId
         string? requestedBy,
         CancellationToken ct)
     {
-        const string sql = @"
+        // The marker is replaced with protection clauses for module-owned foreign keys that
+        // reference omp.Artifacts, so pinned artifacts are excluded instead of failing the DELETE.
+        const string sqlTemplate = @"
 DECLARE @DeleteArtifacts TABLE
 (
     ArtifactId int NOT NULL PRIMARY KEY,
@@ -2023,7 +2025,7 @@ WITH RankedArtifacts AS
             SELECT 1
             FROM omp.HostAgentRuntimeStates hars
             WHERE hars.ArtifactId = ar.ArtifactId
-              AND hars.IsActive = 1
+              AND hars.IsActive = 1/*EXTERNAL_ARTIFACT_REFERENCES*/
         ) protectedRefs
     ) pr
 )
@@ -2247,6 +2249,12 @@ FROM @CreatedJobs;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
+        var externalReferences = await DiscoverExternalArtifactReferencesAsync(conn, ct);
+        var sql = sqlTemplate.Replace(
+            ArtifactRetentionProtectedReferences.SqlMarker,
+            ArtifactRetentionProtectedReferences.BuildProtectionClauses(externalReferences));
+
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
         try
@@ -2328,6 +2336,22 @@ FROM @CreatedJobs;";
             await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    private static async Task<IReadOnlyList<(string SchemaName, string TableName, string ColumnName)>> DiscoverExternalArtifactReferencesAsync(
+        SqlConnection conn,
+        CancellationToken ct)
+    {
+        var references = new List<(string SchemaName, string TableName, string ColumnName)>();
+
+        await using var cmd = new SqlCommand(ArtifactRetentionProtectedReferences.DiscoverySql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            references.Add((rdr.GetString(0), rdr.GetString(1), rdr.GetString(2)));
+        }
+
+        return references;
     }
 
     public async Task<HostAgentJobWorkItem?> TryClaimNextHostAgentJobAsync(
