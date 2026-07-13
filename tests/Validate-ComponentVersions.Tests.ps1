@@ -12,6 +12,11 @@ be exercised without touching the OpenModulePlatform repository state.
 $ErrorActionPreference = 'Stop'
 
 $scriptPath = Resolve-Path (Join-Path $PSScriptRoot '..\scripts\omp\validate-component-versions.ps1')
+$helpersPath = Resolve-Path (Join-Path $PSScriptRoot '..\scripts\omp\validate-component-versions.helpers.ps1')
+
+# Dot-source the helpers so pure functions such as Compare-WebSharedBinaryIdentity
+# can be exercised directly without invoking the full validator.
+. $helpersPath
 
 function New-TemporaryTestRepository {
     <#
@@ -56,6 +61,7 @@ function New-TemporaryTestRepository {
     $ompScriptsDir = Join-Path $RootPath 'scripts\omp'
     $null = New-Item -ItemType Directory -Path $ompScriptsDir -Force
     Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $ompScriptsDir 'validate-component-versions.ps1') -Force
+    Copy-Item -LiteralPath $helpersPath -Destination (Join-Path $ompScriptsDir 'validate-component-versions.helpers.ps1') -Force
 
     # Create component project.
     $projectDir = Join-Path $RootPath 'TestApp'
@@ -324,5 +330,31 @@ Describe 'Check 10: compatibleArtifacts range sanity' {
         $exitCode = Invoke-Validator -ValidatorPath $validatorPath
 
         $exitCode | Should Not Be 0
+    }
+}
+
+Describe 'Check 11: Web.Shared binary identity comparison function' {
+    It 'Passes when parent and HEAD hashes are identical' {
+        $result = Compare-WebSharedBinaryIdentity -ParentHash 'a' -HeadHash 'a' -CascadeBumped $false
+
+        $result.Result | Should Be 'Pass'
+    }
+
+    It 'Fails when hashes differ and consumers were not cascade-bumped' {
+        $result = Compare-WebSharedBinaryIdentity -ParentHash 'aaaa' -HeadHash 'bbbb' -CascadeBumped $false
+
+        $result.Result | Should Be 'Fail'
+    }
+
+    It 'Passes when hashes differ and consumers were cascade-bumped' {
+        $result = Compare-WebSharedBinaryIdentity -ParentHash 'aaaa' -HeadHash 'bbbb' -CascadeBumped $true
+
+        $result.Result | Should Be 'Pass'
+    }
+
+    It 'Skips when a hash is missing' {
+        $result = Compare-WebSharedBinaryIdentity -ParentHash '' -HeadHash 'bbbb' -CascadeBumped $false
+
+        $result.Result | Should Be 'Skip'
     }
 }
