@@ -21,13 +21,13 @@ public sealed class WebAppDeploymentService
     private static bool iisAssemblyResolverRegistered;
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
-    private readonly OmpHostArtifactRepository _repository;
+    private readonly IOmpHostArtifactRepository _repository;
     private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<WebAppDeploymentService> _logger;
 
     public WebAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
-        OmpHostArtifactRepository repository,
+        IOmpHostArtifactRepository repository,
         HostAgentCredentialStoreService credentialStore,
         ILogger<WebAppDeploymentService> logger)
     {
@@ -38,6 +38,12 @@ public sealed class WebAppDeploymentService
     }
 
     public async Task DeployDesiredWebAppsAsync(string hostKey, CancellationToken cancellationToken)
+        => await DeployDesiredWebAppsAsync(hostKey, null, cancellationToken);
+
+    public async Task DeployDesiredWebAppsAsync(
+        string hostKey,
+        IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
+        CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
         if (!settings.DeployWebApps)
@@ -67,13 +73,14 @@ public sealed class WebAppDeploymentService
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, cancellationToken);
+            await DeployAsync(settings, deployment, deploySetWarningsByModuleInstanceKey, cancellationToken);
         }
     }
 
     private async Task DeployAsync(
         HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment,
+        IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
@@ -82,10 +89,30 @@ public sealed class WebAppDeploymentService
         var stopMarkerWritten = false;
         string? diagnosticWarning = null;
         OmpAuthValidationResult? ompAuthValidation = null;
+        string? deploySetWarning = null;
+        if (deploySetWarningsByModuleInstanceKey is not null
+            && deploySetWarningsByModuleInstanceKey.TryGetValue(deployment.ModuleInstanceKey, out var foundDeploySetWarning))
+        {
+            deploySetWarning = foundDeploySetWarning;
+        }
+
+        AppDeploymentResult WithDeploySetWarning(AppDeploymentResult result)
+        {
+            if (string.IsNullOrWhiteSpace(deploySetWarning))
+            {
+                return result;
+            }
+
+            var existing = result.DiagnosticWarningMessage;
+            var combined = string.IsNullOrWhiteSpace(existing)
+                ? deploySetWarning
+                : existing + Environment.NewLine + deploySetWarning;
+            return result.WithDiagnosticWarning(combined);
+        }
 
         AppDeploymentResult WithExtractedOmpAuth(AppDeploymentResult result)
         {
-            return result.WithEffectiveOmpAuth(
+            return WithDeploySetWarning(result).WithEffectiveOmpAuth(
                 ompAuthValidation?.EffectiveCookieName,
                 ompAuthValidation?.EffectiveApplicationName,
                 ompAuthValidation?.EffectiveDataProtectionKeyPath);

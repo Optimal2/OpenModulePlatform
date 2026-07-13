@@ -3299,7 +3299,8 @@ BEGIN
         CAST(NULL AS tinyint) AS DeploymentState,
         CAST(NULL AS nvarchar(500)) AS DeployedSourceLocalPath,
         CAST(NULL AS nvarchar(500)) AS DeployedTargetPath,
-        CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName;
+        CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName,
+        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey;
     RETURN;
 END;
 
@@ -3321,8 +3322,10 @@ SELECT TOP (@maxDeployments)
     hds.DeploymentState,
     hds.SourceLocalPath AS DeployedSourceLocalPath,
     hds.TargetPath AS DeployedTargetPath,
-    hds.RuntimeName AS DeployedRuntimeName
+    hds.RuntimeName AS DeployedRuntimeName,
+    mi.ModuleInstanceKey
 FROM omp.AppInstances ai
+INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
 INNER JOIN omp.HostArtifactStates has
     ON has.HostId = @hostId
@@ -3391,7 +3394,8 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
                 DeploymentState = rdr.IsDBNull(14) ? null : rdr.GetByte(14),
                 DeployedSourceLocalPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
                 DeployedTargetPath = rdr.IsDBNull(16) ? null : rdr.GetString(16),
-                DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17)
+                DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17),
+                ModuleInstanceKey = rdr.GetString(18)
             });
         }
 
@@ -3438,7 +3442,8 @@ BEGIN
         CAST(NULL AS nvarchar(500)) AS DeployedTargetPath,
         CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName,
         CAST(NULL AS datetime2(3)) AS IdentityRepairRequestedUtc,
-        CAST(NULL AS nvarchar(256)) AS IdentityRepairRequestedBy;
+        CAST(NULL AS nvarchar(256)) AS IdentityRepairRequestedBy,
+        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey;
     RETURN;
 END;
 
@@ -3462,8 +3467,10 @@ SELECT TOP (@maxDeployments)
     hds.TargetPath AS DeployedTargetPath,
     hds.RuntimeName AS DeployedRuntimeName,
     hds.IdentityRepairRequestedUtc,
-    hds.IdentityRepairRequestedBy
+    hds.IdentityRepairRequestedBy,
+    mi.ModuleInstanceKey
 FROM omp.AppInstances ai
+INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
 INNER JOIN omp.HostArtifactStates has
     ON has.HostId = @hostId
@@ -3531,7 +3538,8 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
                 DeployedTargetPath = rdr.IsDBNull(16) ? null : rdr.GetString(16),
                 DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17),
                 IdentityRepairRequestedUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
-                IdentityRepairRequestedBy = rdr.IsDBNull(19) ? null : rdr.GetString(19)
+                IdentityRepairRequestedBy = rdr.IsDBNull(19) ? null : rdr.GetString(19),
+                ModuleInstanceKey = rdr.GetString(20)
             });
         }
 

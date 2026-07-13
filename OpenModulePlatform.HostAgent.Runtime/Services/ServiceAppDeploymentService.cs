@@ -13,13 +13,13 @@ public sealed class ServiceAppDeploymentService
     private const int ScAccessDeniedExitCode = 5;
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
-    private readonly OmpHostArtifactRepository _repository;
+    private readonly IOmpHostArtifactRepository _repository;
     private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<ServiceAppDeploymentService> _logger;
 
     public ServiceAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
-        OmpHostArtifactRepository repository,
+        IOmpHostArtifactRepository repository,
         HostAgentCredentialStoreService credentialStore,
         ILogger<ServiceAppDeploymentService> logger)
     {
@@ -30,6 +30,12 @@ public sealed class ServiceAppDeploymentService
     }
 
     public async Task DeployDesiredServiceAppsAsync(string hostKey, CancellationToken cancellationToken)
+        => await DeployDesiredServiceAppsAsync(hostKey, null, cancellationToken);
+
+    public async Task DeployDesiredServiceAppsAsync(
+        string hostKey,
+        IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
+        CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
         if (!settings.DeployServiceApps)
@@ -64,7 +70,7 @@ public sealed class ServiceAppDeploymentService
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, resolvedServiceNames, cancellationToken);
+            await DeployAsync(settings, deployment, resolvedServiceNames, deploySetWarningsByModuleInstanceKey, cancellationToken);
         }
     }
 
@@ -72,12 +78,33 @@ public sealed class ServiceAppDeploymentService
         HostAgentSettings settings,
         ServiceAppDeploymentDescriptor deployment,
         IReadOnlyDictionary<Guid, string> resolvedServiceNames,
+        IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
         string? serviceName = null;
         var serviceStopped = false;
         var stopMarkerWritten = false;
+        string? deploySetWarning = null;
+        if (deploySetWarningsByModuleInstanceKey is not null
+            && deploySetWarningsByModuleInstanceKey.TryGetValue(deployment.ModuleInstanceKey, out var foundDeploySetWarning))
+        {
+            deploySetWarning = foundDeploySetWarning;
+        }
+
+        AppDeploymentResult WithDeploySetWarning(AppDeploymentResult result)
+        {
+            if (string.IsNullOrWhiteSpace(deploySetWarning))
+            {
+                return result;
+            }
+
+            var existing = result.DiagnosticWarningMessage;
+            var combined = string.IsNullOrWhiteSpace(existing)
+                ? deploySetWarning
+                : existing + Environment.NewLine + deploySetWarning;
+            return result.WithDiagnosticWarning(combined);
+        }
 
         try
         {
@@ -122,7 +149,7 @@ public sealed class ServiceAppDeploymentService
 
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AppDeploymentResult.Warning(targetPath, serviceName, message),
+                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, message)),
                     cancellationToken);
                 return;
             }
@@ -142,18 +169,20 @@ public sealed class ServiceAppDeploymentService
                 {
                     await _repository.PublishAppDeploymentResultAsync(
                         deployment,
-                        AddIdentityCheck(
-                            AppDeploymentResult.Warning(targetPath, serviceName, identityCheck.WarningMessage),
-                            identityCheck),
+                        WithDeploySetWarning(
+                            AddIdentityCheck(
+                                AppDeploymentResult.Warning(targetPath, serviceName, identityCheck.WarningMessage),
+                                identityCheck)),
                         cancellationToken);
                     return;
                 }
 
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AddIdentityCheck(
-                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
-                        identityCheck),
+                    WithDeploySetWarning(
+                        AddIdentityCheck(
+                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
+                            identityCheck)),
                     cancellationToken);
                 return;
             }
@@ -182,7 +211,7 @@ public sealed class ServiceAppDeploymentService
 
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AppDeploymentResult.Warning(targetPath, serviceName, message),
+                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, message)),
                     cancellationToken);
                 return;
             }
@@ -191,7 +220,7 @@ public sealed class ServiceAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Running(targetPath, serviceName),
+                WithDeploySetWarning(AppDeploymentResult.Running(targetPath, serviceName)),
                 cancellationToken);
 
             if (settings.StopServiceForServiceAppDeployment)
@@ -289,18 +318,20 @@ public sealed class ServiceAppDeploymentService
             {
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
-                    AddIdentityCheck(
-                        AppDeploymentResult.Warning(targetPath, serviceName, postDeployIdentityCheck.WarningMessage),
-                        postDeployIdentityCheck),
+                    WithDeploySetWarning(
+                        AddIdentityCheck(
+                            AppDeploymentResult.Warning(targetPath, serviceName, postDeployIdentityCheck.WarningMessage),
+                            postDeployIdentityCheck)),
                     cancellationToken);
                 return;
             }
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AddIdentityCheck(
-                    AppDeploymentResult.Succeeded(targetPath, serviceName, applied: true),
-                    postDeployIdentityCheck),
+                WithDeploySetWarning(
+                    AddIdentityCheck(
+                        AppDeploymentResult.Succeeded(targetPath, serviceName, applied: true),
+                        postDeployIdentityCheck)),
                 cancellationToken);
 
             _logger.LogInformation(
@@ -332,7 +363,7 @@ public sealed class ServiceAppDeploymentService
 
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                AppDeploymentResult.Failed(targetPath, serviceName, ex.Message),
+                WithDeploySetWarning(AppDeploymentResult.Failed(targetPath, serviceName, ex.Message)),
                 cancellationToken);
         }
     }
