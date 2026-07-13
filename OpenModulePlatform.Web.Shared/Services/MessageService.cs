@@ -741,8 +741,9 @@ WHERE conversation_id = @conversation_id;";
 
         foreach (var recipientUserId in recipientUserIds)
         {
+            var unreadCount = await GetUnreadMessageCountAsync(conn, recipientUserId, ct);
             await PublishPushEventBestEffortAsync(
-                CreateMessageSentPushEvent(recipientUserId, conversationId, messageId),
+                CreateMessageSentPushEvent(recipientUserId, conversationId, messageId, unreadCount),
                 ct);
         }
 
@@ -787,8 +788,9 @@ WHERE cp.conversation_id = @conversation_id
 
         if (unreadCount > 0)
         {
+            var totalUnreadCount = await GetUnreadMessageCountAsync(conn, userId, ct);
             await PublishPushEventBestEffortAsync(
-                CreateMessageReadPushEvent(userId, conversationId),
+                CreateMessageReadPushEvent(userId, conversationId, totalUnreadCount),
                 ct);
         }
     }
@@ -834,7 +836,7 @@ WHERE cp.user_id = @user_id
         if (messagesMarkedRead > 0)
         {
             await PublishPushEventBestEffortAsync(
-                CreateAllMessagesReadPushEvent(userId),
+                CreateAllMessagesReadPushEvent(userId, 0),
                 ct);
         }
 
@@ -1028,7 +1030,7 @@ ORDER BY display_name,
         return rows;
     }
 
-    internal static PushEvent CreateMessageSentPushEvent(int userId, long conversationId, long messageId)
+    internal static PushEvent CreateMessageSentPushEvent(int userId, long conversationId, long messageId, int? unreadMessageCount = null)
         => PushEvent.ForUser(
             userId,
             PushEventCategory.TopBarMessageStateChanged,
@@ -1036,7 +1038,8 @@ ORDER BY display_name,
             {
                 action = "sent",
                 conversationId,
-                messageId
+                messageId,
+                unreadMessageCount
             }),
             deduplicationKey: string.Create(
                 CultureInfo.InvariantCulture,
@@ -1045,26 +1048,28 @@ ORDER BY display_name,
                 CultureInfo.InvariantCulture,
                 $"conversation:{conversationId}"));
 
-    internal static PushEvent CreateMessageReadPushEvent(int userId, long conversationId)
+    internal static PushEvent CreateMessageReadPushEvent(int userId, long conversationId, int? unreadMessageCount = null)
         => PushEvent.ForUser(
             userId,
             PushEventCategory.TopBarMessageStateChanged,
             JsonSerializer.Serialize(new
             {
                 action = "read",
-                conversationId
+                conversationId,
+                unreadMessageCount
             }),
             correlationKey: string.Create(
                 CultureInfo.InvariantCulture,
                 $"conversation:{conversationId}"));
 
-    internal static PushEvent CreateAllMessagesReadPushEvent(int userId)
+    internal static PushEvent CreateAllMessagesReadPushEvent(int userId, int? unreadMessageCount = null)
         => PushEvent.ForUser(
             userId,
             PushEventCategory.TopBarMessageStateChanged,
             JsonSerializer.Serialize(new
             {
-                action = "read-all"
+                action = "read-all",
+                unreadMessageCount
             }));
 
     public async Task<MessageAttachmentDownload?> GetAttachmentAsync(

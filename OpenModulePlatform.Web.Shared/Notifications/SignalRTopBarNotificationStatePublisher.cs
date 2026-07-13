@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
+using OpenModulePlatform.EventPublisher;
 
 namespace OpenModulePlatform.Web.Shared.Notifications;
 
@@ -16,7 +17,10 @@ public sealed class SignalRTopBarNotificationStatePublisher : ITopBarNotificatio
         _logger = logger;
     }
 
-    public async Task NotifyChangedAsync(int userId, CancellationToken ct)
+    public Task NotifyChangedAsync(int userId, CancellationToken ct)
+        => NotifyChangedAsync(userId, null, ct);
+
+    public async Task NotifyChangedAsync(int userId, int? unreadCount, CancellationToken ct)
     {
         if (ct.IsCancellationRequested)
         {
@@ -33,9 +37,10 @@ public sealed class SignalRTopBarNotificationStatePublisher : ITopBarNotificatio
 
         try
         {
+            var arguments = BuildArguments(unreadCount);
             await _hubContext.Clients
                 .Group(TopBarNotificationHub.UserGroupName(userId))
-                .SendCoreAsync(TopBarNotificationHub.StateChangedMethod, Array.Empty<object?>(), ct);
+                .SendCoreAsync(TopBarNotificationHub.StateChangedMethod, arguments, ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -54,6 +59,11 @@ public sealed class SignalRTopBarNotificationStatePublisher : ITopBarNotificatio
             LogNotificationFanOutFailure(ex, userId);
         }
     }
+
+    private static object?[] BuildArguments(int? unreadCount)
+        => unreadCount.HasValue
+            ? [new { category = PushEventCategory.TopBarNotificationStateChanged.Value, payload = new { unreadNotificationCount = unreadCount.Value } }]
+            : Array.Empty<object?>();
 
     private void LogNotificationFanOutFailure(Exception ex, int userId)
     {
