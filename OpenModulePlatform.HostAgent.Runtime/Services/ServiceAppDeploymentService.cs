@@ -121,6 +121,14 @@ public sealed class ServiceAppDeploymentService
                 targetPath,
                 executableRelativePath,
                 $"Service app instance '{deployment.AppInstanceKey}' executable path");
+
+            var renameCleanup = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
+                settings,
+                deployment,
+                executableRelativePath,
+                serviceName,
+                resolvedServiceNames);
+
             var serviceIdentity = await ResolveServiceAppIdentityAsync(
                 settings,
                 deployment,
@@ -240,9 +248,17 @@ public sealed class ServiceAppDeploymentService
 
             await using var deploymentLockLease = deploymentLock.Lease!;
 
+            // When the runtime name is changing, do not persist the new name until the
+            // old service has been confirmed removed. This makes rename cleanup durable:
+            // a swallowed failure is retried on the next cycle because DeployedRuntimeName
+            // still points to the old service.
+            var runningRuntimeName = renameCleanup.ShouldCleanUp
+                ? renameCleanup.OldServiceName!
+                : serviceName;
+
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
-                WithDeploySetWarning(AppDeploymentResult.Running(targetPath, serviceName)),
+                WithDeploySetWarning(AppDeploymentResult.Running(targetPath, runningRuntimeName)),
                 cancellationToken);
 
             if (settings.StopServiceForServiceAppDeployment)
@@ -267,12 +283,6 @@ public sealed class ServiceAppDeploymentService
                 }
             }
 
-            var renameCleanup = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
-                settings,
-                deployment,
-                executableRelativePath,
-                serviceName,
-                resolvedServiceNames);
             if (renameCleanup.ShouldCleanUp
                 && !string.IsNullOrWhiteSpace(renameCleanup.OldServiceName)
                 && !string.IsNullOrWhiteSpace(renameCleanup.OldTargetPath))
@@ -292,10 +302,20 @@ public sealed class ServiceAppDeploymentService
                 {
                     _logger.LogWarning(
                         ex,
-                        "Failed to clean up renamed service app runtime; continuing with deployment. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}",
+                        "Failed to clean up renamed service app runtime; aborting deployment cycle to retry on next tick. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}",
                         deployment.AppInstanceId,
                         renameCleanup.OldServiceName,
                         renameCleanup.OldTargetPath);
+
+                    await _repository.PublishAppDeploymentResultAsync(
+                        deployment,
+                        WithDeploySetWarning(
+                            AppDeploymentResult.Warning(
+                                targetPath,
+                                renameCleanup.OldServiceName,
+                                $"Failed to clean up the renamed service app service '{renameCleanup.OldServiceName}'. HostAgent will retry on the next deployment cycle.")),
+                        cancellationToken);
+                    return;
                 }
             }
             else if (renameCleanup.OldServiceName is not null && !renameCleanup.ShouldCleanUp)
@@ -521,8 +541,7 @@ public sealed class ServiceAppDeploymentService
 
     private void CleanUpRenamedService(string oldServiceName, string oldTargetPath, string newTargetPath)
     {
-        StopServiceIfRunning(oldServiceName, timeoutSeconds: 30);
-        RunScChecked("delete", oldServiceName);
+        _serviceControl.DeleteService(oldServiceName);
 
         if (Directory.Exists(oldTargetPath)
             && !string.Equals(oldTargetPath, newTargetPath, StringComparison.OrdinalIgnoreCase))

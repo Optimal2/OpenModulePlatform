@@ -130,6 +130,29 @@ public sealed class WindowsServiceControl : IWindowsServiceControl
         RunScChecked("description", serviceName, description);
     }
 
+    public void DeleteService(string serviceName)
+    {
+        if (GetServiceState(serviceName) is null)
+        {
+            return;
+        }
+
+        StopServiceIfRunning(serviceName, timeoutSeconds: 30);
+
+        var result = RunSc("delete", serviceName);
+        if (result.ExitCode == 0 || result.IsServiceNotFound() || result.IsServiceMarkedForDeletion())
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(CreateScFailureMessage(
+            result.ExitCode,
+            result.Output,
+            result.Error,
+            "delete",
+            serviceName));
+    }
+
     private void WaitForServiceState(string serviceName, string desiredState, int timeoutSeconds)
     {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);

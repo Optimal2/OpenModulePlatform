@@ -1183,6 +1183,7 @@ public sealed class HostAgentJobProcessor
             settings,
             deployments,
             serviceLookup: null,
+            EnumerateServiceAppServices(settings),
             cancellationToken);
     }
 
@@ -1192,6 +1193,23 @@ public sealed class HostAgentJobProcessor
         HostAgentSettings settings,
         IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
         Func<string, (string? State, string? ExecutablePath)?>? serviceLookup,
+        CancellationToken cancellationToken)
+        => BuildOrphanServiceAppFindingsCore(
+            hostId,
+            hostKey,
+            settings,
+            activeDeployments,
+            serviceLookup,
+            serviceAppServiceCandidates: null,
+            cancellationToken);
+
+    internal static IReadOnlyList<MaintenanceFindingUpsert> BuildOrphanServiceAppFindingsCore(
+        Guid hostId,
+        string hostKey,
+        HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
+        Func<string, (string? State, string? ExecutablePath)?>? serviceLookup,
+        IReadOnlyList<ServiceAppServiceCandidate>? serviceAppServiceCandidates,
         CancellationToken cancellationToken)
     {
         var findings = new List<MaintenanceFindingUpsert>();
@@ -1314,35 +1332,18 @@ public sealed class HostAgentJobProcessor
                 Severity = 2,
                 Confidence = hasStoppedService ? (byte)90 : (byte)80
             });
+        }
 
-            if (hasStoppedService)
-            {
-                var serviceDetail =
-                    $"Host '{hostKey}' has a stopped Windows service '{folderName}' whose executable is located in the orphan service-app directory '{fullDirectory}'.";
-                var serviceAction = JsonSerializer.Serialize(new MaintenanceFindingAction
-                {
-                    TargetKind = MaintenanceTargetKinds.WindowsService,
-                    HostId = hostId,
-                    ServiceName = folderName
-                }, JsonOptions);
-
-                findings.Add(new MaintenanceFindingUpsert
-                {
-                    FindingKey = $"orphan-serviceapp-service:{hostId:D}:{folderName}",
-                    Scope = MaintenanceScanScopes.Host,
-                    HostId = hostId,
-                    Category = "OrphanServiceApp",
-                    TargetKind = MaintenanceTargetKinds.WindowsService,
-                    TargetIdentifier = folderName,
-                    Title = "Orphan service-app Windows service",
-                    Detail = serviceDetail,
-                    RecommendedAction = $"Delete the stopped Windows service '{folderName}' and remove the orphan service-app directory.",
-                    SafetyNotes = "The service is stopped, its executable is inside an orphan service-app directory, and it is not owned by any active enabled AppInstance, HostAgent, or WorkerManager.",
-                    ActionJson = serviceAction,
-                    Severity = 2,
-                    Confidence = 90
-                });
-            }
+        if (serviceAppServiceCandidates is not null)
+        {
+            findings.AddRange(BuildOrphanServiceAppServiceFindings(
+                hostId,
+                hostKey,
+                settings,
+                expectedServiceNames,
+                expectedTargetPaths,
+                serviceAppServiceCandidates,
+                cancellationToken));
         }
 
         return findings;
@@ -1839,6 +1840,227 @@ public sealed class HostAgentJobProcessor
             .ToArray();
     }
 
+    private static IReadOnlyList<ServiceAppServiceCandidate> EnumerateServiceAppServices(HostAgentSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.ServicesRoot))
+        {
+            return [];
+        }
+
+        var servicesRoot = Path.GetFullPath(settings.ServicesRoot.Trim())
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var hostAgentInstallRoot = Path.GetFullPath(ResolveHostAgentInstallRoot(settings))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        var result = RunSc("queryex", "type=", "service", "state=", "all");
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
+        }
+
+        var serviceNames = result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.Trim())
+            .Where(line => line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
+            .Select(line => line["SERVICE_NAME:".Length..].Trim())
+            .Where(name =>
+                !IsServiceNameWithKnownPrefix(name, KnownHostAgentServiceNamePrefixes)
+                && !IsServiceNameWithKnownPrefix(name, KnownWorkerManagerServiceNamePrefixes)
+                && !string.Equals(name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return serviceNames
+            .Select(name => new ServiceAppServiceCandidate(
+                name,
+                GetServiceState(name),
+                TryGetServiceExecutablePath(name),
+                TryGetServiceDisplayName(name)))
+            .Where(candidate =>
+            {
+                if (string.IsNullOrWhiteSpace(candidate.ExecutablePath))
+                {
+                    return false;
+                }
+
+                var fullExecutablePath = Path.GetFullPath(candidate.ExecutablePath)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                if (!IsSameOrChildPath(servicesRoot, fullExecutablePath))
+                {
+                    return false;
+                }
+
+                if (IsSameOrChildPath(hostAgentInstallRoot, fullExecutablePath))
+                {
+                    return false;
+                }
+
+                return true;
+            })
+            .ToArray();
+    }
+
+    private static string? TryGetServiceDisplayName(string serviceName)
+    {
+        var result = RunSc("qc", serviceName);
+        if (result.ExitCode != 0)
+        {
+            return null;
+        }
+
+        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var displayNameIndex = line.IndexOf("DISPLAY_NAME", StringComparison.OrdinalIgnoreCase);
+            if (displayNameIndex < 0)
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf(':', displayNameIndex);
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            var displayName = line[(separatorIndex + 1)..].Trim();
+            return string.IsNullOrWhiteSpace(displayName) ? null : displayName;
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyList<MaintenanceFindingUpsert> BuildOrphanServiceAppServiceFindings(
+        Guid hostId,
+        string hostKey,
+        HostAgentSettings settings,
+        IReadOnlySet<string> claimedServiceNames,
+        IReadOnlySet<string> expectedTargetPaths,
+        IReadOnlyList<ServiceAppServiceCandidate> candidates,
+        CancellationToken cancellationToken)
+    {
+        var findings = new List<MaintenanceFindingUpsert>();
+
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(candidate.Name))
+            {
+                continue;
+            }
+
+            if (IsServiceNameWithKnownPrefix(candidate.Name, KnownHostAgentServiceNamePrefixes)
+                || IsServiceNameWithKnownPrefix(candidate.Name, KnownWorkerManagerServiceNamePrefixes)
+                || string.Equals(candidate.Name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (claimedServiceNames.Contains(candidate.Name))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(candidate.ExecutablePath))
+            {
+                var executableDirectory = Path.GetDirectoryName(
+                    Path.GetFullPath(candidate.ExecutablePath)
+                        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+                if (!string.IsNullOrWhiteSpace(executableDirectory)
+                    && expectedTargetPaths.Contains(executableDirectory))
+                {
+                    continue;
+                }
+            }
+
+            var isRunning = string.Equals(candidate.State, "RUNNING", StringComparison.OrdinalIgnoreCase);
+            var detail =
+                $"Host '{hostKey}' has a Windows service '{candidate.Name}' in state '{candidate.State ?? "unknown"}' that is not owned by any active enabled AppInstance.";
+            var action = JsonSerializer.Serialize(new MaintenanceFindingAction
+            {
+                TargetKind = MaintenanceTargetKinds.WindowsService,
+                HostId = hostId,
+                ServiceName = candidate.Name
+            }, JsonOptions);
+
+            findings.Add(new MaintenanceFindingUpsert
+            {
+                FindingKey = $"orphan-serviceapp-service:{hostId:D}:{candidate.Name}",
+                Scope = MaintenanceScanScopes.Host,
+                HostId = hostId,
+                Category = "OrphanServiceApp",
+                TargetKind = MaintenanceTargetKinds.WindowsService,
+                TargetIdentifier = candidate.Name,
+                Title = "Orphan service-app Windows service",
+                Detail = detail,
+                RecommendedAction = $"Review and delete the orphan Windows service '{candidate.Name}' after confirming it is no longer needed.",
+                SafetyNotes = "The service executable is located under the configured service-apps root, and the service is not owned by any active enabled AppInstance, HostAgent, or WorkerManager. Cleanup is human-gated.",
+                ActionJson = action,
+                Severity = 2,
+                Confidence = isRunning ? (byte)95 : (byte)90
+            });
+        }
+
+        var duplicateDisplayNameGroups = candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.DisplayName))
+            .GroupBy(candidate => candidate.DisplayName!, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .ToArray();
+
+        foreach (var group in duplicateDisplayNameGroups)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var unclaimedCandidates = group
+                .Where(candidate =>
+                    !claimedServiceNames.Contains(candidate.Name)
+                    && !IsServiceNameWithKnownPrefix(candidate.Name, KnownHostAgentServiceNamePrefixes)
+                    && !IsServiceNameWithKnownPrefix(candidate.Name, KnownWorkerManagerServiceNamePrefixes)
+                    && !string.Equals(candidate.Name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (unclaimedCandidates.Length == 0)
+            {
+                continue;
+            }
+
+            var names = string.Join(", ", unclaimedCandidates.Select(candidate => $"'{candidate.Name}'"));
+
+            foreach (var candidate in unclaimedCandidates)
+            {
+                var action = JsonSerializer.Serialize(new MaintenanceFindingAction
+                {
+                    TargetKind = MaintenanceTargetKinds.WindowsService,
+                    HostId = hostId,
+                    ServiceName = candidate.Name
+                }, JsonOptions);
+
+                findings.Add(new MaintenanceFindingUpsert
+                {
+                    FindingKey = $"orphan-serviceapp-duplicate-displayname:{hostId:D}:{candidate.Name}",
+                    Scope = MaintenanceScanScopes.Host,
+                    HostId = hostId,
+                    Category = "OrphanServiceApp",
+                    TargetKind = MaintenanceTargetKinds.WindowsService,
+                    TargetIdentifier = candidate.Name,
+                    Title = "Duplicate service-app display name",
+                    Detail =
+                        $"Host '{hostKey}' has multiple service-app services sharing the display name '{group.Key}': {names}. " +
+                        $"At least one of them ('{candidate.Name}') is not owned by an active enabled AppInstance.",
+                    RecommendedAction = $"Review the duplicate services and delete the orphan service '{candidate.Name}' after confirming it is no longer needed.",
+                    SafetyNotes = "Duplicate display names usually indicate a rename or cross-instance upgrade that left an old service behind. Cleanup is human-gated.",
+                    ActionJson = action,
+                    Severity = 2,
+                    Confidence = 95
+                });
+            }
+        }
+
+        return findings;
+    }
+
     private static IReadOnlySet<string> GetKnownHostAgentServiceNamePrefixes(string serviceNamePrefix)
     {
         var prefixes = new HashSet<string>(KnownHostAgentServiceNamePrefixes, StringComparer.OrdinalIgnoreCase);
@@ -2040,5 +2262,11 @@ public sealed class HostAgentJobProcessor
         string Name,
         string? State,
         string? ExecutablePath);
+
+    internal sealed record ServiceAppServiceCandidate(
+        string Name,
+        string? State,
+        string? ExecutablePath,
+        string? DisplayName);
 
 }

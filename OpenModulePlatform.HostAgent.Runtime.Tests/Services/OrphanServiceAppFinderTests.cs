@@ -1,5 +1,6 @@
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+using ServiceAppServiceCandidate = OpenModulePlatform.HostAgent.Runtime.Services.HostAgentJobProcessor.ServiceAppServiceCandidate;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
@@ -91,6 +92,10 @@ public sealed class OrphanServiceAppFinderTests
 
         var settings = CreateSettings(root.Path);
         var hostId = Guid.NewGuid();
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate("OrphanA", "STOPPED", Path.Combine(orphanA, "OrphanA.exe"), "Orphan A")
+        };
 
         var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             hostId,
@@ -100,6 +105,7 @@ public sealed class OrphanServiceAppFinderTests
             serviceName => serviceName.Equals("OrphanA", StringComparison.OrdinalIgnoreCase)
                 ? ("STOPPED", Path.Combine(orphanA, "OrphanA.exe"))
                 : null,
+            candidates,
             CancellationToken.None);
 
         Assert.Equal(3, findings.Count);
@@ -168,13 +174,21 @@ public sealed class OrphanServiceAppFinderTests
     }
 
     [Fact]
-    public void BuildOrphanServiceAppFindings_SkipsRunningServiceUnderOrphanDirectory()
+    public void BuildOrphanServiceAppFindings_RunningServiceWithoutOwner_IsFlaggedByServiceSweep()
     {
         using var root = new TempServicesRoot();
         var orphanDirectory = Path.Combine(root.Path, "OrphanWithRunningService");
         Directory.CreateDirectory(orphanDirectory);
 
         var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate(
+                "OrphanWithRunningService",
+                "RUNNING",
+                Path.Combine(orphanDirectory, "OrphanWithRunningService.exe"),
+                "Orphan With Running Service")
+        };
 
         var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
             Guid.NewGuid(),
@@ -182,9 +196,13 @@ public sealed class OrphanServiceAppFinderTests
             settings,
             Array.Empty<ServiceAppDeploymentDescriptor>(),
             _ => ("RUNNING", Path.Combine(orphanDirectory, "OrphanWithRunningService.exe")),
+            candidates,
             CancellationToken.None);
 
-        Assert.Empty(findings);
+        var serviceFinding = Assert.Single(findings);
+        Assert.Equal(MaintenanceTargetKinds.WindowsService, serviceFinding.TargetKind);
+        Assert.Contains("OrphanWithRunningService", serviceFinding.TargetIdentifier, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((byte)95, serviceFinding.Confidence);
     }
 
     [Fact]
@@ -257,6 +275,148 @@ public sealed class OrphanServiceAppFinderTests
         var directoryFinding = Assert.Single(findings);
         Assert.Equal(MaintenanceTargetKinds.Directory, directoryFinding.TargetKind);
         Assert.Equal(orphanSameNamePath, directoryFinding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsStoppedOwnerlessServiceWithoutDirectory()
+    {
+        using var root = new TempServicesRoot();
+        // The service executable path is reported as under the services root, but the
+        // directory itself has already been removed. The sweep must still flag the service.
+        var executablePath = Path.Combine(root.Path, "OrphanStopped", "OrphanStopped.exe");
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate("OrphanStopped", "STOPPED", executablePath, "Orphan Stopped")
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal(MaintenanceTargetKinds.WindowsService, finding.TargetKind);
+        Assert.Equal("OrphanStopped", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal((byte)90, finding.Confidence);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_SkipsClaimedService()
+    {
+        using var root = new TempServicesRoot();
+        var activePath = Path.Combine(root.Path, "MyActiveService");
+        Directory.CreateDirectory(activePath);
+
+        var deployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "active-instance",
+            InstallationName = "MyActiveService",
+            DeployedRuntimeName = "MyActiveService",
+            DeployedTargetPath = activePath
+        };
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate(
+                "MyActiveService",
+                "RUNNING",
+                Path.Combine(activePath, "MyActiveService.exe"),
+                "My Active Service")
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { deployment },
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_SkipsServiceInActiveTargetDirectory()
+    {
+        using var root = new TempServicesRoot();
+        var activePath = Path.Combine(root.Path, "GenericExeService");
+        Directory.CreateDirectory(activePath);
+
+        var deployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "generic-instance",
+            InstallationName = "service",
+            DeployedTargetPath = activePath
+        };
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate(
+                "GenericExeService",
+                "RUNNING",
+                Path.Combine(activePath, "GenericExeService.exe"),
+                "Generic Exe Service")
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { deployment },
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsDuplicateDisplayNameUnclaimed()
+    {
+        using var root = new TempServicesRoot();
+        var path = Path.Combine(root.Path, "SomeService");
+        Directory.CreateDirectory(path);
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate("OldService", "STOPPED", Path.Combine(path, "OldService.exe"), "OMP Duplicate Display"),
+            new ServiceAppServiceCandidate("NewService", "RUNNING", Path.Combine(path, "NewService.exe"), "OMP Duplicate Display")
+        };
+
+        var deployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "new-instance",
+            InstallationName = "NewService",
+            DeployedRuntimeName = "NewService",
+            DeployedTargetPath = path
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { deployment },
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        var duplicateFinding = Assert.Single(findings);
+        Assert.Equal(MaintenanceTargetKinds.WindowsService, duplicateFinding.TargetKind);
+        Assert.Equal("OldService", duplicateFinding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("duplicate", duplicateFinding.Title, StringComparison.OrdinalIgnoreCase);
     }
 
     private static HostAgentSettings CreateSettings(string servicesRoot)

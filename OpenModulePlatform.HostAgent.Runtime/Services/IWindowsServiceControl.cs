@@ -20,4 +20,11 @@ public interface IWindowsServiceControl
         string executablePath,
         string displayName,
         string description);
+
+    /// <summary>
+    /// Stops the service if it is running and deletes it via sc.exe.
+    /// Does nothing if the service is already absent.
+    /// Throws <see cref="InvalidOperationException"/> if deletion fails.
+    /// </summary>
+    void DeleteService(string serviceName);
 }
