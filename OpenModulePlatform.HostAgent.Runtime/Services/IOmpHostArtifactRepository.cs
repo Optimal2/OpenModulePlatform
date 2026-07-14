@@ -124,4 +124,9 @@ public interface IOmpHostArtifactRepository
         string hostKey,
         string? requestedBy,
         CancellationToken ct);
+
+    Task<IReadOnlyList<OrphanHostCandidate>> GetOrphanHostCandidatesAsync(
+        Guid currentHostId,
+        int maxCandidates,
+        CancellationToken ct);
 }
