@@ -262,7 +262,7 @@ public sealed class OmpHostArtifactRepositoryTierCTests : IDisposable
     }
 
     [Fact]
-    public async Task GetOrphanHostCandidatesAsync_WhenHostHasArtifactRequirement_ReturnsEmpty()
+    public async Task GetOrphanHostCandidatesAsync_WhenHostHasArtifactRequirement_ReturnsCandidate()
     {
         var currentHostId = _database.InsertHost("current-host");
         var hostWithRequirementId = _database.InsertHost("host-with-requirement", environment: null);
@@ -273,11 +273,14 @@ public sealed class OmpHostArtifactRepositoryTierCTests : IDisposable
             100,
             CancellationToken.None);
 
-        Assert.Empty(candidates);
+        var candidate = Assert.Single(candidates);
+        Assert.Equal(hostWithRequirementId, candidate.HostId);
+        Assert.Equal(1, candidate.HostArtifactRequirementCount);
+        Assert.Equal("host-with-requirement", candidate.HostKey);
     }
 
     [Fact]
-    public async Task GetOrphanHostCandidatesAsync_WhenHostHasArtifactState_ReturnsEmpty()
+    public async Task GetOrphanHostCandidatesAsync_WhenHostHasArtifactState_ReturnsCandidate()
     {
         var currentHostId = _database.InsertHost("current-host");
         var hostWithStateId = _database.InsertHost("host-with-state", environment: null);
@@ -288,7 +291,10 @@ public sealed class OmpHostArtifactRepositoryTierCTests : IDisposable
             100,
             CancellationToken.None);
 
-        Assert.Empty(candidates);
+        var candidate = Assert.Single(candidates);
+        Assert.Equal(hostWithStateId, candidate.HostId);
+        Assert.Equal(1, candidate.HostArtifactStateCount);
+        Assert.Equal("host-with-state", candidate.HostKey);
     }
 
     [Fact]
@@ -311,6 +317,39 @@ public sealed class OmpHostArtifactRepositoryTierCTests : IDisposable
             CancellationToken.None);
 
         Assert.Empty(candidates);
+    }
+
+    [Fact]
+    public async Task DeleteOrphanHostAsync_WhenHostHasArtifactRequirements_DeletesDependenciesAndHost()
+    {
+        var orphanHostId = _database.InsertHost("orphan-cleanup-host", environment: null);
+        _database.InsertHostArtifactRequirement(orphanHostId, "orphan-requirement");
+        _database.InsertHostArtifactState(orphanHostId);
+
+        var deletedRows = await _repository.DeleteOrphanHostAsync(
+            orphanHostId,
+            CancellationToken.None);
+
+        Assert.Equal(1, deletedRows);
+        Assert.False(_database.HostExists(orphanHostId), "Expected orphan host row to be deleted.");
+        Assert.Equal(0, _database.CountHostArtifactRequirements(orphanHostId));
+        Assert.Equal(0, _database.CountHostArtifactStates(orphanHostId));
+    }
+
+    [Fact]
+    public async Task DeleteOrphanHostAsync_WhenHostHasMaintenanceFinding_UnlinksFindingAndDeletesHost()
+    {
+        var orphanHostId = _database.InsertHost("orphan-with-finding", environment: null);
+        _database.CreateMaintenanceFindingsTable();
+        var findingId = _database.InsertMaintenanceFinding("orphan-host:test", orphanHostId);
+
+        var deletedRows = await _repository.DeleteOrphanHostAsync(
+            orphanHostId,
+            CancellationToken.None);
+
+        Assert.Equal(1, deletedRows);
+        Assert.False(_database.HostExists(orphanHostId));
+        Assert.Null(_database.GetMaintenanceFindingHostId(findingId));
     }
 
     [Fact]

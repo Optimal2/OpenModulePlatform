@@ -215,6 +215,7 @@ public static class MaintenanceTargetKinds
     public const string WindowsService = "WindowsService";
     public const string IisApplication = "IisApplication";
     public const string IisAppPool = "IisAppPool";
+    public const string OrphanHost = "OrphanHost";
 }
 
 public sealed class MaintenanceScanJobPayload
