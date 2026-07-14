@@ -216,6 +216,18 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         return Task.FromResult(RenewLeaseResult);
     }
 
+    public List<string> EnqueuedMaintenanceScanHostKeys { get; } = [];
+
+    public Task<bool> EnqueueMaintenanceScanJobAsync(
+        string hostKey,
+        string? requestedBy,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        EnqueuedMaintenanceScanHostKeys.Add(hostKey);
+        return Task.FromResult(true);
+    }
+
     public sealed record CompletedDeployment(
         long HostDeploymentId,
         Guid LeaseToken,

@@ -119,4 +119,9 @@ public interface IOmpHostArtifactRepository
         Guid leaseToken,
         int leaseSeconds,
         CancellationToken ct);
+
+    Task<bool> EnqueueMaintenanceScanJobAsync(
+        string hostKey,
+        string? requestedBy,
+        CancellationToken ct);
 }

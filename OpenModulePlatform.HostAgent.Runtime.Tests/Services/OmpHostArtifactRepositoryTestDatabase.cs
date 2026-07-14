@@ -107,6 +107,42 @@ END;");
         return hostId;
     }
 
+    public void CreateMaintenanceFindingsTable()
+    {
+        Execute(@"
+CREATE TABLE omp.MaintenanceFindings
+(
+    MaintenanceFindingId bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    FindingKey nvarchar(450) NOT NULL UNIQUE,
+    Scope nvarchar(20) NOT NULL,
+    HostId uniqueidentifier NULL,
+    Category nvarchar(100) NOT NULL,
+    TargetKind nvarchar(80) NOT NULL,
+    TargetIdentifier nvarchar(1000) NOT NULL,
+    Title nvarchar(300) NOT NULL,
+    Detail nvarchar(max) NULL,
+    RecommendedAction nvarchar(300) NULL,
+    SafetyNotes nvarchar(max) NULL,
+    ActionJson nvarchar(max) NULL,
+    Status tinyint NOT NULL DEFAULT(0),
+    Severity tinyint NOT NULL DEFAULT(1),
+    Confidence tinyint NOT NULL DEFAULT(80),
+    DetectedByHostAgentJobId bigint NOT NULL,
+    ResultMessage nvarchar(max) NULL,
+    DetectedUtc datetime2(3) NOT NULL,
+    LastSeenUtc datetime2(3) NOT NULL,
+    UpdatedUtc datetime2(3) NOT NULL
+);");
+    }
+
+    public int CountFindings()
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand("SELECT COUNT(1) FROM omp.MaintenanceFindings;", conn);
+        return (int)cmd.ExecuteScalar()!;
+    }
+
     public void InsertRecoveryCandidate(
         Guid hostId,
         string appInstanceKey,
