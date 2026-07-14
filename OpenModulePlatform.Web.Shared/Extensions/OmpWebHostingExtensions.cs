@@ -76,6 +76,28 @@ public static class OmpWebHostingExtensions
                     factory.Create(typeof(TAppResource));
             });
 
+        // Model binder conversion errors ("The value 'x' is not valid for ...") are
+        // framework-internal English strings unless replaced. The accessors resolve
+        // through the shared resource at binding time, so they follow the request
+        // culture like every other localized string.
+        builder.Services.AddOptions<Microsoft.AspNetCore.Mvc.MvcOptions>()
+            .Configure<IStringLocalizerFactory>(static (options, localizerFactory) =>
+            {
+                var localizer = localizerFactory.Create(typeof(SharedResource));
+                var messages = options.ModelBindingMessageProvider;
+                messages.SetAttemptedValueIsInvalidAccessor((value, field) => localizer["The value '{0}' is not valid for {1}.", value, field]);
+                messages.SetMissingBindRequiredValueAccessor(field => localizer["A value for the '{0}' field was not provided.", field]);
+                messages.SetMissingKeyOrValueAccessor(() => localizer["A value is required."]);
+                messages.SetMissingRequestBodyRequiredValueAccessor(() => localizer["A non-empty request body is required."]);
+                messages.SetNonPropertyAttemptedValueIsInvalidAccessor(value => localizer["The value '{0}' is not valid.", value]);
+                messages.SetNonPropertyUnknownValueIsInvalidAccessor(() => localizer["The supplied value is invalid."]);
+                messages.SetNonPropertyValueMustBeANumberAccessor(() => localizer["The field must be a number."]);
+                messages.SetUnknownValueIsInvalidAccessor(field => localizer["The supplied value is invalid for {0}.", field]);
+                messages.SetValueIsInvalidAccessor(value => localizer["The value '{0}' is invalid.", value]);
+                messages.SetValueMustBeANumberAccessor(field => localizer["The field {0} must be a number.", field]);
+                messages.SetValueMustNotBeNullAccessor(value => localizer["The value '{0}' is invalid.", value]);
+            });
+
         builder.Services.AddAntiforgery();
 
         ConfigureOmpAuthentication(

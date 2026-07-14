@@ -79,4 +79,14 @@
   <data name="There are no unreferenced old artifact versions to delete." xml:space="preserve"><value>Det finns inga orefererade gamla artefaktversioner att ta bort.</value></data>
   <data name="ArtifactUpload:ArtifactStoreRoot must point to an existing artifact store before artifact payloads can be cleaned up." xml:space="preserve"><value>ArtifactUpload:ArtifactStoreRoot måste peka på ett befintligt artefaktlager innan artifact-payloads kan rensas.</value></data>
   <data name="Universal package builder" xml:space="preserve"><value>Universalpaketsbyggare</value></data>
+  <data name="The value '{0}' is not valid for {1}." xml:space="preserve"><value>Värdet '{0}' är inte giltigt för {1}.</value></data>
+  <data name="A value for the '{0}' field was not provided." xml:space="preserve"><value>Inget värde angavs för fältet {0}.</value></data>
+  <data name="A value is required." xml:space="preserve"><value>Ett värde krävs.</value></data>
+  <data name="A non-empty request body is required." xml:space="preserve"><value>En icke-tom förfrågningskropp krävs.</value></data>
+  <data name="The value '{0}' is not valid." xml:space="preserve"><value>Värdet '{0}' är inte giltigt.</value></data>
+  <data name="The supplied value is invalid." xml:space="preserve"><value>Det angivna värdet är ogiltigt.</value></data>
+  <data name="The field must be a number." xml:space="preserve"><value>Fältet måste vara ett tal.</value></data>
+  <data name="The supplied value is invalid for {0}." xml:space="preserve"><value>Det angivna värdet är ogiltigt för {0}.</value></data>
+  <data name="The value '{0}' is invalid." xml:space="preserve"><value>Värdet '{0}' är ogiltigt.</value></data>
+  <data name="The field {0} must be a number." xml:space="preserve"><value>Fältet {0} måste vara ett tal.</value></data>
 </root>
