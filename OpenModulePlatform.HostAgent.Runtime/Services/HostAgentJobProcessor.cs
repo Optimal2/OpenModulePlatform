@@ -11,6 +11,7 @@ public sealed class HostAgentJobProcessor
 {
     private const int DirectoryDeleteMaxAttempts = 20;
     private const int MaxServiceAppDeploymentsForOrphanScan = 10000;
+    private const int MaxOrphanHostCandidates = 10000;
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
     // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
     // older installs without exposing any customer-specific configuration.
@@ -413,6 +414,10 @@ public sealed class HostAgentJobProcessor
                 job.HostId.Value,
                 hostKey,
                 _settings.CurrentValue,
+                cancellationToken));
+            findings.AddRange(await BuildOrphanHostFindings(
+                job.HostId.Value,
+                hostKey,
                 cancellationToken));
 
             await _repository.UpsertMaintenanceFindingsAsync(
@@ -1335,6 +1340,49 @@ public sealed class HostAgentJobProcessor
                     Confidence = 90
                 });
             }
+        }
+
+        return findings;
+    }
+
+    private async Task<IReadOnlyList<MaintenanceFindingUpsert>> BuildOrphanHostFindings(
+        Guid hostId,
+        string hostKey,
+        CancellationToken cancellationToken)
+    {
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            hostId,
+            MaxOrphanHostCandidates,
+            cancellationToken);
+
+        var findings = new List<MaintenanceFindingUpsert>(candidates.Count);
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var action = JsonSerializer.Serialize(new MaintenanceFindingAction
+            {
+                SchemaVersion = 1,
+                TargetKind = MaintenanceTargetKinds.DatabaseRow,
+                HostId = candidate.HostId
+            }, JsonOptions);
+
+            findings.Add(new MaintenanceFindingUpsert
+            {
+                FindingKey = $"orphan-host:{candidate.HostId:D}",
+                Scope = MaintenanceScanScopes.Host,
+                HostId = candidate.HostId,
+                Category = "OrphanHost",
+                TargetKind = MaintenanceTargetKinds.DatabaseRow,
+                TargetIdentifier = candidate.HostKey,
+                Title = "Orphan host row",
+                Detail = $"Host '{candidate.HostKey}' appears to be an orphan. Its Environment is null, its InstanceId '{candidate.InstanceId:D}' does not belong to an active installation, and the host has no desired apps or runtime status rows.",
+                RecommendedAction = $"Review host '{candidate.HostKey}'; if confirmed orphan, delete via maintenance cleanup.",
+                SafetyNotes = "This finding is detect-only and never triggers automatic deletion. Verify the host is truly unused before removing it via the separate human-gated MaintenanceCleanup job.",
+                ActionJson = action,
+                Severity = 2,
+                Confidence = 85
+            });
         }
 
         return findings;

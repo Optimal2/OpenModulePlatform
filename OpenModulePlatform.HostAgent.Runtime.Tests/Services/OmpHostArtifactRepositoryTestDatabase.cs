@@ -96,15 +96,71 @@ BEGIN
 END;");
     }
 
-    public Guid InsertHost(string hostKey, bool isEnabled = true)
+    public Guid InsertHost(string hostKey, bool isEnabled = true, Guid? instanceId = null, string? environment = null)
     {
         var hostId = Guid.NewGuid();
         Execute(
-            "INSERT INTO omp.Hosts(HostId, HostKey, IsEnabled) VALUES(@hostId, @hostKey, @isEnabled);",
+            "INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, Environment, IsEnabled) VALUES(@hostId, @instanceId, @hostKey, @environment, @isEnabled);",
             new SqlParameter("@hostId", hostId),
+            new SqlParameter("@instanceId", instanceId ?? Guid.NewGuid()),
             new SqlParameter("@hostKey", hostKey),
+            new SqlParameter("@environment", environment ?? (object)DBNull.Value),
             new SqlParameter("@isEnabled", isEnabled));
         return hostId;
+    }
+
+    public Guid InsertInstance(string instanceKey, bool isEnabled = true)
+    {
+        var instanceId = Guid.NewGuid();
+        Execute(
+            "INSERT INTO omp.Instances(InstanceId, InstanceKey, DisplayName, IsEnabled) VALUES(@instanceId, @instanceKey, @displayName, @isEnabled);",
+            new SqlParameter("@instanceId", instanceId),
+            new SqlParameter("@instanceKey", instanceKey),
+            new SqlParameter("@displayName", instanceKey),
+            new SqlParameter("@isEnabled", isEnabled));
+        return instanceId;
+    }
+
+    public Guid InsertAppInstance(Guid moduleInstanceId, string appInstanceKey, Guid? hostId = null)
+    {
+        var appInstanceId = Guid.NewGuid();
+        var artifactId = EnsureArtifact(1, "web-app");
+        Execute(
+            "INSERT INTO omp.AppInstances(AppInstanceId, ModuleInstanceId, AppInstanceKey, HostId, ArtifactId, IsEnabled, IsAllowed, DesiredState) VALUES(@appInstanceId, @moduleInstanceId, @appInstanceKey, @hostId, @artifactId, 1, 1, 1);",
+            new SqlParameter("@appInstanceId", appInstanceId),
+            new SqlParameter("@moduleInstanceId", moduleInstanceId),
+            new SqlParameter("@appInstanceKey", appInstanceKey),
+            new SqlParameter("@hostId", hostId ?? (object)DBNull.Value),
+            new SqlParameter("@artifactId", artifactId));
+        return appInstanceId;
+    }
+
+    public void InsertHostArtifactRequirement(Guid hostId, string requirementKey, int artifactId = 1)
+    {
+        EnsureArtifact(artifactId, "host-requirement");
+        Execute(
+            "INSERT INTO omp.HostArtifactRequirements(HostId, ArtifactId, RequirementKey) VALUES(@hostId, @artifactId, @requirementKey);",
+            new SqlParameter("@hostId", hostId),
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@requirementKey", requirementKey));
+    }
+
+    public void InsertHostArtifactState(Guid hostId, int artifactId = 1)
+    {
+        EnsureArtifact(artifactId, "host-state");
+        Execute(
+            "INSERT INTO omp.HostArtifactStates(HostId, ArtifactId) VALUES(@hostId, @artifactId);",
+            new SqlParameter("@hostId", hostId),
+            new SqlParameter("@artifactId", artifactId));
+    }
+
+    private int EnsureArtifact(int artifactId, string packageType)
+    {
+        Execute(
+            "IF NOT EXISTS (SELECT 1 FROM omp.Artifacts WHERE ArtifactId = @artifactId) INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled) VALUES(@artifactId, @packageType, 1);",
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@packageType", packageType));
+        return artifactId;
     }
 
     public void CreateMaintenanceFindingsTable()
@@ -192,10 +248,20 @@ CREATE TABLE omp.MaintenanceFindings
     {
         Execute("CREATE SCHEMA [omp];");
         Execute(@"
+CREATE TABLE omp.Instances
+(
+    InstanceId uniqueidentifier NOT NULL PRIMARY KEY,
+    InstanceKey nvarchar(100) NOT NULL,
+    DisplayName nvarchar(200) NOT NULL,
+    IsEnabled bit NOT NULL DEFAULT(1)
+);");
+        Execute(@"
 CREATE TABLE omp.Hosts
 (
     HostId uniqueidentifier NOT NULL PRIMARY KEY,
+    InstanceId uniqueidentifier NOT NULL,
     HostKey nvarchar(128) NOT NULL,
+    Environment nvarchar(100) NULL,
     IsEnabled bit NOT NULL DEFAULT(1)
 );");
         Execute(@"
@@ -209,11 +275,33 @@ CREATE TABLE omp.Artifacts
 CREATE TABLE omp.AppInstances
 (
     AppInstanceId uniqueidentifier NOT NULL PRIMARY KEY,
+    ModuleInstanceId uniqueidentifier NULL,
     AppInstanceKey nvarchar(100) NOT NULL,
+    HostId uniqueidentifier NULL,
     ArtifactId int NULL,
     IsEnabled bit NOT NULL DEFAULT(1),
     IsAllowed bit NOT NULL DEFAULT(1),
     DesiredState bit NOT NULL DEFAULT(1)
+);");
+        Execute(@"
+CREATE TABLE omp.HostArtifactRequirements
+(
+    HostArtifactRequirementId bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    HostId uniqueidentifier NOT NULL,
+    ArtifactId int NOT NULL,
+    RequirementKey nvarchar(200) NOT NULL,
+    DesiredLocalPath nvarchar(500) NULL,
+    IsEnabled bit NOT NULL DEFAULT(1)
+);");
+        Execute(@"
+CREATE TABLE omp.HostArtifactStates
+(
+    HostId uniqueidentifier NOT NULL,
+    ArtifactId int NOT NULL,
+    ProvisioningState tinyint NOT NULL DEFAULT(0),
+    LocalPath nvarchar(500) NULL,
+    ContentSha256 nvarchar(128) NULL,
+    CONSTRAINT PK_HostArtifactStates PRIMARY KEY(HostId, ArtifactId)
 );");
         Execute(@"
 CREATE TABLE omp.HostAppDeploymentStates
