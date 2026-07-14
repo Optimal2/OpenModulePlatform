@@ -170,6 +170,32 @@ public sealed class OmpHostArtifactRepositoryTierCTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertMaintenanceFindingsAsync_WhenCalledTwiceWithSameKey_DoesNotDuplicate()
+    {
+        var hostId = _database.InsertHost("maintenance-host");
+        _database.CreateMaintenanceFindingsTable();
+
+        var findings = new List<MaintenanceFindingUpsert>
+        {
+            new()
+            {
+                FindingKey = "test:duplicate-key",
+                Scope = MaintenanceScanScopes.Host,
+                HostId = hostId,
+                Category = "Test",
+                TargetKind = MaintenanceTargetKinds.Directory,
+                TargetIdentifier = @"C:\test",
+                Title = "Test finding"
+            }
+        };
+
+        await _repository.UpsertMaintenanceFindingsAsync(findings, 1, CancellationToken.None);
+        await _repository.UpsertMaintenanceFindingsAsync(findings, 2, CancellationToken.None);
+
+        Assert.Equal(1, _database.CountFindings());
+    }
+
+    [Fact]
     public async Task GetDeploymentRuntimeRecoveryCandidatesAsync_WhenSqlThrows_PropagatesException()
     {
         var hostId = _database.InsertHost("bad-host");
