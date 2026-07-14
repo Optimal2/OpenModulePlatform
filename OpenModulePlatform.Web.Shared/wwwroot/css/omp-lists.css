@@ -291,11 +291,21 @@ table[data-page-size] > thead th:not([data-sort-type]) {
     word-spacing: normal;
 }
 
-/* Clip cell content at the column edge so narrow (user-resized) columns never
-   let unbreakable content overlap the neighbouring column. */
+/* Clip cell content at the column edge and truncate it with an ellipsis so
+   narrow (user-resized) columns never let content overlap the neighbouring
+   column. Opt out per cell with data-list-wrap when content should keep
+   wrapping (multi-line descriptions and the like). */
 table[data-sortable-list] > tbody > tr > td,
 table[data-page-size] > tbody > tr > td {
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+table[data-sortable-list] > tbody > tr > td[data-list-wrap],
+table[data-page-size] > tbody > tr > td[data-list-wrap] {
+    white-space: normal;
+    text-overflow: clip;
 }
 
 th.list-column-resize-host {
@@ -395,6 +405,10 @@ body.list-column-resizing {
 
 .admin-icon-button--clarify {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/clarify.svg");
+}
+
+.admin-icon-button--copy {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg");
 }
 
 .admin-icon-button--delete {
