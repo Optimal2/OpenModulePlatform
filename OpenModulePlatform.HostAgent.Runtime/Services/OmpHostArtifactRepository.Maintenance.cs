@@ -519,4 +519,98 @@ WHERE MaintenanceFindingId = @maintenanceFindingId;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<IReadOnlyList<OrphanHostCandidate>> GetOrphanHostCandidatesAsync(
+        Guid currentHostId,
+        int maxCandidates,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT TOP (@maxCandidates)
+    h.HostId,
+    h.HostKey,
+    h.InstanceId,
+    h.Environment,
+    (
+        SELECT COUNT(1)
+        FROM omp.AppInstances ai
+        WHERE ai.HostId = h.HostId
+    ) AS AppInstanceCount,
+    (
+        SELECT COUNT(1)
+        FROM omp.HostArtifactRequirements har
+        WHERE har.HostId = h.HostId
+    ) AS HostArtifactRequirementCount,
+    (
+        SELECT COUNT(1)
+        FROM omp.HostArtifactStates has
+        WHERE has.HostId = h.HostId
+    ) AS HostArtifactStateCount,
+    (
+        SELECT COUNT(1)
+        FROM omp.HostAppDeploymentStates hds
+        WHERE hds.HostId = h.HostId
+    ) AS HostAppDeploymentStateCount
+FROM omp.Hosts h
+WHERE h.HostId <> @currentHostId
+  AND (h.Environment IS NULL OR LTRIM(RTRIM(h.Environment)) = N'')
+  AND h.HostKey <> N'sample-host'
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.Instances i
+      WHERE i.InstanceId = h.InstanceId
+        AND i.IsEnabled = 1
+  )
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.AppInstances ai
+      WHERE ai.HostId = h.HostId
+  )
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.HostArtifactRequirements har
+      WHERE har.HostId = h.HostId
+  )
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.HostArtifactStates has
+      WHERE has.HostId = h.HostId
+  )
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.HostAppDeploymentStates hds
+      WHERE hds.HostId = h.HostId
+  )
+ORDER BY h.HostKey;";
+
+        var candidates = new List<OrphanHostCandidate>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@currentHostId", SqlDbType.UniqueIdentifier, currentHostId);
+        Add(cmd, "@maxCandidates", SqlDbType.Int, Math.Max(1, maxCandidates));
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            candidates.Add(new OrphanHostCandidate
+            {
+                HostId = rdr.GetGuid(0),
+                HostKey = rdr.GetString(1),
+                InstanceId = rdr.GetGuid(2),
+                Environment = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                AppInstanceCount = rdr.GetInt32(4),
+                HostArtifactRequirementCount = rdr.GetInt32(5),
+                HostArtifactStateCount = rdr.GetInt32(6),
+                HostAppDeploymentStateCount = rdr.GetInt32(7)
+            });
+        }
+
+        return candidates;
+    }
+
 }

@@ -196,6 +196,124 @@ public sealed class OmpHostArtifactRepositoryTierCTests : IDisposable
     }
 
     [Fact]
+    public async Task GetOrphanHostCandidatesAsync_WhenHostMatchesCriteria_ReturnsCandidate()
+    {
+        var currentHostId = _database.InsertHost("current-host");
+        var orphanHostId = _database.InsertHost("orphan-host", environment: null);
+
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            currentHostId,
+            100,
+            CancellationToken.None);
+
+        var candidate = Assert.Single(candidates);
+        Assert.Equal(orphanHostId, candidate.HostId);
+        Assert.Equal("orphan-host", candidate.HostKey);
+        Assert.Null(candidate.Environment);
+        Assert.Equal(0, candidate.AppInstanceCount);
+        Assert.Equal(0, candidate.HostArtifactRequirementCount);
+        Assert.Equal(0, candidate.HostArtifactStateCount);
+        Assert.Equal(0, candidate.HostAppDeploymentStateCount);
+    }
+
+    [Fact]
+    public async Task GetOrphanHostCandidatesAsync_WhenHostBelongsToActiveInstance_ReturnsEmpty()
+    {
+        var instanceId = _database.InsertInstance("active-instance");
+        var currentHostId = _database.InsertHost("current-host", instanceId: instanceId);
+        _database.InsertHost("installation-host", instanceId: instanceId, environment: null);
+
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            currentHostId,
+            100,
+            CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
+    public async Task GetOrphanHostCandidatesAsync_WhenHostIsSeed_ReturnsEmpty()
+    {
+        var currentHostId = _database.InsertHost("current-host");
+        _database.InsertHost("sample-host", environment: null);
+
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            currentHostId,
+            100,
+            CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
+    public async Task GetOrphanHostCandidatesAsync_WhenHostHasAppInstance_ReturnsEmpty()
+    {
+        var moduleInstanceId = Guid.NewGuid();
+        var currentHostId = _database.InsertHost("current-host");
+        var hostWithAppId = _database.InsertHost("host-with-app", environment: null);
+        _database.InsertAppInstance(moduleInstanceId, "test-app", hostWithAppId);
+
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            currentHostId,
+            100,
+            CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
+    public async Task GetOrphanHostCandidatesAsync_WhenHostHasArtifactRequirement_ReturnsEmpty()
+    {
+        var currentHostId = _database.InsertHost("current-host");
+        var hostWithRequirementId = _database.InsertHost("host-with-requirement", environment: null);
+        _database.InsertHostArtifactRequirement(hostWithRequirementId, "test-requirement");
+
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            currentHostId,
+            100,
+            CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
+    public async Task GetOrphanHostCandidatesAsync_WhenHostHasArtifactState_ReturnsEmpty()
+    {
+        var currentHostId = _database.InsertHost("current-host");
+        var hostWithStateId = _database.InsertHost("host-with-state", environment: null);
+        _database.InsertHostArtifactState(hostWithStateId);
+
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            currentHostId,
+            100,
+            CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
+    public async Task GetOrphanHostCandidatesAsync_WhenHostHasDeploymentState_ReturnsEmpty()
+    {
+        var moduleInstanceId = Guid.NewGuid();
+        var currentHostId = _database.InsertHost("current-host");
+        var hostWithDeploymentId = _database.InsertHost("host-with-deployment", environment: null);
+        var appInstanceId = _database.InsertAppInstance(moduleInstanceId, "deployed-app");
+        _database.InsertRecoveryCandidate(
+            hostWithDeploymentId,
+            "deployed-app",
+            @"C:\deployed",
+            "OMP.deployed-app",
+            packageType: "service-app");
+
+        var candidates = await _repository.GetOrphanHostCandidatesAsync(
+            currentHostId,
+            100,
+            CancellationToken.None);
+
+        Assert.Empty(candidates);
+    }
+
+    [Fact]
     public async Task GetDeploymentRuntimeRecoveryCandidatesAsync_WhenSqlThrows_PropagatesException()
     {
         var hostId = _database.InsertHost("bad-host");

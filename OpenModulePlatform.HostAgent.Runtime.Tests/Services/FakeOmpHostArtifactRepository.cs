@@ -218,6 +218,8 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
 
     public List<string> EnqueuedMaintenanceScanHostKeys { get; } = [];
 
+    public List<OrphanHostCandidate> OrphanHostCandidates { get; set; } = [];
+
     public Task<bool> EnqueueMaintenanceScanJobAsync(
         string hostKey,
         string? requestedBy,
@@ -226,6 +228,15 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         ct.ThrowIfCancellationRequested();
         EnqueuedMaintenanceScanHostKeys.Add(hostKey);
         return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<OrphanHostCandidate>> GetOrphanHostCandidatesAsync(
+        Guid currentHostId,
+        int maxCandidates,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<OrphanHostCandidate>>(OrphanHostCandidates);
     }
 
     public sealed record CompletedDeployment(
