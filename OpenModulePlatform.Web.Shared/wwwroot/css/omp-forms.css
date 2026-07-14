@@ -1,0 +1,83 @@
+/* File: OpenModulePlatform.Web.Shared/wwwroot/css/omp-forms.css */
+/* Shared OMP form behaviours: the confirm dialog used instead of the native
+   window.confirm. Host apps must define the shared tokens (--border, --surface,
+   --surface-muted, --text, --text-muted, --link, --link-hover, --shadow).
+   All visual properties on the buttons are declared explicitly so host app
+   global button rules (margins, backgrounds, hover states) cannot leak in. */
+
+.omp-confirm-dialog {
+    width: min(28rem, calc(100vw - 2rem));
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 0;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 24px 64px rgba(17, 24, 39, 0.18);
+}
+
+.omp-confirm-dialog::backdrop {
+    background: rgba(23, 32, 51, 0.35);
+}
+
+.omp-confirm-dialog__body {
+    margin: 0;
+    padding: 18px;
+    display: grid;
+    gap: 16px;
+}
+
+.omp-confirm-dialog__message {
+    margin: 0;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.omp-confirm-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.omp-confirm-dialog__actions button {
+    margin: 0;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-muted);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.omp-confirm-dialog__actions button:hover,
+.omp-confirm-dialog__actions button:focus-visible {
+    border-color: var(--link);
+    background: var(--surface-muted);
+    color: var(--link-hover);
+    outline: none;
+}
+
+.omp-confirm-dialog__ok {
+    border-color: var(--link);
+    background: var(--link);
+    color: #fff;
+}
+
+.omp-confirm-dialog__ok:hover,
+.omp-confirm-dialog__ok:focus-visible {
+    border-color: var(--link-hover);
+    background: var(--link-hover);
+    color: #fff;
+}
+
+/* Higher specificity than the base rule above so the primary button keeps its
+   fill on hover regardless of rule order. */
+.omp-confirm-dialog__actions button.omp-confirm-dialog__ok:hover,
+.omp-confirm-dialog__actions button.omp-confirm-dialog__ok:focus-visible {
+    border-color: var(--link-hover);
+    background: var(--link-hover);
+    color: #fff;
+}
