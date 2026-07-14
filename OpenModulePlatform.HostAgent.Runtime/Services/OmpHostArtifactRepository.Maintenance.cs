@@ -139,6 +139,68 @@ WHEN NOT MATCHED THEN
         }
     }
 
+    public async Task<bool> EnqueueMaintenanceScanJobAsync(
+        string hostKey,
+        string? requestedBy,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NULL
+BEGIN
+    SELECT CAST(0 AS bit) AS Enqueued;
+    RETURN;
+END;
+
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT CAST(0 AS bit) AS Enqueued;
+    RETURN;
+END;
+
+INSERT INTO omp.HostAgentJobs
+(
+    HostId,
+    JobType,
+    PayloadJson,
+    Status,
+    RequestedBy,
+    MaxAttempts
+)
+VALUES
+(
+    @hostId,
+    N'MaintenanceScan',
+    @payloadJson,
+    @pendingStatus,
+    @requestedBy,
+    3
+);
+
+SELECT CAST(1 AS bit) AS Enqueued;";
+
+        var payloadJson = JsonSerializer.Serialize(
+            new MaintenanceScanJobPayload { Scope = MaintenanceScanScopes.Host },
+            JsonOptions);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@hostKey", SqlDbType.NVarChar, 128, hostKey);
+        Add(cmd, "@payloadJson", SqlDbType.NVarChar, -1, payloadJson);
+        Add(cmd, "@requestedBy", SqlDbType.NVarChar, 256, string.IsNullOrWhiteSpace(requestedBy) ? DBNull.Value : Truncate(requestedBy, 256));
+        Add(cmd, "@pendingStatus", SqlDbType.TinyInt, HostAgentJobStatuses.Pending);
+
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is not null && Convert.ToBoolean(result, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     public async Task<IReadOnlyList<string>> UpsertStaleHostAgentRuntimeStateFindingsAsync(
         long detectedByHostAgentJobId,
         CancellationToken ct)

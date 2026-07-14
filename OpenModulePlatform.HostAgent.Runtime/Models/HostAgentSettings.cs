@@ -36,6 +36,12 @@ public sealed class HostAgentSettings
 
     public int MaxHostAgentJobsPerCycle { get; set; } = 5;
 
+    /// <summary>
+    /// Interval in minutes between scheduled detect-only maintenance scans.
+    /// A value of 0 disables the scheduled scan. Default is 1440 minutes (24 hours).
+    /// </summary>
+    public int MaintenanceScanIntervalMinutes { get; set; } = 1440;
+
     public bool DeployWebApps { get; set; }
 
     public string IisSiteName { get; set; } = string.Empty;
@@ -197,6 +203,11 @@ public sealed class HostAgentSettings
         if (MaxHostAgentJobsPerCycle < 1)
         {
             throw new InvalidOperationException("HostAgent:MaxHostAgentJobsPerCycle must be at least 1.");
+        }
+
+        if (MaintenanceScanIntervalMinutes < 0)
+        {
+            throw new InvalidOperationException("HostAgent:MaintenanceScanIntervalMinutes must be zero or greater.");
         }
 
         if (DeployWebApps)

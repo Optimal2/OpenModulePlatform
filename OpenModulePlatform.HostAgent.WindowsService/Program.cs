@@ -59,6 +59,7 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<HostAgentEngine>();
         services.AddHostedService<HostAgentHostedService>();
+        services.AddHostedService<MaintenanceScanScheduler>();
         if (OperatingSystem.IsWindows())
         {
             services.AddHostedService<HostAgentRpcHostedService>();
