@@ -199,6 +199,57 @@ CREATE TABLE omp.MaintenanceFindings
         return (int)cmd.ExecuteScalar()!;
     }
 
+    public bool HostExists(Guid hostId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand("SELECT COUNT(1) FROM omp.Hosts WHERE HostId = @hostId;", conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        return (int)cmd.ExecuteScalar()! > 0;
+    }
+
+    public int CountHostArtifactRequirements(Guid hostId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand("SELECT COUNT(1) FROM omp.HostArtifactRequirements WHERE HostId = @hostId;", conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        return (int)cmd.ExecuteScalar()!;
+    }
+
+    public int CountHostArtifactStates(Guid hostId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand("SELECT COUNT(1) FROM omp.HostArtifactStates WHERE HostId = @hostId;", conn);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        return (int)cmd.ExecuteScalar()!;
+    }
+
+    public long InsertMaintenanceFinding(string findingKey, Guid hostId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "INSERT INTO omp.MaintenanceFindings(FindingKey, Scope, HostId, Category, TargetKind, TargetIdentifier, Title, DetectedByHostAgentJobId, DetectedUtc, LastSeenUtc, UpdatedUtc) " +
+            "VALUES(@findingKey, N'Host', @hostId, N'Test', N'DatabaseRow', N'test', N'Test', 1, SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME()); " +
+            "SELECT SCOPE_IDENTITY();",
+            conn);
+        cmd.Parameters.AddWithValue("@findingKey", findingKey);
+        cmd.Parameters.AddWithValue("@hostId", hostId);
+        return Convert.ToInt64(cmd.ExecuteScalar()!, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public Guid? GetMaintenanceFindingHostId(long maintenanceFindingId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand("SELECT HostId FROM omp.MaintenanceFindings WHERE MaintenanceFindingId = @id;", conn);
+        cmd.Parameters.AddWithValue("@id", maintenanceFindingId);
+        var result = cmd.ExecuteScalar();
+        return result is DBNull ? null : (Guid?)result;
+    }
+
     public void InsertRecoveryCandidate(
         Guid hostId,
         string appInstanceKey,

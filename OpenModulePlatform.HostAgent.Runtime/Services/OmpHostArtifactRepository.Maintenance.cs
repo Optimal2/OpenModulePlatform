@@ -524,6 +524,20 @@ WHERE MaintenanceFindingId = @maintenanceFindingId;";
         int maxCandidates,
         CancellationToken ct)
     {
+        // Orphan-host criteria:
+        //  - Environment is null/empty (unclassified / not assigned to a named environment).
+        //  - Not the seed/sample host used during bootstrap.
+        //  - InstanceId does not belong to an active omp.Instances row. A foreign InstanceId
+        //    is definitive: the host belongs to no known installation, so it is an orphan.
+        //  - No AppInstances: an AppInstance means someone intentionally configured an app for
+        //    this host, so there is active deploy-intention and the host must not be treated as
+        //    an orphan.
+        //  - No HostAppDeploymentStates: a deployment state means a runtime deployment actually
+        //    happened for this host, so it has been actively used and must not be treated as an
+        //    orphan.
+        // HostArtifactRequirements and HostArtifactStates are deliberately NOT exclusions.
+        // Those rows are orphan-dependencies (leftover desired/provisioned artifacts for a host
+        // that no longer belongs to an installation) and are exactly what cleanup should remove.
         const string sql = @"
 SELECT TOP (@maxCandidates)
     h.HostId,
@@ -570,18 +584,6 @@ WHERE h.HostId <> @currentHostId
   AND NOT EXISTS
   (
       SELECT 1
-      FROM omp.HostArtifactRequirements har
-      WHERE har.HostId = h.HostId
-  )
-  AND NOT EXISTS
-  (
-      SELECT 1
-      FROM omp.HostArtifactStates has
-      WHERE has.HostId = h.HostId
-  )
-  AND NOT EXISTS
-  (
-      SELECT 1
       FROM omp.HostAppDeploymentStates hds
       WHERE hds.HostId = h.HostId
   )
@@ -611,6 +613,54 @@ ORDER BY h.HostKey;";
         }
 
         return candidates;
+    }
+
+    /// <summary>
+    /// Deletes an orphan host and all of its dependent rows in an FK-safe order.
+    /// Maintenance findings for the host are unlinked (HostId set to NULL) so the
+    /// cleanup job can still update the status of the finding that triggered the
+    /// cleanup after the host row is gone.
+    /// </summary>
+    public async Task<int> DeleteOrphanHostAsync(
+        Guid hostId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+-- Unlink maintenance findings so the current finding row can be updated after the host is gone.
+IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NOT NULL
+    UPDATE omp.MaintenanceFindings
+    SET HostId = NULL
+    WHERE HostId = @hostId;
+
+-- Delete direct FK children of omp.Hosts, ordered so that rows referencing AppInstances
+-- are removed before AppInstances itself (defensive, since the orphan finder excludes
+-- hosts with AppInstances/HostAppDeploymentStates). Each statement is guarded with
+-- OBJECT_ID so the cleanup is robust on partial/schemas (e.g., isolated test databases).
+IF OBJECT_ID(N'omp.HostArtifactRequirements', N'U') IS NOT NULL DELETE FROM omp.HostArtifactRequirements WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostArtifactStates', N'U') IS NOT NULL DELETE FROM omp.HostArtifactStates WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostAgentLeases', N'U') IS NOT NULL DELETE FROM omp.HostAgentLeases WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostAgentRuntimeStates', N'U') IS NOT NULL DELETE FROM omp.HostAgentRuntimeStates WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostAgentDesiredStates', N'U') IS NOT NULL DELETE FROM omp.HostAgentDesiredStates WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.WebAppHealthStates', N'U') IS NOT NULL DELETE FROM omp.WebAppHealthStates WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostResourceSamples', N'U') IS NOT NULL DELETE FROM omp.HostResourceSamples WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostResourceLatest', N'U') IS NOT NULL DELETE FROM omp.HostResourceLatest WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostDeploymentAssignments', N'U') IS NOT NULL DELETE FROM omp.HostDeploymentAssignments WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL DELETE FROM omp.HostDeployments WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL DELETE FROM omp.WorkerInstances WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostAppDeploymentStates', N'U') IS NOT NULL DELETE FROM omp.HostAppDeploymentStates WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL DELETE FROM omp.AppInstances WHERE HostId = @hostId;
+
+-- Delete the orphan host itself.
+DELETE FROM omp.Hosts WHERE HostId = @hostId;
+
+SELECT @@ROWCOUNT;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
+
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 
 }

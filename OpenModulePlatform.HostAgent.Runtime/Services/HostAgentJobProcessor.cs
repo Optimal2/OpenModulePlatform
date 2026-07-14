@@ -506,6 +506,9 @@ public sealed class HostAgentJobProcessor
             case MaintenanceTargetKinds.DatabaseRow:
                 result = await CleanupDatabaseRowFindingAsync(entry, action, cancellationToken);
                 break;
+            case MaintenanceTargetKinds.OrphanHost:
+                result = await CleanupOrphanHostFindingAsync(entry, action, cancellationToken);
+                break;
             default:
                 result = CreateMaintenanceCleanupEntryResult(
                     entry,
@@ -1363,7 +1366,7 @@ public sealed class HostAgentJobProcessor
             var action = JsonSerializer.Serialize(new MaintenanceFindingAction
             {
                 SchemaVersion = 1,
-                TargetKind = MaintenanceTargetKinds.DatabaseRow,
+                TargetKind = MaintenanceTargetKinds.OrphanHost,
                 HostId = candidate.HostId
             }, JsonOptions);
 
@@ -1373,10 +1376,10 @@ public sealed class HostAgentJobProcessor
                 Scope = MaintenanceScanScopes.Host,
                 HostId = candidate.HostId,
                 Category = "OrphanHost",
-                TargetKind = MaintenanceTargetKinds.DatabaseRow,
+                TargetKind = MaintenanceTargetKinds.OrphanHost,
                 TargetIdentifier = candidate.HostKey,
                 Title = "Orphan host row",
-                Detail = $"Host '{candidate.HostKey}' appears to be an orphan. Its Environment is null, its InstanceId '{candidate.InstanceId:D}' does not belong to an active installation, and the host has no desired apps or runtime status rows.",
+                Detail = $"Host '{candidate.HostKey}' appears to be an orphan. Its Environment is null, its InstanceId '{candidate.InstanceId:D}' does not belong to an active installation, and the host has no desired apps or runtime deployment states. Leftover artifact requirements or states may be present and will be removed by the human-gated cleanup.",
                 RecommendedAction = $"Review host '{candidate.HostKey}'; if confirmed orphan, delete via maintenance cleanup.",
                 SafetyNotes = "This finding is detect-only and never triggers automatic deletion. Verify the host is truly unused before removing it via the separate human-gated MaintenanceCleanup job.",
                 ActionJson = action,
@@ -1640,6 +1643,25 @@ public sealed class HostAgentJobProcessor
         return deletedRows > 0
             ? CreateMaintenanceCleanupEntryResult(entry, "Cleaned", "Deleted stale HostAgent runtime-state row.")
             : CreateMaintenanceCleanupEntryResult(entry, "Missing", "The runtime-state row was already missing or is now protected by active desired/runtime state.");
+    }
+
+    private async Task<MaintenanceCleanupEntryResult> CleanupOrphanHostFindingAsync(
+        MaintenanceFindingCleanupEntry entry,
+        MaintenanceFindingAction? action,
+        CancellationToken cancellationToken)
+    {
+        if (action?.HostId is not { } hostId)
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Error", "The cleanup action does not contain a host identity.");
+        }
+
+        var deletedRows = await _repository.DeleteOrphanHostAsync(
+            hostId,
+            cancellationToken);
+
+        return deletedRows > 0
+            ? CreateMaintenanceCleanupEntryResult(entry, "Cleaned", "Deleted orphan host and its dependent rows.")
+            : CreateMaintenanceCleanupEntryResult(entry, "Missing", "The orphan host row was already missing.");
     }
 
     private static MaintenanceCleanupEntryResult CreateMaintenanceCleanupEntryResult(
