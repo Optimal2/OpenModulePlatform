@@ -170,6 +170,143 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.Equal(2, control.StartAttempts.Count);
     }
 
+    [Fact]
+    public async Task RenameCleanup_DeleteFailure_RetriesNextCycle_And_PersistsOldRuntimeNameUntilCleaned()
+    {
+        var (service, repository, control, deployment, newTargetPath, oldTargetPath) = CreateRenameScenario();
+        var oldServiceName = "backend";
+        var newServiceName = "OMP.iKrock2.Backend";
+
+        // Simulate a transient sc.exe delete failure on the first attempt.
+        var deleteAttempts = 0;
+        control.DeleteServiceSimulator = name =>
+        {
+            deleteAttempts++;
+            return deleteAttempts == 1
+                ? new InvalidOperationException($"Simulated failure deleting '{name}'.")
+                : null;
+        };
+
+        // First cycle: cleanup fails -> abort, RuntimeName stays OLD.
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Equal(2, repository.PublishedServiceAppResults.Count);
+        var runningResult = repository.PublishedServiceAppResults[0].Result;
+        var warningResult = repository.PublishedServiceAppResults[1].Result;
+
+        Assert.Equal(HostDeploymentStatuses.Running, runningResult.State);
+        Assert.Equal(oldServiceName, runningResult.RuntimeName);
+        Assert.Equal(HostDeploymentStatuses.Warning, warningResult.State);
+        Assert.Equal(oldServiceName, warningResult.RuntimeName);
+        Assert.Contains("retry on the next deployment cycle", warningResult.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, deleteAttempts);
+        Assert.Empty(control.DeletedServices);
+        Assert.True(Directory.Exists(oldTargetPath));
+
+        repository.PublishedServiceAppResults.Clear();
+
+        // Second cycle: cleanup succeeds -> deployment proceeds, RuntimeName advances to NEW.
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Equal(2, repository.PublishedServiceAppResults.Count);
+        var secondRunningResult = repository.PublishedServiceAppResults[0].Result;
+        var succeededResult = repository.PublishedServiceAppResults[1].Result;
+
+        Assert.Equal(HostDeploymentStatuses.Running, secondRunningResult.State);
+        Assert.Equal(oldServiceName, secondRunningResult.RuntimeName);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, succeededResult.State);
+        Assert.Equal(newServiceName, succeededResult.RuntimeName);
+        Assert.Equal(2, deleteAttempts);
+        Assert.Single(control.DeletedServices, oldServiceName);
+        Assert.False(Directory.Exists(oldTargetPath));
+        Assert.True(Directory.Exists(newTargetPath));
+    }
+
+    [Fact]
+    public async Task NonRename_NoOldRuntimeNameChange_NoCleanupAttempted()
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario();
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Single(repository.PublishedServiceAppResults);
+        var result = repository.PublishedServiceAppResults[0].Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, result.State);
+        Assert.Equal(deployment.DeployedRuntimeName, result.RuntimeName);
+        Assert.Empty(control.DeletedServices);
+    }
+
+    private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath, string OldTargetPath) CreateRenameScenario()
+    {
+        var settings = new HostAgentSettings
+        {
+            DeployServiceApps = true,
+            CentralArtifactRoot = _tempRoot,
+            LocalArtifactCacheRoot = _tempRoot,
+            ServicesRoot = _tempRoot,
+            StartServiceAfterServiceAppDeployment = true,
+            StopServiceForServiceAppDeployment = true,
+            ServiceAppStopTimeoutSeconds = 1,
+            ServiceAppStartTimeoutSeconds = 1
+        };
+        var optionsMonitor = new FakeOptionsMonitor<HostAgentSettings> { CurrentValue = settings };
+        var repository = new FakeOmpHostArtifactRepository();
+        var control = new FakeWindowsServiceControl();
+        var credentialStore = new HostAgentCredentialStoreService(Options.Create(settings));
+        var service = new ServiceAppDeploymentService(
+            optionsMonitor,
+            repository,
+            credentialStore,
+            NullLogger<ServiceAppDeploymentService>.Instance,
+            control);
+
+        var (deployment, newTargetPath, oldTargetPath) = CreateRenameDeployment();
+        repository.DesiredServiceAppDeployments.Add(deployment);
+
+        // The old service exists in the SCM and must be deleted during rename cleanup.
+        control.SetState("backend", "STOPPED");
+
+        return (service, repository, control, deployment, newTargetPath, oldTargetPath);
+    }
+
+    private (ServiceAppDeploymentDescriptor Deployment, string NewTargetPath, string OldTargetPath) CreateRenameDeployment()
+    {
+        var appInstanceId = Guid.NewGuid();
+        var appInstanceKey = $"test-app-{appInstanceId:N}";
+        var oldServiceName = "backend";
+        var newServiceName = "OMP.iKrock2.Backend";
+        var executableRelativePath = "iKrock2.Backend.exe";
+        var sourcePath = Path.Combine(_tempRoot, "source", appInstanceKey);
+        var newTargetPath = Path.Combine(_tempRoot, newServiceName);
+        var oldTargetPath = Path.Combine(_tempRoot, oldServiceName);
+        Directory.CreateDirectory(sourcePath);
+        Directory.CreateDirectory(oldTargetPath);
+        File.WriteAllText(Path.Combine(sourcePath, executableRelativePath), string.Empty);
+        File.WriteAllText(Path.Combine(oldTargetPath, executableRelativePath), string.Empty);
+
+        var deployment = new ServiceAppDeploymentDescriptor
+        {
+            HostId = Guid.NewGuid(),
+            HostKey = "test-host",
+            AppInstanceId = appInstanceId,
+            AppInstanceKey = appInstanceKey,
+            ModuleInstanceKey = $"module-{appInstanceId:N}",
+            DisplayName = "OMP iKrock Backend",
+            ArtifactId = 42,
+            Version = "1.0.0",
+            SourceLocalPath = sourcePath,
+            InstallationName = newServiceName,
+            DeployedArtifactId = 42,
+            DeploymentState = HostDeploymentStatuses.Succeeded,
+            DeployedSourceLocalPath = sourcePath,
+            DeployedTargetPath = oldTargetPath,
+            DeployedRuntimeName = oldServiceName
+        };
+
+        return (deployment, newTargetPath, oldTargetPath);
+    }
+
     private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateScenario(
         bool startAfterDeployment = true)
     {
@@ -272,7 +409,11 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
 
         public List<string> StartAttempts { get; } = [];
 
+        public List<string> DeletedServices { get; } = [];
+
         public bool StartChangesStateToRunning { get; set; } = true;
+
+        public Func<string, Exception?>? DeleteServiceSimulator { get; set; }
 
         public void SetState(string serviceName, string state)
             => _states[serviceName] = state;
@@ -317,6 +458,23 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             if (GetServiceState(serviceName) is null)
             {
                 _states[serviceName] = "STOPPED";
+            }
+        }
+
+        public void DeleteService(string serviceName)
+        {
+            if (DeleteServiceSimulator is not null)
+            {
+                var simulated = DeleteServiceSimulator(serviceName);
+                if (simulated is not null)
+                {
+                    throw simulated;
+                }
+            }
+
+            if (_states.Remove(serviceName))
+            {
+                DeletedServices.Add(serviceName);
             }
         }
     }
