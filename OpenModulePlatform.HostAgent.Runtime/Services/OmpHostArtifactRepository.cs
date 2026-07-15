@@ -1643,6 +1643,20 @@ WHERE HostKey = @hostKey;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task<int> GetEnabledHostCountAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.Hosts
+WHERE IsEnabled = 1;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
     public async Task<TemplateMaterializationResult> MaterializeTemplatesForHostAsync(
         string hostKey,
         int? hostTemplateId,
