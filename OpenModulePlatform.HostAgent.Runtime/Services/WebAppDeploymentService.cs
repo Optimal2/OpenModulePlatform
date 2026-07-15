@@ -151,7 +151,7 @@ public sealed class WebAppDeploymentService
                 settings);
 
             var hostDataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
-            ompAuthValidation = ValidateOmpAuthConfiguration(configurationFiles, hostDataProtectionKeyPath, isMultiHost);
+            ompAuthValidation = ValidateOmpAuthConfiguration(configurationFiles, configurationVariables, hostDataProtectionKeyPath, isMultiHost);
             foreach (var warning in ompAuthValidation.Warnings)
             {
                 _logger.LogWarning(
@@ -412,6 +412,7 @@ public sealed class WebAppDeploymentService
 
     private static OmpAuthValidationResult ValidateOmpAuthConfiguration(
         IReadOnlyList<ArtifactConfigurationFileDescriptor> configurationFiles,
+        IReadOnlyDictionary<string, string> configurationVariables,
         string hostDataProtectionKeyPath,
         bool isMultiHost)
     {
@@ -427,10 +428,15 @@ public sealed class WebAppDeploymentService
             return new OmpAuthValidationResult { Warnings = warnings };
         }
 
+        // Stored configuration may contain {{Omp.*}} tokens that are only rendered at apply
+        // time. Render before comparing so token-based configs are validated by their
+        // effective values instead of false-positive mismatches on the raw token text.
+        var content = ArtifactConfigurationFileWriter.Render(appSettingsFile.FileContent, configurationVariables);
+
         JsonNode? ompAuthNode;
         try
         {
-            ompAuthNode = JsonNode.Parse(appSettingsFile.FileContent)?["OmpAuth"];
+            ompAuthNode = JsonNode.Parse(content)?["OmpAuth"];
         }
         catch (JsonException)
         {
