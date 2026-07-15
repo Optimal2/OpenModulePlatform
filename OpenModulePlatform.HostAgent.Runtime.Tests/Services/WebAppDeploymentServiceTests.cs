@@ -143,6 +143,24 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_TokenBasedDataProtectionKeyPath_RendersTokenBeforeComparison()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        settings.WebAppDataProtectionKeyPath = @"C:\OMP\DataProtectionKeys";
+        repository.EnabledHostCount = 1;
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateAppSettingsWithDataProtectionKeyPath(descriptor.ArtifactId, "{{Omp.Json.HostAgent.WebAppDataProtectionKeyPath}}"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Null(last.Result.DiagnosticWarningMessage);
+        Assert.Equal(@"C:\OMP\DataProtectionKeys", last.Result.EffectiveOmpAuthDataProtectionKeyPath);
+    }
+
     private static ArtifactConfigurationFileDescriptor CreateAppSettingsWithDataProtectionKeyPath(
         int artifactId,
         string dataProtectionKeyPath)
