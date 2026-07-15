@@ -38,6 +38,8 @@ public interface IOmpHostArtifactRepository
 
     Task TouchHostHeartbeatAsync(string hostKey, CancellationToken ct);
 
+    Task<int> GetEnabledHostCountAsync(CancellationToken ct);
+
     Task<TemplateMaterializationResult> MaterializeTemplatesForHostAsync(
         string hostKey,
         int? hostTemplateId,

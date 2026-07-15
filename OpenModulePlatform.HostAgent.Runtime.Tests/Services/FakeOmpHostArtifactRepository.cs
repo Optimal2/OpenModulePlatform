@@ -67,6 +67,14 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
     public Task TouchHostHeartbeatAsync(string hostKey, CancellationToken ct)
         => Task.CompletedTask;
 
+    public int EnabledHostCount { get; set; } = 1;
+
+    public Task<int> GetEnabledHostCountAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(EnabledHostCount);
+    }
+
     public async Task<TemplateMaterializationResult> MaterializeTemplatesForHostAsync(
         string hostKey,
         int? hostTemplateId,
@@ -144,11 +152,13 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ServiceAppDeploymentDescriptor>>(DesiredServiceAppDeployments);
 
+    public List<ArtifactConfigurationFileDescriptor> ArtifactConfigurationFiles { get; set; } = [];
+
     public Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
         int artifactId,
         string hostKey,
         CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<ArtifactConfigurationFileDescriptor>>([]);
+        => Task.FromResult<IReadOnlyList<ArtifactConfigurationFileDescriptor>>(ArtifactConfigurationFiles);
 
     public Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
         int artifactId,
