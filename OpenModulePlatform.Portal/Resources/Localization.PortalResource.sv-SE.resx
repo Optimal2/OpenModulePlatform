@@ -2790,4 +2790,8 @@
   <data name="Banner enabled." xml:space="preserve"><value>Bannern aktiverades.</value></data>
   <data name="Enable banner" xml:space="preserve"><value>Aktivera banner</value></data>
   <data name="Disable banner" xml:space="preserve"><value>Inaktivera banner</value></data>
+  <data name="OmpAuth:CookieName is '{0}' but the expected OMP default is '{1}'. Shared auth cookies may break if this value differs across OMP web apps." xml:space="preserve"><value>OmpAuth:CookieName är '{0}' men det förväntade OMP-standardvärdet är '{1}'. Delade autentiseringscookies kan sluta fungera om värdet skiljer sig mellan OMP-webbappar.</value></data>
+  <data name="OmpAuth:ApplicationName is '{0}' but the expected OMP default is '{1}'. Shared auth cookies may break if this value differs across OMP web apps." xml:space="preserve"><value>OmpAuth:ApplicationName är '{0}' men det förväntade OMP-standardvärdet är '{1}'. Delade autentiseringscookies kan sluta fungera om värdet skiljer sig mellan OMP-webbappar.</value></data>
+  <data name="OmpAuth:DataProtectionKeyPath is '{0}' but the HostAgent expects '{1}'. Data protection keys must be shared across OMP web apps for auth-cookie compatibility." xml:space="preserve"><value>OmpAuth:DataProtectionKeyPath är '{0}' men HostAgent förväntar sig '{1}'. Dataskyddsnycklar måste delas mellan OMP-webbappar för att autentiseringscookies ska vara kompatibla.</value></data>
+  <data name="OmpAuth:DataProtectionKeyPath '{0}' is not a UNC path. A local key path will break auth-cookie sharing in load-balanced scenarios." xml:space="preserve"><value>OmpAuth:DataProtectionKeyPath '{0}' är inte en UNC-sökväg. En lokal nyckelsökväg bryter delningen av autentiseringscookies i lastbalanserade scenarier.</value></data>
 </root>

@@ -2645,4 +2645,8 @@
   <data name="Banner enabled." xml:space="preserve"><value>Banner enabled.</value></data>
   <data name="Enable banner" xml:space="preserve"><value>Enable banner</value></data>
   <data name="Disable banner" xml:space="preserve"><value>Disable banner</value></data>
+  <data name="OmpAuth:CookieName is '{0}' but the expected OMP default is '{1}'. Shared auth cookies may break if this value differs across OMP web apps." xml:space="preserve"><value>OmpAuth:CookieName is '{0}' but the expected OMP default is '{1}'. Shared auth cookies may break if this value differs across OMP web apps.</value></data>
+  <data name="OmpAuth:ApplicationName is '{0}' but the expected OMP default is '{1}'. Shared auth cookies may break if this value differs across OMP web apps." xml:space="preserve"><value>OmpAuth:ApplicationName is '{0}' but the expected OMP default is '{1}'. Shared auth cookies may break if this value differs across OMP web apps.</value></data>
+  <data name="OmpAuth:DataProtectionKeyPath is '{0}' but the HostAgent expects '{1}'. Data protection keys must be shared across OMP web apps for auth-cookie compatibility." xml:space="preserve"><value>OmpAuth:DataProtectionKeyPath is '{0}' but the HostAgent expects '{1}'. Data protection keys must be shared across OMP web apps for auth-cookie compatibility.</value></data>
+  <data name="OmpAuth:DataProtectionKeyPath '{0}' is not a UNC path. A local key path will break auth-cookie sharing in load-balanced scenarios." xml:space="preserve"><value>OmpAuth:DataProtectionKeyPath '{0}' is not a UNC path. A local key path will break auth-cookie sharing in load-balanced scenarios.</value></data>
 </root>

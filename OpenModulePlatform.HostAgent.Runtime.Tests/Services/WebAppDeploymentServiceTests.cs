@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -61,6 +62,103 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         var last = published.Last();
         Assert.Null(last.Result.DiagnosticWarningMessage);
     }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_SingleHostWithLocalDataProtectionKeyPath_SkipsUncPathAdvisory()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        settings.WebAppDataProtectionKeyPath = @"C:\OMP\DataProtectionKeys";
+        repository.EnabledHostCount = 1;
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateAppSettingsWithDataProtectionKeyPath(descriptor.ArtifactId, @"C:\OMP\DataProtectionKeys"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Null(last.Result.DiagnosticWarningMessage);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_MultiHostWithLocalDataProtectionKeyPath_EmitsStructuredUncPathAdvisory()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        settings.WebAppDataProtectionKeyPath = @"C:\OMP\DataProtectionKeys";
+        repository.EnabledHostCount = 2;
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateAppSettingsWithDataProtectionKeyPath(descriptor.ArtifactId, @"C:\OMP\DataProtectionKeys"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Contains(
+            OmpAuthConfigurationWarning.DataProtectionKeyPathNotUncPathCode,
+            last.Result.DiagnosticWarningMessage,
+            StringComparison.Ordinal);
+        // The stored warning is a single JSON line, so backslashes in the path are escaped.
+        Assert.Contains(@"C:\\OMP\\DataProtectionKeys", last.Result.DiagnosticWarningMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_MultiHostWithUncDataProtectionKeyPath_SkipsUncPathAdvisory()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        settings.WebAppDataProtectionKeyPath = @"\\localhost\omp-dataprotection";
+        repository.EnabledHostCount = 2;
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateAppSettingsWithDataProtectionKeyPath(descriptor.ArtifactId, @"\\localhost\omp-dataprotection"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Null(last.Result.DiagnosticWarningMessage);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_SingleHostWithMismatchedDataProtectionKeyPath_KeepsMismatchWarningOnly()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        settings.WebAppDataProtectionKeyPath = @"C:\OMP\DataProtectionKeys";
+        repository.EnabledHostCount = 1;
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(
+            CreateAppSettingsWithDataProtectionKeyPath(descriptor.ArtifactId, @"D:\Other\Keys"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Contains(
+            OmpAuthConfigurationWarning.DataProtectionKeyPathMismatchCode,
+            last.Result.DiagnosticWarningMessage,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            OmpAuthConfigurationWarning.DataProtectionKeyPathNotUncPathCode,
+            last.Result.DiagnosticWarningMessage,
+            StringComparison.Ordinal);
+    }
+
+    private static ArtifactConfigurationFileDescriptor CreateAppSettingsWithDataProtectionKeyPath(
+        int artifactId,
+        string dataProtectionKeyPath)
+        => new()
+        {
+            ArtifactConfigurationFileId = 1,
+            ArtifactId = artifactId,
+            RelativePath = "appsettings.json",
+            FileContent = $$"""
+            {
+              "OmpAuth": {
+                "DataProtectionKeyPath": {{JsonSerializer.Serialize(dataProtectionKeyPath)}}
+              }
+            }
+            """
+        };
 
     private (WebAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, HostAgentSettings Settings) CreateServiceWithFakeRepository()
     {

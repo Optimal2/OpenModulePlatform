@@ -70,10 +70,15 @@ public sealed class WebAppDeploymentService
             hostKey,
             deployments.Count);
 
+        // A UNC data-protection key path is only required when auth cookies must be shared
+        // across multiple enabled hosts; on single-host installs a local path is correct.
+        var isMultiHost = deployments.Count > 0
+            && await _repository.GetEnabledHostCountAsync(cancellationToken) > 1;
+
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, deploySetWarningsByModuleInstanceKey, cancellationToken);
+            await DeployAsync(settings, deployment, deploySetWarningsByModuleInstanceKey, isMultiHost, cancellationToken);
         }
     }
 
@@ -81,6 +86,7 @@ public sealed class WebAppDeploymentService
         HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
+        bool isMultiHost,
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
@@ -145,18 +151,18 @@ public sealed class WebAppDeploymentService
                 settings);
 
             var hostDataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
-            ompAuthValidation = ValidateOmpAuthConfiguration(configurationFiles, hostDataProtectionKeyPath);
+            ompAuthValidation = ValidateOmpAuthConfiguration(configurationFiles, hostDataProtectionKeyPath, isMultiHost);
             foreach (var warning in ompAuthValidation.Warnings)
             {
                 _logger.LogWarning(
                     "OmpAuth configuration warning for web app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
                     deployment.AppInstanceId,
                     deployment.ArtifactId,
-                    warning);
+                    warning.Message);
             }
 
             diagnosticWarning = ompAuthValidation.Warnings.Count > 0
-                ? string.Join(Environment.NewLine, ompAuthValidation.Warnings)
+                ? string.Join(Environment.NewLine, ompAuthValidation.Warnings.Select(warning => warning.ToStoredString()))
                 : null;
 
             var requiredRootSections = await _repository.GetRequiredConfigRootSectionsAsync(
@@ -398,7 +404,7 @@ public sealed class WebAppDeploymentService
 
     private sealed class OmpAuthValidationResult
     {
-        public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
+        public IReadOnlyList<OmpAuthConfigurationWarning> Warnings { get; init; } = Array.Empty<OmpAuthConfigurationWarning>();
         public string? EffectiveCookieName { get; init; }
         public string? EffectiveApplicationName { get; init; }
         public string? EffectiveDataProtectionKeyPath { get; init; }
@@ -406,9 +412,10 @@ public sealed class WebAppDeploymentService
 
     private static OmpAuthValidationResult ValidateOmpAuthConfiguration(
         IReadOnlyList<ArtifactConfigurationFileDescriptor> configurationFiles,
-        string hostDataProtectionKeyPath)
+        string hostDataProtectionKeyPath,
+        bool isMultiHost)
     {
-        var warnings = new List<string>();
+        var warnings = new List<OmpAuthConfigurationWarning>();
         string? effectiveCookieName = null;
         string? effectiveApplicationName = null;
         string? effectiveDataProtectionKeyPath = null;
@@ -445,9 +452,11 @@ public sealed class WebAppDeploymentService
             effectiveCookieName = cookieName;
             if (!string.Equals(cookieName, DefaultCookieName, StringComparison.Ordinal))
             {
-                warnings.Add(
+                warnings.Add(new OmpAuthConfigurationWarning(
+                    OmpAuthConfigurationWarning.CookieNameUnexpectedValueCode,
+                    [cookieName, DefaultCookieName],
                     $"OmpAuth:CookieName is '{cookieName}' but the expected OMP default is '{DefaultCookieName}'. " +
-                    "Shared auth cookies may break if this value differs across OMP web apps.");
+                    "Shared auth cookies may break if this value differs across OMP web apps."));
             }
         }
 
@@ -458,9 +467,11 @@ public sealed class WebAppDeploymentService
             effectiveApplicationName = applicationName;
             if (!string.Equals(applicationName, DefaultApplicationName, StringComparison.Ordinal))
             {
-                warnings.Add(
+                warnings.Add(new OmpAuthConfigurationWarning(
+                    OmpAuthConfigurationWarning.ApplicationNameUnexpectedValueCode,
+                    [applicationName, DefaultApplicationName],
                     $"OmpAuth:ApplicationName is '{applicationName}' but the expected OMP default is '{DefaultApplicationName}'. " +
-                    "Shared auth cookies may break if this value differs across OMP web apps.");
+                    "Shared auth cookies may break if this value differs across OMP web apps."));
             }
         }
 
@@ -471,17 +482,24 @@ public sealed class WebAppDeploymentService
             effectiveDataProtectionKeyPath = dataProtectionKeyPath;
             if (!string.Equals(dataProtectionKeyPath, hostDataProtectionKeyPath, StringComparison.OrdinalIgnoreCase))
             {
-                warnings.Add(
+                warnings.Add(new OmpAuthConfigurationWarning(
+                    OmpAuthConfigurationWarning.DataProtectionKeyPathMismatchCode,
+                    [dataProtectionKeyPath, hostDataProtectionKeyPath],
                     $"OmpAuth:DataProtectionKeyPath is '{dataProtectionKeyPath}' but the HostAgent expects '{hostDataProtectionKeyPath}'. " +
-                    "Data protection keys must be shared across OMP web apps for auth-cookie compatibility.");
+                    "Data protection keys must be shared across OMP web apps for auth-cookie compatibility."));
             }
 
-            if (!string.IsNullOrWhiteSpace(dataProtectionKeyPath)
+            // A UNC key path is only needed to share auth cookies across multiple enabled hosts.
+            // On a single-host installation a local key path is correct, so only advise then.
+            if (isMultiHost
+                && !string.IsNullOrWhiteSpace(dataProtectionKeyPath)
                 && !dataProtectionKeyPath.StartsWith(@"\\", StringComparison.Ordinal))
             {
-                warnings.Add(
+                warnings.Add(new OmpAuthConfigurationWarning(
+                    OmpAuthConfigurationWarning.DataProtectionKeyPathNotUncPathCode,
+                    [dataProtectionKeyPath],
                     $"OmpAuth:DataProtectionKeyPath '{dataProtectionKeyPath}' is not a UNC path. " +
-                    "A local key path will break auth-cookie sharing in load-balanced scenarios.");
+                    "A local key path will break auth-cookie sharing in load-balanced scenarios."));
             }
         }
 

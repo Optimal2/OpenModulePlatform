@@ -307,6 +307,9 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
            || string.Equals(row.IdentityCheckStatus, "ManualActionRequired", StringComparison.OrdinalIgnoreCase)
            || string.Equals(row.IdentityCheckStatus, "WaitingForPortalAdminApproval", StringComparison.OrdinalIgnoreCase);
 
+    public string? LocalizeDiagnosticWarning(string? storedWarning)
+        => HostDeploymentWarningLocalizer.Localize(storedWarning, _portalLocalizer);
+
     public static bool IsInterestingArtifactState(HostArtifactStateRow row)
         => row.ProvisioningState != 2
            || !string.IsNullOrWhiteSpace(row.LastError);
