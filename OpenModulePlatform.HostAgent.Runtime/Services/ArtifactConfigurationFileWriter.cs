@@ -403,7 +403,7 @@ internal static class ArtifactConfigurationFileWriter
         return variables;
     }
 
-    private static string Render(string content, IReadOnlyDictionary<string, string> variables)
+    internal static string Render(string content, IReadOnlyDictionary<string, string> variables)
     {
         if (string.IsNullOrEmpty(content) || !content.Contains("{{Omp.", StringComparison.Ordinal))
         {
