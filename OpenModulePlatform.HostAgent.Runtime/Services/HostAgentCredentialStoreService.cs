@@ -25,9 +25,9 @@ public sealed class HostAgentCredentialStoreService
 
     private readonly HostAgentSettings _settings;
 
-    public HostAgentCredentialStoreService(IOptions<HostAgentSettings> options)
+    public HostAgentCredentialStoreService(IOptionsMonitor<HostAgentSettings> options)
     {
-        _settings = options.Value;
+        _settings = options.CurrentValue;
     }
 
     public async Task<HostAgentCredentialStoreDocument> LoadAsync(CancellationToken cancellationToken = default)

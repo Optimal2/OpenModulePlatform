@@ -53,31 +53,38 @@ registrations.
   BackgroundService` (`OpenModulePlatform.Web.Shared/Notifications/PushEventDispatcherHostedService.cs:11`),
   registered conditionally at `OmpWebHostingExtensions.cs:205` behind
   `PushEvents:Dispatcher:Enabled` (`:202`).
-- **Options:** `WebAppOptions` is the only fully validated options type —
+- **Options:** `WebAppOptions` and `OmpAuthOptions` are fully validated —
   `AddOptions<WebAppOptions>().Bind(...).ValidateOnStart()` (`:63-65`) with
   `IValidateOptions<WebAppOptions>` (`:61`, implementation
-  `OpenModulePlatform.Web.Shared/Options/WebAppOptionsValidator.cs:9`).
-  Unvalidated: `OmpAuthOptions` (`AddOptions<OmpAuthOptions>().Bind(...)`
-  `:858`), `PushEventProducerOptions` (`Configure<>` `:171`),
-  `PushEventDispatcherOptions` (`Configure<>` `:195`). `IOptionsMonitor<T>`
-  is used where reload matters (`MigratingTopBarNotificationStatePublisher.cs:14`,
+  `OpenModulePlatform.Web.Shared/Options/WebAppOptionsValidator.cs:9`), and
+  `AddOptions<OmpAuthOptions>().Bind(...).ValidateOnStart()` (`:860-862`)
+  with `IValidateOptions<OmpAuthOptions>` (`:858`, implementation
+  `OpenModulePlatform.Web.Shared/Options/OmpAuthOptionsValidator.cs:11`;
+  OIDC rules apply only when `OmpAuth:Oidc:Enabled`). Unvalidated:
+  `PushEventProducerOptions` (`Configure<>` `:171`),
+  `PushEventDispatcherOptions` (`Configure<>` `:195`) — deliberately, since
+  the dispatcher clamps out-of-range values via `Effective*` properties.
+  `IOptionsMonitor<T>` is used where reload matters
+  (`MigratingTopBarNotificationStatePublisher.cs:14`,
   `PushEventDispatcherHostedService.cs:23`).
 - **HTTP clients:** none in web projects.
 
 **Web — hosts:**
 
-- `OpenModulePlatform.Portal/Program.cs:24-67` —
+- `OpenModulePlatform.Portal/Program.cs:24-70` —
   `AddOmpWebDefaults<PortalResource>("Portal")` (`:24`),
   `AddOmpPushEventDispatcher()` (`:25`, the only host that enables the
   dispatcher), then ~20 inline registrations: scoped repositories/services
   (`:27-48`) plus singletons `LocalPasswordHasher` (`:28`) and
-  `PortalDeploymentLockService` (`:46`); unvalidated
-  `Configure<ArtifactUploadOptions>` (`:49`). No Portal-specific extension
-  method — all registrations inline.
-- `OpenModulePlatform.Web.ContentWebAppModule/Program.cs:10-23` —
+  `PortalDeploymentLockService` (`:46`);
+  `AddOptions<ArtifactUploadOptions>().Bind(...).ValidateOnStart()` (`:52-54`,
+  no rules — empty roots and a non-positive `MaxUploadBytes` are valid by
+  design). No Portal-specific extension method — all registrations inline.
+- `OpenModulePlatform.Web.ContentWebAppModule/Program.cs:10-26` —
   `AddOmpWebDefaults<ContentWebAppModuleResource>("Portal")` (`:10`),
-  unvalidated `Configure<ContentWebAppModuleOptions>` (`:11-12`), six
-  scoped services (`:18-23`).
+  `AddOptions<ContentWebAppModuleOptions>().Bind(...).Validate(...).ValidateOnStart()`
+  (`:11-15`, requires a non-empty `AppInstanceId`), six scoped services
+  (`:21-26`).
 - `OpenModulePlatform.Web.iFrameWebAppModule/Program.cs:7-8` —
   `AddOmpWebDefaults<IFrameWebAppModuleResource>("Portal")` (`:7`), one
   scoped repository (`:8`).
@@ -89,7 +96,8 @@ registrations.
   `AddOmpOidcAuthentication` (`:39`, extension declared at
   `OpenModulePlatform.Auth/Services/OmpOidcAuthenticationExtensions.cs:13`,
   which also registers an instance-singleton `IStartupFilter` `:32-33`).
-  No `ValidateOnStart` anywhere in Auth.
+  `ValidateOnStart` coverage comes from `AddOmpCookieAuthentication` →
+  `ConfigureOmpAuthentication` (`OmpAuthOptions`).
 
 **Services, workers and libraries:**
 
@@ -124,9 +132,8 @@ registrations.
   defined in `OpenModulePlatform.HostAgent.Runtime/Services/MaintenanceScanScheduler.cs:12` —
   and Windows-only `HostAgentRpcHostedService` `:63-66`).
   `Configure<HostAgentSettings>` (`:35`) with manual `Validate()` at first
-  use; `IOptionsMonitor<HostAgentSettings>` everywhere **except**
-  `OpenModulePlatform.HostAgent.Runtime/Services/HostAgentCredentialStoreService.cs:28`
-  (`IOptions<T>` — inconsistent). Contains the repo's only `AddHttpClient`
+  use; `IOptionsMonitor<HostAgentSettings>` everywhere. Contains the repo's
+  only `AddHttpClient`
   calls: named clients `"PortalHealth"` (`:48`) and
   `"PortalHealthAllowInvalidTls"` with a custom handler (`:49-53`), consumed
   via `IHttpClientFactory` in
@@ -435,18 +442,20 @@ Key divergences:
    concretes; IbsPackager/iKrock2 inject concretes everywhere;
    VajSkrivare/Dokumentbibliotek are interface-based throughout.
 4. **Options validation coverage is the widest gap.** `ValidateOnStart` is
-   present for: OMP `WebAppOptions` only, LogSearch, EArkivChecker,
-   Dokumentbibliotek, VajSkrivare, iKrock2 (4 of 5 types). Missing for:
-   `OmpAuthOptions`, `ArtifactUploadOptions`, `ContentWebAppModuleOptions`,
-   OMP push-event options, all OMP service settings (`HostAgentSettings`,
-   `WorkerManagerSettings`, `WorkerProcessSettings` — manual `Validate()`
-   at first use instead), IbsPackager's own options, ODVGateway (manual
-   pre-build check for trusted roots only; silent clamps elsewhere).
+   present for: OMP `WebAppOptions`, `OmpAuthOptions`,
+   `ArtifactUploadOptions`, `ContentWebAppModuleOptions`, LogSearch,
+   EArkivChecker, Dokumentbibliotek, VajSkrivare, iKrock2 (4 of 5 types).
+   Missing for: OMP push-event options (deliberate — out-of-range values
+   are clamped via `Effective*` properties), all OMP service settings
+   (`HostAgentSettings`, `WorkerManagerSettings`, `WorkerProcessSettings` —
+   manual `Validate()` at first use instead), IbsPackager's own options,
+   ODVGateway (manual pre-build check for trusted roots only; silent clamps
+   elsewhere).
 5. **`IOptions<T>` vs `IOptionsMonitor<T>` drift.** Lone `IOptions<T>`
-   consumers in monitor-based services
-   (`HostAgentCredentialStoreService.cs:28`,
-   `WorkerProcessHostedService.cs:31`, `ContentTypeMapper.cs:10` in
-   ODVGateway); EArkivChecker snapshots `.Value` everywhere despite
+   consumers in monitor-based services (`ContentTypeMapper.cs:10` in
+   ODVGateway); `WorkerProcessHostedService.cs:31` keeps `IOptions<T>`
+   deliberately (settings are static for the child-process lifetime);
+   EArkivChecker snapshots `.Value` everywhere despite
    `reloadOnChange: true` on its JSON overlays.
 6. **HTTP clients barely exist.** Only OMP HostAgent (two named clients,
    one with a custom TLS handler) and ODVGateway (one named client with no
@@ -542,8 +551,8 @@ services.AddOptions<TOptions>()
   at startup, not at first use.
 - Consume `IOptions<T>` by default. Use `IOptionsMonitor<T>` only in
   singletons that must observe reloads — and then use it consistently
-  within the repo (the `HostAgentCredentialStoreService`/`ContentTypeMapper`
-  lone-`IOptions` cases are the anti-pattern). If nothing observes reloads,
+  within the repo (the `ContentTypeMapper` lone-`IOptions` case is the
+  anti-pattern). If nothing observes reloads,
   do not set `reloadOnChange: true` on the JSON source.
 - Windows-Service settings may keep the `XxxSettings` name (OMP service
   convention) but should move from manual `Validate()` calls to the same
@@ -578,18 +587,15 @@ SPI, HostAgent) already teaches.
 
 ### OpenModulePlatform (Medium)
 
-- Current: `ValidateOnStart` only for `WebAppOptions`; service hosts
-  validate settings manually at first use; two lone `IOptions<T>`
-  consumers in monitor-based services; Portal keeps ~20 inline
-  registrations.
-- Migration (high-level): extend `ValidateOnStart` + validators to
-  `OmpAuthOptions`, `ArtifactUploadOptions`, `ContentWebAppModuleOptions`
-  and the push-event options; convert `HostAgentSettings`,
+- Current: `ValidateOnStart` for `WebAppOptions`, `OmpAuthOptions`,
+  `ArtifactUploadOptions` and `ContentWebAppModuleOptions`; service hosts
+  validate settings manually at first use; `WorkerProcessHostedService`
+  keeps a deliberate `IOptions<T>` snapshot (settings are static for the
+  child-process lifetime); Portal keeps ~20 inline registrations.
+- Migration (high-level): convert `HostAgentSettings`,
   `WorkerManagerSettings`, `WorkerProcessSettings` from manual
-  `Validate()` to the standard chain; align
-  `HostAgentCredentialStoreService` and `WorkerProcessHostedService` on
-  `IOptionsMonitor<T>`; optionally extract Portal's inline block into
-  `AddPortalServices`.
+  `Validate()` to the standard chain; optionally extract Portal's inline
+  block into `AddPortalServices`.
 - Priority: Medium (platform-wide blast radius; do in slices).
 
 ### IbsPackager (Medium)

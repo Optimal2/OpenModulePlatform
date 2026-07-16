@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
 
@@ -253,7 +252,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         var optionsMonitor = new FakeOptionsMonitor<HostAgentSettings> { CurrentValue = settings };
         var repository = new FakeOmpHostArtifactRepository();
         var control = new FakeWindowsServiceControl();
-        var credentialStore = new HostAgentCredentialStoreService(Options.Create(settings));
+        var credentialStore = new HostAgentCredentialStoreService(optionsMonitor);
         var service = new ServiceAppDeploymentService(
             optionsMonitor,
             repository,
@@ -324,7 +323,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         var optionsMonitor = new FakeOptionsMonitor<HostAgentSettings> { CurrentValue = settings };
         var repository = new FakeOmpHostArtifactRepository();
         var control = new FakeWindowsServiceControl();
-        var credentialStore = new HostAgentCredentialStoreService(Options.Create(settings));
+        var credentialStore = new HostAgentCredentialStoreService(optionsMonitor);
         var service = new ServiceAppDeploymentService(
             optionsMonitor,
             repository,

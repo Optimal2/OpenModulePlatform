@@ -46,8 +46,11 @@ builder.Services.AddScoped<PortableModulePackageService>();
 builder.Services.AddSingleton<PortalDeploymentLockService>();
 builder.Services.AddScoped<ConfigOverlayObjectService>();
 builder.Services.AddScoped<PortalHealthService>();
-builder.Services.Configure<ArtifactUploadOptions>(
-    builder.Configuration.GetSection(ArtifactUploadOptions.SectionName));
+// No validation rules: empty roots disable the optional import surfaces by
+// design, and a non-positive MaxUploadBytes falls back to the default above.
+builder.Services.AddOptions<ArtifactUploadOptions>()
+    .Bind(builder.Configuration.GetSection(ArtifactUploadOptions.SectionName))
+    .ValidateOnStart();
 builder.Services.Configure<IISServerOptions>(options =>
 {
     options.MaxRequestBodySize = maxUploadBytes;

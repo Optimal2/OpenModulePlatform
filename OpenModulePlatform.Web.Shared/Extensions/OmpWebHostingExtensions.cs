@@ -855,8 +855,11 @@ public static class OmpWebHostingExtensions
             .GetSection(OmpAuthOptions.SectionName)
             .Get<OmpAuthOptions>() ?? new OmpAuthOptions();
 
+        services.AddSingleton<IValidateOptions<OmpAuthOptions>, OmpAuthOptionsValidator>();
+
         services.AddOptions<OmpAuthOptions>()
-            .Bind(configuration.GetSection(OmpAuthOptions.SectionName));
+            .Bind(configuration.GetSection(OmpAuthOptions.SectionName))
+            .ValidateOnStart();
 
         var dataProtectionBuilder = services
             .AddDataProtection()
