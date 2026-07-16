@@ -426,8 +426,7 @@ export async function fetchWithRetry(url, options, { maxAttempts = 3, baseDelayM
 File staged: docs/conventions/http-clients.md
 ```
 
-Commit: `d837846af7fb835155d8c3d7604a5f456c92e365`  
-Push: `98d9d0e..d837846 main -> main` (pre-push gate passed: build + tests + component-version validation + module-definition validation).
+Committed and pushed to `main` in OpenModulePlatform. The exact commit hash and push status are recorded in the job result / `git log`.
 
 ---
 
