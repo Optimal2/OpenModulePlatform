@@ -171,18 +171,24 @@ registrations.
 ### IbsPackager (.NET 10, private OMP module)
 
 - **Registration location:** single host `IbsPackager.Web/Program.cs`
-  (18 lines): `AddOmpWebDefaults<IbsPackagerResource>("WebApp")` (`:8`),
-  `Configure<OpenDocViewerOptions>` (`:9`), three singletons
-  (`SqlConnectionFactory` `:10`, `IbsPackagerRepository` `:11`,
-  `ConfigSchemaValidator` `:12`). **No `IServiceCollection` extension
-  methods exist in the repo.**
+  (22 lines): `AddOmpWebDefaults<IbsPackagerResource>("WebApp")` (`:8`),
+  the `OpenDocViewerOptions` options chain (`:9-15`), and one module
+  extension `AddIbsPackagerServices(this IServiceCollection, IConfiguration)`
+  (`:16`; implementation
+  `IbsPackager.Runtime/DependencyInjection/IbsPackagerServiceCollectionExtensions.cs:9`)
+  registering three singletons (`IbsPackagerConnectionFactory`,
+  `IbsPackagerRepository`, `ConfigSchemaValidator`).
 - **Lifetimes:** all singleton, no scoped/transient. Safe because the
   repository is stateless with per-call connections
-  (`IbsPackager.Runtime/Services/IbsPackagerRepository.cs:16-19`), but it
-  diverges from the OMP scoped-data-services convention. Flag: a module-own
-  `SqlConnectionFactory` (`IbsPackager.Runtime/Services/SqlConnectionFactory.cs:10`)
-  collides in name with the OMP shared one — both singletons, both reading
-  `ConnectionStrings:OmpDb`.
+  (`IbsPackager.Runtime/Services/IbsPackagerRepository.cs:16-19`); singleton
+  is a deliberate decision per §3.2 (see §4) — the worker plugin constructs
+  the repository manually (`IbsPackagerWorkerFactory.cs:20-21`) and
+  channel-type factories resolve it scope-free
+  (`FileDropChannelTypeFactory.cs:237`), so scoped would break those paths.
+  The former name collision with the OMP shared `SqlConnectionFactory` is
+  resolved by the rename to `IbsPackagerConnectionFactory`
+  (`IbsPackager.Runtime/Services/IbsPackagerConnectionFactory.cs:6`), still
+  reading `ConnectionStrings:OmpDb`.
 - **Module/plugin pattern:** web side uses only the OMP shared defaults.
   Worker side is an OMP plugin: `IbsPackagerWorkerFactory :
   IWorkerModuleFactory` (`IbsPackager.Worker/IbsPackagerWorkerFactory.cs:11`)
@@ -194,10 +200,14 @@ registrations.
   (`IbsPackager.Abstractions/Contracts/IIbsChannelTypeFactory.cs:16`).
 - **Hosted services:** none (background work runs as the OMP worker plugin).
 - **Options:** `WebAppOptions` validated via OMP defaults;
-  `OpenDocViewerOptions` is plain `Configure<T>` with no validation;
-  `HostAgentRpcOptions` bypasses the options pattern entirely (manual
-  section binding in `IbsPackagerWorkerFactory.cs:40-56`, manual
-  `Validate()` at `IbsPackager.Runtime/Models/HostAgentRpcOptions.cs:27-33`).
+  `OpenDocViewerOptions` now uses
+  `AddOptions<T>().Bind(...).Validate(...).ValidateOnStart()` with a minimal
+  non-empty `BaseUrl` rule (`IbsPackager.Web/Program.cs:9-15`);
+  `HostAgentRpcOptions` still bypasses the options pattern (manual section
+  binding in `IbsPackagerWorkerFactory.cs:40-58`, rules in
+  `IbsPackager.Runtime/Models/HostAgentRpcOptions.cs:27-33`) but
+  `Validate()` is now invoked at worker startup
+  (`IbsPackagerWorkerFactory.cs:55`).
 - **HTTP clients:** none (outbound RPC is named-pipe based,
   `IbsPackager.Runtime/Services/HostAgentRpcClient.cs:15`).
 
@@ -426,7 +436,7 @@ registrations.
 | Repo | Registration location | Lifetimes | Extension methods | Hosted services | Options pattern | HTTP clients |
 |---|---|---|---|---|---|---|
 | OpenModulePlatform | Hub extension (`OmpWebHostingExtensions`) + inline per host | Scoped web services + singleton infra; services all-singleton; 1 transient (`IClaimsTransformation`) | `AddOmp*`/`UseOmp*` on `WebApplicationBuilder`/`IServiceCollection` in `Extensions/` | 5 `BackgroundService` (push dispatcher, WorkerManager, WorkerProcess, HostAgent ×2, MaintenanceScan) | `ValidateOnStart` for web options and all three service settings (validators adapt the retained `Validate()` rules); `IOptionsMonitor` in long-lived services | Named clients in HostAgent only (`"PortalHealth"` ×2) |
-| IbsPackager | Inline `Program.cs` only | All singleton (3) | None in repo | None | OMP-validated `WebAppOptions`; own `Configure<T>` unvalidated; worker manual binding | None |
+| IbsPackager | Module extension (`AddIbsPackagerServices`) + thin `Program.cs` | All singleton (3) | `AddIbsPackagerServices` (`DependencyInjection/`) | None | OMP-validated `WebAppOptions`; `OpenDocViewerOptions` validated; worker manual binding + startup `Validate()` | None |
 | LogSearch | Inline per host + shared options extension | All singleton; concrete+interface forwarding in Service only | `AddLogSearchOptions` (`*OptionsServiceCollectionExtensions.cs`) | 1 (`LogSearchWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>` — exemplary | None |
 | EArkivChecker | Inline, **duplicated block** across 2 hosts | All singleton; concrete+interface forwarding in Service only | `AddEArkivCheckerOptions` (same convention as LogSearch) | 1 (`EArkivCheckerWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>`; eager `.Value` snapshots defeat `reloadOnChange` | None |
 | Dokumentbibliotek | Inline `Program.cs` | Scoped data services + singleton infra (OMP-web mix) | None (endpoint-mapping ext only) | None (imperative startup migration) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>`; deliberate `IOptions`/`IOptionsMonitor` split | None |
@@ -438,8 +448,9 @@ Key divergences:
 
 1. **Three registration styles coexist.** (a) Centralized extension:
    OMP Web.Shared (`AddOmpWebDefaults`), iKrock2 (`AddIKrock2Application`),
-   LogSearch/EArkivChecker (options-only extensions). (b) Fully inline
-   `Program.cs`: IbsPackager, Dokumentbibliotek, VajSkrivare, ODVGateway,
+   IbsPackager (`AddIbsPackagerServices`), LogSearch/EArkivChecker
+   (options-only extensions). (b) Fully inline
+   `Program.cs`: Dokumentbibliotek, VajSkrivare, ODVGateway,
    and all OMP service hosts. (c) Duplicated inline blocks across sibling
    hosts: EArkivChecker (Web/Service share an identical block).
 2. **Lifetime philosophy splits the fleet.** Scoped per-request data
@@ -460,11 +471,12 @@ Key divergences:
    `WorkerProcessSettings` — singleton `IValidateOptions<T>` adapters over
    the retained `Validate()` methods the no-DI Bootstrapper still calls
    directly), LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare,
-   iKrock2 (4 of 5 types).
+   iKrock2 (4 of 5 types), IbsPackager (`OpenDocViewerOptions`; its
+   `HostAgentRpcOptions` keeps manual binding with `Validate()` at worker
+   startup).
    Missing for: OMP push-event options (deliberate — out-of-range values
-   are clamped via `Effective*` properties), IbsPackager's own options,
-   ODVGateway (manual pre-build check for trusted roots only; silent clamps
-   elsewhere).
+   are clamped via `Effective*` properties) and ODVGateway (manual
+   pre-build check for trusted roots only; silent clamps elsewhere).
 5. **`IOptions<T>` vs `IOptionsMonitor<T>` drift.** Lone `IOptions<T>`
    consumers in monitor-based services (`ContentTypeMapper.cs:10` in
    ODVGateway); `WorkerProcessHostedService.cs:31` keeps `IOptions<T>`
@@ -480,10 +492,11 @@ Key divergences:
    EArkivChecker), `Add{Product}Application` in
    `DependencyInjection/{X}ServiceCollectionExtensions.cs` (iKrock2) —
    plus repos with no extensions at all.
-8. **Notable single-instance smells:** IbsPackager's `SqlConnectionFactory`
-   name collision with OMP shared; iKrock2's dead `BackendOptions`
+8. **Notable single-instance smells:** iKrock2's dead `BackendOptions`
    registration; Dokumentbibliotek's duplicated `AddMemoryCache()`;
-   ODVGateway's unconfigured named HttpClient.
+   ODVGateway's unconfigured named HttpClient. (Resolved: IbsPackager's
+   `SqlConnectionFactory` name collision — renamed to
+   `IbsPackagerConnectionFactory`.)
 
 ## 3. Recommended standard pattern
 
@@ -622,9 +635,15 @@ SPI, HostAgent) already teaches.
   non-empty `BaseUrl` rule); module factory renamed to
   `IbsPackagerConnectionFactory` (collision removed); worker keeps manual
   `HostAgentRpcOptions` binding but calls `Validate()` at startup.
-- Migration: decide scoped-vs-singleton for `IbsPackagerRepository` per
-  §3.2.
-- Priority: Low (only a documentation-level lifetime decision remains).
+- Decision (applied): keep `IbsPackagerRepository` singleton per §3.2 —
+  sealed and stateless with per-call connections; the worker plugin
+  constructs it manually (`IbsPackagerWorkerFactory.cs:20-21`) and
+  channel-type factories resolve it scope-free
+  (`FileDropChannelTypeFactory.cs:237`), so a scoped registration would
+  break those paths and buy nothing. Recorded in a comment at the
+  registration site (`IbsPackagerServiceCollectionExtensions.cs`).
+- Migration: none remaining.
+- Priority: Low (complete).
 
 ### LogSearch (Low)
 
