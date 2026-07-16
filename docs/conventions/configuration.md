@@ -154,18 +154,26 @@ Audited repositories (all under the local workspace root):
 - **Config sources:** `EArkivChecker.Web/appsettings.json` +
   `EArkivChecker.Service/appsettings.json:1-50` (inline NLog `:13-49`), each
   with a Development variant; `appsettings.Local.json` documented as a
-  personal overlay (`docs/DEV-SETUP.md:127-129`, gitignored `.gitignore:368`)
-  but **no in-repo code loads it**; monitored folders are DB rows, not config.
-- **IOptions usage:** `services.Configure<EArkivCheckerOptions>(GetSection("EArkivChecker"))`
-  in both hosts (`EArkivChecker.Web/Program.cs:9`,
-  `EArkivChecker.Service/Program.cs:9`); `IOptions<T>` injection;
+  personal overlay (`docs/DEV-SETUP.md:128`, gitignored `.gitignore:368`) and
+  loaded in both hosts right after `appsettings.{Environment}.json`
+  (`EArkivChecker.Web/Program.cs:8`, `EArkivChecker.Service/Program.cs:10`);
+  monitored folders are DB rows, not config.
+- **IOptions usage:** `AddEArkivCheckerOptions(...)` extension
+  (`EArkivChecker.Runtime/EArkivCheckerOptionsServiceCollectionExtensions.cs:9-19`)
+  with `.Bind(...)` in both hosts (`EArkivChecker.Web/Program.cs:12`,
+  `EArkivChecker.Service/Program.cs:12`); `IOptions<T>` injection;
   `WebAppOptions` via `AddOmpWebDefaults("WebApp")`
-  (`EArkivChecker.Web/Program.cs:7`).
-- **Validation:** none at all — no `ValidateOnStart`, no `IValidateOptions<T>`.
-- **Connection strings:** `ConnectionStrings:OmpDb` resolved centrally with a
-  missing-value guard (`EArkivChecker.Runtime/EArkivCheckerConnectionFactory.cs:25-34`),
-  but raw `IConfiguration` is injected deep into the Runtime layer
-  (`EArkivCheckerConnectionFactory.cs:8-12`). Real values arrive only via
+  (`EArkivChecker.Web/Program.cs:10`).
+- **Validation:** `IValidateOptions<EArkivCheckerOptions>`
+  (`EArkivChecker.Runtime/EArkivCheckerOptionsValidator.cs`) registered by
+  `AddEArkivCheckerOptions(...)` with `.ValidateOnStart()` — fail-fast at
+  startup in both hosts.
+- **Connection strings:** `ConnectionStrings:OmpDb` resolved eagerly at
+  startup; both hosts construct `EArkivCheckerConnectionFactory` from
+  `builder.Configuration.GetConnectionString("OmpDb")` and the factory takes
+  the resolved string with a missing-value guard
+  (`EArkivChecker.Runtime/EArkivCheckerConnectionFactory.cs:9-17`) — no
+  `IConfiguration` in the Runtime layer. Real values arrive only via
   HostAgent overlay of `appsettings.json`.
 - **Secrets:** none committed; Integrated Security only.
 - **Options classes:** `EArkivCheckerOptions`
@@ -173,9 +181,8 @@ Audited repositories (all under the local workspace root):
 - **Overlay relationship:** consumer-side only; overlays are deliberately not
   committed (`scripts/omp/README.md:94-97`); packaging accepts
   `-ConfigOverlayFile` (`scripts/omp/build-repository-objects.ps1:39,587,773`).
-- **Divergences:** dead `appsettings.Local.json` convention; no validation;
-  the `EArkivChecker` section is duplicated across both appsettings files with
-  overlapping keys.
+- **Divergences:** the `EArkivChecker` section is duplicated across both
+  appsettings files with overlapping keys.
 
 ### Dokumentbibliotek (.NET 10, single web project, OMP module)
 
@@ -374,7 +381,7 @@ Audited repositories (all under the local workspace root):
 | OpenModulePlatform | appsettings + Dev, bootstrap.json, psd1, overlays | `XxxOptions` (web) / `XxxSettings` (services), `IOptions<T>`/`IOptionsMonitor<T>` | Only `WebAppOptions` (`IValidateOptions` + `ValidateOnStart`) | `OmpDb` via per-project `SqlConnectionFactory`; bootstrap token replacement | None committed; `enc:aesgcm:v1:` + DPAPI store | Platform (produces/applies overlays) |
 | IbsPackager | appsettings + Dev, psd1 installer, generated Production.json, CLI args, DB channel JSON | Mixed: `IOptions<T>` (web) + manual binding (worker) | None | `OmpDb` via `SqlConnectionFactory`; installer-built | None committed; gitignored local psd1 | Produces overlays; consumes none |
 | LogSearch | appsettings + Dev, generated overlay appsettings | `XxxOptions` + `IOptions<T>`, uniform | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` + 3-tier source-DB indirection with credential guardrails | None committed; policy-enforced | Exemplary producer of generated appsettings overlays |
-| EArkivChecker | appsettings + Dev, (dead) Local.json | `XxxOptions` + `IOptions<T>` | None | `OmpDb` via factory; raw `IConfiguration` deep | None committed | Consumer (overlays not committed) |
+| EArkivChecker | appsettings + Dev + Local.json | `XxxOptions` + `IOptions<T>` | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` via factory taking the resolved string | None committed | Consumer (overlays not committed) |
 | Dokumentbibliotek | root-linked appsettings + Dev + Local.json | `XxxOptions`; mixed `IOptions<T>`/`IOptionsMonitor<T>` | None | `OmpDb` shared factory + legacy direct read | None committed | Consumer; contract documented in module definition |
 | VajSkrivare | appsettings template + Dev; HostAgent-generated production file | `XxxOptions` + `SectionName` consts + `IOptions<T>` | Yes — `Validate(...)` + `ValidateOnStart` | Named indirection (`ConnectionStringName`) | None committed | Full overlay replacement of appsettings.json |
 | iKrock2 | appsettings + Dev, psd1, generated Production.json | `XxxOptions` + `IOptions<T>` | None | `OmpDb` → options; per-catalog composition | Plaintext password in gitignored prod psd1 that `IncludeConfigInPackage=$true` may bundle | None at runtime (installer-written config) |
@@ -385,18 +392,17 @@ Audited repositories (all under the local workspace root):
 Key divergences:
 
 1. **Validation coverage is the widest gap.** Only OMP Web.Shared
-   (`WebAppOptions`), LogSearch and VajSkrivare validate options at startup.
-   IbsPackager, EArkivChecker, Dokumentbibliotek, iKrock2 and ODVGateway fail
-   late (first use / first connection) instead of at startup.
+   (`WebAppOptions`), LogSearch, EArkivChecker and VajSkrivare validate
+   options at startup. IbsPackager, Dokumentbibliotek, iKrock2 and ODVGateway
+   fail late (first use / first connection) instead of at startup.
 2. **Connection-string style is consistent in shape** (`ConnectionStrings:OmpDb`
    + factory) **but delivery differs:** HostAgent overlay-generated appsettings
    (LogSearch, VajSkrivare, Dokumentbibliotek, EArkivChecker) vs
    installer-written `appsettings.Production.json` (IbsPackager, iKrock2, OMP
    services via Bootstrapper).
 3. **Raw `IConfiguration` reads deep in services** bypass the options pattern
-   in Dokumentbibliotek (`DocumentLibraryImageService.cs:431-432`), iKrock2
-   (`Pages/MLLPerformance/Index.cshtml.cs:118`) and EArkivChecker
-   (`EArkivCheckerConnectionFactory.cs:8-12`).
+   in Dokumentbibliotek (`DocumentLibraryImageService.cs:431-432`) and iKrock2
+   (`Pages/MLLPerformance/Index.cshtml.cs:118`).
 4. **iKrock2 is the largest outlier:** stale backend HTTP config, hardcoded
    customer URLs/test data in C#, and a password-bearing psd1 that may be
    bundled into packages.
@@ -486,15 +492,18 @@ the pattern new OMP modules (examples, shared helpers) already teach.
   generate appsettings from it); drop unused sections from overlay output.
 - Priority: Low.
 
-### EArkivChecker (Medium)
+### EArkivChecker (Done)
 
-- Current: no validation; documented `appsettings.Local.json` is never loaded;
-  raw `IConfiguration` in Runtime; duplicated section across hosts.
-- Migration: add `IValidateOptions<EArkivCheckerOptions>` + `ValidateOnStart()`;
-  either wire `appsettings.Local.json` explicitly (optional reload) or remove
-  it from docs; keep the connection-string factory but inject options instead
-  of `IConfiguration`.
-- Priority: Medium.
+- Done (EArkivChecker `5b9e6e8`): `IValidateOptions<EArkivCheckerOptions>` +
+  `ValidateOnStart()` via `AddEArkivCheckerOptions(...)` in both hosts;
+  `appsettings.Local.json` now loaded in both hosts;
+  `EArkivCheckerConnectionFactory` takes the resolved `OmpDb` connection
+  string instead of `IConfiguration`.
+- Remaining: the `EArkivChecker` section is still duplicated across both host
+  appsettings files with overlapping keys.
+- Migration: extract the shared defaults (for example into the Runtime layer
+  or a generated overlay) so each host only carries host-specific overrides.
+- Priority: Low.
 
 ### Dokumentbibliotek (Medium)
 
