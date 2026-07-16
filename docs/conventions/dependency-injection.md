@@ -614,18 +614,17 @@ SPI, HostAgent) already teaches.
 - Priority: Low (options validation complete; only the Portal inline
   block remains).
 
-### IbsPackager (Medium)
+### IbsPackager (Low)
 
-- Current: no repo extension methods; all-singleton web app; own options
-  unvalidated; worker options manually bound; `SqlConnectionFactory` name
-  collision with OMP shared.
-- Migration: add `AddIbsPackagerServices` + `AddIbsPackagerOptions` in
-  `IbsPackager.Runtime`; move `OpenDocViewerOptions` to the
-  `ValidateOnStart` chain; bind `HostAgentRpcOptions` through the options
-  pattern in the worker factory (or keep manual binding but validate at
-  startup); rename the module connection factory to remove the collision;
-  decide scoped-vs-singleton for `IbsPackagerRepository` per §3.2.
-- Priority: Medium.
+- Current: `AddIbsPackagerServices` extension in `IbsPackager.Runtime`
+  (thin `Program.cs`: shared defaults + options + module extension);
+  `OpenDocViewerOptions` on `AddOptions+Bind+ValidateOnStart` (minimal
+  non-empty `BaseUrl` rule); module factory renamed to
+  `IbsPackagerConnectionFactory` (collision removed); worker keeps manual
+  `HostAgentRpcOptions` binding but calls `Validate()` at startup.
+- Migration: decide scoped-vs-singleton for `IbsPackagerRepository` per
+  §3.2.
+- Priority: Low (only a documentation-level lifetime decision remains).
 
 ### LogSearch (Low)
 
