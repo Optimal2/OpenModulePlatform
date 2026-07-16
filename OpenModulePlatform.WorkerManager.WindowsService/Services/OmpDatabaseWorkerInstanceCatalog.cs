@@ -28,8 +28,6 @@ public sealed class OmpDatabaseWorkerInstanceCatalog : IWorkerInstanceCatalog
         cancellationToken.ThrowIfCancellationRequested();
 
         var settings = _settings.CurrentValue;
-        settings.Validate();
-        settings.OmpDatabase.Validate();
 
         var hostKey = settings.ResolveHostKey();
         var runtimeKind = settings.OmpDatabase.RuntimeKind.Trim();
