@@ -51,8 +51,6 @@ public sealed class WebAppDeploymentService
             return;
         }
 
-        settings.Validate();
-
         if (!OperatingSystem.IsWindows())
         {
             throw new InvalidOperationException("Web app deployment requires Windows and IIS appcmd.exe.");

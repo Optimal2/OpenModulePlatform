@@ -24,7 +24,6 @@ public sealed class ArtifactProvisioner
         ArgumentNullException.ThrowIfNull(artifact);
 
         var settings = _settings.CurrentValue;
-        settings.Validate();
 
         var localPath = ResolveLocalPath(settings, artifact);
         var expectedHash = NormalizeHash(artifact.Sha256);

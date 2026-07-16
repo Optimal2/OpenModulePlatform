@@ -3,6 +3,8 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Models;
 
 public sealed class WorkerManagerSettings
 {
+    public const string SectionName = "WorkerManager";
+
     public string CatalogMode { get; set; } = WorkerCatalogModes.Configuration;
 
     public string? HostKey { get; set; }

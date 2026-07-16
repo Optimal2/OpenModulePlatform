@@ -49,8 +49,6 @@ public sealed class ServiceAppDeploymentService
             return;
         }
 
-        settings.Validate();
-
         if (!OperatingSystem.IsWindows())
         {
             throw new InvalidOperationException("Service app deployment requires Windows and sc.exe.");
