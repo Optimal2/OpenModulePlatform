@@ -426,7 +426,8 @@ export async function fetchWithRetry(url, options, { maxAttempts = 3, baseDelayM
 File staged: docs/conventions/http-clients.md
 ```
 
-Push status and commit hash will be recorded below after the commit is executed.
+Commit: `d837846af7fb835155d8c3d7604a5f456c92e365`  
+Push: `98d9d0e..d837846 main -> main` (pre-push gate passed: build + tests + component-version validation + module-definition validation).
 
 ---
 
