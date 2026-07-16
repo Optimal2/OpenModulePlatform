@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NLog.Extensions.Hosting;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
@@ -32,8 +33,11 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
     .UseNLog()
     .ConfigureServices((context, services) =>
     {
-        services.Configure<HostAgentSettings>(context.Configuration.GetSection("HostAgent"));
-        services.AddSingleton(_ => CreateProcessContext(args, context.Configuration.GetSection("HostAgent").Get<HostAgentSettings>()));
+        services.AddSingleton<IValidateOptions<HostAgentSettings>, HostAgentSettingsValidator>();
+        services.AddOptions<HostAgentSettings>()
+            .Bind(context.Configuration.GetSection(HostAgentSettings.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton(_ => CreateProcessContext(args, context.Configuration.GetSection(HostAgentSettings.SectionName).Get<HostAgentSettings>()));
         services.AddSingleton<SqlConnectionFactory>();
         services.AddSingleton<ISqlConnectionFactory>(static sp => sp.GetRequiredService<SqlConnectionFactory>());
         services.AddSingleton<OmpHostArtifactRepository>();
@@ -71,6 +75,13 @@ try
     using var host = builder.Build();
     if (runOnce)
     {
+        // --run-once never calls IHost.StartAsync, so run the ValidateOnStart
+        // validators explicitly to keep fail-fast behavior on invalid settings.
+        foreach (var validator in host.Services.GetServices<IStartupValidator>())
+        {
+            validator.Validate();
+        }
+
         var engine = host.Services.GetRequiredService<HostAgentEngine>();
         try
         {

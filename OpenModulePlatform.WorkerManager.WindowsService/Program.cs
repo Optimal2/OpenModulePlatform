@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NLog.Extensions.Hosting;
 using OpenModulePlatform.WorkerManager.WindowsService.Contracts;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
@@ -21,7 +22,10 @@ var builder = Host.CreateDefaultBuilder(args)
     .UseNLog()
     .ConfigureServices((context, services) =>
     {
-        services.Configure<WorkerManagerSettings>(context.Configuration.GetSection("WorkerManager"));
+        services.AddSingleton<IValidateOptions<WorkerManagerSettings>, WorkerManagerSettingsValidator>();
+        services.AddOptions<WorkerManagerSettings>()
+            .Bind(context.Configuration.GetSection(WorkerManagerSettings.SectionName))
+            .ValidateOnStart();
         services.AddSingleton<SqlConnectionFactory>();
         services.AddSingleton<OmpWorkerRuntimeRepository>();
         services.AddSingleton<ConfiguredWorkerInstanceCatalog>();

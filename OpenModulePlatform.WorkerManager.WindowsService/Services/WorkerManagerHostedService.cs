@@ -250,7 +250,6 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         var settings = _settings.CurrentValue;
-        settings.Validate();
 
         var nowUtc = DateTimeOffset.UtcNow;
         var restartWindow = TimeSpan.FromSeconds(settings.RestartWindowSeconds);
@@ -765,7 +764,6 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         var settings = _settings.CurrentValue;
-        settings.Validate();
 
         string workerProcessPath;
         try

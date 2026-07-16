@@ -34,7 +34,6 @@ public sealed class HostAgentRpcClient
         CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
-        settings.HostAgentRpc.Validate();
 
         if (!settings.HostAgentRpc.Enabled)
         {

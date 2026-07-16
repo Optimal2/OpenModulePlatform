@@ -63,7 +63,6 @@ public sealed class HostAgentEngine
     public async Task RunOnceAsync(CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
-        settings.Validate();
 
         var hostKey = settings.ResolveHostKey();
         var runtimeMode = _process.RuntimeMode;
@@ -276,7 +275,6 @@ public sealed class HostAgentEngine
         CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
-        settings.Validate();
 
         var hostKey = settings.ResolveHostKey();
         await _repository.TouchHostHeartbeatAsync(hostKey, cancellationToken);

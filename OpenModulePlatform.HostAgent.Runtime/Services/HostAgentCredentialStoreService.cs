@@ -254,7 +254,6 @@ public sealed class HostAgentCredentialStoreService
 
     private static void EnsureStoreEnabled(HostAgentCredentialStoreSettings settings)
     {
-        settings.Validate();
         if (!settings.IsEnabled())
         {
             throw new InvalidOperationException(

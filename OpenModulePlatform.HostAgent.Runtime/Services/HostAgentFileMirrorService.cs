@@ -31,7 +31,6 @@ public sealed class HostAgentFileMirrorService
         foreach (var mirror in mirrors)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            mirror.Validate();
 
             var sourcePath = Path.GetFullPath(mirror.SourcePath.Trim());
             var targetPath = Path.GetFullPath(mirror.TargetPath.Trim());

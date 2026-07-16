@@ -101,20 +101,26 @@ registrations.
 
 **Services, workers and libraries:**
 
-- `OpenModulePlatform.WorkerManager.WindowsService/Program.cs:11-32` —
-  `Host.CreateDefaultBuilder` + `UseWindowsService` (`:12-15`),
-  registrations inline in `ConfigureServices` (`:22-32`): all singleton
-  (`:25-30`) plus `AddHostedService<WorkerManagerHostedService>` (`:31`,
+- `OpenModulePlatform.WorkerManager.WindowsService/Program.cs:12-38` —
+  `Host.CreateDefaultBuilder` + `UseWindowsService` (`:13-16`),
+  registrations inline in `ConfigureServices` (`:23-36`): all singleton
+  (`:29-34`) plus `AddHostedService<WorkerManagerHostedService>` (`:35`,
   implementation `Services/WorkerManagerHostedService.cs:19`).
-  `Configure<WorkerManagerSettings>` (`:24`) consumed as
-  `IOptionsMonitor<WorkerManagerSettings>`; manual `Validate()` calls
-  instead of `ValidateOnStart` (`WorkerManagerHostedService.cs:253,768`,
-  `Models/WorkerManagerSettings.cs:54`).
-- `OpenModulePlatform.WorkerProcessHost/Program.cs:11-23` — console child
-  host (no `UseWindowsService`): singletons `WorkerModuleLoader` (`:20`),
-  `WorkerRuntimeContextFactory` (`:21`),
-  `AddHostedService<WorkerProcessHostedService>` (`:22`).
-  `Configure<WorkerProcessSettings>` (`:19`) consumed as `IOptions<T>`
+  `AddOptions<WorkerManagerSettings>().Bind(...).ValidateOnStart()`
+  (`:26-28`) with singleton `IValidateOptions<WorkerManagerSettings>`
+  (`:25`, implementation `Models/WorkerManagerSettingsValidator.cs:11`,
+  which adapts the retained `WorkerManagerSettings.Validate()` rules);
+  consumed as `IOptionsMonitor<WorkerManagerSettings>`.
+- `OpenModulePlatform.WorkerProcessHost/Program.cs:12-29` — console child
+  host (no `UseWindowsService`): singletons `WorkerModuleLoader` (`:24`),
+  `WorkerRuntimeContextFactory` (`:25`),
+  `AddHostedService<WorkerProcessHostedService>` (`:26`).
+  `AddOptions<WorkerProcessSettings>().Bind(...).ValidateOnStart()`
+  (`:21-23`) with singleton `IValidateOptions<WorkerProcessSettings>`
+  (`:20`, implementation `Models/WorkerProcessSettingsValidator.cs:13`,
+  which adapts the retained `WorkerProcessSettings.Validate()` rules —
+  including the deliberate WorkerInstanceId/ShutdownEventName
+  normalizations applied to the cached instance); consumed as `IOptions<T>`
   (not monitor — `Services/WorkerProcessHostedService.cs:31`). This is the
   **worker plugin mechanism**: `Plugins/WorkerModuleLoader.cs:12` loads
   plugin assemblies into a collectible `AssemblyLoadContext` and finds
@@ -122,20 +128,26 @@ registrations.
   scope per plugin activation (`Services/WorkerProcessHostedService.cs:98-100`)
   and hands `scope.ServiceProvider` to the factory (contract
   `OpenModulePlatform.Worker.Abstractions/Contracts/IWorkerModuleFactory.cs:7`).
-- `OpenModulePlatform.HostAgent.WindowsService/Program.cs:20-67` — the
-  largest service registration block (`:33-67`): all singleton, using a
+- `OpenModulePlatform.HostAgent.WindowsService/Program.cs:21-71` — the
+  largest service registration block (`:34-71`): all singleton, using a
   **concrete-first + interface-forwarding** idiom so both resolve the same
-  instance (`SqlConnectionFactory`/`ISqlConnectionFactory` `:37-38`,
-  `OmpHostArtifactRepository`/`IOmpHostArtifactRepository` `:39-40`),
-  `TimeProvider.System` (`:59`), three hosted services
-  (`HostAgentHostedService` `:61`, `MaintenanceScanScheduler` `:62` —
+  instance (`SqlConnectionFactory`/`ISqlConnectionFactory` `:41-42`,
+  `OmpHostArtifactRepository`/`IOmpHostArtifactRepository` `:43-44`),
+  `TimeProvider.System` (`:63`), three hosted services
+  (`HostAgentHostedService` `:65`, `MaintenanceScanScheduler` `:66` —
   defined in `OpenModulePlatform.HostAgent.Runtime/Services/MaintenanceScanScheduler.cs:12` —
-  and Windows-only `HostAgentRpcHostedService` `:63-66`).
-  `Configure<HostAgentSettings>` (`:35`) with manual `Validate()` at first
-  use; `IOptionsMonitor<HostAgentSettings>` everywhere. Contains the repo's
-  only `AddHttpClient`
-  calls: named clients `"PortalHealth"` (`:48`) and
-  `"PortalHealthAllowInvalidTls"` with a custom handler (`:49-53`), consumed
+  and Windows-only `HostAgentRpcHostedService` `:67-70`).
+  `AddOptions<HostAgentSettings>().Bind(...).ValidateOnStart()` (`:37-39`)
+  with singleton `IValidateOptions<HostAgentSettings>` (`:36`,
+  implementation
+  `OpenModulePlatform.HostAgent.Runtime/Models/HostAgentSettingsValidator.cs:11`,
+  which adapts the retained `HostAgentSettings.Validate()` rules);
+  `IOptionsMonitor<HostAgentSettings>` everywhere. The `--run-once`
+  console path never calls `IHost.StartAsync`, so it runs the registered
+  `IStartupValidator` validators explicitly before executing (`:76-83`).
+  Contains the repo's only `AddHttpClient`
+  calls: named clients `"PortalHealth"` (`:52`) and
+  `"PortalHealthAllowInvalidTls"` with a custom handler (`:53-57`), consumed
   via `IHttpClientFactory` in
   `OpenModulePlatform.HostAgent.Runtime/Services/WebAppHealthMonitor.cs:15,202-204`.
 - `OpenModulePlatform.Bootstrapper` — **no DI at all**: static `Program`
@@ -413,7 +425,7 @@ registrations.
 
 | Repo | Registration location | Lifetimes | Extension methods | Hosted services | Options pattern | HTTP clients |
 |---|---|---|---|---|---|---|
-| OpenModulePlatform | Hub extension (`OmpWebHostingExtensions`) + inline per host | Scoped web services + singleton infra; services all-singleton; 1 transient (`IClaimsTransformation`) | `AddOmp*`/`UseOmp*` on `WebApplicationBuilder`/`IServiceCollection` in `Extensions/` | 5 `BackgroundService` (push dispatcher, WorkerManager, WorkerProcess, HostAgent ×2, MaintenanceScan) | `ValidateOnStart` only for `WebAppOptions`; services `Configure<T>` + manual `Validate()`; `IOptionsMonitor` in long-lived services | Named clients in HostAgent only (`"PortalHealth"` ×2) |
+| OpenModulePlatform | Hub extension (`OmpWebHostingExtensions`) + inline per host | Scoped web services + singleton infra; services all-singleton; 1 transient (`IClaimsTransformation`) | `AddOmp*`/`UseOmp*` on `WebApplicationBuilder`/`IServiceCollection` in `Extensions/` | 5 `BackgroundService` (push dispatcher, WorkerManager, WorkerProcess, HostAgent ×2, MaintenanceScan) | `ValidateOnStart` for web options and all three service settings (validators adapt the retained `Validate()` rules); `IOptionsMonitor` in long-lived services | Named clients in HostAgent only (`"PortalHealth"` ×2) |
 | IbsPackager | Inline `Program.cs` only | All singleton (3) | None in repo | None | OMP-validated `WebAppOptions`; own `Configure<T>` unvalidated; worker manual binding | None |
 | LogSearch | Inline per host + shared options extension | All singleton; concrete+interface forwarding in Service only | `AddLogSearchOptions` (`*OptionsServiceCollectionExtensions.cs`) | 1 (`LogSearchWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>` — exemplary | None |
 | EArkivChecker | Inline, **duplicated block** across 2 hosts | All singleton; concrete+interface forwarding in Service only | `AddEArkivCheckerOptions` (same convention as LogSearch) | 1 (`EArkivCheckerWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>`; eager `.Value` snapshots defeat `reloadOnChange` | None |
@@ -443,12 +455,14 @@ Key divergences:
    VajSkrivare/Dokumentbibliotek are interface-based throughout.
 4. **Options validation coverage is the widest gap.** `ValidateOnStart` is
    present for: OMP `WebAppOptions`, `OmpAuthOptions`,
-   `ArtifactUploadOptions`, `ContentWebAppModuleOptions`, LogSearch,
-   EArkivChecker, Dokumentbibliotek, VajSkrivare, iKrock2 (4 of 5 types).
+   `ArtifactUploadOptions`, `ContentWebAppModuleOptions`, all OMP service
+   settings (`HostAgentSettings`, `WorkerManagerSettings`,
+   `WorkerProcessSettings` — singleton `IValidateOptions<T>` adapters over
+   the retained `Validate()` methods the no-DI Bootstrapper still calls
+   directly), LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare,
+   iKrock2 (4 of 5 types).
    Missing for: OMP push-event options (deliberate — out-of-range values
-   are clamped via `Effective*` properties), all OMP service settings
-   (`HostAgentSettings`, `WorkerManagerSettings`, `WorkerProcessSettings` —
-   manual `Validate()` at first use instead), IbsPackager's own options,
+   are clamped via `Effective*` properties), IbsPackager's own options,
    ODVGateway (manual pre-build check for trusted roots only; silent clamps
    elsewhere).
 5. **`IOptions<T>` vs `IOptionsMonitor<T>` drift.** Lone `IOptions<T>`
@@ -585,18 +599,20 @@ SPI, HostAgent) already teaches.
 
 ## 4. Migration notes per diverging repo
 
-### OpenModulePlatform (Medium)
+### OpenModulePlatform (Low)
 
 - Current: `ValidateOnStart` for `WebAppOptions`, `OmpAuthOptions`,
-  `ArtifactUploadOptions` and `ContentWebAppModuleOptions`; service hosts
-  validate settings manually at first use; `WorkerProcessHostedService`
-  keeps a deliberate `IOptions<T>` snapshot (settings are static for the
-  child-process lifetime); Portal keeps ~20 inline registrations.
-- Migration (high-level): convert `HostAgentSettings`,
-  `WorkerManagerSettings`, `WorkerProcessSettings` from manual
-  `Validate()` to the standard chain; optionally extract Portal's inline
-  block into `AddPortalServices`.
-- Priority: Medium (platform-wide blast radius; do in slices).
+  `ArtifactUploadOptions`, `ContentWebAppModuleOptions` and all three
+  service settings (`HostAgentSettings`, `WorkerManagerSettings`,
+  `WorkerProcessSettings` — singleton `IValidateOptions<T>` adapters over
+  the retained `Validate()` methods, which the no-DI Bootstrapper still
+  calls directly); `WorkerProcessHostedService` keeps a deliberate
+  `IOptions<T>` snapshot (settings are static for the child-process
+  lifetime); Portal keeps ~20 inline registrations.
+- Migration (high-level): optionally extract Portal's inline block into
+  `AddPortalServices`.
+- Priority: Low (options validation complete; only the Portal inline
+  block remains).
 
 ### IbsPackager (Medium)
 

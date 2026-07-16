@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NLog.Extensions.Hosting;
 using OpenModulePlatform.WorkerProcessHost.Models;
 using OpenModulePlatform.WorkerProcessHost.Plugins;
@@ -16,7 +17,10 @@ var builder = Host.CreateDefaultBuilder(args)
     .UseNLog()
     .ConfigureServices((context, services) =>
     {
-        services.Configure<WorkerProcessSettings>(context.Configuration.GetSection("WorkerProcess"));
+        services.AddSingleton<IValidateOptions<WorkerProcessSettings>, WorkerProcessSettingsValidator>();
+        services.AddOptions<WorkerProcessSettings>()
+            .Bind(context.Configuration.GetSection(WorkerProcessSettings.SectionName))
+            .ValidateOnStart();
         services.AddSingleton<WorkerModuleLoader>();
         services.AddSingleton<WorkerRuntimeContextFactory>();
         services.AddHostedService<WorkerProcessHostedService>();

@@ -3,6 +3,8 @@ namespace OpenModulePlatform.WorkerProcessHost.Models;
 
 public sealed class WorkerProcessSettings
 {
+    public const string SectionName = "WorkerProcess";
+
     private const string ShutdownEventNamePrefix = "OpenModulePlatform.WorkerShutdown.";
 
     public Guid AppInstanceId { get; set; }

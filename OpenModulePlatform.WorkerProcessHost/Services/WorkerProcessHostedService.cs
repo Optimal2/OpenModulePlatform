@@ -46,7 +46,6 @@ public sealed class WorkerProcessHostedService : BackgroundService
     {
         try
         {
-            _settings.Validate();
             using var memoryGuardCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             var memoryGuardTask = RunMemoryGuardAsync(memoryGuardCts.Token);
 

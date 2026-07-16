@@ -19,7 +19,6 @@ public sealed class ConfiguredWorkerInstanceCatalog : IWorkerInstanceCatalog
         cancellationToken.ThrowIfCancellationRequested();
 
         var current = _settings.CurrentValue;
-        current.Validate();
 
         var desired = new List<DesiredWorkerInstance>();
         var seen = new HashSet<Guid>();
