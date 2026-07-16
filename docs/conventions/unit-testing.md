@@ -94,11 +94,18 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 ### EArkivChecker
 
-- **Tests exist:** **No** — 0 test projects, 0 test files. Only 3 production projects in `EArkivChecker.slnx:2-4` (Runtime, Service, Web).
-- **Framework / mock lib / assertion style:** None. CPM enabled (`Directory.Packages.props:3`) but pins only 6 runtime packages (`:6-11`); TargetFramework `net10.0` repo-wide via `Directory.Build.props:3`.
-- **Coverage / integration separation:** None.
-- **How tests run:** They don't. `scripts/local-ci.ps1:38-54` = build + version validation; `.github/workflows/ci.yml:63-82` mirrors that (also `workflow_dispatch`-only).
-- **Natural home for tests:** `EArkivChecker.Runtime.Tests/` beside `EArkivChecker.Runtime/` (FolderScanner, scan processor, repository are the obvious first targets; Service and Web are thin hosts).
+- **Tests exist:** Yes — 1 test project, 3 test files, 44 test methods (24 `[Fact]` Tier D + 20 `[SkippableFact]` Tier C).
+  - `EArkivChecker.Runtime.Tests` — `FolderScannerTierDTests.cs`, `EArkivCheckerScanProcessorTierDTests.cs`, `EArkivCheckerRepositoryTierCTests.cs`
+- **Framework:** xUnit + `Xunit.SkippableFact`.
+  - `EArkivChecker.Runtime.Tests/EArkivChecker.Runtime.Tests.csproj:13-15`
+- **Layout/naming:** Sibling `<SourceProject>.Tests` at repo root beside the source projects, included in `EArkivChecker.slnx:3`; Tier C/D suffix on test classes; global `<Using Include="Xunit" />` in the csproj (`:27`). Only `EArkivChecker.Runtime` is referenced/tested (`:23`); Service and Web are thin hosts.
+- **Mock library:** None — hand-written fakes for the FolderScanner and scan-processor decision-logic Tier D tests.
+- **Package pins (CPM, `Directory.Packages.props:3`):** `Microsoft.NET.Test.Sdk` 18.7.0 (`:11`), `xunit` 2.9.3 (`:14`), `xunit.runner.visualstudio` 3.1.5 (`:15`), `coverlet.collector` 10.0.1 (`:6`), `Xunit.SkippableFact` 1.4.13 (`:16`). TargetFramework `net10.0` repo-wide via `Directory.Build.props:3`.
+- **Assertion style:** Plain xUnit `Assert.*` (`EArkivCheckerRepositoryTierCTests.cs:443-446` — `Assert.ThrowsAsync`, `Assert.Equal`). No FluentAssertions.
+- **Coverage:** `coverlet.collector` referenced (PrivateAssets=all) in the test csproj (`:9-12`) — but never invoked: no `.runsettings`, no `--collect` in scripts or CI.
+- **Integration vs unit separation:** The recommended-standard combination — OMP's Tier C/D class naming plus IbsPackager-style gating. Tier D = pure in-memory fakes. Tier C = `[SkippableFact]` over a per-class fixture `EArkivCheckerRepositoryTestDatabase` (`EArkivCheckerRepositoryTierCTests.cs:582`) that honors env var `EARKIVCHECKER_TEST_CONNECTION_STRING` (default `Server=localhost;Integrated Security=true`, `:584-585`), lazily creates a uniquely named database (`EArkivChecker_Tests_<guid>`, `:589-590`), deploys `sql/1-setup-earkiv-checker.sql` plus a minimal core-schema stub (omp schema, `omp.users`, `omp.notifications` — `:737`), drops the database on dispose, and skips cleanly via `SkipException` when no local SQL Server is reachable (`:693`). The alarm methods `SetAlarmSubscriptionAsync`/`CreateAlarmNotificationsAsync` are covered against that stub (`:435-520`).
+- **How tests run:** `dotnet test EArkivChecker.slnx --no-build` is step 2 of the local gate `scripts/local-ci.ps1:54-55`, which the pre-push hook executes (`.githooks/pre-push.ps1:6,33`). GitHub CI stays `workflow_dispatch`-only build+validate (`.github/workflows/ci.yml:63-82`).
+- **Extra notes:** Adopted the full recommended standard from day one (Tier suffix + SkippableFact + env var + self-deployed schema) — the cleanest Tier C pattern in the ecosystem alongside IbsPackager.
 
 ### Dokumentbibliotek
 
@@ -152,7 +159,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 | **VajSkrivare** | Yes — 1 project, 2 tests | xUnit 2.9.3 + runner **2.8.2** | None (hand-written fake) | **Inline (no CPM)**: Test.Sdk **17.14.0**, no coverlet | Plain `Assert.*` | None | None (tests avoid DB via config) | Nothing automated |
 | **iKrock2** | Yes — 1 project, 35 methods | xUnit 2.9.3 + runner 3.1.5 | None (Options.Create) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | None (pure unit tests) | Nothing automated (stale TODO) |
 | **LogSearch** | **No** | — | — | — | — | — | — | — |
-| **EArkivChecker** | **No** | — | — | — | — | — | — | — |
+| **EArkivChecker** | Yes — 1 project, 44 methods | xUnit 2.9.3 + runner 3.1.5 + SkippableFact 1.4.13 | None (hand-written fakes) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | Tier C/D naming + `[SkippableFact]` + env connection string | `dotnet test` in local-ci/pre-push; CI build-only |
 | **Dokumentbibliotek** | **No** | — | — | — | — | — | — | — |
 | **ODVGateway** | **No** (has e2e smoke script) | — | — | — | — | — | — | Smoke test in local gate + CI |
 | **OpenDocViewer** | Yes — 4 files | vitest ^4.0.0 | None | package.json + lockfile | vitest `expect` | None | None | `npm test` locally only; CI build-only |
@@ -160,13 +167,13 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 ### Key divergences
 
-- **Testless repos:** 4 of 8 .NET repos have zero automated tests — **LogSearch**, **EArkivChecker**, **Dokumentbibliotek**, **ODVGateway**. ODVGateway at least has an end-to-end smoke script; the other three rely on manual verification.
+- **Testless repos:** 3 of 8 .NET repos have zero automated tests — **LogSearch**, **Dokumentbibliotek**, **ODVGateway**. ODVGateway at least has an end-to-end smoke script; the other two rely on manual verification.
 - **Framework is consistent where tests exist:** xUnit in every .NET repo; vitest in OpenDocViewer; node:test in AgentDocMap. No NUnit/MSTest/jest/mocha anywhere.
 - **No mock framework anywhere:** every repo uses hand-written fakes/stubs. This is a deliberate-looking, ecosystem-wide pattern.
 - **Pin drift in VajSkrivare:** the only repo without CPM pins the older `Microsoft.NET.Test.Sdk` 17.14.0 and `xunit.runner.visualstudio` 2.8.2 (vs 18.7.0 / 3.1.5 everywhere else) and has no coverlet reference.
-- **Coverage is decorative:** `coverlet.collector` is referenced in OMP (2 of 3 test projects), IbsPackager, and iKrock2, but no `.runsettings`, script, or CI step ever collects coverage.
+- **Coverage is decorative:** `coverlet.collector` is referenced in OMP (2 of 3 test projects), IbsPackager, iKrock2, and EArkivChecker, but no `.runsettings`, script, or CI step ever collects coverage.
 - **CI gap:** only **AgentDocMap** runs tests in GitHub CI. OMP runs tests in the local pre-push hook; all other repos' CI/local-ci gates are build-only.
-- **DB-test gating split:** IbsPackager skips cleanly without SQL Server (`[SkippableFact]` + env var); OMP's Tier C tests hard-fail without local SQL Server. No `[Trait]`/`[Collection]`/Testcontainers anywhere.
+- **DB-test gating split:** IbsPackager and EArkivChecker skip cleanly without SQL Server (`[SkippableFact]` + env var); OMP's Tier C tests hard-fail without local SQL Server. No `[Trait]`/`[Collection]`/Testcontainers anywhere.
 - **Layout outliers:** VajSkrivare uses a top-level `tests/` folder instead of sibling `X.Tests/`; `IbsPackager.Tests` is named after the repo, not its actual target (`IbsPackager.Runtime`); ODVGateway has no solution file at all.
 - **Fragile patterns:** iKrock2 tests reach private statics via reflection; iKrock2's `local-ci.ps1:40` and `docs/DEV-SETUP.md:119` still claim no test project exists (stale, Swedish TODO).
 
@@ -204,11 +211,11 @@ This is already the de-facto standard: OMP, IbsPackager, and iKrock2 use identic
 - **Migration:** Add `LogSearch.Tests/LogSearch.Tests.csproj` beside the source projects with the standard xUnit pins in `Directory.Packages.props`, add it to `LogSearch.slnx`, and start with Tier D tests of `LogSearch.Runtime` lease/ownership semantics (currently verified manually). Wire `dotnet test` into `scripts/local-ci.ps1`. DB-dependent behavior gets Tier C tests with the SkippableFact + env-var pattern.
 - **Priority:** **High** — core queue/lease logic currently has only manual verification.
 
-### EArkivChecker (testless)
+### EArkivChecker (aligned)
 
-- **Current state:** No automated tests; build-only local-ci and CI.
-- **Migration:** Add `EArkivChecker.Runtime.Tests/` beside `EArkivChecker.Runtime/` (FolderScanner, scan processor, repository are the first targets; Service and Web are thin hosts), standard CPM pins, add to `EArkivChecker.slnx`, wire `dotnet test` into `scripts/local-ci.ps1`.
-- **Priority:** **High** — scan/notification logic is business-critical and unverified.
+- **Current state:** Matches the recommended standard: `EArkivChecker.Runtime.Tests` (24 Tier D + 20 Tier C tests) with standard CPM pins, Tier C/D naming, `[SkippableFact]` + `EARKIVCHECKER_TEST_CONNECTION_STRING` gating over self-deployed per-class databases (including a core-schema stub covering the alarm subscription/notification methods), and `dotnet test` wired into `scripts/local-ci.ps1` / the pre-push gate. Only `EArkivChecker.Runtime` is covered; Service and Web are thin hosts.
+- **Migration:** None required for Runtime. If Service or Web grow real logic, extend the suite along the same pattern.
+- **Priority:** **Done** — reference implementation for Tier C gating alongside IbsPackager.
 
 ### Dokumentbibliotek (testless)
 
@@ -260,5 +267,5 @@ This is already the de-facto standard: OMP, IbsPackager, and iKrock2 use identic
 
 ### Repos already aligned
 
-- **.NET:** OpenModulePlatform (reference), IbsPackager, iKrock2 — identical xUnit/CPM pins and conventions.
+- **.NET:** OpenModulePlatform (reference), IbsPackager, iKrock2, EArkivChecker — identical xUnit/CPM pins and conventions (IbsPackager and EArkivChecker additionally pair Tier C/D naming with SkippableFact gating).
 - **JS:** AgentDocMap — node:test, lockfile, CI-enforced.
