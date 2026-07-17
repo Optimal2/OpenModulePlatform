@@ -117,6 +117,13 @@ app.MapGet("/session-status", (HttpContext context) =>
         : Results.Unauthorized();
 });
 
+app.MapGet("/runtime-versions", (HttpContext context) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+
+    return Results.Json(OmpRuntimeAssemblyVersionCheck.CreateReport());
+});
+
 app.MapPost("/logout", async (
     HttpContext context,
     IOptions<OmpAuthOptions> authOptions,
