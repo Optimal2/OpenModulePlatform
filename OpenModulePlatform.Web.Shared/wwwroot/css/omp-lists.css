@@ -457,6 +457,10 @@ body.list-column-resizing {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/cancel.svg");
 }
 
+.admin-icon-button--change {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/change.svg");
+}
+
 /* Variant that shows a text glyph (e.g. an expansion arrow) instead of the
    mask icon; the host supplies the glyph as button content. */
 .admin-icon-button--glyph::before {
