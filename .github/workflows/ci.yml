@@ -86,3 +86,6 @@ jobs:
 
       - name: Build solution
         run: dotnet build OpenModulePlatform.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test OpenModulePlatform.slnx --configuration Release --no-build
