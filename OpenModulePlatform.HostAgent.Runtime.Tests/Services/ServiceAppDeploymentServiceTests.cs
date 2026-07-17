@@ -236,6 +236,166 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.Empty(control.DeletedServices);
     }
 
+    [Fact]
+    public void OrphanDuplicateCleanup_RunningOrphan_CanonicalClaimedAndRunning_IsStoppedAndDeleted()
+    {
+        var control = new FakeWindowsServiceControl();
+        control.SetState("iKrock2.Backend", "RUNNING");
+        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+
+        var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
+            control,
+            CreateGuardrailSettings(),
+            serviceName: "iKrock2.Backend",
+            serviceState: "RUNNING",
+            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
+            canonicalServiceName: "OMP.iKrock2.Backend",
+            canonicalState: "RUNNING",
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            out var refusalReason);
+
+        Assert.True(deleted);
+        Assert.Null(refusalReason);
+        Assert.Single(control.DeletedServices, "iKrock2.Backend");
+        Assert.Null(control.GetServiceState("iKrock2.Backend"));
+        // The canonical service must remain untouched.
+        Assert.Equal("RUNNING", control.GetServiceState("OMP.iKrock2.Backend"));
+    }
+
+    [Fact]
+    public void OrphanDuplicateCleanup_TwinStillClaimedByAppInstance_IsRefused()
+    {
+        var control = new FakeWindowsServiceControl();
+        control.SetState("iKrock2.Backend", "RUNNING");
+        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+
+        var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
+            control,
+            CreateGuardrailSettings(),
+            serviceName: "iKrock2.Backend",
+            serviceState: "RUNNING",
+            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
+            canonicalServiceName: "OMP.iKrock2.Backend",
+            canonicalState: "RUNNING",
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend", "iKrock2.Backend" },
+            out var refusalReason);
+
+        Assert.False(deleted);
+        Assert.Contains("still claimed", refusalReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(control.DeletedServices);
+    }
+
+    [Theory]
+    [InlineData("STOPPED")]
+    [InlineData(null)]
+    public void OrphanDuplicateCleanup_CanonicalNotRunning_IsRefused(string? canonicalState)
+    {
+        var control = new FakeWindowsServiceControl();
+        control.SetState("iKrock2.Backend", "RUNNING");
+        if (canonicalState is not null)
+        {
+            control.SetState("OMP.iKrock2.Backend", canonicalState);
+        }
+
+        var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
+            control,
+            CreateGuardrailSettings(),
+            serviceName: "iKrock2.Backend",
+            serviceState: "RUNNING",
+            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
+            canonicalServiceName: "OMP.iKrock2.Backend",
+            canonicalState: canonicalState,
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            out var refusalReason);
+
+        Assert.False(deleted);
+        Assert.NotNull(refusalReason);
+        Assert.Empty(control.DeletedServices);
+    }
+
+    [Fact]
+    public void OrphanDuplicateCleanup_CanonicalNotClaimed_IsRefused()
+    {
+        var control = new FakeWindowsServiceControl();
+        control.SetState("iKrock2.Backend", "RUNNING");
+
+        var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
+            control,
+            CreateGuardrailSettings(),
+            serviceName: "iKrock2.Backend",
+            serviceState: "RUNNING",
+            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
+            canonicalServiceName: "OMP.iKrock2.Backend",
+            canonicalState: "RUNNING",
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            out var refusalReason);
+
+        Assert.False(deleted);
+        Assert.Contains("not claimed", refusalReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(control.DeletedServices);
+    }
+
+    [Theory]
+    [InlineData("OMP.HostAgent")]
+    [InlineData("OMP.WorkerManager")]
+    public void OrphanDuplicateCleanup_HostAgentOrWorkerManagerTarget_IsNeverDeleted(string targetServiceName)
+    {
+        var control = new FakeWindowsServiceControl();
+        control.SetState(targetServiceName, "RUNNING");
+        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+
+        var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
+            control,
+            CreateGuardrailSettings(),
+            serviceName: targetServiceName,
+            serviceState: "RUNNING",
+            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
+            canonicalServiceName: "OMP.iKrock2.Backend",
+            canonicalState: "RUNNING",
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            out var refusalReason);
+
+        Assert.False(deleted);
+        Assert.NotNull(refusalReason);
+        Assert.Empty(control.DeletedServices);
+    }
+
+    [Fact]
+    public void OrphanDuplicateCleanup_ExecutableIdentityMismatch_IsRefused()
+    {
+        var control = new FakeWindowsServiceControl();
+        control.SetState("iKrock2.Backend", "RUNNING");
+        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+
+        var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
+            control,
+            CreateGuardrailSettings(),
+            serviceName: "iKrock2.Backend",
+            serviceState: "RUNNING",
+            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\OtherApp.exe",
+            canonicalServiceName: "OMP.iKrock2.Backend",
+            canonicalState: "RUNNING",
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            out var refusalReason);
+
+        Assert.False(deleted);
+        Assert.Contains("executable", refusalReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(control.DeletedServices);
+    }
+
+    private static HostAgentSettings CreateGuardrailSettings()
+        => new()
+        {
+            ServicesRoot = "E:\\OMP\\Services",
+            ServiceName = "OMP.HostAgent"
+        };
+
     private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath, string OldTargetPath) CreateRenameScenario()
     {
         var settings = new HostAgentSettings
