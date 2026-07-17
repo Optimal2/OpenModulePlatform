@@ -419,6 +419,218 @@ public sealed class OrphanServiceAppFinderTests
         Assert.Contains("duplicate", duplicateFinding.Title, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsLegacyTwinOutsideServicesRoot()
+    {
+        using var root = new TempServicesRoot();
+        using var externalRoot = new TempServicesRoot();
+        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
+        var twinExePath = Path.Combine(externalRoot.Path, "iKrock2.Backend", "iKrock2.Backend.exe");
+
+        var deployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "ikrock_backend",
+            InstallationName = "OMP.iKrock2.Backend",
+            ArtifactId = 42,
+            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedTargetPath = canonicalPath
+        };
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate(
+                "OMP.iKrock2.Backend",
+                "RUNNING",
+                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                "OMP iKrock Backend"),
+            new ServiceAppServiceCandidate(
+                "iKrock2.Backend",
+                "RUNNING",
+                twinExePath,
+                "OMP DESKTOP-TEST iKrock Backend",
+                IsUnderServicesRoot: false)
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { deployment },
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal(MaintenanceTargetKinds.WindowsService, finding.TargetKind);
+        Assert.Equal("iKrock2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("duplicate-twin", finding.FindingKey, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((byte)95, finding.Confidence);
+        Assert.Contains("canonicalServiceName", finding.ActionJson, StringComparison.Ordinal);
+        Assert.Contains("OMP.iKrock2.Backend", finding.ActionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsUnclaimedLegacyTwinUnderServicesRootOnlyOnce()
+    {
+        using var root = new TempServicesRoot();
+        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
+        var twinPath = Path.Combine(root.Path, "iKrock2.Backend");
+
+        var deployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "ikrock_backend",
+            InstallationName = "OMP.iKrock2.Backend",
+            ArtifactId = 42,
+            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedTargetPath = canonicalPath
+        };
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate(
+                "OMP.iKrock2.Backend",
+                "RUNNING",
+                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                "OMP iKrock Backend"),
+            new ServiceAppServiceCandidate(
+                "iKrock2.Backend",
+                "STOPPED",
+                Path.Combine(twinPath, "iKrock2.Backend.exe"),
+                "OMP iKrock Backend old")
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { deployment },
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        // The twin must be reported exactly once, as a duplicate-twin finding, and the
+        // canonical claimed service must never be flagged.
+        var finding = Assert.Single(findings);
+        Assert.Equal("iKrock2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("duplicate-twin", finding.FindingKey, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(findings, f => f.TargetIdentifier.Contains("OMP.iKrock2.Backend", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsTwinClaimedBySameAppDuplicateInstance()
+    {
+        using var root = new TempServicesRoot();
+        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
+        var twinPath = Path.Combine(root.Path, "iKrock2.Backend");
+
+        var canonicalDeployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "ikrock_backend",
+            InstallationName = "OMP.iKrock2.Backend",
+            ArtifactId = 42,
+            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedTargetPath = canonicalPath
+        };
+        var duplicateInstanceDeployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "ikrock_backend_desktop_test",
+            InstallationName = "iKrock2.Backend",
+            ArtifactId = 42,
+            DeployedRuntimeName = "iKrock2.Backend",
+            DeployedTargetPath = twinPath
+        };
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate(
+                "OMP.iKrock2.Backend",
+                "STOPPED",
+                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                "OMP iKrock Backend"),
+            new ServiceAppServiceCandidate(
+                "iKrock2.Backend",
+                "RUNNING",
+                Path.Combine(twinPath, "iKrock2.Backend.exe"),
+                "OMP DESKTOP-TEST iKrock Backend")
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { canonicalDeployment, duplicateInstanceDeployment },
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal("iKrock2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("duplicate-twin", finding.FindingKey, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((byte)80, finding.Confidence);
+        Assert.Contains("ikrock_backend_desktop_test", finding.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Disable or remove the duplicate AppInstance", finding.RecommendedAction, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_ServiceSweep_SkipsTwinClaimedByDifferentApp()
+    {
+        using var root = new TempServicesRoot();
+        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
+        var twinPath = Path.Combine(root.Path, "iKrock2.Backend");
+
+        var canonicalDeployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "ikrock_backend",
+            InstallationName = "OMP.iKrock2.Backend",
+            ArtifactId = 42,
+            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedTargetPath = canonicalPath
+        };
+        var otherAppDeployment = new ServiceAppDeploymentDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "other_app_instance",
+            InstallationName = "iKrock2.Backend",
+            ArtifactId = 99,
+            DeployedRuntimeName = "iKrock2.Backend",
+            DeployedTargetPath = twinPath
+        };
+
+        var settings = CreateSettings(root.Path);
+        var candidates = new[]
+        {
+            new ServiceAppServiceCandidate(
+                "OMP.iKrock2.Backend",
+                "RUNNING",
+                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                "OMP iKrock Backend"),
+            new ServiceAppServiceCandidate(
+                "iKrock2.Backend",
+                "RUNNING",
+                Path.Combine(twinPath, "iKrock2.Backend.exe"),
+                "Other App Backend")
+        };
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            new[] { canonicalDeployment, otherAppDeployment },
+            _ => null,
+            candidates,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
     private static HostAgentSettings CreateSettings(string servicesRoot)
     {
         return new HostAgentSettings

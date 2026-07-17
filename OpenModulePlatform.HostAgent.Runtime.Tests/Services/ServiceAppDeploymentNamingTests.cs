@@ -270,6 +270,40 @@ public sealed class ServiceAppDeploymentNamingTests
         Assert.Contains("WorkerManager service name", result.Reason);
     }
 
+    [Theory]
+    // Twin matches the canonical executable name (legacy generic-resolution name).
+    [InlineData("iKrock2.Backend", "OMP.iKrock2.Backend", "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe", true)]
+    // Twin is the canonical name without its first prefix segment.
+    [InlineData("iKrock2.Backend", "OMP.iKrock2.Backend", null, true)]
+    [InlineData("backend", "OMP.backend", "D:\\apps\\backend\\backend.exe", true)]
+    // Same name is never a twin.
+    [InlineData("OMP.iKrock2.Backend", "OMP.iKrock2.Backend", "E:\\x\\iKrock2.Backend.exe", false)]
+    // Unrelated name with no naming relationship.
+    [InlineData("SomeOtherService", "OMP.iKrock2.Backend", "E:\\x\\iKrock2.Backend.exe", false)]
+    [InlineData("iKrock2.Backend", "OMP.OtherApp.Backend", null, false)]
+    public void IsLegacyTwinServiceName_MatchesExpected(
+        string candidate,
+        string canonical,
+        string? canonicalExecutablePath,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            ServiceAppDeploymentNaming.IsLegacyTwinServiceName(candidate, canonical, canonicalExecutablePath));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void IsLegacyTwinServiceName_False_ForBlankCandidate(string? candidate)
+    {
+        Assert.False(ServiceAppDeploymentNaming.IsLegacyTwinServiceName(
+            candidate!,
+            "OMP.iKrock2.Backend",
+            "E:\\x\\iKrock2.Backend.exe"));
+    }
+
     private static ServiceAppDeploymentDescriptor CreateDeployment(
         Guid? appInstanceId = null,
         string? installationName = null,
