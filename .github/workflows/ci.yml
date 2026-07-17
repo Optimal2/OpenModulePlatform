@@ -87,5 +87,14 @@ jobs:
       - name: Build solution
         run: dotnet build OpenModulePlatform.slnx --configuration Release --no-restore
 
+      - name: Start SQL Server LocalDB for integration tests
+        shell: pwsh
+        run: |
+          sqllocaldb info MSSQLLocalDB
+          if ($LASTEXITCODE -ne 0) { sqllocaldb create MSSQLLocalDB }
+          sqllocaldb start MSSQLLocalDB
+
       - name: Test
+        env:
+          OMP_TEST_CONNECTION_STRING: 'Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true'
         run: dotnet test OpenModulePlatform.slnx --configuration Release --no-build
