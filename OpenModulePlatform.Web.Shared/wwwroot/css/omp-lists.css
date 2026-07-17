@@ -216,9 +216,15 @@
     margin-top: 12px;
 }
 
+/* Long unbroken strings (paths, keys) must wrap inside the popover, and very
+   long texts scroll instead of growing past the viewport. */
 .info-popover {
     position: fixed;
-    max-width: 340px;
+    max-width: min(420px, calc(100vw - 16px));
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
     padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 10px;
@@ -441,6 +447,20 @@ body.list-column-resizing {
 
 .admin-icon-button--visible-off {
     --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/visible_off.svg");
+}
+
+.admin-icon-button--check {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+}
+
+.admin-icon-button--cancel {
+    --admin-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/cancel.svg");
+}
+
+/* Variant that shows a text glyph (e.g. an expansion arrow) instead of the
+   mask icon; the host supplies the glyph as button content. */
+.admin-icon-button--glyph::before {
+    display: none;
 }
 
 .admin-icon-button:disabled,
