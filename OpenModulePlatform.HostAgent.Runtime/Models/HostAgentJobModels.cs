@@ -319,6 +319,12 @@ public sealed class MaintenanceFindingAction
 
     public string? ServiceName { get; set; }
 
+    /// <summary>
+    /// For duplicate service-app findings: the claimed canonical service that must
+    /// remain running before the duplicate <see cref="ServiceName"/> may be deleted.
+    /// </summary>
+    public string? CanonicalServiceName { get; set; }
+
     public string? Path { get; set; }
 
     public string? InstallRoot { get; set; }

@@ -57,6 +57,39 @@ internal static class ServiceAppDeploymentNaming
             || value.Equals("app", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Determines whether a service name looks like the legacy/unprefixed twin of a
+    /// canonical service name for the same logical app. A twin is either the canonical
+    /// executable file name without extension (the service name a generic
+    /// InstallationName would have produced) or the canonical name with its first
+    /// prefix segment removed (for example 'iKrock2.Backend' vs 'OMP.iKrock2.Backend').
+    /// Callers must additionally verify that both services point to the same
+    /// executable file name before treating the candidate as a duplicate.
+    /// </summary>
+    internal static bool IsLegacyTwinServiceName(
+        string candidateServiceName,
+        string canonicalServiceName,
+        string? canonicalExecutablePath)
+    {
+        if (string.IsNullOrWhiteSpace(candidateServiceName)
+            || string.IsNullOrWhiteSpace(canonicalServiceName)
+            || string.Equals(candidateServiceName, canonicalServiceName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var executableName = Path.GetFileNameWithoutExtension(canonicalExecutablePath);
+        if (!string.IsNullOrWhiteSpace(executableName)
+            && string.Equals(candidateServiceName.Trim(), executableName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return canonicalServiceName.EndsWith(
+            "." + candidateServiceName.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Determines whether an old service/folder should be cleaned up because the
     /// deployment's runtime name changed. Returns a reason string when cleanup is skipped.
     /// </summary>

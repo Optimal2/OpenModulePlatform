@@ -113,7 +113,7 @@ public sealed class HostAgentJobProcessor
                     break;
 
                 case HostAgentJobTypes.MaintenanceCleanup:
-                    await ProcessMaintenanceCleanupJobAsync(job, processingCancellation.Token);
+                    await ProcessMaintenanceCleanupJobAsync(job, hostKey, processingCancellation.Token);
                     break;
 
                 case HostAgentJobTypes.WebAppHealthProbe:
@@ -446,6 +446,7 @@ public sealed class HostAgentJobProcessor
 
     private async Task ProcessMaintenanceCleanupJobAsync(
         HostAgentJobWorkItem job,
+        string hostKey,
         CancellationToken cancellationToken)
     {
         var payload = string.IsNullOrWhiteSpace(job.PayloadJson)
@@ -462,7 +463,7 @@ public sealed class HostAgentJobProcessor
         foreach (var entry in entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var entryResult = await ProcessMaintenanceCleanupEntryAsync(entry, job.HostAgentJobId, cancellationToken);
+            var entryResult = await ProcessMaintenanceCleanupEntryAsync(entry, job.HostAgentJobId, hostKey, cancellationToken);
             AddMaintenanceCleanupResult(result, entryResult);
         }
 
@@ -482,6 +483,7 @@ public sealed class HostAgentJobProcessor
     private async Task<MaintenanceCleanupEntryResult> ProcessMaintenanceCleanupEntryAsync(
         MaintenanceFindingCleanupEntry entry,
         long hostAgentJobId,
+        string hostKey,
         CancellationToken cancellationToken)
     {
         MaintenanceFindingAction? action = null;
@@ -498,7 +500,7 @@ public sealed class HostAgentJobProcessor
         switch (targetKind)
         {
             case MaintenanceTargetKinds.WindowsService:
-                result = CleanupWindowsServiceFinding(entry, action);
+                result = await CleanupWindowsServiceFindingAsync(entry, action, hostKey, cancellationToken);
                 break;
             case MaintenanceTargetKinds.Directory:
                 result = CleanupDirectoryFinding(entry, action, cancellationToken);
@@ -1340,6 +1342,7 @@ public sealed class HostAgentJobProcessor
                 hostId,
                 hostKey,
                 settings,
+                activeDeployments,
                 expectedServiceNames,
                 expectedTargetPaths,
                 serviceAppServiceCandidates,
@@ -1518,9 +1521,11 @@ public sealed class HostAgentJobProcessor
         return findings;
     }
 
-    private MaintenanceCleanupEntryResult CleanupWindowsServiceFinding(
+    private async Task<MaintenanceCleanupEntryResult> CleanupWindowsServiceFindingAsync(
         MaintenanceFindingCleanupEntry entry,
-        MaintenanceFindingAction? action)
+        MaintenanceFindingAction? action,
+        string hostKey,
+        CancellationToken cancellationToken)
     {
         var serviceName = action?.ServiceName?.Trim();
         if (string.IsNullOrWhiteSpace(serviceName))
@@ -1538,6 +1543,18 @@ public sealed class HostAgentJobProcessor
         if (state is null)
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Missing", "The Windows service was already missing.");
+        }
+
+        var canonicalServiceName = ServiceAppDeploymentNaming.Clean(action?.CanonicalServiceName);
+        if (!string.IsNullOrWhiteSpace(canonicalServiceName))
+        {
+            return await CleanupOrphanDuplicateServiceFindingAsync(
+                entry,
+                hostKey,
+                serviceName,
+                state,
+                canonicalServiceName,
+                cancellationToken);
         }
 
         if (string.Equals(state, "RUNNING", StringComparison.OrdinalIgnoreCase))
@@ -1563,6 +1580,187 @@ public sealed class HostAgentJobProcessor
             entry,
             "Error",
             $"sc.exe delete failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
+    }
+
+    /// <summary>
+    /// Deletes a confirmed orphan-duplicate ("legacy twin") service. Unlike the generic
+    /// cleanup path, a running duplicate may be stopped and deleted here, but only when
+    /// every guardrail in <see cref="TryCleanupOrphanDuplicateService"/> passes.
+    /// </summary>
+    private async Task<MaintenanceCleanupEntryResult> CleanupOrphanDuplicateServiceFindingAsync(
+        MaintenanceFindingCleanupEntry entry,
+        string hostKey,
+        string serviceName,
+        string? serviceState,
+        string canonicalServiceName,
+        CancellationToken cancellationToken)
+    {
+        var deployments = await _repository.GetDesiredServiceAppDeploymentsAsync(
+            hostKey,
+            MaxServiceAppDeploymentsForOrphanScan,
+            cancellationToken);
+
+        var claimedServiceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var deployment in deployments)
+        {
+            var resolvedName = ResolveExpectedServiceAppServiceName(deployment);
+            if (!string.IsNullOrWhiteSpace(resolvedName))
+            {
+                claimedServiceNames.Add(resolvedName);
+            }
+        }
+
+        var canonicalState = GetServiceState(canonicalServiceName);
+        var serviceExecutablePath = TryGetServiceExecutablePath(serviceName);
+        var canonicalExecutablePath = TryGetServiceExecutablePath(canonicalServiceName);
+
+        bool deleted;
+        string? refusalReason;
+        try
+        {
+            deleted = TryCleanupOrphanDuplicateService(
+                WindowsServiceControl.Instance,
+                _settings.CurrentValue,
+                serviceName,
+                serviceState,
+                serviceExecutablePath,
+                canonicalServiceName,
+                canonicalState,
+                canonicalExecutablePath,
+                claimedServiceNames,
+                out refusalReason);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return CreateMaintenanceCleanupEntryResult(
+                entry,
+                "Error",
+                $"Failed to stop and delete duplicate Windows service '{serviceName}': {ex.Message}");
+        }
+
+        if (!deleted)
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Skipped", refusalReason);
+        }
+
+        return CreateMaintenanceCleanupEntryResult(
+            entry,
+            "Cleaned",
+            $"Stopped and deleted duplicate Windows service '{serviceName}'. The claimed canonical service '{canonicalServiceName}' remains in place.");
+    }
+
+    /// <summary>
+    /// Guardrailed stop-and-delete of an orphan-duplicate service. The duplicate is
+    /// only deleted when (a) the claimed canonical service for the same app remains
+    /// running, (b) the duplicate is unambiguously orphan (not claimed by any active
+    /// enabled AppInstance and pointing to the same executable file name as the
+    /// canonical service), and (c) neither the duplicate nor the canonical service is
+    /// the active HostAgent or a WorkerManager service. Returns true when the service
+    /// was stopped and deleted via <paramref name="serviceControl"/>.
+    /// </summary>
+    internal static bool TryCleanupOrphanDuplicateService(
+        IWindowsServiceControl serviceControl,
+        HostAgentSettings settings,
+        string serviceName,
+        string? serviceState,
+        string? serviceExecutablePath,
+        string canonicalServiceName,
+        string? canonicalState,
+        string? canonicalExecutablePath,
+        IReadOnlySet<string> claimedServiceNames,
+        out string? refusalReason)
+    {
+        refusalReason = EvaluateOrphanDuplicateCleanup(
+            settings,
+            serviceName,
+            serviceState,
+            serviceExecutablePath,
+            canonicalServiceName,
+            canonicalState,
+            canonicalExecutablePath,
+            claimedServiceNames);
+        if (refusalReason is not null)
+        {
+            return false;
+        }
+
+        // DeleteService stops the service first when it is running, then deletes it.
+        serviceControl.DeleteService(serviceName);
+        return true;
+    }
+
+    private static string? EvaluateOrphanDuplicateCleanup(
+        HostAgentSettings settings,
+        string serviceName,
+        string? serviceState,
+        string? serviceExecutablePath,
+        string canonicalServiceName,
+        string? canonicalState,
+        string? canonicalExecutablePath,
+        IReadOnlySet<string> claimedServiceNames)
+    {
+        if (string.Equals(serviceName, settings.ServiceName, StringComparison.OrdinalIgnoreCase)
+            || IsServiceNameWithKnownPrefix(serviceName, KnownHostAgentServiceNamePrefixes))
+        {
+            return $"Refusing to delete '{serviceName}': it is a HostAgent service.";
+        }
+
+        if (IsServiceNameWithKnownPrefix(serviceName, KnownWorkerManagerServiceNamePrefixes))
+        {
+            return $"Refusing to delete '{serviceName}': it is a WorkerManager service.";
+        }
+
+        if (string.Equals(canonicalServiceName, serviceName, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Refusing to delete '{serviceName}': the canonical service name matches the duplicate target; the finding action is inconsistent.";
+        }
+
+        if (string.Equals(canonicalServiceName, settings.ServiceName, StringComparison.OrdinalIgnoreCase)
+            || IsServiceNameWithKnownPrefix(canonicalServiceName, KnownHostAgentServiceNamePrefixes)
+            || IsServiceNameWithKnownPrefix(canonicalServiceName, KnownWorkerManagerServiceNamePrefixes))
+        {
+            return $"Refusing to delete '{serviceName}': the canonical service '{canonicalServiceName}' is a HostAgent or WorkerManager service; the finding action is inconsistent.";
+        }
+
+        if (claimedServiceNames.Contains(serviceName))
+        {
+            return $"Refusing to delete '{serviceName}': it is still claimed by an active enabled AppInstance. Disable or remove that AppInstance first.";
+        }
+
+        if (!claimedServiceNames.Contains(canonicalServiceName))
+        {
+            return $"Refusing to delete '{serviceName}': the canonical service '{canonicalServiceName}' is not claimed by any active enabled AppInstance.";
+        }
+
+        if (canonicalState is null)
+        {
+            return $"Refusing to delete '{serviceName}': the canonical service '{canonicalServiceName}' is missing.";
+        }
+
+        if (!string.Equals(canonicalState, "RUNNING", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Refusing to delete '{serviceName}': the canonical service '{canonicalServiceName}' is not running (state '{canonicalState}').";
+        }
+
+        if (string.IsNullOrWhiteSpace(serviceExecutablePath) || string.IsNullOrWhiteSpace(canonicalExecutablePath))
+        {
+            return $"Refusing to delete '{serviceName}': the executable identity of the duplicate pair could not be confirmed.";
+        }
+
+        var serviceExeFileName = Path.GetFileName(serviceExecutablePath);
+        var canonicalExeFileName = Path.GetFileName(canonicalExecutablePath);
+        if (string.IsNullOrWhiteSpace(serviceExeFileName)
+            || !string.Equals(serviceExeFileName, canonicalExeFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Refusing to delete '{serviceName}': its executable does not match the canonical service executable.";
+        }
+
+        if (!ServiceAppDeploymentNaming.IsLegacyTwinServiceName(serviceName, canonicalServiceName, canonicalExecutablePath))
+        {
+            return $"Refusing to delete '{serviceName}': it is not an unambiguous legacy twin of '{canonicalServiceName}'.";
+        }
+
+        return null;
     }
 
     private MaintenanceCleanupEntryResult CleanupDirectoryFinding(
@@ -1876,27 +2074,21 @@ public sealed class HostAgentJobProcessor
                 GetServiceState(name),
                 TryGetServiceExecutablePath(name),
                 TryGetServiceDisplayName(name)))
-            .Where(candidate =>
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.ExecutablePath))
+            .Select(candidate =>
             {
-                if (string.IsNullOrWhiteSpace(candidate.ExecutablePath))
-                {
-                    return false;
-                }
-
-                var fullExecutablePath = Path.GetFullPath(candidate.ExecutablePath)
+                var fullExecutablePath = Path.GetFullPath(candidate.ExecutablePath!)
                     .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-                if (!IsSameOrChildPath(servicesRoot, fullExecutablePath))
-                {
-                    return false;
-                }
+                // Services outside the services root are kept as candidates so that a
+                // legacy/unprefixed duplicate of an active OMP service can be detected
+                // even when it was self-installed elsewhere. The general orphan sweep
+                // still only considers services under the services root.
+                var isUnderServicesRoot =
+                    IsSameOrChildPath(servicesRoot, fullExecutablePath)
+                    && !IsSameOrChildPath(hostAgentInstallRoot, fullExecutablePath);
 
-                if (IsSameOrChildPath(hostAgentInstallRoot, fullExecutablePath))
-                {
-                    return false;
-                }
-
-                return true;
+                return candidate with { IsUnderServicesRoot = isUnderServicesRoot };
             })
             .ToArray();
     }
@@ -1934,12 +2126,24 @@ public sealed class HostAgentJobProcessor
         Guid hostId,
         string hostKey,
         HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
         IReadOnlySet<string> claimedServiceNames,
         IReadOnlySet<string> expectedTargetPaths,
         IReadOnlyList<ServiceAppServiceCandidate> candidates,
         CancellationToken cancellationToken)
     {
         var findings = new List<MaintenanceFindingUpsert>();
+
+        // Detect legacy/unprefixed duplicate ("twin") services of active claimed
+        // services first, so the general orphan sweep does not double-report them.
+        var duplicateTwinMatches = FindLegacyDuplicateTwinServices(
+            settings,
+            activeDeployments,
+            claimedServiceNames,
+            candidates);
+        var duplicateTwinNames = new HashSet<string>(
+            duplicateTwinMatches.Select(static match => match.Twin.Name),
+            StringComparer.OrdinalIgnoreCase);
 
         foreach (var candidate in candidates)
         {
@@ -1953,6 +2157,19 @@ public sealed class HostAgentJobProcessor
             if (IsServiceNameWithKnownPrefix(candidate.Name, KnownHostAgentServiceNamePrefixes)
                 || IsServiceNameWithKnownPrefix(candidate.Name, KnownWorkerManagerServiceNamePrefixes)
                 || string.Equals(candidate.Name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // The general orphan sweep only considers services whose executable lives
+            // under the services root. Outside-root services are only reported through
+            // the duplicate-twin detection below.
+            if (!candidate.IsUnderServicesRoot)
+            {
+                continue;
+            }
+
+            if (duplicateTwinNames.Contains(candidate.Name))
             {
                 continue;
             }
@@ -2004,7 +2221,7 @@ public sealed class HostAgentJobProcessor
         }
 
         var duplicateDisplayNameGroups = candidates
-            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.DisplayName))
+            .Where(candidate => candidate.IsUnderServicesRoot && !string.IsNullOrWhiteSpace(candidate.DisplayName))
             .GroupBy(candidate => candidate.DisplayName!, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .ToArray();
@@ -2058,7 +2275,162 @@ public sealed class HostAgentJobProcessor
             }
         }
 
+        foreach (var match in duplicateTwinMatches)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var twin = match.Twin;
+            var canonical = match.Canonical;
+            var executableFileName = Path.GetFileName(canonical.ExecutablePath);
+            var location = twin.IsUnderServicesRoot ? "under" : "outside";
+
+            string detail;
+            string recommendedAction;
+            byte confidence;
+            if (match.ClaimingDeployment is not null)
+            {
+                detail =
+                    $"Host '{hostKey}' has a Windows service '{twin.Name}' in state '{twin.State ?? "unknown"}' ({location} the services root) that is a legacy/unprefixed duplicate of the claimed canonical service '{canonical.Name}' for the same app (same executable '{executableFileName}'). " +
+                    $"The duplicate name is still claimed by enabled AppInstance '{match.ClaimingDeployment.AppInstanceKey}', so the app is deployed twice on this host.";
+                recommendedAction =
+                    $"Disable or remove the duplicate AppInstance '{match.ClaimingDeployment.AppInstanceKey}' in the Portal, then let the human-gated maintenance cleanup delete service '{twin.Name}'.";
+                confidence = 80;
+            }
+            else
+            {
+                detail =
+                    $"Host '{hostKey}' has a Windows service '{twin.Name}' in state '{twin.State ?? "unknown"}' ({location} the services root) that is a legacy/unprefixed duplicate of the claimed canonical service '{canonical.Name}' for the same app (same executable '{executableFileName}'). " +
+                    "The duplicate is not owned by any active enabled AppInstance; it is likely left behind by a rename of AppInstances.InstallationName.";
+                recommendedAction =
+                    $"Confirm that the canonical service '{canonical.Name}' is running, then delete the duplicate service '{twin.Name}' via the human-gated maintenance cleanup.";
+                confidence = 95;
+            }
+
+            var twinAction = JsonSerializer.Serialize(new MaintenanceFindingAction
+            {
+                TargetKind = MaintenanceTargetKinds.WindowsService,
+                HostId = hostId,
+                ServiceName = twin.Name,
+                CanonicalServiceName = canonical.Name
+            }, JsonOptions);
+
+            findings.Add(new MaintenanceFindingUpsert
+            {
+                FindingKey = $"orphan-serviceapp-duplicate-twin:{hostId:D}:{twin.Name}",
+                Scope = MaintenanceScanScopes.Host,
+                HostId = hostId,
+                Category = "OrphanServiceApp",
+                TargetKind = MaintenanceTargetKinds.WindowsService,
+                TargetIdentifier = twin.Name,
+                Title = "Duplicate service-app service (legacy twin)",
+                Detail = detail,
+                RecommendedAction = recommendedAction,
+                SafetyNotes =
+                    "Cleanup is human-gated and only proceeds when the claimed canonical service for the same app remains running, the duplicate is no longer claimed by any active enabled AppInstance, both services point to the same executable file name, and the target is not the HostAgent or WorkerManager.",
+                ActionJson = twinAction,
+                Severity = 2,
+                Confidence = confidence
+            });
+        }
+
         return findings;
+    }
+
+    /// <summary>
+    /// Finds legacy/unprefixed "twin" services of active claimed service-app services:
+    /// a different Windows service that points to the same executable file name as a
+    /// claimed canonical service and whose name matches the legacy naming (the
+    /// executable name, or the canonical name without its first prefix segment).
+    /// Twins are matched regardless of whether their executable is under the services
+    /// root, so self-installed legacy services outside the root are detected too.
+    /// </summary>
+    private static IReadOnlyList<LegacyDuplicateTwinMatch> FindLegacyDuplicateTwinServices(
+        HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
+        IReadOnlySet<string> claimedServiceNames,
+        IReadOnlyList<ServiceAppServiceCandidate> candidates)
+    {
+        var deploymentsByServiceName = new Dictionary<string, ServiceAppDeploymentDescriptor>(StringComparer.OrdinalIgnoreCase);
+        foreach (var deployment in activeDeployments)
+        {
+            var resolvedName = ResolveExpectedServiceAppServiceName(deployment);
+            if (!string.IsNullOrWhiteSpace(resolvedName)
+                && !deploymentsByServiceName.ContainsKey(resolvedName))
+            {
+                deploymentsByServiceName[resolvedName] = deployment;
+            }
+        }
+
+        var canonicalCandidates = candidates
+            .Where(candidate =>
+                !string.IsNullOrWhiteSpace(candidate.Name)
+                && !string.IsNullOrWhiteSpace(candidate.ExecutablePath)
+                && claimedServiceNames.Contains(candidate.Name))
+            .OrderBy(candidate => candidate.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var matches = new List<LegacyDuplicateTwinMatch>();
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate.Name)
+                || string.IsNullOrWhiteSpace(candidate.ExecutablePath))
+            {
+                continue;
+            }
+
+            if (IsServiceNameWithKnownPrefix(candidate.Name, KnownHostAgentServiceNamePrefixes)
+                || IsServiceNameWithKnownPrefix(candidate.Name, KnownWorkerManagerServiceNamePrefixes)
+                || string.Equals(candidate.Name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var candidateExeFileName = Path.GetFileName(candidate.ExecutablePath);
+            if (string.IsNullOrWhiteSpace(candidateExeFileName))
+            {
+                continue;
+            }
+
+            foreach (var canonical in canonicalCandidates)
+            {
+                if (string.Equals(canonical.Name, candidate.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var canonicalExeFileName = Path.GetFileName(canonical.ExecutablePath);
+                if (string.IsNullOrWhiteSpace(canonicalExeFileName)
+                    || !string.Equals(candidateExeFileName, canonicalExeFileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!ServiceAppDeploymentNaming.IsLegacyTwinServiceName(
+                        candidate.Name,
+                        canonical.Name,
+                        canonical.ExecutablePath))
+                {
+                    continue;
+                }
+
+                // A twin still claimed by an active AppInstance is only a duplicate when
+                // the claiming instance deploys the same app (same artifact). When a
+                // different app legitimately owns the name, flagging it would be unsafe.
+                deploymentsByServiceName.TryGetValue(candidate.Name, out var claimingDeployment);
+                deploymentsByServiceName.TryGetValue(canonical.Name, out var canonicalDeployment);
+                if (claimingDeployment is not null
+                    && canonicalDeployment is not null
+                    && claimingDeployment.ArtifactId != canonicalDeployment.ArtifactId)
+                {
+                    continue;
+                }
+
+                matches.Add(new LegacyDuplicateTwinMatch(candidate, canonical, claimingDeployment));
+                break;
+            }
+        }
+
+        return matches;
     }
 
     private static IReadOnlySet<string> GetKnownHostAgentServiceNamePrefixes(string serviceNamePrefix)
@@ -2267,6 +2639,12 @@ public sealed class HostAgentJobProcessor
         string Name,
         string? State,
         string? ExecutablePath,
-        string? DisplayName);
+        string? DisplayName,
+        bool IsUnderServicesRoot = true);
+
+    private sealed record LegacyDuplicateTwinMatch(
+        ServiceAppServiceCandidate Twin,
+        ServiceAppServiceCandidate Canonical,
+        ServiceAppDeploymentDescriptor? ClaimingDeployment);
 
 }
