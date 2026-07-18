@@ -11,8 +11,7 @@ public sealed class PushEventPipelineTestFixture : IAsyncLifetime
 {
     public const string DatabaseName = "OpenModulePlatform_PortalTests_PushEvents";
 
-    public string ConnectionString { get; } =
-        "Server=localhost;Database=OpenModulePlatform_PortalTests_PushEvents;Integrated Security=true;TrustServerCertificate=true;";
+    public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 
     public const int TestUserId = 42;
 
