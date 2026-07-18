@@ -2387,6 +2387,7 @@
   <data name="errors" xml:space="preserve"><value>fel</value></data>
   <data name="Employee HSAID" xml:space="preserve"><value>Anställds HSAID</value></data>
   <data name="Patient identifier" xml:space="preserve"><value>Patient-id</value></data>
+  <data name="Patient extract" xml:space="preserve"><value>Patientutdrag</value></data>
   <data name="Completed" xml:space="preserve"><value>Slutförd</value></data>
   <data name="Canceled" xml:space="preserve"><value>Avbruten</value></data>
   <data name="Queued" xml:space="preserve"><value>Köad</value></data>

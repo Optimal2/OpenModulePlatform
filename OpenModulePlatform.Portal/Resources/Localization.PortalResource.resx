@@ -2272,6 +2272,7 @@
   <data name="errors" xml:space="preserve"><value>errors</value></data>
   <data name="Employee HSAID" xml:space="preserve"><value>Employee HSAID</value></data>
   <data name="Patient identifier" xml:space="preserve"><value>Patient identifier</value></data>
+  <data name="Patient extract" xml:space="preserve"><value>Patient extract</value></data>
   <data name="Completed" xml:space="preserve"><value>Completed</value></data>
   <data name="Canceled" xml:space="preserve"><value>Canceled</value></data>
   <data name="Queued" xml:space="preserve"><value>Queued</value></data>
