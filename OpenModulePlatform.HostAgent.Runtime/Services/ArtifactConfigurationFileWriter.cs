@@ -56,7 +56,24 @@ internal static class ArtifactConfigurationFileWriter
             // would otherwise make the worker heartbeat a phantom AppInstance.
             if (IsWorkerManagerDeployment(deployment))
             {
-                return files;
+                // A WorkerManager overlay replaces the built-in configuration, but the
+                // host identity must always come from the live deployment and settings.
+                // A stale WorkerManager.HostKey makes the OmpDatabase worker catalog
+                // lookup return nothing and stops all workers on the host; a stale
+                // HostAgentRpc.PipeName breaks the RPC channel; a stale
+                // ConnectionStrings.OmpDb is inherited by every spawned worker process.
+                return files
+                    .Select(file => IsAppSettingsJson(file)
+                        ? new ArtifactConfigurationFileDescriptor
+                        {
+                            ArtifactConfigurationFileId = file.ArtifactConfigurationFileId,
+                            ArtifactId = file.ArtifactId,
+                            RelativePath = file.RelativePath,
+                            FileContent = WithLiveWorkerManagerIdentity(
+                                file.FileContent, deployment, ompConnectionString, settings, file.RelativePath)
+                        }
+                        : file)
+                    .ToArray();
             }
 
             return files
@@ -503,6 +520,51 @@ internal static class ArtifactConfigurationFileWriter
         {
             throw new InvalidOperationException(
                 $"Service app configuration file '{relativePath}' must contain a valid JSON object.",
+                ex);
+        }
+    }
+
+    private static string WithLiveWorkerManagerIdentity(
+        string content,
+        ServiceAppDeploymentDescriptor deployment,
+        string ompConnectionString,
+        HostAgentSettings settings,
+        string relativePath)
+    {
+        try
+        {
+            var root = ParseJsonObject(content, relativePath);
+            if (root["WorkerManager"] is not JsonObject workerManager)
+            {
+                workerManager = new JsonObject();
+                root["WorkerManager"] = workerManager;
+            }
+
+            workerManager["HostKey"] = deployment.HostKey;
+            workerManager["HostName"] = Environment.MachineName;
+
+            if (workerManager["HostAgentRpc"] is not JsonObject rpc)
+            {
+                rpc = new JsonObject();
+                workerManager["HostAgentRpc"] = rpc;
+            }
+
+            rpc["PipeName"] = settings.ResolveRpcPipeName();
+
+            if (root["ConnectionStrings"] is not JsonObject connectionStrings)
+            {
+                connectionStrings = new JsonObject();
+                root["ConnectionStrings"] = connectionStrings;
+            }
+
+            connectionStrings["OmpDb"] = ompConnectionString;
+
+            return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"WorkerManager configuration file '{relativePath}' must contain a valid JSON object.",
                 ex);
         }
     }
