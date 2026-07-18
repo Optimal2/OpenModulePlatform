@@ -12,6 +12,7 @@ public sealed class HostAgentJobProcessor
     private const int DirectoryDeleteMaxAttempts = 20;
     private const int MaxServiceAppDeploymentsForOrphanScan = 10000;
     private const int MaxOrphanHostCandidates = 10000;
+    private const string OrphanServiceAppFindingCategory = "OrphanServiceApp";
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
     // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
     // older installs without exposing any customer-specific configuration.
@@ -503,7 +504,9 @@ public sealed class HostAgentJobProcessor
                 result = await CleanupWindowsServiceFindingAsync(entry, action, hostKey, cancellationToken);
                 break;
             case MaintenanceTargetKinds.Directory:
-                result = CleanupDirectoryFinding(entry, action, cancellationToken);
+                result = string.Equals(entry.Category, OrphanServiceAppFindingCategory, StringComparison.OrdinalIgnoreCase)
+                    ? await CleanupOrphanServiceAppDirectoryFindingAsync(entry, action, hostKey, cancellationToken)
+                    : CleanupDirectoryFinding(entry, action, cancellationToken);
                 break;
             case MaintenanceTargetKinds.DatabaseRow:
                 result = await CleanupDatabaseRowFindingAsync(entry, action, cancellationToken);
@@ -1773,6 +1776,48 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Error", error);
         }
 
+        return DeleteMaintenanceDirectoryWithGuards(entry, directory, cancellationToken);
+    }
+
+    private async Task<MaintenanceCleanupEntryResult> CleanupOrphanServiceAppDirectoryFindingAsync(
+        MaintenanceFindingCleanupEntry entry,
+        MaintenanceFindingAction? action,
+        string hostKey,
+        CancellationToken cancellationToken)
+    {
+        if (!TryResolveMaintenanceDirectoryPath(action, out var directory, out var error))
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Error", error);
+        }
+
+        if (!Directory.Exists(directory))
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Missing", "The directory was already missing.");
+        }
+
+        // Re-verify the finding-time safety conditions at cleanup time: the directory
+        // must still be an unowned orphan below the configured services root.
+        var settings = _settings.CurrentValue;
+        var deployments = await _repository.GetDesiredServiceAppDeploymentsAsync(
+            hostKey,
+            MaxServiceAppDeploymentsForOrphanScan,
+            cancellationToken);
+        var serviceCandidates = EnumerateServiceAppServices(settings);
+
+        var refusal = ValidateOrphanServiceAppDirectoryCleanup(settings, deployments, serviceCandidates, directory);
+        if (refusal is not null)
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Skipped", refusal);
+        }
+
+        return DeleteMaintenanceDirectoryWithGuards(entry, directory, cancellationToken);
+    }
+
+    private MaintenanceCleanupEntryResult DeleteMaintenanceDirectoryWithGuards(
+        MaintenanceFindingCleanupEntry entry,
+        string directory,
+        CancellationToken cancellationToken)
+    {
         if (!Directory.Exists(directory))
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Missing", "The directory was already missing.");
@@ -1916,6 +1961,28 @@ public sealed class HostAgentJobProcessor
         out string directory,
         out string error)
     {
+        if (!TryResolveMaintenanceDirectoryPath(action, out directory, out error))
+        {
+            return false;
+        }
+
+        var folderName = Path.GetFileName(directory);
+        if (!string.Equals(folderName, "HostAgent", StringComparison.OrdinalIgnoreCase)
+            && !folderName.StartsWith("HostAgent-", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "Refusing to delete a directory that does not look like a HostAgent install directory.";
+            directory = string.Empty;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryResolveMaintenanceDirectoryPath(
+        MaintenanceFindingAction? action,
+        out string directory,
+        out string error)
+    {
         directory = string.Empty;
         error = string.Empty;
 
@@ -1952,16 +2019,95 @@ public sealed class HostAgentJobProcessor
             return false;
         }
 
-        var folderName = Path.GetFileName(candidate);
-        if (!string.Equals(folderName, "HostAgent", StringComparison.OrdinalIgnoreCase)
-            && !folderName.StartsWith("HostAgent-", StringComparison.OrdinalIgnoreCase))
-        {
-            error = "Refusing to delete a directory that does not look like a HostAgent install directory.";
-            return false;
-        }
-
         directory = candidate;
         return true;
+    }
+
+    /// <summary>
+    /// Re-validates, at cleanup time, that an orphan service-app directory is still safe to
+    /// delete. Returns <see langword="null"/> when deletion is allowed, otherwise a refusal
+    /// message. Every finding-time safety condition from
+    /// <see cref="BuildOrphanServiceAppFindingsCore(Guid, string, HostAgentSettings, IReadOnlyList{ServiceAppDeploymentDescriptor}, Func{string, (string? State, string? ExecutablePath)?}?, IReadOnlyList{ServiceAppServiceCandidate}?, CancellationToken)"/>
+    /// is re-checked here against current state.
+    /// </summary>
+    internal static string? ValidateOrphanServiceAppDirectoryCleanup(
+        HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> activeDeployments,
+        IReadOnlyList<ServiceAppServiceCandidate> serviceAppServiceCandidates,
+        string directory)
+    {
+        if (string.IsNullOrWhiteSpace(settings.ServicesRoot))
+        {
+            return "Refusing to delete the orphan service-app directory: no services root is configured.";
+        }
+
+        var servicesRoot = Path.GetFullPath(settings.ServicesRoot.Trim())
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string candidate;
+        try
+        {
+            candidate = Path.GetFullPath(directory.Trim())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            return $"Refusing to delete the orphan service-app directory: the path is invalid ({ex.Message}).";
+        }
+
+        if (!IsSameOrChildPath(servicesRoot, candidate)
+            || string.Equals(servicesRoot, candidate, GetPathComparison()))
+        {
+            return $"Refusing to delete '{candidate}': it is not a child of the configured services root.";
+        }
+
+        var hostAgentInstallRoot = Path.GetFullPath(ResolveHostAgentInstallRoot(settings))
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.Equals(hostAgentInstallRoot, candidate, GetPathComparison()))
+        {
+            return $"Refusing to delete '{candidate}': it is the HostAgent install directory.";
+        }
+
+        var folderName = Path.GetFileName(candidate);
+        if (string.IsNullOrWhiteSpace(folderName)
+            || IsServiceNameWithKnownPrefix(folderName, KnownWorkerManagerServiceNamePrefixes)
+            || string.Equals(folderName, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Refusing to delete '{candidate}': the folder name matches a protected platform service.";
+        }
+
+        foreach (var deployment in activeDeployments)
+        {
+            var serviceName = ResolveExpectedServiceAppServiceName(deployment);
+            var targetPath = ResolveExpectedServiceAppTargetPath(settings, deployment, serviceName);
+            if (string.IsNullOrWhiteSpace(targetPath))
+            {
+                continue;
+            }
+
+            var expectedPath = Path.GetFullPath(targetPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (string.Equals(expectedPath, candidate, GetPathComparison()))
+            {
+                return $"Refusing to delete '{candidate}': it is now owned by active enabled AppInstance '{deployment.AppInstanceKey}'.";
+            }
+        }
+
+        foreach (var service in serviceAppServiceCandidates)
+        {
+            if (string.IsNullOrWhiteSpace(service.ExecutablePath))
+            {
+                continue;
+            }
+
+            var executablePath = Path.GetFullPath(service.ExecutablePath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (IsSameOrChildPath(candidate, executablePath))
+            {
+                return $"Refusing to delete '{candidate}' while Windows service '{service.Name}' still references it.";
+            }
+        }
+
+        return null;
     }
 
     private static string ResolveHostAgentInstallRoot(HostAgentSettings settings)

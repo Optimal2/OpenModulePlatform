@@ -389,6 +389,7 @@ BEGIN
     SELECT TOP (0)
         CAST(NULL AS bigint) AS MaintenanceFindingId,
         CAST(NULL AS uniqueidentifier) AS HostId,
+        CAST(NULL AS nvarchar(100)) AS Category,
         CAST(NULL AS nvarchar(80)) AS TargetKind,
         CAST(NULL AS nvarchar(1000)) AS TargetIdentifier,
         CAST(NULL AS nvarchar(max)) AS ActionJson;
@@ -404,6 +405,7 @@ WHERE TRY_CONVERT(bigint, value) IS NOT NULL;
 
 SELECT finding.MaintenanceFindingId,
        finding.HostId,
+       finding.Category,
        finding.TargetKind,
        finding.TargetIdentifier,
        finding.ActionJson
@@ -443,9 +445,10 @@ ORDER BY CASE finding.TargetKind
             {
                 MaintenanceFindingId = rdr.GetInt64(0),
                 HostId = rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
-                TargetKind = rdr.GetString(2),
-                TargetIdentifier = rdr.GetString(3),
-                ActionJson = rdr.IsDBNull(4) ? null : rdr.GetString(4)
+                Category = rdr.GetString(2),
+                TargetKind = rdr.GetString(3),
+                TargetIdentifier = rdr.GetString(4),
+                ActionJson = rdr.IsDBNull(5) ? null : rdr.GetString(5)
             });
         }
 

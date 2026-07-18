@@ -302,6 +302,8 @@ public sealed class MaintenanceFindingCleanupEntry
 
     public Guid? HostId { get; set; }
 
+    public string Category { get; set; } = string.Empty;
+
     public string TargetKind { get; set; } = string.Empty;
 
     public string TargetIdentifier { get; set; } = string.Empty;
