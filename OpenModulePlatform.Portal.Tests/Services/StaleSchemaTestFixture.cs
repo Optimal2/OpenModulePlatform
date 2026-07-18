@@ -16,8 +16,7 @@ public sealed class StaleSchemaTestFixture : IAsyncLifetime
 {
     public const string DatabaseName = "OpenModulePlatform_PortalTests_StaleSchema";
 
-    public string ConnectionString { get; } =
-        "Server=localhost;Database=OpenModulePlatform_PortalTests_StaleSchema;Integrated Security=true;TrustServerCertificate=true;";
+    public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 
     public async Task InitializeAsync()
     {
