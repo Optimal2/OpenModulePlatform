@@ -50,7 +50,26 @@ internal static class ArtifactConfigurationFileWriter
     {
         if (HasAppSettingsJson(files))
         {
-            return files;
+            // A service-app overlay replaces the built-in configuration (no merge,
+            // unlike web apps), but the Worker identity must always come from the
+            // live deployment. A stale Worker.AppInstanceId captured in an overlay
+            // would otherwise make the worker heartbeat a phantom AppInstance.
+            if (IsWorkerManagerDeployment(deployment))
+            {
+                return files;
+            }
+
+            return files
+                .Select(file => IsAppSettingsJson(file)
+                    ? new ArtifactConfigurationFileDescriptor
+                    {
+                        ArtifactConfigurationFileId = file.ArtifactConfigurationFileId,
+                        ArtifactId = file.ArtifactId,
+                        RelativePath = file.RelativePath,
+                        FileContent = WithLiveWorkerAppInstanceId(file.FileContent, deployment.AppInstanceId, file.RelativePath)
+                    }
+                    : file)
+                .ToArray();
         }
 
         return
@@ -461,6 +480,29 @@ internal static class ArtifactConfigurationFileWriter
         {
             throw new InvalidOperationException(
                 $"Web app configuration file '{relativePath}' must contain a valid JSON object.",
+                ex);
+        }
+    }
+
+    private static string WithLiveWorkerAppInstanceId(string content, Guid appInstanceId, string relativePath)
+    {
+        try
+        {
+            var root = ParseJsonObject(content, relativePath);
+            if (root["Worker"] is not JsonObject worker)
+            {
+                worker = new JsonObject();
+                root["Worker"] = worker;
+            }
+
+            worker["AppInstanceId"] = appInstanceId.ToString("D");
+
+            return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"Service app configuration file '{relativePath}' must contain a valid JSON object.",
                 ex);
         }
     }
