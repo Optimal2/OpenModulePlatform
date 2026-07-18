@@ -232,6 +232,10 @@ public static class OmpWebHostingExtensions
 
         app.UseOmpSecurityHeaders();
 
+        // Resolve/emit the correlation id and open its logging scope as early as possible,
+        // so every log line for the request (including error handling below) carries it.
+        app.UseOmpRequestCorrelation();
+
         if (app.Environment.IsDevelopment())
         {
             app.UseDeveloperExceptionPage();
