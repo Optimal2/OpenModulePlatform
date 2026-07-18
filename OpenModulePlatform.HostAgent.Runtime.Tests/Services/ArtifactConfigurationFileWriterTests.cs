@@ -108,31 +108,101 @@ public sealed class ArtifactConfigurationFileWriterTests
     }
 
     [Fact]
-    public void WorkerManagerOverlay_WithAppSettingsJson_IsLeftUnchanged()
+    public void WorkerManagerOverlay_WithAppSettingsJson_ForcesLiveIdentityAndPreservesRest()
     {
-        var deployment = new ServiceAppDeploymentDescriptor
-        {
-            HostId = Guid.NewGuid(),
-            HostKey = "test-host",
-            AppInstanceId = Guid.NewGuid(),
-            AppInstanceKey = "omp_workermanager",
-            ModuleInstanceKey = "module-test",
-            DisplayName = "OMP WorkerManager",
-            ArtifactId = 42,
-            Version = "1.0.0"
-        };
-        const string content = """{ "WorkerManager": { "HostKey": "overlay-host" } }""";
-        var overlay = CreateOverlay(content);
+        var deployment = CreateWorkerManagerDeployment();
+        var settings = new HostAgentSettings();
+        var overlay = CreateOverlay("""
+            {
+              "ConnectionStrings": { "OmpDb": "Server=stale;Database=StaleDb;" },
+              "WorkerManager": {
+                "HostKey": "stale-host",
+                "HostName": "STALE-MACHINE",
+                "RefreshSeconds": 60,
+                "MaxRestartsPerWindow": 9,
+                "OmpDatabase": { "RuntimeKind": "custom-runtime" },
+                "HostAgentRpc": { "Enabled": false, "PipeName": "stale-pipe", "TimeoutSeconds": 99 }
+              },
+              "Logging": { "LogLevel": { "Default": "Debug" } }
+            }
+            """);
 
         var result = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
             [overlay],
             deployment,
             "Server=localhost;Database=OpenModulePlatform;",
-            new HostAgentSettings());
+            settings);
 
         var appsettings = Assert.Single(result);
-        Assert.Same(overlay, appsettings);
-        Assert.Equal(content, appsettings.FileContent);
+        var root = JsonNode.Parse(appsettings.FileContent)!.AsObject();
+        var workerManager = root["WorkerManager"]!.AsObject();
+
+        // Identity is forced from the live deployment/settings.
+        Assert.Equal("test-host", workerManager["HostKey"]!.GetValue<string>());
+        Assert.Equal(Environment.MachineName, workerManager["HostName"]!.GetValue<string>());
+        Assert.Equal(
+            "Server=localhost;Database=OpenModulePlatform;",
+            root["ConnectionStrings"]!["OmpDb"]!.GetValue<string>());
+        var rpc = workerManager["HostAgentRpc"]!.AsObject();
+        Assert.Equal(settings.ResolveRpcPipeName(), rpc["PipeName"]!.GetValue<string>());
+
+        // Everything else in the overlay is preserved.
+        Assert.Equal(60, workerManager["RefreshSeconds"]!.GetValue<int>());
+        Assert.Equal(9, workerManager["MaxRestartsPerWindow"]!.GetValue<int>());
+        Assert.Equal("custom-runtime", workerManager["OmpDatabase"]!["RuntimeKind"]!.GetValue<string>());
+        Assert.False(rpc["Enabled"]!.GetValue<bool>());
+        Assert.Equal(99, rpc["TimeoutSeconds"]!.GetValue<int>());
+        Assert.Equal("Debug", root["Logging"]!["LogLevel"]!["Default"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void WorkerManagerOverlay_WithoutIdentitySections_GetsLiveIdentity()
+    {
+        var deployment = CreateWorkerManagerDeployment();
+        var settings = new HostAgentSettings();
+        var overlay = CreateOverlay("""{ "Custom": { "Enabled": true } }""");
+
+        var result = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+            [overlay],
+            deployment,
+            "Server=localhost;Database=OpenModulePlatform;",
+            settings);
+
+        var appsettings = Assert.Single(result);
+        var root = JsonNode.Parse(appsettings.FileContent)!.AsObject();
+        var workerManager = root["WorkerManager"]!.AsObject();
+        Assert.Equal("test-host", workerManager["HostKey"]!.GetValue<string>());
+        Assert.Equal(Environment.MachineName, workerManager["HostName"]!.GetValue<string>());
+        Assert.Equal(
+            settings.ResolveRpcPipeName(),
+            workerManager["HostAgentRpc"]!["PipeName"]!.GetValue<string>());
+        Assert.Equal(
+            "Server=localhost;Database=OpenModulePlatform;",
+            root["ConnectionStrings"]!["OmpDb"]!.GetValue<string>());
+        Assert.True(root["Custom"]!["Enabled"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void WorkerManagerOverlay_NonAppSettingsFiles_AreLeftUnchanged()
+    {
+        var deployment = CreateWorkerManagerDeployment();
+        var overlay = CreateOverlay("""{ "WorkerManager": { "HostKey": "stale-host" } }""");
+        var other = new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 2,
+            ArtifactId = deployment.ArtifactId,
+            RelativePath = "config/nlog.config",
+            FileContent = "<nlog />"
+        };
+
+        var result = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+            [overlay, other],
+            deployment,
+            "Server=localhost;Database=OpenModulePlatform;",
+            new HostAgentSettings());
+
+        Assert.Equal(2, result.Count);
+        Assert.Same(other, result[1]);
     }
 
     [Fact]
@@ -176,6 +246,19 @@ public sealed class ArtifactConfigurationFileWriterTests
             AppInstanceKey = "ikrock_backend",
             ModuleInstanceKey = "module-test",
             DisplayName = "Test service app",
+            ArtifactId = 42,
+            Version = "1.0.0"
+        };
+
+    private static ServiceAppDeploymentDescriptor CreateWorkerManagerDeployment()
+        => new()
+        {
+            HostId = Guid.NewGuid(),
+            HostKey = "test-host",
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "omp_workermanager",
+            ModuleInstanceKey = "module-test",
+            DisplayName = "OMP WorkerManager",
             ArtifactId = 42,
             Version = "1.0.0"
         };
