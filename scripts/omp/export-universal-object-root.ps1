@@ -16,6 +16,17 @@ an object root with the standard folders:
 The generated zip contains the same portable object paths plus
 omp-universal-package.json. The outer zip metadata is transport-only; validate
 import-relevant data with compare-universal-package-data.ps1.
+
+By default every version of every object is included. Pass -LatestOnly to keep
+only the highest version per versioned object identity (artifact packages and
+dashboard widgets), matching the installer GUI export when "include historical
+artifacts" is unchecked. All other object kinds are always kept.
+
+.PARAMETER LatestOnly
+Keep only the latest version per artifact identity
+(module__app__type__target) and per dashboard widget identity. Versions are
+compared with the same numeric major.minor.patch semantics as the installer
+GUI. Without this switch the output is unchanged: all versions are included.
 #>
 [CmdletBinding()]
 param(
@@ -33,7 +44,9 @@ param(
 
     [string]$Description = '',
 
-    [string]$TargetHostProfile = ''
+    [string]$TargetHostProfile = '',
+
+    [switch]$LatestOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -232,6 +245,153 @@ function Get-JsonOrZipManifestVersion {
     }
 }
 
+function Compare-UniversalPackageVersionText {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Left,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Right
+    )
+
+    # Mirrors CompareVersionText in OpenModulePlatform.Bootstrapper/Program.Gui.cs.
+    $leftVersion = $null
+    $rightVersion = $null
+    if ([System.Version]::TryParse($Left, [ref]$leftVersion) -and [System.Version]::TryParse($Right, [ref]$rightVersion)) {
+        return $leftVersion.CompareTo($rightVersion)
+    }
+
+    $splitChars = [char[]]@('.', '-', '+')
+    $leftParts = @($Left.Split($splitChars, [StringSplitOptions]::RemoveEmptyEntries))
+    $rightParts = @($Right.Split($splitChars, [StringSplitOptions]::RemoveEmptyEntries))
+    $count = [Math]::Max($leftParts.Length, $rightParts.Length)
+    for ($index = 0; $index -lt $count; $index++) {
+        $leftPart = if ($index -lt $leftParts.Length) { $leftParts[$index] } else { '0' }
+        $rightPart = if ($index -lt $rightParts.Length) { $rightParts[$index] } else { '0' }
+        $leftNumber = 0
+        $rightNumber = 0
+        if ([int]::TryParse($leftPart, [ref]$leftNumber) -and [int]::TryParse($rightPart, [ref]$rightNumber)) {
+            $numberComparison = $leftNumber.CompareTo($rightNumber)
+            if ($numberComparison -ne 0) {
+                return $numberComparison
+            }
+
+            continue
+        }
+
+        $textComparison = [string]::Compare($leftPart, $rightPart, [StringComparison]::OrdinalIgnoreCase)
+        if ($textComparison -ne 0) {
+            return $textComparison
+        }
+    }
+
+    return 0
+}
+
+function ConvertTo-SafeUniversalPackagePathSegment {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value)
+
+    # Mirrors SanitizeUniversalPackagePathSegment in OpenModulePlatform.Bootstrapper/Program.Gui.cs.
+    $invalidChars = @{}
+    foreach ($ch in [System.IO.Path]::GetInvalidFileNameChars()) {
+        $invalidChars[$ch] = $true
+    }
+    foreach ($ch in [char[]]@('/', '\', ':')) {
+        $invalidChars[$ch] = $true
+    }
+
+    $chars = foreach ($ch in $Value.Trim().ToCharArray()) {
+        if ($invalidChars.ContainsKey($ch)) { '_' } else { $ch }
+    }
+
+    $sanitized = ([string]::new([char[]]@($chars))).Trim('.', ' ')
+    if ([string]::IsNullOrWhiteSpace($sanitized)) {
+        return 'host'
+    }
+
+    return $sanitized
+}
+
+function Get-UniversalPackageVersionedIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$Kind,
+        [Parameter(Mandatory = $true)][string]$PackagePath,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Version
+    )
+
+    # Mirrors TryParseUniversalPackageArtifactIdentity and
+    # TryParseUniversalPackageWidgetIdentity in OpenModulePlatform.Bootstrapper/Program.Gui.cs.
+    if (($Kind.Equals('artifact-package', [StringComparison]::OrdinalIgnoreCase) -or $Kind.Equals('artifact', [StringComparison]::OrdinalIgnoreCase)) `
+            -and $PackagePath.StartsWith('artifacts/', [StringComparison]::OrdinalIgnoreCase)) {
+        $fileName = [System.IO.Path]::GetFileNameWithoutExtension($PackagePath)
+        $parts = $fileName.Split([string[]]@('__'), [StringSplitOptions]::None)
+        if ($parts.Length -ne 5) {
+            return $null
+        }
+
+        return [pscustomobject]@{
+            IdentityKey = 'artifact__' + ($parts[0..3] -join '__')
+            Version = $parts[4]
+            PackagePath = $PackagePath
+        }
+    }
+
+    if ($Kind.Equals('dashboard-widget', [StringComparison]::OrdinalIgnoreCase) `
+            -and $PackagePath.StartsWith('widgets/', [StringComparison]::OrdinalIgnoreCase)) {
+        $widgetVersion = if ([string]::IsNullOrWhiteSpace($Version)) { '0.0.0' } else { $Version }
+        $fileName = [System.IO.Path]::GetFileNameWithoutExtension($PackagePath)
+        $versionSuffix = '__' + (ConvertTo-SafeUniversalPackagePathSegment -Value $widgetVersion)
+        $identity = if ($fileName.EndsWith($versionSuffix, [StringComparison]::OrdinalIgnoreCase)) {
+            $fileName.Substring(0, $fileName.Length - $versionSuffix.Length)
+        }
+        else {
+            $fileName
+        }
+
+        if ([string]::IsNullOrWhiteSpace($identity)) {
+            return $null
+        }
+
+        return [pscustomobject]@{
+            IdentityKey = 'widget__' + $identity
+            Version = $widgetVersion
+            PackagePath = $PackagePath
+        }
+    }
+
+    return $null
+}
+
+function Select-LatestUniversalPackageObjects {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Files
+    )
+
+    # Mirrors FilterLatestUniversalPackageVersionedObjects in
+    # OpenModulePlatform.Bootstrapper/Program.Gui.cs: keep only the highest
+    # version per artifact/widget identity, keep every non-versioned object.
+    $latestByIdentity = New-Object 'System.Collections.Generic.Dictionary[string,psobject]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($file in $Files) {
+        $identity = Get-UniversalPackageVersionedIdentity -Kind $file.Kind -PackagePath $file.PackagePath -Version ([string]$file.Version)
+        if ($null -eq $identity) {
+            continue
+        }
+
+        $current = $null
+        if (-not $latestByIdentity.TryGetValue($identity.IdentityKey, [ref]$current) -or
+            (Compare-UniversalPackageVersionText -Left $identity.Version -Right ([string]$current.Version)) -gt 0) {
+            $latestByIdentity[$identity.IdentityKey] = $identity
+        }
+    }
+
+    $latestPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($identity in $latestByIdentity.Values) {
+        [void]$latestPaths.Add($identity.PackagePath)
+    }
+
+    return @($Files | Where-Object {
+        $identity = Get-UniversalPackageVersionedIdentity -Kind $_.Kind -PackagePath $_.PackagePath -Version ([string]$_.Version)
+        ($null -eq $identity) -or $latestPaths.Contains($_.PackagePath)
+    })
+}
+
 if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
     $PackageVersion = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmm')
 }
@@ -277,6 +437,10 @@ $files = foreach ($folder in $folderKinds) {
             }
         }
     }
+}
+
+if ($LatestOnly) {
+    $files = Select-LatestUniversalPackageObjects -Files @($files)
 }
 
 $items = [System.Collections.Generic.List[object]]::new()

@@ -294,6 +294,9 @@ To create a universal package from an already validated object root, use:
   -OutputPath "E:\Packages\omp-universal__global__verified.zip"
 ```
 
-That helper is intended for validation and developer packaging. Normal
-repository builds should still use `build-universal-package.cmd` or
-`export-universal-package.ps1`.
+Pass `-LatestOnly` to keep only the highest version per artifact identity
+(`module__app__type__target`) and per dashboard widget identity, matching the
+installer GUI export when "include historical artifacts" is unchecked. Without
+the switch every version is included. That helper is intended for validation
+and developer packaging. Normal repository builds should still use
+`build-universal-package.cmd` or `export-universal-package.ps1`.
