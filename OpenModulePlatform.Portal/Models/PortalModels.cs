@@ -1282,6 +1282,18 @@ public sealed class HostDriftDetailRow
     public string? LastError { get; set; }
 
     public string? IdentityCheckStatus { get; set; }
+
+    /// <summary>
+    /// Provisioning state of the desired artifact on the host
+    /// (omp.HostArtifactStates.ProvisioningState), if reported.
+    /// </summary>
+    public byte? DesiredProvisioningState { get; set; }
+
+    /// <summary>
+    /// Last provisioning error for the desired artifact on the host
+    /// (omp.HostArtifactStates.LastError), if any.
+    /// </summary>
+    public string? DesiredProvisioningError { get; set; }
 }
 
 /// <summary>

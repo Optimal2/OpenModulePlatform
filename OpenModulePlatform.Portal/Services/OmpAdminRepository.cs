@@ -1299,6 +1299,7 @@ ResolvedApps AS
            state.LastCheckedUtc,
            state.LastAppliedUtc,
            state.LastError,
+           desiredArtifactState.ProvisioningState AS DesiredProvisioningState,
            CAST(CASE WHEN {identityWarningExpression} THEN 1 ELSE 0 END AS bit) AS HasIdentityWarning
     FROM DesiredTemplateApps desired
     LEFT JOIN omp.AppInstances appInstance
@@ -1324,6 +1325,9 @@ ResolvedApps AS
     LEFT JOIN omp.HostAppDeploymentStates state
         ON state.HostId = desired.HostId
        AND state.AppInstanceId = appInstance.AppInstanceId
+    LEFT JOIN omp.HostArtifactStates desiredArtifactState
+        ON desiredArtifactState.HostId = desired.HostId
+       AND desiredArtifactState.ArtifactId = desired.DesiredArtifactId
 ),
 Aggregated AS
 (
@@ -1333,6 +1337,7 @@ Aggregated AS
                          AND DeploymentState = 2
                          AND ISNULL(RuntimeArtifactId, -1) = ISNULL(DesiredArtifactId, -1)
                          AND LastError IS NULL
+                         AND ISNULL(DesiredProvisioningState, 2) NOT IN (3, 4)
                          AND HasIdentityWarning = 0 THEN 1 ELSE 0 END) AS InSyncAppCount,
            SUM(CASE WHEN AppInstanceId IS NULL
                          OR ISNULL(MaterializedArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN 1 ELSE 0 END) AS MaterializationPendingCount,
@@ -1347,9 +1352,11 @@ Aggregated AS
                          OR ISNULL(RuntimeArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN 1 ELSE 0 END) AS PendingAppCount,
            SUM(CASE WHEN DeploymentState = 1 THEN 1 ELSE 0 END) AS RunningAppCount,
            SUM(CASE WHEN DeploymentState = 3
-                         OR LastError IS NOT NULL THEN 1 ELSE 0 END) AS FailedAppCount,
+                         OR LastError IS NOT NULL
+                         OR DesiredProvisioningState = 3 THEN 1 ELSE 0 END) AS FailedAppCount,
            SUM(CASE WHEN DeploymentState = 4
-                         OR HasIdentityWarning = 1 THEN 1 ELSE 0 END) AS WarningAppCount,
+                         OR HasIdentityWarning = 1
+                         OR DesiredProvisioningState = 4 THEN 1 ELSE 0 END) AS WarningAppCount,
            MAX(LastCheckedUtc) AS LastCheckedUtc,
            MAX(LastAppliedUtc) AS LastAppliedUtc
     FROM ResolvedApps
@@ -1542,6 +1549,8 @@ ResolvedApps AS
            state.LastCheckedUtc,
            state.LastAppliedUtc,
            state.LastError,
+           desiredArtifactState.ProvisioningState AS DesiredProvisioningState,
+           desiredArtifactState.LastError AS DesiredProvisioningError,
            {identityStatusSelect} AS IdentityCheckStatus,
            CAST(CASE WHEN {identityWarningExpression} THEN 1 ELSE 0 END AS bit) AS HasIdentityWarning
     FROM DesiredTemplateApps desired
@@ -1570,6 +1579,9 @@ ResolvedApps AS
         ON state.HostId = desired.HostId
        AND state.AppInstanceId = appInstance.AppInstanceId
     LEFT JOIN omp.Artifacts runtimeArtifact ON runtimeArtifact.ArtifactId = state.ArtifactId
+    LEFT JOIN omp.HostArtifactStates desiredArtifactState
+        ON desiredArtifactState.HostId = desired.HostId
+       AND desiredArtifactState.ArtifactId = desired.DesiredArtifactId
 ),
 Classified AS
 (
@@ -1582,7 +1594,9 @@ Classified AS
                WHEN DeploymentState = 0 THEN N'Pending'
                WHEN DeploymentState = 1 THEN N'Running'
                WHEN DeploymentState = 3 OR LastError IS NOT NULL THEN N'Failed'
+               WHEN DesiredProvisioningState = 3 THEN N'Failed'
                WHEN DeploymentState = 4 OR HasIdentityWarning = 1 THEN N'Warning'
+               WHEN DesiredProvisioningState = 4 THEN N'Warning'
                ELSE N'In sync'
            END AS DriftReason,
            COALESCE(PinnedHostKey, TargetHostTemplateKey, N'Any host') AS Placement
@@ -1605,7 +1619,9 @@ SELECT HostId,
        LastCheckedUtc,
        LastAppliedUtc,
        LastError,
-       IdentityCheckStatus
+       IdentityCheckStatus,
+       DesiredProvisioningState,
+       DesiredProvisioningError
 FROM Classified
 WHERE DriftReason <> N'In sync'
 ORDER BY HostKey,
@@ -1645,7 +1661,9 @@ ORDER BY HostKey,
                 LastCheckedUtc = rdr.IsDBNull(14) ? null : rdr.GetDateTime(14),
                 LastAppliedUtc = rdr.IsDBNull(15) ? null : rdr.GetDateTime(15),
                 LastError = rdr.IsDBNull(16) ? null : rdr.GetString(16),
-                IdentityCheckStatus = rdr.IsDBNull(17) ? null : rdr.GetString(17)
+                IdentityCheckStatus = rdr.IsDBNull(17) ? null : rdr.GetString(17),
+                DesiredProvisioningState = rdr.IsDBNull(18) ? null : rdr.GetByte(18),
+                DesiredProvisioningError = rdr.IsDBNull(19) ? null : rdr.GetString(19)
             });
         }
 
