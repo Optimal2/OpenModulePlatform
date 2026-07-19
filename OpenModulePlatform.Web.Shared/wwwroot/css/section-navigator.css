@@ -347,6 +347,41 @@ body.section-navigator-resizing {
     scroll-margin-top: calc(var(--app-header-height, 92px) + var(--section-navigator-sticky-gap));
 }
 
+/* Shared left pane stacking the section navigator above other pane content
+   (e.g. the link box). The pane takes over stickiness and the resizable
+   width; the navigator inside gives up its own grid/sticky placement and
+   flex-shrinks with internal scrolling so content below it stays visible.
+   Collapsing the navigator root therefore reveals what sits under it. */
+.section-navigator-pane {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: end;
+    position: sticky;
+    top: calc(var(--app-header-height, 92px) + var(--section-navigator-sticky-gap, 16px));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: var(--section-navigator-pane-width, var(--section-navigator-width));
+    max-height: calc(100vh - var(--app-header-height, 92px) - (var(--section-navigator-sticky-gap, 16px) * 2));
+    min-height: 0;
+}
+
+.section-navigator-pane .section-navigator {
+    position: static;
+    top: auto;
+    width: 100%;
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.section-navigator-pane .section-navigator__nav {
+    max-height: none;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 @media (max-width: 1500px) {
     .content-shell:has(.section-navigator-layout) {
         max-width: 1400px;
@@ -360,5 +395,15 @@ body.section-navigator-resizing {
 
     .section-navigator {
         display: none;
+    }
+
+    /* The pane falls back into the page flow so remaining pane content
+       (the link box) renders full-width between header and content. */
+    .section-navigator-pane {
+        position: static;
+        display: block;
+        width: auto;
+        max-height: none;
+        margin-bottom: 16px;
     }
 }
