@@ -420,6 +420,10 @@
                                                         {
                                                             <span class="muted">@L["No runtime state"]</span>
                                                         }
+                                                        @if (detail.DesiredProvisioningState.HasValue)
+                                                        {
+                                                            <div>@L["Provisioning"]: @L[HostDeploymentsModel.FormatArtifactProvisioningStatus(detail.DesiredProvisioningState.Value)]</div>
+                                                        }
                                                         @if (detail.LastCheckedUtc.HasValue)
                                                         {
                                                             <div class="muted">@L["Last checked UTC"]: @detail.LastCheckedUtc.Value.ToString("u")</div>
@@ -433,7 +437,20 @@
                                                             <div class="muted">@L["Identity"]: @L[detail.IdentityCheckStatus]</div>
                                                         }
                                                     </td>
-                                                    <td>@(string.IsNullOrWhiteSpace(detail.LastError) ? L["None"].Value : detail.LastError)</td>
+                                                    <td>
+                                                        @if (!string.IsNullOrWhiteSpace(detail.LastError))
+                                                        {
+                                                            <div>@detail.LastError</div>
+                                                        }
+                                                        @if (!string.IsNullOrWhiteSpace(detail.DesiredProvisioningError))
+                                                        {
+                                                            <div>@detail.DesiredProvisioningError</div>
+                                                        }
+                                                        @if (string.IsNullOrWhiteSpace(detail.LastError) && string.IsNullOrWhiteSpace(detail.DesiredProvisioningError))
+                                                        {
+                                                            @L["None"]
+                                                        }
+                                                    </td>
                                                 </tr>
                                             }
                                             </tbody>
