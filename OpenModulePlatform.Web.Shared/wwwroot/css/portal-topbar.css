@@ -21,6 +21,14 @@
     overflow: visible;
 }
 
+/* Browsers search inside closed <details> and auto-expand them on
+   find-in-page matches; top bar dropdown content should only be searchable
+   while the user has the menu open, so closed menus render display: none
+   (which find-in-page skips). */
+.portal-topbar details:not([open]) > :not(summary) {
+    display: none;
+}
+
 .portal-topbar__nav {
     display: flex;
     align-items: center;
