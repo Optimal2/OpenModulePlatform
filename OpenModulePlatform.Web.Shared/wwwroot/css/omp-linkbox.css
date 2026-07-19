@@ -127,9 +127,11 @@
     border-color: var(--link-hover);
 }
 
-/* Exactly one resize handle per pane: when a section navigator shares the
-   pane, its handle is the pane's handle and the link box hides its own. */
-.section-navigator-pane:has(.section-navigator) .omp-linkbox__resize-handle {
+/* Exactly one visible grip per pane: when a section navigator shares the
+   pane, the link box keeps its handle as an invisible drag surface (so the
+   pane's whole right edge stays grabbable) but hides its own grip visual. */
+.section-navigator-pane:has(.section-navigator) .omp-linkbox__resize-handle::before,
+.section-navigator-pane:has(.section-navigator) .omp-linkbox__resize-handle::after {
     display: none;
 }
 
