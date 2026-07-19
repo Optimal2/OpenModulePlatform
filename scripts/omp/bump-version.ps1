@@ -623,6 +623,22 @@ try {
         }
 
         $nextRepositoryVersion = Get-NextVersion -CurrentVersion $currentRepositoryVersion
+
+        # Guard against a version REGRESSION. -Version is returned verbatim by Get-NextVersion for
+        # EVERY selected target, the repository included, so setting components to an explicit
+        # version silently drags repositoryVersion backwards (observed 2026-07-19: bumping two
+        # example components to 0.3.83 rewrote repositoryVersion 0.3.279 -> 0.3.83). A published
+        # version must never go backwards, so fail loudly instead of corrupting the manifest.
+        $parsedCurrentRepositoryVersion = $null
+        $parsedNextRepositoryVersion = $null
+        if ([System.Version]::TryParse($currentRepositoryVersion, [ref]$parsedCurrentRepositoryVersion) -and
+            [System.Version]::TryParse($nextRepositoryVersion, [ref]$parsedNextRepositoryVersion) -and
+            $parsedNextRepositoryVersion -lt $parsedCurrentRepositoryVersion) {
+            throw ("Refusing to regress repositoryVersion from '{0}' to '{1}'. -Version is applied to every " -f $currentRepositoryVersion, $nextRepositoryVersion) +
+                  'selected target, including the repository. Pass -SkipRepositoryVersion when setting components ' +
+                  'to an explicit version, or bump the repository separately.'
+        }
+
         Set-JsonProperty -Object $manifest -Name 'repositoryVersion' -Value $nextRepositoryVersion
         [void]$updates.Add([pscustomobject]@{
             Item = 'repository'
