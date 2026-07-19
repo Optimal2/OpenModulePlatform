@@ -17,6 +17,11 @@
         @* Same resize mechanics as the section navigator; hidden by CSS when a
            navigator shares the pane so exactly one handle is shown. *@
         <span class="section-navigator__resize-handle omp-linkbox__resize-handle" data-section-navigator-resize aria-hidden="true"></span>
+        @if (!string.IsNullOrWhiteSpace(Model.EditUrl))
+        {
+            var editLabel = string.IsNullOrWhiteSpace(Model.EditLabel) ? "Edit links" : Model.EditLabel;
+            <a class="omp-linkbox__edit" href="@Model.EditUrl" title="@editLabel" aria-label="@editLabel"></a>
+        }
         @if (!string.IsNullOrWhiteSpace(Model.Heading))
         {
             <div class="omp-linkbox__heading">@Model.Heading</div>

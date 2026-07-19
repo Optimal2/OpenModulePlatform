@@ -13,5 +13,14 @@ public sealed class LinkBoxModel
 
     public string? Heading { get; init; }
 
+    /// <summary>
+    /// When set, a discreet gear icon links to this page-owned editor. The
+    /// host page decides authorization and only sets the URL for users who
+    /// may edit the links; the component itself has no permission model.
+    /// </summary>
+    public string? EditUrl { get; init; }
+
+    public string? EditLabel { get; init; }
+
     public IReadOnlyList<LinkBoxItem> Items { get; init; } = Array.Empty<LinkBoxItem>();
 }

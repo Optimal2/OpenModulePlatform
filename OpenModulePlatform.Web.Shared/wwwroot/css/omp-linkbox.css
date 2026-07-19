@@ -20,6 +20,45 @@
     text-transform: uppercase;
 }
 
+/* Keep the heading clear of the edit gear when one is rendered. */
+.omp-linkbox:has(.omp-linkbox__edit) .omp-linkbox__heading {
+    padding-right: 26px;
+}
+
+/* Discreet always-visible edit gear (hover-only would be undiscoverable on
+   touch); it brightens on hover/focus. Rendered only when the host page set
+   an EditUrl for an authorized user. */
+.omp-linkbox__edit {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    color: var(--text-muted);
+    opacity: 0.55;
+}
+
+.omp-linkbox__edit::before {
+    content: "";
+    width: 15px;
+    height: 15px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/settings.svg") center / contain no-repeat;
+}
+
+.omp-linkbox__edit:hover,
+.omp-linkbox__edit:focus-visible {
+    background: var(--surface-muted);
+    color: var(--link-hover);
+    opacity: 1;
+    outline: none;
+}
+
 .omp-linkbox__items {
     display: flex;
     flex-wrap: wrap;
