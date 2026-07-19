@@ -71,9 +71,11 @@
 .section-navigator__resize-handle {
     position: absolute;
     top: 0;
-    right: -7px;
+    /* Cover the full column gap between the pane and the content so the
+       grab surface sits centered between them, not on the pane's edge. */
+    right: calc(0px - var(--section-navigator-gap, 16px));
     bottom: 0;
-    width: 14px;
+    width: var(--section-navigator-gap, 16px);
     cursor: col-resize;
     touch-action: none;
     z-index: 2;
