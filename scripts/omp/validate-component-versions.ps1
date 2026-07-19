@@ -1168,6 +1168,88 @@ if ($null -ne $manifest.moduleDefinitions) {
     $moduleDefinitionCount = @($manifest.moduleDefinitions).Count
 }
 
+# ---------------------------------------------------------------------------
+# Check: consistentArtifactSets lockstep.
+# A module definition may declare consistentArtifactSets; HostAgent supports only
+# versionMatchRule 'exact', so every artifact in a set must deploy at the SAME version.
+# NOTHING enforced this at build time, so a set whose members had different bump
+# triggers drifted apart silently and the platform warned forever at runtime:
+# example_serviceapp's web member is a Web.Shared consumer (cascade-bumped on every
+# shared change) while its service member is not, giving web=0.3.82 vs service=0.3.9
+# and an unsatisfiable set. Fail the build instead, so members are bumped together.
+# ---------------------------------------------------------------------------
+$consistentSetCount = 0
+$consistentSetErrorCount = 0
+
+foreach ($consistentSetModuleKey in $moduleDefinitionObjectsByKey.Keys) {
+    $consistentSetDefinition = $moduleDefinitionObjectsByKey[$consistentSetModuleKey]
+    $consistentSets = Get-OptionalPropertyValue -Object $consistentSetDefinition -Name 'consistentArtifactSets'
+    if ($null -eq $consistentSets) {
+        continue
+    }
+
+    foreach ($consistentSet in @($consistentSets)) {
+        if ($null -eq $consistentSet) {
+            continue
+        }
+
+        $setKey = [string](Get-OptionalPropertyValue -Object $consistentSet -Name 'setKey')
+        if ([string]::IsNullOrWhiteSpace($setKey)) {
+            $setKey = '<unnamed>'
+        }
+
+        $expectedArtifacts = Get-OptionalPropertyValue -Object $consistentSet -Name 'expectedArtifacts'
+        if ($null -eq $expectedArtifacts) {
+            continue
+        }
+
+        $consistentSetCount++
+        $setMemberVersions = [System.Collections.Generic.List[string]]::new()
+        $setMemberDescriptions = [System.Collections.Generic.List[string]]::new()
+
+        foreach ($setMember in @($expectedArtifacts)) {
+            if ($null -eq $setMember) {
+                continue
+            }
+
+            $memberTargetName = [string](Get-OptionalPropertyValue -Object $setMember -Name 'targetName')
+            $memberPackageType = [string](Get-OptionalPropertyValue -Object $setMember -Name 'packageType')
+
+            $matchedComponent = $null
+            foreach ($candidateComponent in @($manifest.components)) {
+                if ($null -eq $candidateComponent) {
+                    continue
+                }
+
+                $candidateTargetName = [string](Get-OptionalPropertyValue -Object $candidateComponent -Name 'targetName')
+                $candidatePackageType = [string](Get-OptionalPropertyValue -Object $candidateComponent -Name 'packageType')
+
+                if ([string]::Equals($candidateTargetName, $memberTargetName, [StringComparison]::OrdinalIgnoreCase) -and
+                    [string]::Equals($candidatePackageType, $memberPackageType, [StringComparison]::OrdinalIgnoreCase)) {
+                    $matchedComponent = $candidateComponent
+                    break
+                }
+            }
+
+            if ($null -eq $matchedComponent) {
+                Add-ValidationError -Errors $errors -Message "Module '$consistentSetModuleKey' consistentArtifactSets set '$setKey' references artifact '$memberTargetName' ($memberPackageType), which has no matching component in omp-components.json."
+                $consistentSetErrorCount++
+                continue
+            }
+
+            $memberVersion = [string](Get-OptionalPropertyValue -Object $matchedComponent -Name 'version')
+            [void]$setMemberVersions.Add($memberVersion)
+            [void]$setMemberDescriptions.Add(('{0}={1}' -f $memberTargetName, $memberVersion))
+        }
+
+        $distinctSetVersions = @($setMemberVersions | Sort-Object -Unique)
+        if ($distinctSetVersions.Count -gt 1) {
+            Add-ValidationError -Errors $errors -Message ("Module '{0}' consistentArtifactSets set '{1}' requires every artifact at the SAME version (versionMatchRule 'exact'), but omp-components.json has {2}. Bump all members of the set together." -f $consistentSetModuleKey, $setKey, ($setMemberDescriptions -join ', '))
+            $consistentSetErrorCount++
+        }
+    }
+}
+
 $sharedProjectCount = 0
 if ($null -ne $sharedProjects) {
     $sharedProjectCount = @($sharedProjects).Count
@@ -1179,6 +1261,10 @@ Write-Host "$checkMark Repository version $repositoryVersionStatus"
 Write-Host "$checkMark $componentVersionCount of $componentCount component versions validated"
 Write-Host "$checkMark $moduleDefinitionVersionSyncCount of $moduleDefinitionCount module definition versions synced"
 Write-Host "$checkMark $moduleMappingCount component-to-module mappings validated"
+
+if ($consistentSetCount -gt 0) {
+    Write-Host "$checkMark $consistentSetCount consistent artifact set(s) validated ($consistentSetErrorCount error(s))"
+}
 
 if ($sharedProjectCount -gt 0 -and ($cascadeCheckCount -gt 0 -or $cascadeErrorCount -gt 0)) {
     Write-Host "$checkMark $cascadeCheckCount of $sharedProjectCount changed shared project(s) passed cascade bump validation ($cascadeErrorCount error(s))"
