@@ -29,6 +29,12 @@
     grid-row: 2;
 }
 
+/* The content's first element must start level with the navigator pane,
+   so host panel top margins do not push it below the pane's top edge. */
+.section-navigator-layout__content > :first-child {
+    margin-top: 0;
+}
+
 .content-shell:has(.section-navigator-layout) {
     max-width: none;
 }
