@@ -373,13 +373,23 @@ body.section-navigator-resizing {
 }
 
 .section-navigator-pane .section-navigator {
-    position: static;
+    /* Relative (not sticky): the pane carries stickiness, while the resize
+       handle still anchors to the navigator so its grip can be positioned
+       against the navigator's edges. */
+    position: relative;
     top: auto;
     width: 100%;
     flex: 0 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
+}
+
+/* When the pane stacks more content below the navigator, the drag grip sits
+   exactly in the gap between the elements instead of at the vertical center. */
+.section-navigator-pane .section-navigator:has(+ *) .section-navigator__resize-handle::before,
+.section-navigator-pane .section-navigator:has(+ *) .section-navigator__resize-handle::after {
+    top: calc(100% + 6px);
 }
 
 .section-navigator-pane .section-navigator__nav {
