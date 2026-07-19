@@ -1,22 +1,44 @@
+@using OpenModulePlatform.Web.Shared.Navigation
 @*
-    Discreet quick-access row to admin list pages that are not in the main menu yet.
-    `L` (IStringLocalizer<PortalResource>) comes from Pages/_ViewImports.cshtml; missing keys fall
-    back to the key text. Edit this ONE file to add/remove a link. Routes are the default Razor Pages
-    routes for Pages/Admin/<Name>.cshtml → /admin/<name>.
+    Quick links to admin pages that are not in the main menu yet, rendered as
+    the shared LinkBox component. Edit this ONE file to add/remove a link.
+    Routes are the default Razor Pages routes for Pages/Admin/<Name>.cshtml →
+    /admin/<name>. Include the partial inside a .section-navigator-pane (below
+    the section navigator when the page has one).
+
+    Group keys are free-form; links sharing a key share a muted tint:
+    "topology" = hosts/instances, "modules" = module and app catalogs,
+    "operations" = runtime upkeep. Ungrouped links stay neutral.
 *@
-<nav class="admin-quicklinks" aria-label="@L["Admin quick links"]"
-     style="display:flex;flex-wrap:wrap;align-items:center;gap:.3rem 1rem;font-size:.85rem;margin:.25rem 0 1rem;opacity:.85">
-    <a class="action-link" href="~/admin/overview">@L["Overview"]</a>
-    <a class="action-link" href="~/admin/instancetemplateedit?id=1">@L["Installation"]</a>
-    <a class="action-link" href="~/admin/instances">@L["Instances"]</a>
-    <a class="action-link" href="~/admin/appinstances">@L["App instances"]</a>
-    <a class="action-link" href="~/admin/moduleinstances">@L["Module instances"]</a>
-    <a class="action-link" href="~/admin/hosts">@L["Hosts"]</a>
-    <a class="action-link" href="~/admin/hostresources">@L["Host resources"]</a>
-    <a class="action-link" href="~/admin/hostdeployments">@L["Host deployments"]</a>
-    <a class="action-link" href="~/admin/modules">@L["Modules"]</a>
-    <a class="action-link" href="~/admin/moduledefinitions">@L["Module definitions"]</a>
-    <a class="action-link" href="~/admin/apps">@L["Apps"]</a>
-    <a class="action-link" href="~/admin/workers">@L["Workers"]</a>
-    <a class="action-link" href="~/admin/maintenance">@L["Maintenance"]</a>
-</nav>
+@{
+    string currentPath = (ViewContext.HttpContext.Request.Path.Value ?? string.Empty).TrimEnd('/');
+
+    LinkBoxItem Link(string text, string relativePath, string? group = null)
+        => new(text,
+            Url.Content("~" + relativePath),
+            group,
+            string.Equals(currentPath, relativePath.Split('?')[0], StringComparison.OrdinalIgnoreCase));
+
+    var quickLinks = new LinkBoxModel
+    {
+        Label = L["Admin quick links"].Value,
+        Heading = L["Admin quick links"].Value,
+        Items =
+        [
+            Link(L["Overview"].Value, "/admin/overview"),
+            Link(L["Installation"].Value, "/admin/instancetemplateedit?id=1"),
+            Link(L["Instances"].Value, "/admin/instances", "topology"),
+            Link(L["App instances"].Value, "/admin/appinstances", "topology"),
+            Link(L["Module instances"].Value, "/admin/moduleinstances", "topology"),
+            Link(L["Hosts"].Value, "/admin/hosts", "topology"),
+            Link(L["Host resources"].Value, "/admin/hostresources", "topology"),
+            Link(L["Host deployments"].Value, "/admin/hostdeployments", "topology"),
+            Link(L["Modules"].Value, "/admin/modules", "modules"),
+            Link(L["Module definitions"].Value, "/admin/moduledefinitions", "modules"),
+            Link(L["Apps"].Value, "/admin/apps", "modules"),
+            Link(L["Workers"].Value, "/admin/workers", "operations"),
+            Link(L["Maintenance"].Value, "/admin/maintenance", "operations")
+        ]
+    };
+}
+@await Component.InvokeAsync("LinkBox", new { model = quickLinks })

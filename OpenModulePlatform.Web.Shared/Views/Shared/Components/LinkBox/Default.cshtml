@@ -1,0 +1,34 @@
+@model OpenModulePlatform.Web.Shared.Navigation.LinkBoxModel
+
+@if (Model.Items.Count > 0)
+{
+    @* Group keys are mapped to one of four muted tints in order of first
+       appearance; the keys themselves are free-form and never displayed. *@
+    var groupTints = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    foreach (var groupedItem in Model.Items)
+    {
+        if (!string.IsNullOrWhiteSpace(groupedItem.Group) && !groupTints.ContainsKey(groupedItem.Group))
+        {
+            groupTints[groupedItem.Group] = (groupTints.Count % 4) + 1;
+        }
+    }
+
+    <nav class="omp-linkbox" aria-label="@Model.Label">
+        @* Same resize mechanics as the section navigator; hidden by CSS when a
+           navigator shares the pane so exactly one handle is shown. *@
+        <span class="section-navigator__resize-handle omp-linkbox__resize-handle" data-section-navigator-resize aria-hidden="true"></span>
+        @if (!string.IsNullOrWhiteSpace(Model.Heading))
+        {
+            <div class="omp-linkbox__heading">@Model.Heading</div>
+        }
+        <div class="omp-linkbox__items">
+            @foreach (var item in Model.Items)
+            {
+                var groupClass = !string.IsNullOrWhiteSpace(item.Group) ? $"omp-linkbox__link--group-{groupTints[item.Group]}" : null;
+                <a class="omp-linkbox__link @groupClass @(item.IsActive ? "omp-linkbox__link--active" : null)"
+                   href="@item.Url"
+                   title="@item.Text">@item.Text</a>
+            }
+        </div>
+    </nav>
+}
