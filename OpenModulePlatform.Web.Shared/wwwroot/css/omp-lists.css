@@ -314,6 +314,14 @@ table[data-page-size] > tbody > tr > td[data-list-wrap] {
     text-overflow: clip;
 }
 
+/* Cells holding icon-button groups clip cleanly instead of drawing an
+   ellipsis next to partially visible buttons when a column is squeezed
+   (e.g. by user-resized column widths). */
+table[data-sortable-list] > tbody > tr > td:has(> .admin-icon-actions),
+table[data-page-size] > tbody > tr > td:has(> .admin-icon-actions) {
+    text-overflow: clip;
+}
+
 th.list-column-resize-host {
     position: relative;
 }
