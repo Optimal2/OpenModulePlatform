@@ -163,6 +163,85 @@ END;");
         return artifactId;
     }
 
+    public void CreateConfigOverlayTables()
+    {
+        Execute(@"
+CREATE TABLE omp.ConfigOverlayDocuments
+(
+    ConfigOverlayDocumentId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    OverlayKey nvarchar(200) NOT NULL,
+    OverlayVersion nvarchar(50) NOT NULL,
+    HostKey nvarchar(128) NOT NULL,
+    ModuleKey nvarchar(100) NULL,
+    ModuleDefinitionVersion nvarchar(50) NULL,
+    AppKey nvarchar(100) NULL,
+    PackageType nvarchar(50) NULL,
+    TargetName nvarchar(200) NULL,
+    ArtifactVersion nvarchar(50) NULL,
+    FormatVersion int NOT NULL DEFAULT(1),
+    OverlayJson nvarchar(max) NOT NULL,
+    OverlaySha256 nvarchar(128) NOT NULL,
+    SourceName nvarchar(400) NULL,
+    IsEnabled bit NOT NULL DEFAULT(1),
+    CreatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    UpdatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_Test_ConfigOverlayDocuments_Key_Host_Version UNIQUE(OverlayKey, HostKey, OverlayVersion)
+);");
+        Execute(@"
+CREATE TABLE omp.ConfigOverlayConfigurationFiles
+(
+    ConfigOverlayConfigurationFileId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    ConfigOverlayDocumentId int NOT NULL,
+    RelativePath nvarchar(500) NOT NULL,
+    FileContent nvarchar(max) NOT NULL,
+    IsEnabled bit NOT NULL DEFAULT(1)
+);");
+    }
+
+    public IReadOnlyList<(int DocumentId, string OverlayVersion, bool IsEnabled, DateTime UpdatedUtc)> GetOverlayDocuments(
+        string overlayKey,
+        string hostKey)
+    {
+        var rows = new List<(int, string, bool, DateTime)>();
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            @"
+SELECT ConfigOverlayDocumentId, OverlayVersion, IsEnabled, UpdatedUtc
+FROM omp.ConfigOverlayDocuments
+WHERE OverlayKey = @overlayKey AND HostKey = @hostKey
+ORDER BY ConfigOverlayDocumentId;",
+            conn);
+        cmd.Parameters.AddWithValue("@overlayKey", overlayKey);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        using var rdr = cmd.ExecuteReader();
+        while (rdr.Read())
+        {
+            rows.Add((rdr.GetInt32(0), rdr.GetString(1), rdr.GetBoolean(2), rdr.GetDateTime(3)));
+        }
+
+        return rows;
+    }
+
+    public int CountOverlayConfigurationFiles(int documentId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "SELECT COUNT(1) FROM omp.ConfigOverlayConfigurationFiles WHERE ConfigOverlayDocumentId = @documentId;",
+            conn);
+        cmd.Parameters.AddWithValue("@documentId", documentId);
+        return (int)cmd.ExecuteScalar()!;
+    }
+
+    public void SetOverlayDocumentEnabled(int documentId, bool isEnabled)
+    {
+        Execute(
+            "UPDATE omp.ConfigOverlayDocuments SET IsEnabled = @isEnabled WHERE ConfigOverlayDocumentId = @documentId;",
+            new SqlParameter("@isEnabled", isEnabled),
+            new SqlParameter("@documentId", documentId));
+    }
+
     public void CreateMaintenanceFindingsTable()
     {
         Execute(@"

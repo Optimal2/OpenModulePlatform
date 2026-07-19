@@ -290,13 +290,32 @@ WHERE OverlayKey = @OverlayKey
                     "A config overlay with the same overlay key, host key, and version already exists, but the imported JSON is different.");
             }
 
-            var documentId = existingId ?? await InsertConfigOverlayDocumentAsync(conn, tx, input, ct);
-            if (existingId.HasValue && (replaceExisting || !isIdentical))
+            int documentId;
+            if (isIdentical)
             {
+                // Fully idempotent re-import: no writes at all and never toggle IsEnabled
+                // (must not re-enable a manually disabled row nor disable siblings).
+                documentId = existingId!.Value;
+            }
+            else if (existingId.HasValue)
+            {
+                documentId = existingId.Value;
                 await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, ct);
+                await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
+                await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
+            }
+            else
+            {
+                var enableImported = await ShouldEnableImportedConfigOverlayAsync(conn, tx, input, ct);
+                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, ct);
+                if (enableImported)
+                {
+                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
+                }
+
+                await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             }
 
-            await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             await tx.CommitAsync(ct);
             return (documentId, !existingId.HasValue, existingId.HasValue && replaceExisting && !isIdentical, existingId.HasValue && isIdentical);
         }
@@ -383,10 +402,67 @@ WHERE HostConfigurationDocumentId = @HostConfigurationDocumentId;";
         Add(cmd, "@SourceName", input.SourceName);
     }
 
+    /// <summary>
+    /// Decides whether a newly imported overlay version should become the single enabled
+    /// document for its (OverlayKey, HostKey): true when no row is currently enabled or the
+    /// incoming version is strictly newer than every currently enabled row's version.
+    /// </summary>
+    private static async Task<bool> ShouldEnableImportedConfigOverlayAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableConfigOverlayDocument input,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT OverlayVersion
+FROM omp.ConfigOverlayDocuments
+WHERE OverlayKey = @OverlayKey
+  AND HostKey = @HostKey
+  AND IsEnabled = 1;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@OverlayKey", input.OverlayKey);
+        Add(cmd, "@HostKey", input.HostKey);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            if (ArtifactVersionComparer.Compare(input.OverlayVersion, rdr.GetString(0)) <= 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static async Task DisableOtherEnabledConfigOverlayDocumentsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        PortableConfigOverlayDocument input,
+        int documentId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.ConfigOverlayDocuments
+SET IsEnabled = 0,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE OverlayKey = @OverlayKey
+  AND HostKey = @HostKey
+  AND IsEnabled = 1
+  AND ConfigOverlayDocumentId <> @ConfigOverlayDocumentId;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@OverlayKey", input.OverlayKey);
+        Add(cmd, "@HostKey", input.HostKey);
+        Add(cmd, "@ConfigOverlayDocumentId", documentId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task<int> InsertConfigOverlayDocumentAsync(
         SqlConnection conn,
         SqlTransaction tx,
         PortableConfigOverlayDocument input,
+        bool isEnabled,
         CancellationToken ct)
     {
         const string sql = @"
@@ -422,13 +498,14 @@ VALUES
     @OverlayJson,
     @OverlaySha256,
     @SourceName,
-    1
+    @IsEnabled
 );
 
 SELECT CAST(SCOPE_IDENTITY() AS int);";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         BindConfigOverlayDocument(cmd, input);
+        Add(cmd, "@IsEnabled", isEnabled);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
     }
 
