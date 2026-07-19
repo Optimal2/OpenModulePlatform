@@ -1,0 +1,104 @@
+/* Reusable link box: a bordered panel of chip-style links flowing in a
+   wrapping row. Lives in the left pane next to the section navigator
+   (inside .section-navigator-pane) where it shares the navigator's
+   resizable width, or stands alone with the same default width. */
+.omp-linkbox {
+    position: relative;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 12px 14px;
+    flex-shrink: 0;
+}
+
+.omp-linkbox__heading {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.omp-linkbox__items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.omp-linkbox__link {
+    display: inline-block;
+    max-width: 100%;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-muted);
+    color: var(--text);
+    font-size: 0.82rem;
+    line-height: 1.3;
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.omp-linkbox__link:hover,
+.omp-linkbox__link:focus-visible {
+    border-color: var(--link);
+    background: var(--surface);
+    color: var(--link-hover);
+    outline: none;
+}
+
+/* Muted group tints: same restrained color-mix language as the tinted form
+   panels. Group keys map to tints in order of first appearance. */
+.omp-linkbox__link--group-1 {
+    border-color: color-mix(in srgb, var(--link) 40%, var(--border));
+    background: color-mix(in srgb, var(--link) 9%, var(--surface));
+}
+
+.omp-linkbox__link--group-2 {
+    border-color: color-mix(in srgb, #2f9e63 45%, var(--border));
+    background: color-mix(in srgb, #2f9e63 9%, var(--surface));
+}
+
+.omp-linkbox__link--group-3 {
+    border-color: color-mix(in srgb, #d89614 45%, var(--border));
+    background: color-mix(in srgb, #d89614 10%, var(--surface));
+}
+
+.omp-linkbox__link--group-4 {
+    border-color: color-mix(in srgb, #7c5cd6 40%, var(--border));
+    background: color-mix(in srgb, #7c5cd6 9%, var(--surface));
+}
+
+/* The active page wins over any group tint. */
+.omp-linkbox__link--active,
+.omp-linkbox__link--active:hover,
+.omp-linkbox__link--active:focus-visible {
+    background: var(--link);
+    border-color: var(--link);
+    color: #fff;
+    font-weight: 600;
+}
+
+.omp-linkbox__link--active:hover,
+.omp-linkbox__link--active:focus-visible {
+    background: var(--link-hover);
+    border-color: var(--link-hover);
+}
+
+/* Exactly one resize handle per pane: when a section navigator shares the
+   pane, its handle is the pane's handle and the link box hides its own. */
+.section-navigator-pane:has(.section-navigator) .omp-linkbox__resize-handle {
+    display: none;
+}
+
+@media (max-width: 1500px) {
+    /* The navigator hides below this width, but the link box is navigation
+       rather than orientation: it stays, as a full-width chip row in the
+       page flow, and resizing is no longer meaningful. */
+    .omp-linkbox__resize-handle {
+        display: none;
+    }
+}

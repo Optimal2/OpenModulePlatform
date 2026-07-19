@@ -39,17 +39,16 @@
         }
     }
 
-    function init() {
-        var handle = document.querySelector("[data-section-navigator-resize]");
-        var navigator = handle ? handle.closest(".section-navigator") : null;
-        var layout = navigator ? navigator.closest(".section-navigator-layout") : null;
-        if (!handle || !navigator || !layout) {
+    function initHandle(handle) {
+        // The measured element is the shared pane when one exists (so the
+        // width covers both the navigator and the link box), otherwise the
+        // component the handle belongs to.
+        var target = handle.closest(".section-navigator-pane")
+            || handle.closest(".section-navigator")
+            || handle.closest(".omp-linkbox");
+        var layout = handle.closest(".section-navigator-layout");
+        if (!target || !layout) {
             return;
-        }
-
-        var storedWidth = readStoredWidth();
-        if (storedWidth !== null) {
-            applyWidth(layout, storedWidth);
         }
 
         var dragStartX = 0;
@@ -62,7 +61,7 @@
 
             event.preventDefault();
             dragStartX = event.clientX;
-            dragStartWidth = navigator.getBoundingClientRect().width;
+            dragStartWidth = target.getBoundingClientRect().width;
             handle.setPointerCapture(event.pointerId);
             document.body.classList.add("section-navigator-resizing");
         });
@@ -82,7 +81,7 @@
 
             handle.releasePointerCapture(event.pointerId);
             document.body.classList.remove("section-navigator-resizing");
-            storeWidth(clampWidth(Math.round(navigator.getBoundingClientRect().width)));
+            storeWidth(clampWidth(Math.round(target.getBoundingClientRect().width)));
         }
 
         handle.addEventListener("pointerup", endDrag);
@@ -92,6 +91,23 @@
             applyWidth(layout, null);
             storeWidth(null);
         });
+    }
+
+    function init() {
+        var handles = Array.prototype.slice.call(document.querySelectorAll("[data-section-navigator-resize]"));
+        if (handles.length === 0) {
+            return;
+        }
+
+        var storedWidth = readStoredWidth();
+        if (storedWidth !== null) {
+            var layout = document.querySelector(".section-navigator-layout");
+            if (layout) {
+                applyWidth(layout, storedWidth);
+            }
+        }
+
+        handles.forEach(initHandle);
     }
 
     if (document.readyState === "loading") {
