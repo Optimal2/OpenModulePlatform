@@ -2885,4 +2885,22 @@
   <data name="Drag to reorder" xml:space="preserve">
     <value>Dra för att ändra ordning</value>
   </data>
+  <data name="Groups" xml:space="preserve">
+    <value>Grupper</value>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Byt namn</value>
+  </data>
+  <data name="No group" xml:space="preserve">
+    <value>Utan grupp</value>
+  </data>
+  <data name="This box has no groups yet." xml:space="preserve">
+    <value>Denna box har inga grupper ännu.</value>
+  </data>
+  <data name="Groups tint the links in the box. Colors are assigned in the order groups first appear among the links, so reordering links can shift which group gets which color." xml:space="preserve">
+    <value>Grupper färgtonar länkarna i boxen. Färgerna tilldelas i den ordning grupperna först förekommer bland länkarna, så en omordning av länkarna kan skifta vilken grupp som får vilken färg.</value>
+  </data>
+  <data name="Renaming a group updates all of its links; renaming it to an existing group merges them. Leave the name empty to remove the group from its links." xml:space="preserve">
+    <value>Byter du namn på en grupp uppdateras alla dess länkar; byter du till en befintlig grupp slås de ihop. Lämna namnet tomt för att ta bort gruppen från dess länkar.</value>
+  </data>
 </root>
