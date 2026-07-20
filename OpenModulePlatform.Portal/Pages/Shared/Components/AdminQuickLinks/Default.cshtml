@@ -1,39 +1,31 @@
-@using OpenModulePlatform.Portal.Services
 @using OpenModulePlatform.Portal.ViewComponents
 @using OpenModulePlatform.Web.Shared.Navigation
-@model AdminQuickLinksViewModel
+@model IReadOnlyList<AdminPaneBox>
 @*
-    Admin quick links as the shared LinkBox component. Built-in links come from
-    the PortalLinkBoxes registry (edit that ONE list in code); user-added links
-    come from omp.link_box_items and are curated at /admin/navigation, which the
-    gear links to. Group keys map to the shared muted tints in order of first
-    appearance, so user links can share tints with built-in groups by using the
-    same group key.
+    The admin pane's link boxes, straight from storage (curated at
+    /admin/navigation, where each box's gear leads). Titles and labels are
+    localization keys resolved resx-first: seeded entries localize, free-text
+    entries render as-is. Boxes stack vertically in the pane, always.
 *@
 @{
     string currentPath = (ViewContext.HttpContext.Request.Path.Value ?? string.Empty).TrimEnd('/');
 
     bool IsActive(string relativePath)
         => string.Equals(currentPath, relativePath.Split('?')[0], StringComparison.OrdinalIgnoreCase);
-
-    var items = new List<LinkBoxItem>();
-    foreach (var link in Model.Definition.CodeLinks)
-    {
-        items.Add(new LinkBoxItem(L[link.TextKey].Value, Url.Content("~" + link.RelativePath), link.Group, IsActive(link.RelativePath)));
-    }
-
-    foreach (var link in Model.UserLinks)
-    {
-        items.Add(new LinkBoxItem(link.Label, Url.Content("~" + link.Url), link.GroupKey, IsActive(link.Url)));
-    }
-
-    var quickLinks = new LinkBoxModel
-    {
-        Label = L[Model.Definition.TitleKey].Value,
-        Heading = L[Model.Definition.TitleKey].Value,
-        EditUrl = Url.Content("~/admin/navigation?box=" + Uri.EscapeDataString(Model.Definition.BoxKey)),
-        EditLabel = L["Edit links"].Value,
-        Items = items
-    };
 }
-@await Component.InvokeAsync("LinkBox", new { model = quickLinks })
+@foreach (var paneBox in Model)
+{
+    var boxModel = new LinkBoxModel
+    {
+        Label = L[paneBox.Box.Title].Value,
+        Heading = L[paneBox.Box.Title].Value,
+        BoxKey = paneBox.Box.BoxKey,
+        EditUrl = Url.Content("~/admin/navigation?box=" + Uri.EscapeDataString(paneBox.Box.BoxKey)),
+        EditLabel = L["Edit links"].Value,
+        Items = paneBox.Links
+            .Select(link => new LinkBoxItem(L[link.Label].Value, Url.Content("~" + link.Url), link.GroupKey, IsActive(link.Url)))
+            .ToArray()
+    };
+
+    @await Component.InvokeAsync("LinkBox", new { model = boxModel })
+}

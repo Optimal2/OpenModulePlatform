@@ -20,6 +20,57 @@
     text-transform: uppercase;
 }
 
+/* Collapsible heading: the summary reuses the heading look and adds a small
+   rotation arrow. Collapsed boxes shrink to just the header row. */
+.omp-linkbox__summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
+    border-radius: 6px;
+}
+
+.omp-linkbox__summary::-webkit-details-marker {
+    display: none;
+}
+
+.omp-linkbox__summary .omp-linkbox__heading {
+    margin-bottom: 0;
+}
+
+.omp-linkbox__summary::after {
+    content: "\25BE";
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    transition: transform 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .omp-linkbox__summary::after {
+        transition: none;
+    }
+}
+
+.omp-linkbox__details:not([open]) > .omp-linkbox__summary::after {
+    transform: rotate(-90deg);
+}
+
+.omp-linkbox__summary:hover .omp-linkbox__heading,
+.omp-linkbox__summary:focus-visible .omp-linkbox__heading {
+    color: var(--text);
+}
+
+.omp-linkbox__summary:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+.omp-linkbox__details[open] > .omp-linkbox__summary {
+    margin-bottom: 8px;
+}
+
 /* Keep the heading clear of the edit gear when one is rendered. */
 .omp-linkbox:has(.omp-linkbox__edit) .omp-linkbox__heading {
     padding-right: 26px;

@@ -14,6 +14,13 @@ public sealed class LinkBoxModel
     public string? Heading { get; init; }
 
     /// <summary>
+    /// Stable key identifying this box (e.g. its omp.link_boxes key). Used to
+    /// persist the collapsed/expanded state per box in localStorage; boxes
+    /// without a key still collapse but do not persist the state.
+    /// </summary>
+    public string? BoxKey { get; init; }
+
+    /// <summary>
     /// When set, a discreet gear icon links to this page-owned editor. The
     /// host page decides authorization and only sets the URL for users who
     /// may edit the links; the component itself has no permission model.

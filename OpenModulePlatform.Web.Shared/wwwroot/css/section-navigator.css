@@ -377,20 +377,31 @@ body.section-navigator-resizing {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    width: var(--section-navigator-pane-width, var(--section-navigator-width));
+    /* The pane is the ONE scroll container for navigator + boxes: the
+       scrollbar only exists when the stack actually overflows the viewport
+       budget. The extra gap-wide padding (pulled back by the negative
+       margin, so the grid footprint stays the pane width) keeps the resize
+       handles inside the scrollport so overflow-y never clips them; when a
+       scrollbar appears it lives in that same gap zone. */
+    width: calc(var(--section-navigator-pane-width, var(--section-navigator-width)) + var(--section-navigator-gap, 16px));
+    padding-right: var(--section-navigator-gap, 16px);
+    margin-right: calc(0px - var(--section-navigator-gap, 16px));
     max-height: calc(100vh - var(--app-header-height, 92px) - (var(--section-navigator-sticky-gap, 16px) * 2));
     min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.32) transparent;
 }
 
 .section-navigator-pane .section-navigator {
     /* Relative (not sticky): the pane carries stickiness, while the resize
        handle still anchors to the navigator so its grip can be positioned
-       against the navigator's edges. */
+       against the navigator's edges. The navigator no longer shrinks with
+       internal scrolling — the pane scrolls as one surface instead. */
     position: relative;
     top: auto;
     width: 100%;
-    flex: 0 1 auto;
-    min-height: 0;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
 }
@@ -404,8 +415,7 @@ body.section-navigator-resizing {
 
 .section-navigator-pane .section-navigator__nav {
     max-height: none;
-    min-height: 0;
-    overflow-y: auto;
+    overflow-y: visible;
 }
 
 @media (max-width: 1500px) {
@@ -429,7 +439,10 @@ body.section-navigator-resizing {
         position: static;
         display: block;
         width: auto;
+        padding-right: 0;
+        margin-right: 0;
         max-height: none;
+        overflow: visible;
         margin-bottom: 16px;
     }
 }

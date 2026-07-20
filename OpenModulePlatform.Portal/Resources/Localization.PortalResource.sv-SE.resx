@@ -2855,4 +2855,31 @@
   <data name="Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint." xml:space="preserve">
     <value>Valfritt. Länkar med samma gruppnyckel delar färgton; matchar du en inbyggd grupp återanvänds dess ton.</value>
   </data>
+  <data name="Box settings" xml:space="preserve">
+    <value>Boxinställningar</value>
+  </data>
+  <data name="Required permission" xml:space="preserve">
+    <value>Kräver rättighet</value>
+  </data>
+  <data name="Visible to everyone" xml:space="preserve">
+    <value>Synlig för alla</value>
+  </data>
+  <data name="Save box" xml:space="preserve">
+    <value>Spara box</value>
+  </data>
+  <data name="Links" xml:space="preserve">
+    <value>Länkar</value>
+  </data>
+  <data name="This box has no links yet." xml:space="preserve">
+    <value>Denna box har inga länkar ännu.</value>
+  </data>
+  <data name="Only users holding the permission see the box at all." xml:space="preserve">
+    <value>Endast användare med rättigheten ser boxen överhuvudtaget.</value>
+  </data>
+  <data name="Only users holding the permission see the link." xml:space="preserve">
+    <value>Endast användare med rättigheten ser länken.</value>
+  </data>
+  <data name="Curate the links shown in the platform's link boxes. Links and boxes can be limited to a permission; labels and titles that match a translation key are localized, anything else is shown as written." xml:space="preserve">
+    <value>Hantera länkarna som visas i plattformens länkboxar. Länkar och boxar kan begränsas till en rättighet; etiketter och titlar som matchar en översättningsnyckel lokaliseras, allt annat visas som det är skrivet.</value>
+  </data>
 </root>
