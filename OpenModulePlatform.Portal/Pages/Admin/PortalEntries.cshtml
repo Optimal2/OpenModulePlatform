@@ -1,23 +1,34 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.PortalEntriesModel
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Portal"]</div>
-        <h2>@L["Navigation"]</h2>
-        <p class="lede">@L["Manage the shared All modules menu. Users pick their own favorites from these entries."]</p>
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["Portal"]</div>
+                <h2>@L["Navigation"]</h2>
+                <p class="lede">@L["Manage the shared All modules menu. Users pick their own favorites from these entries."]</p>
+            </div>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+        {
+            <div class="card status-banner">@Model.StatusMessage</div>
+        }
+
+        @if (!ViewContext.ModelState.IsValid)
+        {
+            <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+        }
     </div>
-</section>
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-{
-    <div class="card status-banner">@Model.StatusMessage</div>
-}
+    @* The pane holds the link box directory: every registered link box as a
+       chip leading to the generic editor with that box preselected. *@
+    <div class="section-navigator-pane">
+        @await Component.InvokeAsync("LinkBoxDirectory")
+    </div>
 
-@if (!ViewContext.ModelState.IsValid)
-{
-    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
-}
+    <div class="section-navigator-layout__content">
 
 <section class="card top-gap portal-entry-layout-admin">
     <div class="section-header">
@@ -453,6 +464,9 @@
         </div>
     }
 </section>
+
+    </div>
+</div>
 
 @section Scripts {
     <script>

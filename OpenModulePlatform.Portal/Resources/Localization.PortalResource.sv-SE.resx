@@ -2903,4 +2903,7 @@
   <data name="Renaming a group updates all of its links; renaming it to an existing group merges them. Leave the name empty to remove the group from its links." xml:space="preserve">
     <value>Byter du namn på en grupp uppdateras alla dess länkar; byter du till en befintlig grupp slås de ihop. Lämna namnet tomt för att ta bort gruppen från dess länkar.</value>
   </data>
+  <data name="Link boxes" xml:space="preserve">
+    <value>Länkboxar</value>
+  </data>
 </root>
