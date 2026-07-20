@@ -74,9 +74,16 @@
     }
     else
     {
+        @* Detached forms: link edits submit through link-edit-form; a drag
+           reorder fills the hidden order field and submits link-reorder-form. *@
+        <form method="post" asp-page-handler="Update" asp-route-box="@Model.SelectedBoxKey" id="link-edit-form"></form>
+        <form method="post" asp-page-handler="Reorder" asp-route-box="@Model.SelectedBoxKey" id="link-reorder-form">
+            <input type="hidden" name="order" data-linkbox-order />
+        </form>
         <table class="grid">
             <thead>
                 <tr>
+                    <th></th>
                     <th>@L["Label"]</th>
                     <th>@L["URL"]</th>
                     <th>@L["Group"]</th>
@@ -84,68 +91,172 @@
                     <th>@L["Actions"]</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody data-linkbox-list>
             @foreach (var link in Model.Links)
             {
-                <tr>
-                    <td>@L[link.Label]</td>
-                    <td><code>@link.Url</code></td>
-                    <td>@(string.IsNullOrWhiteSpace(link.GroupKey) ? "-" : link.GroupKey)</td>
-                    <td>@(string.IsNullOrWhiteSpace(link.RequiredPermission) ? L["Visible to everyone"] : link.RequiredPermission)</td>
+                var isEditing = Model.EditingLinkId == link.LinkBoxItemId;
+                <tr data-linkbox-row data-link-id="@link.LinkBoxItemId">
                     <td>
-                        <form method="post"
-                              asp-page-handler="Delete"
-                              asp-route-box="@Model.SelectedBoxKey"
-                              asp-route-id="@link.LinkBoxItemId"
-                              data-omp-confirm="@L["Remove this link?"]"
-                              data-omp-confirm-ok="@L["Remove"]"
-                              data-omp-confirm-cancel="@L["Cancel"]">
-                            <button type="submit" class="action-link">@L["Remove"]</button>
-                        </form>
+                        <span class="portal-entry-layout-row__handle"
+                              draggable="true"
+                              data-linkbox-drag-handle
+                              title="@L["Drag to reorder"]"
+                              aria-hidden="true"></span>
                     </td>
+                    @if (isEditing)
+                    {
+                        <td>
+                            <input form="link-edit-form" asp-for="Input.Label" aria-label="@L["Label"]" />
+                            <input form="link-edit-form" asp-for="Input.LinkBoxItemId" type="hidden" />
+                        </td>
+                        <td><input form="link-edit-form" asp-for="Input.Url" aria-label="@L["URL"]" /></td>
+                        <td><input form="link-edit-form" asp-for="Input.Group" aria-label="@L["Group"]" /></td>
+                        <td>
+                            <select form="link-edit-form" asp-for="Input.RequiredPermission" aria-label="@L["Required permission"]">
+                                <option value="">@L["Visible to everyone"]</option>
+                                @foreach (var permission in Model.PermissionNames)
+                                {
+                                    <option value="@permission">@permission</option>
+                                }
+                            </select>
+                        </td>
+                        <td>
+                            <div class="toolbar">
+                                <button form="link-edit-form" type="submit" class="action-link">@L["Save"]</button>
+                                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(Model.SelectedBoxKey)">@L["Cancel"]</a>
+                            </div>
+                        </td>
+                    }
+                    else
+                    {
+                        <td>@L[link.Label]</td>
+                        <td><code>@link.Url</code></td>
+                        <td>@(string.IsNullOrWhiteSpace(link.GroupKey) ? "-" : link.GroupKey)</td>
+                        <td>@(string.IsNullOrWhiteSpace(link.RequiredPermission) ? L["Visible to everyone"] : link.RequiredPermission)</td>
+                        <td>
+                            <div class="toolbar">
+                                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(Model.SelectedBoxKey)&editId=@link.LinkBoxItemId">@L["Edit"]</a>
+                                <form method="post"
+                                      asp-page-handler="Delete"
+                                      asp-route-box="@Model.SelectedBoxKey"
+                                      asp-route-id="@link.LinkBoxItemId"
+                                      data-omp-confirm="@L["Remove this link?"]"
+                                      data-omp-confirm-ok="@L["Remove"]"
+                                      data-omp-confirm-cancel="@L["Cancel"]">
+                                    <button type="submit" class="action-link">@L["Remove"]</button>
+                                </form>
+                            </div>
+                        </td>
+                    }
                 </tr>
             }
             </tbody>
         </table>
     }
 
-    <h4 class="top-gap">@L["Add link"]</h4>
-    <form method="post" asp-page-handler="Add" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
-        <div class="field-grid field-grid--2">
-            <div class="form-field">
-                <label asp-for="Input.Label">@L["Label"]</label>
-                <input asp-for="Input.Label" />
-                <span asp-validation-for="Input.Label" class="field-validation-error"></span>
+    @if (Model.EditingLinkId is null)
+    {
+        <h4 class="top-gap">@L["Add link"]</h4>
+        <form method="post" asp-page-handler="Add" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="Input.Label">@L["Label"]</label>
+                    <input asp-for="Input.Label" />
+                    <span asp-validation-for="Input.Label" class="field-validation-error"></span>
+                </div>
+                <div class="form-field">
+                    <label asp-for="Input.Url">@L["URL"]</label>
+                    <input asp-for="Input.Url" placeholder="/admin/hosts" />
+                    <div class="field-help">@L["Only relative URLs within this site are allowed, e.g. /admin/hosts."]</div>
+                    <span asp-validation-for="Input.Url" class="field-validation-error"></span>
+                </div>
             </div>
-            <div class="form-field">
-                <label asp-for="Input.Url">@L["URL"]</label>
-                <input asp-for="Input.Url" placeholder="/admin/hosts" />
-                <div class="field-help">@L["Only relative URLs within this site are allowed, e.g. /admin/hosts."]</div>
-                <span asp-validation-for="Input.Url" class="field-validation-error"></span>
+            <div class="field-grid field-grid--2">
+                <div class="form-field">
+                    <label asp-for="Input.Group">@L["Group"]</label>
+                    <input asp-for="Input.Group" />
+                    <div class="field-help">@L["Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint."]</div>
+                    <span asp-validation-for="Input.Group" class="field-validation-error"></span>
+                </div>
+                <div class="form-field">
+                    <label asp-for="Input.RequiredPermission">@L["Required permission"]</label>
+                    <select asp-for="Input.RequiredPermission">
+                        <option value="">@L["Visible to everyone"]</option>
+                        @foreach (var permission in Model.PermissionNames)
+                        {
+                            <option value="@permission">@permission</option>
+                        }
+                    </select>
+                    <div class="field-help">@L["Only users holding the permission see the link."]</div>
+                    <span asp-validation-for="Input.RequiredPermission" class="field-validation-error"></span>
+                </div>
             </div>
-        </div>
-        <div class="field-grid field-grid--2">
-            <div class="form-field">
-                <label asp-for="Input.Group">@L["Group"]</label>
-                <input asp-for="Input.Group" />
-                <div class="field-help">@L["Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint."]</div>
-                <span asp-validation-for="Input.Group" class="field-validation-error"></span>
+            <div class="toolbar">
+                <button type="submit" class="action-link">@L["Add link"]</button>
             </div>
-            <div class="form-field">
-                <label asp-for="Input.RequiredPermission">@L["Required permission"]</label>
-                <select asp-for="Input.RequiredPermission">
-                    <option value="">@L["Visible to everyone"]</option>
-                    @foreach (var permission in Model.PermissionNames)
-                    {
-                        <option value="@permission">@permission</option>
-                    }
-                </select>
-                <div class="field-help">@L["Only users holding the permission see the link."]</div>
-                <span asp-validation-for="Input.RequiredPermission" class="field-validation-error"></span>
-            </div>
-        </div>
-        <div class="toolbar">
-            <button type="submit" class="action-link">@L["Add link"]</button>
-        </div>
-    </form>
+        </form>
+    }
 </section>
+
+@section Scripts {
+    <script>
+        (() => {
+            // Flat drag-to-reorder for the link rows: dragging a handle moves
+            // its row; dropping in a new position submits the new id order.
+            const list = document.querySelector("[data-linkbox-list]");
+            const orderForm = document.getElementById("link-reorder-form");
+            const orderInput = orderForm?.querySelector("[data-linkbox-order]");
+            if (!list || !orderForm || !orderInput) {
+                return;
+            }
+
+            const idOrder = () =>
+                Array.from(list.querySelectorAll("[data-linkbox-row]")).map(row => row.dataset.linkId).join(",");
+
+            let draggedRow = null;
+            let startOrder = "";
+
+            list.querySelectorAll("[data-linkbox-drag-handle]").forEach(handle => {
+                const row = handle.closest("[data-linkbox-row]");
+                handle.addEventListener("dragstart", event => {
+                    draggedRow = row;
+                    startOrder = idOrder();
+                    row.classList.add("linkbox-editor-row--dragging");
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", row.dataset.linkId);
+                    event.dataTransfer.setDragImage(row, 12, 12);
+                });
+
+                handle.addEventListener("dragend", () => {
+                    row.classList.remove("linkbox-editor-row--dragging");
+                    if (draggedRow && idOrder() !== startOrder) {
+                        orderInput.value = idOrder();
+                        orderForm.submit();
+                    }
+
+                    draggedRow = null;
+                });
+            });
+
+            list.addEventListener("dragover", event => {
+                if (!draggedRow) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                const target = event.target.closest("[data-linkbox-row]");
+                if (!target || target === draggedRow) {
+                    return;
+                }
+
+                const rect = target.getBoundingClientRect();
+                const insertBefore = event.clientY < rect.top + (rect.height / 2);
+                target.parentNode.insertBefore(draggedRow, insertBefore ? target : target.nextSibling);
+            });
+
+            // Some browsers require a drop handler for the move to be allowed.
+            list.addEventListener("drop", event => event.preventDefault());
+        })();
+    </script>
+}
