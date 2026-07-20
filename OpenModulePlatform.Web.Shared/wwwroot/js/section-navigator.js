@@ -39,6 +39,22 @@
         }
     }
 
+    function snapGrip(handle) {
+        // Grid layout can place the grip anchor on a fractional pixel (odd
+        // viewport widths, fractional pane heights), which antialiases the
+        // grip's 1px ring asymmetrically so it looks off-center. Measure the
+        // anchor and publish whole-pixel deltas for the grip pseudo-elements.
+        var rect = handle.getBoundingClientRect();
+        var host = handle.parentElement;
+        var betweenElements = host
+            && host.matches(".section-navigator-pane .section-navigator")
+            && host.nextElementSibling;
+        var centerX = rect.left + (rect.width / 2);
+        var centerY = betweenElements ? rect.bottom + 6 : rect.top + (rect.height / 2);
+        handle.style.setProperty("--section-navigator-grip-dx", (Math.round(centerX) - centerX) + "px");
+        handle.style.setProperty("--section-navigator-grip-dy", (Math.round(centerY) - centerY) + "px");
+    }
+
     function initHandle(handle) {
         // The measured element is the shared pane when one exists (so the
         // width covers both the navigator and the link box), otherwise the
@@ -72,6 +88,7 @@
             }
 
             applyWidth(layout, clampWidth(Math.round(dragStartWidth + (event.clientX - dragStartX))));
+            snapGrip(handle);
         });
 
         function endDrag(event) {
@@ -90,6 +107,16 @@
         handle.addEventListener("dblclick", function () {
             applyWidth(layout, null);
             storeWidth(null);
+            snapGrip(handle);
+        });
+
+        snapGrip(handle);
+        window.addEventListener("resize", function () {
+            snapGrip(handle);
+        });
+        // Late layout shifts (web fonts, images) can move the anchor after init.
+        window.addEventListener("load", function () {
+            snapGrip(handle);
         });
     }
 
