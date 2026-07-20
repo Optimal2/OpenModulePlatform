@@ -20,8 +20,10 @@
     text-transform: uppercase;
 }
 
-/* Collapsible heading: the summary reuses the heading look and adds a small
-   rotation arrow. Collapsed boxes shrink to just the header row. */
+/* Collapsible heading: the summary reuses the heading look with no extra
+   marker (an arrow would collide with the edit gear); hover/focus brightening
+   plus the pointer cursor carry the affordance. Collapsed boxes shrink to
+   just the header row. */
 .omp-linkbox__summary {
     display: flex;
     align-items: center;
@@ -38,23 +40,6 @@
 
 .omp-linkbox__summary .omp-linkbox__heading {
     margin-bottom: 0;
-}
-
-.omp-linkbox__summary::after {
-    content: "\25BE";
-    color: var(--text-muted);
-    font-size: 0.7rem;
-    transition: transform 120ms ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .omp-linkbox__summary::after {
-        transition: none;
-    }
-}
-
-.omp-linkbox__details:not([open]) > .omp-linkbox__summary::after {
-    transform: rotate(-90deg);
 }
 
 .omp-linkbox__summary:hover .omp-linkbox__heading,

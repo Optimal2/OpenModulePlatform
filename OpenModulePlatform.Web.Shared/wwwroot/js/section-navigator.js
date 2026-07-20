@@ -120,22 +120,24 @@
         });
     }
 
-    // Link boxes collapse via their heading; the state persists per box key
-    // so a box an operator folded stays folded across pages and visits.
-    function initLinkBoxCollapse() {
-        document.querySelectorAll("details[data-omp-linkbox]").forEach(function (details) {
-            var boxKey = details.getAttribute("data-omp-linkbox");
-            if (!boxKey) {
+    // Pane elements (link boxes, the section navigator) collapse via their
+    // heading; the state persists per collapse key (box key or page path) so
+    // what an operator folded stays folded across visits. Toggling changes
+    // the pane geometry, so grip snaps are refreshed afterwards.
+    function initPaneCollapse() {
+        document.querySelectorAll("details[data-omp-pane-collapse]").forEach(function (details) {
+            var paneKey = details.getAttribute("data-omp-pane-collapse");
+            if (!paneKey) {
                 return;
             }
 
-            var collapseKey = "omp.linkbox-collapsed." + boxKey;
+            var collapseKey = "omp.pane-collapsed." + paneKey;
             try {
                 if (window.localStorage.getItem(collapseKey) === "1") {
                     details.open = false;
                 }
             } catch (error) {
-                // Storage may be unavailable; the box still collapses for the page.
+                // Storage may be unavailable; the element still collapses for the page.
             }
 
             details.addEventListener("toggle", function () {
@@ -148,12 +150,14 @@
                 } catch (error) {
                     // Ignore storage failures.
                 }
+
+                document.querySelectorAll("[data-section-navigator-resize]").forEach(snapGrip);
             });
         });
     }
 
     function init() {
-        initLinkBoxCollapse();
+        initPaneCollapse();
 
         var handles = Array.prototype.slice.call(document.querySelectorAll("[data-section-navigator-resize]"));
         if (handles.length === 0) {

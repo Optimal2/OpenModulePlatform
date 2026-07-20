@@ -26,7 +26,7 @@
         {
             @* The heading collapses the box; the state persists per box key in
                localStorage (applied by section-navigator.js before paint). *@
-            <details class="omp-linkbox__details" data-omp-linkbox="@Model.BoxKey" open>
+            <details class="omp-linkbox__details" data-omp-pane-collapse="@Model.BoxKey" open>
                 <summary class="omp-linkbox__summary">
                     <span class="omp-linkbox__heading">@Model.Heading</span>
                 </summary>
