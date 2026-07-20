@@ -2,35 +2,43 @@
 
 @if (Model.Items.Count > 0)
 {
+    var collapseKey = "section-navigator:" + (ViewContext.HttpContext.Request.Path.Value ?? string.Empty).TrimEnd('/');
     <aside class="section-navigator" aria-label="@Model.Label">
         <span class="section-navigator__resize-handle" data-section-navigator-resize aria-hidden="true"></span>
         <nav class="section-navigator__nav">
-            <div class="section-navigator__heading">@Model.Label</div>
-            @if (!string.IsNullOrWhiteSpace(Model.RootText))
-            {
-                <ol class="section-navigator__list section-navigator__list--root">
-                    <li class="section-navigator__item section-navigator__item--branch section-navigator__item--root">
-                        <details class="section-navigator__details" open="@Model.RootInitiallyExpanded">
-                            <summary class="section-navigator__summary section-navigator__summary--root">
-                                <span class="section-navigator__chevron" aria-hidden="true"></span>
-                                @if (!string.IsNullOrWhiteSpace(Model.RootHref))
-                                {
-                                    <a class="section-navigator__summary-link" href="@Model.RootHref" title="@Model.RootText" onclick="event.stopPropagation();">@Model.RootText</a>
-                                }
-                                else
-                                {
-                                    <span class="section-navigator__summary-label" title="@Model.RootText">@Model.RootText</span>
-                                }
-                            </summary>
-                            @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", Model.Items)
-                        </details>
-                    </li>
-                </ol>
-            }
-            else
-            {
-                @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", Model.Items)
-            }
+            @* The heading collapses the whole navigator, mirroring the link box
+               headings so every pane element folds the same way; the state
+               persists per page path in localStorage. *@
+            <details class="section-navigator__collapse" data-omp-pane-collapse="@collapseKey" open>
+                <summary class="section-navigator__collapse-summary">
+                    <span class="section-navigator__heading">@Model.Label</span>
+                </summary>
+                @if (!string.IsNullOrWhiteSpace(Model.RootText))
+                {
+                    <ol class="section-navigator__list section-navigator__list--root">
+                        <li class="section-navigator__item section-navigator__item--branch section-navigator__item--root">
+                            <details class="section-navigator__details" open="@Model.RootInitiallyExpanded">
+                                <summary class="section-navigator__summary section-navigator__summary--root">
+                                    <span class="section-navigator__chevron" aria-hidden="true"></span>
+                                    @if (!string.IsNullOrWhiteSpace(Model.RootHref))
+                                    {
+                                        <a class="section-navigator__summary-link" href="@Model.RootHref" title="@Model.RootText" onclick="event.stopPropagation();">@Model.RootText</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="section-navigator__summary-label" title="@Model.RootText">@Model.RootText</span>
+                                    }
+                                </summary>
+                                @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", Model.Items)
+                            </details>
+                        </li>
+                    </ol>
+                }
+                else
+                {
+                    @await Html.PartialAsync("~/Views/Shared/Components/SectionNavigator/_SectionNavigatorList.cshtml", Model.Items)
+                }
+            </details>
         </nav>
     </aside>
 }

@@ -139,6 +139,39 @@ body.section-navigator-resizing {
     text-transform: uppercase;
 }
 
+/* The heading collapses the whole navigator, same interaction as the link box
+   headings: no marker or arrow, just pointer cursor and hover brightening.
+   Collapsed, the card shrinks to the heading row. */
+.section-navigator__collapse-summary {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    list-style: none;
+    border-radius: 6px;
+}
+
+.section-navigator__collapse-summary::-webkit-details-marker {
+    display: none;
+}
+
+.section-navigator__collapse-summary .section-navigator__heading {
+    margin-bottom: 0;
+}
+
+.section-navigator__collapse[open] > .section-navigator__collapse-summary {
+    margin-bottom: 8px;
+}
+
+.section-navigator__collapse-summary:hover .section-navigator__heading,
+.section-navigator__collapse-summary:focus-visible .section-navigator__heading {
+    color: var(--text);
+}
+
+.section-navigator__collapse-summary:focus-visible {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
 .section-navigator__list {
     display: grid;
     gap: 0;
