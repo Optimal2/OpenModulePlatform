@@ -1,202 +1,290 @@
 @page
 @using OpenModulePlatform.Portal.Services
+@using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.NavigationModel
-
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Manual core"]</div>
-        <h2>@L["Navigation"]</h2>
-        <p class="lede">@L["Curate the links shown in the platform's link boxes. Links and boxes can be limited to a permission; labels and titles that match a translation key are localized, anything else is shown as written."]</p>
-    </div>
-</section>
-
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-{
-    <div class="card status-banner">@Model.StatusMessage</div>
+@{
+    var sectionNavigatorItems = new List<SectionNavigatorItem>
+    {
+        new(L["Box settings"].Value, "box-settings-section"),
+        new(L["Groups"].Value, "groups-section"),
+        new(L["Links"].Value, "links-section"),
+        new(L["Add link"].Value, "add-link-section") { IsDisabled = Model.EditingLinkId is not null }
+    };
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L[Model.SelectedBox?.Title ?? Model.SelectedBoxKey].Value,
+        Items = sectionNavigatorItems
+    };
 }
 
-@if (!ViewContext.ModelState.IsValid)
-{
-    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
-}
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <section class="page-header">
+            <div>
+                <div class="eyebrow">@L["Manual core"]</div>
+                <h2>@L["Navigation"]</h2>
+                <p class="lede">@L["Curate the links shown in the platform's link boxes. Links and boxes can be limited to a permission; labels and titles that match a translation key are localized, anything else is shown as written."]</p>
+            </div>
+        </section>
 
-@if (Model.Boxes.Count > 1)
-{
-    <div class="toolbar top-gap">
-        @foreach (var box in Model.Boxes)
+        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
         {
-            if (string.Equals(box.BoxKey, Model.SelectedBoxKey, StringComparison.OrdinalIgnoreCase))
+            <div class="card status-banner">@Model.StatusMessage</div>
+        }
+
+        @if (!ViewContext.ModelState.IsValid)
+        {
+            <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+        }
+
+        @if (Model.Boxes.Count > 1)
+        {
+            <div class="toolbar top-gap">
+                @foreach (var box in Model.Boxes)
+                {
+                    if (string.Equals(box.BoxKey, Model.SelectedBoxKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="pill">@L[box.Title]</span>
+                    }
+                    else
+                    {
+                        <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(box.BoxKey)">@L[box.Title]</a>
+                    }
+                }
+            </div>
+        }
+    </div>
+
+    <div class="section-navigator-pane">
+        @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    </div>
+
+    <div class="section-navigator-layout__content">
+        <datalist id="linkbox-groups">
+            @foreach (var group in Model.Groups)
             {
-                <span class="pill">@L[box.Title]</span>
+                <option value="@group.Group"></option>
+            }
+        </datalist>
+
+        <section class="card section-navigator-target" id="box-settings-section">
+            <h3>@L["Box settings"]</h3>
+            <p class="field-help">@L["Box key"]: <code>@Model.SelectedBoxKey</code></p>
+            <form method="post" asp-page-handler="SaveBox" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
+                <div class="field-grid field-grid--2">
+                    <div class="form-field">
+                        <label asp-for="BoxInput.Title">@L["Title"]</label>
+                        <input asp-for="BoxInput.Title" />
+                        <span asp-validation-for="BoxInput.Title" class="field-validation-error"></span>
+                    </div>
+                    <div class="form-field">
+                        <label asp-for="BoxInput.RequiredPermission">@L["Required permission"]</label>
+                        <select asp-for="BoxInput.RequiredPermission">
+                            <option value="">@L["Visible to everyone"]</option>
+                            @foreach (var permission in Model.PermissionNames)
+                            {
+                                <option value="@permission">@permission</option>
+                            }
+                        </select>
+                        <div class="field-help">@L["Only users holding the permission see the box at all."]</div>
+                        <span asp-validation-for="BoxInput.RequiredPermission" class="field-validation-error"></span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <button type="submit" class="action-link">@L["Save box"]</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card top-gap section-navigator-target" id="groups-section">
+            <h3>@L["Groups"]</h3>
+            <p class="field-help">@L["Groups tint the links in the box. Colors are assigned in the order groups first appear among the links, so reordering links can shift which group gets which color."]</p>
+            @if (Model.Groups.Count == 0)
+            {
+                <div class="empty-state">@L["This box has no groups yet."]</div>
             }
             else
             {
-                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(box.BoxKey)">@L[box.Title]</a>
-            }
-        }
-    </div>
-}
-
-<section class="card top-gap">
-    <h3>@L[Model.SelectedBox?.Title ?? Model.SelectedBoxKey]</h3>
-    <p class="field-help">@L["Box key"]: <code>@Model.SelectedBoxKey</code></p>
-
-    <h4>@L["Box settings"]</h4>
-    <form method="post" asp-page-handler="SaveBox" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
-        <div class="field-grid field-grid--2">
-            <div class="form-field">
-                <label asp-for="BoxInput.Title">@L["Title"]</label>
-                <input asp-for="BoxInput.Title" />
-                <span asp-validation-for="BoxInput.Title" class="field-validation-error"></span>
-            </div>
-            <div class="form-field">
-                <label asp-for="BoxInput.RequiredPermission">@L["Required permission"]</label>
-                <select asp-for="BoxInput.RequiredPermission">
-                    <option value="">@L["Visible to everyone"]</option>
-                    @foreach (var permission in Model.PermissionNames)
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>@L["Group"]</th>
+                            <th>@L["Links"]</th>
+                            <th>@L["Rename"]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var group in Model.Groups)
                     {
-                        <option value="@permission">@permission</option>
+                        <tr>
+                            <td>
+                                @* The swatch is a real link chip so the legend always shows
+                                   exactly the tint the box renders for this group. *@
+                                <span class="omp-linkbox__link omp-linkbox__link--group-@group.Tint">@group.Group</span>
+                            </td>
+                            <td>@group.Count</td>
+                            <td>
+                                <form method="post"
+                                      asp-page-handler="RenameGroup"
+                                      asp-route-box="@Model.SelectedBoxKey"
+                                      class="toolbar">
+                                    <input type="hidden" name="oldGroup" value="@group.Group" />
+                                    <input type="text" name="newGroup" value="@group.Group" list="linkbox-groups" aria-label="@L["Rename"]" />
+                                    <button type="submit" class="action-link">@L["Save"]</button>
+                                </form>
+                            </td>
+                        </tr>
                     }
-                </select>
-                <div class="field-help">@L["Only users holding the permission see the box at all."]</div>
-                <span asp-validation-for="BoxInput.RequiredPermission" class="field-validation-error"></span>
-            </div>
-        </div>
-        <div class="toolbar">
-            <button type="submit" class="action-link">@L["Save box"]</button>
-        </div>
-    </form>
-
-    <h4 class="top-gap">@L["Links"]</h4>
-    @if (Model.Links.Count == 0)
-    {
-        <div class="empty-state">@L["This box has no links yet."]</div>
-    }
-    else
-    {
-        @* Detached forms: link edits submit through link-edit-form; a drag
-           reorder fills the hidden order field and submits link-reorder-form. *@
-        <form method="post" asp-page-handler="Update" asp-route-box="@Model.SelectedBoxKey" id="link-edit-form"></form>
-        <form method="post" asp-page-handler="Reorder" asp-route-box="@Model.SelectedBoxKey" id="link-reorder-form">
-            <input type="hidden" name="order" data-linkbox-order />
-        </form>
-        <table class="grid">
-            <thead>
-                <tr>
-                    <th></th>
-                    <th>@L["Label"]</th>
-                    <th>@L["URL"]</th>
-                    <th>@L["Group"]</th>
-                    <th>@L["Required permission"]</th>
-                    <th>@L["Actions"]</th>
-                </tr>
-            </thead>
-            <tbody data-linkbox-list>
-            @foreach (var link in Model.Links)
-            {
-                var isEditing = Model.EditingLinkId == link.LinkBoxItemId;
-                <tr data-linkbox-row data-link-id="@link.LinkBoxItemId">
-                    <td>
-                        <span class="portal-entry-layout-row__handle"
-                              draggable="true"
-                              data-linkbox-drag-handle
-                              title="@L["Drag to reorder"]"
-                              aria-hidden="true"></span>
-                    </td>
-                    @if (isEditing)
+                    @if (Model.UngroupedCount > 0)
                     {
-                        <td>
-                            <input form="link-edit-form" asp-for="Input.Label" aria-label="@L["Label"]" />
-                            <input form="link-edit-form" asp-for="Input.LinkBoxItemId" type="hidden" />
-                        </td>
-                        <td><input form="link-edit-form" asp-for="Input.Url" aria-label="@L["URL"]" /></td>
-                        <td><input form="link-edit-form" asp-for="Input.Group" aria-label="@L["Group"]" /></td>
-                        <td>
-                            <select form="link-edit-form" asp-for="Input.RequiredPermission" aria-label="@L["Required permission"]">
+                        <tr>
+                            <td><span class="omp-linkbox__link">@L["No group"]</span></td>
+                            <td>@Model.UngroupedCount</td>
+                            <td>-</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+                <p class="field-help">@L["Renaming a group updates all of its links; renaming it to an existing group merges them. Leave the name empty to remove the group from its links."]</p>
+            }
+        </section>
+
+        <section class="card top-gap section-navigator-target" id="links-section">
+            <h3>@L["Links"]</h3>
+            @if (Model.Links.Count == 0)
+            {
+                <div class="empty-state">@L["This box has no links yet."]</div>
+            }
+            else
+            {
+                @* Detached forms: link edits submit through link-edit-form; a drag
+                   reorder fills the hidden order field and submits link-reorder-form. *@
+                <form method="post" asp-page-handler="Update" asp-route-box="@Model.SelectedBoxKey" id="link-edit-form"></form>
+                <form method="post" asp-page-handler="Reorder" asp-route-box="@Model.SelectedBoxKey" id="link-reorder-form">
+                    <input type="hidden" name="order" data-linkbox-order />
+                </form>
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>@L["Label"]</th>
+                            <th>@L["URL"]</th>
+                            <th>@L["Group"]</th>
+                            <th>@L["Required permission"]</th>
+                            <th>@L["Actions"]</th>
+                        </tr>
+                    </thead>
+                    <tbody data-linkbox-list>
+                    @foreach (var link in Model.Links)
+                    {
+                        var isEditing = Model.EditingLinkId == link.LinkBoxItemId;
+                        <tr data-linkbox-row data-link-id="@link.LinkBoxItemId">
+                            <td>
+                                <span class="portal-entry-layout-row__handle"
+                                      draggable="true"
+                                      data-linkbox-drag-handle
+                                      title="@L["Drag to reorder"]"
+                                      aria-hidden="true"></span>
+                            </td>
+                            @if (isEditing)
+                            {
+                                <td>
+                                    <input form="link-edit-form" asp-for="Input.Label" aria-label="@L["Label"]" />
+                                    <input form="link-edit-form" asp-for="Input.LinkBoxItemId" type="hidden" />
+                                </td>
+                                <td><input form="link-edit-form" asp-for="Input.Url" aria-label="@L["URL"]" /></td>
+                                <td><input form="link-edit-form" asp-for="Input.Group" list="linkbox-groups" aria-label="@L["Group"]" /></td>
+                                <td>
+                                    <select form="link-edit-form" asp-for="Input.RequiredPermission" aria-label="@L["Required permission"]">
+                                        <option value="">@L["Visible to everyone"]</option>
+                                        @foreach (var permission in Model.PermissionNames)
+                                        {
+                                            <option value="@permission">@permission</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <div class="toolbar">
+                                        <button form="link-edit-form" type="submit" class="action-link">@L["Save"]</button>
+                                        <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(Model.SelectedBoxKey)">@L["Cancel"]</a>
+                                    </div>
+                                </td>
+                            }
+                            else
+                            {
+                                <td>@L[link.Label]</td>
+                                <td><code>@link.Url</code></td>
+                                <td>@(string.IsNullOrWhiteSpace(link.GroupKey) ? "-" : link.GroupKey)</td>
+                                <td>@(string.IsNullOrWhiteSpace(link.RequiredPermission) ? L["Visible to everyone"] : link.RequiredPermission)</td>
+                                <td>
+                                    <div class="toolbar">
+                                        <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(Model.SelectedBoxKey)&editId=@link.LinkBoxItemId">@L["Edit"]</a>
+                                        <form method="post"
+                                              asp-page-handler="Delete"
+                                              asp-route-box="@Model.SelectedBoxKey"
+                                              asp-route-id="@link.LinkBoxItemId"
+                                              data-omp-confirm="@L["Remove this link?"]"
+                                              data-omp-confirm-ok="@L["Remove"]"
+                                              data-omp-confirm-cancel="@L["Cancel"]">
+                                            <button type="submit" class="action-link">@L["Remove"]</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            }
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </section>
+
+        @if (Model.EditingLinkId is null)
+        {
+            <section class="card top-gap section-navigator-target" id="add-link-section">
+                <h3>@L["Add link"]</h3>
+                <form method="post" asp-page-handler="Add" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
+                    <div class="field-grid field-grid--2">
+                        <div class="form-field">
+                            <label asp-for="Input.Label">@L["Label"]</label>
+                            <input asp-for="Input.Label" />
+                            <span asp-validation-for="Input.Label" class="field-validation-error"></span>
+                        </div>
+                        <div class="form-field">
+                            <label asp-for="Input.Url">@L["URL"]</label>
+                            <input asp-for="Input.Url" placeholder="/admin/hosts" />
+                            <div class="field-help">@L["Only relative URLs within this site are allowed, e.g. /admin/hosts."]</div>
+                            <span asp-validation-for="Input.Url" class="field-validation-error"></span>
+                        </div>
+                    </div>
+                    <div class="field-grid field-grid--2">
+                        <div class="form-field">
+                            <label asp-for="Input.Group">@L["Group"]</label>
+                            <input asp-for="Input.Group" list="linkbox-groups" />
+                            <div class="field-help">@L["Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint."]</div>
+                            <span asp-validation-for="Input.Group" class="field-validation-error"></span>
+                        </div>
+                        <div class="form-field">
+                            <label asp-for="Input.RequiredPermission">@L["Required permission"]</label>
+                            <select asp-for="Input.RequiredPermission">
                                 <option value="">@L["Visible to everyone"]</option>
                                 @foreach (var permission in Model.PermissionNames)
                                 {
                                     <option value="@permission">@permission</option>
                                 }
                             </select>
-                        </td>
-                        <td>
-                            <div class="toolbar">
-                                <button form="link-edit-form" type="submit" class="action-link">@L["Save"]</button>
-                                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(Model.SelectedBoxKey)">@L["Cancel"]</a>
-                            </div>
-                        </td>
-                    }
-                    else
-                    {
-                        <td>@L[link.Label]</td>
-                        <td><code>@link.Url</code></td>
-                        <td>@(string.IsNullOrWhiteSpace(link.GroupKey) ? "-" : link.GroupKey)</td>
-                        <td>@(string.IsNullOrWhiteSpace(link.RequiredPermission) ? L["Visible to everyone"] : link.RequiredPermission)</td>
-                        <td>
-                            <div class="toolbar">
-                                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(Model.SelectedBoxKey)&editId=@link.LinkBoxItemId">@L["Edit"]</a>
-                                <form method="post"
-                                      asp-page-handler="Delete"
-                                      asp-route-box="@Model.SelectedBoxKey"
-                                      asp-route-id="@link.LinkBoxItemId"
-                                      data-omp-confirm="@L["Remove this link?"]"
-                                      data-omp-confirm-ok="@L["Remove"]"
-                                      data-omp-confirm-cancel="@L["Cancel"]">
-                                    <button type="submit" class="action-link">@L["Remove"]</button>
-                                </form>
-                            </div>
-                        </td>
-                    }
-                </tr>
-            }
-            </tbody>
-        </table>
-    }
-
-    @if (Model.EditingLinkId is null)
-    {
-        <h4 class="top-gap">@L["Add link"]</h4>
-        <form method="post" asp-page-handler="Add" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
-            <div class="field-grid field-grid--2">
-                <div class="form-field">
-                    <label asp-for="Input.Label">@L["Label"]</label>
-                    <input asp-for="Input.Label" />
-                    <span asp-validation-for="Input.Label" class="field-validation-error"></span>
-                </div>
-                <div class="form-field">
-                    <label asp-for="Input.Url">@L["URL"]</label>
-                    <input asp-for="Input.Url" placeholder="/admin/hosts" />
-                    <div class="field-help">@L["Only relative URLs within this site are allowed, e.g. /admin/hosts."]</div>
-                    <span asp-validation-for="Input.Url" class="field-validation-error"></span>
-                </div>
-            </div>
-            <div class="field-grid field-grid--2">
-                <div class="form-field">
-                    <label asp-for="Input.Group">@L["Group"]</label>
-                    <input asp-for="Input.Group" />
-                    <div class="field-help">@L["Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint."]</div>
-                    <span asp-validation-for="Input.Group" class="field-validation-error"></span>
-                </div>
-                <div class="form-field">
-                    <label asp-for="Input.RequiredPermission">@L["Required permission"]</label>
-                    <select asp-for="Input.RequiredPermission">
-                        <option value="">@L["Visible to everyone"]</option>
-                        @foreach (var permission in Model.PermissionNames)
-                        {
-                            <option value="@permission">@permission</option>
-                        }
-                    </select>
-                    <div class="field-help">@L["Only users holding the permission see the link."]</div>
-                    <span asp-validation-for="Input.RequiredPermission" class="field-validation-error"></span>
-                </div>
-            </div>
-            <div class="toolbar">
-                <button type="submit" class="action-link">@L["Add link"]</button>
-            </div>
-        </form>
-    }
-</section>
+                            <div class="field-help">@L["Only users holding the permission see the link."]</div>
+                            <span asp-validation-for="Input.RequiredPermission" class="field-validation-error"></span>
+                        </div>
+                    </div>
+                    <div class="toolbar">
+                        <button type="submit" class="action-link">@L["Add link"]</button>
+                    </div>
+                </form>
+            </section>
+        }
+    </div>
+</div>
 
 @section Scripts {
     <script>
