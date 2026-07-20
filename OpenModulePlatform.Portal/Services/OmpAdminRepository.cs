@@ -1786,7 +1786,12 @@ WHERE h.IsEnabled = 1
   AND ai.IsEnabled = 1
   AND ai.IsAllowed = 1
   AND ai.DesiredState = 1
-  AND a.AppType IN (N'Portal', N'WebApp', N'ServiceApp')
+  -- Cookie-auth apps only. The three Effective* columns above are cookie-authentication and
+  -- data-protection settings, which a ServiceApp (a Windows service, no HTTP pipeline, no cookie,
+  -- no shared key ring) can never carry: all five ServiceApps on the dev host report NULL for all
+  -- three. Including them meant every service was compared against the Portal reference and always
+  -- came back as a mismatch -- 5 apps, 5 mismatches, every one of them spurious.
+  AND a.AppType IN (N'Portal', N'WebApp')
 ORDER BY h.HostKey, ai.AppInstanceKey;";
 
         var rows = new List<HostOmpAuthComparisonRawRow>();
