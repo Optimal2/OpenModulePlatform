@@ -150,6 +150,43 @@ SELECT @boxKey, @label, @url, @groupKey,
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task UpdateItemAsync(long linkBoxItemId, string label, string url, string? groupKey, string? requiredPermission, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.link_box_items
+SET label = @label, url = @url, group_key = @groupKey, required_permission = @requiredPermission, updated_at = SYSUTCDATETIME()
+WHERE link_box_item_id = @id;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@id", linkBoxItemId);
+        cmd.Parameters.AddWithValue("@label", label);
+        cmd.Parameters.AddWithValue("@url", url);
+        cmd.Parameters.AddWithValue("@groupKey", (object?)groupKey ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@requiredPermission", (object?)requiredPermission ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task UpdateSortOrdersAsync(string boxKey, IReadOnlyList<long> orderedIds, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.link_box_items
+SET sort_order = @sortOrder, updated_at = SYSUTCDATETIME()
+WHERE link_box_item_id = @id AND box_key = @boxKey;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        for (var index = 0; index < orderedIds.Count; index++)
+        {
+            await using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@id", orderedIds[index]);
+            cmd.Parameters.AddWithValue("@boxKey", boxKey);
+            cmd.Parameters.AddWithValue("@sortOrder", index);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
     public async Task DeleteItemAsync(long linkBoxItemId, CancellationToken ct)
     {
         const string sql = "DELETE FROM omp.link_box_items WHERE link_box_item_id = @id;";

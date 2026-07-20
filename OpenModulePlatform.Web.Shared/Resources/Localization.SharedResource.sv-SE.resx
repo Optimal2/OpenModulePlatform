@@ -125,4 +125,10 @@
   <data name="Unknown permission." xml:space="preserve">
     <value>Okänd rättighet.</value>
   </data>
+  <data name="Link saved." xml:space="preserve">
+    <value>Länken har sparats.</value>
+  </data>
+  <data name="Order saved." xml:space="preserve">
+    <value>Ordningen har sparats.</value>
+  </data>
 </root>
