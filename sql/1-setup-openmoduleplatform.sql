@@ -4071,3 +4071,39 @@ BEGIN
         INCLUDE(ConfigUsr, ConfigPermission, ConfigRole);
 END
 GO
+
+-------------------------------------------------------------------------------
+-- Link boxes (user-curated links merged into shared LinkBox components)
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.link_box_items', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.link_box_items
+    (
+        link_box_item_id bigint IDENTITY(1,1) NOT NULL,
+        box_key nvarchar(200) NOT NULL,
+        label nvarchar(200) NOT NULL,
+        url nvarchar(400) NOT NULL,
+        group_key nvarchar(100) NULL,
+        sort_order int NOT NULL CONSTRAINT DF_omp_link_box_items_sort_order DEFAULT(0),
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_link_box_items_created_at DEFAULT SYSUTCDATETIME(),
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_link_box_items_updated_at DEFAULT SYSUTCDATETIME(),
+
+        CONSTRAINT PK_omp_link_box_items PRIMARY KEY(link_box_item_id),
+        CONSTRAINT UQ_omp_link_box_items_box_label UNIQUE(box_key, label)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = N'IX_omp_link_box_items_box'
+      AND object_id = OBJECT_ID(N'omp.link_box_items')
+)
+BEGIN
+    CREATE INDEX IX_omp_link_box_items_box
+        ON omp.link_box_items(box_key, sort_order, label)
+        INCLUDE(url, group_key);
+END
+GO

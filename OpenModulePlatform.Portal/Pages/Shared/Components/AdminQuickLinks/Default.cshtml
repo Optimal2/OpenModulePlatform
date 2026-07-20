@@ -1,0 +1,39 @@
+@using OpenModulePlatform.Portal.Services
+@using OpenModulePlatform.Portal.ViewComponents
+@using OpenModulePlatform.Web.Shared.Navigation
+@model AdminQuickLinksViewModel
+@*
+    Admin quick links as the shared LinkBox component. Built-in links come from
+    the PortalLinkBoxes registry (edit that ONE list in code); user-added links
+    come from omp.link_box_items and are curated at /admin/navigation, which the
+    gear links to. Group keys map to the shared muted tints in order of first
+    appearance, so user links can share tints with built-in groups by using the
+    same group key.
+*@
+@{
+    string currentPath = (ViewContext.HttpContext.Request.Path.Value ?? string.Empty).TrimEnd('/');
+
+    bool IsActive(string relativePath)
+        => string.Equals(currentPath, relativePath.Split('?')[0], StringComparison.OrdinalIgnoreCase);
+
+    var items = new List<LinkBoxItem>();
+    foreach (var link in Model.Definition.CodeLinks)
+    {
+        items.Add(new LinkBoxItem(L[link.TextKey].Value, Url.Content("~" + link.RelativePath), link.Group, IsActive(link.RelativePath)));
+    }
+
+    foreach (var link in Model.UserLinks)
+    {
+        items.Add(new LinkBoxItem(link.Label, Url.Content("~" + link.Url), link.GroupKey, IsActive(link.Url)));
+    }
+
+    var quickLinks = new LinkBoxModel
+    {
+        Label = L[Model.Definition.TitleKey].Value,
+        Heading = L[Model.Definition.TitleKey].Value,
+        EditUrl = Url.Content("~/admin/navigation?box=" + Uri.EscapeDataString(Model.Definition.BoxKey)),
+        EditLabel = L["Edit links"].Value,
+        Items = items
+    };
+}
+@await Component.InvokeAsync("LinkBox", new { model = quickLinks })
