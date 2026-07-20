@@ -1,0 +1,27 @@
+@using OpenModulePlatform.Portal.Models
+@using OpenModulePlatform.Web.Shared.Navigation
+@model IReadOnlyList<LinkBoxRow>
+@{
+    var request = ViewContext.HttpContext.Request;
+    var currentPath = (request.Path.Value ?? string.Empty).TrimEnd('/');
+    var currentBox = request.Query["box"].ToString();
+    var onEditor = string.Equals(currentPath, "/admin/navigation", StringComparison.OrdinalIgnoreCase);
+
+    var directory = new LinkBoxModel
+    {
+        Label = L["Link boxes"].Value,
+        Heading = L["Link boxes"].Value,
+        BoxKey = "portal.link-box-directory",
+        Items = Model
+            .Select(box => new LinkBoxItem(
+                L[box.Title].Value,
+                Url.Content("~/admin/navigation?box=" + Uri.EscapeDataString(box.BoxKey)),
+                null,
+                onEditor && string.Equals(currentBox, box.BoxKey, StringComparison.OrdinalIgnoreCase)))
+            .ToArray()
+    };
+}
+@if (directory.Items.Count > 0)
+{
+    @await Component.InvokeAsync("LinkBox", new { model = directory })
+}
