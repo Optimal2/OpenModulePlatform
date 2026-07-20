@@ -6877,3 +6877,9 @@ body.dashboard-widget-picker-open {
         font-size: 0.72rem;
     }
 }
+
+/* Link box editor (admin/navigation): rows are draggable by their handle for
+   reordering; the dragged row dims while it moves. */
+tr.linkbox-editor-row--dragging {
+    opacity: 0.5;
+}

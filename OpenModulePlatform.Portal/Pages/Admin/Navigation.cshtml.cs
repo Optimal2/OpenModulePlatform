@@ -27,6 +27,7 @@ public sealed class NavigationModel : OmpPortalPageModel
     public LinkBoxRow? SelectedBox { get; private set; }
     public IReadOnlyList<LinkBoxItemRow> Links { get; private set; } = Array.Empty<LinkBoxItemRow>();
     public IReadOnlyList<string> PermissionNames { get; private set; } = Array.Empty<string>();
+    public long? EditingLinkId { get; private set; }
 
     [BindProperty]
     public BoxSettingsInput BoxInput { get; set; } = new();
@@ -37,7 +38,7 @@ public sealed class NavigationModel : OmpPortalPageModel
     [TempData]
     public string? StatusMessage { get; set; }
 
-    public async Task<IActionResult> OnGetAsync(string? box, CancellationToken ct)
+    public async Task<IActionResult> OnGetAsync(string? box, long? editId, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
         if (guard is not null)
@@ -45,7 +46,7 @@ public sealed class NavigationModel : OmpPortalPageModel
             return guard;
         }
 
-        await LoadAsync(box, ct);
+        await LoadAsync(box, editId, ct);
         SetTitles("Navigation");
         return Page();
     }
@@ -58,7 +59,7 @@ public sealed class NavigationModel : OmpPortalPageModel
             return guard;
         }
 
-        await LoadAsync(box, ct);
+        await LoadAsync(box, null, ct);
         ValidateBoxInput();
         if (!ModelState.IsValid)
         {
@@ -84,7 +85,7 @@ public sealed class NavigationModel : OmpPortalPageModel
             return guard;
         }
 
-        await LoadAsync(box, ct);
+        await LoadAsync(box, null, ct);
         ValidateLinkInput();
         if (!ModelState.IsValid)
         {
@@ -111,6 +112,58 @@ public sealed class NavigationModel : OmpPortalPageModel
         return RedirectToPage("Navigation", new { box = SelectedBoxKey });
     }
 
+    public async Task<IActionResult> OnPostUpdateAsync(string box, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        await LoadAsync(box, Input.LinkBoxItemId, ct);
+        ValidateLinkInput();
+        if (!ModelState.IsValid)
+        {
+            SetTitles("Navigation");
+            return Page();
+        }
+
+        await _linkBoxes.UpdateItemAsync(
+            Input.LinkBoxItemId,
+            Input.Label.Trim(),
+            Input.Url.Trim(),
+            string.IsNullOrWhiteSpace(Input.Group) ? null : Input.Group.Trim(),
+            string.IsNullOrWhiteSpace(Input.RequiredPermission) ? null : Input.RequiredPermission.Trim(),
+            ct);
+
+        StatusMessage = T("Link saved.");
+        return RedirectToPage("Navigation", new { box = SelectedBoxKey });
+    }
+
+    public async Task<IActionResult> OnPostReorderAsync(string box, string? order, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var orderedIds = (order ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(item => long.TryParse(item, out var id) ? id : (long?)null)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToArray();
+
+        if (orderedIds.Length > 0)
+        {
+            await _linkBoxes.UpdateSortOrdersAsync(box, orderedIds, ct);
+            StatusMessage = T("Order saved.");
+        }
+
+        return RedirectToPage("Navigation", new { box });
+    }
+
     public async Task<IActionResult> OnPostDeleteAsync(string box, long id, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -124,7 +177,7 @@ public sealed class NavigationModel : OmpPortalPageModel
         return RedirectToPage("Navigation", new { box });
     }
 
-    private async Task LoadAsync(string? box, CancellationToken ct)
+    private async Task LoadAsync(string? box, long? editId, CancellationToken ct)
     {
         var registered = await _linkBoxes.GetBoxesAsync(ct);
         var boxes = new List<LinkBoxRow>(registered);
@@ -143,6 +196,21 @@ public sealed class NavigationModel : OmpPortalPageModel
         SelectedBox = registered.FirstOrDefault(item => string.Equals(item.BoxKey, SelectedBoxKey, StringComparison.OrdinalIgnoreCase));
         Links = await _linkBoxes.GetItemsAsync(SelectedBoxKey, ct);
         PermissionNames = await _linkBoxes.GetPermissionNamesAsync(ct);
+        EditingLinkId = Links.Any(link => link.LinkBoxItemId == editId) ? editId : null;
+
+        var hasFormInput = Request.HasFormContentType && Request.Form.ContainsKey("Input.Label");
+        if (EditingLinkId is not null && !hasFormInput)
+        {
+            var editRow = Links.First(link => link.LinkBoxItemId == EditingLinkId);
+            Input = new LinkInput
+            {
+                LinkBoxItemId = editRow.LinkBoxItemId,
+                Label = editRow.Label,
+                Url = editRow.Url,
+                Group = editRow.GroupKey,
+                RequiredPermission = editRow.RequiredPermission
+            };
+        }
 
         if (!Request.HasFormContentType || !Request.Form.ContainsKey("BoxInput.Title"))
         {
@@ -229,6 +297,7 @@ public sealed class NavigationModel : OmpPortalPageModel
 
     public sealed class LinkInput
     {
+        public long LinkBoxItemId { get; set; }
         public string Label { get; set; } = string.Empty;
         public string Url { get; set; } = string.Empty;
         public string? Group { get; set; }

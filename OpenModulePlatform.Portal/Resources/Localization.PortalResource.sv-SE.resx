@@ -2882,4 +2882,7 @@
   <data name="Curate the links shown in the platform's link boxes. Links and boxes can be limited to a permission; labels and titles that match a translation key are localized, anything else is shown as written." xml:space="preserve">
     <value>Hantera länkarna som visas i plattformens länkboxar. Länkar och boxar kan begränsas till en rättighet; etiketter och titlar som matchar en översättningsnyckel lokaliseras, allt annat visas som det är skrivet.</value>
   </data>
+  <data name="Drag to reorder" xml:space="preserve">
+    <value>Dra för att ändra ordning</value>
+  </data>
 </root>
