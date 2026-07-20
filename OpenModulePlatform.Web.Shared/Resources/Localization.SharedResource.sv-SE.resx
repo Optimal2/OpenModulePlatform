@@ -89,4 +89,28 @@
   <data name="The supplied value is invalid for {0}." xml:space="preserve"><value>Det angivna värdet är ogiltigt för {0}.</value></data>
   <data name="The value '{0}' is invalid." xml:space="preserve"><value>Värdet '{0}' är ogiltigt.</value></data>
   <data name="The field {0} must be a number." xml:space="preserve"><value>Fältet {0} måste vara ett tal.</value></data>
+  <data name="Link added." xml:space="preserve">
+    <value>Länken har lagts till.</value>
+  </data>
+  <data name="Link removed." xml:space="preserve">
+    <value>Länken har tagits bort.</value>
+  </data>
+  <data name="Label is required." xml:space="preserve">
+    <value>Etikett krävs.</value>
+  </data>
+  <data name="Label can be at most 200 characters." xml:space="preserve">
+    <value>Etiketten kan vara högst 200 tecken.</value>
+  </data>
+  <data name="URL is required." xml:space="preserve">
+    <value>URL krävs.</value>
+  </data>
+  <data name="URL can be at most 400 characters." xml:space="preserve">
+    <value>URL:en kan vara högst 400 tecken.</value>
+  </data>
+  <data name="Only relative URLs within this site are allowed, e.g. /admin/hosts." xml:space="preserve">
+    <value>Endast relativa URL:er inom denna webbplats tillåts, t.ex. /admin/hosts.</value>
+  </data>
+  <data name="Group can be at most 100 characters." xml:space="preserve">
+    <value>Gruppen kan vara högst 100 tecken.</value>
+  </data>
 </root>

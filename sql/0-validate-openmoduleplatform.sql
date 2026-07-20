@@ -71,7 +71,8 @@ END;
         (N'omp', N'user_auth'),
         (N'omp', N'auth_provider_lpwd'),
         (N'omp', N'config_setting_definitions'),
-        (N'omp', N'config_settings')
+        (N'omp', N'config_settings'),
+        (N'omp', N'link_box_items')
     ) AS v(SchemaName, TableName)
 )
 SELECT @Missing = @Missing + COUNT(1)

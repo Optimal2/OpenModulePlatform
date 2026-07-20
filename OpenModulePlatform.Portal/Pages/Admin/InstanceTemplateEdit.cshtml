@@ -47,7 +47,7 @@
 
     <div class="section-navigator-pane">
         @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
-        <partial name="_AdminQuickLinks" />
+        @await Component.InvokeAsync("AdminQuickLinks")
     </div>
     <div class="section-navigator-layout__content">
 

@@ -27,6 +27,7 @@ builder.AddOmpPushEventDispatcher();
 builder.Services.AddScoped<AppCatalogService>();
 builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddScoped<OmpAdminRepository>();
+builder.Services.AddScoped<LinkBoxRepository>();
 builder.Services.AddScoped<OmpConfigSettingsAdminRepository>();
 builder.Services.AddScoped<OmpUserAdminRepository>();
 builder.Services.AddScoped<PortalUserSettingsAdminRepository>();
