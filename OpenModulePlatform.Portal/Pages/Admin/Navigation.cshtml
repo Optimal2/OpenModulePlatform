@@ -1,0 +1,140 @@
+@page
+@using OpenModulePlatform.Portal.Services
+@model OpenModulePlatform.Portal.Pages.Admin.NavigationModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Manual core"]</div>
+        <h2>@L["Navigation"]</h2>
+        <p class="lede">@L["Curate the links shown in the platform's link boxes. Built-in links come from code and cannot be removed here; links you add are stored per box and appear for everyone."]</p>
+    </div>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+{
+    <div class="card status-banner">@Model.StatusMessage</div>
+}
+
+@if (!ViewContext.ModelState.IsValid)
+{
+    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
+}
+
+@if (Model.Boxes.Count > 1)
+{
+    <div class="toolbar top-gap">
+        @foreach (var box in Model.Boxes)
+        {
+            if (string.Equals(box.BoxKey, Model.SelectedBoxKey, StringComparison.OrdinalIgnoreCase))
+            {
+                <span class="pill">@L[box.TitleKey]</span>
+            }
+            else
+            {
+                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(box.BoxKey)">@L[box.TitleKey]</a>
+            }
+        }
+    </div>
+}
+
+<section class="card top-gap">
+    <h3>@(Model.SelectedDefinition is null ? Model.SelectedBoxKey : L[Model.SelectedDefinition.TitleKey])</h3>
+    <p class="field-help">@L["Box key"]: <code>@Model.SelectedBoxKey</code></p>
+
+    <h4>@L["Built-in links"]</h4>
+    @if (Model.SelectedDefinition is null || Model.SelectedDefinition.CodeLinks.Count == 0)
+    {
+        <div class="empty-state">@L["This box has no built-in links."]</div>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>@L["Label"]</th>
+                    <th>@L["URL"]</th>
+                    <th>@L["Group"]</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var link in Model.SelectedDefinition.CodeLinks)
+            {
+                <tr>
+                    <td>@L[link.TextKey]</td>
+                    <td><code>@link.RelativePath</code></td>
+                    <td>@(string.IsNullOrWhiteSpace(link.Group) ? "-" : link.Group)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <p class="field-help">@L["Built-in links are defined in code and cannot be edited here."]</p>
+    }
+
+    <h4 class="top-gap">@L["Custom links"]</h4>
+    @if (Model.UserLinks.Count == 0)
+    {
+        <div class="empty-state">@L["No custom links yet."]</div>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>@L["Label"]</th>
+                    <th>@L["URL"]</th>
+                    <th>@L["Group"]</th>
+                    <th>@L["Actions"]</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var link in Model.UserLinks)
+            {
+                <tr>
+                    <td>@link.Label</td>
+                    <td><code>@link.Url</code></td>
+                    <td>@(string.IsNullOrWhiteSpace(link.GroupKey) ? "-" : link.GroupKey)</td>
+                    <td>
+                        <form method="post"
+                              asp-page-handler="Delete"
+                              asp-route-box="@Model.SelectedBoxKey"
+                              asp-route-id="@link.LinkBoxItemId"
+                              data-omp-confirm="@L["Remove this link?"]"
+                              data-omp-confirm-ok="@L["Remove"]"
+                              data-omp-confirm-cancel="@L["Cancel"]">
+                            <button type="submit" class="action-link">@L["Remove"]</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    <h4 class="top-gap">@L["Add link"]</h4>
+    <form method="post" asp-page-handler="Add" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
+        <div class="field-grid field-grid--2">
+            <div class="form-field">
+                <label asp-for="Input.Label">@L["Label"]</label>
+                <input asp-for="Input.Label" />
+                <span asp-validation-for="Input.Label" class="field-validation-error"></span>
+            </div>
+            <div class="form-field">
+                <label asp-for="Input.Url">@L["URL"]</label>
+                <input asp-for="Input.Url" placeholder="/admin/hosts" />
+                <div class="field-help">@L["Only relative URLs within this site are allowed, e.g. /admin/hosts."]</div>
+                <span asp-validation-for="Input.Url" class="field-validation-error"></span>
+            </div>
+        </div>
+        <div class="field-grid field-grid--2">
+            <div class="form-field">
+                <label asp-for="Input.Group">@L["Group"]</label>
+                <input asp-for="Input.Group" />
+                <div class="field-help">@L["Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint."]</div>
+                <span asp-validation-for="Input.Group" class="field-validation-error"></span>
+            </div>
+        </div>
+        <div class="toolbar">
+            <button type="submit" class="action-link">@L["Add link"]</button>
+        </div>
+    </form>
+</section>

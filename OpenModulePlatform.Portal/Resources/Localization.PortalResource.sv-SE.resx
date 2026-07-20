@@ -2795,4 +2795,64 @@
   <data name="OmpAuth:ApplicationName is '{0}' but the expected OMP default is '{1}'. Shared auth cookies may break if this value differs across OMP web apps." xml:space="preserve"><value>OmpAuth:ApplicationName är '{0}' men det förväntade OMP-standardvärdet är '{1}'. Delade autentiseringscookies kan sluta fungera om värdet skiljer sig mellan OMP-webbappar.</value></data>
   <data name="OmpAuth:DataProtectionKeyPath is '{0}' but the HostAgent expects '{1}'. Data protection keys must be shared across OMP web apps for auth-cookie compatibility." xml:space="preserve"><value>OmpAuth:DataProtectionKeyPath är '{0}' men HostAgent förväntar sig '{1}'. Dataskyddsnycklar måste delas mellan OMP-webbappar för att autentiseringscookies ska vara kompatibla.</value></data>
   <data name="OmpAuth:DataProtectionKeyPath '{0}' is not a UNC path. A local key path will break auth-cookie sharing in load-balanced scenarios." xml:space="preserve"><value>OmpAuth:DataProtectionKeyPath '{0}' är inte en UNC-sökväg. En lokal nyckelsökväg bryter delningen av autentiseringscookies i lastbalanserade scenarier.</value></data>
+  <data name="Admin quick links" xml:space="preserve">
+    <value>Admin-snabblänkar</value>
+  </data>
+  <data name="Edit links" xml:space="preserve">
+    <value>Redigera länkar</value>
+  </data>
+  <data name="Link added." xml:space="preserve">
+    <value>Länken har lagts till.</value>
+  </data>
+  <data name="Link removed." xml:space="preserve">
+    <value>Länken har tagits bort.</value>
+  </data>
+  <data name="Curate the links shown in the platform's link boxes. Built-in links come from code and cannot be removed here; links you add are stored per box and appear for everyone." xml:space="preserve">
+    <value>Hantera länkarna som visas i plattformens länkboxar. Inbyggda länkar kommer från kod och kan inte tas bort här; länkar du lägger till lagras per box och visas för alla.</value>
+  </data>
+  <data name="Box key" xml:space="preserve">
+    <value>Boxnyckel</value>
+  </data>
+  <data name="Built-in links" xml:space="preserve">
+    <value>Inbyggda länkar</value>
+  </data>
+  <data name="This box has no built-in links." xml:space="preserve">
+    <value>Denna box har inga inbyggda länkar.</value>
+  </data>
+  <data name="Built-in links are defined in code and cannot be edited here." xml:space="preserve">
+    <value>Inbyggda länkar definieras i kod och kan inte redigeras här.</value>
+  </data>
+  <data name="No custom links yet." xml:space="preserve">
+    <value>Inga egna länkar ännu.</value>
+  </data>
+  <data name="Add link" xml:space="preserve">
+    <value>Lägg till länk</value>
+  </data>
+  <data name="Label" xml:space="preserve">
+    <value>Etikett</value>
+  </data>
+  <data name="Remove this link?" xml:space="preserve">
+    <value>Ta bort denna länk?</value>
+  </data>
+  <data name="Label is required." xml:space="preserve">
+    <value>Etikett krävs.</value>
+  </data>
+  <data name="Label can be at most 200 characters." xml:space="preserve">
+    <value>Etiketten kan vara högst 200 tecken.</value>
+  </data>
+  <data name="URL is required." xml:space="preserve">
+    <value>URL krävs.</value>
+  </data>
+  <data name="URL can be at most 400 characters." xml:space="preserve">
+    <value>URL:en kan vara högst 400 tecken.</value>
+  </data>
+  <data name="Only relative URLs within this site are allowed, e.g. /admin/hosts." xml:space="preserve">
+    <value>Endast relativa URL:er inom denna webbplats tillåts, t.ex. /admin/hosts.</value>
+  </data>
+  <data name="Group can be at most 100 characters." xml:space="preserve">
+    <value>Gruppen kan vara högst 100 tecken.</value>
+  </data>
+  <data name="Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint." xml:space="preserve">
+    <value>Valfritt. Länkar med samma gruppnyckel delar färgton; matchar du en inbyggd grupp återanvänds dess ton.</value>
+  </data>
 </root>
