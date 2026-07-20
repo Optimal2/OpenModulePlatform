@@ -86,6 +86,12 @@
     position: absolute;
     top: 50%;
     left: 50%;
+    /* Grid math can put the pane edge (and thus the grip anchor) on a
+       fractional pixel, which antialiases the 1px ring asymmetrically and
+       makes the grip look off-center. The script measures the fraction and
+       sets these deltas so the grip lands on whole device pixels. */
+    margin-left: var(--section-navigator-grip-dx, 0px);
+    margin-top: var(--section-navigator-grip-dy, 0px);
     width: 10px;
     height: 30px;
     transform: translate(-50%, -50%);
@@ -100,6 +106,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
+    margin-left: var(--section-navigator-grip-dx, 0px);
+    margin-top: var(--section-navigator-grip-dy, 0px);
     width: 4px;
     height: 18px;
     transform: translate(-50%, -50%);
