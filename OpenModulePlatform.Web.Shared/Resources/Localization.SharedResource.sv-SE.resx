@@ -131,4 +131,7 @@
   <data name="Order saved." xml:space="preserve">
     <value>Ordningen har sparats.</value>
   </data>
+  <data name="Group renamed." xml:space="preserve">
+    <value>Gruppen har bytt namn.</value>
+  </data>
 </root>

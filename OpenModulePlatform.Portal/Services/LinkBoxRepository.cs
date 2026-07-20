@@ -187,6 +187,24 @@ WHERE link_box_item_id = @id AND box_key = @boxKey;";
         }
     }
 
+    // Renames a group on every link in the box (renaming to an existing group
+    // merges the two); an empty new name removes the group from its links.
+    public async Task RenameGroupAsync(string boxKey, string oldGroup, string? newGroup, CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.link_box_items
+SET group_key = @newGroup, updated_at = SYSUTCDATETIME()
+WHERE box_key = @boxKey AND group_key = @oldGroup;";
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@boxKey", boxKey);
+        cmd.Parameters.AddWithValue("@oldGroup", oldGroup);
+        cmd.Parameters.AddWithValue("@newGroup", (object?)newGroup ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task DeleteItemAsync(long linkBoxItemId, CancellationToken ct)
     {
         const string sql = "DELETE FROM omp.link_box_items WHERE link_box_item_id = @id;";

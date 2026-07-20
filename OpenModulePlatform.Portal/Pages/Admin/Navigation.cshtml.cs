@@ -29,6 +29,13 @@ public sealed class NavigationModel : OmpPortalPageModel
     public IReadOnlyList<string> PermissionNames { get; private set; } = Array.Empty<string>();
     public long? EditingLinkId { get; private set; }
 
+    // Group legend for the selected box: distinct groups in order of first
+    // appearance with their link count and the tint number the shared LinkBox
+    // component will assign (same first-appearance rule, four tints cycling).
+    public sealed record GroupInfo(string Group, int Count, int Tint);
+    public IReadOnlyList<GroupInfo> Groups { get; private set; } = Array.Empty<GroupInfo>();
+    public int UngroupedCount { get; private set; }
+
     [BindProperty]
     public BoxSettingsInput BoxInput { get; set; } = new();
 
@@ -164,6 +171,32 @@ public sealed class NavigationModel : OmpPortalPageModel
         return RedirectToPage("Navigation", new { box });
     }
 
+    public async Task<IActionResult> OnPostRenameGroupAsync(string box, string oldGroup, string? newGroup, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var trimmed = newGroup?.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmed) && trimmed.Length > 100)
+        {
+            await LoadAsync(box, null, ct);
+            ModelState.AddModelError(string.Empty, T("Group can be at most 100 characters."));
+            SetTitles("Navigation");
+            return Page();
+        }
+
+        if (!string.IsNullOrWhiteSpace(oldGroup))
+        {
+            await _linkBoxes.RenameGroupAsync(box, oldGroup, string.IsNullOrWhiteSpace(trimmed) ? null : trimmed, ct);
+            StatusMessage = T("Group renamed.");
+        }
+
+        return RedirectToPage("Navigation", new { box });
+    }
+
     public async Task<IActionResult> OnPostDeleteAsync(string box, long id, CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -196,6 +229,28 @@ public sealed class NavigationModel : OmpPortalPageModel
         SelectedBox = registered.FirstOrDefault(item => string.Equals(item.BoxKey, SelectedBoxKey, StringComparison.OrdinalIgnoreCase));
         Links = await _linkBoxes.GetItemsAsync(SelectedBoxKey, ct);
         PermissionNames = await _linkBoxes.GetPermissionNamesAsync(ct);
+
+        var groups = new List<GroupInfo>();
+        foreach (var link in Links)
+        {
+            if (string.IsNullOrWhiteSpace(link.GroupKey))
+            {
+                UngroupedCount++;
+                continue;
+            }
+
+            var existing = groups.FindIndex(item => string.Equals(item.Group, link.GroupKey, StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0)
+            {
+                groups[existing] = groups[existing] with { Count = groups[existing].Count + 1 };
+            }
+            else
+            {
+                groups.Add(new GroupInfo(link.GroupKey, 1, (groups.Count % 4) + 1));
+            }
+        }
+
+        Groups = groups;
         EditingLinkId = Links.Any(link => link.LinkBoxItemId == editId) ? editId : null;
 
         var hasFormInput = Request.HasFormContentType && Request.Form.ContainsKey("Input.Label");
