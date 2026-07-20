@@ -226,6 +226,15 @@
             controller.showMoreButton.hidden = matchingCount <= shownCount;
         }
 
+        // Release the load-time height lock. initAll() freezes the viewport at its initial height
+        // (see the minHeight write there) so the page does not jitter while the lists render. That
+        // lock was never lifted, so filtering 22 rows down to 0 left the surface as tall as it was
+        // when the page loaded -- the list shrank, the box did not. Clearing it here means the lock
+        // only survives until the row set actually changes, which is exactly as long as it is useful.
+        if (controller.viewport && controller.viewport.style.minHeight) {
+            controller.viewport.style.minHeight = '';
+        }
+
         if (controller.emptyNote) {
             controller.emptyNote.hidden = matchingCount > 0;
         }
