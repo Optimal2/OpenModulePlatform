@@ -113,4 +113,16 @@
   <data name="Group can be at most 100 characters." xml:space="preserve">
     <value>Gruppen kan vara högst 100 tecken.</value>
   </data>
+  <data name="Box saved." xml:space="preserve">
+    <value>Boxen har sparats.</value>
+  </data>
+  <data name="Title is required." xml:space="preserve">
+    <value>Titel krävs.</value>
+  </data>
+  <data name="Title can be at most 200 characters." xml:space="preserve">
+    <value>Titeln kan vara högst 200 tecken.</value>
+  </data>
+  <data name="Unknown permission." xml:space="preserve">
+    <value>Okänd rättighet.</value>
+  </data>
 </root>

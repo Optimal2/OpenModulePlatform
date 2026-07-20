@@ -4107,3 +4107,27 @@ BEGIN
         INCLUDE(url, group_key);
 END
 GO
+
+IF OBJECT_ID(N'omp.link_boxes', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.link_boxes
+    (
+        box_key nvarchar(200) NOT NULL,
+        title nvarchar(200) NOT NULL,
+        required_permission nvarchar(200) NULL,
+        sort_order int NOT NULL CONSTRAINT DF_omp_link_boxes_sort_order DEFAULT(0),
+        created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_link_boxes_created_at DEFAULT SYSUTCDATETIME(),
+        updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_link_boxes_updated_at DEFAULT SYSUTCDATETIME(),
+
+        CONSTRAINT PK_omp_link_boxes PRIMARY KEY(box_key)
+    );
+END
+GO
+
+-- No FK from link_box_items.box_key: items may exist for boxes that have not
+-- been registered yet (the editor upserts the box row on first use).
+IF COL_LENGTH(N'omp.link_box_items', N'required_permission') IS NULL
+BEGIN
+    ALTER TABLE omp.link_box_items ADD required_permission nvarchar(200) NULL;
+END
+GO

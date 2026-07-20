@@ -120,7 +120,41 @@
         });
     }
 
+    // Link boxes collapse via their heading; the state persists per box key
+    // so a box an operator folded stays folded across pages and visits.
+    function initLinkBoxCollapse() {
+        document.querySelectorAll("details[data-omp-linkbox]").forEach(function (details) {
+            var boxKey = details.getAttribute("data-omp-linkbox");
+            if (!boxKey) {
+                return;
+            }
+
+            var collapseKey = "omp.linkbox-collapsed." + boxKey;
+            try {
+                if (window.localStorage.getItem(collapseKey) === "1") {
+                    details.open = false;
+                }
+            } catch (error) {
+                // Storage may be unavailable; the box still collapses for the page.
+            }
+
+            details.addEventListener("toggle", function () {
+                try {
+                    if (details.open) {
+                        window.localStorage.removeItem(collapseKey);
+                    } else {
+                        window.localStorage.setItem(collapseKey, "1");
+                    }
+                } catch (error) {
+                    // Ignore storage failures.
+                }
+            });
+        });
+    }
+
     function init() {
+        initLinkBoxCollapse();
+
         var handles = Array.prototype.slice.call(document.querySelectorAll("[data-section-navigator-resize]"));
         if (handles.length === 0) {
             return;
