@@ -72,7 +72,8 @@ END;
         (N'omp', N'auth_provider_lpwd'),
         (N'omp', N'config_setting_definitions'),
         (N'omp', N'config_settings'),
-        (N'omp', N'link_box_items')
+        (N'omp', N'link_box_items'),
+        (N'omp', N'link_boxes')
     ) AS v(SchemaName, TableName)
 )
 SELECT @Missing = @Missing + COUNT(1)
@@ -136,7 +137,8 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp', N'config_settings', N'ConfigValue'),
         (N'omp', N'config_settings', N'ConfigPriority'),
         (N'omp', N'config_settings', N'ConfigPermission'),
-        (N'omp', N'config_settings', N'ConfigScopeRank')
+        (N'omp', N'config_settings', N'ConfigScopeRank'),
+        (N'omp', N'link_box_items', N'required_permission')
     ) AS v(SchemaName, TableName, ColumnName)
 )
 SELECT @Missing = @Missing + COUNT(1)

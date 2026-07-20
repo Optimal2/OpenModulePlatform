@@ -6,7 +6,7 @@
     <div>
         <div class="eyebrow">@L["Manual core"]</div>
         <h2>@L["Navigation"]</h2>
-        <p class="lede">@L["Curate the links shown in the platform's link boxes. Built-in links come from code and cannot be removed here; links you add are stored per box and appear for everyone."]</p>
+        <p class="lede">@L["Curate the links shown in the platform's link boxes. Links and boxes can be limited to a permission; labels and titles that match a translation key are localized, anything else is shown as written."]</p>
     </div>
 </section>
 
@@ -27,53 +27,50 @@
         {
             if (string.Equals(box.BoxKey, Model.SelectedBoxKey, StringComparison.OrdinalIgnoreCase))
             {
-                <span class="pill">@L[box.TitleKey]</span>
+                <span class="pill">@L[box.Title]</span>
             }
             else
             {
-                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(box.BoxKey)">@L[box.TitleKey]</a>
+                <a class="action-link" href="~/admin/navigation?box=@Uri.EscapeDataString(box.BoxKey)">@L[box.Title]</a>
             }
         }
     </div>
 }
 
 <section class="card top-gap">
-    <h3>@(Model.SelectedDefinition is null ? Model.SelectedBoxKey : L[Model.SelectedDefinition.TitleKey])</h3>
+    <h3>@L[Model.SelectedBox?.Title ?? Model.SelectedBoxKey]</h3>
     <p class="field-help">@L["Box key"]: <code>@Model.SelectedBoxKey</code></p>
 
-    <h4>@L["Built-in links"]</h4>
-    @if (Model.SelectedDefinition is null || Model.SelectedDefinition.CodeLinks.Count == 0)
-    {
-        <div class="empty-state">@L["This box has no built-in links."]</div>
-    }
-    else
-    {
-        <table class="grid">
-            <thead>
-                <tr>
-                    <th>@L["Label"]</th>
-                    <th>@L["URL"]</th>
-                    <th>@L["Group"]</th>
-                </tr>
-            </thead>
-            <tbody>
-            @foreach (var link in Model.SelectedDefinition.CodeLinks)
-            {
-                <tr>
-                    <td>@L[link.TextKey]</td>
-                    <td><code>@link.RelativePath</code></td>
-                    <td>@(string.IsNullOrWhiteSpace(link.Group) ? "-" : link.Group)</td>
-                </tr>
-            }
-            </tbody>
-        </table>
-        <p class="field-help">@L["Built-in links are defined in code and cannot be edited here."]</p>
-    }
+    <h4>@L["Box settings"]</h4>
+    <form method="post" asp-page-handler="SaveBox" asp-route-box="@Model.SelectedBoxKey" class="form-grid">
+        <div class="field-grid field-grid--2">
+            <div class="form-field">
+                <label asp-for="BoxInput.Title">@L["Title"]</label>
+                <input asp-for="BoxInput.Title" />
+                <span asp-validation-for="BoxInput.Title" class="field-validation-error"></span>
+            </div>
+            <div class="form-field">
+                <label asp-for="BoxInput.RequiredPermission">@L["Required permission"]</label>
+                <select asp-for="BoxInput.RequiredPermission">
+                    <option value="">@L["Visible to everyone"]</option>
+                    @foreach (var permission in Model.PermissionNames)
+                    {
+                        <option value="@permission">@permission</option>
+                    }
+                </select>
+                <div class="field-help">@L["Only users holding the permission see the box at all."]</div>
+                <span asp-validation-for="BoxInput.RequiredPermission" class="field-validation-error"></span>
+            </div>
+        </div>
+        <div class="toolbar">
+            <button type="submit" class="action-link">@L["Save box"]</button>
+        </div>
+    </form>
 
-    <h4 class="top-gap">@L["Custom links"]</h4>
-    @if (Model.UserLinks.Count == 0)
+    <h4 class="top-gap">@L["Links"]</h4>
+    @if (Model.Links.Count == 0)
     {
-        <div class="empty-state">@L["No custom links yet."]</div>
+        <div class="empty-state">@L["This box has no links yet."]</div>
     }
     else
     {
@@ -83,16 +80,18 @@
                     <th>@L["Label"]</th>
                     <th>@L["URL"]</th>
                     <th>@L["Group"]</th>
+                    <th>@L["Required permission"]</th>
                     <th>@L["Actions"]</th>
                 </tr>
             </thead>
             <tbody>
-            @foreach (var link in Model.UserLinks)
+            @foreach (var link in Model.Links)
             {
                 <tr>
-                    <td>@link.Label</td>
+                    <td>@L[link.Label]</td>
                     <td><code>@link.Url</code></td>
                     <td>@(string.IsNullOrWhiteSpace(link.GroupKey) ? "-" : link.GroupKey)</td>
+                    <td>@(string.IsNullOrWhiteSpace(link.RequiredPermission) ? L["Visible to everyone"] : link.RequiredPermission)</td>
                     <td>
                         <form method="post"
                               asp-page-handler="Delete"
@@ -131,6 +130,18 @@
                 <input asp-for="Input.Group" />
                 <div class="field-help">@L["Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint."]</div>
                 <span asp-validation-for="Input.Group" class="field-validation-error"></span>
+            </div>
+            <div class="form-field">
+                <label asp-for="Input.RequiredPermission">@L["Required permission"]</label>
+                <select asp-for="Input.RequiredPermission">
+                    <option value="">@L["Visible to everyone"]</option>
+                    @foreach (var permission in Model.PermissionNames)
+                    {
+                        <option value="@permission">@permission</option>
+                    }
+                </select>
+                <div class="field-help">@L["Only users holding the permission see the link."]</div>
+                <span asp-validation-for="Input.RequiredPermission" class="field-validation-error"></span>
             </div>
         </div>
         <div class="toolbar">

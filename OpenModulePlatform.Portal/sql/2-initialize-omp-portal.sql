@@ -389,3 +389,35 @@ SET InstanceTemplateHostId = NULL,
 WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId
   AND AppInstanceKey = N'omp_portal';
 GO
+
+-------------------------------------------------------------------------------
+-- Admin quick links box (shared LinkBox storage in omp.link_box_items).
+-- Seeded ONCE: the guard is the box registry row, so links an admin later
+-- deletes through the editor never resurrect on repeated initialize runs.
+-- Labels are localization keys resolved resx-first at render time.
+-------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.link_boxes', N'U') IS NOT NULL
+   AND OBJECT_ID(N'omp.link_box_items', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM omp.link_boxes WHERE box_key = N'portal.admin-quicklinks')
+BEGIN
+    INSERT INTO omp.link_boxes(box_key, title, required_permission, sort_order)
+    VALUES(N'portal.admin-quicklinks', N'Admin quick links', NULL, 0);
+
+    INSERT INTO omp.link_box_items(box_key, label, url, group_key, sort_order)
+    VALUES
+        (N'portal.admin-quicklinks', N'Overview', N'/admin/overview', NULL, 0),
+        (N'portal.admin-quicklinks', N'Installation', N'/admin/instancetemplateedit?id=1', NULL, 1),
+        (N'portal.admin-quicklinks', N'Navigation', N'/admin/navigation', NULL, 2),
+        (N'portal.admin-quicklinks', N'Instances', N'/admin/instances', N'topology', 3),
+        (N'portal.admin-quicklinks', N'App instances', N'/admin/appinstances', N'topology', 4),
+        (N'portal.admin-quicklinks', N'Module instances', N'/admin/moduleinstances', N'topology', 5),
+        (N'portal.admin-quicklinks', N'Hosts', N'/admin/hosts', N'topology', 6),
+        (N'portal.admin-quicklinks', N'Host resources', N'/admin/hostresources', N'topology', 7),
+        (N'portal.admin-quicklinks', N'Host deployments', N'/admin/hostdeployments', N'topology', 8),
+        (N'portal.admin-quicklinks', N'Modules', N'/admin/modules', N'modules', 9),
+        (N'portal.admin-quicklinks', N'Module definitions', N'/admin/moduledefinitions', N'modules', 10),
+        (N'portal.admin-quicklinks', N'Apps', N'/admin/apps', N'modules', 11),
+        (N'portal.admin-quicklinks', N'Workers', N'/admin/workers', N'operations', 12),
+        (N'portal.admin-quicklinks', N'Maintenance', N'/admin/maintenance', N'operations', 13);
+END
+GO

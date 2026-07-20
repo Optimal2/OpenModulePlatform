@@ -24,16 +24,34 @@
         }
         @if (!string.IsNullOrWhiteSpace(Model.Heading))
         {
-            <div class="omp-linkbox__heading">@Model.Heading</div>
+            @* The heading collapses the box; the state persists per box key in
+               localStorage (applied by section-navigator.js before paint). *@
+            <details class="omp-linkbox__details" data-omp-linkbox="@Model.BoxKey" open>
+                <summary class="omp-linkbox__summary">
+                    <span class="omp-linkbox__heading">@Model.Heading</span>
+                </summary>
+                <div class="omp-linkbox__items">
+                    @foreach (var item in Model.Items)
+                    {
+                        var groupClass = !string.IsNullOrWhiteSpace(item.Group) ? $"omp-linkbox__link--group-{groupTints[item.Group]}" : null;
+                        <a class="omp-linkbox__link @groupClass @(item.IsActive ? "omp-linkbox__link--active" : null)"
+                           href="@item.Url"
+                           title="@item.Text">@item.Text</a>
+                    }
+                </div>
+            </details>
         }
-        <div class="omp-linkbox__items">
-            @foreach (var item in Model.Items)
-            {
-                var groupClass = !string.IsNullOrWhiteSpace(item.Group) ? $"omp-linkbox__link--group-{groupTints[item.Group]}" : null;
-                <a class="omp-linkbox__link @groupClass @(item.IsActive ? "omp-linkbox__link--active" : null)"
-                   href="@item.Url"
-                   title="@item.Text">@item.Text</a>
-            }
-        </div>
+        else
+        {
+            <div class="omp-linkbox__items">
+                @foreach (var item in Model.Items)
+                {
+                    var groupClass = !string.IsNullOrWhiteSpace(item.Group) ? $"omp-linkbox__link--group-{groupTints[item.Group]}" : null;
+                    <a class="omp-linkbox__link @groupClass @(item.IsActive ? "omp-linkbox__link--active" : null)"
+                       href="@item.Url"
+                       title="@item.Text">@item.Text</a>
+                }
+            </div>
+        }
     </nav>
 }
