@@ -29,6 +29,18 @@
     width: 100%;
 }
 
+/* Full-width splitter mode, applied by the script when the pane no longer
+   fits its equal share beside the centered content: the pane column takes
+   exactly the pane width and the content drops its max and fills to the
+   right edge. The handle then repartitions the two -- a smaller pane means
+   a wider content. With room to spare the base template above centers the
+   content exactly as before. */
+.section-navigator-layout--full {
+    grid-template-columns:
+        var(--section-navigator-pane-width, var(--section-navigator-width))
+        minmax(0, 1fr);
+}
+
 .section-navigator-layout__header,
 .section-navigator-layout__content {
     grid-column: 2;
