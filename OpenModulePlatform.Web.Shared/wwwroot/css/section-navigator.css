@@ -81,49 +81,46 @@
     z-index: 2;
 }
 
-.section-navigator__resize-handle::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    /* Grid math can put the pane edge (and thus the grip anchor) on a
-       fractional pixel, which antialiases the 1px ring asymmetrically and
-       makes the grip look off-center. The script measures the fraction and
-       sets these deltas so the grip lands on whole device pixels. */
-    margin-left: var(--section-navigator-grip-dx, 0px);
-    margin-top: var(--section-navigator-grip-dy, 0px);
-    width: 10px;
-    height: 30px;
-    transform: translate(-50%, -50%);
-    border: 1px solid var(--border-strong);
-    border-radius: 999px;
-    background: var(--surface);
-    transition: border-color 120ms ease;
-}
-
+/* Two full-height lines mark the entire draggable edge of the element the
+   handle belongs to, so together the pane's handles trace exactly where the
+   width can be grabbed. They stay subtle until hover or an active resize.
+   The dx delta (set by the script) keeps the thin lines on whole device
+   pixels when grid math puts the pane edge on a fraction. */
+.section-navigator__resize-handle::before,
 .section-navigator__resize-handle::after {
     content: "";
     position: absolute;
-    top: 50%;
-    left: 50%;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
     margin-left: var(--section-navigator-grip-dx, 0px);
-    margin-top: var(--section-navigator-grip-dy, 0px);
-    width: 4px;
-    height: 18px;
-    transform: translate(-50%, -50%);
-    background-image: radial-gradient(circle, rgba(100, 116, 139, 0.45) 1.1px, transparent 1.2px);
-    background-size: 4px 6px;
-    transition: background-image 120ms ease;
+    border-radius: 999px;
+    background: var(--border-strong);
+    opacity: 0.3;
+    transition: opacity 120ms ease, background-color 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .section-navigator__resize-handle::before,
+    .section-navigator__resize-handle::after {
+        transition: none;
+    }
+}
+
+.section-navigator__resize-handle::before {
+    left: calc(50% - 3px);
+}
+
+.section-navigator__resize-handle::after {
+    left: calc(50% + 1px);
 }
 
 .section-navigator__resize-handle:hover::before,
-body.section-navigator-resizing .section-navigator__resize-handle::before {
-    border-color: var(--section-navigator-line);
-}
-
 .section-navigator__resize-handle:hover::after,
+body.section-navigator-resizing .section-navigator__resize-handle::before,
 body.section-navigator-resizing .section-navigator__resize-handle::after {
-    background-image: radial-gradient(circle, var(--section-navigator-line) 1.1px, transparent 1.2px);
+    background: var(--section-navigator-line, #6b9cff);
+    opacity: 1;
 }
 
 body.section-navigator-resizing {
@@ -437,13 +434,6 @@ body.section-navigator-resizing {
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-}
-
-/* When the pane stacks more content below the navigator, the drag grip sits
-   exactly in the gap between the elements instead of at the vertical center. */
-.section-navigator-pane .section-navigator:has(+ *) .section-navigator__resize-handle::before,
-.section-navigator-pane .section-navigator:has(+ *) .section-navigator__resize-handle::after {
-    top: calc(100% + 6px);
 }
 
 .section-navigator-pane .section-navigator__nav {

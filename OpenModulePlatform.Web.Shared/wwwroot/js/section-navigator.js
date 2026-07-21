@@ -40,19 +40,12 @@
     }
 
     function snapGrip(handle) {
-        // Grid layout can place the grip anchor on a fractional pixel (odd
-        // viewport widths, fractional pane heights), which antialiases the
-        // grip's 1px ring asymmetrically so it looks off-center. Measure the
-        // anchor and publish whole-pixel deltas for the grip pseudo-elements.
+        // Grid layout can place the handle on a fractional pixel (odd viewport
+        // widths), which antialiases the thin edge lines asymmetrically.
+        // Measure and publish a whole-pixel delta for the line pseudo-elements.
         var rect = handle.getBoundingClientRect();
-        var host = handle.parentElement;
-        var betweenElements = host
-            && host.matches(".section-navigator-pane .section-navigator")
-            && host.nextElementSibling;
         var centerX = rect.left + (rect.width / 2);
-        var centerY = betweenElements ? rect.bottom + 6 : rect.top + (rect.height / 2);
         handle.style.setProperty("--section-navigator-grip-dx", (Math.round(centerX) - centerX) + "px");
-        handle.style.setProperty("--section-navigator-grip-dy", (Math.round(centerY) - centerY) + "px");
     }
 
     function initHandle(handle) {
