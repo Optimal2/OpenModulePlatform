@@ -4,10 +4,15 @@
     --section-navigator-gap: 16px;
     --section-navigator-sticky-gap: 16px;
     display: grid;
+    /* The right column exists purely for optical balance: while space allows,
+       both side columns share it equally and the content sits centered. Its
+       minimum is 0 so that when space runs short (a wide pane or a narrow
+       window) the content drifts right into the balance column and keeps its
+       full width, instead of shrinking early beside reserved empty space. */
     grid-template-columns:
         minmax(var(--section-navigator-pane-width, var(--section-navigator-width)), 1fr)
         minmax(0, var(--section-navigator-content-max))
-        minmax(var(--section-navigator-width), 1fr);
+        minmax(0, 1fr);
     column-gap: var(--section-navigator-gap);
     row-gap: 16px;
     align-items: start;
