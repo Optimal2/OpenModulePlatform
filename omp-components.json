@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.306",
+  "repositoryVersion": "0.3.307",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -73,7 +73,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.480",
+      "version": "0.3.481",
       "minModuleDefinitionVersion": "0.3.102",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
