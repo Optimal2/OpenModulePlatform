@@ -163,12 +163,14 @@
     border-color: var(--link-hover);
 }
 
-/* Exactly one visible grip per pane: when a section navigator shares the
-   pane, the link box keeps its handle as an invisible drag surface (so the
-   pane's whole right edge stays grabbable) but hides its own grip visual. */
-.section-navigator-pane:has(.section-navigator) .omp-linkbox__resize-handle::before,
-.section-navigator-pane:has(.section-navigator) .omp-linkbox__resize-handle::after {
-    display: none;
+/* Every pane element's handle draws its own edge lines (see the shared
+   handle styles), so the pane's full grabbable edge is traced even when a
+   navigator and link boxes share the pane. The handle is absolutely
+   positioned against the box's padding box, which sits inside its 1px
+   border (the navigator's wrapper has none), so compensate to keep the
+   line segments of all pane elements on the same vertical axis. */
+.omp-linkbox__resize-handle {
+    right: calc(0px - var(--section-navigator-gap, 16px) - 1px);
 }
 
 @media (max-width: 1500px) {
