@@ -1,5 +1,10 @@
 .section-navigator-layout {
-    --section-navigator-width: clamp(120px, calc((100vw - var(--section-navigator-content-max) - 80px) / 2), 200px);
+    /* Default pane width: half the space left beside the content when there is
+       room, but never below 180px -- a 120px floor made the navigator labels
+       unreadable on ~1500-1700px screens. The floor may eat into the content's
+       width, which is fine now that the content drifts right into the balance
+       column before shrinking. */
+    --section-navigator-width: clamp(180px, calc((100vw - var(--section-navigator-content-max) - 80px) / 2), 200px);
     --section-navigator-content-max: 1400px;
     --section-navigator-gap: 16px;
     --section-navigator-sticky-gap: 16px;
