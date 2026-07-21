@@ -567,6 +567,26 @@ BEGIN
 END
 GO
 
+-- Artifact identity is (AppId, Version, PackageType, TargetName). This block
+-- sits outside the create-guard above so existing databases also receive the
+-- index when the module definition is re-applied. SQL Server treats NULL key
+-- values as equal in unique indexes, so one unfiltered index also blocks
+-- duplicate NULL-target identities. On databases that already contain
+-- duplicate identities this fails loudly at apply time; that is the intended
+-- pre-deploy cleanup signal.
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.Artifacts')
+      AND name = N'UX_omp_Artifacts_App_Version_Package_Target'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_Artifacts_App_Version_Package_Target
+        ON omp.Artifacts(AppId, Version, PackageType, TargetName);
+END
+GO
+
 IF OBJECT_ID(N'omp.IsArtifactPackageCompatibleWithAppType', N'FN') IS NULL
     EXEC(N'CREATE FUNCTION omp.IsArtifactPackageCompatibleWithAppType(@PackageType nvarchar(50), @AppType nvarchar(50)) RETURNS bit AS BEGIN RETURN 0; END');
 GO
