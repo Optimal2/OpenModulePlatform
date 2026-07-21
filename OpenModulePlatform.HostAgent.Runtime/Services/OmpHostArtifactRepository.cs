@@ -1263,7 +1263,16 @@ ORDER BY ar.ArtifactId;";
             rdr.IsDBNull(6) ? null : rdr.GetString(6));
     }
 
-    public async Task<int> RegisterImportedArtifactAsync(
+    /// <summary>
+    /// Registers a newly imported artifact atomically. The guarded insert is a
+    /// single statement: the HOLDLOCK serializable range lock is held to the
+    /// end of the implicit transaction, so two concurrent imports of the same
+    /// identity serialize and the loser inserts zero rows instead of creating
+    /// a duplicate. Returns the new artifact id, or <c>null</c> when the
+    /// identity was registered by a concurrent import. The unique index
+    /// UX_omp_Artifacts_App_Version_Package_Target is the last-line defense.
+    /// </summary>
+    public async Task<int?> RegisterImportedArtifactAsync(
         int appId,
         string version,
         string packageType,
@@ -1273,6 +1282,8 @@ ORDER BY ar.ArtifactId;";
         CancellationToken ct)
     {
         const string sql = @"
+DECLARE @newArtifactIds TABLE (ArtifactId int NOT NULL);
+
 INSERT INTO omp.Artifacts
 (
     AppId,
@@ -1283,18 +1294,25 @@ INSERT INTO omp.Artifacts
     Sha256,
     IsEnabled
 )
-VALUES
+OUTPUT INSERTED.ArtifactId INTO @newArtifactIds
+SELECT @appId,
+       @version,
+       @packageType,
+       @targetName,
+       @relativePath,
+       @sha256,
+       1
+WHERE NOT EXISTS
 (
-    @appId,
-    @version,
-    @packageType,
-    @targetName,
-    @relativePath,
-    @sha256,
-    1
+    SELECT 1
+    FROM omp.Artifacts WITH (UPDLOCK, HOLDLOCK)
+    WHERE AppId = @appId
+      AND Version = @version
+      AND PackageType = @packageType
+      AND ((TargetName = @targetName) OR (TargetName IS NULL AND @targetName IS NULL))
 );
 
-SELECT CAST(SCOPE_IDENTITY() AS int);";
+SELECT ArtifactId FROM @newArtifactIds;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -1306,7 +1324,8 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         cmd.Parameters.AddWithValue("@relativePath", relativePath);
         cmd.Parameters.AddWithValue("@sha256", sha256);
 
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return result is null or DBNull ? null : Convert.ToInt32(result);
     }
 
     public async Task UpdateImportedArtifactMetadataAsync(
