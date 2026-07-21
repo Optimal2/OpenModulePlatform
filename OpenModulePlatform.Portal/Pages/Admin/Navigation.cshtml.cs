@@ -11,14 +11,17 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 public sealed class NavigationModel : OmpPortalPageModel
 {
     private readonly LinkBoxRepository _linkBoxes;
+    private readonly AppCatalogService _catalog;
 
     public NavigationModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        LinkBoxRepository linkBoxes)
+        LinkBoxRepository linkBoxes,
+        AppCatalogService catalog)
         : base(options, rbac)
     {
         _linkBoxes = linkBoxes;
+        _catalog = catalog;
     }
 
     // Registered boxes plus any box keys that only exist as stray item rows.
@@ -28,6 +31,12 @@ public sealed class NavigationModel : OmpPortalPageModel
     public IReadOnlyList<LinkBoxItemRow> Links { get; private set; } = Array.Empty<LinkBoxItemRow>();
     public IReadOnlyList<string> PermissionNames { get; private set; } = Array.Empty<string>();
     public long? EditingLinkId { get; private set; }
+
+    // App entry keys ("app:<id>:home") offered as link targets: such links
+    // resolve to the app's address at render time and only show for users
+    // with access to the app, mirroring the portal entries.
+    public sealed record AppTarget(string Key, string Label);
+    public IReadOnlyList<AppTarget> AppTargets { get; private set; } = Array.Empty<AppTarget>();
 
     // Group legend for the selected box: distinct groups in order of first
     // appearance with their link count and the tint number the shared LinkBox
@@ -229,6 +238,10 @@ public sealed class NavigationModel : OmpPortalPageModel
         SelectedBox = registered.FirstOrDefault(item => string.Equals(item.BoxKey, SelectedBoxKey, StringComparison.OrdinalIgnoreCase));
         Links = await _linkBoxes.GetItemsAsync(SelectedBoxKey, ct);
         PermissionNames = await _linkBoxes.GetPermissionNamesAsync(ct);
+        AppTargets = (await _catalog.GetEnabledWebAppsAsync(ct))
+            .Select(app => new AppTarget(PortalEntryService.BuildAppEntryKey(app.AppInstanceId), app.DisplayName))
+            .OrderBy(target => target.Label, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var groups = new List<GroupInfo>();
         foreach (var link in Links)
@@ -311,9 +324,9 @@ public sealed class NavigationModel : OmpPortalPageModel
         {
             ModelState.AddModelError("Input.Url", T("URL can be at most 400 characters."));
         }
-        else if (!IsSafeRelativeUrl(url))
+        else if (!IsSafeRelativeUrl(url) && !PortalEntryService.IsAppEntryKey(url))
         {
-            ModelState.AddModelError("Input.Url", T("Only relative URLs within this site are allowed, e.g. /admin/hosts."));
+            ModelState.AddModelError("Input.Url", T("Only relative URLs within this site or app links are allowed."));
         }
 
         if (!string.IsNullOrWhiteSpace(Input.Group) && Input.Group.Trim().Length > 100)
