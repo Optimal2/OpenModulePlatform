@@ -14,8 +14,13 @@
        minimum is 0 so that when space runs short (a wide pane or a narrow
        window) the content drifts right into the balance column and keeps its
        full width, instead of shrinking early beside reserved empty space. */
+    /* The left column never goes below the default width: dragging the pane
+       SMALLER than default must not pull the content leftwards and dump the
+       freed space on the right -- the pane just shrinks in place (it is
+       end-aligned, so the slack opens at the viewport edge). Only dragging
+       the pane WIDER than default moves the content, via the drift above. */
     grid-template-columns:
-        minmax(var(--section-navigator-pane-width, var(--section-navigator-width)), 1fr)
+        minmax(max(var(--section-navigator-pane-width, var(--section-navigator-width)), var(--section-navigator-width)), 1fr)
         minmax(0, var(--section-navigator-content-max))
         minmax(0, 1fr);
     column-gap: var(--section-navigator-gap);
