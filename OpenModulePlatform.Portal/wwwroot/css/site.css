@@ -6883,3 +6883,15 @@ body.dashboard-widget-picker-open {
 tr.linkbox-editor-row--dragging {
     opacity: 0.5;
 }
+
+/* Section headings with an inline add action right after the title, matching
+   the module admin pages (ibs Channels): title and blue plus icon on one line. */
+.section-heading-line {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.section-heading-line .admin-icon-button--add {
+    color: var(--link);
+}
