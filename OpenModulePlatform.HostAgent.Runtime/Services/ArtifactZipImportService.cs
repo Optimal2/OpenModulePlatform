@@ -804,14 +804,38 @@ public sealed class ArtifactZipImportService
                 }
             }
 
-            var artifactId = await _repository.RegisterImportedArtifactAsync(
-                app.AppId,
-                metadata.Version,
-                metadata.PackageType,
-                metadata.TargetName,
-                relativePath,
-                contentHash,
-                cancellationToken);
+            int? registeredArtifactId;
+            try
+            {
+                registeredArtifactId = await _repository.RegisterImportedArtifactAsync(
+                    app.AppId,
+                    metadata.Version,
+                    metadata.PackageType,
+                    metadata.TargetName,
+                    relativePath,
+                    contentHash,
+                    cancellationToken);
+            }
+            catch (SqlException ex) when (ex.Number is 2601 or 2627)
+            {
+                // Defense in depth: the unique index
+                // UX_omp_Artifacts_App_Version_Package_Target rejected a
+                // concurrent duplicate identity.
+                registeredArtifactId = null;
+            }
+
+            if (registeredArtifactId is null)
+            {
+                // A concurrent import won the race between the identity check
+                // above and the atomic register. Surface the same error the
+                // early check produces for an existing identity.
+                throw new InvalidOperationException(
+                    "An artifact for this app, package type, target, and version already exists: " +
+                    $"{app.AppKey} {metadata.Version} ({metadata.PackageType}). " +
+                    "Use a new version number for changed artifact content.");
+            }
+
+            var artifactId = registeredArtifactId.Value;
 
             var copiedConfigurationFiles = 0;
             if (package.ConfigurationFiles.Count > 0)
