@@ -134,4 +134,7 @@
   <data name="Group renamed." xml:space="preserve">
     <value>Gruppen har bytt namn.</value>
   </data>
+  <data name="Only relative URLs within this site or app links are allowed." xml:space="preserve">
+    <value>Endast relativa URL:er inom denna webbplats eller applänkar tillåts.</value>
+  </data>
 </root>

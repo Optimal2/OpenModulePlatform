@@ -2906,4 +2906,7 @@
   <data name="Link boxes" xml:space="preserve">
     <value>Länkboxar</value>
   </data>
+  <data name="Enter a relative URL like /admin/hosts, or pick an app link -- app links resolve to the app's address and only show for users with access to the app." xml:space="preserve">
+    <value>Ange en relativ URL som /admin/hosts, eller välj en applänk — applänkar löses upp till appens adress och visas bara för användare med åtkomst till appen.</value>
+  </data>
 </root>

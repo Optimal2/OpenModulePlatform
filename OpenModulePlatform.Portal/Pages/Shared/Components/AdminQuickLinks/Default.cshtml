@@ -5,13 +5,18 @@
     The admin pane's link boxes, straight from storage (curated at
     /admin/navigation, where each box's gear leads). Titles and labels are
     localization keys resolved resx-first: seeded entries localize, free-text
-    entries render as-is. Boxes stack vertically in the pane, always.
+    entries render as-is. Hrefs arrive pre-resolved from the portal entry
+    link resolver (app entry keys become app links; inaccessible links are
+    already filtered out). Boxes stack vertically in the pane, always.
 *@
 @{
     string currentPath = (ViewContext.HttpContext.Request.Path.Value ?? string.Empty).TrimEnd('/');
 
-    bool IsActive(string relativePath)
-        => string.Equals(currentPath, relativePath.Split('?')[0], StringComparison.OrdinalIgnoreCase);
+    bool IsActive(string href)
+    {
+        var path = Uri.TryCreate(href, UriKind.Absolute, out var absolute) ? absolute.AbsolutePath : href;
+        return string.Equals(currentPath, path.Split('?')[0].TrimEnd('/'), StringComparison.OrdinalIgnoreCase);
+    }
 }
 @foreach (var paneBox in Model)
 {
@@ -23,7 +28,7 @@
         EditUrl = Url.Content("~/admin/navigation?box=" + Uri.EscapeDataString(paneBox.Box.BoxKey)),
         EditLabel = L["Edit links"].Value,
         Items = paneBox.Links
-            .Select(link => new LinkBoxItem(L[link.Label].Value, Url.Content("~" + link.Url), link.GroupKey, IsActive(link.Url)))
+            .Select(link => new LinkBoxItem(L[link.Row.Label].Value, link.Href, link.Row.GroupKey, IsActive(link.Href)))
             .ToArray()
     };
 
