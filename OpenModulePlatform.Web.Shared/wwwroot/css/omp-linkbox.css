@@ -167,10 +167,19 @@
    handle styles), so the pane's full grabbable edge is traced even when a
    navigator and link boxes share the pane. The handle is absolutely
    positioned against the box's padding box, which sits inside its 1px
-   border (the navigator's wrapper has none), so compensate to keep the
-   line segments of all pane elements on the same vertical axis. */
+   border (the navigator's wrapper has none), so compensate on every edge
+   to keep all pane elements' line segments on one axis and seamlessly
+   joined at the element boundaries. */
 .omp-linkbox__resize-handle {
+    top: -1px;
+    bottom: -1px;
     right: calc(0px - var(--section-navigator-gap, 16px) - 1px);
+}
+
+/* Border compensation for the pane's gap-bridging rule (which otherwise
+   overrides the bottom offset above at higher specificity). */
+.section-navigator-pane > .omp-linkbox:has(+ *) .omp-linkbox__resize-handle {
+    bottom: calc(0px - var(--section-navigator-pane-gap, 12px) - 1px);
 }
 
 @media (max-width: 1500px) {
