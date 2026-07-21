@@ -216,6 +216,85 @@ WHERE entry_key = N'portal:admin-dashboard-widgets';";
         return entries;
     }
 
+    /// <summary>
+    /// True when the url is an app entry key ("app:&lt;32-hex id&gt;:home") that
+    /// resolves to an app link instead of a plain path.
+    /// </summary>
+    public static bool IsAppEntryKey(string? url) => TryParseAppInstanceId(url, out _);
+
+    public static string BuildAppEntryKey(Guid appInstanceId)
+        => AppEntryPrefix + appInstanceId.ToString("N") + AppEntrySuffix;
+
+    /// <summary>
+    /// Prepares a resolver for arbitrary link targets (used by the link
+    /// boxes): app entry keys resolve to app hrefs, and every link gets the
+    /// same access rules as the portal entries, so links a user cannot reach
+    /// simply do not render. Pass allowAll for anonymous dev mode.
+    /// </summary>
+    public async Task<PortalLinkResolver> CreateLinkResolverAsync(
+        HttpRequest request,
+        IReadOnlySet<string> permissions,
+        bool allowAll,
+        CancellationToken ct)
+    {
+        var allApps = await _catalog.GetEnabledWebAppsAsync(ct);
+        var accessibleApps = (allowAll ? allApps : _catalog.FilterByPermissions(allApps, permissions))
+            .ToDictionary(app => app.AppInstanceId);
+        return new PortalLinkResolver(request, allApps, accessibleApps, permissions, allowAll);
+    }
+
+    public sealed class PortalLinkResolver
+    {
+        private readonly HttpRequest _request;
+        private readonly IReadOnlyList<PortalAppEntry> _allApps;
+        private readonly IReadOnlyDictionary<Guid, PortalAppEntry> _accessibleApps;
+        private readonly IReadOnlySet<string> _permissions;
+        private readonly bool _allowAll;
+
+        internal PortalLinkResolver(
+            HttpRequest request,
+            IReadOnlyList<PortalAppEntry> allApps,
+            IReadOnlyDictionary<Guid, PortalAppEntry> accessibleApps,
+            IReadOnlySet<string> permissions,
+            bool allowAll)
+        {
+            _request = request;
+            _allApps = allApps;
+            _accessibleApps = accessibleApps;
+            _permissions = permissions;
+            _allowAll = allowAll;
+        }
+
+        /// <summary>
+        /// Resolves a stored link target to a rendered href and whether the
+        /// current user may see it. App entry keys are hidden when the app is
+        /// not accessible; plain paths get the portal entry access rules.
+        /// </summary>
+        public (string? Href, bool IsVisible) Resolve(string url)
+        {
+            if (TryParseAppInstanceId(url, out var appInstanceId))
+            {
+                if (!_accessibleApps.TryGetValue(appInstanceId, out var app))
+                {
+                    return (null, false);
+                }
+
+                var appHref = AppLinkBuilder.ResolveHref(_request, app);
+                return (appHref, !string.IsNullOrWhiteSpace(appHref));
+            }
+
+            var href = ResolveTargetUrl(_request, url);
+            if (string.IsNullOrWhiteSpace(href))
+            {
+                return (null, false);
+            }
+
+            var visible = _allowAll
+                || CanAccessTargetHref(_request, href, _allApps, _accessibleApps, _permissions);
+            return (href, visible);
+        }
+    }
+
     public async Task<IReadOnlyList<PortalEntry>> GetNavigationFavoriteEntriesAsync(
         HttpRequest request,
         int userId,

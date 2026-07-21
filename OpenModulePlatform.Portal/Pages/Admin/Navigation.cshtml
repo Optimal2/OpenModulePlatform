@@ -67,6 +67,12 @@
                 <option value="@group.Group"></option>
             }
         </datalist>
+        <datalist id="linkbox-url-targets">
+            @foreach (var target in Model.AppTargets)
+            {
+                <option value="@target.Key" label="@target.Label"></option>
+            }
+        </datalist>
 
         <section class="card section-navigator-target" id="box-settings-section">
             <h3>@L["Box settings"]</h3>
@@ -193,7 +199,7 @@
                                     <input form="link-edit-form" asp-for="Input.Label" aria-label="@L["Label"]" />
                                     <input form="link-edit-form" asp-for="Input.LinkBoxItemId" type="hidden" />
                                 </td>
-                                <td><input form="link-edit-form" asp-for="Input.Url" aria-label="@L["URL"]" /></td>
+                                <td><input form="link-edit-form" asp-for="Input.Url" list="linkbox-url-targets" aria-label="@L["URL"]" /></td>
                                 <td><input form="link-edit-form" asp-for="Input.Group" list="linkbox-groups" aria-label="@L["Group"]" /></td>
                                 <td>
                                     <select form="link-edit-form" asp-for="Input.RequiredPermission" aria-label="@L["Required permission"]">
@@ -252,8 +258,8 @@
                         </div>
                         <div class="form-field">
                             <label asp-for="Input.Url">@L["URL"]</label>
-                            <input asp-for="Input.Url" placeholder="/admin/hosts" />
-                            <div class="field-help">@L["Only relative URLs within this site are allowed, e.g. /admin/hosts."]</div>
+                            <input asp-for="Input.Url" list="linkbox-url-targets" placeholder="/admin/hosts" />
+                            <div class="field-help">@L["Enter a relative URL like /admin/hosts, or pick an app link -- app links resolve to the app's address and only show for users with access to the app."]</div>
                             <span asp-validation-for="Input.Url" class="field-validation-error"></span>
                         </div>
                     </div>
