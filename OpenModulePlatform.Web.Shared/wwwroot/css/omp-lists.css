@@ -494,3 +494,11 @@ body.list-column-resizing {
     width: 1%;
     white-space: nowrap;
 }
+
+/* The controller toggles the show-more button with the hidden attribute, but
+   host apps' button classes (e.g. Portal's .btn { display: inline-flex })
+   override the UA's [hidden] { display: none } since author rules beat the
+   UA sheet. Re-assert hiddenness at attribute specificity. */
+[data-list-show-more][hidden] {
+    display: none;
+}
