@@ -1485,7 +1485,6 @@ Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'ex
 Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/ServiceAppModule/2-initialize-example-serviceapp.sql' -VariableName 'ServiceArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-serviceapp-service' } | Select-Object -First 1).version)
 Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -VariableName 'WebArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-web' } | Select-Object -First 1).version)
 Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -VariableName 'WorkerArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-worker' } | Select-Object -First 1).version)
-Add-VersionOverride -Overrides $versionOverrides -ScriptPath 'OpenModulePlatform/3-initialize-opendocviewer.sql' -Version $openDocViewerVersion
 
 $runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue $defaultRuntimeRoot)
 $webRoot = [string](Get-ConfigValue -Config $config -Name 'WebRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'Sites'))

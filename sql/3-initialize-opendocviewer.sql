@@ -24,7 +24,6 @@ BEGIN
 END
 GO
 
-DECLARE @ArtifactVersion nvarchar(50) = N'2.0.3';
 DECLARE @OpenDocViewerDisplayName nvarchar(150) = N'OpenDocViewer';
 DECLARE @OpenDocViewerRoutePath nvarchar(256) = N'opendocviewer';
 DECLARE @OpenDocViewerPublicUrl nvarchar(500) = NULL;
@@ -107,34 +106,25 @@ FROM omp.Apps
 WHERE ModuleId = @OpenDocViewerModuleId
   AND AppKey = N'opendocviewer_webapp';
 
-MERGE omp.Artifacts AS target
-USING
-(
-    SELECT @OpenDocViewerAppId AS AppId,
-           @ArtifactVersion AS Version,
-           N'web-app' AS PackageType,
-           N'opendocviewer' AS TargetName,
-           N'opendocviewer/web/' + @ArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-) AS source
-ON target.AppId = source.AppId
-AND target.Version = source.Version
-AND target.PackageType = source.PackageType
-AND target.TargetName = source.TargetName
-WHEN MATCHED THEN
-    UPDATE SET RelativePath = source.RelativePath,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-    INSERT(AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
-
-SELECT @OpenDocViewerArtifactId = ArtifactId
+-- The seed never writes to omp.Artifacts: artifact rows are owned by package
+-- import, which is the only component that knows the real on-disk version.
+-- Resolving (instead of fabricating) an artifact id guarantees the seed can
+-- never point at a version that does not exist, and can never re-enable a
+-- disabled artifact row. On a fresh install no row exists yet, so the
+-- resolution yields NULL and the COALESCE guards below keep the artifact
+-- pointer NULL until package import sets it. The COALESCE guards also mean an
+-- already-set pointer is never overwritten here; superseding a disabled or
+-- outdated artifact is owned by package import, not by this seed.
+-- ArtifactId is the IDENTITY primary key, so ORDER BY ArtifactId DESC is the
+-- only guaranteed-monotonic "newest" ordering (CreatedUtc is datetime2(3)
+-- and can share a tick or be set explicitly by an importer).
+SELECT TOP (1) @OpenDocViewerArtifactId = ArtifactId
 FROM omp.Artifacts
 WHERE AppId = @OpenDocViewerAppId
-  AND Version = @ArtifactVersion
   AND PackageType = N'web-app'
-  AND TargetName = N'opendocviewer';
+  AND TargetName = N'opendocviewer'
+  AND IsEnabled = 1
+ORDER BY ArtifactId DESC;
 
 MERGE omp.ModuleInstances AS target
 USING
@@ -224,7 +214,7 @@ WHEN MATCHED THEN
                PublicUrl = source.PublicUrl,
                InstallPath = source.InstallPath,
                InstallationName = source.InstallationName,
-               ArtifactId = source.ArtifactId,
+               ArtifactId = COALESCE(target.ArtifactId, source.ArtifactId),
                IsEnabled = source.IsEnabled,
                IsAllowed = source.IsAllowed,
                DesiredState = source.DesiredState,
@@ -263,7 +253,7 @@ WHEN MATCHED THEN
                PublicUrl = source.PublicUrl,
                InstallPath = source.InstallPath,
                InstallationName = source.InstallationName,
-               DesiredArtifactId = source.DesiredArtifactId,
+               DesiredArtifactId = COALESCE(target.DesiredArtifactId, source.DesiredArtifactId),
                DesiredState = source.DesiredState,
                SortOrder = source.SortOrder,
                IsEnabled = source.IsEnabled,
