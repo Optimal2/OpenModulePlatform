@@ -418,6 +418,10 @@ BEGIN
         (N'portal.admin-quicklinks', N'Module definitions', N'/admin/moduledefinitions', N'modules', 10),
         (N'portal.admin-quicklinks', N'Apps', N'/admin/apps', N'modules', 11),
         (N'portal.admin-quicklinks', N'Workers', N'/admin/workers', N'operations', 12),
-        (N'portal.admin-quicklinks', N'Maintenance', N'/admin/maintenance', N'operations', 13);
+        (N'portal.admin-quicklinks', N'Maintenance', N'/admin/maintenance', N'operations', 13),
+        (N'portal.admin-quicklinks', N'Artifacts', N'/admin/artifacts', N'modules', 14),
+        (N'portal.admin-quicklinks', N'Portal entries', N'/admin/portalentries', N'portal', 15),
+        (N'portal.admin-quicklinks', N'Banners', N'/admin/banners', N'portal', 16),
+        (N'portal.admin-quicklinks', N'Config settings', N'/admin/configsettings', N'portal', 17);
 END
 GO
