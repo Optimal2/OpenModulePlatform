@@ -123,6 +123,32 @@ body.section-navigator-resizing .section-navigator__resize-handle::after {
     opacity: 1;
 }
 
+/* In a shared pane, each element's handle bridges the gap down to the next
+   element, so the whole content extent is one continuous grabbable edge and
+   the lines run unbroken across the joints; the line insets remain only at
+   the pane's outer ends. */
+.section-navigator-pane > :has(+ *) .section-navigator__resize-handle {
+    bottom: calc(0px - var(--section-navigator-pane-gap, 12px));
+}
+
+.section-navigator-pane > :has(+ *) .section-navigator__resize-handle::before,
+.section-navigator-pane > :has(+ *) .section-navigator__resize-handle::after {
+    bottom: 0;
+}
+
+.section-navigator-pane > * + * .section-navigator__resize-handle::before,
+.section-navigator-pane > * + * .section-navigator__resize-handle::after {
+    top: 0;
+}
+
+/* Hovering any segment lights the pane's whole edge, so the joined lines
+   read as one control rather than per-element pieces. */
+.section-navigator-pane:has(.section-navigator__resize-handle:hover) .section-navigator__resize-handle::before,
+.section-navigator-pane:has(.section-navigator__resize-handle:hover) .section-navigator__resize-handle::after {
+    background: var(--section-navigator-line, #6b9cff);
+    opacity: 1;
+}
+
 body.section-navigator-resizing {
     cursor: col-resize;
     user-select: none;
@@ -399,6 +425,7 @@ body.section-navigator-resizing {
    flex-shrinks with internal scrolling so content below it stays visible.
    Collapsing the navigator root therefore reveals what sits under it. */
 .section-navigator-pane {
+    --section-navigator-pane-gap: 12px;
     grid-column: 1;
     grid-row: 2;
     justify-self: end;
@@ -406,7 +433,7 @@ body.section-navigator-resizing {
     top: calc(var(--app-header-height, 92px) + var(--section-navigator-sticky-gap, 16px));
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--section-navigator-pane-gap);
     /* The pane is the ONE scroll container for navigator + boxes: the
        scrollbar only exists when the stack actually overflows the viewport
        budget. The extra gap-wide padding (pulled back by the negative
