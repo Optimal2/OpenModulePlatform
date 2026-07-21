@@ -62,3 +62,6 @@ coverage/
 !/installer/README.md
 !/installer/hosts/
 !/installer/hosts/**
+
+# Claude Code local tool config — never tracked, must not block dep maintenance
+.claude/
