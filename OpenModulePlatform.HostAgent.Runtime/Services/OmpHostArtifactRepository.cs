@@ -2770,7 +2770,8 @@ BEGIN
         CAST(NULL AS nvarchar(400)) AS RelativePath,
         CAST(NULL AS nvarchar(max)) AS FileContent,
         CAST(NULL AS int) AS SourcePriority,
-        CAST(NULL AS datetime2(3)) AS SourceUpdatedUtc;
+        CAST(NULL AS datetime2(3)) AS SourceUpdatedUtc,
+        CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion;
     RETURN;
 END;
 
@@ -2798,7 +2799,8 @@ BEGIN
            RelativePath,
            FileContent,
            CAST(0 AS int) AS SourcePriority,
-           UpdatedUtc AS SourceUpdatedUtc
+           UpdatedUtc AS SourceUpdatedUtc,
+           CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion
     FROM omp.ArtifactConfigurationFiles
     WHERE ArtifactId = @artifactId
       AND IsEnabled = 1
@@ -2811,7 +2813,8 @@ SELECT ArtifactConfigurationFileId,
        RelativePath,
        FileContent,
        CAST(0 AS int) AS SourcePriority,
-       UpdatedUtc AS SourceUpdatedUtc
+       UpdatedUtc AS SourceUpdatedUtc,
+       CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion
 FROM omp.ArtifactConfigurationFiles
 WHERE ArtifactId = @artifactId
   AND IsEnabled = 1
@@ -2823,7 +2826,8 @@ SELECT overlayFile.ConfigOverlayConfigurationFileId AS ArtifactConfigurationFile
        overlayFile.RelativePath,
        overlayFile.FileContent,
        CAST(1 AS int) AS SourcePriority,
-       overlay.UpdatedUtc AS SourceUpdatedUtc
+       overlay.UpdatedUtc AS SourceUpdatedUtc,
+       overlay.OverlayVersion AS SourceOverlayVersion
 FROM omp.ConfigOverlayDocuments overlay
 INNER JOIN omp.ConfigOverlayConfigurationFiles overlayFile
     ON overlayFile.ConfigOverlayDocumentId = overlay.ConfigOverlayDocumentId
@@ -2837,7 +2841,7 @@ WHERE overlay.IsEnabled = 1
   AND (overlay.ArtifactVersion IS NULL OR overlay.ArtifactVersion = @Version)
 ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;";
 
-        var rows = new Dictionary<string, ArtifactConfigurationFileDescriptor>(StringComparer.OrdinalIgnoreCase);
+        var rows = new Dictionary<string, ResolvedConfigurationFile>(StringComparer.OrdinalIgnoreCase);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
@@ -2847,20 +2851,65 @@ ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFi
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            var descriptor = new ArtifactConfigurationFileDescriptor
+            var candidate = new ResolvedConfigurationFile(
+                new ArtifactConfigurationFileDescriptor
+                {
+                    ArtifactConfigurationFileId = rdr.GetInt32(0),
+                    ArtifactId = rdr.GetInt32(1),
+                    RelativePath = rdr.GetString(2),
+                    FileContent = rdr.GetString(3)
+                },
+                rdr.GetInt32(4),
+                rdr.GetDateTime(5),
+                rdr.IsDBNull(6) ? null : rdr.GetString(6));
+
+            if (!rows.TryGetValue(candidate.Descriptor.RelativePath, out var existing)
+                || ConfigurationFileCandidateWins(candidate, existing))
             {
-                ArtifactConfigurationFileId = rdr.GetInt32(0),
-                ArtifactId = rdr.GetInt32(1),
-                RelativePath = rdr.GetString(2),
-                FileContent = rdr.GetString(3)
-            };
-            rows[descriptor.RelativePath] = descriptor;
+                rows[candidate.Descriptor.RelativePath] = candidate;
+            }
         }
 
         return rows.Values
+            .Select(static item => item.Descriptor)
             .OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    /// <summary>
+    /// Deterministic winner selection when several rows supply the same relative path:
+    /// source priority first (overlays beat artifact defaults), then OverlayVersion
+    /// (highest version wins, compared with <see cref="ArtifactVersionComparer"/>),
+    /// then UpdatedUtc, and finally the row id so the outcome never depends on read order.
+    /// </summary>
+    private static bool ConfigurationFileCandidateWins(
+        ResolvedConfigurationFile candidate,
+        ResolvedConfigurationFile existing)
+    {
+        if (candidate.SourcePriority != existing.SourcePriority)
+        {
+            return candidate.SourcePriority > existing.SourcePriority;
+        }
+
+        var versionCompare = ArtifactVersionComparer.Compare(candidate.OverlayVersion, existing.OverlayVersion);
+        if (versionCompare != 0)
+        {
+            return versionCompare > 0;
+        }
+
+        if (candidate.SourceUpdatedUtc != existing.SourceUpdatedUtc)
+        {
+            return candidate.SourceUpdatedUtc > existing.SourceUpdatedUtc;
+        }
+
+        return candidate.Descriptor.ArtifactConfigurationFileId > existing.Descriptor.ArtifactConfigurationFileId;
+    }
+
+    private sealed record ResolvedConfigurationFile(
+        ArtifactConfigurationFileDescriptor Descriptor,
+        int SourcePriority,
+        DateTime SourceUpdatedUtc,
+        string? OverlayVersion);
 
     public async Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
         int artifactId,
