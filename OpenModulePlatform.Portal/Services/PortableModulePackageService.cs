@@ -46,17 +46,20 @@ public sealed class PortableModulePackageService
     private readonly ArtifactUploadOptions _options;
     private readonly PortalDashboardWidgetPackageService _widgets;
     private readonly PortalWidgetRuntimeDataPackageService _widgetRuntimeData;
+    private readonly ILogger<PortableModulePackageService> _logger;
 
     public PortableModulePackageService(
         OmpAdminRepository repo,
         IOptions<ArtifactUploadOptions> options,
         PortalDashboardWidgetPackageService widgets,
-        PortalWidgetRuntimeDataPackageService widgetRuntimeData)
+        PortalWidgetRuntimeDataPackageService widgetRuntimeData,
+        ILogger<PortableModulePackageService> logger)
     {
         _repo = repo;
         _options = options.Value;
         _widgets = widgets;
         _widgetRuntimeData = widgetRuntimeData;
+        _logger = logger;
     }
 
     public IReadOnlyList<AvailablePortableModulePackage> GetAvailablePackages()
@@ -546,6 +549,16 @@ public sealed class PortableModulePackageService
                     item.Path,
                     "Skipped",
                     "The item kind is not supported."));
+            }
+
+            foreach (var skipped in results.Where(static item => item.Status == "Skipped"))
+            {
+                _logger.LogWarning(
+                    "Universal module package item import skipped. Kind={Kind}, Path={Path}, Status={Status}, Message={Message}",
+                    skipped.Kind,
+                    skipped.Path,
+                    skipped.Status,
+                    skipped.Message);
             }
 
             return new UniversalPackageImportResult(
