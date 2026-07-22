@@ -107,9 +107,11 @@
 
     OpenDocViewer = @{
         DisplayName = 'OpenDocViewer'
-        # Leave empty to read OpenDocViewer\package.json during packaging or
-        # manifest.json during package installation. Set explicitly only when a
-        # prebuilt ODV payload should be registered with a known external version.
+        # Leave empty to read the canonical opendocviewer-web component version
+        # from OpenDocViewer\omp-components.json during packaging. Set explicitly
+        # only as a fallback when that manifest is unavailable (for example when
+        # registering a prebuilt ODV payload with a known external version); a
+        # mismatch with the component manifest version triggers a warning.
         Version = ''
         # Legacy optional deployment-owned odv.site.config.js source file for
         # artifact packages that still carry configuration files. New universal

@@ -738,24 +738,67 @@ function New-OpenDocViewerArtifactPackage {
     }
 }
 
-function Get-NodePackageVersion {
+function Get-OpenDocViewerWebComponent {
     param(
-        [Parameter(Mandatory = $true)][string]$PackageRoot,
-        [Parameter(Mandatory = $true)][string]$DisplayName
+        [Parameter(Mandatory = $true)][string]$OpenDocViewerRoot
     )
 
-    $packageJsonPath = Join-Path $PackageRoot 'package.json'
-    if (-not (Test-Path -LiteralPath $packageJsonPath -PathType Leaf)) {
-        throw "$DisplayName package.json was not found in: $PackageRoot"
+    # The canonical OpenDocViewer artifact version source is the
+    # opendocviewer-web component version in the OpenDocViewer repository's
+    # omp-components.json. ODV artifact identity is component manifest version
+    # plus SHA-256 content hash, so a zip named from package.json (for example
+    # 2.6.9) creates an identity that matches no component version.
+    $manifestPath = Join-Path $OpenDocViewerRoot 'omp-components.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        return $null
     }
 
-    $packageJson = Get-Content -LiteralPath $packageJsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $versionProperty = $packageJson.PSObject.Properties['version']
-    if ($null -eq $versionProperty -or [string]::IsNullOrWhiteSpace([string]$versionProperty.Value)) {
-        throw "$DisplayName package.json does not contain a version."
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($component in @($manifest.components)) {
+        if ($null -eq $component) {
+            continue
+        }
+
+        $componentKey = Get-ManifestPropertyValue -Object $component -Name 'componentKey'
+        if ([string]::Equals($componentKey, 'opendocviewer-web', [StringComparison]::OrdinalIgnoreCase)) {
+            return $component
+        }
     }
 
-    return ([string]$versionProperty.Value).Trim()
+    return $null
+}
+
+function Resolve-OpenDocViewerArtifactVersion {
+    param(
+        [object]$Component,
+        [string]$ConfiguredVersion = '',
+        [Parameter(Mandatory = $true)][string]$OpenDocViewerRoot
+    )
+
+    $manifestPath = Join-Path $OpenDocViewerRoot 'omp-components.json'
+    $manifestVersion = ''
+    if ($null -ne $Component) {
+        $manifestVersion = [string](Get-ManifestPropertyValue -Object $Component -Name 'version')
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($manifestVersion)) {
+        $version = $manifestVersion.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($ConfiguredVersion) `
+                -and -not [string]::Equals($ConfiguredVersion.Trim(), $version, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Warning ("Configured OpenDocViewer version '{0}' differs from the canonical opendocviewer-web component version '{1}' in '{2}'. The component manifest version is used." -f $ConfiguredVersion.Trim(), $version, $manifestPath)
+        }
+
+        return $version
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($ConfiguredVersion)) {
+        # Explicit fallback when the OpenDocViewer component manifest is unavailable.
+        $version = $ConfiguredVersion.Trim()
+        Write-Warning "OpenDocViewer component 'opendocviewer-web' was not found in '$manifestPath'; using the configured OpenDocViewer version '$version' as an explicit fallback."
+        return $version
+    }
+
+    throw "OpenDocViewer artifact version could not be determined: no opendocviewer-web component version in '$manifestPath' and no configured OpenDocViewer Version override."
 }
 
 function Get-ProjectNameFromComponent {
@@ -1188,13 +1231,25 @@ foreach ($component in $components) {
 
 $openDocViewerPackageZip = [string](Get-NestedConfigValue -Config $config -Section 'Package' -Name 'OpenDocViewerPackageZip' -DefaultValue '')
 $openDocViewerPackageZip = Resolve-DeploymentPath -Path $openDocViewerPackageZip -BasePath $configDirectory
-$openDocViewerVersion = [string](Get-NestedConfigValue -Config $config -Section 'OpenDocViewer' -Name 'Version' -DefaultValue '')
-if ([string]::IsNullOrWhiteSpace($openDocViewerVersion)) {
-    $openDocViewerVersion = Get-NodePackageVersion -PackageRoot $OpenDocViewerRoot -DisplayName 'OpenDocViewer'
-}
+$openDocViewerComponent = Get-OpenDocViewerWebComponent -OpenDocViewerRoot $OpenDocViewerRoot
+$openDocViewerConfigVersion = [string](Get-NestedConfigValue -Config $config -Section 'OpenDocViewer' -Name 'Version' -DefaultValue '')
+$openDocViewerVersion = Resolve-OpenDocViewerArtifactVersion `
+    -Component $openDocViewerComponent `
+    -ConfiguredVersion $openDocViewerConfigVersion `
+    -OpenDocViewerRoot $OpenDocViewerRoot
 $openDocViewerSiteConfigPath = [string](Get-NestedConfigValue -Config $config -Section 'OpenDocViewer' -Name 'SiteConfigPath' -DefaultValue '')
 $openDocViewerSiteConfigPath = Resolve-DeploymentPath -Path $openDocViewerSiteConfigPath -BasePath $configDirectory
-$openDocViewerArtifactPackageName = "opendocviewer__opendocviewer_webapp__web-app__opendocviewer__$openDocViewerVersion.zip"
+if ($null -ne $openDocViewerComponent -and (Test-ComponentHasArtifactIdentity -Component $openDocViewerComponent)) {
+    $openDocViewerArtifactPackageName = Get-ArtifactPackageFileName `
+        -ModuleKey ([string]$openDocViewerComponent.moduleKey) `
+        -AppKey ([string]$openDocViewerComponent.appKey) `
+        -PackageType ([string]$openDocViewerComponent.packageType) `
+        -TargetName ([string]$openDocViewerComponent.targetName) `
+        -Version $openDocViewerVersion
+}
+else {
+    $openDocViewerArtifactPackageName = "opendocviewer__opendocviewer_webapp__web-app__opendocviewer__$openDocViewerVersion.zip"
+}
 $openDocViewerArtifactPackagePath = Join-Path $payloadRoot $openDocViewerArtifactPackageName
 
 Write-Step 'Publishing OpenDocViewer'
