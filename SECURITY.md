@@ -8,8 +8,8 @@ Security issues should be reported privately before public disclosure.
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x | Yes |
-| < 0.1.0 | No |
+| 0.3.x | Yes |
+| < 0.3.0 | No |
 
 ## Reporting a vulnerability
 
