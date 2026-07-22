@@ -4,6 +4,10 @@ All notable changes to this repository should be documented in this file.
 
 The format is inspired by Keep a Changelog and the project follows semantic versioning at the repository level.
 
+## [Unreleased]
+
+> **Note:** This changelog was not maintained per-release after `0.1.0`. The repository has since advanced to the `0.3.x` release line. The authoritative current version is the `repositoryVersion` in `omp-components.json` (and the central metadata in `Directory.Build.props`) — not the newest entry below. Treat the `0.1.0` section as the initial-baseline record, not the current state; future notable changes should be logged here per the Keep a Changelog format.
+
 ## [0.1.0] - 2026-04-13
 
 ### Added
