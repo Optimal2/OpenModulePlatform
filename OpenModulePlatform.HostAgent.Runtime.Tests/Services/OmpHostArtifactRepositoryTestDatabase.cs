@@ -242,6 +242,63 @@ ORDER BY ConfigOverlayDocumentId;",
             new SqlParameter("@documentId", documentId));
     }
 
+    public void SetOverlayDocumentUpdatedUtc(int documentId, DateTime updatedUtc)
+    {
+        Execute(
+            "UPDATE omp.ConfigOverlayDocuments SET UpdatedUtc = @updatedUtc WHERE ConfigOverlayDocumentId = @documentId;",
+            new SqlParameter("@updatedUtc", updatedUtc),
+            new SqlParameter("@documentId", documentId));
+    }
+
+    public void CreateConfigurationFileResolutionTables()
+    {
+        Execute(@"
+ALTER TABLE omp.Artifacts ADD
+    AppId int NULL,
+    Version nvarchar(50) NULL,
+    TargetName nvarchar(200) NULL;");
+        Execute(@"
+CREATE TABLE omp.Modules
+(
+    ModuleId int NOT NULL PRIMARY KEY,
+    ModuleKey nvarchar(100) NOT NULL
+);");
+        Execute(@"
+CREATE TABLE omp.Apps
+(
+    AppId int NOT NULL PRIMARY KEY,
+    ModuleId int NOT NULL,
+    AppKey nvarchar(100) NOT NULL
+);");
+        Execute(@"
+CREATE TABLE omp.ArtifactConfigurationFiles
+(
+    ArtifactConfigurationFileId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    ArtifactId int NOT NULL,
+    RelativePath nvarchar(500) NOT NULL,
+    FileContent nvarchar(max) NOT NULL,
+    IsEnabled bit NOT NULL DEFAULT(1),
+    UpdatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME()
+);");
+        CreateConfigOverlayTables();
+    }
+
+    public int InsertArtifactWithApp(int artifactId, string packageType, string version, string moduleKey, string appKey)
+    {
+        Execute(
+            "INSERT INTO omp.Modules(ModuleId, ModuleKey) VALUES(1, @moduleKey);",
+            new SqlParameter("@moduleKey", moduleKey));
+        Execute(
+            "INSERT INTO omp.Apps(AppId, ModuleId, AppKey) VALUES(1, 1, @appKey);",
+            new SqlParameter("@appKey", appKey));
+        Execute(
+            "INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled, AppId, Version, TargetName) VALUES(@artifactId, @packageType, 1, 1, @version, NULL);",
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@packageType", packageType),
+            new SqlParameter("@version", version));
+        return artifactId;
+    }
+
     public void CreateMaintenanceFindingsTable()
     {
         Execute(@"
