@@ -33,6 +33,7 @@ function Get-ScriptDirectory {
 }
 
 function ConvertFrom-JsonDocument {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '', Justification = 'The ConvertFrom-Json -Depth call is guarded at runtime by checking Get-Command for the Depth parameter; on Windows PowerShell 5.1 the fallback branch without -Depth runs.')]
     param(
         [Parameter(Mandatory = $true)][string]$Json,
         [Parameter(Mandatory = $true)][int]$Depth

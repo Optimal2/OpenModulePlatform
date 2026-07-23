@@ -18,6 +18,16 @@ Thank you for contributing to OpenModulePlatform.
 - prefer small, reviewable changes with explicit intent
 - avoid broad refactors unless they clearly improve correctness, clarity, or maintainability
 
+## Test gates and script analysis
+
+- Changing the `dotnet test --filter` in `.github/workflows/ci.yml`, or
+  otherwise excluding or skipping tests from a gate, requires a same-commit
+  update of [docs/TEST_DEBT.md](docs/TEST_DEBT.md).
+- Run `scripts/omp/run-script-analyzer.ps1` before committing PowerShell
+  changes. It enforces security rules and Windows PowerShell 5.1
+  compatibility over every committed `.ps1`/`.psm1`/`.psd1` file and also
+  runs as a CI gate.
+
 ## Security
 
 Do not open a public issue for a suspected security vulnerability.

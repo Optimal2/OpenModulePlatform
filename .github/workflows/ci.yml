@@ -81,6 +81,10 @@ jobs:
         shell: pwsh
         run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit '${{ steps.base.outputs.sha }}'
 
+      - name: Analyze PowerShell scripts (security + PS5.1 compat)
+        shell: pwsh
+        run: .\scripts\omp\run-script-analyzer.ps1
+
       - name: Restore solution
         run: dotnet restore OpenModulePlatform.slnx
 
@@ -106,4 +110,6 @@ jobs:
           # (sql/2-initialize refuses to run until the bootstrap-admin placeholder
           # is replaced) and are environment-fragile on LocalDB, so they are
           # excluded here and remain runnable locally against a provisioned DB.
+          # Exclusions are tracked in docs/TEST_DEBT.md; keep that register in
+          # sync in the same commit when this filter changes.
           dotnet test OpenModulePlatform.slnx --configuration Release --no-build --filter "FullyQualifiedName!~Portal.Tests.Integration&FullyQualifiedName!~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests"

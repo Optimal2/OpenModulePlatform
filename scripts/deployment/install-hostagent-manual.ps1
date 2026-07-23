@@ -16,6 +16,7 @@ automatic upgrades are re-enabled.
 Run from an elevated PowerShell session on the target host.
 #>
 [CmdletBinding(SupportsShouldProcess)]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialStoreSourcePath', Justification = 'File-system path to a credential-store file, not a secret value.')]
 param(
     [Parameter(Mandatory = $true)]
     [string]$SourcePath,
@@ -390,6 +391,7 @@ function Resolve-ConfiguredCredentialStorePath {
 }
 
 function Update-HostAgentSettings {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'ExplicitCredentialStorePath', Justification = 'File-system path to a credential-store file, not a secret value.')]
     param(
         [Parameter(Mandatory = $true)][string]$SourceSettingsPath,
         [Parameter(Mandatory = $true)][string]$TargetSettingsPath,
