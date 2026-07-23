@@ -11,6 +11,8 @@ Run from an elevated PowerShell session on each HostAgent host, then restart the
 active HostAgent service so the new settings are loaded.
 #>
 [CmdletBinding(SupportsShouldProcess)]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialStorePath', Justification = 'File-system path to a credential-store file, not a secret value.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialKey', Justification = 'Lookup key inside the credential store, not a secret value.')]
 param(
     [Parameter(Mandatory = $true)]
     [string]$HostAgentInstallPath,
