@@ -5772,6 +5772,13 @@ ORDER BY ar.ArtifactId DESC;
 
     internal static UniversalPackageBuildResult CreateUniversalPackageZip(UniversalPackageBuildRequest request)
     {
+        // Validate artifact payloads before touching the output path so a failed
+        // export never leaves a truncated package behind.
+        foreach (var item in request.Items)
+        {
+            AssertUniversalPackageItemHasNoRuntimeConfiguration(item);
+        }
+
         var outputPath = Path.GetFullPath(request.OutputPath);
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         if (File.Exists(outputPath))
@@ -5794,7 +5801,6 @@ ORDER BY ar.ArtifactId DESC;
                 throw new InvalidOperationException($"Duplicate universal package item path '{item.PackagePath}'.");
             }
 
-            AssertUniversalPackageItemHasNoRuntimeConfiguration(item);
             archive.CreateEntryFromFile(
                 item.SourcePath,
                 item.PackagePath,
