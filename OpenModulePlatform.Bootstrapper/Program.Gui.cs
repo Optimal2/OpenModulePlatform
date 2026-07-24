@@ -5394,7 +5394,7 @@ ORDER BY ar.ArtifactId DESC;
             {
                 AutoSize = true,
                 MaximumSize = new Size(880, 0),
-                Text = "Create a universal package zip from the installer's object archive. The zip uses the same folders as the local archive: module-definitions, artifacts, host-configs, config-overlays, widgets, and widget-data."
+                Text = "Create a universal package zip from the installer's object archive. The zip uses the same folders as the local archive: module-definitions, artifacts, host-configs, config-overlays, widgets, and widget-data. Packages without a target host are global and host-agnostic: they never include host-configs or config-overlays."
             }, 0, 0);
 
             var identityGrid = new TableLayoutPanel
@@ -5757,20 +5757,28 @@ ORDER BY ar.ArtifactId DESC;
                 "artifacts",
                 "artifact-package",
                 "*.zip");
-            AddUniversalPackageCandidates(
-                candidates,
-                ResolvePackageHostConfigurationsRoot(payloadRoot),
-                "host-configs",
-                "host-config",
-                "*.*",
-                IsJsonOrZipFile);
-            AddUniversalPackageCandidates(
-                candidates,
-                ResolvePackageConfigOverlaysRoot(payloadRoot),
-                "config-overlays",
-                "config-overlay",
-                "*.*",
-                IsJsonOrZipFile);
+            if (!string.IsNullOrWhiteSpace(hostChoice?.HostKey))
+            {
+                // Host configurations and config overlays always carry a hostKey
+                // and are per-host by definition. A package without a target host
+                // is global and must stay host-agnostic, so global host-configs
+                // and config-overlays are only offered for host-targeted packages.
+                AddUniversalPackageCandidates(
+                    candidates,
+                    ResolvePackageHostConfigurationsRoot(payloadRoot),
+                    "host-configs",
+                    "host-config",
+                    "*.*",
+                    IsJsonOrZipFile);
+                AddUniversalPackageCandidates(
+                    candidates,
+                    ResolvePackageConfigOverlaysRoot(payloadRoot),
+                    "config-overlays",
+                    "config-overlay",
+                    "*.*",
+                    IsJsonOrZipFile);
+            }
+
             AddUniversalPackageCandidates(
                 candidates,
                 ResolvePackageWidgetsRoot(payloadRoot),
