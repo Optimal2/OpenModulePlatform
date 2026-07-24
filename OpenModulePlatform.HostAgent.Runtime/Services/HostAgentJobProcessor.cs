@@ -1228,6 +1228,33 @@ public sealed class HostAgentJobProcessor
         var hostAgentInstallRoot = Path.GetFullPath(ResolveHostAgentInstallRoot(settings))
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+        // Directories that belong to the HostAgent itself must never be flagged as orphan
+        // service-app directories: the active process directory, every HostAgent install
+        // directory below the install root (these are the HostAgentLeftover finder's domain),
+        // and the credential-store protected directories. In the default layout
+        // ServicesRoot == InstallRoot, the running HostAgent-<version> directory sits
+        // directly below ServicesRoot and would otherwise be flagged.
+        var hostAgentProtectedDirectories = new HashSet<string>(GetPathComparer())
+        {
+            Path.GetFullPath(AppContext.BaseDirectory)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        };
+        if (Directory.Exists(hostAgentInstallRoot))
+        {
+            foreach (var installDirectory in EnumerateHostAgentInstallDirectories(hostAgentInstallRoot))
+            {
+                hostAgentProtectedDirectories.Add(
+                    Path.GetFullPath(installDirectory)
+                        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            }
+        }
+        foreach (var protectedDirectory in GetCredentialStoreProtectedDirectories(settings))
+        {
+            hostAgentProtectedDirectories.Add(
+                Path.GetFullPath(protectedDirectory)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        }
+
         var expectedTargetPaths = new HashSet<string>(GetPathComparer());
         var expectedServiceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -1262,7 +1289,8 @@ public sealed class HostAgentJobProcessor
             var fullDirectory = Path.GetFullPath(directory)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-            if (string.Equals(fullDirectory, hostAgentInstallRoot, GetPathComparison()))
+            if (string.Equals(fullDirectory, hostAgentInstallRoot, GetPathComparison())
+                || hostAgentProtectedDirectories.Contains(fullDirectory))
             {
                 continue;
             }
