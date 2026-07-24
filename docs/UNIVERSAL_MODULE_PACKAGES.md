@@ -474,3 +474,22 @@ Runtime configuration files do not belong inside artifact payload hashes. Put
 host-specific application settings and similar files in config overlay objects or
 in the artifact package `configuration-files` section so HostAgent can materialize
 them separately from the binary artifact content.
+
+The exact set of runtime configuration file names is defined canonically by
+`RuntimeConfigurationFiles.IsRuntimeConfigurationFileName` in
+`OpenModulePlatform.Artifacts` (currently `appsettings.json`,
+`appsettings.*.json`, and `odv.site.config.js`). The rule is enforced twice:
+
+- At import time the HostAgent/Portal validators reject any artifact zip whose
+  payload contains such a file.
+- At build time the packaging scripts
+  (`scripts/omp/runtime-configuration-files.ps1`, dot-sourced by
+  `build-repository-objects.ps1`, `export-universal-package.ps1`,
+  `export-universal-object-root.ps1`, and
+  `scripts/deployment/new-omp-artifact-package.ps1`) strip these files from
+  freshly built payload folders and fail the build when any assembled or
+  reused artifact zip still contains one — including inside the nested
+  `payload/artifact.zip`. A reused pre-built artifact is validated before it
+  is bundled, so a stale artifact that predates the strip fails loudly instead
+  of being shipped. Run `scripts/omp/test-runtime-configuration-guard.ps1` to
+  verify the build-time mirror stays in parity with the canonical C# list.

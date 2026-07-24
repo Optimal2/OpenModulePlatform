@@ -35,6 +35,26 @@ function Write-TextFile {
     [System.IO.File]::WriteAllText($Path, $Text, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Write-FakeArtifactZip {
+    # export-universal-object-root.ps1 validates artifact zips with the
+    # runtime-configuration guard, so test artifacts must be real zip files.
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$PayloadText
+    )
+
+    $staging = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-fake-artifact-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $staging -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $staging 'content.txt'), $PayloadText, [System.Text.UTF8Encoding]::new($false))
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Path) -Force | Out-Null
+        Compress-Archive -Path (Join-Path $staging 'content.txt') -DestinationPath $Path -Force
+    }
+    finally {
+        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Read-UniversalPackageItemPaths {
     param([Parameter(Mandatory = $true)][string]$PackagePath)
 
@@ -91,10 +111,10 @@ try {
     $objectRoot = Join-Path $testRoot 'object-root'
 
     # Artifact duplicates: two identities x two versions (old + latest).
-    Write-TextFile -Path (Join-Path $objectRoot 'artifacts\odvgateway__odvgateway__artifact__omp-webapp__0.1.32.zip') -Text 'old artifact payload'
-    Write-TextFile -Path (Join-Path $objectRoot 'artifacts\odvgateway__odvgateway__artifact__omp-webapp__0.1.34.zip') -Text 'latest artifact payload'
-    Write-TextFile -Path (Join-Path $objectRoot 'artifacts\omp-hostagent__omp-hostagent__artifact__omp-service__0.3.153.zip') -Text 'old artifact payload'
-    Write-TextFile -Path (Join-Path $objectRoot 'artifacts\omp-hostagent__omp-hostagent__artifact__omp-service__0.3.160.zip') -Text 'latest artifact payload'
+    Write-FakeArtifactZip -Path (Join-Path $objectRoot 'artifacts\odvgateway__odvgateway__artifact__omp-webapp__0.1.32.zip') -PayloadText 'old artifact payload'
+    Write-FakeArtifactZip -Path (Join-Path $objectRoot 'artifacts\odvgateway__odvgateway__artifact__omp-webapp__0.1.34.zip') -PayloadText 'latest artifact payload'
+    Write-FakeArtifactZip -Path (Join-Path $objectRoot 'artifacts\omp-hostagent__omp-hostagent__artifact__omp-service__0.3.153.zip') -PayloadText 'old artifact payload'
+    Write-FakeArtifactZip -Path (Join-Path $objectRoot 'artifacts\omp-hostagent__omp-hostagent__artifact__omp-service__0.3.160.zip') -PayloadText 'latest artifact payload'
 
     # Widget duplicates: one identity x two versions, plus a second widget.
     Write-TextFile -Path (Join-Path $objectRoot 'widgets\my-widget__1.0.0.json') -Text '{ "packageVersion": "1.0.0" }'

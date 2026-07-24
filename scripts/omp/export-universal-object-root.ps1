@@ -60,6 +60,8 @@ function Resolve-FullPath {
     return [System.IO.Path]::GetFullPath($Path)
 }
 
+. (Join-Path $PSScriptRoot 'runtime-configuration-files.ps1')
+
 function Get-RelativePath {
     param(
         [Parameter(Mandatory = $true)][string]$BasePath,
@@ -441,6 +443,16 @@ $files = foreach ($folder in $folderKinds) {
 
 if ($LatestOnly) {
     $files = Select-LatestUniversalPackageObjects -Files @($files)
+}
+
+# Fail-fast guard (same rule as the import-time validator): no assembled
+# artifact payload may contain runtime configuration files.
+foreach ($file in @($files)) {
+    if ($file.Kind.Equals('artifact-package', [StringComparison]::OrdinalIgnoreCase)) {
+        Assert-OmpArtifactPackageHasNoRuntimeConfiguration `
+            -ZipPath $file.FullName `
+            -Description "Universal package object '$($file.PackagePath)'"
+    }
 }
 
 $items = [System.Collections.Generic.List[object]]::new()
