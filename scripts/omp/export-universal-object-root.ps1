@@ -22,11 +22,22 @@ only the highest version per versioned object identity (artifact packages and
 dashboard widgets), matching the installer GUI export when "include historical
 artifacts" is unchecked. All other object kinds are always kept.
 
+Host-scoping rule: without -TargetHostProfile the package is GLOBAL and must be
+host-agnostic, so host-configs/ and config-overlays/ are always excluded (every
+host configuration and config overlay has a hostKey and is per-host by
+definition). Pass -TargetHostProfile to build a host-specific package from an
+object root that holds that host's objects; then every folder is included.
+
 .PARAMETER LatestOnly
 Keep only the latest version per artifact identity
 (module__app__type__target) and per dashboard widget identity. Versions are
 compared with the same numeric major.minor.patch semantics as the installer
 GUI. Without this switch the output is unchanged: all versions are included.
+
+.PARAMETER TargetHostProfile
+Optional host profile key recorded in the package manifest. When omitted the
+package is global and host-configs/ + config-overlays/ are excluded so a global
+package can never carry host-specific configuration.
 #>
 [CmdletBinding()]
 param(
@@ -413,14 +424,24 @@ if (Test-Path -LiteralPath $outputPathFull -PathType Leaf) {
     Remove-Item -LiteralPath $outputPathFull -Force
 }
 
+$isGlobalPackage = [string]::IsNullOrWhiteSpace($TargetHostProfile)
+
 $folderKinds = @(
     @{ Folder = 'module-definitions'; Kind = 'module-definition'; Patterns = @('*.json') },
     @{ Folder = 'artifacts'; Kind = 'artifact-package'; Patterns = @('*.zip') },
-    @{ Folder = 'host-configs'; Kind = 'host-config'; Patterns = @('*.json', '*.zip') },
-    @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Patterns = @('*.json', '*.zip') },
+    @{ Folder = 'host-configs'; Kind = 'host-config'; Patterns = @('*.json', '*.zip'); HostSpecific = $true },
+    @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Patterns = @('*.json', '*.zip'); HostSpecific = $true },
     @{ Folder = 'widgets'; Kind = 'dashboard-widget'; Patterns = @('*.json') },
     @{ Folder = 'widget-data'; Kind = 'widget-data'; Patterns = @('*.zip') }
 )
+
+if ($isGlobalPackage) {
+    # A global package must be host-agnostic: host configurations and config
+    # overlays always carry a hostKey and are per-host by definition, so they
+    # must never leave in a package without a target host profile.
+    $folderKinds = @($folderKinds | Where-Object { -not ($_.ContainsKey('HostSpecific') -and $_.HostSpecific) })
+    Write-Host 'Global package (no target host profile): host-configs/ and config-overlays/ are excluded.'
+}
 
 $files = foreach ($folder in $folderKinds) {
     $folderPath = Join-Path $objectRootPath $folder.Folder

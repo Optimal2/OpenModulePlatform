@@ -47,7 +47,10 @@ object archive from source repositories. Use `Create universal package` to build
 an `omp-universal-package.json` based zip from selected objects in the archive.
 The package builder can target any available host profile, not only the computer
 currently running the GUI, and can combine global objects with host-specific
-`host-configs`, `config-overlays`, and `widgets`.
+`host-configs`, `config-overlays`, and `widgets`. A package built without a
+target host is global and host-agnostic: it never includes `host-configs` or
+`config-overlays` (those objects always carry a host key and are per-host by
+definition).
 
 Runtime configuration files such as `appsettings*.json` and
 `odv.site.config.js` must stay outside artifact payloads. They are represented

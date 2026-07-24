@@ -9,7 +9,9 @@ with and without -LatestOnly and asserts that:
 
   * with -LatestOnly the old duplicate artifact/widget versions are dropped
     while the latest versions and all other objects remain;
-  * without -LatestOnly every version is kept (unchanged default behavior).
+  * without -LatestOnly every version is kept (unchanged default behavior);
+  * the default (global) export always excludes host-configs/ and
+    config-overlays/, while a -TargetHostProfile export keeps them.
 
 Exits with code 0 on success and throws on the first failed assertion.
 Windows PowerShell 5.1 compatible.
@@ -127,16 +129,20 @@ try {
     Write-TextFile -Path (Join-Path $objectRoot 'config-overlays\overlay1.json') -Text '{ "overlayVersion": "1.0.0" }'
     Write-TextFile -Path (Join-Path $objectRoot 'widget-data\data1.zip') -Text 'widget data payload'
 
-    $nonVersionedPaths = @(
+    # Global exports (no -TargetHostProfile) must be host-agnostic: host-configs
+    # and config-overlays are per-host by definition and never included.
+    $globalNonVersionedPaths = @(
         'module-definitions/omp_core.module-definition.json',
-        'host-configs/host1.json',
-        'config-overlays/overlay1.json',
         'widget-data/data1.zip'
+    )
+    $hostSpecificPaths = @(
+        'host-configs/host1.json',
+        'config-overlays/overlay1.json'
     )
 
     $allOutput = Join-Path $testRoot 'all.zip'
     & $exportScript -ObjectRoot $objectRoot -OutputPath $allOutput | Out-Null
-    Assert-ItemPaths -Label 'default export keeps all versions' -Actual (Read-UniversalPackageItemPaths -PackagePath $allOutput) -Expected (@(
+    Assert-ItemPaths -Label 'default (global) export keeps all versions and excludes host objects' -Actual (Read-UniversalPackageItemPaths -PackagePath $allOutput) -Expected (@(
         'artifacts/odvgateway__odvgateway__artifact__omp-webapp__0.1.32.zip',
         'artifacts/odvgateway__odvgateway__artifact__omp-webapp__0.1.34.zip',
         'artifacts/omp-hostagent__omp-hostagent__artifact__omp-service__0.3.153.zip',
@@ -144,16 +150,25 @@ try {
         'widgets/my-widget__1.0.0.json',
         'widgets/my-widget__1.2.0.json',
         'widgets/other-widget__0.5.0.json'
-    ) + $nonVersionedPaths)
+    ) + $globalNonVersionedPaths)
 
     $latestOutput = Join-Path $testRoot 'latest.zip'
     & $exportScript -ObjectRoot $objectRoot -OutputPath $latestOutput -LatestOnly | Out-Null
-    Assert-ItemPaths -Label '-LatestOnly drops old duplicates' -Actual (Read-UniversalPackageItemPaths -PackagePath $latestOutput) -Expected (@(
+    Assert-ItemPaths -Label '-LatestOnly drops old duplicates and excludes host objects' -Actual (Read-UniversalPackageItemPaths -PackagePath $latestOutput) -Expected (@(
         'artifacts/odvgateway__odvgateway__artifact__omp-webapp__0.1.34.zip',
         'artifacts/omp-hostagent__omp-hostagent__artifact__omp-service__0.3.160.zip',
         'widgets/my-widget__1.2.0.json',
         'widgets/other-widget__0.5.0.json'
-    ) + $nonVersionedPaths)
+    ) + $globalNonVersionedPaths)
+
+    $hostOutput = Join-Path $testRoot 'host.zip'
+    & $exportScript -ObjectRoot $objectRoot -OutputPath $hostOutput -LatestOnly -TargetHostProfile 'host1' | Out-Null
+    Assert-ItemPaths -Label 'host-targeted export keeps host objects' -Actual (Read-UniversalPackageItemPaths -PackagePath $hostOutput) -Expected (@(
+        'artifacts/odvgateway__odvgateway__artifact__omp-webapp__0.1.34.zip',
+        'artifacts/omp-hostagent__omp-hostagent__artifact__omp-service__0.3.160.zip',
+        'widgets/my-widget__1.2.0.json',
+        'widgets/other-widget__0.5.0.json'
+    ) + $globalNonVersionedPaths + $hostSpecificPaths)
 
     Write-Host 'All -LatestOnly smoke assertions passed.'
 }

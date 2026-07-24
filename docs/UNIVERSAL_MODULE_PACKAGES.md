@@ -55,6 +55,21 @@ profile key. Importers treat it as operator-facing metadata; the portable
 objects themselves still carry their own identities. Host-specific objects should
 also include their host key inside the object document.
 
+**Host-scoping rule (enforced by the exporters):** a global package (no target
+host profile) must be host-agnostic. It contains module definitions, artifacts,
+global dashboard widgets, and widget data — but never `host-configs/` or
+`config-overlays/` objects, because every host configuration and config overlay
+carries a host key and is per-host by definition. This guarantees that a global
+package handed to a customer environment cannot modify any specific host's
+configuration on import. Host-specific objects belong in host-targeted packages
+only (built with a target host profile), and then only that host's objects.
+`export-universal-object-root.ps1` and `export-universal-package.ps1` both
+enforce this: in global mode they exclude the host-specific folders, and
+`export-universal-package.ps1` additionally fails the build when explicit
+`-HostConfigurationFile`/`-ConfigOverlayFile` inputs are passed without a
+target host profile. The installer GUI package builder applies the same rule
+when "No target host" is selected.
+
 ## Standard Folders
 
 Use these root folders inside the zip:
@@ -200,7 +215,9 @@ config cannot be read or parsed. Then use
 `Create universal package` to choose:
 
 - the target host profile, or a global-only package
-- global module definitions, artifacts, host configs, overlays, widgets, and widget data
+- global module definitions, artifacts, widgets, and widget data (host configs
+  and config overlays are only offered when a target host is selected, so a
+  global-only package stays host-agnostic)
 - host-specific host configs, overlays, widgets, and widget data for the selected profile
 - the output zip path
 

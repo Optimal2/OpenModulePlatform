@@ -16,9 +16,13 @@ one universal zip containing:
   widgets/
   widget-data/
 
-Run without a host profile to create a global package. Pass -HostProfilePath or
+Run without a host profile to create a global package. A global package is
+host-agnostic: host-configs/ and config-overlays/ are always excluded (every
+host configuration and config overlay has a hostKey and is per-host by
+definition), and passing -HostConfigurationFile/-ConfigOverlayFile without a
+target host profile fails the build. Pass -HostProfilePath or
 -TargetHostProfile with host-specific config/overlay/widget inputs to create a
-host-specific transport package.
+host-specific transport package; then host objects are included as before.
 
 The optional host profile is JSON. Its supported fields are:
 
@@ -533,18 +537,28 @@ function Get-ArchiveRelativePath {
 }
 
 function Get-UniversalPackageFiles {
-    param([Parameter(Mandatory = $true)][string]$ObjectRoot)
+    param(
+        [Parameter(Mandatory = $true)][string]$ObjectRoot,
+        [switch]$IncludeHostSpecificObjects
+    )
 
     $folders = @(
         @{ Folder = 'module-definitions'; Kind = 'module-definition'; Pattern = '*.json' },
         @{ Folder = 'artifacts'; Kind = 'artifact-package'; Pattern = '*.zip' },
-        @{ Folder = 'host-configs'; Kind = 'host-configuration'; Pattern = '*.json' },
-        @{ Folder = 'host-configs'; Kind = 'host-configuration'; Pattern = '*.zip' },
-        @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Pattern = '*.json' },
-        @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Pattern = '*.zip' },
+        @{ Folder = 'host-configs'; Kind = 'host-configuration'; Pattern = '*.json'; HostSpecific = $true },
+        @{ Folder = 'host-configs'; Kind = 'host-configuration'; Pattern = '*.zip'; HostSpecific = $true },
+        @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Pattern = '*.json'; HostSpecific = $true },
+        @{ Folder = 'config-overlays'; Kind = 'config-overlay'; Pattern = '*.zip'; HostSpecific = $true },
         @{ Folder = 'widgets'; Kind = 'dashboard-widget'; Pattern = '*.json' },
         @{ Folder = 'widget-data'; Kind = 'widget-data'; Pattern = '*.zip' }
     )
+
+    if (-not $IncludeHostSpecificObjects) {
+        # A global package must be host-agnostic: host configurations and config
+        # overlays always carry a hostKey and are per-host by definition, so they
+        # must never leave in a package without a target host profile.
+        $folders = @($folders | Where-Object { -not ($_.ContainsKey('HostSpecific') -and $_.HostSpecific) })
+    }
 
     $items = [System.Collections.Generic.List[object]]::new()
     foreach ($folderInfo in $folders) {
@@ -581,6 +595,18 @@ if (-not (Test-Path -LiteralPath $componentManifestPath -PathType Leaf)) {
 $componentManifest = Get-Content -LiteralPath $componentManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $repositoryModuleKeys = Get-RepositoryModuleKeys -Manifest $componentManifest
 $resolvedHostProfilePath = ''
+
+# Host-scoping rule: a package without a target host profile is GLOBAL and must
+# be host-agnostic. Host configurations and config overlays always carry a
+# hostKey and are per-host by definition, so they are only included when the
+# caller explicitly targets a host profile.
+$includeHostSpecificObjects = -not [string]::IsNullOrWhiteSpace($TargetHostProfile) `
+    -or -not [string]::IsNullOrWhiteSpace($HostProfilePath)
+
+if (-not $includeHostSpecificObjects `
+        -and ($HostConfigurationFile.Count -gt 0 -or $ConfigOverlayFile.Count -gt 0)) {
+    throw 'Host configuration files and config overlays are host-specific and cannot be included in a global package. Pass -TargetHostProfile (and optionally -HostProfilePath) to build a host-specific package, or remove -HostConfigurationFile/-ConfigOverlayFile.'
+}
 
 if (-not [string]::IsNullOrWhiteSpace($HostProfilePath)) {
     $resolvedHostProfilePath = Resolve-PathFromBase -Path $HostProfilePath -BasePath $repositoryRoot
@@ -682,7 +708,7 @@ try {
             -Configuration $Configuration
     }
 
-    $files = Get-UniversalPackageFiles -ObjectRoot $objectRoot
+    $files = @(Get-UniversalPackageFiles -ObjectRoot $objectRoot -IncludeHostSpecificObjects:$includeHostSpecificObjects)
 
     # Fail-fast guard (same rule as the import-time validator): no assembled
     # artifact payload may contain runtime configuration files.

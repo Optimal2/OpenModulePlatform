@@ -312,3 +312,11 @@ installer GUI export when "include historical artifacts" is unchecked. Without
 the switch every version is included. That helper is intended for validation
 and developer packaging. Normal repository builds should still use
 `build-universal-package.cmd` or `export-universal-package.ps1`.
+
+Host scoping: without `-TargetHostProfile` both exporters produce a GLOBAL,
+host-agnostic package and always exclude `host-configs/` and `config-overlays/`
+(every host configuration and config overlay carries a host key and is
+per-host by definition). `export-universal-package.ps1` also fails the build
+when `-HostConfigurationFile`/`-ConfigOverlayFile` is passed without a target
+host profile. Pass `-TargetHostProfile` (and optionally `-HostProfilePath`) to
+build a host-specific package that includes that host's objects.
