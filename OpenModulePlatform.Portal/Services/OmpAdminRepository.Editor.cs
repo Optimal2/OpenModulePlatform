@@ -2346,20 +2346,22 @@ BEGIN
     ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
     AND target.AppInstanceKey = source.AppInstanceKey
     WHEN MATCHED THEN
+        -- Operator-owned columns (DesiredState, IsEnabled, IsAllowed) are never
+        -- overwritten by a re-import; RoutePath/InstallPath/InstallationName are
+        -- only filled when the existing row has no value yet (operators may set
+        -- environment-specific deployment values). Descriptive columns still
+        -- follow the module definition seed.
         UPDATE SET InstanceTemplateHostId = source.InstanceTemplateHostId,
                    TargetHostTemplateId = source.TargetHostTemplateId,
                    AppId = source.AppId,
                    DisplayName = source.DisplayName,
                    Description = source.Description,
-                   RoutePath = source.RoutePath,
+                   RoutePath = COALESCE(target.RoutePath, source.RoutePath),
                    PublicUrl = source.PublicUrl,
-                   InstallPath = source.InstallPath,
-                   InstallationName = source.InstallationName,
+                   InstallPath = COALESCE(target.InstallPath, source.InstallPath),
+                   InstallationName = COALESCE(target.InstallationName, source.InstallationName),
                    DesiredArtifactId = COALESCE(source.ArtifactId, target.DesiredArtifactId),
-                   DesiredState = source.DesiredState,
                    SortOrder = source.SortOrder,
-                   IsEnabled = source.IsEnabled,
-                   IsAllowed = source.IsAllowed,
                    UpdatedUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
         INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
