@@ -23,4 +23,5 @@
   <Project Path="OpenModulePlatform.HostAgent.Runtime/OpenModulePlatform.HostAgent.Runtime.csproj" />
   <Project Path="OpenModulePlatform.HostAgent.WindowsService/OpenModulePlatform.HostAgent.WindowsService.csproj" />
   <Project Path="OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.csproj" />
+  <Project Path="OpenModulePlatform.Bootstrapper.Tests/OpenModulePlatform.Bootstrapper.Tests.csproj" />
 </Solution>
