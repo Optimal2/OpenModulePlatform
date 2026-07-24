@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Principal;
@@ -11,6 +12,8 @@ using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+
+[assembly: InternalsVisibleTo("OpenModulePlatform.Bootstrapper.Tests")]
 
 namespace OpenModulePlatform.Bootstrapper;
 

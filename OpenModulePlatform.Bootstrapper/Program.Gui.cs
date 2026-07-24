@@ -2041,69 +2041,6 @@ internal static partial class Program
                         includeGlobal: false,
                         includeHostSpecific: true).Count > 0);
 
-        private static UniversalPackageBuildResult CreateUniversalPackageZip(UniversalPackageBuildRequest request)
-        {
-            var outputPath = Path.GetFullPath(request.OutputPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-            if (File.Exists(outputPath))
-            {
-                File.Delete(outputPath);
-            }
-
-            using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
-            var items = new JsonArray();
-            var usedPackagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in request.Items.OrderBy(static item => item.PackagePath, StringComparer.OrdinalIgnoreCase))
-            {
-                if (!File.Exists(item.SourcePath))
-                {
-                    throw new FileNotFoundException("A selected universal package item no longer exists.", item.SourcePath);
-                }
-
-                if (!usedPackagePaths.Add(item.PackagePath))
-                {
-                    throw new InvalidOperationException($"Duplicate universal package item path '{item.PackagePath}'.");
-                }
-
-                archive.CreateEntryFromFile(
-                    item.SourcePath,
-                    item.PackagePath,
-                    CompressionLevel.Optimal);
-                var manifestItem = new JsonObject
-                {
-                    ["kind"] = item.Kind,
-                    ["path"] = item.PackagePath
-                };
-                if (!string.IsNullOrWhiteSpace(item.Version))
-                {
-                    manifestItem["version"] = item.Version;
-                }
-
-                items.Add(manifestItem);
-            }
-
-            var manifest = new JsonObject
-            {
-                ["formatVersion"] = 1,
-                ["objectType"] = "universal-module-package",
-                ["packageKey"] = request.PackageKey,
-                ["packageVersion"] = request.PackageVersion,
-                ["displayName"] = request.DisplayName,
-                ["description"] = request.Description,
-                ["targetHostProfile"] = request.HostKey,
-                ["createdUtc"] = DateTimeOffset.UtcNow.ToString("O"),
-                ["items"] = items
-            };
-
-            var manifestEntry = archive.CreateEntry(
-                UniversalModulePackageReader.ManifestEntryName,
-                CompressionLevel.Optimal);
-            using var manifestStream = manifestEntry.Open();
-            using var manifestWriter = new StreamWriter(manifestStream, new UTF8Encoding(false));
-            manifestWriter.Write(manifest.ToJsonString(JsonOptions));
-            return new UniversalPackageBuildResult(outputPath, request.Items.Count);
-        }
-
         private UniversalPackageArchiveImportResult ImportUniversalPackageIntoArchiveCore(string packagePath)
         {
             var fullPackagePath = Path.GetFullPath(packagePath);
@@ -5203,7 +5140,7 @@ ORDER BY ar.ArtifactId DESC;
         }
     }
 
-    private sealed record UniversalPackageBuildRequest(
+    internal sealed record UniversalPackageBuildRequest(
         string PackageKey,
         string PackageVersion,
         string DisplayName,
@@ -5213,11 +5150,11 @@ ORDER BY ar.ArtifactId DESC;
         string OutputPath,
         IReadOnlyList<UniversalPackageCandidate> Items);
 
-    private sealed record UniversalPackageBuildResult(
+    internal sealed record UniversalPackageBuildResult(
         string PackagePath,
         int ItemCount);
 
-    private sealed record UniversalPackageCandidate(
+    internal sealed record UniversalPackageCandidate(
         string Kind,
         string SourcePath,
         string PackagePath,
@@ -5833,7 +5770,141 @@ ORDER BY ar.ArtifactId DESC;
             .ToArray();
     }
 
-    private static IReadOnlyList<UniversalPackageCandidate> FilterLatestUniversalPackageVersionedObjects(
+    internal static UniversalPackageBuildResult CreateUniversalPackageZip(UniversalPackageBuildRequest request)
+    {
+        var outputPath = Path.GetFullPath(request.OutputPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        if (File.Exists(outputPath))
+        {
+            File.Delete(outputPath);
+        }
+
+        using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
+        var items = new JsonArray();
+        var usedPackagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in request.Items.OrderBy(static item => item.PackagePath, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(item.SourcePath))
+            {
+                throw new FileNotFoundException("A selected universal package item no longer exists.", item.SourcePath);
+            }
+
+            if (!usedPackagePaths.Add(item.PackagePath))
+            {
+                throw new InvalidOperationException($"Duplicate universal package item path '{item.PackagePath}'.");
+            }
+
+            AssertUniversalPackageItemHasNoRuntimeConfiguration(item);
+            archive.CreateEntryFromFile(
+                item.SourcePath,
+                item.PackagePath,
+                CompressionLevel.Optimal);
+            var manifestItem = new JsonObject
+            {
+                ["kind"] = item.Kind,
+                ["path"] = item.PackagePath
+            };
+            if (!string.IsNullOrWhiteSpace(item.Version))
+            {
+                manifestItem["version"] = item.Version;
+            }
+
+            items.Add(manifestItem);
+        }
+
+        var manifest = new JsonObject
+        {
+            ["formatVersion"] = 1,
+            ["objectType"] = "universal-module-package",
+            ["packageKey"] = request.PackageKey,
+            ["packageVersion"] = request.PackageVersion,
+            ["displayName"] = request.DisplayName,
+            ["description"] = request.Description,
+            ["targetHostProfile"] = request.HostKey,
+            ["createdUtc"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["items"] = items
+        };
+
+        var manifestEntry = archive.CreateEntry(
+            UniversalModulePackageReader.ManifestEntryName,
+            CompressionLevel.Optimal);
+        using var manifestStream = manifestEntry.Open();
+        using var manifestWriter = new StreamWriter(manifestStream, new UTF8Encoding(false));
+        manifestWriter.Write(manifest.ToJsonString(JsonOptions));
+        return new UniversalPackageBuildResult(outputPath, request.Items.Count);
+    }
+
+    // Fail-fast guard for the GUI export path: an artifact package whose payload
+    // contains a runtime configuration file must fail the export instead of being
+    // shipped silently and rejected later by the import-time validators. Uses the
+    // canonical rule (RuntimeConfigurationFiles.IsRuntimeConfigurationFileName)
+    // directly; mirrors Assert-OmpArtifactPackageHasNoRuntimeConfiguration in
+    // scripts/omp/runtime-configuration-files.ps1.
+    private static void AssertUniversalPackageItemHasNoRuntimeConfiguration(UniversalPackageCandidate item)
+    {
+        if (!TryParseUniversalPackageArtifactIdentity(item, out _))
+        {
+            return;
+        }
+
+        var offenders = FindRuntimeConfigurationEntriesInArtifactPackage(item.SourcePath);
+        if (offenders.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Artifact package '{item.PackagePath}' contains runtime configuration file(s): " +
+                string.Join(", ", offenders) +
+                ". Put runtime configuration in the artifact package configuration-files section instead.");
+        }
+    }
+
+    // Scans the whole artifact zip (covers legacy whole-zip payloads) plus one
+    // level of the nested payload zip used by the current package format
+    // (payload/artifact.zip). Configuration-section entries are stored with an
+    // index prefix (configuration/000-name.ext) and never match the rule.
+    internal static IReadOnlyList<string> FindRuntimeConfigurationEntriesInArtifactPackage(string zipPath)
+    {
+        var offenders = new List<string>();
+        using var archive = ZipFile.OpenRead(zipPath);
+        foreach (var entry in archive.Entries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Name))
+            {
+                continue;
+            }
+
+            if (RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(entry.Name))
+            {
+                offenders.Add(entry.FullName);
+                continue;
+            }
+
+            // Entry names may use backslashes when the zip was created by
+            // Windows PowerShell 5.1 Compress-Archive; normalize before the
+            // payload prefix check.
+            var normalizedFullName = entry.FullName.Replace('\\', '/');
+            if (normalizedFullName.StartsWith("payload/", StringComparison.OrdinalIgnoreCase)
+                && entry.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                using var entryStream = entry.Open();
+                using var memory = new MemoryStream();
+                entryStream.CopyTo(memory);
+                memory.Position = 0;
+                using var nested = new ZipArchive(memory, ZipArchiveMode.Read);
+                foreach (var nestedEntry in nested.Entries)
+                {
+                    if (!string.IsNullOrWhiteSpace(nestedEntry.Name)
+                        && RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(nestedEntry.Name))
+                    {
+                        offenders.Add(entry.FullName + "!" + nestedEntry.FullName);
+                    }
+                }
+            }
+        }
+
+        return offenders;
+    }
+
+    internal static IReadOnlyList<UniversalPackageCandidate> FilterLatestUniversalPackageVersionedObjects(
         IReadOnlyList<UniversalPackageCandidate> candidates)
     {
         var latestByIdentity = new Dictionary<string, (UniversalPackageCandidate Candidate, string Version)>(
