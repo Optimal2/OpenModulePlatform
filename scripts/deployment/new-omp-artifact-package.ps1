@@ -39,6 +39,10 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
+# Shared canonical runtime-configuration rule (mirrors
+# OpenModulePlatform.Artifacts RuntimeConfigurationFiles).
+. (Join-Path $PSScriptRoot '..\omp\runtime-configuration-files.ps1')
+
 $script:TokenPattern = '^[A-Za-z0-9][A-Za-z0-9._+-]*$'
 
 function Test-MetadataToken {
@@ -123,33 +127,6 @@ function Resolve-ConfigurationMapping {
     }
 }
 
-function Test-RuntimeConfigurationFileName {
-    param([string]$FileName)
-
-    if ([string]::IsNullOrWhiteSpace($FileName)) {
-        return $false
-    }
-
-    if ([string]::Equals($FileName, 'appsettings.json', [StringComparison]::OrdinalIgnoreCase)) {
-        return $true
-    }
-
-    if ($FileName.StartsWith('appsettings.', [StringComparison]::OrdinalIgnoreCase) `
-            -and $FileName.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
-        return $true
-    }
-
-    return [string]::Equals($FileName, 'odv.site.config.js', [StringComparison]::OrdinalIgnoreCase)
-}
-
-function Remove-RuntimeConfigurationFilesFromFolder {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    Get-ChildItem -LiteralPath $Path -File -Recurse |
-        Where-Object { Test-RuntimeConfigurationFileName -FileName $_.Name } |
-        Remove-Item -Force
-}
-
 function Assert-ZipPayloadDoesNotContainRuntimeConfiguration {
     param([Parameter(Mandatory = $true)][string]$ZipPath)
 
@@ -157,7 +134,7 @@ function Assert-ZipPayloadDoesNotContainRuntimeConfiguration {
     try {
         foreach ($entry in $archive.Entries) {
             if (-not [string]::IsNullOrWhiteSpace($entry.Name) `
-                    -and (Test-RuntimeConfigurationFileName -FileName $entry.Name)) {
+                    -and (Test-OmpRuntimeConfigurationFileName -FileName $entry.Name)) {
                 throw "Payload zip contains runtime configuration file '$($entry.FullName)'. Put runtime configuration in -ConfigurationFile instead."
             }
         }
@@ -183,7 +160,7 @@ function Compress-PayloadDirectory {
     try {
         New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
         Get-ChildItem -LiteralPath $SourceDirectory -Force | Copy-Item -Destination $stagingRoot -Recurse -Force
-        Remove-RuntimeConfigurationFilesFromFolder -Path $stagingRoot
+        Remove-OmpRuntimeConfigurationFilesFromFolder -Path $stagingRoot
 
         $items = @(Get-ChildItem -LiteralPath $stagingRoot -Force)
         if ($items.Count -eq 0) {
