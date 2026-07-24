@@ -97,6 +97,9 @@ public sealed class UniversalPackageExportTests : IDisposable
             () => Program.CreateUniversalPackageZip(request));
         Assert.Contains("runtime configuration", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("odv.site.config.js", exception.Message, StringComparison.OrdinalIgnoreCase);
+        // The guard runs before the output package is created, so a failed
+        // export must not leave a truncated zip behind.
+        Assert.False(File.Exists(request.OutputPath));
     }
 
     [Fact]
