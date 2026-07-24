@@ -82,6 +82,52 @@ public sealed class OrphanServiceAppFinderTests
     }
 
     [Fact]
+    public void BuildOrphanServiceAppFindings_SkipsLiveHostAgentVersionDirectoryUnderServicesRoot()
+    {
+        // Regression: with the default layout ServicesRoot == InstallRoot, the currently
+        // running HostAgent-<version> install directory sits directly below ServicesRoot.
+        // The orphan sweep must never flag it for deletion.
+        using var root = new TempServicesRoot();
+        Directory.CreateDirectory(Path.Combine(root.Path, "HostAgent-0.3.161"));
+
+        var settings = CreateSettings(root.Path);
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_StillFlagsRealOrphanNextToHostAgentDirectory()
+    {
+        // Positive guard: exempting HostAgent install directories must not silence
+        // legitimate orphan findings in the same services root.
+        using var root = new TempServicesRoot();
+        Directory.CreateDirectory(Path.Combine(root.Path, "HostAgent-0.3.161"));
+        Directory.CreateDirectory(Path.Combine(root.Path, "OrphanApp"));
+
+        var settings = CreateSettings(root.Path);
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal("OrphanServiceApp", finding.Category);
+        Assert.Contains("OrphanApp", finding.TargetIdentifier, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void BuildOrphanServiceAppFindings_MultipleOrphansWithAndWithoutService()
     {
         using var root = new TempServicesRoot();
