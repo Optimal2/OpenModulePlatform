@@ -5891,18 +5891,26 @@ ORDER BY ar.ArtifactId DESC;
             if (normalizedFullName.StartsWith("payload/", StringComparison.OrdinalIgnoreCase)
                 && entry.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                using var entryStream = entry.Open();
-                using var memory = new MemoryStream();
-                entryStream.CopyTo(memory);
-                memory.Position = 0;
-                using var nested = new ZipArchive(memory, ZipArchiveMode.Read);
-                foreach (var nestedEntry in nested.Entries)
+                try
                 {
-                    if (!string.IsNullOrWhiteSpace(nestedEntry.Name)
-                        && RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(nestedEntry.Name))
+                    using var entryStream = entry.Open();
+                    using var memory = new MemoryStream();
+                    entryStream.CopyTo(memory);
+                    memory.Position = 0;
+                    using var nested = new ZipArchive(memory, ZipArchiveMode.Read);
+                    foreach (var nestedEntry in nested.Entries)
                     {
-                        offenders.Add(entry.FullName + "!" + nestedEntry.FullName);
+                        if (!string.IsNullOrWhiteSpace(nestedEntry.Name)
+                            && RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(nestedEntry.Name))
+                        {
+                            offenders.Add(entry.FullName + "!" + nestedEntry.FullName);
+                        }
                     }
+                }
+                catch (InvalidDataException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Artifact package entry '{entry.FullName}' is not a readable zip payload.", ex);
                 }
             }
         }

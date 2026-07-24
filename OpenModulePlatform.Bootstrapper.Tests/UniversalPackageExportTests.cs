@@ -129,6 +129,110 @@ public sealed class UniversalPackageExportTests : IDisposable
             entry => entry.FullName == "artifacts/" + ArtifactFileName);
     }
 
+    [Fact]
+    public void ExportSkipsRuntimeConfigurationGuardForNonArtifactItems()
+    {
+        // Widget-data zips are not artifact packages; the guard scope boundary
+        // is TryParseUniversalPackageArtifactIdentity and must not reject them.
+        var widgetDataPath = CreateArtifactPackage(
+            "omp_core__dashboard__1.0.0.zip",
+            topLevelEntries: new Dictionary<string, string>
+            {
+                ["appsettings.json"] = "{}"
+            });
+        var request = new Program.UniversalPackageBuildRequest(
+            "test-package",
+            "1.0.0",
+            "Test package",
+            string.Empty,
+            null,
+            "No target host",
+            Path.Join(_testRoot, "export", "test-package__global__1.0.0.zip"),
+            [
+                new Program.UniversalPackageCandidate(
+                    "widget-data",
+                    widgetDataPath,
+                    "widget-data/omp_core__dashboard__1.0.0.zip",
+                    "1.0.0")
+            ]);
+
+        var result = Program.CreateUniversalPackageZip(request);
+
+        Assert.True(File.Exists(result.PackagePath));
+    }
+
+    [Fact]
+    public void ExportFailsOnCaseInsensitiveRuntimeConfigurationName()
+    {
+        var artifactPath = CreateArtifactPackage(
+            ArtifactFileName,
+            topLevelEntries: new Dictionary<string, string>
+            {
+                ["AppSettings.JSON"] = "{}"
+            });
+
+        var request = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
+
+        Assert.Throws<InvalidOperationException>(
+            () => Program.CreateUniversalPackageZip(request));
+    }
+
+    [Fact]
+    public void ExportFailsOnUnprefixedConfigurationEntry()
+    {
+        // Legitimate configuration-section entries are always index-prefixed
+        // (configuration/000-name.ext). An unprefixed match would also be
+        // rejected by the import-time validators, so the export must fail.
+        var artifactPath = CreateArtifactPackage(
+            ArtifactFileName,
+            topLevelEntries: new Dictionary<string, string>
+            {
+                ["configuration/appsettings.json"] = "{}"
+            });
+
+        var request = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
+
+        Assert.Throws<InvalidOperationException>(
+            () => Program.CreateUniversalPackageZip(request));
+    }
+
+    [Fact]
+    public void ExportFailureMessageListsAllOffenders()
+    {
+        var artifactPath = CreateArtifactPackage(
+            ArtifactFileName,
+            topLevelEntries: new Dictionary<string, string>
+            {
+                ["appsettings.json"] = "{}",
+                ["odv.site.config.js"] = "window.odv = {};"
+            });
+
+        var request = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => Program.CreateUniversalPackageZip(request));
+        Assert.Contains("appsettings.json", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("odv.site.config.js", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ExportFailsWithClearErrorWhenNestedPayloadZipIsCorrupt()
+    {
+        var artifactPath = CreateArtifactPackage(
+            ArtifactFileName,
+            topLevelEntries: new Dictionary<string, string>
+            {
+                ["payload/artifact.zip"] = "this is not a zip"
+            });
+
+        var request = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => Program.CreateUniversalPackageZip(request));
+        Assert.Contains("not a readable zip payload", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("payload/artifact.zip", exception.Message, StringComparison.Ordinal);
+    }
+
     private Program.UniversalPackageCandidate CreateArtifactCandidate(string fileName, string version)
         => new(
             "artifact-package",
