@@ -276,6 +276,12 @@
             controller.emptyNote.hidden = matchingCount > 0;
         }
 
+        // While this table has a local search term, an outer list's deep-search
+        // spotlight inside it is suppressed via CSS: the local search is the
+        // user's active intent, so dimming its results would misread as
+        // "wrong row". Clearing the local term brings the spotlight back.
+        controller.table.classList.toggle('list-locally-searched', !!controller.searchTerm);
+
         controller.table.dispatchEvent(new CustomEvent('sortable-list:updated', { bubbles: true }));
     }
 
@@ -340,6 +346,29 @@
                 controller.searchTerm = input.value.trim().toLocaleLowerCase();
                 controller.visibleLimit = controller.pageSize;
                 refreshListController(controller);
+            });
+        });
+
+        // A one-shot copy of another list's search term into this list's search
+        // box (e.g. carrying the main search down into a sublist). After the
+        // copy it is plain text: editing or clearing it has no further link to
+        // the source. Clicking with an empty source clears the target.
+        root.querySelectorAll('[data-list-search-inherit]').forEach((button) => {
+            if (button.dataset.listSearchInheritInitialized === 'true') {
+                return;
+            }
+
+            const target = document.querySelector(`[data-list-search="${button.dataset.listSearchInherit}"]`);
+            const source = document.querySelector(`[data-list-search="${button.dataset.listSearchInheritFrom}"]`);
+            if (!target || !source) {
+                return;
+            }
+
+            button.dataset.listSearchInheritInitialized = 'true';
+            button.addEventListener('click', () => {
+                target.value = source.value;
+                target.dispatchEvent(new Event('input', { bubbles: true }));
+                target.focus();
             });
         });
 

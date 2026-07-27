@@ -513,3 +513,15 @@ tr.list-deep-miss {
 tr.list-deep-hit > td:first-child {
     box-shadow: inset 3px 0 0 var(--link);
 }
+
+/* A table with an active local search suppresses the deep-search spotlight
+   inside it: the local search is the user's current intent there, so its
+   results must not render dimmed. Child selectors keep the suppression from
+   leaking into nested tables when an OUTER list has the local term. */
+table.list-locally-searched > tbody > tr.list-deep-miss {
+    opacity: 1;
+}
+
+table.list-locally-searched > tbody > tr.list-deep-hit > td:first-child {
+    box-shadow: none;
+}
