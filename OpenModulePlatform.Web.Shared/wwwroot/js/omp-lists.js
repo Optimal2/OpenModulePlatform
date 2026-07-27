@@ -56,6 +56,12 @@
     function getListRowGroups(tbody) {
         const groups = [];
         Array.from(tbody.rows).forEach((row) => {
+            // Ignored rows (e.g. server-rendered empty-state rows) are left
+            // alone entirely: never sorted, hidden, counted or searched.
+            if (row.hasAttribute('data-list-ignore')) {
+                return;
+            }
+
             if (row.hasAttribute('data-list-follow') && groups.length > 0) {
                 groups[groups.length - 1].push(row);
             } else {
@@ -146,6 +152,7 @@
             countNote: document.querySelector(`[data-list-count="${tableId}"]`),
             showMoreButton: document.querySelector(`[data-list-show-more="${tableId}"]`),
             emptyNote: document.querySelector(`[data-list-empty="${tableId}"]`),
+            deepToggle: document.querySelector(`[data-list-search-deep="${tableId}"]`),
             viewport: null
         };
         controller.visibleLimit = controller.pageSize;
@@ -184,15 +191,39 @@
         let matchingCount = 0;
         let shownCount = 0;
 
+        // Deep search extends the term to the nested lists inside follow rows:
+        // a group whose own row misses still matches when a nested tbody row
+        // hits, and the nested rows are spotlighted/dimmed instead of hidden
+        // so the hit is visible in its context once the group is expanded.
+        const deepActive = !!(controller.deepToggle?.checked && controller.searchTerm);
+        const getDeepRows = (rowGroup) => rowGroup
+            .slice(1)
+            .flatMap((followRow) => Array.from(followRow.querySelectorAll('tbody tr')))
+            .filter((nestedRow) => !nestedRow.hasAttribute('data-list-ignore'));
+
         rowGroups.forEach((rowGroup) => {
             const row = rowGroup[0];
+            const deepRows = getDeepRows(rowGroup);
+            const deepHit = (nestedRow) => nestedRow.textContent.toLocaleLowerCase().includes(controller.searchTerm);
             const matchesSearch = !controller.searchTerm
-                || `${row.getAttribute('data-search') || ''} ${row.textContent}`.toLocaleLowerCase().includes(controller.searchTerm);
+                || `${row.getAttribute('data-search') || ''} ${row.textContent}`.toLocaleLowerCase().includes(controller.searchTerm)
+                || (deepActive && deepRows.some(deepHit));
             const matches = matchesSearch && Array.from(groups.values()).every((groupInputs) =>
                 groupInputs.some((input) => rowMatchesFilter(row, input)));
 
+            // Pinned rows (rows being edited or otherwise interacted with)
+            // always stay visible, no matter what the search or filters say.
+            // The contract is the explicit value "true": Razor conditional
+            // attributes can render an empty value instead of omitting, and
+            // an empty value must not pin.
+            const isPinnedRow = (candidate) => candidate.getAttribute('data-list-pinned') === 'true';
+            const pinned = rowGroup.some(isPinnedRow);
+
             let show = false;
-            if (matches) {
+            if (pinned) {
+                show = true;
+                matchingCount += 1;
+            } else if (matches) {
                 show = matchingCount < limit;
                 matchingCount += 1;
             }
@@ -203,6 +234,12 @@
             if (show) {
                 shownCount += 1;
             }
+
+            deepRows.forEach((nestedRow) => {
+                const spotlight = show && deepActive && !isPinnedRow(nestedRow);
+                nestedRow.classList.toggle('list-deep-hit', spotlight && deepHit(nestedRow));
+                nestedRow.classList.toggle('list-deep-miss', spotlight && !deepHit(nestedRow));
+            });
         });
 
         const activeFilterCount = Array.from(groups.values()).reduce((sum, groupInputs) => sum + groupInputs.length, 0);
@@ -301,6 +338,24 @@
             input.dataset.listSearchInitialized = 'true';
             input.addEventListener('input', () => {
                 controller.searchTerm = input.value.trim().toLocaleLowerCase();
+                controller.visibleLimit = controller.pageSize;
+                refreshListController(controller);
+            });
+        });
+
+        root.querySelectorAll('input[type="checkbox"][data-list-search-deep]').forEach((toggle) => {
+            if (toggle.dataset.listSearchDeepInitialized === 'true') {
+                return;
+            }
+
+            const controller = getListController(toggle.dataset.listSearchDeep);
+            if (!controller) {
+                return;
+            }
+
+            toggle.dataset.listSearchDeepInitialized = 'true';
+            controller.deepToggle = toggle;
+            toggle.addEventListener('change', () => {
                 controller.visibleLimit = controller.pageSize;
                 refreshListController(controller);
             });

@@ -502,3 +502,14 @@ body.list-column-resizing {
 [data-list-show-more][hidden] {
     display: none;
 }
+
+/* Deep search spotlight: when a search includes sublevels, nested list rows
+   that miss the term dim instead of hiding (context stays visible) and hits
+   get a discreet accent edge so they stand out in long sublists. */
+tr.list-deep-miss {
+    opacity: 0.45;
+}
+
+tr.list-deep-hit > td:first-child {
+    box-shadow: inset 3px 0 0 var(--link);
+}
