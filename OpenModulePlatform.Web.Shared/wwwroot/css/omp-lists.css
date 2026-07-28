@@ -504,24 +504,30 @@ body.list-column-resizing {
 }
 
 /* Deep search spotlight: when a search includes sublevels, nested list rows
-   that miss the term dim instead of hiding (context stays visible) and hits
-   get a discreet accent edge so they stand out in long sublists. */
-tr.list-deep-miss {
-    opacity: 0.45;
-}
-
+   that miss the term render normally (dimming read as "disabled") while hits
+   highlight like the browser's find-on-page: the matched text gets a mark
+   background and the row keeps a discreet accent edge. */
 tr.list-deep-hit > td:first-child {
     box-shadow: inset 3px 0 0 var(--link);
 }
 
-/* A table with an active local search suppresses the deep-search spotlight
-   inside it: the local search is the user's current intent there, so its
-   results must not render dimmed. Child selectors keep the suppression from
-   leaking into nested tables when an OUTER list has the local term. */
-table.list-locally-searched > tbody > tr.list-deep-miss {
-    opacity: 1;
+mark.list-deep-mark {
+    background: var(--list-mark-bg, rgba(255, 213, 79, 0.4));
+    color: inherit;
+    padding: 0;
+    border-radius: 2px;
 }
 
+/* A table with an active local search suppresses the deep-search spotlight
+   inside it: the local search is the user's current intent there, so the
+   outer term's accent edge and text marks must not compete with it. Child
+   selectors keep the suppression from leaking into nested tables when an
+   OUTER list has the local term. */
 table.list-locally-searched > tbody > tr.list-deep-hit > td:first-child {
     box-shadow: none;
+}
+
+table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
+    background: transparent;
+    border-radius: 0;
 }

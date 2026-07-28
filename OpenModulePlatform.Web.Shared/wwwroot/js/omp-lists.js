@@ -72,6 +72,59 @@
         return groups;
     }
 
+    // Deep-search hits highlight matched text like the browser's find-on-page.
+    // Marks are rebuilt on every refresh, so previous marks must be unwrapped
+    // first or repeated searches would nest and duplicate them.
+    function clearDeepMarks(root) {
+        root.querySelectorAll('mark.list-deep-mark').forEach((mark) => {
+            const parent = mark.parentNode;
+            mark.replaceWith(document.createTextNode(mark.textContent));
+            parent.normalize();
+        });
+    }
+
+    function markDeepMatches(root, term) {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) => node.parentElement?.closest('button, select, textarea, script, style, template')
+                ? NodeFilter.FILTER_REJECT
+                : NodeFilter.FILTER_ACCEPT
+        });
+        const textNodes = [];
+        while (walker.nextNode()) {
+            textNodes.push(walker.currentNode);
+        }
+
+        textNodes.forEach((node) => {
+            const text = node.nodeValue;
+            const lower = text.toLocaleLowerCase();
+            let index = lower.indexOf(term);
+            if (index === -1) {
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            let consumed = 0;
+            while (index !== -1) {
+                if (index > consumed) {
+                    fragment.appendChild(document.createTextNode(text.slice(consumed, index)));
+                }
+
+                const mark = document.createElement('mark');
+                mark.className = 'list-deep-mark';
+                mark.textContent = text.slice(index, index + term.length);
+                fragment.appendChild(mark);
+                consumed = index + term.length;
+                index = lower.indexOf(term, consumed);
+            }
+
+            if (consumed < text.length) {
+                fragment.appendChild(document.createTextNode(text.slice(consumed)));
+            }
+
+            node.replaceWith(fragment);
+        });
+    }
+
     function sortTableRows(table, tbody, columnIndex, sortType, direction) {
         const multiplier = direction === 'descending' ? -1 : 1;
         const groups = getListRowGroups(tbody).map((group, index) => ({ group, index }));
@@ -237,8 +290,13 @@
 
             deepRows.forEach((nestedRow) => {
                 const spotlight = show && deepActive && !isPinnedRow(nestedRow);
-                nestedRow.classList.toggle('list-deep-hit', spotlight && deepHit(nestedRow));
-                nestedRow.classList.toggle('list-deep-miss', spotlight && !deepHit(nestedRow));
+                clearDeepMarks(nestedRow);
+                nestedRow.classList.remove('list-deep-miss');
+                const hit = spotlight && deepHit(nestedRow);
+                nestedRow.classList.toggle('list-deep-hit', hit);
+                if (hit) {
+                    markDeepMatches(nestedRow, controller.searchTerm);
+                }
             });
         });
 
