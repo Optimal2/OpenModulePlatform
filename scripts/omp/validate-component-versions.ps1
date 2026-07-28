@@ -1029,6 +1029,67 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# Check 12: Module-definition content diff enforcement.
+# HostAgent rejects re-importing a module definition whose version already
+# exists in the database with different JSON, and that rejection silently
+# skips every artifact item bundled in the same universal package (the import
+# summary only shows "Skipped"). Any content change to a .module-definition.json
+# therefore requires a definitionVersion bump - not only SQL-affecting changes,
+# which Check 8 already covers. The comparison reads the working tree directly
+# so uncommitted edits are caught before local CI commits them.
+# ---------------------------------------------------------------------------
+$definitionDiffChecked = 0
+$definitionDiffChanged = 0
+
+if (-not $baseRefAvailable) {
+    Add-ValidationWarning -Warnings $warnings -Message 'No valid base ref available; skipping module-definition content diff enforcement (Check 12). Pass -BaseCommit to enable it.'
+}
+else {
+    foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
+        if ($null -eq $manifestDefinition) {
+            continue
+        }
+
+        $moduleKey = [string](Get-OptionalPropertyValue -Object $manifestDefinition -Name 'moduleKey')
+        $relativeDefinitionPath = [string](Get-OptionalPropertyValue -Object $manifestDefinition -Name 'path')
+        if ([string]::IsNullOrWhiteSpace($moduleKey) -or [string]::IsNullOrWhiteSpace($relativeDefinitionPath)) {
+            continue
+        }
+
+        $definitionPath = Resolve-RepositoryPath -Path $relativeDefinitionPath -BasePath $repositoryRoot
+        if (-not (Test-Path -LiteralPath $definitionPath -PathType Leaf)) {
+            continue # missing file is already an error in Check 4
+        }
+
+        $definitionDiffChecked++
+
+        $baseDefinitionTextLines = @(git -C $repositoryRoot show "$baseRef`:$relativeDefinitionPath" 2>$null)
+        $baseDefinitionText = Remove-Utf8Bom -Text ($baseDefinitionTextLines -join "`n")
+        if ([string]::IsNullOrWhiteSpace($baseDefinitionText)) {
+            continue # new definition file; nothing to bump against
+        }
+
+        $headDefinitionText = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+        $headNormalized = (Remove-Utf8Bom -Text $headDefinitionText).Replace("`r`n", "`n").TrimEnd("`n")
+        $baseNormalized = $baseDefinitionText.Replace("`r`n", "`n").TrimEnd("`n")
+        if ([string]::Equals($headNormalized, $baseNormalized, [StringComparison]::Ordinal)) {
+            continue
+        }
+
+        $definitionDiffChanged++
+
+        $headDefinition = ConvertFrom-JsonDocument -Json $headDefinitionText -Depth $jsonDepth
+        $headDefinitionVersion = [string](Get-OptionalPropertyValue -Object $headDefinition -Name 'definitionVersion')
+        $baseDefinition = ConvertFrom-JsonDocument -Json $baseDefinitionText -Depth $jsonDepth
+        $baseDefinitionVersion = [string](Get-OptionalPropertyValue -Object $baseDefinition -Name 'definitionVersion')
+
+        if (-not [string]::IsNullOrWhiteSpace($baseDefinitionVersion) -and [string]::Equals($baseDefinitionVersion, $headDefinitionVersion, [StringComparison]::Ordinal)) {
+            Add-ValidationError -Errors $errors -Message "Module definition '$relativeDefinitionPath' (module '$moduleKey') changed but definitionVersion is still '$headDefinitionVersion'. HostAgent rejects a re-imported definition version with different JSON and silently skips artifacts packaged with it. Bump definitionVersion in both the definition file and omp-components.json."
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Check 9: Transitive ProjectReference lockstep bumps.
 # If a component's own project or any project it references (directly or
 # through one level of ProjectReference transitivity) changed since the base,
@@ -1277,6 +1338,10 @@ if (-not [string]::IsNullOrWhiteSpace($webSharedBinaryCheckMessage)) {
 
 if ($sqlFilesChecked -gt 0) {
     Write-Host "$checkMark $sqlFilesPassed of $sqlFilesChecked owned SQL file(s) passed diff validation ($sqlFilesChanged changed)"
+}
+
+if ($definitionDiffChecked -gt 0) {
+    Write-Host "$checkMark $definitionDiffChecked module definition(s) passed content diff validation ($definitionDiffChanged changed)"
 }
 
 if ($transitiveCheckCount -gt 0 -or $transitiveErrorCount -gt 0) {
