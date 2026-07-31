@@ -1736,6 +1736,11 @@ END;";
         var validationScripts = scripts.Where(IsValidationScript).ToList();
         if (validationScripts.Count > 0)
         {
+            var hasUnexecutedSql = await HasUnexecutedModuleDefinitionSqlAsync(
+                connection,
+                documentId,
+                scripts.Where(static script => !IsValidationScript(script)),
+                sql.CommandTimeoutSeconds);
             var needsRepair = false;
             foreach (var validationScript in validationScripts)
             {
@@ -1778,9 +1783,15 @@ END;";
                 }
             }
 
-            if (!needsRepair)
+            if (!needsRepair && !hasUnexecutedSql)
             {
                 return 0;
+            }
+
+            if (!needsRepair)
+            {
+                Console.WriteLine(
+                    $"Module '{definition.ModuleKey}' validation passed, but one or more idempotent SQL scripts have not succeeded for this definition; completing them now.");
             }
         }
 
@@ -1853,6 +1864,43 @@ END;";
         }
 
         return executed;
+    }
+
+    private static async Task<bool> HasUnexecutedModuleDefinitionSqlAsync(
+        SqlConnection connection,
+        int documentId,
+        IEnumerable<PortableModuleDefinitionSqlScript> scripts,
+        int commandTimeoutSeconds)
+    {
+        const string sql = """
+SELECT TOP (1) 1
+FROM omp.ModuleDefinitionSqlExecutions
+WHERE ModuleDefinitionDocumentId = @documentId
+  AND ScriptKey = @scriptKey
+  AND ScriptSha256 = @scriptSha256
+  AND ExecutionStatus = N'Succeeded';
+""";
+
+        foreach (var script in scripts)
+        {
+            var originalSqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(originalSqlText))
+            {
+                continue;
+            }
+
+            await using var command = new SqlCommand(sql, connection);
+            command.CommandTimeout = commandTimeoutSeconds;
+            command.Parameters.AddWithValue("@documentId", documentId);
+            command.Parameters.AddWithValue("@scriptKey", script.Key);
+            command.Parameters.AddWithValue("@scriptSha256", ComputeTextSha256(originalSqlText));
+            if (await command.ExecuteScalarAsync() is null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
@@ -2174,7 +2222,7 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
     {
         Console.WriteLine($"> SQL ensure database {sql.Database}");
         var createSql = """
-DECLARE @DatabaseName sysname = @databaseName;
+DECLARE @DatabaseName sysname = @requestedDatabaseName;
 DECLARE @sql nvarchar(max);
 
 IF DB_ID(@DatabaseName) IS NULL
@@ -2189,7 +2237,7 @@ END
         await using var command = connection.CreateCommand();
         command.CommandText = createSql;
         command.CommandTimeout = sql.CommandTimeoutSeconds;
-        command.Parameters.AddWithValue("@databaseName", sql.Database.Trim());
+        command.Parameters.AddWithValue("@requestedDatabaseName", sql.Database.Trim());
         await command.ExecuteNonQueryAsync();
     }
 
@@ -4914,9 +4962,14 @@ VALUES
     private static bool WindowsAccountEquals(string left, string right)
         => NormalizeWindowsAccount(left).Equals(NormalizeWindowsAccount(right), StringComparison.OrdinalIgnoreCase);
 
-    private static string NormalizeWindowsAccount(string value)
+    internal static string NormalizeWindowsAccount(string value)
     {
         var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+        {
+            return string.Empty;
+        }
+
         if (trimmed.StartsWith(".\\", StringComparison.Ordinal))
         {
             return Environment.MachineName + "\\" + trimmed[2..];

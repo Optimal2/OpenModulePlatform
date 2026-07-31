@@ -858,9 +858,12 @@ function Copy-AdditionalArtifactFiles {
         $removeRuntimeConfigurationFiles = $true
 
         if ($entry -is [hashtable]) {
-            $sourcePath = [string]$entry.Source
-            $payloadPath = [string]$entry.Payload
-            $targetPath = [string]$entry.Target
+            # Hashtable indexing returns $null for optional keys even under
+            # StrictMode; member access throws before the documented default
+            # payload path can be applied.
+            $sourcePath = [string]$entry['Source']
+            $payloadPath = [string]$entry['Payload']
+            $targetPath = [string]$entry['Target']
             if ($entry.ContainsKey('IsExample')) {
                 $isExample = [bool]$entry.IsExample
             }

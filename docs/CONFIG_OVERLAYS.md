@@ -16,8 +16,10 @@ There are two host-specific portable object types:
   artifact version. HostAgent applies matching overlay configuration files on
   top of artifact-owned configuration files during deployment.
 
-Both object types can be imported through Portal, imported by the HostAgent
-folder watcher, or copied into an installer package library.
+Both object types can be imported through Portal or copied into an installer
+package library. For unattended HostAgent import, put the objects inside a
+universal module package zip. The HostAgent import folder does not accept raw
+JSON objects or standalone config-overlay zips.
 
 ## Host Configuration JSON
 
@@ -174,8 +176,10 @@ ArtifactStoreRoot\_available\config-overlays
 ```
 
 Portal reads these folders from the `ArtifactUpload` settings and offers the
-objects for later import. HostAgent import-folder processing accepts the same
-object formats directly.
+objects for later import. The HostAgent import folder instead accepts only a
+top-level universal module package zip containing `omp-universal-package.json`.
+Use Portal or the universal package builder to wrap host configurations and
+config overlays before dropping them into the watched folder.
 
 ## Tooling
 

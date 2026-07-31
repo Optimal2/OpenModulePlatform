@@ -251,7 +251,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@configId", configId);
+        cmd.Parameters.AddWithValue("@configId", configId.Value);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         if (!await rdr.ReadAsync(ct))
             return null;
@@ -280,7 +280,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@configId", configId);
+        cmd.Parameters.AddWithValue("@configId", configId.Value);
         cmd.Parameters.AddWithValue("@configJson", configJson);
         cmd.Parameters.AddWithValue("@comment", (object?)comment ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@actor", actor);

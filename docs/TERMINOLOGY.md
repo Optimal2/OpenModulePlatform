@@ -112,9 +112,10 @@ Portal or HostAgent import but are not necessarily selected as desired state.
 
 ## Import folder
 
-A watched folder where universal packages, artifact packages, module
-definitions, widgets, host configs, or config overlays can be dropped for
-HostAgent to import.
+A watched folder where universal module package zips can be dropped for
+HostAgent to import. Artifact packages, module definitions, widgets, host
+configs, and config overlays must be contained inside the universal package;
+they are not accepted as loose top-level files.
 
 ## Universal package
 
