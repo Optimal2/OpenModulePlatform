@@ -536,7 +536,9 @@
         const popover = document.createElement('div');
         popover.className = 'info-popover';
         popover.textContent = text;
-        document.body.appendChild(popover);
+        // Inside a modal <dialog> the popover must live in the dialog's
+        // top layer - a body-appended element would render beneath it.
+        (badge.closest('dialog') || document.body).appendChild(popover);
 
         const rect = badge.getBoundingClientRect();
         const maxLeft = window.innerWidth - popover.offsetWidth - 8;
