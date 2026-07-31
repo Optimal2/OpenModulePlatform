@@ -39,7 +39,11 @@ Official guidance:
 
 ## URL Rewrite
 
-The IIS URL Rewrite module is **optional**.
+The IIS URL Rewrite module is optional for OMP core applications whose
+`web.config` does not contain rewrite rules. It is a prerequisite for any
+installed module that does contain IIS rewrite rules. The complete development
+suite, including ODVGateway, currently uses those rules and therefore requires
+URL Rewrite on its IIS host.
 
 It is useful when you need IIS-level rewrite or redirect rules, reverse-proxy style path handling, canonical URL rules, or other server-side URL transformations. It is not a universal prerequisite for every OMP deployment.
 
@@ -130,7 +134,8 @@ For the current public repository, the recommended baseline is:
 - develop on `.NET 10`
 - publish web applications with the current Web SDK defaults
 - install the current `.NET Hosting Bundle` on IIS servers
-- use URL Rewrite only when the deployment topology requires rewrite rules
+- install URL Rewrite when any selected module ships IIS rewrite rules (the
+  complete development suite currently does)
 - keep `web.config` in the deployed application root
 
 ## Related repository files
