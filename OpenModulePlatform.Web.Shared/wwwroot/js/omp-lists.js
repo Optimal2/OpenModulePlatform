@@ -821,4 +821,9 @@
     } else {
         initAll();
     }
+
+    // Pages that swap list markup in dynamically (e.g. push-triggered
+    // refreshes) call this to wire the new elements; every init function
+    // guards against double initialization, so re-running is safe.
+    window.ompLists = Object.assign(window.ompLists || {}, { init: initAll });
 })();
