@@ -366,10 +366,20 @@
 
             const rowCheckboxes = () => Array.from(
                 tbody.querySelectorAll(':scope > tr > td input[data-list-select-row]'));
+            const isSelectable = (checkbox) => {
+                const row = checkbox.closest('tr');
+                return !checkbox.disabled && !!row && !row.hidden;
+            };
 
             const refreshSelection = () => {
                 const checkboxes = rowCheckboxes();
-                const selectable = checkboxes.filter((checkbox) => !checkbox.disabled);
+                checkboxes
+                    .filter((checkbox) => !isSelectable(checkbox))
+                    .forEach((checkbox) => {
+                        checkbox.checked = false;
+                    });
+
+                const selectable = checkboxes.filter(isSelectable);
                 const selected = selectable.filter((checkbox) => checkbox.checked);
 
                 selectAll.disabled = selectable.length === 0;
@@ -403,7 +413,7 @@
 
                 if (checkbox.matches('[data-list-select-all]')) {
                     rowCheckboxes()
-                        .filter((rowCheckbox) => !rowCheckbox.disabled)
+                        .filter(isSelectable)
                         .forEach((rowCheckbox) => {
                             rowCheckbox.checked = checkbox.checked;
                         });
