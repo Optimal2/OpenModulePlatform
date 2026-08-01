@@ -5,7 +5,8 @@ using System.Text.Json;
 
 namespace OpenModulePlatform.Portal.Tests.Integration;
 
-public sealed class TopbarNotificationEndpointIntegrationTests : IClassFixture<PushEventPipelineTestFixture>
+[Collection(PushEventPipelineTestCollection.Name)]
+public sealed class TopbarNotificationEndpointIntegrationTests
 {
     private readonly PushEventPipelineTestFixture _fixture;
 

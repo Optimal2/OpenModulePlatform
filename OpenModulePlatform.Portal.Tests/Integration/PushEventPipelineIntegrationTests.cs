@@ -7,7 +7,8 @@ using System.Text.Json;
 
 namespace OpenModulePlatform.Portal.Tests.Integration;
 
-public sealed class PushEventPipelineIntegrationTests : IClassFixture<PushEventPipelineTestFixture>
+[Collection(PushEventPipelineTestCollection.Name)]
+public sealed class PushEventPipelineIntegrationTests
 {
     private readonly PushEventPipelineTestFixture _fixture;
 

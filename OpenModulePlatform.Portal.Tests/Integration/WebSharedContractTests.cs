@@ -14,7 +14,8 @@ namespace OpenModulePlatform.Portal.Tests.Integration;
 /// Runtime contract tests that verify Portal wires up the shared
 /// OpenModulePlatform.Web.Shared hosting defaults correctly.
 /// </summary>
-public sealed class WebSharedContractTests : IClassFixture<PushEventPipelineTestFixture>
+[Collection(PushEventPipelineTestCollection.Name)]
+public sealed class WebSharedContractTests
 {
     private readonly PushEventPipelineTestFixture _fixture;
 
