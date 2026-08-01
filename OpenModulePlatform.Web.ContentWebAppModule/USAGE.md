@@ -199,6 +199,26 @@ Normal module initialization does not create sample pages. Keep test/demo
 content explicit by running this helper only in development or test
 environments.
 
+For a repeatable end-to-end check of an already running local installation,
+use:
+
+```powershell
+.\scripts\dev\test-content-webapp-local-install.ps1 -RuntimeRoot E:\OMP
+```
+
+This test does not require stopping HostAgent. It writes a unique marker into
+the two named test fixtures, waits for the running HostAgent cycle to mirror
+both files byte-for-byte, verifies that a target-only stale probe is removed,
+and runs the actual Content loaders, report query runner, renderer, and page
+repository against the installed runtime and database. It also confirms that
+the IIS Content route returns either the page or the configured authentication
+redirect instead of an application error.
+
+The seed helper now resolves versioned HostAgent service directories such as
+`HostAgent-0.3.162`. When it updates the two Content mirrors, it preserves any
+unrelated configured file mirrors. Use `-SkipHostAgentConfiguration` when the
+installed settings are managed exclusively by another deployment mechanism.
+
 Report keys map directly to JSON filenames:
 
 ```text
