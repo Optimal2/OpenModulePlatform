@@ -1039,4 +1039,12 @@
   <data name="Banner enabled." xml:space="preserve"><value>Banner enabled.</value></data>
   <data name="Enable banner" xml:space="preserve"><value>Enable banner</value></data>
   <data name="Disable banner" xml:space="preserve"><value>Disable banner</value></data>
+  <data name="Select all banners" xml:space="preserve"><value>Select all banners</value></data>
+  <data name="Select banner {0}" xml:space="preserve"><value>Select banner {0}</value></data>
+  <data name="{0} selected" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="Enable selected" xml:space="preserve"><value>Enable selected</value></data>
+  <data name="Disable selected" xml:space="preserve"><value>Disable selected</value></data>
+  <data name="Select at least one banner." xml:space="preserve"><value>Select at least one banner.</value></data>
+  <data name="{0} banners enabled." xml:space="preserve"><value>{0} banners enabled.</value></data>
+  <data name="{0} banners disabled." xml:space="preserve"><value>{0} banners disabled.</value></data>
 </root>

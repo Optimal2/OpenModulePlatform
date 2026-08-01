@@ -143,36 +143,49 @@
                 <div class="list-filter__menu">
                     <fieldset class="list-filter__group" data-filter-group="level">
                         <legend>@L["Level"]</legend>
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="1" /> @L["Announcement"]</label>
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="2" /> @L["Warning"]</label>
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="1" data-filter-equals="3" /> @L["Critical"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="1" /> @L["Announcement"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="2" /> @L["Warning"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="3" /> @L["Critical"]</label>
                     </fieldset>
                     <fieldset class="list-filter__group" data-filter-group="status">
                         <legend>@L["Status"]</legend>
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="active" /> @L["Active"]</label>
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="scheduled" /> @L["Scheduled"]</label>
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="expired" /> @L["Expired"]</label>
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="disabled" /> @L["Disabled"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="active" /> @L["Active"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="scheduled" /> @L["Scheduled"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="expired" /> @L["Expired"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="disabled" /> @L["Disabled"]</label>
                     </fieldset>
                     <fieldset class="list-filter__group" data-filter-group="targets">
                         <legend>@L["Targets"]</legend>
                         @foreach (var target in targetOptions)
                         {
-                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-includes="@target" /> @target</label>
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-includes="@target" /> @target</label>
                         }
-                        <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="none" /> @L["No targets"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="4" data-filter-equals="none" /> @L["No targets"]</label>
                     </fieldset>
                     <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
                 </div>
             </details>
             <input type="search" class="list-search" data-list-search="banners-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <form id="banners-bulk-form"
+                  method="post"
+                  asp-page-handler="SetEnabledMany"
+                  class="list-selection-actions"
+                  data-list-selection-actions="banners-list"
+                  data-enhance="false">
+                <span class="list-selected-count" data-list-selected-count data-template="@L["{0} selected"]"></span>
+                <button type="submit" name="enabled" value="true" class="btn btn-secondary btn-sm" data-list-selection-action disabled>@L["Enable selected"]</button>
+                <button type="submit" name="enabled" value="false" class="btn btn-secondary btn-sm" data-list-selection-action disabled>@L["Disable selected"]</button>
+            </form>
             <span class="list-count" data-list-count="banners-list" data-template="@L["Showing {0} of {1} rows."]"></span>
         </div>
         <div class="empty-state" data-list-empty="banners-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll">
-            <table id="banners-list" class="grid sortable-list" data-sortable-list data-page-size="50">
+            <table id="banners-list" class="grid sortable-list" data-sortable-list data-page-size="50" data-list-selection="banners-list">
                 <thead>
                     <tr>
+                        <th scope="col" class="list-selection-cell">
+                            <input type="checkbox" data-list-select-all aria-label="@L["Select all banners"]" />
+                        </th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Title"]</button></th>
                         <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Level"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
@@ -186,6 +199,14 @@
                     {
                         var targets = parseTargets(row.TargetSummary);
                         <tr>
+                            <td class="list-selection-cell">
+                                <input type="checkbox"
+                                       name="selectedBannerIds"
+                                       value="@row.BannerId"
+                                       form="banners-bulk-form"
+                                       data-list-select-row
+                                       aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["Select banner {0}"], row.Title)" />
+                            </td>
                             <td data-sort-value="@row.Title">
                                 <strong>@row.Title</strong>
                                 <div class="muted small-text">@row.Content</div>
@@ -209,7 +230,7 @@
                                         <input type="hidden" name="bannerId" value="@row.BannerId" />
                                         <input type="hidden" name="enabled" value="@(!isEnabled)" />
                                         <button type="submit"
-                                                class="admin-icon-button @(isEnabled ? "admin-icon-button--visible-off" : "admin-icon-button--visible")"
+                                                class="admin-icon-button @(isEnabled ? "admin-icon-button--visible" : "admin-icon-button--visible-off")"
                                                 title="@(isEnabled ? L["Disable banner"] : L["Enable banner"])"
                                                 aria-label="@(isEnabled ? L["Disable banner"] : L["Enable banner"])">
                                             <span class="visually-hidden">@(isEnabled ? L["Disable banner"] : L["Enable banner"])</span>
