@@ -5,6 +5,8 @@ param(
     [string]$SqlServer = 'localhost',
     [string]$Database = 'OpenModulePlatform',
     [string]$AppInstanceId = '11111111-1111-1111-1111-111111111232',
+    [string]$HostAgentSettingsPath = '',
+    [switch]$SkipHostAgentConfiguration,
     [switch]$RunHostAgentOnce
 )
 
@@ -65,7 +67,7 @@ function Update-HostAgentFileMirrors {
         throw "HostAgent settings file has no HostAgent section: $HostAgentSettingsPath"
     }
 
-    $mirrors = @(
+    $replacementMirrors = @(
         [ordered]@{
             IsEnabled = $true
             SourcePath = $ReportsSourcePath
@@ -82,8 +84,107 @@ function Update-HostAgentFileMirrors {
         }
     )
 
+    $targetPaths = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase)
+    $null = $targetPaths.Add([System.IO.Path]::GetFullPath($ReportsTargetPath))
+    $null = $targetPaths.Add([System.IO.Path]::GetFullPath($PagesTargetPath))
+
+    $preservedMirrors = @(
+        foreach ($existingMirror in @($json.HostAgent.FileMirrors)) {
+            if ($null -eq $existingMirror) {
+                continue
+            }
+
+            $existingTargetPath = [string]$existingMirror.TargetPath
+            if ([string]::IsNullOrWhiteSpace($existingTargetPath)) {
+                $existingMirror
+                continue
+            }
+
+            $normalizedTargetPath = [System.IO.Path]::GetFullPath($existingTargetPath.Trim())
+            if (-not $targetPaths.Contains($normalizedTargetPath)) {
+                $existingMirror
+            }
+        }
+    )
+
+    $mirrors = @($preservedMirrors) + @($replacementMirrors)
     Set-JsonProperty -Object $json.HostAgent -Name 'FileMirrors' -Value $mirrors
-    $json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $HostAgentSettingsPath -Encoding UTF8
+
+    $jsonText = $json | ConvertTo-Json -Depth 20
+    [System.IO.File]::WriteAllText(
+        $HostAgentSettingsPath,
+        $jsonText + [Environment]::NewLine,
+        [System.Text.UTF8Encoding]::new($false))
+}
+
+function Resolve-HostAgentSettingsPath {
+    param(
+        [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+        [string]$ConfiguredPath
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ConfiguredPath)) {
+        $configuredFullPath = [System.IO.Path]::GetFullPath($ConfiguredPath)
+        if (-not (Test-Path -LiteralPath $configuredFullPath -PathType Leaf)) {
+            throw "HostAgent settings file was not found: $configuredFullPath"
+        }
+
+        return $configuredFullPath
+    }
+
+    $legacyPath = Join-Path $RuntimeRoot 'Services\HostAgent\appsettings.Production.json'
+    if (Test-Path -LiteralPath $legacyPath -PathType Leaf) {
+        return $legacyPath
+    }
+
+    $servicesRoot = [System.IO.Path]::GetFullPath((Join-Path $RuntimeRoot 'Services'))
+    $servicesRootPrefix = $servicesRoot.TrimEnd(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    $runningServicePaths = @(
+        Get-CimInstance Win32_Service -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.State -eq 'Running' -and
+                ($_.Name -eq 'OMP.HostAgent' -or $_.Name -like 'OMP.HostAgent.*')
+            } |
+            ForEach-Object {
+                $executablePath = if ($_.PathName -match '^\s*"([^"]+)"') {
+                    $Matches[1]
+                }
+                else {
+                    ([string]$_.PathName -split '\s+--', 2)[0].Trim()
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace($executablePath)) {
+                    $executableFullPath = [System.IO.Path]::GetFullPath($executablePath)
+                    if ($executableFullPath.StartsWith(
+                            $servicesRootPrefix,
+                            [System.StringComparison]::OrdinalIgnoreCase)) {
+                        Join-Path (Split-Path -Parent $executableFullPath) 'appsettings.Production.json'
+                    }
+                }
+            }
+    )
+
+    foreach ($candidate in $runningServicePaths) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return [System.IO.Path]::GetFullPath($candidate)
+        }
+    }
+
+    $versionedCandidates = @(
+        Get-ChildItem -LiteralPath $servicesRoot -Directory -Filter 'HostAgent-*' -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            ForEach-Object { Join-Path $_.FullName 'appsettings.Production.json' } |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+    )
+
+    if ($versionedCandidates.Count -gt 0) {
+        return [System.IO.Path]::GetFullPath($versionedCandidates[0])
+    }
+
+    throw "No installed HostAgent appsettings.Production.json was found below '$servicesRoot'."
 }
 
 function Invoke-LocalSqlFile {
@@ -93,7 +194,7 @@ function Invoke-LocalSqlFile {
         [Parameter(Mandatory = $true)][string]$DatabaseName
     )
 
-    & sqlcmd -S $Server -d $DatabaseName -E -b -i $SqlPath
+    & sqlcmd -S $Server -d $DatabaseName -E -C -b -f 65001 -i $SqlPath
     if ($LASTEXITCODE -ne 0) {
         throw "sqlcmd failed with exit code $LASTEXITCODE."
     }
@@ -104,7 +205,14 @@ $reportsSourcePath = Join-Path $runtimeRootFull 'Data\ContentReports'
 $pagesSourcePath = Join-Path $runtimeRootFull 'Data\ContentPages'
 $reportsTargetPath = Join-Path $runtimeRootFull 'WebApps\content\App_Data\ContentReports'
 $pagesTargetPath = Join-Path $runtimeRootFull 'WebApps\content\App_Data\ContentPages'
-$hostAgentSettingsPath = Join-Path $runtimeRootFull 'Services\HostAgent\appsettings.Production.json'
+$resolvedHostAgentSettingsPath = if ($SkipHostAgentConfiguration) {
+    $null
+}
+else {
+    Resolve-HostAgentSettingsPath `
+        -RuntimeRoot $runtimeRootFull `
+        -ConfiguredPath $HostAgentSettingsPath
+}
 
 Write-Step 'Writing shared Content test files'
 $reportJson = @'
@@ -150,27 +258,32 @@ $htmlFile = @'
 '@
 Write-Utf8NoBomFile -Path (Join-Path $pagesSourcePath 'content-test-file.html') -Content $htmlFile
 
-Write-Step 'Configuring HostAgent file mirrors'
-Update-HostAgentFileMirrors `
-    -HostAgentSettingsPath $hostAgentSettingsPath `
-    -ReportsSourcePath $reportsSourcePath `
-    -ReportsTargetPath $reportsTargetPath `
-    -PagesSourcePath $pagesSourcePath `
-    -PagesTargetPath $pagesTargetPath
+if (-not $SkipHostAgentConfiguration) {
+    Write-Step 'Configuring HostAgent file mirrors'
+    Update-HostAgentFileMirrors `
+        -HostAgentSettingsPath $resolvedHostAgentSettingsPath `
+        -ReportsSourcePath $reportsSourcePath `
+        -ReportsTargetPath $reportsTargetPath `
+        -PagesSourcePath $pagesSourcePath `
+        -PagesTargetPath $pagesTargetPath
+    Write-Host "HostAgent settings: $resolvedHostAgentSettingsPath"
+}
 
 if ($RunHostAgentOnce) {
+    if ($SkipHostAgentConfiguration) {
+        throw '-RunHostAgentOnce cannot be combined with -SkipHostAgentConfiguration.'
+    }
+
     Write-Step 'Running HostAgent once'
-    $hostAgentExe = Join-Path $runtimeRootFull 'Services\HostAgent\OpenModulePlatform.HostAgent.WindowsService.exe'
+    $hostAgentExe = Join-Path (Split-Path -Parent $resolvedHostAgentSettingsPath) 'OpenModulePlatform.HostAgent.WindowsService.exe'
     if (-not (Test-Path -LiteralPath $hostAgentExe -PathType Leaf)) {
         throw "HostAgent executable was not found: $hostAgentExe"
     }
 
-    $hostAgentServiceName = 'OMP.HostAgent'
-    $service = Get-Service -Name $hostAgentServiceName -ErrorAction SilentlyContinue
-    if ($null -eq $service) {
-        $hostAgentServiceName = 'OpenModulePlatform.HostAgent'
-        $service = Get-Service -Name $hostAgentServiceName -ErrorAction SilentlyContinue
-    }
+    $service = Get-Service -Name 'OMP.HostAgent*' -ErrorAction SilentlyContinue |
+        Where-Object Status -eq 'Running' |
+        Select-Object -First 1
+    $hostAgentServiceName = $service?.Name
 
     $restartService = $false
     if ($null -ne $service -and $service.Status -eq 'Running') {

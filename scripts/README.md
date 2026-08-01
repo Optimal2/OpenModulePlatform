@@ -10,7 +10,11 @@ still part of the current OMP object/installer model.
   secrets before they are stored in private installer profiles.
 - `deployment/` contains HostAgent-first packaging and installer-runner tools.
 - `dev/` contains developer-only helpers for module-definition SQL embedding
-  and local Content smoke-test data.
+  and local Content smoke-test data. `seed-content-webapp-test-pages.ps1`
+  prepares the four supported Content page types, while
+  `test-content-webapp-local-install.ps1` verifies live HostAgent mirroring,
+  stale-file deletion, installed Content file loading, and server-report SQL
+  rendering. The latter uses the focused `ContentWebAppRuntimeProbe` project.
 - `diagnostics/` contains read-only operational diagnostics, including
   HostAgent service checks and OMP web-app checks for logging, filesystem, IIS,
   HTTP, event logs, and OMP database access.
