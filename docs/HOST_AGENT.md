@@ -213,6 +213,15 @@ whose artifact has `PackageType = 'web-app'` and a successful
 `HostAgent:WebAppsRoot`. The site-root portal app uses
 `HostAgent:PortalPhysicalPath`.
 
+A deployment is skipped as already applied only when the deployed artifact id,
+source path, target path, runtime name, and artifact content SHA-256 all match
+the desired state. The content hash comparison uses
+`omp.HostArtifactStates.ContentSha256` (desired) against
+`omp.HostAppDeploymentStates.ContentSha256` (deployed), so replacing the
+content behind an existing artifact id and version still triggers a
+redeployment on the next cycle once the local artifact cache has been
+re-provisioned.
+
 When `HostAgent:EnsureIisSite` is enabled, HostAgent also creates or updates the
 configured IIS site, app pools, and IIS applications before it mirrors files.
 This is the normal HostAgent-first bootstrap path for a blank machine. Existing
@@ -506,6 +515,12 @@ as web apps. If a configured file is missing or differs from the database value,
 HostAgent treats the app as needing deployment so it can stop the runtime,
 mirror the artifact, rewrite the configuration files, and start the service
 again.
+
+Service app deployment also uses the same content-hash change detection as web
+apps: a deployment is only skipped as already applied when the deployed
+artifact content SHA-256 matches the desired
+`omp.HostArtifactStates.ContentSha256`, so changed content behind an unchanged
+artifact id and version is redeployed.
 
 Service app identity resolution is explicit and credential-safe. HostAgent
 first checks `HostAgent:ServiceAppIdentityOverrides` using the app instance key,

@@ -161,6 +161,65 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         Assert.Equal(@"C:\OMP\DataProtectionKeys", last.Result.EffectiveOmpAuthDataProtectionKeyPath);
     }
 
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_ContentSha256Unchanged_SkipsRedeployment()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "aa11", deployedContentSha256: "AA11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        ApplyConfigurationForAlreadyAppliedDeployment(repository, settings, descriptor);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var published = repository.PublishedWebAppResults;
+        Assert.Single(published);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, published[0].Result.State);
+        Assert.False(published[0].Result.Applied);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_ContentSha256Changed_SameArtifactIdAndVersion_TriggersRedeployment()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, contentSha256: "bb22", deployedContentSha256: "aa11");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        ApplyConfigurationForAlreadyAppliedDeployment(repository, settings, descriptor);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var published = repository.PublishedWebAppResults;
+        Assert.Equal(2, published.Count);
+        Assert.Equal(HostDeploymentStatuses.Running, published[0].Result.State);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, published[1].Result.State);
+        Assert.True(published[1].Result.Applied);
+    }
+
+    private static void ApplyConfigurationForAlreadyAppliedDeployment(
+        FakeOmpHostArtifactRepository repository,
+        HostAgentSettings settings,
+        WebAppDeploymentDescriptor deployment)
+    {
+        var configuredConnectionString = repository.GetConfiguredConnectionString();
+        var configurationFiles = repository.GetArtifactConfigurationFilesAsync(
+            deployment.ArtifactId,
+            deployment.HostKey,
+            CancellationToken.None).GetAwaiter().GetResult();
+        configurationFiles = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
+            configurationFiles,
+            deployment,
+            configuredConnectionString,
+            settings);
+        var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
+            deployment,
+            configuredConnectionString,
+            settings);
+        ArtifactConfigurationFileWriter.ApplyAsync(
+            deployment.InstallPath!,
+            configurationFiles,
+            configurationVariables,
+            CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     private static ArtifactConfigurationFileDescriptor CreateAppSettingsWithDataProtectionKeyPath(
         int artifactId,
         string dataProtectionKeyPath)
@@ -220,7 +279,10 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         };
     }
 
-    private WebAppDeploymentDescriptor CreateWebAppDeploymentDescriptor(out string moduleInstanceKey)
+    private WebAppDeploymentDescriptor CreateWebAppDeploymentDescriptor(
+        out string moduleInstanceKey,
+        string? contentSha256 = null,
+        string? deployedContentSha256 = null)
     {
         moduleInstanceKey = "test-module-instance";
         var tempRoot = CreateTempDirectory();
@@ -241,12 +303,14 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
             ArtifactId = 1,
             Version = "1.0.0",
             SourceLocalPath = sourcePath,
+            ContentSha256 = contentSha256,
             InstallPath = targetPath,
             DeploymentState = HostDeploymentStatuses.Succeeded,
             DeployedArtifactId = 1,
             DeployedSourceLocalPath = sourcePath,
             DeployedTargetPath = targetPath,
-            DeployedRuntimeName = "TestSite/"
+            DeployedRuntimeName = "TestSite/",
+            DeployedContentSha256 = deployedContentSha256
         };
     }
 

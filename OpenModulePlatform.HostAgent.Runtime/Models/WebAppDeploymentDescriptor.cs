@@ -39,4 +39,6 @@ public sealed class WebAppDeploymentDescriptor
     public string? DeployedTargetPath { get; init; }
 
     public string? DeployedRuntimeName { get; init; }
+
+    public string? DeployedContentSha256 { get; init; }
 }
