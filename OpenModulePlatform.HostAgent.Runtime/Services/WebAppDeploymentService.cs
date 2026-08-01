@@ -397,6 +397,7 @@ public sealed class WebAppDeploymentService
             && string.Equals(deployment.DeployedSourceLocalPath, deployment.SourceLocalPath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(deployment.DeployedTargetPath, targetPath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(deployment.DeployedRuntimeName ?? string.Empty, appPoolName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            && ArtifactHash.MatchesDeployedContent(deployment.ContentSha256, deployment.DeployedContentSha256)
             && Directory.Exists(targetPath);
     }
 

@@ -532,6 +532,7 @@ public sealed class ServiceAppDeploymentService
             && string.Equals(deployment.DeployedSourceLocalPath, deployment.SourceLocalPath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(deployment.DeployedTargetPath, targetPath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(deployment.DeployedRuntimeName, serviceName, StringComparison.OrdinalIgnoreCase)
+            && ArtifactHash.MatchesDeployedContent(deployment.ContentSha256, deployment.DeployedContentSha256)
             && Directory.Exists(targetPath)
             && File.Exists(targetExecutablePath)
             && _serviceControl.GetServiceState(serviceName) is not null;

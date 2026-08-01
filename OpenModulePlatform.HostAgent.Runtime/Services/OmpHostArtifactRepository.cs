@@ -3425,7 +3425,8 @@ BEGIN
         CAST(NULL AS nvarchar(500)) AS DeployedSourceLocalPath,
         CAST(NULL AS nvarchar(500)) AS DeployedTargetPath,
         CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName,
-        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey;
+        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey,
+        CAST(NULL AS nvarchar(128)) AS DeployedContentSha256;
     RETURN;
 END;
 
@@ -3448,7 +3449,8 @@ SELECT TOP (@maxDeployments)
     hds.SourceLocalPath AS DeployedSourceLocalPath,
     hds.TargetPath AS DeployedTargetPath,
     hds.RuntimeName AS DeployedRuntimeName,
-    mi.ModuleInstanceKey
+    mi.ModuleInstanceKey,
+    hds.ContentSha256 AS DeployedContentSha256
 FROM omp.AppInstances ai
 INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
@@ -3520,7 +3522,8 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
                 DeployedSourceLocalPath = rdr.IsDBNull(15) ? null : rdr.GetString(15),
                 DeployedTargetPath = rdr.IsDBNull(16) ? null : rdr.GetString(16),
                 DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17),
-                ModuleInstanceKey = rdr.GetString(18)
+                ModuleInstanceKey = rdr.GetString(18),
+                DeployedContentSha256 = rdr.IsDBNull(19) ? null : rdr.GetString(19)
             });
         }
 
@@ -3568,7 +3571,8 @@ BEGIN
         CAST(NULL AS nvarchar(200)) AS DeployedRuntimeName,
         CAST(NULL AS datetime2(3)) AS IdentityRepairRequestedUtc,
         CAST(NULL AS nvarchar(256)) AS IdentityRepairRequestedBy,
-        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey;
+        CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey,
+        CAST(NULL AS nvarchar(128)) AS DeployedContentSha256;
     RETURN;
 END;
 
@@ -3593,7 +3597,8 @@ SELECT TOP (@maxDeployments)
     hds.RuntimeName AS DeployedRuntimeName,
     hds.IdentityRepairRequestedUtc,
     hds.IdentityRepairRequestedBy,
-    mi.ModuleInstanceKey
+    mi.ModuleInstanceKey,
+    hds.ContentSha256 AS DeployedContentSha256
 FROM omp.AppInstances ai
 INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
@@ -3664,7 +3669,8 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
                 DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17),
                 IdentityRepairRequestedUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
                 IdentityRepairRequestedBy = rdr.IsDBNull(19) ? null : rdr.GetString(19),
-                ModuleInstanceKey = rdr.GetString(20)
+                ModuleInstanceKey = rdr.GetString(20),
+                DeployedContentSha256 = rdr.IsDBNull(21) ? null : rdr.GetString(21)
             });
         }
 

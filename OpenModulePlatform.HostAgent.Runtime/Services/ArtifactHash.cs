@@ -5,6 +5,20 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public static class ArtifactHash
 {
+    // A missing desired hash means content-change detection is unavailable for the
+    // artifact, so callers must fall back to identity-based (id/version/path) comparison
+    // instead of treating every cycle as a content change.
+    public static bool MatchesDeployedContent(string? desiredSha256, string? deployedSha256)
+    {
+        if (string.IsNullOrWhiteSpace(desiredSha256))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(deployedSha256)
+            && string.Equals(desiredSha256.Trim(), deployedSha256.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
     public static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
         if (File.Exists(path))

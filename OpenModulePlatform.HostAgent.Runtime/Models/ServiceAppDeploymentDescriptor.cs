@@ -40,6 +40,8 @@ public sealed class ServiceAppDeploymentDescriptor
 
     public string? DeployedRuntimeName { get; init; }
 
+    public string? DeployedContentSha256 { get; init; }
+
     public DateTime? IdentityRepairRequestedUtc { get; init; }
 
     public string? IdentityRepairRequestedBy { get; init; }

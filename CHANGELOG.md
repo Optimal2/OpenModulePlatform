@@ -6,6 +6,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ## [Unreleased]
 
+### Fixed
+
+- HostAgent now redeploys web apps and service apps when the artifact content
+  SHA-256 changes behind an unchanged artifact id and version. The already-applied
+  check compares the desired `omp.HostArtifactStates.ContentSha256` with the
+  deployed `omp.HostAppDeploymentStates.ContentSha256`, so replaced artifact
+  content no longer requires a version bump to reach the runtime.
+
 > **Note:** This changelog was not maintained per-release after `0.1.0`. The repository has since advanced to the `0.3.x` release line. The authoritative current version is the `repositoryVersion` in `omp-components.json` (and the central metadata in `Directory.Build.props`) — not the newest entry below. Treat the `0.1.0` section as the initial-baseline record, not the current state; future notable changes should be logged here per the Keep a Changelog format.
 
 ## [0.1.0] - 2026-04-13

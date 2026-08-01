@@ -108,6 +108,55 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AlreadyApplied_ContentSha256Unchanged_SkipsRedeployment()
+    {
+        var (service, repository, control, deployment, _) = CreateScenario(
+            contentSha256: "aa11",
+            deployedContentSha256: "AA11");
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Single(repository.PublishedServiceAppResults);
+        var result = repository.PublishedServiceAppResults[0].Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, result.State);
+        Assert.Null(result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task ContentSha256Changed_SameArtifactIdAndVersion_TriggersRedeployment()
+    {
+        var (service, repository, control, deployment, _) = CreateScenario(
+            contentSha256: "bb22",
+            deployedContentSha256: "aa11");
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Equal(2, repository.PublishedServiceAppResults.Count);
+        Assert.Equal(HostDeploymentStatuses.Running, repository.PublishedServiceAppResults[0].Result.State);
+        var final = repository.PublishedServiceAppResults[1].Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, final.State);
+        Assert.True(final.Applied);
+    }
+
+    [Fact]
+    public async Task DeployedContentSha256Missing_DesiredHashKnown_TriggersRedeployment()
+    {
+        var (service, repository, control, deployment, _) = CreateScenario(
+            contentSha256: "aa11",
+            deployedContentSha256: null);
+        control.SetState(deployment.DeployedRuntimeName!, "RUNNING");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Equal(2, repository.PublishedServiceAppResults.Count);
+        var final = repository.PublishedServiceAppResults[1].Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, final.State);
+        Assert.True(final.Applied);
+    }
+
+    [Fact]
     public async Task AlreadyApplied_ServiceStopsRepeatedly_AfterThresholdEmitsPersistentWarningAndStopsRestarting()
     {
         const int Threshold = 3;
@@ -467,7 +516,9 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     }
 
     private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateScenario(
-        bool startAfterDeployment = true)
+        bool startAfterDeployment = true,
+        string? contentSha256 = null,
+        string? deployedContentSha256 = null)
     {
         var settings = new HostAgentSettings
         {
@@ -491,7 +542,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             NullLogger<ServiceAppDeploymentService>.Instance,
             control);
 
-        var (deployment, targetPath) = CreateAlreadyAppliedDeployment();
+        var (deployment, targetPath) = CreateAlreadyAppliedDeployment(contentSha256, deployedContentSha256);
         repository.DesiredServiceAppDeployments.Add(deployment);
         ApplyConfigurationForAlreadyAppliedDeployment(repository, settings, deployment, targetPath);
 
@@ -525,7 +576,9 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             CancellationToken.None).GetAwaiter().GetResult();
     }
 
-    private (ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateAlreadyAppliedDeployment()
+    private (ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateAlreadyAppliedDeployment(
+        string? contentSha256 = null,
+        string? deployedContentSha256 = null)
     {
         var appInstanceId = Guid.NewGuid();
         var appInstanceKey = $"test-app-{appInstanceId:N}";
@@ -551,12 +604,14 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             ArtifactId = 42,
             Version = "1.0.0",
             SourceLocalPath = sourcePath,
+            ContentSha256 = contentSha256,
             InstallPath = targetPath,
             DeployedArtifactId = 42,
             DeploymentState = HostDeploymentStatuses.Succeeded,
             DeployedSourceLocalPath = sourcePath,
             DeployedTargetPath = targetPath,
-            DeployedRuntimeName = serviceName
+            DeployedRuntimeName = serviceName,
+            DeployedContentSha256 = deployedContentSha256
         };
 
         return (deployment, targetPath);

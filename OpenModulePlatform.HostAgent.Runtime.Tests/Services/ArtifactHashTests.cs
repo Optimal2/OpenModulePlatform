@@ -46,6 +46,24 @@ public sealed class ArtifactHashTests
         Assert.Equal("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash);
     }
 
+    [Theory]
+    [InlineData(null, null, true)]
+    [InlineData(null, "abc123", true)]
+    [InlineData("  ", "abc123", true)]
+    [InlineData("abc123", "abc123", true)]
+    [InlineData("ABC123", "abc123", true)]
+    [InlineData(" abc123 ", "abc123", true)]
+    [InlineData("abc123", null, false)]
+    [InlineData("abc123", "   ", false)]
+    [InlineData("abc123", "def456", false)]
+    public void MatchesDeployedContent_ComparesTrimmedHashesCaseInsensitively(
+        string? desiredSha256,
+        string? deployedSha256,
+        bool expected)
+    {
+        Assert.Equal(expected, ArtifactHash.MatchesDeployedContent(desiredSha256, deployedSha256));
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.GetFullPath(Path.Join(Path.GetTempPath(), $"omp-hash-dir-{Guid.NewGuid():N}"));
