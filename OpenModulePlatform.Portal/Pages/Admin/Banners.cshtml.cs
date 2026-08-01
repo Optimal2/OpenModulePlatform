@@ -1,6 +1,8 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/Banners.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
@@ -14,14 +16,17 @@ public sealed class BannersModel : OmpPortalPageModel
     private const string TargetModeRoles = "roles";
 
     private readonly BannerService _banners;
+    private readonly IStringLocalizer<PortalResource> _portalLocalizer;
 
     public BannersModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        BannerService banners)
+        BannerService banners,
+        IStringLocalizer<PortalResource> portalLocalizer)
         : base(options, rbac)
     {
         _banners = banners;
+        _portalLocalizer = portalLocalizer;
     }
 
     [BindProperty]
@@ -108,7 +113,7 @@ public sealed class BannersModel : OmpPortalPageModel
                     return NotFound();
                 }
 
-                StatusMessage = T("Banner updated.");
+                StatusMessage = P("Banner updated.");
                 return RedirectToPage("/Admin/Banners", new { bannerId = Input.BannerId });
             }
 
@@ -123,12 +128,12 @@ public sealed class BannersModel : OmpPortalPageModel
                 ToTargets(),
                 ct);
 
-            StatusMessage = T("Banner created.");
+            StatusMessage = P("Banner created.");
             return RedirectToPage("/Admin/Banners", new { bannerId });
         }
         catch (ArgumentException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, P(ex.Message));
             return Page();
         }
     }
@@ -143,28 +148,66 @@ public sealed class BannersModel : OmpPortalPageModel
 
         var updated = await _banners.SetEnabledAsync(bannerId, enabled, ct);
         StatusMessage = updated
-            ? T(enabled ? "Banner enabled." : "Banner disabled.")
-            : T("Banner was not found.");
+            ? P(enabled ? "Banner enabled." : "Banner disabled.")
+            : P("Banner was not found.");
+        return RedirectToPage("/Admin/Banners");
+    }
+
+    public async Task<IActionResult> OnPostSetEnabledMany(long[]? selectedBannerIds, bool enabled, CancellationToken ct)
+    {
+        var guard = await RequirePortalAdminAsync(ct);
+        if (guard is not null)
+        {
+            return guard;
+        }
+
+        var bannerIds = (selectedBannerIds ?? [])
+            .Where(bannerId => bannerId > 0)
+            .Distinct()
+            .ToArray();
+        if (bannerIds.Length == 0)
+        {
+            StatusMessage = P("Select at least one banner.");
+            return RedirectToPage("/Admin/Banners");
+        }
+
+        var updatedCount = 0;
+        foreach (var bannerId in bannerIds)
+        {
+            if (await _banners.SetEnabledAsync(bannerId, enabled, ct))
+            {
+                updatedCount += 1;
+            }
+        }
+
+        StatusMessage = updatedCount == 1
+            ? P(enabled ? "Banner enabled." : "Banner disabled.")
+            : string.Format(
+                CultureInfo.CurrentCulture,
+                P(enabled ? "{0} banners enabled." : "{0} banners disabled."),
+                updatedCount);
         return RedirectToPage("/Admin/Banners");
     }
 
     public string StateText(string state)
         => state switch
         {
-            "active" => T("Active"),
-            "scheduled" => T("Scheduled"),
-            "expired" => T("Expired"),
-            "disabled" => T("Disabled"),
+            "active" => P("Active"),
+            "scheduled" => P("Scheduled"),
+            "expired" => P("Expired"),
+            "disabled" => P("Disabled"),
             _ => state
         };
 
     public string LevelText(int level)
         => level switch
         {
-            BannerService.LevelCritical => T("Critical"),
-            BannerService.LevelWarning => T("Warning"),
-            _ => T("Announcement")
+            BannerService.LevelCritical => P("Critical"),
+            BannerService.LevelWarning => P("Warning"),
+            _ => P("Announcement")
         };
+
+    private string P(string key) => _portalLocalizer[key];
 
     private async Task LoadAsync(CancellationToken ct)
     {
@@ -190,27 +233,27 @@ public sealed class BannersModel : OmpPortalPageModel
 
         if (Input.Level is < BannerService.LevelAnnouncement or > BannerService.LevelCritical)
         {
-            ModelState.AddModelError(nameof(Input.Level), T("Select a valid banner level."));
+            ModelState.AddModelError(nameof(Input.Level), P("Select a valid banner level."));
         }
 
         if (Input.Status is not (BannerService.StatusActive or BannerService.StatusDisabled))
         {
-            ModelState.AddModelError(nameof(Input.Status), T("Select a valid status."));
+            ModelState.AddModelError(nameof(Input.Status), P("Select a valid status."));
         }
 
         if (Input.TargetMode == TargetModeRoles && Input.SelectedRoleIds.Count == 0)
         {
-            ModelState.AddModelError(nameof(Input.SelectedRoleIds), T("Select at least one role."));
+            ModelState.AddModelError(nameof(Input.SelectedRoleIds), P("Select at least one role."));
         }
 
         if (Input.TargetMode is not (TargetModeGlobal or TargetModeRoles))
         {
-            ModelState.AddModelError(nameof(Input.TargetMode), T("Select a valid target."));
+            ModelState.AddModelError(nameof(Input.TargetMode), P("Select a valid target."));
         }
 
         if (Input.StartsAtUtc.HasValue && Input.ExpiresAtUtc.HasValue && Input.ExpiresAtUtc.Value <= Input.StartsAtUtc.Value)
         {
-            ModelState.AddModelError(nameof(Input.ExpiresAtUtc), T("Expires at must be after starts at."));
+            ModelState.AddModelError(nameof(Input.ExpiresAtUtc), P("Expires at must be after starts at."));
         }
     }
 

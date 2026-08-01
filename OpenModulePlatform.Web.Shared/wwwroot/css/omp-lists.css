@@ -1,7 +1,8 @@
 /* File: OpenModulePlatform.Web.Shared/wwwroot/css/omp-lists.css */
 /* Shared OMP list component styles: sortable headers, filter dropdown,
-   search, counter, paging, viewport, resizable columns, truncated
-   messages and popovers. Host apps must define the shared tokens
+   search, counter, paging, row selection and bulk actions, viewport,
+   resizable columns, truncated messages and popovers. Host apps define
+   the shared tokens
    (--border, --border-strong, --surface, --surface-muted, --text,
    --text-muted, --link, --link-hover, --shadow). */
 
@@ -208,6 +209,43 @@
     color: var(--text-muted);
     font-size: 0.85rem;
     white-space: nowrap;
+}
+
+.list-selection-actions {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+}
+
+.list-selected-count {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.list-selection-cell {
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    padding-right: 8px !important;
+    padding-left: 12px !important;
+    text-align: center !important;
+    text-overflow: clip !important;
+}
+
+.list-selection-cell input[type="checkbox"] {
+    display: block;
+    width: 18px;
+    height: 18px;
+    margin: 0 auto;
+    padding: 0;
+    cursor: pointer;
+}
+
+table[data-list-selection] > tbody > tr.list-row-selected > td {
+    background: color-mix(in srgb, var(--link) 8%, transparent);
 }
 
 .list-show-more {

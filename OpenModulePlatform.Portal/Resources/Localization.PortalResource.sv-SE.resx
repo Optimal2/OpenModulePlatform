@@ -2909,4 +2909,12 @@
   <data name="Enter a relative URL like /admin/hosts, or pick an app link -- app links resolve to the app's address and only show for users with access to the app." xml:space="preserve">
     <value>Ange en relativ URL som /admin/hosts, eller välj en applänk — applänkar löses upp till appens adress och visas bara för användare med åtkomst till appen.</value>
   </data>
+  <data name="Select all banners" xml:space="preserve"><value>Markera alla banderoller</value></data>
+  <data name="Select banner {0}" xml:space="preserve"><value>Markera banderollen {0}</value></data>
+  <data name="{0} selected" xml:space="preserve"><value>{0} markerade</value></data>
+  <data name="Enable selected" xml:space="preserve"><value>Aktivera markerade</value></data>
+  <data name="Disable selected" xml:space="preserve"><value>Inaktivera markerade</value></data>
+  <data name="Select at least one banner." xml:space="preserve"><value>Markera minst en banderoll.</value></data>
+  <data name="{0} banners enabled." xml:space="preserve"><value>{0} banderoller aktiverades.</value></data>
+  <data name="{0} banners disabled." xml:space="preserve"><value>{0} banderoller inaktiverades.</value></data>
 </root>

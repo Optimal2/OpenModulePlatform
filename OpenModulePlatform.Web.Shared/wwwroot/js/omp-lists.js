@@ -1,7 +1,8 @@
 // File: OpenModulePlatform.Web.Shared/wwwroot/js/omp-lists.js
 // Shared OMP list component: sortable columns, combinable filters, search,
-// row counter, client-side paging, viewport height lock, follow rows,
-// resizable columns, truncated messages with popovers, and info badges.
+// row counter, client-side paging, row selection with bulk actions, viewport
+// height lock, follow rows, resizable columns, truncated messages with
+// popovers, and info badges.
 // Markup conventions are opt-in per table; see the Portal admin pages for examples.
 (() => {
     'use strict';
@@ -341,6 +342,81 @@
         controller.table.classList.toggle('list-locally-searched', !!controller.searchTerm);
 
         controller.table.dispatchEvent(new CustomEvent('sortable-list:updated', { bubbles: true }));
+    }
+
+    function initListSelection(root) {
+        root.querySelectorAll('table[data-list-selection]').forEach((table) => {
+            if (table.dataset.listSelectionInitialized === 'true') {
+                return;
+            }
+
+            const tbody = table.tBodies[0];
+            const selectAll = table.tHead?.querySelector('input[data-list-select-all]');
+            if (!tbody || !selectAll) {
+                return;
+            }
+
+            table.dataset.listSelectionInitialized = 'true';
+            const selectionKey = table.dataset.listSelection || table.id;
+            const actions = selectionKey
+                ? document.querySelector(`[data-list-selection-actions="${CSS.escape(selectionKey)}"]`)
+                : null;
+            const selectedCount = actions?.querySelector('[data-list-selected-count]');
+            const actionButtons = Array.from(actions?.querySelectorAll('[data-list-selection-action]') || []);
+
+            const rowCheckboxes = () => Array.from(
+                tbody.querySelectorAll(':scope > tr > td input[data-list-select-row]'));
+
+            const refreshSelection = () => {
+                const checkboxes = rowCheckboxes();
+                const selectable = checkboxes.filter((checkbox) => !checkbox.disabled);
+                const selected = selectable.filter((checkbox) => checkbox.checked);
+
+                selectAll.disabled = selectable.length === 0;
+                selectAll.checked = selectable.length > 0 && selected.length === selectable.length;
+                selectAll.indeterminate = selected.length > 0 && selected.length < selectable.length;
+
+                checkboxes.forEach((checkbox) => {
+                    checkbox.closest('tr')?.classList.toggle('list-row-selected', checkbox.checked);
+                });
+
+                if (selectedCount) {
+                    const template = selectedCount.dataset.template || '{0} selected';
+                    selectedCount.textContent = template.replace('{0}', String(selected.length));
+                }
+
+                actionButtons.forEach((button) => {
+                    button.disabled = selected.length === 0;
+                });
+
+                table.dispatchEvent(new CustomEvent('sortable-list:selection-changed', {
+                    bubbles: true,
+                    detail: { selectedCount: selected.length, totalCount: selectable.length }
+                }));
+            };
+
+            table.addEventListener('change', (event) => {
+                const checkbox = event.target;
+                if (!(checkbox instanceof HTMLInputElement) || checkbox.type !== 'checkbox') {
+                    return;
+                }
+
+                if (checkbox.matches('[data-list-select-all]')) {
+                    rowCheckboxes()
+                        .filter((rowCheckbox) => !rowCheckbox.disabled)
+                        .forEach((rowCheckbox) => {
+                            rowCheckbox.checked = checkbox.checked;
+                        });
+                } else if (!checkbox.matches('[data-list-select-row]')) {
+                    return;
+                }
+
+                refreshSelection();
+            });
+
+            table.addEventListener('sortable-list:updated', refreshSelection);
+            refreshSelection();
+        });
     }
 
     function initListFilters(root) {
@@ -708,7 +784,7 @@
 
             Array.from(headerRow.cells).forEach((cell, index) => {
                 // The last column has no right-hand neighbour to trade space with.
-                if (index >= columnCount - 1) {
+                if (index >= columnCount - 1 || cell.matches('.list-selection-cell, [data-list-no-resize]')) {
                     return;
                 }
 
@@ -805,6 +881,7 @@
         initSortableLists(document);
         initListFilters(document);
         initListEnhancements(document);
+        initListSelection(document);
         initColumnResize(document);
         initInfoBadges(document);
         initListMessages(document);
