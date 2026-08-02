@@ -123,9 +123,14 @@ SELECT CAST(SCOPE_IDENTITY() AS int);",
 
         foreach (var batch in SplitBatches(portableSql))
         {
-            await using var cmd = new SqlCommand(batch, conn);
-            await cmd.ExecuteNonQueryAsync();
+            await ExecuteNonQueryAsync(conn, batch);
         }
+    }
+
+    private static async Task ExecuteNonQueryAsync(SqlConnection conn, string batch)
+    {
+        await using var cmd = new SqlCommand(batch, conn);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static IEnumerable<string> SplitBatches(string sql)

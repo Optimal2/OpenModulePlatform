@@ -20,17 +20,18 @@
 }
 @foreach (var paneBox in Model)
 {
-    var boxModel = new LinkBoxModel
+    @await Component.InvokeAsync("LinkBox", new
     {
-        Label = L[paneBox.Box.Title].Value,
-        Heading = L[paneBox.Box.Title].Value,
-        BoxKey = paneBox.Box.BoxKey,
-        EditUrl = Url.Content("~/admin/navigation?box=" + Uri.EscapeDataString(paneBox.Box.BoxKey)),
-        EditLabel = L["Edit links"].Value,
-        Items = paneBox.Links
-            .Select(link => new LinkBoxItem(L[link.Row.Label].Value, link.Href, link.Row.GroupKey, IsActive(link.Href)))
-            .ToArray()
-    };
-
-    @await Component.InvokeAsync("LinkBox", new { model = boxModel })
+        model = new LinkBoxModel
+        {
+            Label = L[paneBox.Box.Title].Value,
+            Heading = L[paneBox.Box.Title].Value,
+            BoxKey = paneBox.Box.BoxKey,
+            EditUrl = Url.Content("~/admin/navigation?box=" + Uri.EscapeDataString(paneBox.Box.BoxKey)),
+            EditLabel = L["Edit links"].Value,
+            Items = paneBox.Links
+                .Select(link => new LinkBoxItem(L[link.Row.Label].Value, link.Href, link.Row.GroupKey, IsActive(link.Href)))
+                .ToArray()
+        }
+    })
 }

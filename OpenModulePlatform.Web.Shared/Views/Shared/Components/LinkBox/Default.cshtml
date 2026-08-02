@@ -5,12 +5,11 @@
     @* Group keys are mapped to one of four muted tints in order of first
        appearance; the keys themselves are free-form and never displayed. *@
     var groupTints = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-    foreach (var groupedItem in Model.Items)
+    foreach (var group in Model.Items
+        .Select(item => item.Group)
+        .Where(group => !string.IsNullOrWhiteSpace(group)))
     {
-        if (!string.IsNullOrWhiteSpace(groupedItem.Group) && !groupTints.ContainsKey(groupedItem.Group))
-        {
-            groupTints[groupedItem.Group] = (groupTints.Count % 4) + 1;
-        }
+        groupTints.TryAdd(group!, (groupTints.Count % 4) + 1);
     }
 
     <nav class="omp-linkbox" aria-label="@Model.Label">

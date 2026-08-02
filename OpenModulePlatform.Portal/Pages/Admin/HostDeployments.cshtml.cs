@@ -269,7 +269,10 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             var ompAuthRawRows = await _repo.GetHostOmpAuthComparisonsAsync(ct);
             OmpAuthComparisons = BuildHostOmpAuthComparisons(ompAuthRawRows);
         }
-        catch (Exception ex)
+        // The OmpAuth consistency section is optional page data: any failure
+        // loading it must not break the whole page. The filter still lets a
+        // request cancellation propagate instead of rendering a partial page.
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(
                 ex,

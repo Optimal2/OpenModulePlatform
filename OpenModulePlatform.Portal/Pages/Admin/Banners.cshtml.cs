@@ -174,10 +174,7 @@ public sealed class BannersModel : OmpPortalPageModel
         var updatedCount = 0;
         foreach (var bannerId in bannerIds)
         {
-            if (await _banners.SetEnabledAsync(bannerId, enabled, ct))
-            {
-                updatedCount += 1;
-            }
+            updatedCount += await _banners.SetEnabledAsync(bannerId, enabled, ct) ? 1 : 0;
         }
 
         StatusMessage = updatedCount == 1
