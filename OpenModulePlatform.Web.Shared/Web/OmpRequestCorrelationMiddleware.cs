@@ -76,7 +76,22 @@ public static class OmpRequestCorrelationMiddleware
     }
 
     private static string ResolveCorrelationId(string? candidate)
-        => IsValidCorrelationId(candidate) ? candidate!.Trim() : Guid.NewGuid().ToString("N");
+    {
+        if (!IsValidCorrelationId(candidate))
+        {
+            return Guid.NewGuid().ToString("N");
+        }
+
+        // The allowlist in IsValidCorrelationId already rejects every control
+        // character, so these strips never change an accepted value. They exist
+        // because log-forging analyzers model newline removal as the sanitizer;
+        // the character-loop validation above is invisible to their taint
+        // tracking and would keep the accepted header flagged as attacker-
+        // controlled log input.
+        return candidate!.Trim()
+            .Replace("\r", string.Empty)
+            .Replace("\n", string.Empty);
+    }
 
     private static bool IsValidCorrelationId(string? value)
     {
