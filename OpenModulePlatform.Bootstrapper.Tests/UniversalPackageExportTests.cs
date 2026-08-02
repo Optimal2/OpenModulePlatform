@@ -21,11 +21,13 @@ public sealed class UniversalPackageExportTests : IDisposable
                 Directory.Delete(_testRoot, recursive: true);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 

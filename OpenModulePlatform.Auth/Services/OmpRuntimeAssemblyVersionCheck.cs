@@ -80,7 +80,11 @@ internal static class OmpRuntimeAssemblyVersionCheck
         {
             return Assembly.Load(new AssemblyName(assemblyName)).GetName().Version;
         }
-        catch (Exception)
+        catch (Exception ex) when (
+            ex is ArgumentException
+                or System.IO.FileNotFoundException
+                or System.IO.FileLoadException
+                or BadImageFormatException)
         {
             return null;
         }

@@ -21,9 +21,9 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
                     Directory.Delete(path, recursive: true);
                 }
             }
-            catch
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Best-effort cleanup.
+                // Best-effort cleanup of temp test directories.
             }
         }
     }
@@ -255,16 +255,16 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     private HostAgentSettings CreateTestSettings()
     {
         var tempRoot = CreateTempDirectory();
-        var webAppsRoot = Path.Combine(tempRoot, "webapps");
-        var portalPath = Path.Combine(tempRoot, "portal");
+        var webAppsRoot = Path.Join(tempRoot, "webapps");
+        var portalPath = Path.Join(tempRoot, "portal");
         Directory.CreateDirectory(webAppsRoot);
         Directory.CreateDirectory(portalPath);
 
         return new HostAgentSettings
         {
             DeployWebApps = true,
-            CentralArtifactRoot = Path.Combine(tempRoot, "central"),
-            LocalArtifactCacheRoot = Path.Combine(tempRoot, "cache"),
+            CentralArtifactRoot = Path.Join(tempRoot, "central"),
+            LocalArtifactCacheRoot = Path.Join(tempRoot, "cache"),
             IisSiteName = "TestSite",
             EnsureIisSite = false,
             WebAppsRoot = webAppsRoot,
@@ -286,11 +286,11 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     {
         moduleInstanceKey = "test-module-instance";
         var tempRoot = CreateTempDirectory();
-        var sourcePath = Path.Combine(tempRoot, "source");
-        var targetPath = Path.Combine(tempRoot, "target");
+        var sourcePath = Path.Join(tempRoot, "source");
+        var targetPath = Path.Join(tempRoot, "target");
         Directory.CreateDirectory(sourcePath);
         Directory.CreateDirectory(targetPath);
-        File.WriteAllText(Path.Combine(sourcePath, "app.txt"), "content");
+        File.WriteAllText(Path.Join(sourcePath, "app.txt"), "content");
 
         return new WebAppDeploymentDescriptor
         {
@@ -316,7 +316,7 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
 
     private string CreateTempDirectory()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"OmpWebAppDeployTests-{Guid.NewGuid():N}");
+        var path = Path.Join(Path.GetTempPath(), $"OmpWebAppDeployTests-{Guid.NewGuid():N}");
         _tempPaths.Add(path);
         return path;
     }

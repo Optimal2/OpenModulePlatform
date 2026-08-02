@@ -62,7 +62,7 @@ DROP DATABASE [{_databaseName}];",
                 conn);
             cmd.ExecuteNonQuery();
         }
-        catch
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
             // Best-effort cleanup; do not fail tests because cleanup failed.
         }

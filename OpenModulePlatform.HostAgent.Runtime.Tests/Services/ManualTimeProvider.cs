@@ -104,14 +104,7 @@ public sealed class ManualTimeProvider : TimeProvider
                 return;
             }
 
-            if (_periodTicks < 0)
-            {
-                _dueTimeTicks = -1;
-            }
-            else
-            {
-                _dueTimeTicks = now + _periodTicks;
-            }
+            _dueTimeTicks = _periodTicks < 0 ? -1 : now + _periodTicks;
 
             _callback(_state);
         }

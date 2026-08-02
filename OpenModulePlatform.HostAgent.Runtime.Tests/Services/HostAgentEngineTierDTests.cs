@@ -165,7 +165,7 @@ public sealed class HostAgentEngineTierDTests
     {
         var repository = new FakeOmpHostArtifactRepository { RenewLeaseResult = true };
         var timeProvider = new ManualTimeProvider(DateTimeOffset.UtcNow);
-        var processingCts = new CancellationTokenSource();
+        using var processingCts = new CancellationTokenSource();
         var deployment = new HostDeploymentWorkItem(1, 42, "host-template", Guid.NewGuid());
         var engine = CreateEngine(repository, timeProvider);
 
@@ -192,7 +192,7 @@ public sealed class HostAgentEngineTierDTests
     {
         var repository = new FakeOmpHostArtifactRepository { RenewLeaseResult = false };
         var timeProvider = new ManualTimeProvider(DateTimeOffset.UtcNow);
-        var processingCts = new CancellationTokenSource();
+        using var processingCts = new CancellationTokenSource();
         var deployment = new HostDeploymentWorkItem(1, 42, "host-template", Guid.NewGuid());
         var engine = CreateEngine(repository, timeProvider);
 
@@ -238,7 +238,7 @@ public sealed class HostAgentEngineTierDTests
             RenewLeaseException = new TestDbException("Transient SQL error.")
         };
         var timeProvider = new ManualTimeProvider(DateTimeOffset.UtcNow);
-        var processingCts = new CancellationTokenSource();
+        using var processingCts = new CancellationTokenSource();
         var deployment = new HostDeploymentWorkItem(1, 42, "host-template", Guid.NewGuid());
         var engine = CreateEngine(repository, timeProvider);
 

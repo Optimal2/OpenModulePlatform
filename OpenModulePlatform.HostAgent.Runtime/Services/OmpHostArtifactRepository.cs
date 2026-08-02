@@ -5140,18 +5140,14 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
             return [];
         }
 
-        var result = new List<string>();
-        foreach (var node in array)
-        {
-            if (node is JsonValue value
-                && value.TryGetValue<string>(out var text)
-                && !string.IsNullOrWhiteSpace(text))
-            {
-                result.Add(text);
-            }
-        }
-
-        return result;
+        return
+        [
+            .. array
+                .OfType<JsonValue>()
+                .Select(value => value.TryGetValue<string>(out var text) ? text : null)
+                .Where(text => !string.IsNullOrWhiteSpace(text))
+                .Select(text => text!)
+        ];
     }
 
     private async Task<ArtifactAutoApplyTarget?> ReadArtifactAutoApplyTargetAsync(

@@ -37,15 +37,13 @@ public sealed class DeploySetConsistencyService
 
         foreach (var deviation in deviations)
         {
-            var message =
-                $"Deploy-set consistency deviation detected. " +
+            _logger.LogWarning(
+                "Deploy-set consistency deviation detected. " +
                 $"ModuleInstance={deviation.ModuleInstanceKey} ({deviation.ModuleKey}), " +
                 $"Set={deviation.SetKey}, " +
                 $"MatchedMembers={deviation.MatchedMemberCount}/{deviation.TotalMemberCount}, " +
                 $"Versions={deviation.ActualVersions}. " +
-                $"All artifacts in the set should use the same version.";
-
-            _logger.LogWarning(message);
+                "All artifacts in the set should use the same version.");
         }
 
         return new DeploySetConsistencyCheckSummary(results, deviations);

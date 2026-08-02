@@ -25,8 +25,9 @@ public sealed class ArtifactProvisionerTests : IDisposable
             Directory.Delete(_centralRoot, recursive: true);
             Directory.Delete(_localRoot, recursive: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 

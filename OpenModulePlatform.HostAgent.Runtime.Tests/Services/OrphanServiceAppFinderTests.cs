@@ -10,7 +10,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_FlagsOrphanDirectory()
     {
         using var root = new TempServicesRoot();
-        Directory.CreateDirectory(Path.Combine(root.Path, "OrphanApp"));
+        Directory.CreateDirectory(Path.Join(root.Path, "OrphanApp"));
 
         var settings = CreateSettings(root.Path);
         var hostId = Guid.NewGuid();
@@ -36,7 +36,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_SkipsActiveAppInstanceDirectory()
     {
         using var root = new TempServicesRoot();
-        var activePath = Path.Combine(root.Path, "MyActiveService");
+        var activePath = Path.Join(root.Path, "MyActiveService");
         Directory.CreateDirectory(activePath);
 
         var deployment = new ServiceAppDeploymentDescriptor
@@ -64,7 +64,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_SkipsHostAgentInstallDirectory()
     {
         using var root = new TempServicesRoot();
-        var hostAgentDirectory = Path.Combine(root.Path, "HostAgent");
+        var hostAgentDirectory = Path.Join(root.Path, "HostAgent");
         Directory.CreateDirectory(hostAgentDirectory);
 
         var settings = CreateSettings(root.Path);
@@ -88,7 +88,7 @@ public sealed class OrphanServiceAppFinderTests
         // running HostAgent-<version> install directory sits directly below ServicesRoot.
         // The orphan sweep must never flag it for deletion.
         using var root = new TempServicesRoot();
-        Directory.CreateDirectory(Path.Combine(root.Path, "HostAgent-0.3.161"));
+        Directory.CreateDirectory(Path.Join(root.Path, "HostAgent-0.3.161"));
 
         var settings = CreateSettings(root.Path);
 
@@ -109,8 +109,8 @@ public sealed class OrphanServiceAppFinderTests
         // Positive guard: exempting HostAgent install directories must not silence
         // legitimate orphan findings in the same services root.
         using var root = new TempServicesRoot();
-        Directory.CreateDirectory(Path.Combine(root.Path, "HostAgent-0.3.161"));
-        Directory.CreateDirectory(Path.Combine(root.Path, "OrphanApp"));
+        Directory.CreateDirectory(Path.Join(root.Path, "HostAgent-0.3.161"));
+        Directory.CreateDirectory(Path.Join(root.Path, "OrphanApp"));
 
         var settings = CreateSettings(root.Path);
 
@@ -131,8 +131,8 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_MultipleOrphansWithAndWithoutService()
     {
         using var root = new TempServicesRoot();
-        var orphanA = Path.Combine(root.Path, "OrphanA");
-        var orphanB = Path.Combine(root.Path, "OrphanB");
+        var orphanA = Path.Join(root.Path, "OrphanA");
+        var orphanB = Path.Join(root.Path, "OrphanB");
         Directory.CreateDirectory(orphanA);
         Directory.CreateDirectory(orphanB);
 
@@ -140,7 +140,7 @@ public sealed class OrphanServiceAppFinderTests
         var hostId = Guid.NewGuid();
         var candidates = new[]
         {
-            new ServiceAppServiceCandidate("OrphanA", "STOPPED", Path.Combine(orphanA, "OrphanA.exe"), "Orphan A")
+            new ServiceAppServiceCandidate("OrphanA", "STOPPED", Path.Join(orphanA, "OrphanA.exe"), "Orphan A")
         };
 
         var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
@@ -149,7 +149,7 @@ public sealed class OrphanServiceAppFinderTests
             settings,
             Array.Empty<ServiceAppDeploymentDescriptor>(),
             serviceName => serviceName.Equals("OrphanA", StringComparison.OrdinalIgnoreCase)
-                ? ("STOPPED", Path.Combine(orphanA, "OrphanA.exe"))
+                ? ("STOPPED", Path.Join(orphanA, "OrphanA.exe"))
                 : null,
             candidates,
             CancellationToken.None);
@@ -195,7 +195,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_RespectsCustomRelativeInstallPath()
     {
         using var root = new TempServicesRoot();
-        var customPath = Path.Combine(root.Path, "CustomSub");
+        var customPath = Path.Join(root.Path, "CustomSub");
         Directory.CreateDirectory(customPath);
 
         var deployment = new ServiceAppDeploymentDescriptor
@@ -223,7 +223,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_RunningServiceWithoutOwner_IsFlaggedByServiceSweep()
     {
         using var root = new TempServicesRoot();
-        var orphanDirectory = Path.Combine(root.Path, "OrphanWithRunningService");
+        var orphanDirectory = Path.Join(root.Path, "OrphanWithRunningService");
         Directory.CreateDirectory(orphanDirectory);
 
         var settings = CreateSettings(root.Path);
@@ -232,7 +232,7 @@ public sealed class OrphanServiceAppFinderTests
             new ServiceAppServiceCandidate(
                 "OrphanWithRunningService",
                 "RUNNING",
-                Path.Combine(orphanDirectory, "OrphanWithRunningService.exe"),
+                Path.Join(orphanDirectory, "OrphanWithRunningService.exe"),
                 "Orphan With Running Service")
         };
 
@@ -241,7 +241,7 @@ public sealed class OrphanServiceAppFinderTests
             "TEST",
             settings,
             Array.Empty<ServiceAppDeploymentDescriptor>(),
-            _ => ("RUNNING", Path.Combine(orphanDirectory, "OrphanWithRunningService.exe")),
+            _ => ("RUNNING", Path.Join(orphanDirectory, "OrphanWithRunningService.exe")),
             candidates,
             CancellationToken.None);
 
@@ -255,8 +255,8 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_SkipsWorkerManagerDirectory()
     {
         using var root = new TempServicesRoot();
-        Directory.CreateDirectory(Path.Combine(root.Path, "OMP.WorkerManager"));
-        Directory.CreateDirectory(Path.Combine(root.Path, "EMP.WorkerManager.v2"));
+        Directory.CreateDirectory(Path.Join(root.Path, "OMP.WorkerManager"));
+        Directory.CreateDirectory(Path.Join(root.Path, "EMP.WorkerManager.v2"));
 
         var settings = CreateSettings(root.Path);
 
@@ -275,7 +275,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_SkipsHostAgentServiceNameDirectory()
     {
         using var root = new TempServicesRoot();
-        Directory.CreateDirectory(Path.Combine(root.Path, "OMP.HostAgent"));
+        Directory.CreateDirectory(Path.Join(root.Path, "OMP.HostAgent"));
 
         var settings = CreateSettings(root.Path);
 
@@ -295,8 +295,8 @@ public sealed class OrphanServiceAppFinderTests
     {
         using var servicesRoot = new TempServicesRoot();
         using var externalRoot = new TempServicesRoot();
-        var externalActivePath = Path.Combine(externalRoot.Path, "ActiveCustom");
-        var orphanSameNamePath = Path.Combine(servicesRoot.Path, "ActiveCustom");
+        var externalActivePath = Path.Join(externalRoot.Path, "ActiveCustom");
+        var orphanSameNamePath = Path.Join(servicesRoot.Path, "ActiveCustom");
         Directory.CreateDirectory(externalActivePath);
         Directory.CreateDirectory(orphanSameNamePath);
 
@@ -329,7 +329,7 @@ public sealed class OrphanServiceAppFinderTests
         using var root = new TempServicesRoot();
         // The service executable path is reported as under the services root, but the
         // directory itself has already been removed. The sweep must still flag the service.
-        var executablePath = Path.Combine(root.Path, "OrphanStopped", "OrphanStopped.exe");
+        var executablePath = Path.Join(root.Path, "OrphanStopped", "OrphanStopped.exe");
 
         var settings = CreateSettings(root.Path);
         var candidates = new[]
@@ -356,7 +356,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_ServiceSweep_SkipsClaimedService()
     {
         using var root = new TempServicesRoot();
-        var activePath = Path.Combine(root.Path, "MyActiveService");
+        var activePath = Path.Join(root.Path, "MyActiveService");
         Directory.CreateDirectory(activePath);
 
         var deployment = new ServiceAppDeploymentDescriptor
@@ -374,7 +374,7 @@ public sealed class OrphanServiceAppFinderTests
             new ServiceAppServiceCandidate(
                 "MyActiveService",
                 "RUNNING",
-                Path.Combine(activePath, "MyActiveService.exe"),
+                Path.Join(activePath, "MyActiveService.exe"),
                 "My Active Service")
         };
 
@@ -394,7 +394,7 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_ServiceSweep_SkipsServiceInActiveTargetDirectory()
     {
         using var root = new TempServicesRoot();
-        var activePath = Path.Combine(root.Path, "GenericExeService");
+        var activePath = Path.Join(root.Path, "GenericExeService");
         Directory.CreateDirectory(activePath);
 
         var deployment = new ServiceAppDeploymentDescriptor
@@ -411,7 +411,7 @@ public sealed class OrphanServiceAppFinderTests
             new ServiceAppServiceCandidate(
                 "GenericExeService",
                 "RUNNING",
-                Path.Combine(activePath, "GenericExeService.exe"),
+                Path.Join(activePath, "GenericExeService.exe"),
                 "Generic Exe Service")
         };
 
@@ -431,14 +431,14 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsDuplicateDisplayNameUnclaimed()
     {
         using var root = new TempServicesRoot();
-        var path = Path.Combine(root.Path, "SomeService");
+        var path = Path.Join(root.Path, "SomeService");
         Directory.CreateDirectory(path);
 
         var settings = CreateSettings(root.Path);
         var candidates = new[]
         {
-            new ServiceAppServiceCandidate("OldService", "STOPPED", Path.Combine(path, "OldService.exe"), "OMP Duplicate Display"),
-            new ServiceAppServiceCandidate("NewService", "RUNNING", Path.Combine(path, "NewService.exe"), "OMP Duplicate Display")
+            new ServiceAppServiceCandidate("OldService", "STOPPED", Path.Join(path, "OldService.exe"), "OMP Duplicate Display"),
+            new ServiceAppServiceCandidate("NewService", "RUNNING", Path.Join(path, "NewService.exe"), "OMP Duplicate Display")
         };
 
         var deployment = new ServiceAppDeploymentDescriptor
@@ -470,8 +470,8 @@ public sealed class OrphanServiceAppFinderTests
     {
         using var root = new TempServicesRoot();
         using var externalRoot = new TempServicesRoot();
-        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
-        var twinExePath = Path.Combine(externalRoot.Path, "iKrock2.Backend", "iKrock2.Backend.exe");
+        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
+        var twinExePath = Path.Join(externalRoot.Path, "iKrock2.Backend", "iKrock2.Backend.exe");
 
         var deployment = new ServiceAppDeploymentDescriptor
         {
@@ -489,7 +489,7 @@ public sealed class OrphanServiceAppFinderTests
             new ServiceAppServiceCandidate(
                 "OMP.iKrock2.Backend",
                 "RUNNING",
-                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
                 "OMP iKrock Backend"),
             new ServiceAppServiceCandidate(
                 "iKrock2.Backend",
@@ -521,8 +521,8 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsUnclaimedLegacyTwinUnderServicesRootOnlyOnce()
     {
         using var root = new TempServicesRoot();
-        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
-        var twinPath = Path.Combine(root.Path, "iKrock2.Backend");
+        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
+        var twinPath = Path.Join(root.Path, "iKrock2.Backend");
 
         var deployment = new ServiceAppDeploymentDescriptor
         {
@@ -540,12 +540,12 @@ public sealed class OrphanServiceAppFinderTests
             new ServiceAppServiceCandidate(
                 "OMP.iKrock2.Backend",
                 "RUNNING",
-                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
                 "OMP iKrock Backend"),
             new ServiceAppServiceCandidate(
                 "iKrock2.Backend",
                 "STOPPED",
-                Path.Combine(twinPath, "iKrock2.Backend.exe"),
+                Path.Join(twinPath, "iKrock2.Backend.exe"),
                 "OMP iKrock Backend old")
         };
 
@@ -570,8 +570,8 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsTwinClaimedBySameAppDuplicateInstance()
     {
         using var root = new TempServicesRoot();
-        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
-        var twinPath = Path.Combine(root.Path, "iKrock2.Backend");
+        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
+        var twinPath = Path.Join(root.Path, "iKrock2.Backend");
 
         var canonicalDeployment = new ServiceAppDeploymentDescriptor
         {
@@ -598,12 +598,12 @@ public sealed class OrphanServiceAppFinderTests
             new ServiceAppServiceCandidate(
                 "OMP.iKrock2.Backend",
                 "STOPPED",
-                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
                 "OMP iKrock Backend"),
             new ServiceAppServiceCandidate(
                 "iKrock2.Backend",
                 "RUNNING",
-                Path.Combine(twinPath, "iKrock2.Backend.exe"),
+                Path.Join(twinPath, "iKrock2.Backend.exe"),
                 "OMP DESKTOP-TEST iKrock Backend")
         };
 
@@ -628,8 +628,8 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_ServiceSweep_SkipsTwinClaimedByDifferentApp()
     {
         using var root = new TempServicesRoot();
-        var canonicalPath = Path.Combine(root.Path, "OMP.iKrock2.Backend");
-        var twinPath = Path.Combine(root.Path, "iKrock2.Backend");
+        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
+        var twinPath = Path.Join(root.Path, "iKrock2.Backend");
 
         var canonicalDeployment = new ServiceAppDeploymentDescriptor
         {
@@ -656,12 +656,12 @@ public sealed class OrphanServiceAppFinderTests
             new ServiceAppServiceCandidate(
                 "OMP.iKrock2.Backend",
                 "RUNNING",
-                Path.Combine(canonicalPath, "iKrock2.Backend.exe"),
+                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
                 "OMP iKrock Backend"),
             new ServiceAppServiceCandidate(
                 "iKrock2.Backend",
                 "RUNNING",
-                Path.Combine(twinPath, "iKrock2.Backend.exe"),
+                Path.Join(twinPath, "iKrock2.Backend.exe"),
                 "Other App Backend")
         };
 
@@ -692,7 +692,7 @@ public sealed class OrphanServiceAppFinderTests
 
         public TempServicesRoot()
         {
-            Path = System.IO.Path.Combine(
+            Path = System.IO.Path.Join(
                 System.IO.Path.GetTempPath(),
                 $"omp-orphan-test-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);
