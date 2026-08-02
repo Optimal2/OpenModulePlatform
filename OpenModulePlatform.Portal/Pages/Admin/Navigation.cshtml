@@ -56,9 +56,7 @@
         }
     </div>
 
-    <div class="section-navigator-pane">
-        @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
-    </div>
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
 
     <div class="section-navigator-layout__content">
         <datalist id="linkbox-groups">

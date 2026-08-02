@@ -28,7 +28,9 @@
     {
         Label = L["Page sections"].Value,
         RootText = L["Installation"].Value,
-        Items = sectionNavigatorItems
+        Items = sectionNavigatorItems,
+        // The page composes its own pane (navigator + admin quick links).
+        WrapInPane = false
     };
 }
 

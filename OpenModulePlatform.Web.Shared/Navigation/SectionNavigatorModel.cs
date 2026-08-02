@@ -14,4 +14,11 @@ public sealed class SectionNavigatorModel
     public bool RootInitiallyExpanded { get; init; } = true;
 
     public IReadOnlyList<SectionNavigatorItem> Items { get; init; } = Array.Empty<SectionNavigatorItem>();
+
+    /// <summary>
+    /// Wraps the navigator in a section-navigator-pane so every page gets the
+    /// shared pane behavior (narrow-screen collapse, full-height grab edge).
+    /// Pages that compose their own pane around the navigator opt out.
+    /// </summary>
+    public bool WrapInPane { get; init; } = true;
 }
