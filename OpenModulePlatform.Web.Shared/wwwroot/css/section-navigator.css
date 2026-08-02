@@ -246,15 +246,35 @@ body.section-navigator-resizing {
     margin-left: 10px;
 }
 
+/* The list only draws the connector up to its parent node; the trunk
+   itself is drawn per item below, so it always ends at the last VISIBLE
+   node - view switches hide items, and a full-height trunk would look
+   like a connector to a section that does not exist. */
 .section-navigator__list .section-navigator__list::before {
     background: var(--section-navigator-line);
-    bottom: 0;
     content: "";
+    height: calc(var(--section-navigator-node-y) + (var(--section-navigator-node-size) / 2));
     left: var(--section-navigator-line-left);
     position: absolute;
     top: calc(0px - var(--section-navigator-node-y) - (var(--section-navigator-node-size) / 2));
     width: var(--section-navigator-line-width);
     z-index: 0;
+}
+
+.section-navigator__list .section-navigator__list > .section-navigator__item::after {
+    background: var(--section-navigator-line);
+    bottom: 0;
+    content: "";
+    left: var(--section-navigator-line-left);
+    position: absolute;
+    top: 0;
+    width: var(--section-navigator-line-width);
+    z-index: 0;
+}
+
+.section-navigator__list .section-navigator__list > .section-navigator__item:not(:has(~ .section-navigator__item:not([hidden])))::after {
+    bottom: auto;
+    height: calc(var(--section-navigator-node-y) + (var(--section-navigator-line-width) / 2));
 }
 
 .section-navigator__item {
