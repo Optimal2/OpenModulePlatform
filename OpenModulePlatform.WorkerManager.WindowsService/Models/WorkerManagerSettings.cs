@@ -17,6 +17,13 @@ public sealed class WorkerManagerSettings
 
     public int StopTimeoutSeconds { get; set; } = 15;
 
+    /// <summary>
+    /// How long a configuration-change drain may run before the manager starts
+    /// warning that the restart is deferred. The worker is never killed when
+    /// the timeout passes; the restart simply waits for the in-flight job.
+    /// </summary>
+    public int DrainTimeoutSeconds { get; set; } = 900;
+
     public int RestartDelaySeconds { get; set; } = 5;
 
     public int RestartWindowSeconds { get; set; } = 300;
@@ -66,6 +73,11 @@ public sealed class WorkerManagerSettings
         if (RefreshSeconds < 1)
         {
             throw new InvalidOperationException("WorkerManager:RefreshSeconds must be at least 1.");
+        }
+
+        if (DrainTimeoutSeconds < 1)
+        {
+            throw new InvalidOperationException("WorkerManager:DrainTimeoutSeconds must be at least 1.");
         }
 
         if (StopTimeoutSeconds < 1)

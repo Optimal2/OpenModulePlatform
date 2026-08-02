@@ -81,4 +81,22 @@ public sealed class WorkerProcessSettings
     {
         return $"{ShutdownEventNamePrefix}{workerInstanceId:N}";
     }
+
+    /// <summary>
+    /// Deterministic name of the manager-owned drain event for this worker.
+    /// Keep in sync with the WorkerManager catalog naming convention.
+    /// </summary>
+    public string BuildDrainEventName()
+    {
+        return $"OpenModulePlatform.WorkerDrain.{WorkerInstanceId:N}";
+    }
+
+    /// <summary>
+    /// Deterministic name of the manager-owned busy event for this worker.
+    /// Keep in sync with the WorkerManager catalog naming convention.
+    /// </summary>
+    public string BuildBusyEventName()
+    {
+        return $"OpenModulePlatform.WorkerBusy.{WorkerInstanceId:N}";
+    }
 }

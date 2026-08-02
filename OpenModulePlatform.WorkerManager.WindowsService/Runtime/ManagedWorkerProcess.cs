@@ -22,6 +22,14 @@ public sealed class ManagedWorkerProcess
 
     public EventWaitHandle? ShutdownEvent { get; private set; }
 
+    public EventWaitHandle? DrainEvent { get; private set; }
+
+    public EventWaitHandle? BusyEvent { get; private set; }
+
+    public DateTimeOffset? DrainStartedUtc { get; private set; }
+
+    public bool DrainTimeoutLogged { get; set; }
+
     public int? ProcessId => Process?.HasExited == false ? Process.Id : null;
 
     public DateTimeOffset? LastStartUtc { get; private set; }
@@ -49,16 +57,59 @@ public sealed class ManagedWorkerProcess
         return Process is { HasExited: false };
     }
 
-    public void AttachProcess(Process process, EventWaitHandle shutdownEvent, DateTimeOffset startedUtc)
+    public void AttachProcess(
+        Process process,
+        EventWaitHandle shutdownEvent,
+        DateTimeOffset startedUtc,
+        EventWaitHandle? drainEvent = null,
+        EventWaitHandle? busyEvent = null)
     {
         Process = process;
         ShutdownEvent = shutdownEvent;
+        DrainEvent = drainEvent;
+        BusyEvent = busyEvent;
         LastStartUtc = startedUtc;
         ExitObserved = false;
         StopRequested = false;
         LastExitCode = null;
         LastExitUtc = null;
+        DrainStartedUtc = null;
+        DrainTimeoutLogged = false;
     }
+
+    /// <summary>
+    /// Signals the worker to finish in-flight jobs and start no new ones.
+    /// Returns true the first time the drain begins for the current process.
+    /// </summary>
+    public bool BeginDrain(DateTimeOffset nowUtc)
+    {
+        if (DrainEvent is null)
+        {
+            return false;
+        }
+
+        if (DrainStartedUtc.HasValue)
+        {
+            return false;
+        }
+
+        DrainEvent.Set();
+        DrainStartedUtc = nowUtc;
+        DrainTimeoutLogged = false;
+        return true;
+    }
+
+    /// <summary>
+    /// True while the worker reports an in-flight job through its busy event.
+    /// Workers without drain support never set the busy event and read as idle,
+    /// which keeps the pre-drain restart behavior for them.
+    /// </summary>
+    public bool IsBusy()
+    {
+        return BusyEvent?.WaitOne(0) == true;
+    }
+
+    public bool SupportsDrain => DrainEvent is not null;
 
     public void RecordStartAttempt(DateTimeOffset nowUtc, TimeSpan restartWindow)
     {
@@ -97,9 +148,20 @@ public sealed class ManagedWorkerProcess
         ExitObserved = true;
         process.Dispose();
         Process = null;
+        DisposeNamedEvents();
+        return true;
+    }
+
+    private void DisposeNamedEvents()
+    {
         ShutdownEvent?.Dispose();
         ShutdownEvent = null;
-        return true;
+        DrainEvent?.Dispose();
+        DrainEvent = null;
+        BusyEvent?.Dispose();
+        BusyEvent = null;
+        DrainStartedUtc = null;
+        DrainTimeoutLogged = false;
     }
 
     public async Task<bool> RequestStopAsync(TimeSpan stopTimeout, CancellationToken cancellationToken)
@@ -110,8 +172,7 @@ public sealed class ManagedWorkerProcess
         var process = Process;
         if (process is null)
         {
-            ShutdownEvent?.Dispose();
-            ShutdownEvent = null;
+            DisposeNamedEvents();
             return true;
         }
 
@@ -135,8 +196,7 @@ public sealed class ManagedWorkerProcess
         var process = Process;
         if (process is null)
         {
-            ShutdownEvent?.Dispose();
-            ShutdownEvent = null;
+            DisposeNamedEvents();
             return true;
         }
 

@@ -164,6 +164,14 @@ public sealed class WorkerManagerHostedService : BackgroundService
             {
                 if (!managed.HasEquivalentConfiguration(desired))
                 {
+                    if (!await TryDrainForConfigurationChangeAsync(managed, desired, cancellationToken))
+                    {
+                        // The worker is still busy with an in-flight job. Keep the
+                        // old configuration running and retry during the next cycle;
+                        // a version-change restart never interrupts a running job.
+                        continue;
+                    }
+
                     _logger.LogInformation(
                         "Worker configuration changed. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}",
                         desired.AppInstanceId,
@@ -187,6 +195,52 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 await HandleWorkerFailureAsync(managed, runtimeKind, "reconcile desired worker", ex, cancellationToken);
             }
         }
+    }
+
+    private Task<bool> TryDrainForConfigurationChangeAsync(
+        ManagedWorkerProcess managed,
+        DesiredWorkerInstance desired,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Only a live worker with drain support needs draining; exited or
+        // legacy workers keep the immediate stop-and-replace behavior.
+        if (!managed.IsRunning() || !managed.SupportsDrain)
+        {
+            return Task.FromResult(true);
+        }
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        if (managed.BeginDrain(nowUtc))
+        {
+            _logger.LogInformation(
+                "Worker configuration changed while the worker is running; draining before restart. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                desired.AppInstanceId,
+                desired.WorkerInstanceId,
+                desired.WorkerTypeKey);
+        }
+
+        if (!managed.IsBusy())
+        {
+            return Task.FromResult(true);
+        }
+
+        var drainTimeout = TimeSpan.FromSeconds(Math.Max(1, _settings.CurrentValue.DrainTimeoutSeconds));
+        if (managed.DrainStartedUtc.HasValue
+            && nowUtc - managed.DrainStartedUtc.Value >= drainTimeout
+            && !managed.DrainTimeoutLogged)
+        {
+            managed.DrainTimeoutLogged = true;
+            _logger.LogWarning(
+                "Worker drain exceeded the configured timeout and the worker is still busy; the restart stays deferred until the in-flight job completes. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, DrainTimeoutSeconds={DrainTimeoutSeconds}, DrainStartedUtc={DrainStartedUtc:O}",
+                desired.AppInstanceId,
+                desired.WorkerInstanceId,
+                _settings.CurrentValue.DrainTimeoutSeconds,
+                managed.DrainStartedUtc.Value);
+        }
+
+        return Task.FromResult(false);
     }
 
     private async Task<IReadOnlyList<DesiredWorkerInstance>> ResolveDesiredWorkerArtifactsAsync(
@@ -279,7 +333,10 @@ public sealed class WorkerManagerHostedService : BackgroundService
         ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
         ValidateReadableStartupFile(managed.Definition.PluginAssemblyPath, "Worker plugin assembly");
 
-        using var startupResources = new WorkerStartupResources(CreateShutdownEvent(managed.Definition));
+        using var startupResources = new WorkerStartupResources(
+            CreateShutdownEvent(managed.Definition),
+            CreateManagedWorkerEvent(BuildDrainEventName(managed.Definition.WorkerInstanceId)),
+            CreateManagedWorkerEvent(BuildBusyEventName(managed.Definition.WorkerInstanceId)));
 
         var ompConnectionString = _configuration.GetConnectionString("OmpDb");
         if (string.IsNullOrWhiteSpace(ompConnectionString))
@@ -293,7 +350,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         StartWorkerProcess(process, managed.Definition.WorkerInstanceId, workerProcessPath);
 
-        managed.AttachProcess(process, startupResources.ShutdownEvent, nowUtc);
+        managed.AttachProcess(
+            process,
+            startupResources.ShutdownEvent,
+            nowUtc,
+            startupResources.DrainEvent,
+            startupResources.BusyEvent);
         startupResources.ReleaseOwnership();
 
         await PublishStartingObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
@@ -1091,16 +1153,54 @@ public sealed class WorkerManagerHostedService : BackgroundService
             $"Worker shutdown event already exists for WorkerInstanceId '{definition.WorkerInstanceId}'. Refusing to reuse named event '{definition.ShutdownEventName}'.");
     }
 
+    // Keep these names in sync with WorkerProcessSettings.BuildDrainEventName /
+    // BuildBusyEventName in OpenModulePlatform.WorkerProcessHost.
+    private static string BuildDrainEventName(Guid workerInstanceId)
+        => $"OpenModulePlatform.WorkerDrain.{workerInstanceId:N}";
+
+    private static string BuildBusyEventName(Guid workerInstanceId)
+        => $"OpenModulePlatform.WorkerBusy.{workerInstanceId:N}";
+
+    private static EventWaitHandle CreateManagedWorkerEvent(string eventName)
+    {
+        // Same ownership rules as the shutdown event: the manager creates the
+        // named object and refuses pre-existing handles with the same name.
+        var namedEvent = new EventWaitHandle(
+            initialState: false,
+            mode: EventResetMode.ManualReset,
+            name: eventName,
+            options: ShutdownEventOptions,
+            createdNew: out var createdNew);
+
+        if (createdNew)
+        {
+            return namedEvent;
+        }
+
+        namedEvent.Dispose();
+        throw new InvalidOperationException(
+            $"Managed worker event already exists. Refusing to reuse named event '{eventName}'.");
+    }
+
     private sealed class WorkerStartupResources : IDisposable
     {
         private bool _ownsResources = true;
 
-        public WorkerStartupResources(EventWaitHandle shutdownEvent)
+        public WorkerStartupResources(
+            EventWaitHandle shutdownEvent,
+            EventWaitHandle drainEvent,
+            EventWaitHandle busyEvent)
         {
             ShutdownEvent = shutdownEvent;
+            DrainEvent = drainEvent;
+            BusyEvent = busyEvent;
         }
 
         public EventWaitHandle ShutdownEvent { get; }
+
+        public EventWaitHandle DrainEvent { get; }
+
+        public EventWaitHandle BusyEvent { get; }
 
         public Process? Process { get; private set; }
 
@@ -1123,6 +1223,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
             Process?.Dispose();
             ShutdownEvent.Dispose();
+            DrainEvent.Dispose();
+            BusyEvent.Dispose();
         }
     }
 

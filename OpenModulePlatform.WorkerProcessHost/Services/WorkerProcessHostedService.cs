@@ -90,6 +90,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
     {
         using var shutdownEvent = TryOpenShutdownEvent();
         var shutdownRegistration = RegisterExternalShutdownSignal(shutdownEvent);
+        using var drainCoordinator = TryCreateDrainCoordinator();
 
         try
         {
@@ -100,7 +101,7 @@ public sealed class WorkerProcessHostedService : BackgroundService
                 ?? throw new InvalidOperationException(
                     $"Worker factory '{factory.GetType().FullName}' returned null from Create().");
 
-            var context = _contextFactory.Create(_settings);
+            var context = _contextFactory.Create(_settings, drainCoordinator);
 
             _logger.LogInformation(
                 "Starting worker module. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PluginAssemblyPath={PluginAssemblyPath}, FactoryType={FactoryType}",
@@ -271,6 +272,52 @@ public sealed class WorkerProcessHostedService : BackgroundService
         GC.Collect(MaxGcGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
         GC.Collect(MaxGcGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+    }
+
+    private WorkerDrainCoordinator? TryCreateDrainCoordinator()
+    {
+        // The manager owns the drain/busy events and only creates them when it
+        // supervises this worker. Standalone or older-manager runs simply get a
+        // null coordinator, which modules must treat as "drain not supported".
+        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(_settings.ShutdownEventName))
+        {
+            return null;
+        }
+
+        var drainEvent = TryOpenNamedEvent(_settings.BuildDrainEventName());
+        if (drainEvent is null)
+        {
+            return null;
+        }
+
+        var busyEvent = TryOpenNamedEvent(_settings.BuildBusyEventName());
+        if (busyEvent is null)
+        {
+            drainEvent.Dispose();
+            return null;
+        }
+
+        return new WorkerDrainCoordinator(drainEvent, busyEvent, _logger);
+    }
+
+    private EventWaitHandle? TryOpenNamedEvent(string eventName)
+    {
+        try
+        {
+            return EventWaitHandle.OpenExisting(eventName, ShutdownEventOptions);
+        }
+        catch (WaitHandleCannotBeOpenedException)
+        {
+            return null;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.IO.IOException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Named worker event could not be opened; drain coordination is disabled for this run. EventName={EventName}",
+                eventName);
+            return null;
+        }
     }
 
     private EventWaitHandle? TryOpenShutdownEvent()

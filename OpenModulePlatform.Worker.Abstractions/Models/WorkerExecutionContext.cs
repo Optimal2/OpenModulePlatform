@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Worker.Abstractions/Models/WorkerExecutionContext.cs
+using OpenModulePlatform.Worker.Abstractions.Contracts;
+
 namespace OpenModulePlatform.Worker.Abstractions.Models;
 
 /// <summary>
@@ -40,4 +42,13 @@ public sealed class WorkerExecutionContext
     /// Gets the UTC timestamp when the child host created the runtime context.
     /// </summary>
     public DateTimeOffset StartedUtc { get; init; }
+
+    /// <summary>
+    /// Gets the cooperative drain coordinator, when the manager provided drain
+    /// and busy signals for this worker. Modules that wrap each job in
+    /// <see cref="IWorkerDrainCoordinator.TryBeginJob"/> are never restarted
+    /// mid-job by a version-change restart; modules that ignore it keep the
+    /// pre-drain restart behavior.
+    /// </summary>
+    public IWorkerDrainCoordinator? DrainCoordinator { get; init; }
 }
