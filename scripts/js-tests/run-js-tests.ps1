@@ -5,6 +5,7 @@
 # every *.tests.js file with Node.
 #Requires -Version 7.0
 [CmdletBinding()]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '', Justification = 'The script requires PowerShell 7 (see #Requires) and never runs under Windows PowerShell 5.1. Node.js is an intentional external dependency: its absence is checked at runtime with a clear error before any node invocation.')]
 param()
 
 $ErrorActionPreference = 'Stop'
