@@ -1558,11 +1558,12 @@ public sealed class HostAgentJobProcessor
         string hostKey,
         CancellationToken cancellationToken)
     {
-        var serviceName = action?.ServiceName?.Trim();
-        if (string.IsNullOrWhiteSpace(serviceName))
+        if (action is null || string.IsNullOrWhiteSpace(action.ServiceName))
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Error", "The cleanup action does not contain a Windows service name.");
         }
+
+        var serviceName = action.ServiceName.Trim();
 
         var currentServiceName = _settings.CurrentValue.ServiceName;
         if (string.Equals(serviceName, currentServiceName, StringComparison.OrdinalIgnoreCase))
@@ -1576,9 +1577,9 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Missing", "The Windows service was already missing.");
         }
 
-        // Clean returns null (never whitespace) for a blank input, so a plain
-        // null check is exactly the guard here.
-        var canonicalServiceName = ServiceAppDeploymentNaming.Clean(action?.CanonicalServiceName);
+        // action is non-null past the guard above; Clean returns null (never
+        // whitespace) for a blank input, so a plain null check is the guard here.
+        var canonicalServiceName = ServiceAppDeploymentNaming.Clean(action.CanonicalServiceName);
         if (canonicalServiceName is not null)
         {
             return await CleanupOrphanDuplicateServiceFindingAsync(
