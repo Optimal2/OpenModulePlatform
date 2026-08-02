@@ -472,6 +472,7 @@ internal static partial class Program
         private readonly Button _checkSourceButton = new() { Text = "Check source objects", AutoSize = true };
         private readonly Button _syncPackageObjectsButton = new() { Text = "Sync package objects", AutoSize = true };
         private readonly Button _refreshObjectArchiveButton = new() { Text = "Refresh object archive", AutoSize = true };
+        private readonly Button _refreshAndStageGlobalPackageButton = new() { Text = "Refresh + stage global package", AutoSize = true };
         private readonly Button _syncAllProfilePackageObjectsButton = new() { Text = "Prepare all host profiles", AutoSize = true };
         private readonly Button _importUniversalPackageButton = new() { Text = "Import universal package", AutoSize = true };
         private readonly Button _prunePackageArchiveButton = new() { Text = "Keep latest package objects", AutoSize = true };
@@ -619,6 +620,7 @@ internal static partial class Program
             _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
             _syncPackageObjectsButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
             _refreshObjectArchiveButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
+            _refreshAndStageGlobalPackageButton.Click += async (_, _) => await RefreshAndStageGlobalUniversalPackageAsync();
             _syncAllProfilePackageObjectsButton.Click += async (_, _) => await SyncAllProfilePackageObjectsAsync();
             _importUniversalPackageButton.Click += async (_, _) => await ImportUniversalPackageIntoArchiveAsync();
             _prunePackageArchiveButton.Click += async (_, _) => await PrunePackageArchiveAsync();
@@ -807,6 +809,18 @@ internal static partial class Program
                 Margin = new Padding(0, 7, 0, 4),
                 Text = "Updates the local installer object archive from configured source repositories without starting an install."
             }, 1, 3);
+
+            _refreshAndStageGlobalPackageButton.Width = 260;
+            _refreshAndStageGlobalPackageButton.Margin = new Padding(0, 4, 12, 4);
+            panel.Controls.Add(_refreshAndStageGlobalPackageButton, 0, 4);
+            panel.Controls.Add(new Label
+            {
+                AutoSize = true,
+                MaximumSize = new Size(850, 0),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 7, 0, 4),
+                Text = "One-click flow: refreshes the object archive, creates a global universal package (latest versions, no host configuration), saves it in the exports folder, and copies it to this installation's HostAgent import folder."
+            }, 1, 4);
 
             group.Controls.Add(panel);
             return group;
@@ -1166,6 +1180,8 @@ internal static partial class Program
             _refreshPackageBeforePrimaryAction.Checked = _hasDeveloperSource;
             _refreshObjectArchiveButton.Visible = _hasDeveloperSource;
             _refreshObjectArchiveButton.Enabled = _hasDeveloperSource;
+            _refreshAndStageGlobalPackageButton.Visible = _hasDeveloperSource;
+            _refreshAndStageGlobalPackageButton.Enabled = _hasDeveloperSource;
             _quickPackageObjectRefresh.Visible = _hasDeveloperSource || _hasExistingInstallation;
             _quickPackageObjectRefresh.Enabled = _hasDeveloperSource || _hasExistingInstallation;
             _developerSourceStatusLabel.ForeColor = _hasDeveloperSource ? Color.DarkGreen : SystemColors.GrayText;
@@ -1550,6 +1566,131 @@ internal static partial class Program
 
                     return result.HasWarnings ? 1 : 0;
                 });
+        }
+
+        private async Task RefreshAndStageGlobalUniversalPackageAsync()
+        {
+            ApplyValues();
+            var importRoot = ResolveHostAgentArtifactImportPath();
+            var importSummary = string.IsNullOrWhiteSpace(importRoot)
+                ? "No HostAgent artifact import path is configured for this profile, so the package zip is only written to the exports folder."
+                : $"The package zip is written to the exports folder and copied to this installation's HostAgent import folder: {importRoot}";
+            var confirmation = MessageBox.Show(
+                "This refreshes the installer object archive from the configured source repositories and then creates a global universal package (latest versions, no host configuration)."
+                + Environment.NewLine
+                + Environment.NewLine
+                + importSummary
+                + Environment.NewLine
+                + Environment.NewLine
+                + (_quickPackageObjectRefresh.Checked
+                    ? "Fast mode is enabled: same-version objects are trusted by version."
+                    : "Fast mode is disabled: same-version objects are verified by content where possible.")
+                + Environment.NewLine
+                + Environment.NewLine
+                + "Continue?",
+                "Refresh and stage global package",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button1);
+            if (confirmation != DialogResult.Yes)
+            {
+                return;
+            }
+
+            await RunGuiOperationAsync(
+                "Refreshing object archive and staging global universal package...",
+                "Global universal package created and staged for import.",
+                "Refresh and stage completed with warnings. Review the log for details.",
+                "Refresh and stage failed.",
+                async () =>
+                {
+                    var sync = await SyncDeveloperPackageObjectsCoreAsync(
+                        quickMode: _quickPackageObjectRefresh.Checked);
+                    foreach (var line in sync.Lines)
+                    {
+                        Console.WriteLine(line);
+                    }
+
+                    if (sync.ConfigUpdated)
+                    {
+                        Console.WriteLine("> Configuration targets were updated in memory for this run. Package-object sync does not rewrite tracked host config files.");
+                    }
+
+                    if (sync.HasWarnings)
+                    {
+                        Console.WriteLine("> Package object refresh had warnings. The universal package was not created.");
+                        return 1;
+                    }
+
+                    var candidates = FilterLatestUniversalPackageVersionedObjects(
+                        CollectUniversalPackageCandidates(
+                            _payloadRoot,
+                            hostChoice: null,
+                            includeGlobal: true,
+                            includeHostSpecific: false));
+                    if (candidates.Count == 0)
+                    {
+                        Console.WriteLine("> No global package objects were found in the object archive; nothing to package.");
+                        return 1;
+                    }
+
+                    var version = DateTime.Now.ToString("yyyyMMdd-HHmm");
+                    var exportsRoot = Path.Join(_payloadRoot, "exports");
+                    Directory.CreateDirectory(exportsRoot);
+                    var outputPath = Path.Join(exportsRoot, $"omp-universal__global__{version}.zip");
+                    var request = new UniversalPackageBuildRequest(
+                        "omp-universal",
+                        version,
+                        "OpenModulePlatform universal package",
+                        "Global package created by the refresh-and-stage action.",
+                        HostKey: null,
+                        "No target host (global package)",
+                        outputPath,
+                        candidates);
+                    var result = CreateUniversalPackageZip(request);
+                    Console.WriteLine($"> Universal module package: {result.PackagePath}");
+                    Console.WriteLine($"> Items: {result.ItemCount}");
+
+                    if (string.IsNullOrWhiteSpace(importRoot))
+                    {
+                        Console.WriteLine("> WARN: HostAgent:ArtifactZipImport:ImportPath is not configured for this profile; the package was not staged for import.");
+                        return 1;
+                    }
+
+                    Directory.CreateDirectory(importRoot);
+                    var importTarget = Path.Join(importRoot, Path.GetFileName(outputPath));
+                    File.Copy(outputPath, importTarget, overwrite: true);
+                    Console.WriteLine($"> Staged package in HostAgent import folder: {importTarget}");
+                    if (!IsHostAgentArtifactImportEnabled())
+                    {
+                        Console.WriteLine("> Note: HostAgent:ArtifactZipImport:IsEnabled is false in this profile, so the HostAgent will not pick the file up until import is enabled.");
+                    }
+
+                    return 0;
+                });
+        }
+
+        private string ResolveHostAgentArtifactImportPath()
+        {
+            var artifactZipImport = GetJsonObjectProperty(
+                GetJsonObjectProperty(_config.HostAgent.AppSettings, "HostAgent"),
+                "ArtifactZipImport");
+            var importPath = GetJsonStringProperty(artifactZipImport, "ImportPath");
+            // An unresolved {placeholder} means the profile never substituted a
+            // real path; staging into it would create a literal brace folder.
+            return importPath.Contains('{', StringComparison.Ordinal)
+                ? string.Empty
+                : importPath;
+        }
+
+        private bool IsHostAgentArtifactImportEnabled()
+        {
+            var artifactZipImport = GetJsonObjectProperty(
+                GetJsonObjectProperty(_config.HostAgent.AppSettings, "HostAgent"),
+                "ArtifactZipImport");
+            return GetJsonObjectProperty(artifactZipImport, "IsEnabled") is JsonValue value
+                && value.TryGetValue<bool>(out var enabled)
+                && enabled;
         }
 
         private async Task SyncAllProfilePackageObjectsAsync()
@@ -5072,6 +5213,7 @@ ORDER BY ar.ArtifactId DESC;
             _refreshPackageBeforePrimaryAction.Enabled = enabled && _hasDeveloperSource;
             _quickPackageObjectRefresh.Enabled = enabled && (_hasDeveloperSource || _hasExistingInstallation);
             _refreshObjectArchiveButton.Enabled = enabled && _hasDeveloperSource;
+            _refreshAndStageGlobalPackageButton.Enabled = enabled && _hasDeveloperSource;
             _showAdvancedActions.Enabled = enabled;
             _installButton.Enabled = enabled;
             _upgradeCompleteButton.Enabled = enabled;
