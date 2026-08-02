@@ -615,8 +615,11 @@ if ($baseRefAvailable) {
 # ---------------------------------------------------------------------------
 # Check 7: Shared project cascade version bumps.
 # ---------------------------------------------------------------------------
-$sharedProjects = Get-OptionalPropertyValue -Object $manifest -Name 'sharedProjects'
-if ($null -ne $sharedProjects -and $baseRefAvailable) {
+# Normalize to a null-free array once so every loop below (Checks 7, 11 and the
+# summary) iterates real entries instead of a single $null element when the
+# manifest has no sharedProjects property.
+$sharedProjects = @(Get-OptionalPropertyValue -Object $manifest -Name 'sharedProjects' | Where-Object { $null -ne $_ })
+if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
     foreach ($sharedProject in @($sharedProjects)) {
         if ($null -eq $sharedProject) {
             continue
@@ -713,6 +716,13 @@ if ($null -eq $webSharedProject) {
 }
 elseif (-not $baseRefAvailable) {
     Add-ValidationWarning -Warnings $warnings -Message 'No valid base ref available; skipping Web.Shared binary identity check (Check 11). Pass -BaseCommit to enable it.'
+}
+elseif (-not (Get-Command -Name 'Compare-WebSharedBinaryIdentity' -ErrorAction SilentlyContinue)) {
+    # Check 11 relies on Build-WebSharedForBinaryIdentity, Get-FileSha256Hex and
+    # Compare-WebSharedBinaryIdentity from validate-component-versions.helpers.ps1,
+    # which is dot-sourced only when present. Skip with a clear message instead
+    # of throwing an opaque "term not recognized" error if it is missing.
+    Add-ValidationWarning -Warnings $warnings -Message "Helper functions from '$helpersPath' are not loaded; skipping Web.Shared binary identity check (Check 11)."
 }
 else {
     Write-Host 'Check 11: Comparing OpenModulePlatform.Web.Shared.dll binary identity between parent and HEAD...'
@@ -1323,10 +1333,7 @@ foreach ($consistentSetModuleKey in $moduleDefinitionObjectsByKey.Keys) {
     }
 }
 
-$sharedProjectCount = 0
-if ($null -ne $sharedProjects) {
-    $sharedProjectCount = @($sharedProjects).Count
-}
+$sharedProjectCount = $sharedProjects.Count
 
 $repositoryVersionStatus = if ([string]::IsNullOrWhiteSpace($repositoryVersion)) { 'missing' } else { 'validated' }
 Write-Host "$checkMark $projectPathCount of $componentCount component project paths validated"
