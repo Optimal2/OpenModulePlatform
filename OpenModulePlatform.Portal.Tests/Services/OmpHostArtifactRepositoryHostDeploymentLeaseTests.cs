@@ -156,8 +156,8 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             CancellationToken.None);
 
         Assert.NotNull(deployment);
-        var originalLeaseUntilUtc = (await GetDeploymentRowAsync(deploymentId)).LeaseUntilUtc;
-        Assert.NotNull(originalLeaseUntilUtc);
+        var originalLeaseUntilUtc = (await GetDeploymentRowAsync(deploymentId)).LeaseUntilUtc
+            ?? throw new InvalidOperationException("Expected an original lease timestamp before renewal.");
 
         var renewed = await _repository.RenewHostDeploymentLeaseAsync(
             deployment.HostDeploymentId,
@@ -166,11 +166,10 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             CancellationToken.None);
 
         Assert.True(renewed);
-        Assert.NotNull(originalLeaseUntilUtc);
 
         var row = await GetDeploymentRowAsync(deploymentId);
         Assert.NotNull(row.LeaseUntilUtc);
-        Assert.True(row.LeaseUntilUtc > originalLeaseUntilUtc.Value.AddSeconds(LeaseSeconds - 5));
+        Assert.True(row.LeaseUntilUtc > originalLeaseUntilUtc.AddSeconds(LeaseSeconds - 5));
     }
 
     [Fact]
