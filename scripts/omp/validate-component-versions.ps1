@@ -341,6 +341,11 @@ $manifest = ConvertFrom-JsonDocument -Json $manifestText -Depth $jsonDepth
 Write-Host 'Validating component versions...'
 Write-Host ''
 
+# The "Check N" numbers below are stable identifiers for cross-referencing
+# error messages and docs; they are logical groupings, not execution order.
+# Execution runs top-to-bottom, so a lower-numbered check may run after a
+# higher-numbered one (for example Check 2 here precedes Check 1).
+
 # ---------------------------------------------------------------------------
 # Check 2: Repository version presence and format.
 # ---------------------------------------------------------------------------
@@ -1040,6 +1045,7 @@ else {
 # ---------------------------------------------------------------------------
 $definitionDiffChecked = 0
 $definitionDiffChanged = 0
+$definitionDiffPassed = 0
 
 if (-not $baseRefAvailable) {
     Add-ValidationWarning -Warnings $warnings -Message 'No valid base ref available; skipping module-definition content diff enforcement (Check 12). Pass -BaseCommit to enable it.'
@@ -1066,6 +1072,7 @@ else {
         $baseDefinitionTextLines = @(git -C $repositoryRoot show "$baseRef`:$relativeDefinitionPath" 2>$null)
         $baseDefinitionText = Remove-Utf8Bom -Text ($baseDefinitionTextLines -join "`n")
         if ([string]::IsNullOrWhiteSpace($baseDefinitionText)) {
+            $definitionDiffPassed++
             continue # new definition file; nothing to bump against
         }
 
@@ -1073,6 +1080,7 @@ else {
         $headNormalized = (Remove-Utf8Bom -Text $headDefinitionText).Replace("`r`n", "`n").TrimEnd("`n")
         $baseNormalized = $baseDefinitionText.Replace("`r`n", "`n").TrimEnd("`n")
         if ([string]::Equals($headNormalized, $baseNormalized, [StringComparison]::Ordinal)) {
+            $definitionDiffPassed++
             continue
         }
 
@@ -1085,6 +1093,9 @@ else {
 
         if (-not [string]::IsNullOrWhiteSpace($baseDefinitionVersion) -and [string]::Equals($baseDefinitionVersion, $headDefinitionVersion, [StringComparison]::Ordinal)) {
             Add-ValidationError -Errors $errors -Message "Module definition '$relativeDefinitionPath' (module '$moduleKey') changed but definitionVersion is still '$headDefinitionVersion'. HostAgent rejects a re-imported definition version with different JSON and silently skips artifacts packaged with it. Bump definitionVersion in both the definition file and omp-components.json."
+        }
+        else {
+            $definitionDiffPassed++
         }
     }
 }
@@ -1341,7 +1352,7 @@ if ($sqlFilesChecked -gt 0) {
 }
 
 if ($definitionDiffChecked -gt 0) {
-    Write-Host "$checkMark $definitionDiffChecked module definition(s) passed content diff validation ($definitionDiffChanged changed)"
+    Write-Host "$checkMark $definitionDiffPassed of $definitionDiffChecked module definition(s) passed content diff validation ($definitionDiffChanged changed)"
 }
 
 if ($transitiveCheckCount -gt 0 -or $transitiveErrorCount -gt 0) {
