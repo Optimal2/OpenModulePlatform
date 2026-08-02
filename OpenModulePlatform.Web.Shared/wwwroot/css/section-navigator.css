@@ -153,13 +153,15 @@ body.section-navigator-resizing .section-navigator__resize-handle::after {
 /* In a shared pane, each element's handle bridges the gap down to the next
    element, so the whole content extent is one continuous grabbable edge and
    the lines run unbroken across the joints; the line insets remain only at
-   the pane's outer ends. */
-.section-navigator-pane > :has(+ *) .section-navigator__resize-handle {
+   the pane's outer ends. The script-injected pane edge does not count as a
+   next element - bridging towards it would poke the last real element's
+   handle below the pane and summon a vertical scrollbar. */
+.section-navigator-pane > :has(+ :not(.section-navigator-pane__edge)) .section-navigator__resize-handle {
     bottom: calc(0px - var(--section-navigator-pane-gap, 12px));
 }
 
-.section-navigator-pane > :has(+ *) .section-navigator__resize-handle::before,
-.section-navigator-pane > :has(+ *) .section-navigator__resize-handle::after {
+.section-navigator-pane > :has(+ :not(.section-navigator-pane__edge)) .section-navigator__resize-handle::before,
+.section-navigator-pane > :has(+ :not(.section-navigator-pane__edge)) .section-navigator__resize-handle::after {
     bottom: 0;
 }
 
