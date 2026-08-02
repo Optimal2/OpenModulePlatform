@@ -352,49 +352,29 @@ public static class OmpWebHostingExtensions
             return Results.LocalRedirect("/");
         });
 
-        app.MapPost(OmpAuthDefaults.SetActiveRolePath, async (
-            HttpContext context,
-            IAntiforgery antiforgery,
-            RbacService rbac,
-            CancellationToken ct) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            var selection = await ReadActiveRoleSelectionAsync(context, ct);
-            if (!selection.IsValid)
+        // Both the OmpAuth and RBAC set-active-role paths run the same handler,
+        // so register one delegate against both to keep them in lockstep.
+        Func<HttpContext, IAntiforgery, RbacService, CancellationToken, Task<IResult>> setActiveRoleHandler =
+            async (context, antiforgery, rbac, ct) =>
             {
-                return Results.BadRequest();
-            }
+                await antiforgery.ValidateRequestAsync(context);
+                var selection = await ReadActiveRoleSelectionAsync(context, ct);
+                if (!selection.IsValid)
+                {
+                    return Results.BadRequest();
+                }
 
-            return await HandleSetActiveRoleAsync(
-                context,
-                selection.RoleId,
-                selection.ReturnUrl,
-                rbac,
-                options,
-                ct);
-        }).RequireAuthorization();
+                return await HandleSetActiveRoleAsync(
+                    context,
+                    selection.RoleId,
+                    selection.ReturnUrl,
+                    rbac,
+                    options,
+                    ct);
+            };
 
-        app.MapPost(OmpAuthDefaults.RbacSetActiveRolePath, async (
-            HttpContext context,
-            IAntiforgery antiforgery,
-            RbacService rbac,
-            CancellationToken ct) =>
-        {
-            await antiforgery.ValidateRequestAsync(context);
-            var selection = await ReadActiveRoleSelectionAsync(context, ct);
-            if (!selection.IsValid)
-            {
-                return Results.BadRequest();
-            }
-
-            return await HandleSetActiveRoleAsync(
-                context,
-                selection.RoleId,
-                selection.ReturnUrl,
-                rbac,
-                options,
-                ct);
-        }).RequireAuthorization();
+        app.MapPost(OmpAuthDefaults.SetActiveRolePath, setActiveRoleHandler).RequireAuthorization();
+        app.MapPost(OmpAuthDefaults.RbacSetActiveRolePath, setActiveRoleHandler).RequireAuthorization();
 
         app.MapGet(PortalTopBarModel.DefaultSessionStatusPath, (HttpContext context) =>
         {
@@ -579,7 +559,10 @@ public static class OmpWebHostingExtensions
             }
 
             var notificationUnreadCount = await notificationService.GetUnreadCountAsync(userId.Value, ct);
-            var notifications = await notificationService.GetRecentForUserAsync(userId.Value, DefaultNotificationPageSize, ct);
+            // Fetch one extra row so hasMore is accurate: an exactly-full page with
+            // nothing beyond it must not report hasMore. Only the page size is returned.
+            var fetchedNotifications = await notificationService.GetRecentForUserAsync(userId.Value, DefaultNotificationPageSize + 1, ct);
+            var notifications = fetchedNotifications.Take(DefaultNotificationPageSize).ToList();
             var messageUnreadCount = await messageService.GetUnreadMessageCountAsync(userId.Value, ct);
             var portalBaseUrl = webAppOptions.Value.PortalTopBar?.PortalBaseUrl ?? "/";
             var messageConversations = await messageService.GetConversationsForUserAsync(
@@ -605,7 +588,7 @@ public static class OmpWebHostingExtensions
                         createdAt = row.CreatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
                         isUnread = row.IsUnread
                     }),
-                    hasMore = notifications.Count >= DefaultNotificationPageSize
+                    hasMore = fetchedNotifications.Count > DefaultNotificationPageSize
                 },
                 ["messages"] = new
                 {
@@ -620,9 +603,7 @@ public static class OmpWebHostingExtensions
                             : string.Empty,
                         unreadCount = row.UnreadCount,
                         avatarUrl = BuildPortalAvatarUrl(portalBaseUrl, row.OtherUserId, row.OtherProfileImageStorageKey) ?? string.Empty,
-                        href = PortalTopBarModelFactory.CombinePortalHref(
-                            portalBaseUrl,
-                            $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}")
+                        href = BuildConversationHref(portalBaseUrl, row.ConversationId)
                     })
                 }
             };
@@ -659,7 +640,7 @@ public static class OmpWebHostingExtensions
                 conversationId = row.ConversationId,
                 title = row.Title,
                 content = ToToastSnippet(row.Content),
-                targetUrl = $"/messages/{row.ConversationId.ToString(CultureInfo.InvariantCulture)}"
+                targetUrl = BuildConversationHref(portalBaseUrl, row.ConversationId)
             });
 
             return Results.Json(response);
@@ -694,12 +675,14 @@ public static class OmpWebHostingExtensions
                 limit.GetValueOrDefault(DefaultNotificationPageSize),
                 1,
                 MaxNotificationPageSize);
-            var rows = await notificationService.GetRecentForUserAsync(
+            // Fetch one extra row so hasMore is accurate for an exactly-full page.
+            var fetched = await notificationService.GetRecentForUserAsync(
                 userId.Value,
-                pageSize,
+                pageSize + 1,
                 before,
                 beforeNotificationId,
                 ct);
+            var rows = fetched.Take(pageSize).ToList();
 
             return Results.Json(new
             {
@@ -716,10 +699,16 @@ public static class OmpWebHostingExtensions
                     createdAt = row.CreatedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
                     isUnread = row.IsUnread
                 }),
-                hasMore = rows.Count >= pageSize
+                hasMore = fetched.Count > pageSize
             });
         }).RequireAuthorization();
 
+        // Two entry paths, one hub. ASP.NET Core registers the
+        // HubLifetimeManager<TopBarNotificationHub> per hub type (singleton), so
+        // both endpoints share the same connections, groups and IHubContext:
+        // a server-side push reaches clients regardless of which path they
+        // connected through. The topbar connects on Path; module pages using
+        // omp-live-refresh connect on PushEventPath.
         app.MapHub<TopBarNotificationHub>(TopBarNotificationHub.Path)
             .RequireAuthorization();
 
@@ -752,6 +741,13 @@ public static class OmpWebHostingExtensions
             ? $"{request.PathBase}{trimmed}"
             : trimmed;
     }
+
+    // Single source for the conversation URL so the conversations list and the
+    // message toast targets stay in sync with the portal base path.
+    private static string BuildConversationHref(string portalBaseUrl, long conversationId)
+        => PortalTopBarModelFactory.CombinePortalHref(
+            portalBaseUrl,
+            $"/messages/{conversationId.ToString(CultureInfo.InvariantCulture)}");
 
     private static string? BuildPortalAvatarUrl(string portalBaseUrl, int? userId, string? storageKey)
     {

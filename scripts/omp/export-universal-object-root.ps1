@@ -381,12 +381,17 @@ function Select-LatestUniversalPackageObjects {
     # OpenModulePlatform.Bootstrapper/Program.Gui.cs: keep only the highest
     # version per artifact/widget identity, keep every non-versioned object.
     $latestByIdentity = New-Object 'System.Collections.Generic.Dictionary[string,psobject]' ([System.StringComparer]::OrdinalIgnoreCase)
+    # Package paths whose identity is versioned (non-null). Recorded here so the
+    # filter below never has to recompute the identity -- for widget files that
+    # means re-reading and parsing the JSON from disk a second time.
+    $versionedPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
     foreach ($file in $Files) {
         $identity = Get-UniversalPackageVersionedIdentity -Kind $file.Kind -PackagePath $file.PackagePath -Version ([string]$file.Version)
         if ($null -eq $identity) {
             continue
         }
 
+        [void]$versionedPaths.Add([string]$file.PackagePath)
         $current = $null
         if (-not $latestByIdentity.TryGetValue($identity.IdentityKey, [ref]$current) -or
             (Compare-UniversalPackageVersionText -Left $identity.Version -Right ([string]$current.Version)) -gt 0) {
@@ -400,8 +405,7 @@ function Select-LatestUniversalPackageObjects {
     }
 
     return @($Files | Where-Object {
-        $identity = Get-UniversalPackageVersionedIdentity -Kind $_.Kind -PackagePath $_.PackagePath -Version ([string]$_.Version)
-        ($null -eq $identity) -or $latestPaths.Contains($_.PackagePath)
+        (-not $versionedPaths.Contains([string]$_.PackagePath)) -or $latestPaths.Contains([string]$_.PackagePath)
     })
 }
 

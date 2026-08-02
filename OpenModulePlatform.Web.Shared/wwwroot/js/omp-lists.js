@@ -151,7 +151,7 @@
         const rawValue = (cell?.getAttribute('data-sort-value') || cell?.textContent || '').trim();
 
         if (sortType === 'number') {
-            const normalized = rawValue.replace(/\s+/g, '').replace(',', '.');
+            const normalized = rawValue.replace(/\s+/g, '').replace(/,/g, '.');
             const parsed = Number.parseFloat(normalized);
             return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
         }
