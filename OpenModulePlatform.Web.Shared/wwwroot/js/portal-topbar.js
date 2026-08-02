@@ -33,6 +33,27 @@
     var NOTIFICATION_CHANGED_EVENT = 'omp:notification-state-changed';
     var MESSAGE_CHANGED_EVENT = 'omp:message-state-changed';
     var PUSH_EVENT_RECEIVED_EVENT = 'omp:push-event';
+    var PUSH_CHANNEL_STATE_EVENT = 'omp:push-channel-state';
+
+    // Consumers (omp-live-refresh.js and future pages) read the current top-bar
+    // push-channel state synchronously and react to transitions via the DOM
+    // event, so they never have to open a second SignalR connection while the
+    // top bar already maintains one.
+    window.ompPushChannel = window.ompPushChannel || { connected: false };
+
+    function publishPushChannelState(connected) {
+        var normalized = !!connected;
+        if (window.ompPushChannel && window.ompPushChannel.connected === normalized) {
+            return;
+        }
+
+        window.ompPushChannel = { connected: normalized };
+        if (typeof window.CustomEvent === 'function') {
+            window.dispatchEvent(new CustomEvent(PUSH_CHANNEL_STATE_EVENT, {
+                detail: { connected: normalized }
+            }));
+        }
+    }
     var SESSION_STATUS_WARNING_EVENT = 'omp:session-status-warning';
     var sessionStatusState = {
         root: null,
@@ -1863,6 +1884,7 @@
     }
 
     function startTopbarPushFallback(error) {
+        publishPushChannelState(false);
         topbarPollingState.pushFallbackActive = true;
         if (!topbarPollingState.pushFallbackWarned && window.console && typeof window.console.warn === 'function') {
             topbarPollingState.pushFallbackWarned = true;
@@ -2025,6 +2047,7 @@
     }
 
     function stopTopbarPushConnection() {
+        publishPushChannelState(false);
         clearTopbarPushReconnect();
         if (topbarPollingState.pushDebounceTimer) {
             window.clearTimeout(topbarPollingState.pushDebounceTimer);
@@ -2095,6 +2118,7 @@
                 startTopbarPushFallback(error);
             });
             connection.onreconnected(function () {
+                publishPushChannelState(true);
                 topbarPollingState.pushFallbackActive = false;
                 topbarPollingState.pushReconnectAttempts = 0;
                 topbarPollingState.failures = 0;
@@ -2102,6 +2126,7 @@
                 runTopbarSummaryRefreshSoon(true);
             });
             connection.onclose(function (error) {
+                publishPushChannelState(false);
                 if (topbarPollingState.pushConnection === connection) {
                     topbarPollingState.pushConnection = null;
                 }
@@ -2115,6 +2140,7 @@
 
             topbarPollingState.pushConnection = connection;
             await connection.start();
+            publishPushChannelState(true);
             topbarPollingState.pushFallbackActive = false;
             topbarPollingState.pushFallbackWarned = false;
             topbarPollingState.pushReconnectAttempts = 0;
