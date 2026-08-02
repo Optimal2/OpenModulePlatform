@@ -6,17 +6,78 @@
     var minWidth = 140;
     var maxWidth = 420;
 
-    function clampWidth(value) {
-        return Math.min(maxWidth, Math.max(minWidth, value));
+    // Narrow mode: layouts with a shared pane keep the splitter below the
+    // stacking breakpoint. The pane collapses to the left edge (width 0) by
+    // default - as if the handle had been dragged fully left - and drags
+    // below the snap width settle back into the collapsed state. The pulled-
+    // out width lives in sessionStorage so it survives navigation but every
+    // new session starts collapsed.
+    var narrowQuery = window.matchMedia("(max-width: 1500px)");
+    var narrowStorageKey = "omp.section-navigator.narrow-width";
+    var narrowCollapseSnap = 80;
+    var narrowMaxWidth = 360;
+    var narrowDefaultWidth = 240;
+
+    function isNarrowPaneLayout(layout) {
+        return narrowQuery.matches && !!layout.querySelector(".section-navigator-pane");
+    }
+
+    function clampWidth(value, narrow) {
+        return narrow
+            ? Math.min(narrowMaxWidth, Math.max(0, value))
+            : Math.min(maxWidth, Math.max(minWidth, value));
+    }
+
+    function readNarrowWidth() {
+        try {
+            var parsed = parseInt(window.sessionStorage.getItem(narrowStorageKey) || "", 10);
+            return Number.isFinite(parsed) ? parsed : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function storeNarrowWidth(value) {
+        try {
+            if (value === null) {
+                window.sessionStorage.removeItem(narrowStorageKey);
+            } else {
+                window.sessionStorage.setItem(narrowStorageKey, String(value));
+            }
+        } catch (error) {
+            // Storage may be unavailable; the state still applies for the page.
+        }
     }
 
     function readStoredWidth() {
         try {
             var parsed = parseInt(window.localStorage.getItem(storageKey) || "", 10);
-            return Number.isFinite(parsed) ? clampWidth(parsed) : null;
+            return Number.isFinite(parsed) ? clampWidth(parsed, false) : null;
         } catch (error) {
             return null;
         }
+    }
+
+    function applyNarrowState(layout) {
+        if (!layout || !layout.querySelector(".section-navigator-pane")) {
+            return;
+        }
+
+        if (narrowQuery.matches) {
+            var narrowWidth = readNarrowWidth();
+            if (narrowWidth !== null && narrowWidth >= narrowCollapseSnap) {
+                layout.classList.remove("section-navigator-layout--pane-collapsed");
+                applyWidth(layout, clampWidth(narrowWidth, true));
+            } else {
+                layout.classList.add("section-navigator-layout--pane-collapsed");
+                applyWidth(layout, 0);
+            }
+        } else {
+            layout.classList.remove("section-navigator-layout--pane-collapsed");
+            applyWidth(layout, readStoredWidth());
+        }
+
+        updateLayoutMode(layout);
     }
 
     function storeWidth(value) {
@@ -119,6 +180,13 @@
             dragStartWidth = measureTargetWidth(target);
             handle.setPointerCapture(event.pointerId);
             document.body.classList.add("section-navigator-resizing");
+            // Pulling out a collapsed pane: reveal the content immediately so
+            // the drag gives visual feedback; the end-of-drag snap decides
+            // whether it stays out.
+            if (layout.classList.contains("section-navigator-layout--pane-collapsed")) {
+                layout.classList.remove("section-navigator-layout--pane-collapsed");
+                dragStartWidth = 0;
+            }
         });
 
         handle.addEventListener("pointermove", function (event) {
@@ -126,7 +194,7 @@
                 return;
             }
 
-            applyWidth(layout, clampWidth(Math.round(dragStartWidth + (event.clientX - dragStartX))));
+            applyWidth(layout, clampWidth(Math.round(dragStartWidth + (event.clientX - dragStartX)), isNarrowPaneLayout(layout)));
             updateLayoutMode(layout, true);
             snapGrip(handle);
         });
@@ -138,8 +206,18 @@
 
             handle.releasePointerCapture(event.pointerId);
             document.body.classList.remove("section-navigator-resizing");
-            storeWidth(clampWidth(Math.round(measureTargetWidth(target))));
-            updateLayoutMode(layout, false);
+            if (isNarrowPaneLayout(layout)) {
+                var narrowWidth = Math.round(measureTargetWidth(target));
+                if (narrowWidth < narrowCollapseSnap) {
+                    storeNarrowWidth(null);
+                } else {
+                    storeNarrowWidth(clampWidth(narrowWidth, true));
+                }
+                applyNarrowState(layout);
+            } else {
+                storeWidth(clampWidth(Math.round(measureTargetWidth(target)), false));
+                updateLayoutMode(layout, false);
+            }
             snapGrip(handle);
         }
 
@@ -147,9 +225,16 @@
         handle.addEventListener("pointercancel", endDrag);
 
         handle.addEventListener("dblclick", function () {
-            applyWidth(layout, null);
-            storeWidth(null);
-            updateLayoutMode(layout);
+            if (isNarrowPaneLayout(layout)) {
+                // Double-click toggles the collapsed state at a comfortable width.
+                var collapsed = layout.classList.contains("section-navigator-layout--pane-collapsed");
+                storeNarrowWidth(collapsed ? narrowDefaultWidth : null);
+                applyNarrowState(layout);
+            } else {
+                applyWidth(layout, null);
+                storeWidth(null);
+                updateLayoutMode(layout);
+            }
             snapGrip(handle);
         });
 
@@ -205,6 +290,21 @@
     function init() {
         initPaneCollapse();
 
+        // One full-height grab edge per shared pane: on wide screens it just
+        // widens the draggable surface (its lines stay hidden there), on
+        // narrow screens it is what remains of a collapsed pane.
+        document.querySelectorAll(".section-navigator-pane").forEach(function (pane) {
+            if (pane.querySelector(".section-navigator-pane__edge")) {
+                return;
+            }
+
+            var edge = document.createElement("div");
+            edge.className = "section-navigator__resize-handle section-navigator-pane__edge";
+            edge.setAttribute("data-section-navigator-resize", "");
+            edge.setAttribute("aria-hidden", "true");
+            pane.appendChild(edge);
+        });
+
         var handles = Array.prototype.slice.call(document.querySelectorAll("[data-section-navigator-resize]"));
         if (handles.length === 0) {
             return;
@@ -219,6 +319,12 @@
         }
 
         handles.forEach(initHandle);
+
+        document.querySelectorAll(".section-navigator-layout").forEach(applyNarrowState);
+        narrowQuery.addEventListener("change", function () {
+            document.querySelectorAll(".section-navigator-layout").forEach(applyNarrowState);
+            document.querySelectorAll("[data-section-navigator-resize]").forEach(snapGrip);
+        });
     }
 
     if (document.readyState === "loading") {
