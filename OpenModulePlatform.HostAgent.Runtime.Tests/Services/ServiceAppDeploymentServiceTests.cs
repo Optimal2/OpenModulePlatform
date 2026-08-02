@@ -26,7 +26,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         {
             Directory.Delete(_tempRoot, recursive: true);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Best-effort cleanup of temp test artifacts.
         }
@@ -485,13 +485,13 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         var oldServiceName = "backend";
         var newServiceName = "OMP.iKrock2.Backend";
         var executableRelativePath = "iKrock2.Backend.exe";
-        var sourcePath = Path.Combine(_tempRoot, "source", appInstanceKey);
-        var newTargetPath = Path.Combine(_tempRoot, newServiceName);
-        var oldTargetPath = Path.Combine(_tempRoot, oldServiceName);
+        var sourcePath = Path.Join(_tempRoot, "source", appInstanceKey);
+        var newTargetPath = Path.Join(_tempRoot, newServiceName);
+        var oldTargetPath = Path.Join(_tempRoot, oldServiceName);
         Directory.CreateDirectory(sourcePath);
         Directory.CreateDirectory(oldTargetPath);
-        File.WriteAllText(Path.Combine(sourcePath, executableRelativePath), string.Empty);
-        File.WriteAllText(Path.Combine(oldTargetPath, executableRelativePath), string.Empty);
+        File.WriteAllText(Path.Join(sourcePath, executableRelativePath), string.Empty);
+        File.WriteAllText(Path.Join(oldTargetPath, executableRelativePath), string.Empty);
 
         var deployment = new ServiceAppDeploymentDescriptor
         {
@@ -583,13 +583,13 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         var appInstanceId = Guid.NewGuid();
         var appInstanceKey = $"test-app-{appInstanceId:N}";
         var serviceName = "TestService";
-        var sourcePath = Path.Combine(_tempRoot, "source", appInstanceKey);
-        var targetPath = Path.Combine(_tempRoot, "target", appInstanceKey);
+        var sourcePath = Path.Join(_tempRoot, "source", appInstanceKey);
+        var targetPath = Path.Join(_tempRoot, "target", appInstanceKey);
         Directory.CreateDirectory(sourcePath);
         Directory.CreateDirectory(targetPath);
         var executableRelativePath = $"{serviceName}.exe";
-        var sourceExecutablePath = Path.Combine(sourcePath, executableRelativePath);
-        var targetExecutablePath = Path.Combine(targetPath, executableRelativePath);
+        var sourceExecutablePath = Path.Join(sourcePath, executableRelativePath);
+        var targetExecutablePath = Path.Join(targetPath, executableRelativePath);
         File.WriteAllText(sourceExecutablePath, string.Empty);
         File.WriteAllText(targetExecutablePath, string.Empty);
 

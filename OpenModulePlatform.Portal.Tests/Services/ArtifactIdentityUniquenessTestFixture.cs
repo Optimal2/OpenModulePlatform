@@ -130,13 +130,8 @@ SELECT CAST(SCOPE_IDENTITY() AS int);",
 
     private static IEnumerable<string> SplitBatches(string sql)
     {
-        foreach (var batch in Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline))
-        {
-            if (!string.IsNullOrWhiteSpace(batch))
-            {
-                yield return batch;
-            }
-        }
+        return Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline)
+            .Where(batch => !string.IsNullOrWhiteSpace(batch));
     }
 
     private async Task DropDatabaseAsync()

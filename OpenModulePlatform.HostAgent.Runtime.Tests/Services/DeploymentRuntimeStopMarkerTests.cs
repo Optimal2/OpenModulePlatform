@@ -12,8 +12,9 @@ public sealed class DeploymentRuntimeStopMarkerTests : IDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 

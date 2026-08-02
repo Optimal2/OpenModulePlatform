@@ -14,8 +14,9 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex);
         }
     }
 

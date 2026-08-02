@@ -13,7 +13,7 @@ public sealed class ModuleConfigIdTests
     public void FromNullable_MapsValidAndInvalidValues(int? input, int? expected)
     {
         var actual = ModuleConfigId.FromNullable(input);
-        Assert.Equal(expected, actual?.Value);
+        Assert.Equal(expected, actual is { } id ? id.Value : (int?)null);
     }
 
     [Theory]

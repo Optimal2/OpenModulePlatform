@@ -1576,8 +1576,10 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Missing", "The Windows service was already missing.");
         }
 
+        // Clean returns null (never whitespace) for a blank input, so a plain
+        // null check is exactly the guard here.
         var canonicalServiceName = ServiceAppDeploymentNaming.Clean(action?.CanonicalServiceName);
-        if (!string.IsNullOrWhiteSpace(canonicalServiceName))
+        if (canonicalServiceName is not null)
         {
             return await CleanupOrphanDuplicateServiceFindingAsync(
                 entry,

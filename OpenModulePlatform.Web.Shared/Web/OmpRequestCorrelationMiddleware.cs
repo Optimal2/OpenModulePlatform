@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 
 namespace OpenModulePlatform.Web.Shared.Web;
 
@@ -106,16 +107,8 @@ public static class OmpRequestCorrelationMiddleware
             return false;
         }
 
-        foreach (var ch in trimmed)
-        {
-            var isToken = ch is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9')
-                or '.' or '_' or '-';
-            if (!isToken)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return trimmed.All(static ch =>
+            ch is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9')
+                or '.' or '_' or '-');
     }
 }

@@ -5898,13 +5898,12 @@ ORDER BY ar.ArtifactId DESC;
                     entryStream.CopyTo(memory);
                     memory.Position = 0;
                     using var nested = new ZipArchive(memory, ZipArchiveMode.Read);
-                    foreach (var nestedEntry in nested.Entries)
+                    var nestedConfigEntries = nested.Entries.Where(nestedEntry =>
+                        !string.IsNullOrWhiteSpace(nestedEntry.Name)
+                        && RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(nestedEntry.Name));
+                    foreach (var nestedEntry in nestedConfigEntries)
                     {
-                        if (!string.IsNullOrWhiteSpace(nestedEntry.Name)
-                            && RuntimeConfigurationFiles.IsRuntimeConfigurationFileName(nestedEntry.Name))
-                        {
-                            offenders.Add(entry.FullName + "!" + nestedEntry.FullName);
-                        }
+                        offenders.Add(entry.FullName + "!" + nestedEntry.FullName);
                     }
                 }
                 catch (InvalidDataException ex)

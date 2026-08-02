@@ -87,7 +87,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
             new ServiceAppServiceCandidate(
                 "OMP.iKrock2.Backend",
                 "RUNNING",
-                Path.Combine(orphan, "iKrock2.Backend.exe"),
+                Path.Join(orphan, "iKrock2.Backend.exe"),
                 "OMP iKrock Backend")
         };
 
@@ -112,7 +112,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
             new ServiceAppServiceCandidate(
                 "OrphanApp",
                 "STOPPED",
-                Path.Combine(orphan, "OrphanApp.exe"),
+                Path.Join(orphan, "OrphanApp.exe"),
                 "Orphan App")
         };
 
@@ -193,7 +193,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
 
     private static string CreateSubDirectory(string root, string name)
     {
-        var path = Path.Combine(root, name);
+        var path = Path.Join(root, name);
         Directory.CreateDirectory(path);
         return path;
     }
@@ -213,7 +213,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
 
         public TempDirectory()
         {
-            Path = System.IO.Path.Combine(
+            Path = System.IO.Path.Join(
                 System.IO.Path.GetTempPath(),
                 $"omp-orphan-cleanup-test-{Guid.NewGuid():N}");
             Directory.CreateDirectory(Path);

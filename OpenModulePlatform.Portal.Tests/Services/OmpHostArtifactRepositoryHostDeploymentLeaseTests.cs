@@ -166,6 +166,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
             CancellationToken.None);
 
         Assert.True(renewed);
+        Assert.NotNull(originalLeaseUntilUtc);
 
         var row = await GetDeploymentRowAsync(deploymentId);
         Assert.NotNull(row.LeaseUntilUtc);
@@ -324,7 +325,7 @@ WHERE HostDeploymentId = @hostDeploymentId;",
             cmd.Parameters.AddWithValue("@ids", string.Join(",", _createdDeploymentIds));
             cmd.ExecuteNonQuery();
         }
-        catch
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
             // Best-effort cleanup; do not fail the test because cleanup failed.
         }
