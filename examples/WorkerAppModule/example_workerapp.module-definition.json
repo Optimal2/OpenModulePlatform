@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_workerapp",
-  "definitionVersion": "0.3.13",
+  "definitionVersion": "0.3.14",
   "module": {
     "displayName": "Example WorkerApp",
     "moduleType": "HostAppModule",
@@ -181,14 +181,16 @@
           "appInstanceKey": "example_workerapp_worker",
           "moduleInstanceKey": "example_workerapp",
           "installationName": "default",
-          "hostBinding": "host-bound-sample"
+          "hostBinding": "host-bound-sample",
+          "targetHostTemplateKey": "ServiceHost"
         }
       ],
       "workerInstances": [
         {
           "workerInstanceKey": "example_workerapp_worker_default",
           "appInstanceKey": "example_workerapp_worker",
-          "hostBinding": "host-bound-sample"
+          "hostBinding": "host-bound-sample",
+          "targetHostTemplateKey": "ServiceHost"
         }
       ],
       "instanceTemplateModuleInstances": [
@@ -209,7 +211,8 @@
           "appInstanceKey": "example_workerapp_worker",
           "moduleInstanceKey": "example_workerapp",
           "installationName": "default",
-          "hostBinding": "host-bound-sample"
+          "hostBinding": "host-bound-sample",
+          "targetHostTemplateKey": "ServiceHost"
         }
       ]
     },

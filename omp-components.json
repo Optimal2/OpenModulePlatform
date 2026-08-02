@@ -45,7 +45,7 @@
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.13",
+      "definitionVersion": "0.3.14",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
