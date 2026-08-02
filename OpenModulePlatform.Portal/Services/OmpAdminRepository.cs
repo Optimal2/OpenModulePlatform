@@ -2046,12 +2046,30 @@ SELECT ar.ArtifactId,
 FROM omp.Artifacts ar
 INNER JOIN omp.Apps a ON a.AppId = ar.AppId
 INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+CROSS APPLY
+(
+    -- Newest by semantic version first, so an older version registered later
+    -- (legacy universal package import) is never offered as the top option.
+    SELECT CASE
+               WHEN ar.Version LIKE N'%[^0-9.]%' THEN NULL
+               WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 0 THEN ar.Version + N'.0.0.0'
+               WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 1 THEN ar.Version + N'.0.0'
+               WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 2 THEN ar.Version + N'.0'
+               WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 3 THEN ar.Version
+               ELSE NULL
+           END AS NormalizedVersion
+) nv
 WHERE m.ModuleKey = N'omp_core'
   AND a.AppKey = N'omp_hostagent'
   AND ar.PackageType = N'host-agent'
   AND ar.TargetName = N'omp-hostagent'
   AND ar.IsEnabled = 1
-ORDER BY ar.CreatedUtc DESC, ar.ArtifactId DESC;";
+ORDER BY TRY_CAST(PARSENAME(nv.NormalizedVersion, 4) AS bigint) DESC,
+         TRY_CAST(PARSENAME(nv.NormalizedVersion, 3) AS bigint) DESC,
+         TRY_CAST(PARSENAME(nv.NormalizedVersion, 2) AS bigint) DESC,
+         TRY_CAST(PARSENAME(nv.NormalizedVersion, 1) AS bigint) DESC,
+         ar.CreatedUtc DESC,
+         ar.ArtifactId DESC;";
 
         var rows = new List<HostAgentArtifactOption>();
         await using var conn = _db.Create();
