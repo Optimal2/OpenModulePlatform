@@ -504,6 +504,14 @@ body.section-navigator-resizing {
     content: none;
 }
 
+/* The edge is a direct pane child, so unlike the nested handles it must
+   anchor inside the pane's own gap-wide scrollport padding - the nested
+   handles' right offset would poke it outside the pane and summon a
+   horizontal scrollbar. */
+.section-navigator-pane > .section-navigator-pane__edge {
+    right: 0;
+}
+
 @media (max-width: 1500px) {
     .content-shell:has(.section-navigator-layout) {
         max-width: 1400px;
