@@ -705,8 +705,55 @@ public sealed class HostAgentJobProcessor
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            AddEntryResult(result, entry, localPath, "Error", ex.Message);
+            AddEntryResult(result, entry, localPath, "Error", DescribeCacheDeleteFailure(localPath, ex));
         }
+    }
+
+    /// <summary>
+    /// A cache delete that fails with access-denied is usually a DLL that a
+    /// running process (typically a worker host) still has memory-mapped.
+    /// Naming the process turns an opaque OS error into an actionable message.
+    /// </summary>
+    private static string DescribeCacheDeleteFailure(string localPath, Exception exception)
+    {
+        try
+        {
+            var normalizedRoot = Path.GetFullPath(localPath);
+            foreach (var process in System.Diagnostics.Process.GetProcesses())
+            {
+                using (process)
+                {
+                    try
+                    {
+                        foreach (System.Diagnostics.ProcessModule module in process.Modules)
+                        {
+                            var fileName = module.FileName;
+                            if (!string.IsNullOrEmpty(fileName)
+                                && fileName.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return $"{exception.Message} The path is in use by running process '{process.ProcessName}' (PID {process.Id}); the entry can be deleted after that process restarts.";
+                            }
+                        }
+                    }
+                    catch (Exception moduleEx) when (moduleEx is System.ComponentModel.Win32Exception
+                        or InvalidOperationException
+                        or NotSupportedException)
+                    {
+                        // Module enumeration is best-effort; inaccessible or exited
+                        // processes are simply skipped.
+                    }
+                }
+            }
+        }
+        catch (Exception scanEx) when (scanEx is ArgumentException
+            or IOException
+            or NotSupportedException
+            or UnauthorizedAccessException)
+        {
+            // Diagnostics must never turn a delete failure into a job crash.
+        }
+
+        return exception.Message;
     }
 
     private async Task ProcessArtifactStoreCleanupEntryAsync(

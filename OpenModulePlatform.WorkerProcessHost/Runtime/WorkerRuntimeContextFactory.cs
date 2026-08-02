@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.WorkerProcessHost/Runtime/WorkerRuntimeContextFactory.cs
+using OpenModulePlatform.Worker.Abstractions.Contracts;
 using OpenModulePlatform.Worker.Abstractions.Models;
 using OpenModulePlatform.WorkerProcessHost.Models;
 
@@ -9,7 +10,9 @@ namespace OpenModulePlatform.WorkerProcessHost.Runtime;
 /// </summary>
 public sealed class WorkerRuntimeContextFactory
 {
-    public WorkerExecutionContext Create(WorkerProcessSettings settings)
+    public WorkerExecutionContext Create(
+        WorkerProcessSettings settings,
+        IWorkerDrainCoordinator? drainCoordinator = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -25,7 +28,8 @@ public sealed class WorkerRuntimeContextFactory
             WorkerTypeKey = settings.WorkerTypeKey,
             PluginAssemblyPath = Path.GetFullPath(settings.PluginAssemblyPath),
             ConfigurationJson = settings.ConfigurationJson,
-            StartedUtc = DateTimeOffset.UtcNow
+            StartedUtc = DateTimeOffset.UtcNow,
+            DrainCoordinator = drainCoordinator
         };
     }
 }
