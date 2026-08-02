@@ -240,13 +240,18 @@
 
         updateLayoutMode(layout);
         snapGrip(handle);
-        window.addEventListener("resize", function () {
-            updateLayoutMode(layout);
-            snapGrip(handle);
-        });
-        // Late layout shifts (web fonts, images) can move the anchor after init.
-        window.addEventListener("load", function () {
-            updateLayoutMode(layout);
+    }
+
+    // Refresh every handle's layout mode and grip. Registered once on window
+    // resize/load (not per handle) so the listeners never accumulate when a
+    // page has more than one resize handle.
+    function refreshAllHandles() {
+        document.querySelectorAll("[data-section-navigator-resize]").forEach(function (handle) {
+            var layout = handle.closest(".section-navigator-layout");
+            if (layout) {
+                updateLayoutMode(layout);
+            }
+
             snapGrip(handle);
         });
     }
@@ -305,7 +310,7 @@
             pane.appendChild(edge);
         });
 
-        var handles = Array.prototype.slice.call(document.querySelectorAll("[data-section-navigator-resize]"));
+        var handles = Array.from(document.querySelectorAll("[data-section-navigator-resize]"));
         if (handles.length === 0) {
             return;
         }
@@ -325,6 +330,10 @@
             document.querySelectorAll(".section-navigator-layout").forEach(applyNarrowState);
             document.querySelectorAll("[data-section-navigator-resize]").forEach(snapGrip);
         });
+
+        // Late layout shifts (web fonts, images) can move the anchor after init.
+        window.addEventListener("resize", refreshAllHandles);
+        window.addEventListener("load", refreshAllHandles);
     }
 
     if (document.readyState === "loading") {
