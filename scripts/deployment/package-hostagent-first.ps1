@@ -1076,18 +1076,9 @@ $workerProcessHostComponent = $components | Where-Object { $_.componentKey -eq '
 
 function New-WorkerManagerArtifactConfigurationFile {
     param(
-        [Parameter(Mandatory = $true)][object]$WorkerProcessHostComponent,
         [Parameter(Mandatory = $true)][string]$BuildRoot
     )
 
-    $workerProcessHostCacheRelativePath = [string]::Join(
-        '/',
-        @(
-            [string]$WorkerProcessHostComponent.packageType,
-            [string]$WorkerProcessHostComponent.targetName,
-            [string]$WorkerProcessHostComponent.version
-        ))
-    $workerProcessExecutablePath = "{{Omp.Json.HostAgent.LocalArtifactCacheRoot}}/$workerProcessHostCacheRelativePath/OpenModulePlatform.WorkerProcessHost.exe"
     $configurationPath = Join-Path $BuildRoot 'worker-manager-appsettings.json'
     $configuration = [ordered]@{
         ConnectionStrings = [ordered]@{
@@ -1098,7 +1089,11 @@ function New-WorkerManagerArtifactConfigurationFile {
             HostKey = '{{Omp.Json.HostKey}}'
             HostName = ''
             RefreshSeconds = 15
-            WorkerProcessPath = $workerProcessExecutablePath
+            # An empty path makes WorkerManager resolve the provisioned
+            # WorkerProcessHost from the OMP database each cycle. Baking a
+            # version-pinned cache path here strands the config when artifact
+            # retention later reclaims that superseded cache folder.
+            WorkerProcessPath = ''
             StopTimeoutSeconds = 15
             RestartDelaySeconds = 5
             RestartWindowSeconds = 300
@@ -1200,9 +1195,7 @@ foreach ($component in $components) {
                 throw "Component manifest must include omp-workerprocesshost before packaging omp-workermanager-service."
             }
 
-            $configurationFiles += New-WorkerManagerArtifactConfigurationFile `
-                -WorkerProcessHostComponent $workerProcessHostComponent `
-                -BuildRoot $buildRoot
+            $configurationFiles += New-WorkerManagerArtifactConfigurationFile -BuildRoot $buildRoot
         }
 
         $minModuleDefinitionVersion = Get-ManifestPropertyValue -Object $component -Name 'minModuleDefinitionVersion'
