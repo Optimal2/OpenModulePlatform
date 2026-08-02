@@ -495,31 +495,49 @@ body.section-navigator-resizing {
     overflow-y: visible;
 }
 
+/* Pane-level grab edge: one full-height handle for the whole shared pane,
+   injected by the script. On wide screens the per-element handles already
+   trace the same edge, so this one stays lineless there; on narrow screens
+   it is also what remains grabbable when the pane is dragged fully shut. */
+.section-navigator-pane__edge::before,
+.section-navigator-pane__edge::after {
+    content: none;
+}
+
 @media (max-width: 1500px) {
     .content-shell:has(.section-navigator-layout) {
         max-width: 1400px;
     }
 
-    .section-navigator-layout {
+    /* Layouts without a shared pane keep the stacked fallback: content
+       full-width, navigator hidden. */
+    .section-navigator-layout:not(:has(.section-navigator-pane)) {
         display: block;
         margin: 0 auto;
         max-width: 1400px;
     }
 
-    .section-navigator {
+    .section-navigator-layout:not(:has(.section-navigator-pane)) .section-navigator {
         display: none;
     }
 
-    /* The pane falls back into the page flow so remaining pane content
-       (the link box) renders full-width between header and content. */
-    .section-navigator-pane {
-        position: static;
-        display: block;
-        width: auto;
-        padding-right: 0;
-        margin-right: 0;
-        max-height: none;
+    /* Layouts with a shared pane keep the splitter instead: the script
+       collapses the pane to the left edge (width 0) by default, exactly as
+       if the handle had been dragged fully left, and the same edge pulls
+       it back out. */
+    .section-navigator-pane__edge::before,
+    .section-navigator-pane__edge::after {
+        content: "";
+    }
+
+    .section-navigator-layout--pane-collapsed .section-navigator-pane {
+        /* Collapsed: nothing but the grab edge remains; the min-height
+           keeps a generous grab surface at the screen edge. */
+        min-height: 40vh;
         overflow: visible;
-        margin-bottom: 16px;
+    }
+
+    .section-navigator-layout--pane-collapsed .section-navigator-pane > :not(.section-navigator-pane__edge) {
+        display: none;
     }
 }
