@@ -2022,7 +2022,12 @@ WITH RankedArtifacts AS
            CAST(ROW_NUMBER() OVER
            (
                PARTITION BY ar.AppId, ar.PackageType, ISNULL(ar.TargetName, N'')
-               ORDER BY ar.CreatedUtc DESC, ar.ArtifactId DESC
+               ORDER BY TRY_CAST(PARSENAME(nv.NormalizedVersion, 4) AS bigint) DESC,
+                        TRY_CAST(PARSENAME(nv.NormalizedVersion, 3) AS bigint) DESC,
+                        TRY_CAST(PARSENAME(nv.NormalizedVersion, 2) AS bigint) DESC,
+                        TRY_CAST(PARSENAME(nv.NormalizedVersion, 1) AS bigint) DESC,
+                        ar.CreatedUtc DESC,
+                        ar.ArtifactId DESC
            ) AS int) AS RetentionRank,
            CAST(COUNT(1) OVER
            (
@@ -2032,6 +2037,23 @@ WITH RankedArtifacts AS
     FROM omp.Artifacts ar
     INNER JOIN omp.Apps a ON a.AppId = ar.AppId
     INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+    CROSS APPLY
+    (
+        -- Rank by semantic version, not registration time: an older version
+        -- imported later (legacy universal packages) must not outrank the
+        -- actually-newest artifact. The version is normalized to four dot
+        -- segments so PARSENAME can split it; non-numeric versions yield NULL
+        -- segments and sort below every parseable version, after which the
+        -- CreatedUtc/ArtifactId fallback keeps the order deterministic.
+        SELECT CASE
+                   WHEN ar.Version LIKE N'%[^0-9.]%' THEN NULL
+                   WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 0 THEN ar.Version + N'.0.0.0'
+                   WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 1 THEN ar.Version + N'.0.0'
+                   WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 2 THEN ar.Version + N'.0'
+                   WHEN LEN(ar.Version) - LEN(REPLACE(ar.Version, N'.', N'')) = 3 THEN ar.Version
+                   ELSE NULL
+               END AS NormalizedVersion
+    ) nv
     OUTER APPLY
     (
         SELECT COUNT(1) AS ProtectedReferenceCount
