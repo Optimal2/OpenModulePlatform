@@ -97,7 +97,10 @@ public sealed class MaintenanceScanScheduler : BackgroundService
             {
                 break;
             }
-            catch (Exception ex)
+            // Deliberate resilience boundary: one failed enqueue must never stop
+            // the scheduler loop. The filter keeps this from swallowing a
+            // shutdown cancellation, which the clause above owns.
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 _logger.LogError(
                     ex,

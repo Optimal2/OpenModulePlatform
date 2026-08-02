@@ -223,13 +223,14 @@ public sealed class NavigationModel : OmpPortalPageModel
     {
         var registered = await _linkBoxes.GetBoxesAsync(ct);
         var boxes = new List<LinkBoxRow>(registered);
-        foreach (var strayKey in await _linkBoxes.GetBoxKeysAsync(ct))
-        {
-            if (boxes.All(item => !string.Equals(item.BoxKey, strayKey, StringComparison.OrdinalIgnoreCase)))
-            {
-                boxes.Add(new LinkBoxRow { BoxKey = strayKey, Title = strayKey });
-            }
-        }
+        var knownKeys = boxes
+            .Select(item => item.BoxKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // HashSet.Add returns true only for a key not already present, which
+        // also de-duplicates repeats within the stray-key sequence itself.
+        var strayKeys = (await _linkBoxes.GetBoxKeysAsync(ct)).Where(knownKeys.Add);
+        boxes.AddRange(strayKeys.Select(strayKey => new LinkBoxRow { BoxKey = strayKey, Title = strayKey }));
 
         Boxes = boxes;
         SelectedBoxKey = boxes.FirstOrDefault(item => string.Equals(item.BoxKey, box, StringComparison.OrdinalIgnoreCase))?.BoxKey
