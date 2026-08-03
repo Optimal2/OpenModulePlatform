@@ -7,6 +7,7 @@ param(
     [string]$OutputRoot = '',
     [string]$Version = '',
     [string]$Configuration = '',
+    [string]$CodeSigningConfigPath = '',
     [switch]$SkipRestore,
     [switch]$SkipOpenDocViewerBuild,
     [switch]$SkipOpenDocViewerNpmInstall,
@@ -25,6 +26,27 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 function Write-Step {
     param([string]$Message)
     Write-Host "`n== $Message ==" -ForegroundColor Cyan
+}
+
+$script:SignedPublishRoots = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+
+function Invoke-ReleaseCodeSigning {
+    # Signs first-party binaries in a publish folder with Azure Trusted Signing
+    # before the folder is zipped into a package. A no-op unless signing is
+    # configured (see scripts/deployment/sign-artifacts.ps1), so unsigned
+    # developer packaging keeps working without an Azure account.
+    param([Parameter(Mandatory = $true)][string]$PublishFolder)
+
+    $resolved = [IO.Path]::GetFullPath($PublishFolder)
+    if (-not $script:SignedPublishRoots.Add($resolved)) {
+        return
+    }
+
+    $signScript = Join-Path $PSScriptRoot 'sign-artifacts.ps1'
+    & $signScript -Path $resolved -ConfigPath $CodeSigningConfigPath -SkipIfUnconfigured
+    if ($LASTEXITCODE -ne 0) {
+        throw "Code signing failed for '$resolved' with exit code $LASTEXITCODE."
+    }
 }
 
 function Import-DeploymentConfig {
@@ -1172,6 +1194,7 @@ foreach ($component in $components) {
     $componentKey = [string]$component.componentKey
     $projectName = Get-ProjectNameFromComponent -RepositoryRoot $RepositoryRoot -Component $component
     $source = Join-Path $publishRoot $projectName
+    Invoke-ReleaseCodeSigning -PublishFolder $source
     $payloadZip = Join-Path $componentPayloadRoot "$componentKey.zip"
     Compress-FolderToZip -Source $source -Destination $payloadZip
 
@@ -1467,6 +1490,7 @@ $bootstrapSql += [Environment]::NewLine
 Set-Content -LiteralPath (Join-Path $sqlRoot 'bootstrap-local.sql') -Value $bootstrapSql -Encoding UTF8
 
 Write-Step 'Copying bootstrapper'
+Invoke-ReleaseCodeSigning -PublishFolder (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper')
 Compress-FolderToZip -Source (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper.zip')
 Copy-Item -LiteralPath (Join-Path $publishRoot 'OpenModulePlatform.Bootstrapper') -Destination (Join-Path $toolsRoot 'OpenModulePlatform.Bootstrapper') -Recurse -Force
 
@@ -1480,6 +1504,7 @@ Invoke-NativeChecked dotnet 'publish' (Join-Path $RepositoryRoot 'OpenModulePlat
     '-p:IncludeNativeLibrariesForSelfExtract=true' `
     '-p:DebugType=None' `
     '-p:DebugSymbols=false'
+Invoke-ReleaseCodeSigning -PublishFolder $rootBootstrapperPublishRoot
 Copy-Item -Path (Join-Path $rootBootstrapperPublishRoot '*') -Destination $packageRoot -Recurse -Force
 
 Write-Step 'Writing bootstrap manifest'

@@ -65,3 +65,5 @@ coverage/
 
 # Claude Code local tool config — never tracked, must not block dep maintenance
 .claude/
+
+scripts/deployment/trusted-signing.json

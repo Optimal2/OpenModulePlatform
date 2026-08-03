@@ -1,0 +1,5 @@
+{
+  "Endpoint": "https://weu.codesigning.azure.net",
+  "CodeSigningAccountName": "optimal2-signing",
+  "CertificateProfileName": "optimal2-public-trust"
+}
