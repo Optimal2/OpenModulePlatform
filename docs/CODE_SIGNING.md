@@ -28,10 +28,10 @@ exactly as before and produces unsigned developer builds.
    - a service principal (app registration) for unattended/CI signing; set
      `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` in the build
      environment.
-6. **Install the Windows SDK signing tools** on the build machine (the
-   "Windows SDK Signing Tools for Desktop Apps" feature provides
-   `signtool.exe`). The Trusted Signing client library is downloaded from
-   NuGet automatically on first use.
+6. **No tooling install is required** on the build machine: both
+   `signtool.exe` (from the Microsoft.Windows.SDK.BuildTools package) and the
+   Trusted Signing client library are downloaded from NuGet automatically on
+   first use and cached under LOCALAPPDATA.
 
 ## Enable signing in the packaging pipeline
 
