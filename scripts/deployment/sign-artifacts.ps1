@@ -66,7 +66,45 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $TrustedSigningClientVersion = '1.0.60'
+$SdkBuildToolsVersion = '10.0.26100.4948'
 $TimestampUrl = 'http://timestamp.acs.microsoft.com'
+
+function Get-NuGetPackageCached {
+    # Downloads and expands a NuGet package into the local cache once, so the
+    # signing pipeline has no machine prerequisites beyond PowerShell. The
+    # probe pattern may contain wildcards because some packages nest content
+    # under an inner version folder that differs from the package version.
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageId,
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$ProbePattern
+    )
+
+    $cacheRoot = Join-Path $env:LOCALAPPDATA "OMP\nuget-tools\$PackageId\$Version"
+    $existing = Get-ChildItem -Path (Join-Path $cacheRoot $ProbePattern) -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($existing) {
+        return $existing.FullName
+    }
+
+    Write-Host "Downloading $PackageId $Version from nuget.org..."
+    $packageUrl = "https://www.nuget.org/api/v2/package/$PackageId/$Version"
+    $tempFile = Join-Path ([IO.Path]::GetTempPath()) ($PackageId + '-' + [Guid]::NewGuid().ToString('N') + '.zip')
+    try {
+        Invoke-WebRequest -Uri $packageUrl -OutFile $tempFile -UseBasicParsing
+        New-Item -ItemType Directory -Path $cacheRoot -Force | Out-Null
+        Expand-Archive -LiteralPath $tempFile -DestinationPath $cacheRoot -Force
+    }
+    finally {
+        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
+    }
+
+    $downloaded = Get-ChildItem -Path (Join-Path $cacheRoot $ProbePattern) -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $downloaded) {
+        throw "NuGet package $PackageId $Version did not contain a file matching: $ProbePattern"
+    }
+
+    return $downloaded.FullName
+}
 
 function Resolve-SigningConfigPath {
     param([string]$Explicit)
@@ -110,33 +148,19 @@ function Get-SignToolPath {
         return $onPath.Source
     }
 
-    throw 'signtool.exe was not found. Install the Windows 10/11 SDK (the "Windows SDK Signing Tools for Desktop Apps" feature is enough).'
+    # No Windows SDK installed: fall back to the SDK build-tools NuGet package,
+    # which ships signtool and keeps the pipeline prerequisite-free.
+    return Get-NuGetPackageCached `
+        -PackageId 'Microsoft.Windows.SDK.BuildTools' `
+        -Version $SdkBuildToolsVersion `
+        -ProbePattern 'bin\*\x64\signtool.exe'
 }
 
 function Get-TrustedSigningDlibPath {
-    $cacheRoot = Join-Path $env:LOCALAPPDATA "OMP\trusted-signing-client\$TrustedSigningClientVersion"
-    $dlibPath = Join-Path $cacheRoot 'bin\x64\Azure.CodeSigning.Dlib.dll'
-    if (Test-Path -LiteralPath $dlibPath -PathType Leaf) {
-        return $dlibPath
-    }
-
-    Write-Host "Downloading Microsoft.Trusted.Signing.Client $TrustedSigningClientVersion from nuget.org..."
-    $packageUrl = "https://www.nuget.org/api/v2/package/Microsoft.Trusted.Signing.Client/$TrustedSigningClientVersion"
-    $tempFile = Join-Path ([IO.Path]::GetTempPath()) ("trusted-signing-client-" + [Guid]::NewGuid().ToString('N') + '.zip')
-    try {
-        Invoke-WebRequest -Uri $packageUrl -OutFile $tempFile -UseBasicParsing
-        New-Item -ItemType Directory -Path $cacheRoot -Force | Out-Null
-        Expand-Archive -LiteralPath $tempFile -DestinationPath $cacheRoot -Force
-    }
-    finally {
-        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
-    }
-
-    if (-not (Test-Path -LiteralPath $dlibPath -PathType Leaf)) {
-        throw "The Trusted Signing client package did not contain the expected dlib: $dlibPath"
-    }
-
-    return $dlibPath
+    return Get-NuGetPackageCached `
+        -PackageId 'Microsoft.Trusted.Signing.Client' `
+        -Version $TrustedSigningClientVersion `
+        -ProbePattern 'bin\x64\Azure.CodeSigning.Dlib.dll'
 }
 
 function Get-EligibleFiles {
