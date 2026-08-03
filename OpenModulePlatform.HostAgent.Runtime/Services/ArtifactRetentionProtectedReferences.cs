@@ -78,11 +78,11 @@ ORDER BY s.name, t.name, c.name;";
         {
             builder.AppendLine();
             builder.AppendLine();
-            builder.AppendLine("            UNION ALL");
+            builder.AppendLine("                UNION ALL");
             builder.AppendLine();
-            builder.AppendLine("            SELECT 1");
-            builder.AppendLine($"            FROM {QuoteIdentifier(reference.SchemaName)}.{QuoteIdentifier(reference.TableName)} extref");
-            builder.Append($"            WHERE extref.{QuoteIdentifier(reference.ColumnName)} = ar.ArtifactId");
+            builder.AppendLine($"                SELECT {QuoteStringLiteral($"{reference.SchemaName}.{reference.TableName}")}");
+            builder.AppendLine($"                FROM {QuoteIdentifier(reference.SchemaName)}.{QuoteIdentifier(reference.TableName)} extref");
+            builder.Append($"                WHERE extref.{QuoteIdentifier(reference.ColumnName)} = ar.ArtifactId");
         }
 
         return builder.ToString();
@@ -93,4 +93,11 @@ ORDER BY s.name, t.name, c.name;";
     /// </summary>
     public static string QuoteIdentifier(string identifier)
         => "[" + identifier.Replace("]", "]]") + "]";
+
+    /// <summary>
+    /// Renders a catalog-sourced name as an N'' string literal so it can be
+    /// used as the protected-reference source label.
+    /// </summary>
+    public static string QuoteStringLiteral(string value)
+        => "N'" + value.Replace("'", "''") + "'";
 }

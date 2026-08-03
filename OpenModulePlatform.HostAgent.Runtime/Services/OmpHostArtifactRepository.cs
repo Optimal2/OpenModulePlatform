@@ -2056,51 +2056,62 @@ WITH RankedArtifacts AS
     ) nv
     OUTER APPLY
     (
-        SELECT COUNT(1) AS ProtectedReferenceCount
+        -- Grouped by source name; keep this shape identical to the preview twin
+        -- in OmpAdminRepository.Maintenance.cs so both sides agree on what is
+        -- protected. The generated external clauses select source-name literals.
+        SELECT ISNULL(SUM(grouped.ReferenceCount), 0) AS ProtectedReferenceCount,
+               STRING_AGG(
+                   CONCAT(grouped.SourceName, CASE WHEN grouped.ReferenceCount > 1 THEN CONCAT(N' x', grouped.ReferenceCount) ELSE N'' END),
+                   N', ') AS ProtectedReferenceSources
         FROM
         (
-            SELECT 1 AS ReferenceRow
-            FROM omp.AppInstances ai
-            WHERE ai.ArtifactId = ar.ArtifactId
+            SELECT refs.SourceName, COUNT(1) AS ReferenceCount
+            FROM
+            (
+                SELECT N'App instance' AS SourceName
+                FROM omp.AppInstances ai
+                WHERE ai.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.WorkerInstances wi
-            WHERE wi.ArtifactId = ar.ArtifactId
+                SELECT N'Worker instance'
+                FROM omp.WorkerInstances wi
+                WHERE wi.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.InstanceTemplateAppInstances tai
-            WHERE tai.DesiredArtifactId = ar.ArtifactId
+                SELECT N'Template app instance'
+                FROM omp.InstanceTemplateAppInstances tai
+                WHERE tai.DesiredArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostArtifactRequirements har
-            WHERE har.ArtifactId = ar.ArtifactId
-              AND har.IsEnabled = 1
+                SELECT N'Host requirement'
+                FROM omp.HostArtifactRequirements har
+                WHERE har.ArtifactId = ar.ArtifactId
+                  AND har.IsEnabled = 1
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostAgentDesiredStates hads
-            WHERE hads.ArtifactId = ar.ArtifactId
+                SELECT N'HostAgent desired state'
+                FROM omp.HostAgentDesiredStates hadesired
+                WHERE hadesired.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostAppDeploymentStates hads
-            WHERE hads.ArtifactId = ar.ArtifactId
+                SELECT N'App deployment state'
+                FROM omp.HostAppDeploymentStates hdeploy
+                WHERE hdeploy.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostAgentRuntimeStates hars
-            WHERE hars.ArtifactId = ar.ArtifactId
-              AND hars.IsActive = 1/*EXTERNAL_ARTIFACT_REFERENCES*/
-        ) protectedRefs
+                SELECT N'Active HostAgent runtime'
+                FROM omp.HostAgentRuntimeStates hars
+                WHERE hars.ArtifactId = ar.ArtifactId
+                  AND hars.IsActive = 1/*EXTERNAL_ARTIFACT_REFERENCES*/
+            ) refs
+            GROUP BY refs.SourceName
+        ) grouped
     ) pr
 )
 INSERT INTO @DeleteArtifacts

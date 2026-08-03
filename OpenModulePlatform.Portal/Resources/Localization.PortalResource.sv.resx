@@ -2891,4 +2891,7 @@
   <data name="Select at least one banner." xml:space="preserve"><value>Markera minst en banderoll.</value></data>
   <data name="{0} banners enabled." xml:space="preserve"><value>{0} banderoller aktiverades.</value></data>
   <data name="{0} banners disabled." xml:space="preserve"><value>{0} banderoller inaktiverades.</value></data>
+  <data name="Open workers" xml:space="preserve"><value>Öppna workers</value></data>
+  <data name="Protected by" xml:space="preserve"><value>Skyddas av</value></data>
+  <data name="Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running." xml:space="preserve"><value>Workers körs via workerhanteraren i stället för HostAgents appdeployment, så de listas här med sin senast observerade körstatus så att den här sidan ger en komplett bild av allt som kör.</value></data>
 </root>

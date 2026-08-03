@@ -57,8 +57,36 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
 
     public IReadOnlyList<HostOmpAuthComparisonHostRow> OmpAuthComparisons { get; private set; } = [];
 
+    public IReadOnlyList<AppWorkerRuntimeRow> WorkerRuntimeRows { get; private set; } = [];
+
     public bool CanRecyclePortalAppPool
         => PortalDeploymentLockStatus is null || !PortalDeploymentLockStatus.IsLocked;
+
+    public string GetWorkerObservedStateLabel(byte observedState)
+        => observedState switch
+        {
+            1 => T("Starting"),
+            2 => T("Running"),
+            3 => T("Stopping"),
+            4 => T("Stopped"),
+            5 => T("Failed"),
+            _ => T("Unknown")
+        };
+
+    public string GetWorkerDesiredStateLabel(byte desiredState, bool isAllowed)
+    {
+        if (!isAllowed)
+        {
+            return T("Blocked");
+        }
+
+        return desiredState switch
+        {
+            1 => T("Should run"),
+            2 => T("Should stop"),
+            _ => T("Unmanaged")
+        };
+    }
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
@@ -263,6 +291,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         HostAgentArtifactOptions = hostAgentArtifactOptions;
         AppDeploymentStates = await _repo.GetHostAppDeploymentStatesAsync(ct);
         ArtifactStates = await _repo.GetHostArtifactStatesAsync(ct);
+        WorkerRuntimeRows = await _repo.GetAppWorkerRuntimeAsync(ct);
 
         try
         {
