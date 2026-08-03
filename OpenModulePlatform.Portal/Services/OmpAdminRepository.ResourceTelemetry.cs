@@ -170,7 +170,7 @@ SELECT HostId,
        MaxValue
 FROM omp.HostResourceSamples
 WHERE HostId = @HostId
-  AND SampleKey = @SampleKey
+  AND (SampleKey = @SampleKey OR SampleKey LIKE @SampleKey + N'.[0-9]%')
   AND SampleBucketUtc >= @SinceUtc
 ORDER BY SampleBucketUtc DESC;";
 
@@ -199,6 +199,46 @@ ORDER BY SampleBucketUtc DESC;";
             });
         }
 
-        return rows;
+        return MergeVersionedHistoryRows(sampleKey, rows);
+    }
+
+    // Version-suffixed runtimes write history under one key per version
+    // (service.OMP.HostAgent.0.3.168, .0.3.169, ...). Merge same-bucket rows
+    // into one series so charts and stats span upgrades: sample values combine
+    // as a sample-count-weighted average, counts sum, and min/max widen.
+    private static IReadOnlyList<HostResourceHistoryRow> MergeVersionedHistoryRows(
+        string requestedSampleKey,
+        List<HostResourceHistoryRow> rows)
+    {
+        if (rows.Select(static row => row.SampleKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() <= 1)
+        {
+            return rows;
+        }
+
+        return rows
+            .GroupBy(static row => row.SampleBucketUtc)
+            .Select(bucket =>
+            {
+                var totalCount = bucket.Sum(static row => Math.Max(1, row.SampleCount));
+                var weightedValue = bucket.Sum(static row => row.SampleValue * Math.Max(1, row.SampleCount)) / totalCount;
+                return new HostResourceHistoryRow
+                {
+                    HostId = bucket.First().HostId,
+                    SampleKey = requestedSampleKey,
+                    SampleBucketUtc = bucket.Key,
+                    SampleValue = weightedValue,
+                    SampleCount = bucket.Sum(static row => row.SampleCount),
+                    FirstSampledUtc = bucket.Min(static row => row.FirstSampledUtc),
+                    LastSampledUtc = bucket.Max(static row => row.LastSampledUtc),
+                    MinValue = bucket.Any(static row => row.MinValue.HasValue)
+                        ? bucket.Where(static row => row.MinValue.HasValue).Min(static row => row.MinValue!.Value)
+                        : null,
+                    MaxValue = bucket.Any(static row => row.MaxValue.HasValue)
+                        ? bucket.Where(static row => row.MaxValue.HasValue).Max(static row => row.MaxValue!.Value)
+                        : null
+                };
+            })
+            .OrderByDescending(static row => row.SampleBucketUtc)
+            .ToList();
     }
 }

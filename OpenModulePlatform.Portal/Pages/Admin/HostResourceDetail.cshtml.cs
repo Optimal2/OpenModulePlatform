@@ -75,6 +75,9 @@ public sealed class HostResourceDetailModel : OmpPortalPageModel
 
         EffectiveHours = Math.Clamp(Hours, MinHours, MaxHours);
 
+        // Version-suffixed keys (old bookmarks or pre-merge links) collapse to
+        // the logical series so the chart always spans upgrades.
+        SampleKey = HostResourceSampleKeyParser.NormalizeSampleKey(SampleKey);
         var sampleKey = HostResourceSampleKeyParser.Parse(SampleKey);
         RuntimeKind = sampleKey.RuntimeKind;
         RuntimeName = sampleKey.RuntimeName;

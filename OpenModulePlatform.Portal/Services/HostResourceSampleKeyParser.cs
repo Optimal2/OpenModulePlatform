@@ -74,6 +74,74 @@ internal static class HostResourceSampleKeyParser
         return new HostResourceSampleKeyParts(string.Empty, string.Empty, HostResourceMetricKind.Unknown);
     }
 
+    /// <summary>
+    /// Strips a trailing dotted numeric version (for example ".0.3.169") from
+    /// a runtime name, so resource telemetry for version-suffixed runtimes
+    /// such as the HostAgent service merges into one series across upgrades.
+    /// At least two numeric segments are required, so names that merely end in
+    /// one number keep their identity.
+    /// </summary>
+    public static string NormalizeRuntimeName(string runtimeName)
+    {
+        if (string.IsNullOrEmpty(runtimeName))
+        {
+            return runtimeName ?? string.Empty;
+        }
+
+        var index = runtimeName.Length;
+        var numericSegments = 0;
+        while (index > 0)
+        {
+            var dot = runtimeName.LastIndexOf('.', index - 1);
+            if (dot <= 0 || dot == index - 1)
+            {
+                break;
+            }
+
+            var segmentIsNumeric = true;
+            for (var position = dot + 1; position < index; position++)
+            {
+                if (!char.IsDigit(runtimeName[position]))
+                {
+                    segmentIsNumeric = false;
+                    break;
+                }
+            }
+
+            if (!segmentIsNumeric)
+            {
+                break;
+            }
+
+            numericSegments++;
+            index = dot;
+        }
+
+        return numericSegments >= 2 ? runtimeName[..index] : runtimeName;
+    }
+
+    /// <summary>
+    /// Returns the sample key with any version suffix removed from its runtime
+    /// name portion, or the key unchanged when it has no known prefix.
+    /// </summary>
+    public static string NormalizeSampleKey(string sampleKey)
+    {
+        if (string.IsNullOrWhiteSpace(sampleKey))
+        {
+            return sampleKey ?? string.Empty;
+        }
+
+        foreach (var prefix in new[] { IisAppPoolMemoryPrefix, ServiceMemoryPrefix, ServiceStatePrefix, IisAppPoolCpuPrefix, ServiceCpuPrefix })
+        {
+            if (sampleKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return prefix + NormalizeRuntimeName(sampleKey[prefix.Length..]);
+            }
+        }
+
+        return sampleKey;
+    }
+
     public static string? DeriveCounterpartSampleKey(string sampleKey)
     {
         if (sampleKey.StartsWith(IisAppPoolCpuPrefix, StringComparison.OrdinalIgnoreCase))

@@ -73,6 +73,11 @@ public sealed class HostResourcesModel : OmpPortalPageModel
                 group => group.First());
 
         var groups = new Dictionary<(Guid HostId, string RuntimeKind, string RuntimeName), HostResourceLatestGroupRow>();
+        // Version-suffixed runtimes (for example OMP.HostAgent.0.3.169) merge
+        // into one logical series: per metric the latest sample wins, and the
+        // per-version sample counts sum so history is not reset by an upgrade.
+        var metricTimestamps = new Dictionary<(Guid HostId, string RuntimeKind, string RuntimeName, HostResourceMetricKind Metric), DateTime>();
+        var versionSampleCounts = new Dictionary<(Guid HostId, string RuntimeKind, string RuntimeName), Dictionary<string, int>>();
 
         foreach (var row in rows)
         {
@@ -102,7 +107,8 @@ public sealed class HostResourcesModel : OmpPortalPageModel
             var runtimeKind = sampleKey.MetricKind == HostResourceMetricKind.State
                 ? "Windows service"
                 : sampleKey.RuntimeKind;
-            var key = (row.HostId, runtimeKind, sampleKey.RuntimeName);
+            var normalizedRuntimeName = HostResourceSampleKeyParser.NormalizeRuntimeName(sampleKey.RuntimeName);
+            var key = (row.HostId, runtimeKind, normalizedRuntimeName);
             if (!groups.TryGetValue(key, out var group))
             {
                 group = new HostResourceLatestGroupRow
@@ -112,31 +118,56 @@ public sealed class HostResourcesModel : OmpPortalPageModel
                     HostDisplayName = row.HostDisplayName,
                     HostLastSeenUtc = row.HostLastSeenUtc,
                     RuntimeKind = runtimeKind,
-                    RuntimeName = sampleKey.RuntimeName
+                    RuntimeName = normalizedRuntimeName
                 };
                 groups[key] = group;
             }
 
-            if (sampleKey.MetricKind == HostResourceMetricKind.Memory)
+            var metricKey = (row.HostId, runtimeKind, normalizedRuntimeName, sampleKey.MetricKind);
+            var isLatestForMetric = !metricTimestamps.TryGetValue(metricKey, out var existingTimestamp)
+                || row.LastSampledUtc >= existingTimestamp;
+            if (isLatestForMetric)
             {
-                group.MemorySampleKey = row.SampleKey;
-                group.MemoryValue = row.SampleValue;
-            }
-            else if (sampleKey.MetricKind == HostResourceMetricKind.Cpu)
-            {
-                group.CpuSampleKey = row.SampleKey;
-                group.CpuValue = row.SampleValue;
-            }
-            else if (sampleKey.MetricKind == HostResourceMetricKind.State)
-            {
-                group.StateSampleKey = row.SampleKey;
-                group.StateValue = row.SampleValue;
+                metricTimestamps[metricKey] = row.LastSampledUtc;
+                var normalizedSampleKey = HostResourceSampleKeyParser.NormalizeSampleKey(row.SampleKey);
+                if (sampleKey.MetricKind == HostResourceMetricKind.Memory)
+                {
+                    group.MemorySampleKey = normalizedSampleKey;
+                    group.MemoryValue = row.SampleValue;
+                }
+                else if (sampleKey.MetricKind == HostResourceMetricKind.Cpu)
+                {
+                    group.CpuSampleKey = normalizedSampleKey;
+                    group.CpuValue = row.SampleValue;
+                }
+                else if (sampleKey.MetricKind == HostResourceMetricKind.State)
+                {
+                    group.StateSampleKey = normalizedSampleKey;
+                    group.StateValue = row.SampleValue;
+                }
             }
 
-            group.SampleCount = Math.Max(group.SampleCount, row.SampleCount);
+            if (!versionSampleCounts.TryGetValue(key, out var countsByVersion))
+            {
+                countsByVersion = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                versionSampleCounts[key] = countsByVersion;
+            }
+
+            countsByVersion[sampleKey.RuntimeName] = Math.Max(
+                countsByVersion.TryGetValue(sampleKey.RuntimeName, out var existingCount) ? existingCount : 0,
+                row.SampleCount);
+
             if (!group.LastSampledUtc.HasValue || row.LastSampledUtc > group.LastSampledUtc.Value)
             {
                 group.LastSampledUtc = row.LastSampledUtc;
+            }
+        }
+
+        foreach (var entry in versionSampleCounts)
+        {
+            if (groups.TryGetValue(entry.Key, out var group))
+            {
+                group.SampleCount = entry.Value.Values.Sum();
             }
         }
 
