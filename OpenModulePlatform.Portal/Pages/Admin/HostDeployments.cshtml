@@ -8,6 +8,7 @@
     const string DriftSectionId = "hostdeployments-drift";
     const string HostAgentUpgradeSectionId = "hostdeployments-hostagent-upgrade";
     const string AppDeploymentSectionId = "hostdeployments-app-deployments";
+    const string WorkerRuntimeSectionId = "hostdeployments-worker-runtime";
     const string OmpAuthSectionId = "hostdeployments-ompauth";
     const string ArtifactHistorySectionId = "hostdeployments-artifact-history";
 
@@ -29,6 +30,7 @@
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["Template/runtime drift overview"].Value, DriftSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["HostAgent self-upgrade"].Value, HostAgentUpgradeSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["App deployment state"].Value, AppDeploymentSectionId));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Worker runtime"].Value, WorkerRuntimeSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["OmpAuth consistency"].Value, OmpAuthSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact provisioning history"].Value, ArtifactHistorySectionId));
 
@@ -750,6 +752,73 @@
         </div>
         <div class="list-show-more">
             <button type="button" class="btn btn-secondary btn-sm" data-list-show-more="app-deployments-list" hidden>@L["Show more"]</button>
+        </div>
+    }
+</section>
+
+<section id="@WorkerRuntimeSectionId" class="card section-card section-card--wide section-navigator-target">
+    <h3>@L["Worker runtime"]</h3>
+    <p class="muted">@L["Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running."]</p>
+
+    <div class="toolbar">
+        <a class="action-link" href="~/admin/workers">@L["Open workers"]</a>
+    </div>
+
+    @if (Model.WorkerRuntimeRows.Count == 0)
+    {
+        <div class="empty-state">@L["No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated."]</div>
+    }
+    else
+    {
+        <div class="table-scroll">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>@L["Module instance"]</th>
+                        <th>@L["App instance key"]</th>
+                        <th>@L["Host"]</th>
+                        <th>@L["Desired"]</th>
+                        <th>@L["Observed"]</th>
+                        <th>@L["PID"]</th>
+                        <th>@L["Last seen"]</th>
+                        <th>@L["Message"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var row in Model.WorkerRuntimeRows)
+                {
+                    <tr>
+                        <td><code>@row.ModuleInstanceKey</code></td>
+                        <td>
+                            <div><code>@row.AppInstanceKey</code></div>
+                            <div class="muted small-text">@row.DisplayName</div>
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.HostKey))
+                            {
+                                <code>@row.HostKey</code>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(row.TargetHostTemplateKey))
+                            {
+                                <span>@L["Host role"]: <code>@row.TargetHostTemplateKey</code></span>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                        </td>
+                        <td><span class="pill">@Model.GetWorkerDesiredStateLabel(row.DesiredState, row.IsAllowed)</span></td>
+                        <td>
+                            <div><span class="pill">@Model.GetWorkerObservedStateLabel(row.ObservedState)</span></div>
+                            <div class="muted small-text"><code>@row.WorkerTypeKey</code></div>
+                        </td>
+                        <td>@row.ProcessId</td>
+                        <td>@row.LastSeenUtc?.ToString("u")</td>
+                        <td class="small-text">@row.StatusMessage</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
         </div>
     }
 </section>

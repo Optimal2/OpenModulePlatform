@@ -39,7 +39,8 @@ WITH RankedArtifacts AS
            (
                PARTITION BY ar.AppId, ar.PackageType, ISNULL(ar.TargetName, N'')
            ) AS int) AS TotalVersions,
-           pr.ProtectedReferenceCount
+           pr.ProtectedReferenceCount,
+           pr.ProtectedReferenceSources
     FROM omp.Artifacts ar
     INNER JOIN omp.Apps a ON a.AppId = ar.AppId
     INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
@@ -62,51 +63,62 @@ WITH RankedArtifacts AS
     ) nv
     OUTER APPLY
     (
-        SELECT COUNT(1) AS ProtectedReferenceCount
+        -- Grouped by source so operators can see WHAT protects a candidate,
+        -- not just how many rows do. Keep this shape identical to the twin in
+        -- OmpHostArtifactRepository so preview and cleanup stay in lockstep.
+        SELECT ISNULL(SUM(grouped.ReferenceCount), 0) AS ProtectedReferenceCount,
+               STRING_AGG(
+                   CONCAT(grouped.SourceName, CASE WHEN grouped.ReferenceCount > 1 THEN CONCAT(N' x', grouped.ReferenceCount) ELSE N'' END),
+                   N', ') AS ProtectedReferenceSources
         FROM
         (
-            SELECT 1 AS ReferenceRow
-            FROM omp.AppInstances ai
-            WHERE ai.ArtifactId = ar.ArtifactId
+            SELECT refs.SourceName, COUNT(1) AS ReferenceCount
+            FROM
+            (
+                SELECT N'App instance' AS SourceName
+                FROM omp.AppInstances ai
+                WHERE ai.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.WorkerInstances wi
-            WHERE wi.ArtifactId = ar.ArtifactId
+                SELECT N'Worker instance'
+                FROM omp.WorkerInstances wi
+                WHERE wi.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.InstanceTemplateAppInstances tai
-            WHERE tai.DesiredArtifactId = ar.ArtifactId
+                SELECT N'Template app instance'
+                FROM omp.InstanceTemplateAppInstances tai
+                WHERE tai.DesiredArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostArtifactRequirements har
-            WHERE har.ArtifactId = ar.ArtifactId
-              AND har.IsEnabled = 1
+                SELECT N'Host requirement'
+                FROM omp.HostArtifactRequirements har
+                WHERE har.ArtifactId = ar.ArtifactId
+                  AND har.IsEnabled = 1
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostAgentDesiredStates hads
-            WHERE hads.ArtifactId = ar.ArtifactId
+                SELECT N'HostAgent desired state'
+                FROM omp.HostAgentDesiredStates hadesired
+                WHERE hadesired.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostAppDeploymentStates hads
-            WHERE hads.ArtifactId = ar.ArtifactId
+                SELECT N'App deployment state'
+                FROM omp.HostAppDeploymentStates hdeploy
+                WHERE hdeploy.ArtifactId = ar.ArtifactId
 
-            UNION ALL
+                UNION ALL
 
-            SELECT 1
-            FROM omp.HostAgentRuntimeStates hars
-            WHERE hars.ArtifactId = ar.ArtifactId
-              AND hars.IsActive = 1/*EXTERNAL_ARTIFACT_REFERENCES*/
-        ) protectedRefs
+                SELECT N'Active HostAgent runtime'
+                FROM omp.HostAgentRuntimeStates hars
+                WHERE hars.ArtifactId = ar.ArtifactId
+                  AND hars.IsActive = 1/*EXTERNAL_ARTIFACT_REFERENCES*/
+            ) refs
+            GROUP BY refs.SourceName
+        ) grouped
     ) pr
 )
 SELECT ArtifactId,
@@ -119,7 +131,8 @@ SELECT ArtifactId,
        CreatedUtc,
        RetentionRank,
        TotalVersions,
-       ProtectedReferenceCount
+       ProtectedReferenceCount,
+       ProtectedReferenceSources
 FROM RankedArtifacts
 WHERE TotalVersions > @MaxVersionsToKeep
   AND RetentionRank > @MaxVersionsToKeep
@@ -219,11 +232,11 @@ ORDER BY s.name, t.name, c.name;";
         {
             builder.AppendLine();
             builder.AppendLine();
-            builder.AppendLine("            UNION ALL");
+            builder.AppendLine("                UNION ALL");
             builder.AppendLine();
-            builder.AppendLine("            SELECT 1");
-            builder.AppendLine($"            FROM {QuoteSqlIdentifier(reference.SchemaName)}.{QuoteSqlIdentifier(reference.TableName)} extref");
-            builder.Append($"            WHERE extref.{QuoteSqlIdentifier(reference.ColumnName)} = ar.ArtifactId");
+            builder.AppendLine($"                SELECT {QuoteSqlStringLiteral($"{reference.SchemaName}.{reference.TableName}")}");
+            builder.AppendLine($"                FROM {QuoteSqlIdentifier(reference.SchemaName)}.{QuoteSqlIdentifier(reference.TableName)} extref");
+            builder.Append($"                WHERE extref.{QuoteSqlIdentifier(reference.ColumnName)} = ar.ArtifactId");
         }
 
         return builder.ToString();
@@ -231,6 +244,9 @@ ORDER BY s.name, t.name, c.name;";
 
     private static string QuoteSqlIdentifier(string identifier)
         => "[" + identifier.Replace("]", "]]") + "]";
+
+    private static string QuoteSqlStringLiteral(string value)
+        => "N'" + value.Replace("'", "''") + "'";
 
     public async Task<long> QueueArtifactRetentionCleanupAsync(
         int maxVersionsToKeep,
@@ -809,7 +825,8 @@ SELECT @@ROWCOUNT;";
             CreatedUtc = rdr.GetDateTime(7),
             RetentionRank = rdr.GetInt32(8),
             TotalVersions = rdr.GetInt32(9),
-            ProtectedReferenceCount = rdr.GetInt32(10)
+            ProtectedReferenceCount = rdr.GetInt32(10),
+            ProtectedReferenceSources = rdr.IsDBNull(11) ? null : rdr.GetString(11)
         };
 
     private sealed record MaintenanceCleanupCandidate(

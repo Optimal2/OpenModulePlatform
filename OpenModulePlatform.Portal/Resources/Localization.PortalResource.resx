@@ -2658,4 +2658,7 @@
   <data name="Select at least one banner." xml:space="preserve"><value>Select at least one banner.</value></data>
   <data name="{0} banners enabled." xml:space="preserve"><value>{0} banners enabled.</value></data>
   <data name="{0} banners disabled." xml:space="preserve"><value>{0} banners disabled.</value></data>
+  <data name="Open workers" xml:space="preserve"><value>Open workers</value></data>
+  <data name="Protected by" xml:space="preserve"><value>Protected by</value></data>
+  <data name="Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running." xml:space="preserve"><value>Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running.</value></data>
 </root>

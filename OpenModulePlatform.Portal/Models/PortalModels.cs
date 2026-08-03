@@ -707,6 +707,13 @@ public sealed class ArtifactRetentionCandidateRow
 
     public int ProtectedReferenceCount { get; set; }
 
+    /// <summary>
+    /// Human-readable, comma-separated list of the sources that protect this
+    /// candidate (e.g. "App instance, omp_ibs_packager.ChannelTypeVersions"),
+    /// so operators never need the database to see why a version is kept.
+    /// </summary>
+    public string? ProtectedReferenceSources { get; set; }
+
     public bool IsProtected => ProtectedReferenceCount > 0;
 
     public string IdentityKey => string.Join(

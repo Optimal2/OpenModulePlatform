@@ -405,7 +405,11 @@ else
                                 <td>
                                     @if (row.IsProtected)
                                     {
-                                        <span class="pill">@L["Protected"] (@row.ProtectedReferenceCount)</span>
+                                        <span class="pill" title="@row.ProtectedReferenceSources">@L["Protected"] (@row.ProtectedReferenceCount)</span>
+                                        @if (!string.IsNullOrWhiteSpace(row.ProtectedReferenceSources))
+                                        {
+                                            <div class="muted small-text">@L["Protected by"]: @row.ProtectedReferenceSources</div>
+                                        }
                                     }
                                     else
                                     {
