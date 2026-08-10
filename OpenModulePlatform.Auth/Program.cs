@@ -94,6 +94,10 @@ var app = builder.Build();
 
 app.UseRequestLocalization(app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>().Value);
 app.UseOmpSecurityHeaders();
+// Login/logout round-trips are all redirects; without the explicit
+// Content-Length: 0 they get chunk-framed and middleboxes can surface a
+// lone "0" page.
+app.UseOmpRedirectContentLength();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
