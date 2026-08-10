@@ -1,20 +1,47 @@
 @* File: OpenModulePlatform.Portal/Pages/Admin/Workers.cshtml *@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.WorkersModel
+@using OpenModulePlatform.Web.Shared.Navigation
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Worker runtime"]</div>
-        <h2>@L["Workers"]</h2>
-        <p class="lede">
-            @L["Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place."]
-        </p>
+@{
+    const string StatusSectionId = "workers-status";
+
+    var pageHeader = new PageHeaderModel
+    {
+        Eyebrow = L["Worker runtime"].Value,
+        Title = L["Workers"].Value,
+        Info = L["Workers combines app worker definitions with the live worker runtime so you can manage the worker track from one place."].Value
+    };
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+    if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["App workers"].Value, "worker-definitions-panel"));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Worker runtime"].Value, "worker-runtime-panel"));
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L["Workers"].Value,
+        Items = sectionNavigatorItems
+    };
+}
+
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <partial name="_PageHeader" model="pageHeader" />
     </div>
-</section>
 
-@await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
 
-<section class="card bottom-gap" id="worker-definitions-panel">
+<div id="@StatusSectionId" class="section-navigator-target">
+    @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
+</div>
+
+<section class="card bottom-gap section-navigator-target" id="worker-definitions-panel">
     <div class="page-header">
         <div>
             <div class="eyebrow">@L["Definitions"]</div>
@@ -75,11 +102,11 @@
             }
             </tbody>
         </table>
-    </div>
+        </div>
     }
 </section>
 
-<section class="card" id="worker-runtime-panel">
+<section class="card section-navigator-target" id="worker-runtime-panel">
     <div class="page-header">
         <div>
             <div class="eyebrow">@L["Runtime"]</div>
@@ -212,3 +239,6 @@
     </div>
     }
 </section>
+
+    </div>
+</div>
