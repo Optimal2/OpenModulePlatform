@@ -41,6 +41,11 @@ builder.Services.AddRazorPages()
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options =>
 {
     options.ModelMetadataDetailsProviders.Add(new OmpValidationMetadataProvider());
+
+    // A stale antiforgery token reloads the page instead of surfacing the
+    // framework's empty 400 (which middleboxes can re-frame into a lone "0"
+    // page) - login tabs left open are the most common way to hit this.
+    options.Filters.Add(new OpenModulePlatform.Web.Shared.Mvc.AntiforgeryFailureRedirectFilter());
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
