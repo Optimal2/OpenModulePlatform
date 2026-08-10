@@ -250,28 +250,7 @@ public static class OmpWebHostingExtensions
 
         app.UseOmpSecurityHeaders();
 
-        // Redirect responses carry no body. Announce that with an explicit
-        // Content-Length: 0 instead of letting in-process IIS chunk-frame the
-        // empty body; a scanning middlebox that re-frames chunked responses can
-        // otherwise surface the terminating "0" chunk as the whole page, which
-        // users have hit intermittently after POST-redirect flows.
-        app.Use(static async (context, next) =>
-        {
-            context.Response.OnStarting(static state =>
-            {
-                var response = ((HttpContext)state).Response;
-                if (response.StatusCode is 301 or 302 or 303 or 307 or 308
-                    && response.ContentLength is null
-                    && !response.HasStarted)
-                {
-                    response.ContentLength = 0;
-                }
-
-                return Task.CompletedTask;
-            }, context);
-
-            await next(context);
-        });
+        app.UseOmpRedirectContentLength();
 
         // Resolve/emit the correlation id and open its logging scope as early as possible,
         // so every log line for the request (including error handling below) carries it.
@@ -773,6 +752,35 @@ public static class OmpWebHostingExtensions
         return string.IsNullOrWhiteSpace(avatarPath)
             ? null
             : PortalTopBarModelFactory.CombinePortalHref(portalBaseUrl, avatarPath);
+    }
+
+    /// <summary>
+    /// Redirect responses carry no body. Announce that with an explicit
+    /// Content-Length: 0 instead of letting in-process IIS chunk-frame the
+    /// empty body; a scanning middlebox that re-frames chunked responses can
+    /// otherwise surface the terminating "0" chunk as the whole page, which
+    /// users have hit intermittently after POST-redirect flows. Part of
+    /// UseOmpWebDefaults; apps that wire their own pipeline call it directly.
+    /// </summary>
+    public static IApplicationBuilder UseOmpRedirectContentLength(this IApplicationBuilder app)
+    {
+        return app.Use(static async (context, next) =>
+        {
+            context.Response.OnStarting(static state =>
+            {
+                var response = ((HttpContext)state).Response;
+                if (response.StatusCode is 301 or 302 or 303 or 307 or 308
+                    && response.ContentLength is null
+                    && !response.HasStarted)
+                {
+                    response.ContentLength = 0;
+                }
+
+                return Task.CompletedTask;
+            }, context);
+
+            await next(context);
+        });
     }
 
     public static IApplicationBuilder UseOmpSecurityHeaders(this IApplicationBuilder app)
