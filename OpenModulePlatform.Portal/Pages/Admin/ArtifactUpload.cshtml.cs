@@ -12,6 +12,7 @@ using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -107,7 +108,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
 
@@ -165,7 +166,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                         {
                             ModelState.AddModelError(
                                 string.Empty,
-                                T($"Configuration files from the artifact package could not be saved: {ex.Message}"));
+                                PortalLocalizer["Configuration files from the artifact package could not be saved: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
                             return Page();
                         }
 
@@ -354,27 +355,27 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         }
         catch (InvalidDataException ex)
         {
-            ModelState.AddModelError(nameof(Input.ZipFile), T($"The uploaded zip could not be read: {ex.Message}"));
+            ModelState.AddModelError(nameof(Input.ZipFile), PortalLocalizer["The uploaded zip could not be read: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
         catch (SqlException ex)
         {
-            ModelState.AddModelError(string.Empty, T($"The artifact metadata could not be saved: {ex.Message}"));
+            ModelState.AddModelError(string.Empty, PortalLocalizer["The artifact metadata could not be saved: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
         catch (IOException ex)
         {
-            ModelState.AddModelError(string.Empty, T($"The artifact could not be stored: {ex.Message}"));
+            ModelState.AddModelError(string.Empty, PortalLocalizer["The artifact could not be stored: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
         catch (UnauthorizedAccessException ex)
         {
-            ModelState.AddModelError(string.Empty, T($"The artifact store could not be accessed: {ex.Message}"));
+            ModelState.AddModelError(string.Empty, PortalLocalizer["The artifact store could not be accessed: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
         finally
@@ -440,7 +441,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 nameof(Input.ZipFile),
-                T($"The uploaded zip exceeds the configured limit of {GetMaxUploadBytes()} bytes."));
+                PortalLocalizer["The uploaded zip exceeds the configured limit of {0} bytes.", GetMaxUploadBytes()]);
         }
 
         if (Input.AppId <= 0)
@@ -496,7 +497,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 string.Empty,
-                T($"ArtifactUpload:ArtifactStoreRoot could not be used: {ex.Message}"));
+                PortalLocalizer["ArtifactUpload:ArtifactStoreRoot could not be used: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return null;
         }
     }

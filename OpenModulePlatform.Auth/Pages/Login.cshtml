@@ -144,11 +144,11 @@
 
             @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && !Model.HasOpenPrompt)
             {
-                <div class="error">@Model.ErrorMessage</div>
+                <div class="error" role="alert">@Model.ErrorMessage</div>
             }
             @if (!string.IsNullOrWhiteSpace(Model.LogoutMessage))
             {
-                <div class="notice">@Model.LogoutMessage</div>
+                <div class="notice" role="status">@Model.LogoutMessage</div>
             }
 
             <div class="primary-actions">
@@ -210,7 +210,7 @@
                     </div>
                     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowAlternateWindowsPrompt)
                     {
-                        <div class="error">@Model.ErrorMessage</div>
+                        <div class="error" role="alert">@Model.ErrorMessage</div>
                     }
                     <div>
                         <label asp-for="AlternateWindowsUserName">@L["Windows account"]</label>
@@ -236,7 +236,7 @@
                     </div>
                     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowLocalAccountPrompt)
                     {
-                        <div class="error">@Model.ErrorMessage</div>
+                        <div class="error" role="alert">@Model.ErrorMessage</div>
                     }
                     <div>
                         <label asp-for="UserName">@L["User name"]</label>
@@ -264,7 +264,7 @@
                         </div>
                         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.ShowRegisterAccountPrompt)
                         {
-                            <div class="error">@Model.ErrorMessage</div>
+                            <div class="error" role="alert">@Model.ErrorMessage</div>
                         }
                         <div>
                             <label asp-for="RegisterUserName">@L["User name"]</label>

@@ -53,10 +53,9 @@
     </div>
     <div class="section-navigator-layout__content">
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-{
-    <section id="@StatusSectionId" class="card status-banner section-navigator-target">@Model.StatusMessage</section>
-}
+<div id="@StatusSectionId" class="section-navigator-target">
+    @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
+</div>
 
 <section id="@HostsSectionId" class="card section-card section-card--wide section-navigator-target">
     <div class="section-heading-row">

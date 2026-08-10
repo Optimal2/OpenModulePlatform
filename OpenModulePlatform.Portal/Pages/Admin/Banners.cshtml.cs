@@ -133,7 +133,7 @@ public sealed class BannersModel : OmpPortalPageModel
         }
         catch (ArgumentException ex)
         {
-            ModelState.AddModelError(string.Empty, P(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(_portalLocalizer, ex.Message));
             return Page();
         }
     }

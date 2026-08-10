@@ -264,7 +264,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         if (file is null)
         {
-            return BadRequest(new { ok = false, message = "Upload one MP3 file." });
+            return BadRequest(new { ok = false, message = T("Upload one MP3 file.") });
         }
 
         try
@@ -278,7 +278,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { ok = false, message = ex.Message });
+            return BadRequest(new { ok = false, message = PortalTextLocalizer.Display(Localizer, ex.Message) });
         }
     }
 
@@ -291,7 +291,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         if (zipFile is null)
         {
-            return BadRequest(new { ok = false, message = "Upload a zip file." });
+            return BadRequest(new { ok = false, message = T("Upload a zip file.") });
         }
 
         try
@@ -301,11 +301,11 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { ok = false, message = ex.Message });
+            return BadRequest(new { ok = false, message = PortalTextLocalizer.Display(Localizer, ex.Message) });
         }
         catch (InvalidDataException ex)
         {
-            return BadRequest(new { ok = false, message = ex.Message });
+            return BadRequest(new { ok = false, message = PortalTextLocalizer.Display(Localizer, ex.Message) });
         }
     }
 
@@ -321,7 +321,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         if (file is null)
         {
-            return BadRequest(new { ok = false, message = "Upload one image or GIF file." });
+            return BadRequest(new { ok = false, message = T("Upload one image or GIF file.") });
         }
 
         try
@@ -341,7 +341,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { ok = false, message = ex.Message });
+            return BadRequest(new { ok = false, message = PortalTextLocalizer.Display(Localizer, ex.Message) });
         }
     }
 
@@ -354,7 +354,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         if (zipFile is null)
         {
-            return BadRequest(new { ok = false, message = "Upload a zip file." });
+            return BadRequest(new { ok = false, message = T("Upload a zip file.") });
         }
 
         try
@@ -374,11 +374,11 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { ok = false, message = ex.Message });
+            return BadRequest(new { ok = false, message = PortalTextLocalizer.Display(Localizer, ex.Message) });
         }
         catch (InvalidDataException ex)
         {
-            return BadRequest(new { ok = false, message = ex.Message });
+            return BadRequest(new { ok = false, message = PortalTextLocalizer.Display(Localizer, ex.Message) });
         }
     }
 

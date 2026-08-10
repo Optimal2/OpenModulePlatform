@@ -43,15 +43,9 @@
     @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
     <div class="section-navigator-layout__content">
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-{
-    <div id="@StatusSectionId" class="card status-banner section-navigator-target">@Model.StatusMessage</div>
-}
-
-@if (!ViewContext.ModelState.IsValid)
-{
-    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
-}
+<div id="@StatusSectionId" class="section-navigator-target">
+    @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
+</div>
 
 @{
     var configSettingsPicker = new ColumnListPickerModel

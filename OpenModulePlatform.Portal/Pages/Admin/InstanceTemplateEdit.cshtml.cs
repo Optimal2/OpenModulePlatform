@@ -6,6 +6,7 @@ using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -99,11 +100,11 @@ public sealed class InstanceTemplateEditModel : OmpPortalPageModel
         }
         catch (InvalidOperationException ex)
         {
-            StatusMessage = T(ex.Message);
+            StatusMessage = PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
         }
         catch (SqlException ex)
         {
-            StatusMessage = string.Format(T("The desired artifact could not be updated: {0}"), ex.Message);
+            StatusMessage = PortalLocalizer["The desired artifact could not be updated: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)];
         }
 
         return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });

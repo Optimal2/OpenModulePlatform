@@ -21,10 +21,7 @@
     </div>
 </div>
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-{
-    <div class="card status-banner">@Model.StatusMessage</div>
-}
+@await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage, includeValidationSummary = false })
 
 <form method="post" class="card form-grid" id="content-edit-form">
     <input type="hidden" asp-for="Input.ContentId" />

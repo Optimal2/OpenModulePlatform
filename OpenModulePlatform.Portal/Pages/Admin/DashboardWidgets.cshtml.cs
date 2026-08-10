@@ -5,6 +5,7 @@ using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -61,7 +62,7 @@ public sealed class DashboardWidgetsModel : OmpPortalPageModel
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             await LoadAsync(ct, widgetId);
             return Page();
         }

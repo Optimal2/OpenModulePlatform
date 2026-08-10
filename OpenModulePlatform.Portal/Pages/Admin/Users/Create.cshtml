@@ -12,10 +12,7 @@
     </div>
 </section>
 
-@if (!ViewContext.ModelState.IsValid)
-{
-    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
-}
+@await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
 
 <form method="post" class="card form-grid">
     <div class="field-grid field-grid--2">

@@ -135,7 +135,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            ModelState.AddModelError(string.Empty, ex.Message);
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(Localizer, ex.Message));
             CanUseMessages = true;
             await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: false, ct);
             if (isAjaxRequest)

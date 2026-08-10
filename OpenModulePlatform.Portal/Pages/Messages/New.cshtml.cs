@@ -79,7 +79,7 @@ public sealed class NewModel : OmpSecurePageModel<PortalResource>
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            ModelState.AddModelError(nameof(DirectUserId), ex.Message);
+            ModelState.AddModelError(nameof(DirectUserId), PortalTextLocalizer.Display(Localizer, ex.Message));
             await LoadAsync(ct);
             return Page();
         }
@@ -113,7 +113,7 @@ public sealed class NewModel : OmpSecurePageModel<PortalResource>
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            ModelState.AddModelError(nameof(GroupUserIds), ex.Message);
+            ModelState.AddModelError(nameof(GroupUserIds), PortalTextLocalizer.Display(Localizer, ex.Message));
             await LoadAsync(ct);
             return Page();
         }

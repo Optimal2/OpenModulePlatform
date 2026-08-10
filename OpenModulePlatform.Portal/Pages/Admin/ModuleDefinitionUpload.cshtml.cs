@@ -11,6 +11,7 @@ using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -110,22 +111,22 @@ public sealed class ModuleDefinitionUploadModel : OmpPortalPageModel
         }
         catch (JsonException ex)
         {
-            ModelState.AddModelError(nameof(Input.JsonFile), T($"The uploaded JSON could not be read: {ex.Message}"));
+            ModelState.AddModelError(nameof(Input.JsonFile), PortalLocalizer["The uploaded JSON could not be read: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
         catch (IOException ex)
         {
-            ModelState.AddModelError(nameof(Input.JsonFile), T($"The uploaded file could not be read: {ex.Message}"));
+            ModelState.AddModelError(nameof(Input.JsonFile), PortalLocalizer["The uploaded file could not be read: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
         catch (SqlException ex)
         {
-            ModelState.AddModelError(string.Empty, T($"The module definition could not be saved: {ex.Message}"));
+            ModelState.AddModelError(string.Empty, PortalLocalizer["The module definition could not be saved: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
     }
@@ -147,7 +148,7 @@ public sealed class ModuleDefinitionUploadModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 nameof(Input.JsonFile),
-                T($"The uploaded module definition exceeds the configured limit of {MaxDefinitionBytes} bytes."));
+                PortalLocalizer["The uploaded module definition exceeds the configured limit of {0} bytes.", MaxDefinitionBytes]);
         }
     }
 

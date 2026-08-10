@@ -16,10 +16,7 @@
     <a class="action-link" href="~/admin/universalpackagebuilder">@L["Create universal package"]</a>
 </div>
 
-@if (!string.IsNullOrWhiteSpace(statusMessage))
-{
-    <div class="card status-banner">@statusMessage</div>
-}
+@await Component.InvokeAsync("OmpFeedback", new { message = statusMessage, includeValidationSummary = false })
 
 @if (Model.UniversalImportResults.Count > 0)
 {
@@ -74,10 +71,7 @@
     </section>
 }
 
-@if (!ViewContext.ModelState.IsValid)
-{
-    <div class="card validation-summary-errors" asp-validation-summary="All"></div>
-}
+@await Component.InvokeAsync("OmpFeedback")
 
 <section class="import-export-tabs top-gap" data-import-export-tabs data-initial-panel="@Model.ActivePanel">
     <div class="tab-list" role="tablist" aria-label="@L["Import/export"]">

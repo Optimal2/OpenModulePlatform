@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Admin/Edit.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Web.ContentWebAppModule.Localization;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using OpenModulePlatform.Web.ContentWebAppModule.Options;
 using OpenModulePlatform.Web.ContentWebAppModule.Pages;
@@ -147,7 +148,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError("Input.Slug", T(ex.Message));
+            ModelState.AddModelError("Input.Slug", ContentWebAppTextLocalizer.Display(Localizer, ex.Message));
             return Page();
         }
     }

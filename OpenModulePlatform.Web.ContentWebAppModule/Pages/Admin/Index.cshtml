@@ -19,10 +19,7 @@
     }
 </div>
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-{
-    <div class="card status-banner">@Model.StatusMessage</div>
-}
+@await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
 
 @if (Model.CanCreatePages)
 {

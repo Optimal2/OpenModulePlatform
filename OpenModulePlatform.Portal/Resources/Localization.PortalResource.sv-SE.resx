@@ -2920,4 +2920,196 @@
   <data name="Open workers" xml:space="preserve"><value>Öppna workers</value></data>
   <data name="Protected by" xml:space="preserve"><value>Skyddas av</value></data>
   <data name="Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running." xml:space="preserve"><value>Workers körs via workerhanteraren i stället för HostAgents appdeployment, så de listas här med sin senast observerade körstatus så att den här sidan ger en komplett bild av allt som kör.</value></data>
+  <data name="Host app deployment identity repair columns are not installed. Run module definition SQL repair first." xml:space="preserve">
+    <value>Kolumnerna för identitetsreparation av app-deployment på värden är inte installerade. Kör SQL-reparation av moduldefinitionen först.</value>
+  </data>
+  <data name="The selected service-app deployment state was not found." xml:space="preserve">
+    <value>Det valda deployment-tillståndet för tjänsteappen hittades inte.</value>
+  </data>
+  <data name="Module definition document was not found." xml:space="preserve">
+    <value>Moduldefinitionsdokumentet hittades inte.</value>
+  </data>
+  <data name="HostAgent job queue is not available. Apply the core OMP schema before queueing HostAgent jobs." xml:space="preserve">
+    <value>HostAgents jobbkö är inte tillgänglig. Applicera OMP:s kärnschema innan HostAgent-jobb köas.</value>
+  </data>
+  <data name="HostAgent job queue is not available. Apply the core OMP schema before queueing maintenance jobs." xml:space="preserve">
+    <value>HostAgents jobbkö är inte tillgänglig. Applicera OMP:s kärnschema innan underhållsjobb köas.</value>
+  </data>
+  <data name="Maintenance findings are not available. Apply the core OMP schema before queueing a maintenance scan." xml:space="preserve">
+    <value>Underhållsfynd är inte tillgängliga. Applicera OMP:s kärnschema innan en underhållsskanning köas.</value>
+  </data>
+  <data name="Portal user setting definition is missing: Portal/AdminMetricsCollapsed." xml:space="preserve">
+    <value>Definition för portalanvändarinställning saknas: Portal/AdminMetricsCollapsed.</value>
+  </data>
+  <data name="Portal user setting definition is missing: Portal/TopbarDropdownsOpenOnHover." xml:space="preserve">
+    <value>Definition för portalanvändarinställning saknas: Portal/TopbarDropdownsOpenOnHover.</value>
+  </data>
+  <data name="Do not mix active host-neutral and targeted web app instances for the same module instance and web app definition." xml:space="preserve">
+    <value>Blanda inte aktiva värdneutrala och riktade webbappsinstanser för samma modulinstans och webbappsdefinition.</value>
+  </data>
+  <data name="Do not mix active host-role and overlapping host-specific web app instances for the same module instance and web app definition." xml:space="preserve">
+    <value>Blanda inte aktiva värdrollsbaserade och överlappande värdspecifika webbappsinstanser för samma modulinstans och webbappsdefinition.</value>
+  </data>
+  <data name="Duplicate active host-neutral web app instances exist. Keep only one active desired host-neutral row per module instance and web app definition." xml:space="preserve">
+    <value>Det finns dubbletter av aktiva värdneutrala webbappsinstanser. Behåll endast en aktiv önskad värdneutral rad per modulinstans och webbappsdefinition.</value>
+  </data>
+  <data name="Duplicate active host-role web app instances exist. Keep only one active desired row per module instance, web app definition and host role." xml:space="preserve">
+    <value>Det finns dubbletter av aktiva värdrollsbaserade webbappsinstanser. Behåll endast en aktiv önskad rad per modulinstans, webbappsdefinition och värdroll.</value>
+  </data>
+  <data name="Duplicate active host-specific web app instances exist. Keep only one active desired row per module instance, web app definition and host." xml:space="preserve">
+    <value>Det finns dubbletter av aktiva värdspecifika webbappsinstanser. Behåll endast en aktiv önskad rad per modulinstans, webbappsdefinition och värd.</value>
+  </data>
+  <data name="Only one active desired web app instance is allowed per module instance, web app definition and host placement." xml:space="preserve">
+    <value>Endast en aktiv önskad webbappsinstans är tillåten per modulinstans, webbappsdefinition och värdplacering.</value>
+  </data>
+  <data name="Do not mix active host-neutral and targeted template web app rows for the same template module and web app definition." xml:space="preserve">
+    <value>Blanda inte aktiva värdneutrala och riktade mallwebbappsrader för samma mallmodul och webbappsdefinition.</value>
+  </data>
+  <data name="Do not mix active host-role and overlapping host-specific template web app rows for the same template module and web app definition." xml:space="preserve">
+    <value>Blanda inte aktiva värdrollsbaserade och överlappande värdspecifika mallwebbappsrader för samma mallmodul och webbappsdefinition.</value>
+  </data>
+  <data name="Duplicate active host-neutral template web app rows exist. Keep only one active desired host-neutral row per template module and web app definition." xml:space="preserve">
+    <value>Det finns dubbletter av aktiva värdneutrala mallwebbappsrader. Behåll endast en aktiv önskad värdneutral rad per mallmodul och webbappsdefinition.</value>
+  </data>
+  <data name="Duplicate active host-role template web app rows exist. Keep only one active desired row per template module, web app definition and host role." xml:space="preserve">
+    <value>Det finns dubbletter av aktiva värdrollsbaserade mallwebbappsrader. Behåll endast en aktiv önskad rad per mallmodul, webbappsdefinition och värdroll.</value>
+  </data>
+  <data name="Duplicate active host-specific template web app rows exist. Keep only one active desired row per template module, web app definition and template host." xml:space="preserve">
+    <value>Det finns dubbletter av aktiva värdspecifika mallwebbappsrader. Behåll endast en aktiv önskad rad per mallmodul, webbappsdefinition och mallvärd.</value>
+  </data>
+  <data name="Only one active desired template web app row is allowed per template module, web app definition and host placement." xml:space="preserve">
+    <value>Endast en aktiv önskad mallwebbappsrad är tillåten per mallmodul, webbappsdefinition och värdplacering.</value>
+  </data>
+  <data name="Host deployment request requires HostKey." xml:space="preserve">
+    <value>Deployment-begäran för värd kräver HostKey.</value>
+  </data>
+  <data name="Host deployment request host was not found or is disabled." xml:space="preserve">
+    <value>Värden i deployment-begäran hittades inte eller är inaktiverad.</value>
+  </data>
+  <data name="Host deployment request host template was not found or is disabled." xml:space="preserve">
+    <value>Värdmallen i deployment-begäran hittades inte eller är inaktiverad.</value>
+  </data>
+  <data name="Host deployment request host template is not actively assigned to the host." xml:space="preserve">
+    <value>Värdmallen i deployment-begäran är inte aktivt tilldelad värden.</value>
+  </data>
+  <data name="Template materialization host was not found or is disabled." xml:space="preserve">
+    <value>Värden för mallmaterialisering hittades inte eller är inaktiverad.</value>
+  </data>
+  <data name="Template materialization host does not have the requested active host template assignment." xml:space="preserve">
+    <value>Värden för mallmaterialisering har inte den begärda aktiva värdmallstilldelningen.</value>
+  </data>
+  <data name="Direct conversations require two distinct OMP users." xml:space="preserve">
+    <value>Direktkonversationer kräver två olika OMP-användare.</value>
+  </data>
+  <data name="Group conversations require at least two OMP users." xml:space="preserve">
+    <value>Gruppkonversationer kräver minst två OMP-användare.</value>
+  </data>
+  <data name="A message must contain text or at least one attachment." xml:space="preserve">
+    <value>Ett meddelande måste innehålla text eller minst en bilaga.</value>
+  </data>
+  <data name="OMP messages tables are not installed." xml:space="preserve">
+    <value>OMP:s meddelandetabeller är inte installerade.</value>
+  </data>
+  <data name="OMP messages are disabled." xml:space="preserve">
+    <value>OMP-meddelanden är inaktiverade.</value>
+  </data>
+  <data name="OMP user does not exist or is not active." xml:space="preserve">
+    <value>OMP-användaren finns inte eller är inte aktiv.</value>
+  </data>
+  <data name="Attachment content type is not allowed." xml:space="preserve">
+    <value>Bilagans innehållstyp är inte tillåten.</value>
+  </data>
+  <data name="Upload one MP3 file." xml:space="preserve">
+    <value>Ladda upp en MP3-fil.</value>
+  </data>
+  <data name="Upload a zip file." xml:space="preserve">
+    <value>Ladda upp en zip-fil.</value>
+  </data>
+  <data name="The zip file does not contain any MP3 files." xml:space="preserve">
+    <value>Zip-filen innehåller inga MP3-filer.</value>
+  </data>
+  <data name="The music player widget definition is missing." xml:space="preserve">
+    <value>Definitionen för musikspelarwidgeten saknas.</value>
+  </data>
+  <data name="Upload one image or GIF file." xml:space="preserve">
+    <value>Ladda upp en bild- eller GIF-fil.</value>
+  </data>
+  <data name="The zip file does not contain any image or GIF files." xml:space="preserve">
+    <value>Zip-filen innehåller inga bild- eller GIF-filer.</value>
+  </data>
+  <data name="The blank widget definition is missing." xml:space="preserve">
+    <value>Definitionen för den tomma widgeten saknas.</value>
+  </data>
+  <data name="Upload a GIF, PNG, JPG, or JPEG file." xml:space="preserve">
+    <value>Ladda upp en GIF-, PNG-, JPG- eller JPEG-fil.</value>
+  </data>
+  <data name="The uploaded file is not a supported image format." xml:space="preserve">
+    <value>Den uppladdade filen är inte i ett bildformat som stöds.</value>
+  </data>
+  <data name="A message can include at most {0} attachments." xml:space="preserve">
+    <value>Ett meddelande kan innehålla högst {0} bilagor.</value>
+  </data>
+  <data name="Attachment file is too large. The current limit is {0}." xml:space="preserve">
+    <value>Bilagan är för stor. Nuvarande gräns är {0}.</value>
+  </data>
+  <data name="The zip file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>Zip-filen överskrider gränsen på {0} byte.</value>
+  </data>
+  <data name="The MP3 file '{0}' exceeds the limit of {1} bytes." xml:space="preserve">
+    <value>MP3-filen '{0}' överskrider gränsen på {1} byte.</value>
+  </data>
+  <data name="The MP3 file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>MP3-filen överskrider gränsen på {0} byte.</value>
+  </data>
+  <data name="The image file '{0}' exceeds the limit of {1} bytes." xml:space="preserve">
+    <value>Bildfilen '{0}' överskrider gränsen på {1} byte.</value>
+  </data>
+  <data name="The image file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>Bildfilen överskrider gränsen på {0} byte.</value>
+  </data>
+  <data name="The uploaded file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>Den uppladdade filen överskrider gränsen på {0} byte.</value>
+  </data>
+  <data name="ArtifactUpload:ArtifactStoreRoot could not be used: {0}" xml:space="preserve">
+    <value>ArtifactUpload:ArtifactStoreRoot kunde inte användas: {0}</value>
+  </data>
+  <data name="Configuration files from the artifact package could not be saved: {0}" xml:space="preserve">
+    <value>Konfigurationsfiler från artefaktpaketet kunde inte sparas: {0}</value>
+  </data>
+  <data name="The artifact could not be stored: {0}" xml:space="preserve">
+    <value>Artefakten kunde inte lagras: {0}</value>
+  </data>
+  <data name="The artifact metadata could not be saved: {0}" xml:space="preserve">
+    <value>Artefaktens metadata kunde inte sparas: {0}</value>
+  </data>
+  <data name="The artifact store could not be accessed: {0}" xml:space="preserve">
+    <value>Artefaktlagret kunde inte nås: {0}</value>
+  </data>
+  <data name="The module definition SQL repair failed: {0}" xml:space="preserve">
+    <value>SQL-reparationen av moduldefinitionen misslyckades: {0}</value>
+  </data>
+  <data name="The module definition could not be applied: {0}" xml:space="preserve">
+    <value>Moduldefinitionen kunde inte appliceras: {0}</value>
+  </data>
+  <data name="The module definition could not be saved: {0}" xml:space="preserve">
+    <value>Moduldefinitionen kunde inte sparas: {0}</value>
+  </data>
+  <data name="The uploaded JSON could not be read: {0}" xml:space="preserve">
+    <value>Den uppladdade JSON-filen kunde inte läsas: {0}</value>
+  </data>
+  <data name="The uploaded configuration file is too large. The maximum size is {0} bytes." xml:space="preserve">
+    <value>Den uppladdade konfigurationsfilen är för stor. Maxstorleken är {0} byte.</value>
+  </data>
+  <data name="The uploaded file could not be read: {0}" xml:space="preserve">
+    <value>Den uppladdade filen kunde inte läsas: {0}</value>
+  </data>
+  <data name="The uploaded module definition exceeds the configured limit of {0} bytes." xml:space="preserve">
+    <value>Den uppladdade moduldefinitionen överskrider den konfigurerade gränsen på {0} byte.</value>
+  </data>
+  <data name="The uploaded zip could not be read: {0}" xml:space="preserve">
+    <value>Den uppladdade zip-filen kunde inte läsas: {0}</value>
+  </data>
+  <data name="The uploaded zip exceeds the configured limit of {0} bytes." xml:space="preserve">
+    <value>Den uppladdade zip-filen överskrider den konfigurerade gränsen på {0} byte.</value>
+  </data>
 </root>
