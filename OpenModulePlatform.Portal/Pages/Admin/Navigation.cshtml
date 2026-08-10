@@ -28,15 +28,7 @@
             </div>
         </section>
 
-        @if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-        {
-            <div class="card status-banner">@Model.StatusMessage</div>
-        }
-
-        @if (!ViewContext.ModelState.IsValid)
-        {
-            <div class="card validation-summary-errors" asp-validation-summary="All"></div>
-        }
+        @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
 
         @if (Model.Boxes.Count > 1)
         {

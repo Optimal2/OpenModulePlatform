@@ -9,6 +9,7 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -182,7 +183,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
     }
@@ -220,7 +221,7 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
                 TemplateControl = await _repo.GetTemplateManagedAppInstanceInfoAsync(Input.AppInstanceId, ct);
             }
 
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
     }

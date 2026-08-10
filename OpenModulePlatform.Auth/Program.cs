@@ -22,7 +22,26 @@ var cultureSelectionService = new CultureSelectionService();
 builder.AddOmpWebLogging();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 builder.Services.AddRazorPages()
-    .AddViewLocalization();
+    .AddViewLocalization()
+    .AddDataAnnotationsLocalization(options =>
+    {
+        // App resource first, SharedResource as fallback - the same
+        // composite-localizer pattern as OmpWebHostingExtensions so the
+        // localized validation defaults stamped by
+        // OmpValidationMetadataProvider resolve without duplicating them.
+        options.DataAnnotationLocalizerProvider = static (_, factory) =>
+            new OmpCompositeStringLocalizer(
+                factory.Create(typeof(OpenModulePlatform.Auth.Localization.AuthResource)),
+                factory.Create(typeof(SharedResource)));
+    });
+
+// DataAnnotations attributes without an explicit ErrorMessage (including the
+// implicit Required for non-nullable reference types) get a localizable
+// template stamped on, so their messages follow the request culture.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options =>
+{
+    options.ModelMetadataDetailsProviders.Add(new OmpValidationMetadataProvider());
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SqlConnectionFactory>();

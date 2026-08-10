@@ -2661,4 +2661,196 @@
   <data name="Open workers" xml:space="preserve"><value>Open workers</value></data>
   <data name="Protected by" xml:space="preserve"><value>Protected by</value></data>
   <data name="Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running." xml:space="preserve"><value>Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running.</value></data>
+  <data name="Host app deployment identity repair columns are not installed. Run module definition SQL repair first." xml:space="preserve">
+    <value>Host app deployment identity repair columns are not installed. Run module definition SQL repair first.</value>
+  </data>
+  <data name="The selected service-app deployment state was not found." xml:space="preserve">
+    <value>The selected service-app deployment state was not found.</value>
+  </data>
+  <data name="Module definition document was not found." xml:space="preserve">
+    <value>Module definition document was not found.</value>
+  </data>
+  <data name="HostAgent job queue is not available. Apply the core OMP schema before queueing HostAgent jobs." xml:space="preserve">
+    <value>HostAgent job queue is not available. Apply the core OMP schema before queueing HostAgent jobs.</value>
+  </data>
+  <data name="HostAgent job queue is not available. Apply the core OMP schema before queueing maintenance jobs." xml:space="preserve">
+    <value>HostAgent job queue is not available. Apply the core OMP schema before queueing maintenance jobs.</value>
+  </data>
+  <data name="Maintenance findings are not available. Apply the core OMP schema before queueing a maintenance scan." xml:space="preserve">
+    <value>Maintenance findings are not available. Apply the core OMP schema before queueing a maintenance scan.</value>
+  </data>
+  <data name="Portal user setting definition is missing: Portal/AdminMetricsCollapsed." xml:space="preserve">
+    <value>Portal user setting definition is missing: Portal/AdminMetricsCollapsed.</value>
+  </data>
+  <data name="Portal user setting definition is missing: Portal/TopbarDropdownsOpenOnHover." xml:space="preserve">
+    <value>Portal user setting definition is missing: Portal/TopbarDropdownsOpenOnHover.</value>
+  </data>
+  <data name="Do not mix active host-neutral and targeted web app instances for the same module instance and web app definition." xml:space="preserve">
+    <value>Do not mix active host-neutral and targeted web app instances for the same module instance and web app definition.</value>
+  </data>
+  <data name="Do not mix active host-role and overlapping host-specific web app instances for the same module instance and web app definition." xml:space="preserve">
+    <value>Do not mix active host-role and overlapping host-specific web app instances for the same module instance and web app definition.</value>
+  </data>
+  <data name="Duplicate active host-neutral web app instances exist. Keep only one active desired host-neutral row per module instance and web app definition." xml:space="preserve">
+    <value>Duplicate active host-neutral web app instances exist. Keep only one active desired host-neutral row per module instance and web app definition.</value>
+  </data>
+  <data name="Duplicate active host-role web app instances exist. Keep only one active desired row per module instance, web app definition and host role." xml:space="preserve">
+    <value>Duplicate active host-role web app instances exist. Keep only one active desired row per module instance, web app definition and host role.</value>
+  </data>
+  <data name="Duplicate active host-specific web app instances exist. Keep only one active desired row per module instance, web app definition and host." xml:space="preserve">
+    <value>Duplicate active host-specific web app instances exist. Keep only one active desired row per module instance, web app definition and host.</value>
+  </data>
+  <data name="Only one active desired web app instance is allowed per module instance, web app definition and host placement." xml:space="preserve">
+    <value>Only one active desired web app instance is allowed per module instance, web app definition and host placement.</value>
+  </data>
+  <data name="Do not mix active host-neutral and targeted template web app rows for the same template module and web app definition." xml:space="preserve">
+    <value>Do not mix active host-neutral and targeted template web app rows for the same template module and web app definition.</value>
+  </data>
+  <data name="Do not mix active host-role and overlapping host-specific template web app rows for the same template module and web app definition." xml:space="preserve">
+    <value>Do not mix active host-role and overlapping host-specific template web app rows for the same template module and web app definition.</value>
+  </data>
+  <data name="Duplicate active host-neutral template web app rows exist. Keep only one active desired host-neutral row per template module and web app definition." xml:space="preserve">
+    <value>Duplicate active host-neutral template web app rows exist. Keep only one active desired host-neutral row per template module and web app definition.</value>
+  </data>
+  <data name="Duplicate active host-role template web app rows exist. Keep only one active desired row per template module, web app definition and host role." xml:space="preserve">
+    <value>Duplicate active host-role template web app rows exist. Keep only one active desired row per template module, web app definition and host role.</value>
+  </data>
+  <data name="Duplicate active host-specific template web app rows exist. Keep only one active desired row per template module, web app definition and template host." xml:space="preserve">
+    <value>Duplicate active host-specific template web app rows exist. Keep only one active desired row per template module, web app definition and template host.</value>
+  </data>
+  <data name="Only one active desired template web app row is allowed per template module, web app definition and host placement." xml:space="preserve">
+    <value>Only one active desired template web app row is allowed per template module, web app definition and host placement.</value>
+  </data>
+  <data name="Host deployment request requires HostKey." xml:space="preserve">
+    <value>Host deployment request requires HostKey.</value>
+  </data>
+  <data name="Host deployment request host was not found or is disabled." xml:space="preserve">
+    <value>Host deployment request host was not found or is disabled.</value>
+  </data>
+  <data name="Host deployment request host template was not found or is disabled." xml:space="preserve">
+    <value>Host deployment request host template was not found or is disabled.</value>
+  </data>
+  <data name="Host deployment request host template is not actively assigned to the host." xml:space="preserve">
+    <value>Host deployment request host template is not actively assigned to the host.</value>
+  </data>
+  <data name="Template materialization host was not found or is disabled." xml:space="preserve">
+    <value>Template materialization host was not found or is disabled.</value>
+  </data>
+  <data name="Template materialization host does not have the requested active host template assignment." xml:space="preserve">
+    <value>Template materialization host does not have the requested active host template assignment.</value>
+  </data>
+  <data name="Direct conversations require two distinct OMP users." xml:space="preserve">
+    <value>Direct conversations require two distinct OMP users.</value>
+  </data>
+  <data name="Group conversations require at least two OMP users." xml:space="preserve">
+    <value>Group conversations require at least two OMP users.</value>
+  </data>
+  <data name="A message must contain text or at least one attachment." xml:space="preserve">
+    <value>A message must contain text or at least one attachment.</value>
+  </data>
+  <data name="OMP messages tables are not installed." xml:space="preserve">
+    <value>OMP messages tables are not installed.</value>
+  </data>
+  <data name="OMP messages are disabled." xml:space="preserve">
+    <value>OMP messages are disabled.</value>
+  </data>
+  <data name="OMP user does not exist or is not active." xml:space="preserve">
+    <value>OMP user does not exist or is not active.</value>
+  </data>
+  <data name="Attachment content type is not allowed." xml:space="preserve">
+    <value>Attachment content type is not allowed.</value>
+  </data>
+  <data name="Upload one MP3 file." xml:space="preserve">
+    <value>Upload one MP3 file.</value>
+  </data>
+  <data name="Upload a zip file." xml:space="preserve">
+    <value>Upload a zip file.</value>
+  </data>
+  <data name="The zip file does not contain any MP3 files." xml:space="preserve">
+    <value>The zip file does not contain any MP3 files.</value>
+  </data>
+  <data name="The music player widget definition is missing." xml:space="preserve">
+    <value>The music player widget definition is missing.</value>
+  </data>
+  <data name="Upload one image or GIF file." xml:space="preserve">
+    <value>Upload one image or GIF file.</value>
+  </data>
+  <data name="The zip file does not contain any image or GIF files." xml:space="preserve">
+    <value>The zip file does not contain any image or GIF files.</value>
+  </data>
+  <data name="The blank widget definition is missing." xml:space="preserve">
+    <value>The blank widget definition is missing.</value>
+  </data>
+  <data name="Upload a GIF, PNG, JPG, or JPEG file." xml:space="preserve">
+    <value>Upload a GIF, PNG, JPG, or JPEG file.</value>
+  </data>
+  <data name="The uploaded file is not a supported image format." xml:space="preserve">
+    <value>The uploaded file is not a supported image format.</value>
+  </data>
+  <data name="A message can include at most {0} attachments." xml:space="preserve">
+    <value>A message can include at most {0} attachments.</value>
+  </data>
+  <data name="Attachment file is too large. The current limit is {0}." xml:space="preserve">
+    <value>Attachment file is too large. The current limit is {0}.</value>
+  </data>
+  <data name="The zip file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>The zip file exceeds the limit of {0} bytes.</value>
+  </data>
+  <data name="The MP3 file '{0}' exceeds the limit of {1} bytes." xml:space="preserve">
+    <value>The MP3 file '{0}' exceeds the limit of {1} bytes.</value>
+  </data>
+  <data name="The MP3 file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>The MP3 file exceeds the limit of {0} bytes.</value>
+  </data>
+  <data name="The image file '{0}' exceeds the limit of {1} bytes." xml:space="preserve">
+    <value>The image file '{0}' exceeds the limit of {1} bytes.</value>
+  </data>
+  <data name="The image file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>The image file exceeds the limit of {0} bytes.</value>
+  </data>
+  <data name="The uploaded file exceeds the limit of {0} bytes." xml:space="preserve">
+    <value>The uploaded file exceeds the limit of {0} bytes.</value>
+  </data>
+  <data name="ArtifactUpload:ArtifactStoreRoot could not be used: {0}" xml:space="preserve">
+    <value>ArtifactUpload:ArtifactStoreRoot could not be used: {0}</value>
+  </data>
+  <data name="Configuration files from the artifact package could not be saved: {0}" xml:space="preserve">
+    <value>Configuration files from the artifact package could not be saved: {0}</value>
+  </data>
+  <data name="The artifact could not be stored: {0}" xml:space="preserve">
+    <value>The artifact could not be stored: {0}</value>
+  </data>
+  <data name="The artifact metadata could not be saved: {0}" xml:space="preserve">
+    <value>The artifact metadata could not be saved: {0}</value>
+  </data>
+  <data name="The artifact store could not be accessed: {0}" xml:space="preserve">
+    <value>The artifact store could not be accessed: {0}</value>
+  </data>
+  <data name="The module definition SQL repair failed: {0}" xml:space="preserve">
+    <value>The module definition SQL repair failed: {0}</value>
+  </data>
+  <data name="The module definition could not be applied: {0}" xml:space="preserve">
+    <value>The module definition could not be applied: {0}</value>
+  </data>
+  <data name="The module definition could not be saved: {0}" xml:space="preserve">
+    <value>The module definition could not be saved: {0}</value>
+  </data>
+  <data name="The uploaded JSON could not be read: {0}" xml:space="preserve">
+    <value>The uploaded JSON could not be read: {0}</value>
+  </data>
+  <data name="The uploaded configuration file is too large. The maximum size is {0} bytes." xml:space="preserve">
+    <value>The uploaded configuration file is too large. The maximum size is {0} bytes.</value>
+  </data>
+  <data name="The uploaded file could not be read: {0}" xml:space="preserve">
+    <value>The uploaded file could not be read: {0}</value>
+  </data>
+  <data name="The uploaded module definition exceeds the configured limit of {0} bytes." xml:space="preserve">
+    <value>The uploaded module definition exceeds the configured limit of {0} bytes.</value>
+  </data>
+  <data name="The uploaded zip could not be read: {0}" xml:space="preserve">
+    <value>The uploaded zip could not be read: {0}</value>
+  </data>
+  <data name="The uploaded zip exceeds the configured limit of {0} bytes." xml:space="preserve">
+    <value>The uploaded zip exceeds the configured limit of {0} bytes.</value>
+  </data>
 </root>

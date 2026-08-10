@@ -258,7 +258,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
             ActivePanel = "import-universal";
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             await LoadAsync(ct);
             return Page();
         }
@@ -297,7 +297,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
             ActivePanel = "import-universal";
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             await LoadAsync(ct);
             return Page();
         }
@@ -330,7 +330,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
             ActivePanel = "import-universal";
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             await LoadAsync(ct);
             return Page();
         }
@@ -454,7 +454,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(T(ex.Message));
+            return BadRequest(PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
         }
     }
 

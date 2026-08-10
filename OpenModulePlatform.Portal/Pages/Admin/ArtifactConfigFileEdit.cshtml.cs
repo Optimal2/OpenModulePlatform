@@ -9,6 +9,7 @@ using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
 using System.IO.Compression;
 using System.Text;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -173,7 +174,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         {
             ModelState.AddModelError(
                 nameof(UploadedFile),
-                T($"The uploaded configuration file is too large. The maximum size is {MaxConfigurationFileBytes} bytes."));
+                PortalLocalizer["The uploaded configuration file is too large. The maximum size is {0} bytes.", MaxConfigurationFileBytes]);
 
             return Page();
         }

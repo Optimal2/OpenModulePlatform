@@ -12,10 +12,7 @@
     </div>
 </section>
 
-@if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
-{
-    <div class="card status-banner">@Model.StatusMessage</div>
-}
+@await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
 
 <section class="card bottom-gap" id="worker-definitions-panel">
     <div class="page-header">

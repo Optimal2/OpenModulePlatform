@@ -6,6 +6,7 @@ using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -77,7 +78,7 @@ public sealed class ModuleDefinitionsModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or System.Text.Json.JsonException or SqlException or UnauthorizedAccessException)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             SetTitles("Module definition versions");
             await LoadAsync(ct);
             return Page();
@@ -118,7 +119,7 @@ public sealed class ModuleDefinitionsModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             SetTitles("Module definition versions");
             await LoadAsync(ct);
             return Page();
@@ -146,7 +147,7 @@ public sealed class ModuleDefinitionsModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             SetTitles("Module definition versions");
             await LoadAsync(ct);
             return Page();
@@ -174,14 +175,14 @@ public sealed class ModuleDefinitionsModel : OmpPortalPageModel
         }
         catch (SqlException ex)
         {
-            ModelState.AddModelError(string.Empty, T($"The module definition SQL repair failed: {ex.Message}"));
+            ModelState.AddModelError(string.Empty, PortalLocalizer["The module definition SQL repair failed: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             SetTitles("Module definition versions");
             await LoadAsync(ct);
             return Page();
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             SetTitles("Module definition versions");
             await LoadAsync(ct);
             return Page();

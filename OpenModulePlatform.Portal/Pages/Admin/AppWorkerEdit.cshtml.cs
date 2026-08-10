@@ -8,6 +8,7 @@ using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -121,7 +122,7 @@ public sealed class AppWorkerEditModel : OmpPortalPageModel
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
         catch (SqlException ex)
@@ -152,7 +153,7 @@ public sealed class AppWorkerEditModel : OmpPortalPageModel
         {
             await LoadAsync(ct);
             SetTitles("Edit app worker definition");
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
         catch (SqlException ex)

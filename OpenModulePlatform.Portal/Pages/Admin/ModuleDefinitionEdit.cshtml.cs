@@ -7,6 +7,7 @@ using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.Text;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -103,12 +104,12 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
         }
         catch (SqlException ex)
         {
-            ModelState.AddModelError(string.Empty, T($"The module definition could not be applied: {ex.Message}"));
+            ModelState.AddModelError(string.Empty, PortalLocalizer["The module definition could not be applied: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             return Page();
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
 
@@ -155,13 +156,13 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
         }
         catch (SqlException ex)
         {
-            ModelState.AddModelError(string.Empty, T($"The module definition SQL repair failed: {ex.Message}"));
+            ModelState.AddModelError(string.Empty, PortalLocalizer["The module definition SQL repair failed: {0}", PortalTextLocalizer.Display(PortalLocalizer, ex.Message)]);
             SqlCheckRows = await _repo.GetModuleDefinitionSqlChecksAsync(Input.ModuleDefinitionDocumentId, ct);
             return Page();
         }
         catch (InvalidOperationException ex)
         {
-            ModelState.AddModelError(string.Empty, T(ex.Message));
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             SqlCheckRows = await _repo.GetModuleDefinitionSqlChecksAsync(Input.ModuleDefinitionDocumentId, ct);
             return Page();
         }

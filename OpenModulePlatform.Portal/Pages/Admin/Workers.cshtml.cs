@@ -5,6 +5,7 @@ using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Portal.Localization;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -54,7 +55,7 @@ public sealed class WorkersModel : OmpPortalPageModel
         }
         catch (InvalidOperationException ex)
         {
-            StatusMessage = T(ex.Message);
+            StatusMessage = PortalTextLocalizer.Display(PortalLocalizer, ex.Message);
         }
         catch (Microsoft.Data.SqlClient.SqlException)
         {

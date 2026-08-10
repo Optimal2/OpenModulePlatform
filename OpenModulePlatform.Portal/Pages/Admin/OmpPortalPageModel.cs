@@ -1,9 +1,11 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/OmpPortalPageModel.cs
+using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Security;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
@@ -18,6 +20,15 @@ public abstract class OmpPortalPageModel : OmpSecurePageModel
         : base(options, rbac)
     {
     }
+
+    /// <summary>
+    /// Portal resource localizer. The admin pages' <c>T()</c> helper targets
+    /// SharedResource, so page-specific texts (including localized exception
+    /// display via <see cref="PortalTextLocalizer"/>) resolve through this
+    /// localizer instead.
+    /// </summary>
+    protected IStringLocalizer<PortalResource> PortalLocalizer =>
+        HttpContext.RequestServices.GetRequiredService<IStringLocalizer<PortalResource>>();
 
     protected async Task<IActionResult?> RequirePortalAdminAsync(CancellationToken ct)
     {
