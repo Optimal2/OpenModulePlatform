@@ -72,8 +72,15 @@ public static class OmpWebHostingExtensions
         builder.Services.AddRazorPages()
             .AddDataAnnotationsLocalization(options =>
             {
+                // App resource first, SharedResource as fallback: the
+                // validation message templates stamped by
+                // OmpValidationMetadataProvider live in SharedResource so
+                // every app renders localized defaults without duplicating
+                // them, while an app can still override any key.
                 options.DataAnnotationLocalizerProvider = static (_, factory) =>
-                    factory.Create(typeof(TAppResource));
+                    new OmpCompositeStringLocalizer(
+                        factory.Create(typeof(TAppResource)),
+                        factory.Create(typeof(SharedResource)));
             });
 
         // Model binder conversion errors ("The value 'x' is not valid for ...") are
@@ -83,6 +90,12 @@ public static class OmpWebHostingExtensions
         builder.Services.AddOptions<Microsoft.AspNetCore.Mvc.MvcOptions>()
             .Configure<IStringLocalizerFactory>(static (options, localizerFactory) =>
             {
+                // DataAnnotations attributes without an explicit ErrorMessage
+                // (including the implicit Required for non-nullable reference
+                // types) get a localizable template stamped on, so their
+                // messages follow the request culture like everything else.
+                options.ModelMetadataDetailsProviders.Add(new OmpValidationMetadataProvider());
+
                 var localizer = localizerFactory.Create(typeof(SharedResource));
                 var messages = options.ModelBindingMessageProvider;
                 messages.SetAttemptedValueIsInvalidAccessor((value, field) => localizer["The value '{0}' is not valid for {1}.", value, field]);

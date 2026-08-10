@@ -1,0 +1,43 @@
+@model OpenModulePlatform.Web.Shared.Models.OmpFeedbackDisplayModel
+@{
+    // ModelState errors render manually instead of via the validation
+    // summary tag helper: component views have no tag helper imports, and
+    // the manual list lets the block collapse to nothing when everything
+    // is valid.
+    var modelState = ViewContext.ViewData.ModelState;
+    var validationErrors = Model.IncludeValidationSummary && !modelState.IsValid
+        ? modelState.Values
+            .SelectMany(entry => entry.Errors)
+            .Select(error => error.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Distinct()
+            .ToArray()
+        : [];
+    var hasContent = !string.IsNullOrWhiteSpace(Model.Message)
+        || !string.IsNullOrWhiteSpace(Model.Error)
+        || validationErrors.Length > 0;
+}
+@if (hasContent)
+{
+    <div class="omp-feedback" data-omp-feedback tabindex="-1">
+        @if (!string.IsNullOrWhiteSpace(Model.Message))
+        {
+            <div class="omp-feedback__alert omp-feedback__alert--success" role="status">@Model.Message</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Error))
+        {
+            <div class="omp-feedback__alert omp-feedback__alert--error" role="alert">@Model.Error</div>
+        }
+        @if (validationErrors.Length > 0)
+        {
+            <div class="omp-feedback__alert omp-feedback__alert--error" role="alert">
+                <ul class="omp-feedback__list">
+                    @foreach (var error in validationErrors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </div>
+        }
+    </div>
+}

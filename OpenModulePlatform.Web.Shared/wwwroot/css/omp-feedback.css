@@ -1,0 +1,33 @@
+/* Shared feedback block rendered by the OmpFeedback view component.
+   Placed contextually next to the section/table/form an action belongs
+   to; omp-feedback.js scrolls it into view after load. */
+.omp-feedback {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+    outline: none;
+}
+
+.omp-feedback__alert {
+    padding: 10px 14px;
+    border: 1px solid;
+    border-radius: 6px;
+    overflow-wrap: anywhere;
+}
+
+.omp-feedback__alert--success {
+    border-color: #2e7d43;
+    background: #eef8f0;
+    color: #1d5b2f;
+}
+
+.omp-feedback__alert--error {
+    border-color: #a61b1b;
+    background: #fdf0f0;
+    color: #a61b1b;
+}
+
+.omp-feedback__list {
+    margin: 0;
+    padding-left: 18px;
+}
