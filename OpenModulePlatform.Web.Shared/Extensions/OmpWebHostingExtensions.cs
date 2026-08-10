@@ -96,6 +96,11 @@ public static class OmpWebHostingExtensions
                 // messages follow the request culture like everything else.
                 options.ModelMetadataDetailsProviders.Add(new OmpValidationMetadataProvider());
 
+                // A stale antiforgery token reloads the page instead of
+                // surfacing the framework's empty 400 (which middleboxes can
+                // re-frame into a lone "0" page).
+                options.Filters.Add(new Mvc.AntiforgeryFailureRedirectFilter());
+
                 var localizer = localizerFactory.Create(typeof(SharedResource));
                 var messages = options.ModelBindingMessageProvider;
                 messages.SetAttemptedValueIsInvalidAccessor((value, field) => localizer["The value '{0}' is not valid for {1}.", value, field]);
