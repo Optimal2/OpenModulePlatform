@@ -113,7 +113,7 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip"
@@ -137,15 +137,14 @@
       "appKey": "content_webapp_webapp",
       "packageType": "web-app",
       "targetName": "content-webapp",
-      "version": "0.3.151",
+      "version": "0.3.152",
       "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
       "relativePathTemplate": "content-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip",
       "artifactConfigurationFiles": [
         {
           "relativePath": "appsettings.json",
-          "sourcePath": "OpenModulePlatform.Web.ContentWebAppModule/Packaging/appsettings.json",
-          "packageSourcePath": "configuration/appsettings.json"
+          "sourcePath": "OpenModulePlatform.Web.ContentWebAppModule/Packaging/appsettings.json"
         }
       ]
     },
