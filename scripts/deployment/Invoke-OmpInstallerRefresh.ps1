@@ -82,6 +82,11 @@ if (-not $Apply) {
 # module artifacts from the other source repositories (IbsPackager & co) are
 # produced by the package-object sync - without it the package library keeps
 # serving the previous versions.
+# Long-lived MSBuild nodes (/nodeReuse:true) from the refresh build keep
+# obj-files open and intermittently fail the selective builds below with
+# "file is being used by another process"; shut the build servers down first.
+dotnet build-server shutdown 2>&1 | Out-Null
+
 Write-Host 'Syncing package objects from source repositories (--sync-package-objects)...'
 $syncLog = [IO.Path]::ChangeExtension($logFile, '.sync.log')
 $syncProcess = Start-Process -FilePath $exe `
