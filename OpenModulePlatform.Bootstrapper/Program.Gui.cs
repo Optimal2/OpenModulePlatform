@@ -168,6 +168,19 @@ internal static partial class Program
         var machineMatches = profiles
             .Where(profile => ProfileMatchesMachine(profile, localMachineNames))
             .ToArray();
+
+        // On developer machines the generated sample template carries the
+        // build machine's hostAgent identity, so it can shadow the real host
+        // profile. A sample may only be selected when no real config matches.
+        var nonSampleMatches = machineMatches
+            .Where(static profile => !Path.GetFileName(profile.ConfigPath)
+                .EndsWith(".sample.json", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (nonSampleMatches.Length > 0)
+        {
+            machineMatches = nonSampleMatches;
+        }
+
         if (machineMatches.Length == 1)
         {
             return machineMatches[0].ConfigPath;
