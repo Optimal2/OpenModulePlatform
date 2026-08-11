@@ -1080,6 +1080,20 @@ WHERE ModuleKey = @ModuleKey;";
 
                 if (!needsRepair)
                 {
+                    // The validation probe only covers the objects it was
+                    // written to check. A changed idempotent script (new
+                    // content hash, e.g. adding a column the probe does not
+                    // know about) must still run, or the document is marked
+                    // applied while code and schema silently drift apart.
+                    needsRepair = await AnyModuleDefinitionScriptWithoutSucceededExecutionAsync(
+                        conn,
+                        moduleDefinitionDocumentId,
+                        scripts,
+                        ct);
+                }
+
+                if (!needsRepair)
+                {
                     return 0;
                 }
             }
@@ -1138,6 +1152,46 @@ WHERE ModuleKey = @ModuleKey;";
         }
 
         return executed;
+    }
+
+    private async Task<bool> AnyModuleDefinitionScriptWithoutSucceededExecutionAsync(
+        SqlConnection conn,
+        int moduleDefinitionDocumentId,
+        IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT COUNT(1)
+FROM omp.ModuleDefinitionSqlExecutions
+WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId
+  AND ScriptKey = @scriptKey
+  AND ScriptSha256 = @scriptSha256
+  AND ExecutionStatus = N'Succeeded';";
+
+        foreach (var script in scripts)
+        {
+            if (IsValidationScript(script))
+            {
+                continue;
+            }
+
+            var sqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(sqlText))
+            {
+                continue;
+            }
+
+            await using var cmd = new SqlCommand(sql, conn);
+            Add(cmd, "@moduleDefinitionDocumentId", moduleDefinitionDocumentId);
+            Add(cmd, "@scriptKey", script.Key);
+            Add(cmd, "@scriptSha256", ComputeTextSha256(sqlText));
+            if (Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture) == 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task<ArtifactZipImportAppDescriptor?> ResolveArtifactZipImportAppAsync(
