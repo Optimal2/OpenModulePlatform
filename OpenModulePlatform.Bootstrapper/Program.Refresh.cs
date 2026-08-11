@@ -439,12 +439,15 @@ internal static partial class Program
             // the profile keeps stale artifact versions and SQL variable
             // overrides forever - and those variables feed the module
             // definition seeds, which then resurrect and re-default
-            // long-retired versions on every apply. The out-of-package profile
-            // gets no copy inside the generated package (the fallback path
-            // there is the sample template, which must stay a template).
+            // long-retired versions on every apply. The profile is
+            // hand-maintained, so only the generated fields are merged into
+            // the original JSON - a full BootstrapConfig round-trip would
+            // drop properties the model does not carry (schema, profile
+            // metadata). It gets no copy inside the generated package, where
+            // the fallback path is the sample template.
             if (!IsSameOrParentPath(currentPackageRoot, fullConfigPath))
             {
-                await File.WriteAllTextAsync(fullConfigPath, json + Environment.NewLine, Encoding.UTF8);
+                await WriteGeneratedPayloadMetadataIntoJsonFileAsync(fullConfigPath, generatedConfig);
                 Console.WriteLine($"Updated host profile config with generated artifact versions: {fullConfigPath}");
                 wroteAnyConfig = true;
                 continue;
@@ -468,6 +471,38 @@ internal static partial class Program
         {
             File.Delete(generatedSampleProfile);
         }
+    }
+
+    private static async Task WriteGeneratedPayloadMetadataIntoJsonFileAsync(string configPath, BootstrapConfig generatedConfig)
+    {
+        // Same field set as ApplyGeneratedPayloadMetadata, but merged into the
+        // original JSON document so hand-maintained properties survive.
+        var originalNode = JsonNode.Parse(
+                await File.ReadAllTextAsync(configPath),
+                documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true })
+            as JsonObject
+            ?? throw new InvalidOperationException($"Host profile config is not a JSON object: {configPath}");
+
+        originalNode["artifacts"] = JsonSerializer.SerializeToNode(generatedConfig.Artifacts, JsonOptions);
+        if (originalNode["sql"] is not JsonObject sqlNode)
+        {
+            sqlNode = new JsonObject();
+            originalNode["sql"] = sqlNode;
+        }
+
+        sqlNode["artifactVersionOverrides"] = JsonSerializer.SerializeToNode(generatedConfig.Sql.ArtifactVersionOverrides, JsonOptions);
+        sqlNode["artifactVersionVariableOverrides"] = JsonSerializer.SerializeToNode(generatedConfig.Sql.ArtifactVersionVariableOverrides, JsonOptions);
+
+        if (generatedConfig.HostAgent.AppSettings?["HostAgent"] is JsonObject generatedHostAgentSettings
+            && generatedHostAgentSettings.TryGetPropertyValue("Version", out var generatedVersion)
+            && generatedVersion is not null
+            && originalNode["hostAgent"]?["appSettings"]?["HostAgent"] is JsonObject profileHostAgentSettings)
+        {
+            profileHostAgentSettings["Version"] = generatedVersion.DeepClone();
+        }
+
+        var json = originalNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, Encoding.UTF8);
     }
 
     private static void ApplyGeneratedPayloadMetadata(BootstrapConfig profileConfig, BootstrapConfig generatedConfig)
