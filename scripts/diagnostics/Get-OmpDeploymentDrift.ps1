@@ -164,7 +164,9 @@ ORDER BY h.HostKey;
 
         # Artifact provisioning state for every desired artifact on each host —
         # this is what covers worker/channel-type packages that the app summary
-        # (web-app/service-app only) does not see.
+        # (web-app/service-app only) does not see. Only artifacts with an
+        # enabled requirement count: states left behind for retired versions
+        # are noise, not drift.
         $artifactSql = @"
 SELECT h.HostKey, a.PackageType, a.TargetName, a.Version,
        has.ProvisioningState, has.LastError, has.UpdatedUtc
@@ -173,6 +175,14 @@ INNER JOIN omp.Hosts h ON h.HostId = has.HostId
 INNER JOIN omp.Artifacts a ON a.ArtifactId = has.ArtifactId
 WHERE h.IsEnabled = 1 $hostFilter
   AND (has.ProvisioningState NOT IN (2) OR has.LastError IS NOT NULL)
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.HostArtifactRequirements r
+      WHERE r.HostId = has.HostId
+        AND r.ArtifactId = has.ArtifactId
+        AND r.IsEnabled = 1
+  )
 ORDER BY h.HostKey, a.PackageType, a.TargetName, a.Version;
 "@
 
