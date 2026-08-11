@@ -38,6 +38,23 @@ public sealed class ManualTimeProvider : TimeProvider
         return timer;
     }
 
+    /// <summary>
+    /// True while any undisposed timer still has a due time scheduled. Tests
+    /// use this to know the subject has registered its next wait before they
+    /// advance time; advancing earlier silently strands the next timer a full
+    /// interval in the future.
+    /// </summary>
+    public bool HasPendingTimer
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _timers.Any(static timer => timer.IsPending);
+            }
+        }
+    }
+
     public void Advance(TimeSpan delta)
     {
         if (delta < TimeSpan.Zero)
@@ -83,6 +100,8 @@ public sealed class ManualTimeProvider : TimeProvider
             _dueTimeTicks = dueTime == Timeout.InfiniteTimeSpan ? -1 : provider.GetTimestamp() + dueTime.Ticks;
             _periodTicks = period == Timeout.InfiniteTimeSpan ? -1 : period.Ticks;
         }
+
+        public bool IsPending => !_disposed && _dueTimeTicks >= 0;
 
         public bool Change(TimeSpan dueTime, TimeSpan period)
         {
