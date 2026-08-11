@@ -18,9 +18,16 @@ internal static partial class Program
 
     private static async Task<int> RunInstallerPackageRefreshAsync(CliOptions cli)
     {
-        var logPath = Path.Join(
-            Path.GetTempPath(),
-            "omp-installer-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + ".log");
+        if (TryRestartRefreshFromRunnerCopy(cli, out var runnerExitCode))
+        {
+            return runnerExitCode;
+        }
+
+        var logPath = string.IsNullOrWhiteSpace(cli.LogFilePath)
+            ? Path.Join(
+                Path.GetTempPath(),
+                "omp-installer-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + ".log")
+            : Path.GetFullPath(cli.LogFilePath);
 
         if (OperatingSystem.IsWindows() && Environment.UserInteractive && cli.RestartGui)
         {
@@ -34,6 +41,7 @@ internal static partial class Program
         try
         {
             await RunInstallerPackageRefreshCoreAsync(cli, logPath);
+            Console.WriteLine("Installer package refresh completed.");
             return 0;
         }
         catch (JsonException ex)
@@ -42,16 +50,7 @@ internal static partial class Program
             Console.Error.WriteLine("Installer package refresh failed.");
             Console.Error.WriteLine(ex);
             await log.FlushAsync();
-
-            if (OperatingSystem.IsWindows() && Environment.UserInteractive)
-            {
-                MessageBox.Show(
-                    $"Installer package refresh failed. Details were written to:{Environment.NewLine}{logPath}{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-
+            ShowRefreshFailureDialogForGuiFlow(cli, logPath, ex);
             return 1;
         }
         catch (SystemException ex)
@@ -60,18 +59,113 @@ internal static partial class Program
             Console.Error.WriteLine("Installer package refresh failed.");
             Console.Error.WriteLine(ex);
             await log.FlushAsync();
-
-            if (OperatingSystem.IsWindows() && Environment.UserInteractive)
-            {
-                MessageBox.Show(
-                    $"Installer package refresh failed. Details were written to:{Environment.NewLine}{logPath}{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-
+            ShowRefreshFailureDialogForGuiFlow(cli, logPath, ex);
             return 1;
         }
+    }
+
+    private static void ShowRefreshFailureDialogForGuiFlow(CliOptions cli, string logPath, Exception ex)
+    {
+        // Only the GUI-initiated flow (--restart-gui) may block on a dialog;
+        // a scripted refresh must fail with an exit code, never hang on UI.
+        if (!cli.RestartGui || !OperatingSystem.IsWindows() || !Environment.UserInteractive)
+        {
+            return;
+        }
+
+        MessageBox.Show(
+            $"Installer package refresh failed. Details were written to:{Environment.NewLine}{logPath}{Environment.NewLine}{Environment.NewLine}{ex.Message}",
+            "OpenModulePlatform installer",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Error);
+    }
+
+    private static bool TryRestartRefreshFromRunnerCopy(CliOptions cli, out int exitCode)
+    {
+        exitCode = 1;
+        var currentExecutable = Environment.ProcessPath;
+        if (currentExecutable is null || string.IsNullOrWhiteSpace(cli.ConfigPath))
+        {
+            return false;
+        }
+
+        var configPath = Path.GetFullPath(cli.ConfigPath);
+        var payloadRoot = ResolvePayloadRoot(cli, configPath);
+        if (!IsSameOrParentPath(payloadRoot, currentExecutable))
+        {
+            return false;
+        }
+
+        // The refresh replaces the payload root; a process running from inside
+        // it keeps the directory locked, so the replace step would fail with
+        // access denied. Hand the work to a copy in the temp directory (the
+        // same pattern the GUI uses) and let this process exit so the copy can
+        // swap the package. The runner inherits --log-file so callers can
+        // follow a deterministic log; without one, a path is generated here
+        // and printed before this process exits.
+        var runnerRoot = Path.Join(
+            Path.GetTempPath(),
+            "omp-installer-refresh-runner-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(runnerRoot);
+        CopyInstallerRunnerFiles(currentExecutable, runnerRoot);
+
+        var logPath = string.IsNullOrWhiteSpace(cli.LogFilePath)
+            ? Path.Join(
+                Path.GetTempPath(),
+                "omp-installer-refresh-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + ".log")
+            : Path.GetFullPath(cli.LogFilePath);
+
+        var startInfo = new ProcessStartInfo(Path.Join(runnerRoot, Path.GetFileName(currentExecutable)))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = runnerRoot,
+            ArgumentList =
+            {
+                "--refresh-installer-package",
+                "--config",
+                configPath,
+                "--payload-root",
+                payloadRoot,
+                "--parent-process-id",
+                Environment.ProcessId.ToString(),
+                "--log-file",
+                logPath
+            }
+        };
+
+        if (cli.RestartGui)
+        {
+            startInfo.ArgumentList.Add("--restart-gui");
+        }
+
+        var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Could not start the installer package refresh runner process.");
+
+        Console.WriteLine("Installer package refresh continues in a detached runner process.");
+        Console.WriteLine($"RunnerPid: {process.Id}");
+        Console.WriteLine($"LogFile:   {logPath}");
+        Console.WriteLine("The runner waits for this process to exit before replacing the package.");
+        exitCode = 0;
+        return true;
+    }
+
+    internal static void CopyInstallerRunnerFiles(string currentExecutable, string runnerRoot)
+    {
+        var executableDirectory = Path.GetDirectoryName(currentExecutable)
+            ?? throw new InvalidOperationException("Could not resolve the running installer directory.");
+        var baseName = Path.GetFileNameWithoutExtension(currentExecutable);
+        var hasFrameworkDependentFiles =
+            File.Exists(Path.Join(executableDirectory, baseName + ".deps.json"))
+            || File.Exists(Path.Join(executableDirectory, baseName + ".runtimeconfig.json"));
+
+        if (!hasFrameworkDependentFiles)
+        {
+            File.Copy(currentExecutable, Path.Join(runnerRoot, Path.GetFileName(currentExecutable)), overwrite: true);
+            return;
+        }
+
+        CopyDirectoryRecursive(executableDirectory, runnerRoot);
     }
 
     private static int RunInstallerPackageRefreshWithProgress(CliOptions cli, string logPath)
