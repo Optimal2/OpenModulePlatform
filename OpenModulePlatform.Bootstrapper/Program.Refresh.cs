@@ -407,6 +407,19 @@ internal static partial class Program
                 .ToArray()
             : [currentConfigPath];
 
+        // The operative config may be a host profile outside the package
+        // (Universal hosts layout); once the package has its own configs
+        // folder the enumeration above would silently drop the profile from
+        // the merge, so its artifact versions and SQL variable overrides
+        // would never be refreshed.
+        if (!configsToMerge.Any(path => string.Equals(
+                Path.GetFullPath(path),
+                Path.GetFullPath(currentConfigPath),
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            configsToMerge = [.. configsToMerge, currentConfigPath];
+        }
+
         var wroteAnyConfig = false;
         foreach (var configPath in configsToMerge)
         {
@@ -418,29 +431,32 @@ internal static partial class Program
                     : await ReadJsonAsync<BootstrapConfig>(configPath);
 
             ApplyGeneratedPayloadMetadata(profileConfig, generatedConfig);
+            var json = JsonSerializer.Serialize(profileConfig, JsonOptions);
+            var fullConfigPath = Path.GetFullPath(configPath);
+
+            // A host-profile config outside the package root is the operative
+            // config for later installer runs. Without writing the merge back,
+            // the profile keeps stale artifact versions and SQL variable
+            // overrides forever - and those variables feed the module
+            // definition seeds, which then resurrect and re-default
+            // long-retired versions on every apply. The out-of-package profile
+            // gets no copy inside the generated package (the fallback path
+            // there is the sample template, which must stay a template).
+            if (!IsSameOrParentPath(currentPackageRoot, fullConfigPath))
+            {
+                await File.WriteAllTextAsync(fullConfigPath, json + Environment.NewLine, Encoding.UTF8);
+                Console.WriteLine($"Updated host profile config with generated artifact versions: {fullConfigPath}");
+                wroteAnyConfig = true;
+                continue;
+            }
+
             var generatedConfigPath = ResolveGeneratedCurrentConfigPath(
                 configPath,
                 currentPackageRoot,
                 generatedPackageRoot,
                 generatedTemplateConfigPath);
-            var json = JsonSerializer.Serialize(profileConfig, JsonOptions);
             Directory.CreateDirectory(Path.GetDirectoryName(generatedConfigPath)!);
             await File.WriteAllTextAsync(generatedConfigPath, json + Environment.NewLine, Encoding.UTF8);
-
-            // A host-profile config outside the package root is the operative
-            // config for later installer runs, but the merged copy above only
-            // lands inside the generated package. Without writing it back, the
-            // profile keeps stale artifact versions and SQL variable overrides
-            // forever - and those variables feed the module definition seeds,
-            // which then resurrect and re-default long-retired versions on
-            // every apply.
-            var fullConfigPath = Path.GetFullPath(configPath);
-            if (!IsSameOrParentPath(currentPackageRoot, fullConfigPath))
-            {
-                await File.WriteAllTextAsync(fullConfigPath, json + Environment.NewLine, Encoding.UTF8);
-                Console.WriteLine($"Updated host profile config with generated artifact versions: {fullConfigPath}");
-            }
-
             wroteAnyConfig = true;
         }
 
