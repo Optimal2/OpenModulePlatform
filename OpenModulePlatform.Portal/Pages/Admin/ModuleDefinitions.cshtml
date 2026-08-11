@@ -1,15 +1,46 @@
 @page
 @model OpenModulePlatform.Portal.Pages.Admin.ModuleDefinitionsModel
+@using OpenModulePlatform.Web.Shared.Navigation
 
-<section class="page-header">
-    <div>
-        <div class="eyebrow">@L["Modules"]</div>
-        <h2>@L["Module definition versions"]</h2>
-        <p class="lede">@L["Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review."]</p>
+@{
+    const string StatusSectionId = "module-definitions-status";
+
+    var pageHeader = new PageHeaderModel
+    {
+        Eyebrow = L["Modules"].Value,
+        Title = L["Module definition versions"].Value,
+        Info = L["Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review."].Value
+    };
+
+    var sectionNavigatorItems = new List<SectionNavigatorItem>();
+    if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
+    {
+        sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
+    }
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Applied module definitions"].Value, "applied-definitions-section"));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Available package library"].Value, "package-library-section"));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Module integrity matrix"].Value, "integrity-matrix-section"));
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Stored definition versions"].Value, "stored-definitions-section"));
+
+    var sectionNavigator = new SectionNavigatorModel
+    {
+        Label = L["Page sections"].Value,
+        RootText = L["Module definition versions"].Value,
+        Items = sectionNavigatorItems
+    };
+}
+
+<div class="section-navigator-layout">
+    <div class="section-navigator-layout__header">
+        <partial name="_PageHeader" model="pageHeader" />
     </div>
-</section>
 
-@await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
+    @await Component.InvokeAsync("SectionNavigator", new { model = sectionNavigator })
+    <div class="section-navigator-layout__content">
+
+<div id="@StatusSectionId" class="section-navigator-target">
+    @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
+</div>
 
 <div class="toolbar top-gap">
     <a class="action-link" href="~/admin/modulepackageimport">@L["Packages"]</a>
@@ -31,7 +62,7 @@
         .ToDictionary(row => row.ModuleKey, StringComparer.OrdinalIgnoreCase);
 }
 
-<section class="card top-gap">
+<section class="card top-gap section-navigator-target" id="applied-definitions-section">
     <div class="section-heading-row">
         <div>
             <h3>@L["Applied module definitions"]</h3>
@@ -97,7 +128,7 @@
     }
 </section>
 
-<section class="card top-gap">
+<section class="card top-gap section-navigator-target" id="package-library-section">
     <div class="section-heading-row">
         <div>
             <h3>@L["Available package library"]</h3>
@@ -175,7 +206,7 @@
     }
 </section>
 
-<section class="card top-gap">
+<section class="card top-gap section-navigator-target" id="integrity-matrix-section">
     <div class="section-heading-row">
         <div>
             <h3>@L["Module integrity matrix"]</h3>
@@ -293,6 +324,13 @@
     }
 </section>
 
+<section class="card top-gap section-navigator-target" id="stored-definitions-section">
+    <div class="section-heading-row">
+        <div>
+            <h3>@L["Stored definition versions"]</h3>
+        </div>
+    </div>
+
 @if (Model.Rows.Count == 0)
 {
     <div class="empty-state">@L["No module definitions found."]</div>
@@ -336,3 +374,7 @@ else
     </table>
     </div>
 }
+</section>
+
+    </div>
+</div>

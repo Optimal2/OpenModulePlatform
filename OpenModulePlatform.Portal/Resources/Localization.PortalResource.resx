@@ -2853,4 +2853,5 @@
   <data name="The uploaded zip exceeds the configured limit of {0} bytes." xml:space="preserve">
     <value>The uploaded zip exceeds the configured limit of {0} bytes.</value>
   </data>
+  <data name="Stored definition versions" xml:space="preserve"><value>Stored definition versions</value></data>
 </root>

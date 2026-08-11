@@ -3086,4 +3086,5 @@
   <data name="The uploaded zip exceeds the configured limit of {0} bytes." xml:space="preserve">
     <value>Den uppladdade zip-filen överskrider den konfigurerade gränsen på {0} byte.</value>
   </data>
+  <data name="Stored definition versions" xml:space="preserve"><value>Lagrade definitionsversioner</value></data>
 </root>
