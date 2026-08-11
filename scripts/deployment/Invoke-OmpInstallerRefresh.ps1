@@ -49,10 +49,17 @@ Write-Host "Log:     $logFile"
 # has handed off.
 $launcherOutFile = "$logFile.launcher.out"
 $launcherErrFile = "$logFile.launcher.err"
+# No -Wait here: Start-Process -Wait waits for the whole descendant tree,
+# which includes MSBuild's idle nodeReuse processes and stalls the wrapper
+# long after the refresh is done. WaitForExit() covers only the launcher.
 $launcherProcess = Start-Process -FilePath $exe `
     -ArgumentList @('--refresh-installer-package', '--config', $ConfigPath, '--payload-root', $InstallerRoot, '--log-file', $logFile) `
     -RedirectStandardOutput $launcherOutFile -RedirectStandardError $launcherErrFile `
-    -NoNewWindow -Wait -PassThru
+    -NoNewWindow -PassThru
+if (-not $launcherProcess.WaitForExit($TimeoutSeconds * 1000)) {
+    Write-Error "Refresh launcher did not exit within $TimeoutSeconds seconds."
+    exit 1
+}
 $launcherExit = $launcherProcess.ExitCode
 $launcherOutput = @(Get-Content $launcherOutFile -ErrorAction SilentlyContinue) + @(Get-Content $launcherErrFile -ErrorAction SilentlyContinue)
 $launcherOutput | Where-Object { $_ } | ForEach-Object { Write-Host "  $_" }
@@ -60,10 +67,15 @@ $launcherOutput | Where-Object { $_ } | ForEach-Object { Write-Host "  $_" }
 $runnerPid = ($launcherOutput | Select-String 'RunnerPid:\s*(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
 
 if ($runnerPid) {
-    Write-Host "Waiting for detached refresh runner (PID $runnerPid)..."
-    try { Wait-Process -Id ([int]$runnerPid) -Timeout $TimeoutSeconds -ErrorAction Stop } catch {
-        Write-Error "Refresh runner (PID $runnerPid) did not finish within $TimeoutSeconds seconds."
-        exit 1
+    # The runner may already have exited (fast refresh); only an actual
+    # timeout is fatal here. The marker poll below is the real authority.
+    $runnerProcess = Get-Process -Id ([int]$runnerPid) -ErrorAction SilentlyContinue
+    if ($runnerProcess) {
+        Write-Host "Waiting for detached refresh runner (PID $runnerPid)..."
+        if (-not $runnerProcess.WaitForExit($TimeoutSeconds * 1000)) {
+            Write-Error "Refresh runner (PID $runnerPid) did not finish within $TimeoutSeconds seconds."
+            exit 1
+        }
     }
 }
 elseif ($launcherExit -ne 0 -and $null -ne $launcherExit) {
