@@ -2419,24 +2419,6 @@ internal static partial class Program
             return string.Join('/', segments);
         }
 
-        private static void CopyInstallerRunnerFiles(string currentExecutable, string runnerRoot)
-        {
-            var executableDirectory = Path.GetDirectoryName(currentExecutable)
-                ?? throw new InvalidOperationException("Could not resolve the running installer directory.");
-            var baseName = Path.GetFileNameWithoutExtension(currentExecutable);
-            var hasFrameworkDependentFiles =
-                File.Exists(Path.Join(executableDirectory, baseName + ".deps.json"))
-                || File.Exists(Path.Join(executableDirectory, baseName + ".runtimeconfig.json"));
-
-            if (!hasFrameworkDependentFiles)
-            {
-                File.Copy(currentExecutable, Path.Join(runnerRoot, Path.GetFileName(currentExecutable)), overwrite: true);
-                return;
-            }
-
-            CopyDirectoryRecursive(executableDirectory, runnerRoot);
-        }
-
         private async Task<DeveloperSourceCheckResult> CheckDeveloperSourceStatusAsync()
         {
             var lines = new List<string>();

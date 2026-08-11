@@ -478,7 +478,7 @@ internal static partial class Program
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --upgrade-or-complete [--payload-root <path>] [--payload-zip <zip>] [--sync-package-objects-before-action] [--full-content-check]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --config <bootstrap.json> --uninstall [--remove-runtime-files] [--remove-database-objects] [--yes]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui [--config <bootstrap.json> | --config-dir <configs>] [--payload-root <path>] [--payload-zip <zip>]");
-        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> --payload-root <path> [--parent-process-id <pid>] [--restart-gui]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> [--payload-root <path>] [--parent-process-id <pid>] [--restart-gui] [--log-file <path>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --sync-package-objects --config <bootstrap.json> [--payload-root <path>] [--full-content-check]");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
@@ -5900,6 +5900,8 @@ internal sealed class CliOptions
 
     public bool RestartGui { get; private init; }
 
+    public string LogFilePath { get; private init; } = string.Empty;
+
     public static CliOptions Parse(string[] args)
     {
         var options = new CliOptionsBuilder();
@@ -5962,6 +5964,9 @@ internal sealed class CliOptions
                 case "--restart-gui":
                     options.RestartGui = true;
                     break;
+                case "--log-file":
+                    options.LogFilePath = ReadValue(args, ref i, arg);
+                    break;
                 default:
                     throw new InvalidOperationException($"Unknown argument: {arg}");
             }
@@ -6017,6 +6022,8 @@ internal sealed class CliOptions
 
         public bool RestartGui { get; set; }
 
+        public string LogFilePath { get; set; } = string.Empty;
+
         public CliOptions ToOptions()
         {
             var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects }
@@ -6054,7 +6061,8 @@ internal sealed class CliOptions
                 RemoveRuntimeFiles = RemoveRuntimeFiles,
                 RemoveDatabaseObjects = RemoveDatabaseObjects,
                 ParentProcessId = ParentProcessId,
-                RestartGui = RestartGui
+                RestartGui = RestartGui,
+                LogFilePath = LogFilePath
             };
         }
     }
