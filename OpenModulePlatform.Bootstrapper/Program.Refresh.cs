@@ -401,8 +401,14 @@ internal static partial class Program
         var generatedTemplateConfigPath = ResolveGeneratedTemplateConfigPath(generatedPackageRoot);
         var generatedConfig = await ReadJsonAsync<BootstrapConfig>(generatedTemplateConfigPath);
         var currentConfigRoot = Path.Join(currentPackageRoot, "configs");
+        // Sample templates are never operative configs: merging one would
+        // round-trip it through BootstrapConfig (stamping the build machine's
+        // hostAgent identity into it) and its presence in the merge set blocks
+        // the sample cleanup below, so the installer later sees two configs
+        // matching the same machine.
         var configsToMerge = Directory.Exists(currentConfigRoot)
             ? Directory.EnumerateFiles(currentConfigRoot, "*.json", SearchOption.TopDirectoryOnly)
+                .Where(static path => !Path.GetFileName(path).EndsWith(".sample.json", StringComparison.OrdinalIgnoreCase))
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToArray()
             : [currentConfigPath];
