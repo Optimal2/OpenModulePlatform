@@ -10,6 +10,7 @@ namespace OpenModulePlatform.Bootstrapper;
 internal static partial class Program
 {
     private const int InstallerRefreshParentWaitSeconds = 120;
+    private const int InstallerRefreshPackageLockWaitSeconds = 120;
     private const int InstallerRefreshPathSafetyMargin = 240;
     private const int InstallerRefreshExpectedDeepSuffixLength = 190;
     private const int DeveloperSourceGitPullTimeoutSeconds = 120;
@@ -307,6 +308,7 @@ internal static partial class Program
         Console.WriteLine($"Generated package: {generatedPackageRoot}");
         await MergeCurrentBootstrapConfigAsync(config, configPath, payloadRoot, generatedPackageRoot);
         MergeCurrentPackageData(payloadRoot, generatedPackageRoot, configPath);
+        WaitForPackageProcessesToExit(payloadRoot);
         ReplaceDirectory(generatedPackageRoot, payloadRoot);
 
         var destinationLogPath = Path.Join(payloadRoot, "installer-refresh.log");
@@ -1068,6 +1070,49 @@ internal static partial class Program
             && File.Exists(Path.Join(path, "scripts", "deployment", "package-hostagent-first.ps1"));
     }
 
+    private static void WaitForPackageProcessesToExit(string packageRoot)
+    {
+        // An installer GUI (or any other process) started from the package
+        // keeps the directory locked, so the swap below would fail with a raw
+        // IOException that names no culprit. Wait a bounded time and then fail
+        // with the offending processes named, so the operator knows to close
+        // the installer window instead of guessing.
+        var deadline = DateTime.UtcNow.AddSeconds(InstallerRefreshPackageLockWaitSeconds);
+        while (true)
+        {
+            var blockers = Process.GetProcesses()
+                .Where(process =>
+                {
+                    try
+                    {
+                        return process.Id != Environment.ProcessId
+                            && process.MainModule?.FileName is { } fileName
+                            && IsSameOrParentPath(packageRoot, fileName);
+                    }
+                    catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+                    {
+                        return false;
+                    }
+                })
+                .ToArray();
+            if (blockers.Length == 0)
+            {
+                return;
+            }
+
+            var blockerNames = string.Join(", ", blockers.Select(static process => $"{process.ProcessName} (PID {process.Id})"));
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new InvalidOperationException(
+                    "The installer package cannot be replaced while these processes run from it: " + blockerNames
+                    + ". Close the installer window (or stop the processes) and run the refresh again.");
+            }
+
+            Console.WriteLine($"Waiting for processes running from the package to exit: {blockerNames}");
+            Thread.Sleep(TimeSpan.FromSeconds(5));
+        }
+    }
+
     private static void ReplaceDirectory(string source, string destination)
     {
         if (PathOverlaps(source, destination))
@@ -1081,7 +1126,7 @@ internal static partial class Program
 
         if (Directory.Exists(destination))
         {
-            Directory.Move(destination, backup);
+            MoveDirectoryWithRetry(destination, backup);
         }
 
         try
@@ -1099,6 +1144,27 @@ internal static partial class Program
             }
 
             throw;
+        }
+    }
+
+    private static void MoveDirectoryWithRetry(string source, string destination)
+    {
+        // Antivirus scanners and file-sync engines take transient handles on
+        // freshly written package files; a single failed rename should not
+        // abort a refresh that already built a complete package.
+        const int maxAttempts = 5;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Move(source, destination);
+                return;
+            }
+            catch (IOException ex) when (attempt < maxAttempts)
+            {
+                Console.WriteLine($"Package directory is locked ({ex.Message.TrimEnd('.')}); retrying in 3 seconds (attempt {attempt}/{maxAttempts}).");
+                Thread.Sleep(TimeSpan.FromSeconds(3));
+            }
         }
     }
 
