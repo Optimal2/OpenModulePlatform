@@ -57,13 +57,11 @@ public sealed class MaintenanceScanSchedulerTests
 
         await scheduler.StartAsync(CancellationToken.None);
 
-        // Give the scheduler time to reach the initial delay.
-        await Task.Delay(50);
-
-        // Advance past the first interval to trigger the enqueue.
+        // Wait for the scheduler to register its delay timer, then advance
+        // past the first interval to trigger the enqueue.
+        await WaitUntilAsync(() => timeProvider.HasPendingTimer);
         timeProvider.Advance(TimeSpan.FromMinutes(5));
-        await Task.Yield();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => repository.EnqueuedMaintenanceScanHostKeys.Count == 1);
 
         Assert.Single(repository.EnqueuedMaintenanceScanHostKeys, "test-host");
 
@@ -93,20 +91,31 @@ public sealed class MaintenanceScanSchedulerTests
 
         await scheduler.StartAsync(CancellationToken.None);
 
-        // Give the scheduler time to reach the initial delay.
-        await Task.Delay(50);
-
+        // Each advance must wait until the scheduler has registered its next
+        // delay timer; advancing earlier strands the following wait a full
+        // interval past the manual clock and the second enqueue never fires.
+        await WaitUntilAsync(() => timeProvider.HasPendingTimer);
         timeProvider.Advance(TimeSpan.FromMinutes(5));
-        await Task.Yield();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => repository.EnqueuedMaintenanceScanHostKeys.Count == 1);
 
+        await WaitUntilAsync(() => timeProvider.HasPendingTimer);
         timeProvider.Advance(TimeSpan.FromMinutes(5));
-        await Task.Yield();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => repository.EnqueuedMaintenanceScanHostKeys.Count == 2);
 
         Assert.Equal(2, repository.EnqueuedMaintenanceScanHostKeys.Count);
         Assert.All(repository.EnqueuedMaintenanceScanHostKeys, hostKey => Assert.Equal("test-host", hostKey));
 
         await scheduler.StopAsync(CancellationToken.None);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.True(condition(), "Timed out waiting for the scheduler to reach the expected state.");
     }
 }
