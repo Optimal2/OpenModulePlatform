@@ -78,12 +78,33 @@ if (-not $Apply) {
     exit 0
 }
 
+# The refresh rebuilds the installer skeleton and the OMP/ODV payload, but
+# module artifacts from the other source repositories (IbsPackager & co) are
+# produced by the package-object sync - without it the package library keeps
+# serving the previous versions.
+Write-Host 'Syncing package objects from source repositories (--sync-package-objects)...'
+$syncLog = [IO.Path]::ChangeExtension($logFile, '.sync.log')
+$syncProcess = Start-Process -FilePath $exe `
+    -ArgumentList @('--sync-package-objects', '--config', $ConfigPath, '--payload-root', $InstallerRoot) `
+    -RedirectStandardOutput $syncLog `
+    -RedirectStandardError ([IO.Path]::ChangeExtension($syncLog, '.err.log')) `
+    -NoNewWindow -Wait -PassThru
+Write-Host "Sync log: $syncLog"
+if ($syncProcess.ExitCode -ne 0) {
+    Get-Content $syncLog -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
+    Write-Error "Package-object sync failed with exit code $($syncProcess.ExitCode)."
+    exit $syncProcess.ExitCode
+}
+
 # The refresh replaced the package (including the exe); run upgrade/complete
 # from the fresh package so new module definitions and artifacts are applied.
 Write-Host 'Applying package to the installation (--upgrade-or-complete)...'
 $applyLog = [IO.Path]::ChangeExtension($logFile, '.apply.log')
+# --full-content-check on purpose: fast mode trusts version numbers and has
+# been observed to skip importing a newer module definition after a failed
+# earlier apply; the content check costs seconds and always converges.
 $process = Start-Process -FilePath $exe `
-    -ArgumentList @('--upgrade-or-complete', '--config', $ConfigPath, '--payload-root', $InstallerRoot, '-y') `
+    -ArgumentList @('--upgrade-or-complete', '--config', $ConfigPath, '--payload-root', $InstallerRoot, '--full-content-check', '-y') `
     -RedirectStandardOutput $applyLog `
     -RedirectStandardError ([IO.Path]::ChangeExtension($applyLog, '.err.log')) `
     -NoNewWindow -Wait -PassThru
