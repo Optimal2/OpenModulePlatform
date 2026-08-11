@@ -41,34 +41,57 @@ Write-Host "Refresh: $exe"
 Write-Host "Config:  $ConfigPath"
 Write-Host "Log:     $logFile"
 
-$launcherOutput = & $exe --refresh-installer-package --config $ConfigPath --payload-root $InstallerRoot --log-file $logFile 2>&1
-$launcherExit = $LASTEXITCODE
-$launcherOutput | ForEach-Object { Write-Host "  $_" }
+# The Bootstrapper is a GUI-subsystem executable: the call operator neither
+# waits for it nor captures its stdout, which once let this script race ahead
+# and run sync/apply while the detached runner was still rebuilding the
+# package. Start-Process with explicit redirection gives the GUI process real
+# std handles (so RunnerPid reaches us) and -Wait blocks until the launcher
+# has handed off.
+$launcherOutFile = "$logFile.launcher.out"
+$launcherErrFile = "$logFile.launcher.err"
+$launcherProcess = Start-Process -FilePath $exe `
+    -ArgumentList @('--refresh-installer-package', '--config', $ConfigPath, '--payload-root', $InstallerRoot, '--log-file', $logFile) `
+    -RedirectStandardOutput $launcherOutFile -RedirectStandardError $launcherErrFile `
+    -NoNewWindow -Wait -PassThru
+$launcherExit = $launcherProcess.ExitCode
+$launcherOutput = @(Get-Content $launcherOutFile -ErrorAction SilentlyContinue) + @(Get-Content $launcherErrFile -ErrorAction SilentlyContinue)
+$launcherOutput | Where-Object { $_ } | ForEach-Object { Write-Host "  $_" }
 
 $runnerPid = ($launcherOutput | Select-String 'RunnerPid:\s*(\d+)' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Select-Object -First 1)
 
 if ($runnerPid) {
     Write-Host "Waiting for detached refresh runner (PID $runnerPid)..."
-    try { Wait-Process -Id ([int]$runnerPid) -Timeout $TimeoutSeconds -ErrorAction Stop } catch {}
+    try { Wait-Process -Id ([int]$runnerPid) -Timeout $TimeoutSeconds -ErrorAction Stop } catch {
+        Write-Error "Refresh runner (PID $runnerPid) did not finish within $TimeoutSeconds seconds."
+        exit 1
+    }
 }
 elseif ($launcherExit -ne 0 -and $null -ne $launcherExit) {
     Write-Error "Refresh launcher failed with exit code $launcherExit."
     exit 1
 }
 
-# The launcher itself completed the refresh (started from outside the package),
-# or the runner has now exited. The log carries the definitive result marker.
-$deadline = (Get-Date).AddSeconds(30)
-while (-not (Test-Path $logFile) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
-if (-not (Test-Path $logFile)) {
-    Write-Error "Refresh log was never created: $logFile"
-    exit 1
+# The runner writes the completion marker only after the package swap, so
+# poll the log for the definitive result instead of trusting a single early
+# read. A failure marker (or the timeout) aborts before sync/apply can run
+# against a half-replaced package.
+$deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+$refreshCompleted = $false
+while ((Get-Date) -lt $deadline) {
+    $logText = if (Test-Path $logFile) { Get-Content $logFile -Raw -ErrorAction SilentlyContinue } else { $null }
+    if ($logText -match 'Installer package refresh failed\.') { break }
+    if ($logText -match 'Installer package refresh completed\.') { $refreshCompleted = $true; break }
+    Start-Sleep -Seconds 2
 }
 
-$logText = Get-Content $logFile -Raw
-if ($logText -notmatch 'Installer package refresh completed\.') {
-    Write-Host '--- Refresh log tail ---'
-    Get-Content $logFile -Tail 20 | ForEach-Object { Write-Host "  $_" }
+if (-not $refreshCompleted) {
+    if (Test-Path $logFile) {
+        Write-Host '--- Refresh log tail ---'
+        Get-Content $logFile -Tail 20 | ForEach-Object { Write-Host "  $_" }
+    }
+    else {
+        Write-Host "Refresh log was never created: $logFile"
+    }
     Write-Error 'Installer package refresh did not complete. See the log above.'
     exit 1
 }
