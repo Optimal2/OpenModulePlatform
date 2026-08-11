@@ -16,6 +16,10 @@ using OpenModulePlatform.WorkerProcessHost.Services;
 // The file logging is therefore configured in code as the always-on default;
 // an NLog section in configuration (config overlay) still takes precedence
 // through UseNLog() below.
+// The log directory must live OUTSIDE the artifact folder: HostAgent validates
+// the provisioned artifact against its SHA manifest, so files written under
+// basedir turn every validation into a repair attempt that then fails on the
+// open log handle.
 static void ConfigureDefaultNLog()
 {
     if (LogManager.Configuration is not null)
@@ -26,7 +30,7 @@ static void ConfigureDefaultNLog()
     var config = new NLog.Config.LoggingConfiguration();
     var logfile = new NLog.Targets.FileTarget("logfile")
     {
-        FileName = "${basedir}/logs/OpenModulePlatform.WorkerProcessHost-${shortdate}.log",
+        FileName = "${specialfolder:folder=CommonApplicationData}/OpenModulePlatform/logs/OpenModulePlatform.WorkerProcessHost-${shortdate}.log",
         Layout = "${longdate}|${uppercase:${level}}|${logger}|${message}${onexception:inner= ${exception:format=tostring}}",
         MaxArchiveDays = 14
     };
