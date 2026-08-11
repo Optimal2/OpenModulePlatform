@@ -426,6 +426,21 @@ internal static partial class Program
             var json = JsonSerializer.Serialize(profileConfig, JsonOptions);
             Directory.CreateDirectory(Path.GetDirectoryName(generatedConfigPath)!);
             await File.WriteAllTextAsync(generatedConfigPath, json + Environment.NewLine, Encoding.UTF8);
+
+            // A host-profile config outside the package root is the operative
+            // config for later installer runs, but the merged copy above only
+            // lands inside the generated package. Without writing it back, the
+            // profile keeps stale artifact versions and SQL variable overrides
+            // forever - and those variables feed the module definition seeds,
+            // which then resurrect and re-default long-retired versions on
+            // every apply.
+            var fullConfigPath = Path.GetFullPath(configPath);
+            if (!IsSameOrParentPath(currentPackageRoot, fullConfigPath))
+            {
+                await File.WriteAllTextAsync(fullConfigPath, json + Environment.NewLine, Encoding.UTF8);
+                Console.WriteLine($"Updated host profile config with generated artifact versions: {fullConfigPath}");
+            }
+
             wroteAnyConfig = true;
         }
 
