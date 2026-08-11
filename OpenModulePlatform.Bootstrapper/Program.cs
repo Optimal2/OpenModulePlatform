@@ -823,14 +823,30 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
         var configuredModuleKeys = ResolveConfiguredModuleKeys(config);
         Console.WriteLine("> Module definitions");
 
+        var packageDefinitions = new List<(string DefinitionPath, ModuleDefinitionDocument Definition)>();
+        foreach (var definitionPath in definitionPaths)
+        {
+            var candidate = await ReadModuleDefinitionAsync(definitionPath);
+            if (configuredModuleKeys.Count > 0 && !configuredModuleKeys.Contains(candidate.ModuleKey))
+            {
+                continue;
+            }
+
+            packageDefinitions.Add((definitionPath, candidate));
+        }
+
         await using var connection = new SqlConnection(BuildConnectionString(config.Sql, config.Sql.Database));
         await connection.OpenAsync();
 
-        foreach (var definitionPath in definitionPaths)
+        foreach (var (definitionPath, definition) in packageDefinitions)
         {
-            var definition = await ReadModuleDefinitionAsync(definitionPath);
-            if (configuredModuleKeys.Count > 0 && !configuredModuleKeys.Contains(definition.ModuleKey))
+            // A newer definition's idempotent SQL scripts supersede the older version's, so an
+            // older package copy must never gate the import; re-running its failed scripts first
+            // would permanently block a fixed newer definition from ever being applied.
+            if (IsSupersededByNewerPackageDefinition(definition, packageDefinitions.Select(static item => item.Definition)))
             {
+                Console.WriteLine(
+                    $"  {definition.ModuleKey} {definition.DefinitionVersion} skipped; the package contains a newer definition that supersedes this version's SQL scripts.");
                 continue;
             }
 
@@ -933,6 +949,22 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
                     ? $"  {definition.ModuleKey} {definition.DefinitionVersion}; executed {repairCount} SQL repair script(s)."
                     : $"  {definition.ModuleKey} {definition.DefinitionVersion}");
         }
+    }
+
+    internal static bool IsSupersededByNewerPackageDefinition(
+        ModuleDefinitionDocument definition,
+        IEnumerable<ModuleDefinitionDocument> packageDefinitions)
+    {
+        foreach (var candidate in packageDefinitions)
+        {
+            if (string.Equals(candidate.ModuleKey, definition.ModuleKey, StringComparison.OrdinalIgnoreCase)
+                && CompareVersionText(candidate.DefinitionVersion, definition.DefinitionVersion) > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static IReadOnlySet<string> ResolveConfiguredModuleKeys(BootstrapConfig config)
