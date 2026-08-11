@@ -725,7 +725,7 @@ function New-OpenDocViewerArtifactPackage {
 
     $stagingRoot = Join-Path $BuildRoot ('odv-artifact-package-' + [Guid]::NewGuid().ToString('N'))
     $payloadDestination = Join-Path $stagingRoot 'payload\artifact.zip'
-    $configurationDestination = Join-Path $stagingRoot 'configuration\odv.site.config.js'
+    $configurationDestination = Join-Path $stagingRoot 'configuration\000-odv.site.config.js'
 
     try {
         Copy-RequiredFile -Source $PayloadZip -Destination $payloadDestination
@@ -747,7 +747,7 @@ function New-OpenDocViewerArtifactPackage {
             configurationFiles = @(
                 [ordered]@{
                     relativePath = 'odv.site.config.js'
-                    source = 'configuration/odv.site.config.js'
+                    source = 'configuration/000-odv.site.config.js'
                 }
             )
         }
@@ -1181,7 +1181,10 @@ function New-WorkerManagerArtifactConfigurationFile {
     return [ordered]@{
         RelativePath = 'appsettings.json'
         SourcePath = $configurationPath
-        PackageSourcePath = 'configuration/appsettings.json'
+        # Index prefix 000 keeps the entry outside the runtime-configuration
+        # guard (a bare configuration/appsettings.json fails validation) and
+        # cannot collide with manifest-declared files, whose indexes start at 1.
+        PackageSourcePath = 'configuration/000-appsettings.json'
     }
 }
 
