@@ -654,7 +654,7 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
-        var node = JsonNode.Parse(File.ReadAllText(targetSettingsPath));
+        var node = JsonNode.Parse(File.ReadAllText(targetSettingsPath), documentOptions: LenientSettingsJsonOptions);
         if (node is not JsonObject json)
         {
             return;
@@ -671,13 +671,25 @@ public sealed class HostAgentSelfUpgradeService
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
+    // The .NET configuration loader that actually consumes these files tolerates
+    // // comments and trailing commas, so parsing them with default (strict)
+    // options threw JsonException on a perfectly working config — and because that
+    // happened inside the self-upgrade after the target service was already
+    // stopped, the fleet silently never upgraded, logging only a generic cycle
+    // failure (R5-D8). Match the loader's leniency.
+    private static readonly JsonDocumentOptions LenientSettingsJsonOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
     private static JsonObject? LoadCurrentSettingsJson()
     {
         JsonObject? merged = null;
         foreach (var path in new[] { "appsettings.json", "appsettings.Production.json" }
                      .Select(fileName => Path.Join(AppContext.BaseDirectory, fileName)))
         {
-            if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path)) is not JsonObject json)
+            if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path), documentOptions: LenientSettingsJsonOptions) is not JsonObject json)
             {
                 continue;
             }
