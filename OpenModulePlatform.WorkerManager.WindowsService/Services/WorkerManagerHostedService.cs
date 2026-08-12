@@ -1073,11 +1073,22 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
 
             var executablePath = parent.MainModule?.FileName;
-            return !string.IsNullOrWhiteSpace(executablePath)
-                && string.Equals(
-                    Path.GetFullPath(executablePath),
-                    managerProcessPath,
-                    GetPathComparison());
+            if (string.IsNullOrWhiteSpace(executablePath))
+            {
+                return false;
+            }
+
+            // Match on the WorkerManager executable NAME, not this manager's exact
+            // install path: a second WorkerManager installed at a different path
+            // (blue/green or side-by-side upgrade) is a legitimate live parent for
+            // its own worker hosts, and matching only our own path made this
+            // manager classify those healthy hosts as orphans and kill them
+            // (R4-F5). Same-path coexistence still matches by name.
+            var managerFileName = Path.GetFileName(managerProcessPath);
+            return string.Equals(
+                Path.GetFileName(executablePath),
+                managerFileName,
+                GetPathComparison());
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception or NotSupportedException)
         {

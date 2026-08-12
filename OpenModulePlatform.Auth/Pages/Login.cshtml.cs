@@ -150,7 +150,8 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
-        if (_loginThrottle.IsLockedOut(UserName))
+        var clientAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (_loginThrottle.IsLockedOut(UserName) || _loginThrottle.IsClientLockedOut(clientAddress))
         {
             ErrorMessage = T("Too many failed sign-in attempts. Please wait a few minutes and try again.");
             ShowLocalAccountPrompt = true;
@@ -163,6 +164,7 @@ public sealed class LoginModel : PageModel
         if (result.User is null)
         {
             _loginThrottle.RecordFailure(UserName);
+            _loginThrottle.RecordClientFailure(clientAddress);
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The user name or password is incorrect.", ct);
             ShowLocalAccountPrompt = true;
             ShowOtherSignInOptions = true;
@@ -234,8 +236,11 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
-        var throttleKey = $"adfs:{AlternateWindowsUserName}";
-        if (_loginThrottle.IsLockedOut(throttleKey))
+        // Canonicalize so operator / .\operator / MACHINE\operator — the same
+        // account — share one throttle budget instead of one each (R4-F1).
+        var throttleKey = $"adfs:{OpenModulePlatform.Auth.Services.WindowsPasswordAuthenticator.BuildCanonicalAccountKey(AlternateWindowsUserName)}";
+        var clientAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (_loginThrottle.IsLockedOut(throttleKey) || _loginThrottle.IsClientLockedOut(clientAddress))
         {
             ErrorMessage = T("Too many failed sign-in attempts. Please wait a few minutes and try again.");
             await PreparePageAsync(ct);
@@ -249,6 +254,7 @@ public sealed class LoginModel : PageModel
         if (!result.Succeeded || result.Principal is null)
         {
             _loginThrottle.RecordFailure(throttleKey);
+            _loginThrottle.RecordClientFailure(clientAddress);
             ErrorMessage = T("Windows credentials could not be validated.");
             await PreparePageAsync(ct);
             return Page();
