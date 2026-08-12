@@ -23,6 +23,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
     // Kept below the HostAgent RPC server's 8 pipe instances so a worker fan-out can
     // never exhaust that shared pipe and stall every other caller (R6-F4).
     private const int MaxConcurrentArtifactResolves = 4;
+
+    // How often a still-wedged drain re-warns, so it stays visible (R6-F6).
+    private static readonly TimeSpan DrainTimeoutReminderInterval = TimeSpan.FromMinutes(15);
     private static readonly NamedWaitHandleOptions ShutdownEventOptions = new()
     {
         CurrentUserOnly = true
@@ -282,18 +285,29 @@ public sealed class WorkerManagerHostedService : BackgroundService
             return Task.FromResult(true);
         }
 
+        // Re-warn periodically, not once. DrainTimeoutLogged latched, so a drain that
+        // never completes (a plugin that leaks a JobScope keeps the busy event set
+        // forever) produced exactly one warning and then went silent -- and since
+        // R5-F4 the worker also publishes a fresh heartbeat every cycle, which
+        // suppresses the staleness detector that used to be the only recurring signal.
+        // A wedged worker would look healthy indefinitely while admitting no jobs
+        // (R6-F6). The worker is still never killed; this only keeps it visible.
         var drainTimeout = TimeSpan.FromSeconds(Math.Max(1, _settings.CurrentValue.DrainTimeoutSeconds));
         if (managed.DrainStartedUtc.HasValue
             && nowUtc - managed.DrainStartedUtc.Value >= drainTimeout
-            && !managed.DrainTimeoutLogged)
+            && (!managed.DrainTimeoutLogged
+                || !managed.DrainTimeoutLastLoggedUtc.HasValue
+                || nowUtc - managed.DrainTimeoutLastLoggedUtc.Value >= DrainTimeoutReminderInterval))
         {
             managed.DrainTimeoutLogged = true;
+            managed.DrainTimeoutLastLoggedUtc = nowUtc;
             _logger.LogWarning(
-                "Worker drain exceeded the configured timeout and the worker is still busy; the restart stays deferred until the in-flight job completes. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, DrainTimeoutSeconds={DrainTimeoutSeconds}, DrainStartedUtc={DrainStartedUtc:O}",
+                "Worker drain exceeded the configured timeout and the worker is still busy; the restart stays deferred until the in-flight job completes. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, DrainTimeoutSeconds={DrainTimeoutSeconds}, DrainStartedUtc={DrainStartedUtc:O}, DrainingFor={DrainingFor}",
                 desired.AppInstanceId,
                 desired.WorkerInstanceId,
                 _settings.CurrentValue.DrainTimeoutSeconds,
-                managed.DrainStartedUtc.Value);
+                managed.DrainStartedUtc.Value,
+                nowUtc - managed.DrainStartedUtc.Value);
         }
 
         return Task.FromResult(false);
@@ -506,7 +520,15 @@ public sealed class WorkerManagerHostedService : BackgroundService
     {
         var runtimeKind = GetRuntimeKindOrNull();
 
-        foreach (var managed in _managedWorkers.Values.ToList())
+        // Stop workers concurrently. Each stop waits up to StopTimeoutSeconds (15 s
+        // deployed) for a graceful exit, and the host's ShutdownTimeout is 30 s, so
+        // stopping serially meant two unresponsive workers consumed the entire budget:
+        // the host stopped waiting and the process exited mid-loop, leaving the
+        // remaining worker hosts alive as orphans. They are not in a job object, so
+        // they survived until the next start's orphan cleanup killed them with their
+        // whole process tree -- losing exactly the in-flight jobs that drain exists to
+        // protect (R6-F5). Each worker keeps its own best-effort error handling.
+        async Task StopOneAsync(ManagedWorkerProcess managed)
         {
             try
             {
@@ -527,6 +549,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     reason);
             }
         }
+
+        await Task.WhenAll(_managedWorkers.Values.ToList().Select(StopOneAsync));
 
         _managedWorkers.Clear();
     }

@@ -30,6 +30,12 @@ public sealed class ManagedWorkerProcess
 
     public bool DrainTimeoutLogged { get; set; }
 
+    /// <summary>
+    /// When the drain-timeout warning was last emitted, so a wedged drain keeps
+    /// producing a periodic signal instead of falling silent after one line (R6-F6).
+    /// </summary>
+    public DateTimeOffset? DrainTimeoutLastLoggedUtc { get; set; }
+
     public int? ProcessId => Process?.HasExited == false ? Process.Id : null;
 
     public DateTimeOffset? LastStartUtc { get; private set; }
@@ -75,6 +81,7 @@ public sealed class ManagedWorkerProcess
         LastExitUtc = null;
         DrainStartedUtc = null;
         DrainTimeoutLogged = false;
+        DrainTimeoutLastLoggedUtc = null;
     }
 
     /// <summary>
@@ -96,6 +103,7 @@ public sealed class ManagedWorkerProcess
         DrainEvent.Set();
         DrainStartedUtc = nowUtc;
         DrainTimeoutLogged = false;
+        DrainTimeoutLastLoggedUtc = null;
         return true;
     }
 
@@ -116,6 +124,7 @@ public sealed class ManagedWorkerProcess
         DrainEvent?.Reset();
         DrainStartedUtc = null;
         DrainTimeoutLogged = false;
+        DrainTimeoutLastLoggedUtc = null;
         return true;
     }
 
@@ -182,6 +191,7 @@ public sealed class ManagedWorkerProcess
         BusyEvent = null;
         DrainStartedUtc = null;
         DrainTimeoutLogged = false;
+        DrainTimeoutLastLoggedUtc = null;
     }
 
     public async Task<bool> RequestStopAsync(TimeSpan stopTimeout, CancellationToken cancellationToken)
