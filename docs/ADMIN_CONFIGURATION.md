@@ -352,6 +352,19 @@ that should normally follow the app across immutable artifact versions.
 If the uploaded artifact package declares configuration files, those packaged
 files are registered for the artifact and the previous-version copy is skipped.
 
+Operator edits made to configuration files from the artifact edit page are not
+lost when a new version arrives with packaged configuration files. Each
+package-registered row stores the pristine packaged content as a
+`PackageFileContent` baseline, so import can tell operator edits apart from
+package changes. When a new artifact version is registered and the packaged
+file is unchanged against the previous version's baseline, the previous
+version's operator-edited content (and enabled state) is carried forward to the
+new version automatically. When the packaged file changed over an operator
+edit, or the previous row predates the baseline column, the package file wins
+and the upload/import status names the affected files so the operator can merge
+manually. Rows created or edited only by an operator have no baseline and keep
+the previous behavior.
+
 The upload form also has an enabled-by-default option to use the uploaded
 artifact immediately. When selected, Portal updates matching desired
 installation app rows and already materialized app rows to the new artifact.

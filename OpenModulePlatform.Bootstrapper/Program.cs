@@ -3817,6 +3817,14 @@ SELECT COUNT(1) FROM @changes;
                 artifactId,
                 prepared.ConfigurationFiles);
 
+            // Preserve operator-edited configuration content from the previous
+            // artifact version when the prepared file itself is unchanged, and
+            // log files whose operator edits could not be carried forward.
+            await CarryForwardArtifactConfigurationFilesAsync(
+                connection,
+                artifactId,
+                prepared.ArtifactRelativePath);
+
             Console.WriteLine(
                 $"> Artifact config files {prepared.ArtifactRelativePath}: {prepared.ConfigurationFiles.Count}");
         }
@@ -3908,11 +3916,13 @@ INSERT INTO omp.ArtifactConfigurationFiles
     ArtifactId,
     RelativePath,
     FileContent,
+    PackageFileContent,
     IsEnabled
 )
 SELECT @targetArtifactId,
        sourceFile.RelativePath,
        sourceFile.FileContent,
+       sourceFile.PackageFileContent,
        sourceFile.IsEnabled
 FROM omp.ArtifactConfigurationFiles sourceFile
 WHERE sourceFile.ArtifactId = @sourceArtifactId
@@ -4055,39 +4065,44 @@ ORDER BY ArtifactId;
 
         try
         {
-            await using (var delete = new SqlCommand(
-                "DELETE FROM omp.ArtifactConfigurationFiles WHERE ArtifactId = @artifactId;",
+            var existingPaths = new List<string>();
+            await using (var select = new SqlCommand(
+                ArtifactConfigurationFileImportSql.SelectConfigurationFilePaths,
                 connection,
                 transaction))
             {
-                delete.Parameters.AddWithValue("@artifactId", artifactId);
+                select.Parameters.AddWithValue("@ArtifactId", artifactId);
+                await using var reader = await select.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    existingPaths.Add(reader.GetString(0));
+                }
+            }
+
+            var incomingPaths = configurationFiles
+                .Select(static file => file.RelativePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var stalePath in existingPaths.Where(path => !incomingPaths.Contains(path)))
+            {
+                await using var delete = new SqlCommand(
+                    ArtifactConfigurationFileImportSql.DeleteConfigurationFileByPath,
+                    connection,
+                    transaction);
+                delete.Parameters.AddWithValue("@ArtifactId", artifactId);
+                delete.Parameters.AddWithValue("@RelativePath", stalePath);
                 await delete.ExecuteNonQueryAsync();
             }
 
-            const string insertSql = """
-INSERT INTO omp.ArtifactConfigurationFiles
-(
-    ArtifactId,
-    RelativePath,
-    FileContent,
-    IsEnabled
-)
-VALUES
-(
-    @artifactId,
-    @relativePath,
-    @fileContent,
-    1
-);
-""";
-
             foreach (var configurationFile in configurationFiles)
             {
-                await using var insert = new SqlCommand(insertSql, connection, transaction);
-                insert.Parameters.AddWithValue("@artifactId", artifactId);
-                insert.Parameters.AddWithValue("@relativePath", configurationFile.RelativePath);
-                insert.Parameters.AddWithValue("@fileContent", configurationFile.FileContent);
-                await insert.ExecuteNonQueryAsync();
+                await using var upsert = new SqlCommand(
+                    ArtifactConfigurationFileImportSql.UpsertPackageConfigurationFile,
+                    connection,
+                    transaction);
+                upsert.Parameters.AddWithValue("@ArtifactId", artifactId);
+                upsert.Parameters.AddWithValue("@RelativePath", configurationFile.RelativePath);
+                upsert.Parameters.AddWithValue("@FileContent", configurationFile.FileContent);
+                await upsert.ExecuteNonQueryAsync();
             }
 
             await transaction.CommitAsync();
@@ -4096,6 +4111,34 @@ VALUES
         {
             await transaction.RollbackAsync();
             throw;
+        }
+    }
+
+    private static async Task CarryForwardArtifactConfigurationFilesAsync(
+        SqlConnection connection,
+        int artifactId,
+        string artifactRelativePath)
+    {
+        await using var command = new SqlCommand(
+            ArtifactConfigurationFileImportSql.CarryForwardOperatorEdits,
+            connection);
+        command.Parameters.AddWithValue("@ArtifactId", artifactId);
+
+        string? sourceVersion = null;
+        var items = new List<ArtifactConfigurationCarryForwardItem>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            sourceVersion ??= reader.IsDBNull(0) ? null : reader.GetString(0);
+            items.Add(new ArtifactConfigurationCarryForwardItem(
+                reader.GetString(1),
+                Enum.Parse<ArtifactConfigurationCarryForwardOutcome>(reader.GetString(2))));
+        }
+
+        var message = new ArtifactConfigurationCarryForwardResult(sourceVersion, items).BuildImportMessage();
+        if (!string.IsNullOrWhiteSpace(message))
+        {
+            Console.WriteLine($"> Artifact config files {artifactRelativePath}: {message}");
         }
     }
 

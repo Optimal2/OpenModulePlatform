@@ -129,10 +129,22 @@ For a manifest envelope:
 - each declared `configurationFiles` entry is read as UTF-8 text
 - `relativePath` becomes the deployed file path relative to the artifact root
 - the imported files replace the artifact's current
-  `omp.ArtifactConfigurationFiles` rows
+  `omp.ArtifactConfigurationFiles` rows; the packaged content is also stored as
+  the row's pristine `PackageFileContent` baseline
 - importing the same artifact identity with the same payload hash is still
   allowed to update configuration-file rows from the package; the immutable
-  artifact payload is left unchanged
+  artifact payload is left unchanged. Rows whose packaged content is unchanged
+  against the stored baseline keep their operator-edited `FileContent` and
+  `IsEnabled` values instead of being overwritten
+- when a new artifact version is registered with packaged configuration files,
+  import runs a three-way carry-forward against the latest previous artifact in
+  the same app/package-type/target slot: if the previous row was
+  operator-edited and the packaged file is unchanged against that row's
+  baseline, the operator content follows the new version automatically. If the
+  packaged file changed over an operator edit, or the previous row predates the
+  baseline column, the package file wins and the import result carries a
+  warning naming the affected file so the operator can merge manually.
+  Operator-edited files that the new package no longer ships are also reported
 - if metadata for the same artifact identity and payload hash already exists
   but the artifact store payload folder is missing, Portal and HostAgent import
   repair the missing folder from the package instead of treating the import as

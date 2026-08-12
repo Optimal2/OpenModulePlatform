@@ -838,12 +838,21 @@ public sealed class ArtifactZipImportService
             var artifactId = registeredArtifactId.Value;
 
             var copiedConfigurationFiles = 0;
+            string? configurationCarryForwardMessage = null;
             if (package.ConfigurationFiles.Count > 0)
             {
                 copiedConfigurationFiles = await _repository.ReplaceArtifactConfigurationFilesAsync(
                     artifactId,
                     package.ConfigurationFiles,
                     cancellationToken);
+
+                // Preserve operator-edited configuration content from the previous
+                // artifact version when the packaged file itself is unchanged, and
+                // surface files whose operator edits could not be carried forward.
+                var carryForward = await _repository.CarryForwardArtifactConfigurationFilesAsync(
+                    artifactId,
+                    cancellationToken);
+                configurationCarryForwardMessage = carryForward.BuildImportMessage();
             }
             else if (importSettings.CopyConfigurationFilesFromPreviousVersion)
             {
@@ -881,7 +890,8 @@ public sealed class ArtifactZipImportService
                 application.AppInstanceRowsUpdated,
                 application.WorkerInstanceRowsUpdated,
                 hostAgentDesiredRows,
-                adoptedExistingContent);
+                adoptedExistingContent,
+                Message: configurationCarryForwardMessage);
         }
         catch
         {
