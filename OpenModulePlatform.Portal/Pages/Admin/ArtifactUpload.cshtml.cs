@@ -278,6 +278,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             }
 
             var packagedConfigurationFileCount = 0;
+            ArtifactConfigurationCarryForwardResult? carryForwardResult = null;
             if (package.ConfigurationFiles.Count > 0)
             {
                 try
@@ -294,6 +295,25 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                         + T("Configuration files from the artifact package could not be saved. Review the artifact edit page before deploying this version.");
 
                     return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
+                }
+
+                if (existingIdentity is null)
+                {
+                    // Preserve operator-edited configuration content from the
+                    // previous artifact version when the packaged file itself is
+                    // unchanged, and report files that need manual review.
+                    try
+                    {
+                        carryForwardResult = await _repo.CarryForwardArtifactConfigurationFilesAsync(artifactId, ct);
+                    }
+                    catch (SqlException)
+                    {
+                        StatusMessage = T("Artifact uploaded and registered.")
+                            + " "
+                            + T("Operator-edited configuration files from the previous version could not be checked. Review the artifact edit page before deploying this version.");
+
+                        return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
+                    }
                 }
             }
 
@@ -350,7 +370,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 packagedConfigurationFileCount,
                 applicationResult,
                 Input.UseArtifactImmediately,
-                existingIdentity is not null);
+                existingIdentity is not null,
+                carryForwardResult);
             return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
         }
         catch (InvalidDataException ex)
@@ -715,7 +736,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
         int packagedConfigurationFileCount,
         ArtifactApplicationResult? applicationResult,
         bool applyWasRequested,
-        bool replacedExistingArtifact)
+        bool replacedExistingArtifact,
+        ArtifactConfigurationCarryForwardResult? carryForwardResult = null)
     {
         var message = replacedExistingArtifact
             ? T("Existing artifact content replaced and metadata updated.")
@@ -755,9 +777,51 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             }
         }
 
+        message = AppendCarryForwardStatus(message, carryForwardResult);
+
         if (applyWasRequested)
         {
             message += " " + BuildArtifactAutoApplyStatusMessage(applicationResult);
+        }
+
+        return message;
+    }
+
+    private string AppendCarryForwardStatus(
+        string message,
+        ArtifactConfigurationCarryForwardResult? carryForwardResult)
+    {
+        if (carryForwardResult is null || string.IsNullOrWhiteSpace(carryForwardResult.SourceVersion))
+        {
+            return message;
+        }
+
+        var preserved = carryForwardResult.PathsWithOutcome(ArtifactConfigurationCarryForwardOutcome.Preserved);
+        if (preserved.Count > 0)
+        {
+            message += " " + string.Format(
+                T("Preserved {0} operator-edited configuration file(s) from version {1}: {2}."),
+                preserved.Count,
+                carryForwardResult.SourceVersion,
+                string.Join(", ", preserved));
+        }
+
+        var conflicts = carryForwardResult.PathsWithOutcome(ArtifactConfigurationCarryForwardOutcome.Conflict);
+        if (conflicts.Count > 0)
+        {
+            message += " " + string.Format(
+                T("Warning: configuration file(s) differ from version {0} and were taken from the package. Review them for lost operator edits: {1}."),
+                carryForwardResult.SourceVersion,
+                string.Join(", ", conflicts));
+        }
+
+        var missing = carryForwardResult.PathsWithOutcome(ArtifactConfigurationCarryForwardOutcome.MissingInPackage);
+        if (missing.Count > 0)
+        {
+            message += " " + string.Format(
+                T("Warning: operator-edited configuration file(s) from version {0} are not part of this package and were not carried forward: {1}."),
+                carryForwardResult.SourceVersion,
+                string.Join(", ", missing));
         }
 
         return message;

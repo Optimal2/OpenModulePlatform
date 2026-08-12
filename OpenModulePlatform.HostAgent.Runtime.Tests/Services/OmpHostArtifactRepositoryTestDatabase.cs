@@ -256,7 +256,8 @@ ORDER BY ConfigOverlayDocumentId;",
 ALTER TABLE omp.Artifacts ADD
     AppId int NULL,
     Version nvarchar(50) NULL,
-    TargetName nvarchar(200) NULL;");
+    TargetName nvarchar(200) NULL,
+    CreatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME();");
         Execute(@"
 CREATE TABLE omp.Modules
 (
@@ -277,6 +278,7 @@ CREATE TABLE omp.ArtifactConfigurationFiles
     ArtifactId int NOT NULL,
     RelativePath nvarchar(500) NOT NULL,
     FileContent nvarchar(max) NOT NULL,
+    PackageFileContent nvarchar(max) NULL,
     IsEnabled bit NOT NULL DEFAULT(1),
     UpdatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME()
 );");
@@ -297,6 +299,76 @@ CREATE TABLE omp.ArtifactConfigurationFiles
             new SqlParameter("@packageType", packageType),
             new SqlParameter("@version", version));
         return artifactId;
+    }
+
+    public int InsertArtifact(int artifactId, string packageType, string version, DateTime createdUtc)
+    {
+        Execute(
+            "INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled, AppId, Version, TargetName, CreatedUtc) VALUES(@artifactId, @packageType, 1, 1, @version, NULL, @createdUtc);",
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@packageType", packageType),
+            new SqlParameter("@version", version),
+            new SqlParameter("@createdUtc", createdUtc));
+        return artifactId;
+    }
+
+    public void SetArtifactConfigurationFileContent(
+        int artifactId,
+        string relativePath,
+        string fileContent,
+        bool? isEnabled = null)
+    {
+        Execute(
+            @"
+UPDATE omp.ArtifactConfigurationFiles
+SET FileContent = @fileContent,
+    IsEnabled = ISNULL(@isEnabled, IsEnabled),
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ArtifactId = @artifactId
+  AND RelativePath = @relativePath;",
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@relativePath", relativePath),
+            new SqlParameter("@fileContent", fileContent),
+            new SqlParameter("@isEnabled", (object?)isEnabled ?? DBNull.Value));
+    }
+
+    public void ClearArtifactConfigurationFileBaseline(int artifactId, string relativePath)
+    {
+        Execute(
+            @"
+UPDATE omp.ArtifactConfigurationFiles
+SET PackageFileContent = NULL
+WHERE ArtifactId = @artifactId
+  AND RelativePath = @relativePath;",
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@relativePath", relativePath));
+    }
+
+    public IReadOnlyList<(string RelativePath, string FileContent, string? PackageFileContent, bool IsEnabled)> GetArtifactConfigurationFiles(
+        int artifactId)
+    {
+        var rows = new List<(string, string, string?, bool)>();
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            @"
+SELECT RelativePath, FileContent, PackageFileContent, IsEnabled
+FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @artifactId
+ORDER BY RelativePath;",
+            conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        using var rdr = cmd.ExecuteReader();
+        while (rdr.Read())
+        {
+            rows.Add((
+                rdr.GetString(0),
+                rdr.GetString(1),
+                rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                rdr.GetBoolean(3)));
+        }
+
+        return rows;
     }
 
     public void CreateMaintenanceFindingsTable()

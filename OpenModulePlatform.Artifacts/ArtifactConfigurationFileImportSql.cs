@@ -1,0 +1,207 @@
+namespace OpenModulePlatform.Artifacts;
+
+/// <summary>
+/// Shared T-SQL for registering package-delivered artifact configuration files
+/// and for carrying operator-edited configuration content forward to a newly
+/// imported artifact version. HostAgent import, Portal upload/import, and the
+/// Bootstrapper must all use these statements so the preservation semantics
+/// stay identical across import paths.
+///
+/// Content comparisons cast nvarchar(max) to varbinary(max) so they are exact
+/// (case- and whitespace-sensitive) regardless of database collation.
+/// </summary>
+public static class ArtifactConfigurationFileImportSql
+{
+    /// <summary>
+    /// Upserts one package-delivered configuration file row.
+    /// Parameters: @ArtifactId, @RelativePath, @FileContent.
+    ///
+    /// The package content always becomes the new PackageFileContent baseline.
+    /// When the row already exists with a known baseline and the incoming
+    /// package content is unchanged against that baseline, the operator-edited
+    /// FileContent and IsEnabled values are kept. In every other case the
+    /// package content wins, which matches the pre-baseline behavior.
+    /// </summary>
+    public const string UpsertPackageConfigurationFile = @"
+UPDATE omp.ArtifactConfigurationFiles
+SET FileContent = CASE
+        WHEN PackageFileContent IS NOT NULL
+             AND CAST(PackageFileContent AS varbinary(max)) = CAST(@FileContent AS varbinary(max))
+            THEN FileContent
+        ELSE @FileContent
+    END,
+    IsEnabled = CASE
+        WHEN PackageFileContent IS NOT NULL
+             AND CAST(PackageFileContent AS varbinary(max)) = CAST(@FileContent AS varbinary(max))
+            THEN IsEnabled
+        ELSE 1
+    END,
+    PackageFileContent = @FileContent,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ArtifactId = @ArtifactId
+  AND RelativePath = @RelativePath;
+
+IF @@ROWCOUNT = 0
+BEGIN
+    INSERT INTO omp.ArtifactConfigurationFiles
+    (
+        ArtifactId,
+        RelativePath,
+        FileContent,
+        PackageFileContent,
+        IsEnabled
+    )
+    VALUES
+    (
+        @ArtifactId,
+        @RelativePath,
+        @FileContent,
+        @FileContent,
+        1
+    );
+END;";
+
+    /// <summary>
+    /// Deletes one configuration file row that is no longer part of the package.
+    /// Parameters: @ArtifactId, @RelativePath.
+    /// </summary>
+    public const string DeleteConfigurationFileByPath = @"
+DELETE FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @ArtifactId
+  AND RelativePath = @RelativePath;";
+
+    /// <summary>
+    /// Reads the relative paths currently registered for one artifact.
+    /// Parameters: @ArtifactId.
+    /// </summary>
+    public const string SelectConfigurationFilePaths = @"
+SELECT RelativePath
+FROM omp.ArtifactConfigurationFiles
+WHERE ArtifactId = @ArtifactId;";
+
+    /// <summary>
+    /// Carries operator-edited configuration content forward from the latest
+    /// previous enabled artifact in the same app/package-type/target slot to
+    /// the artifact identified by @ArtifactId, and reports one row per
+    /// configuration file whose continuity needs operator attention.
+    ///
+    /// Result set columns: SourceVersion, RelativePath, Outcome
+    /// ('Preserved' | 'Conflict' | 'MissingInPackage'). Empty when there is no
+    /// previous artifact with configuration rows, or nothing worth reporting.
+    ///
+    /// A row is carried forward only when the previous row has a known package
+    /// baseline, the operator changed it (content or IsEnabled), and the new
+    /// package content is unchanged against that baseline (three-way rule).
+    /// Rows without a baseline (legacy) keep the pre-baseline behavior: the
+    /// package file wins, but a Conflict row is reported so the operator can
+    /// review the difference instead of losing edits silently.
+    /// </summary>
+    public const string CarryForwardOperatorEdits = @"
+DECLARE @AppId int;
+DECLARE @PackageType nvarchar(100);
+DECLARE @TargetName nvarchar(200);
+DECLARE @SourceArtifactId int;
+DECLARE @SourceVersion nvarchar(50);
+
+SELECT @AppId = AppId,
+       @PackageType = PackageType,
+       @TargetName = TargetName
+FROM omp.Artifacts
+WHERE ArtifactId = @ArtifactId;
+
+SELECT TOP (1)
+       @SourceArtifactId = source.ArtifactId,
+       @SourceVersion = source.Version
+FROM omp.Artifacts source
+WHERE source.ArtifactId <> @ArtifactId
+  AND source.AppId = @AppId
+  AND source.PackageType = @PackageType
+  AND ((source.TargetName = @TargetName) OR (source.TargetName IS NULL AND @TargetName IS NULL))
+  AND source.IsEnabled = 1
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.ArtifactConfigurationFiles sourceFile
+      WHERE sourceFile.ArtifactId = source.ArtifactId
+  )
+ORDER BY source.CreatedUtc DESC, source.ArtifactId DESC;
+
+IF @SourceArtifactId IS NULL
+BEGIN
+    SELECT CAST(NULL AS nvarchar(50)) AS SourceVersion,
+           CAST(NULL AS nvarchar(400)) AS RelativePath,
+           CAST(NULL AS nvarchar(20)) AS Outcome
+    WHERE 1 = 0;
+    RETURN;
+END;
+
+-- Classify every relevant source row against the pre-update target state.
+-- sourceEdited: the previous row provably carries operator changes.
+-- baselinesEqual: the package file is unchanged between the two versions.
+-- targetPristine: the target row is still exactly what its package delivered,
+-- so carrying content forward cannot overwrite a newer operator edit.
+DECLARE @Report TABLE
+(
+    RelativePath nvarchar(400) NOT NULL,
+    Outcome nvarchar(20) NOT NULL
+);
+
+INSERT INTO @Report (RelativePath, Outcome)
+SELECT sourceFile.RelativePath,
+       CASE
+           WHEN target.ArtifactConfigurationFileId IS NULL THEN N'MissingInPackage'
+           WHEN sourceFile.PackageFileContent IS NOT NULL
+                AND target.PackageFileContent IS NOT NULL
+                AND CAST(target.PackageFileContent AS varbinary(max)) = CAST(sourceFile.PackageFileContent AS varbinary(max))
+                AND (CAST(sourceFile.FileContent AS varbinary(max)) <> CAST(sourceFile.PackageFileContent AS varbinary(max))
+                     OR sourceFile.IsEnabled = 0)
+               THEN N'Preserved'
+           ELSE N'Conflict'
+       END
+FROM omp.ArtifactConfigurationFiles sourceFile
+LEFT JOIN omp.ArtifactConfigurationFiles target
+    ON target.ArtifactId = @ArtifactId
+   AND target.RelativePath = sourceFile.RelativePath
+WHERE sourceFile.ArtifactId = @SourceArtifactId
+  AND
+  (
+      -- Operator-edited previous rows the new package no longer ships.
+      (target.ArtifactConfigurationFileId IS NULL
+       AND sourceFile.PackageFileContent IS NOT NULL
+       AND (CAST(sourceFile.FileContent AS varbinary(max)) <> CAST(sourceFile.PackageFileContent AS varbinary(max))
+            OR sourceFile.IsEnabled = 0))
+      OR
+      -- Rows in both versions whose effective content differs, where the
+      -- target row is still pristine package content. Rows whose previous
+      -- version is provably unedited are a normal package change and are not
+      -- reported. Targets already operator-edited are left alone entirely.
+      (target.ArtifactConfigurationFileId IS NOT NULL
+       AND target.PackageFileContent IS NOT NULL
+       AND CAST(target.FileContent AS varbinary(max)) = CAST(target.PackageFileContent AS varbinary(max))
+       AND target.IsEnabled = 1
+       AND (CAST(target.FileContent AS varbinary(max)) <> CAST(sourceFile.FileContent AS varbinary(max))
+            OR target.IsEnabled <> sourceFile.IsEnabled)
+       AND NOT (sourceFile.PackageFileContent IS NOT NULL
+                AND CAST(sourceFile.FileContent AS varbinary(max)) = CAST(sourceFile.PackageFileContent AS varbinary(max))
+                AND sourceFile.IsEnabled = 1))
+  );
+
+UPDATE target
+SET FileContent = sourceFile.FileContent,
+    IsEnabled = sourceFile.IsEnabled,
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.ArtifactConfigurationFiles target
+INNER JOIN omp.ArtifactConfigurationFiles sourceFile
+    ON sourceFile.ArtifactId = @SourceArtifactId
+   AND sourceFile.RelativePath = target.RelativePath
+INNER JOIN @Report report
+    ON report.RelativePath = target.RelativePath
+   AND report.Outcome = N'Preserved'
+WHERE target.ArtifactId = @ArtifactId;
+
+SELECT @SourceVersion AS SourceVersion,
+       RelativePath,
+       Outcome
+FROM @Report
+ORDER BY RelativePath;";
+}

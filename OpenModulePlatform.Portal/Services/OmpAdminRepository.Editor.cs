@@ -2892,11 +2892,13 @@ BEGIN
         ArtifactId,
         RelativePath,
         FileContent,
+        PackageFileContent,
         IsEnabled
     )
     SELECT @ArtifactId,
            sourceFile.RelativePath,
            sourceFile.FileContent,
+           sourceFile.PackageFileContent,
            sourceFile.IsEnabled
     FROM omp.ArtifactConfigurationFiles sourceFile
     WHERE sourceFile.ArtifactId = @SourceArtifactId
@@ -2946,42 +2948,75 @@ SELECT @SourceArtifactId AS SourceArtifactId,
         await conn.OpenAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
-        await using (var delete = new SqlCommand(
-            "DELETE FROM omp.ArtifactConfigurationFiles WHERE ArtifactId = @ArtifactId;",
+        var existingPaths = new List<string>();
+        await using (var select = new SqlCommand(
+            ArtifactConfigurationFileImportSql.SelectConfigurationFilePaths,
             conn,
             tx))
         {
+            Add(select, "@ArtifactId", artifactId);
+            await using var reader = await select.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                existingPaths.Add(reader.GetString(0));
+            }
+        }
+
+        var incomingPaths = configurationFiles
+            .Select(static file => file.RelativePath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var stalePath in existingPaths.Where(path => !incomingPaths.Contains(path)))
+        {
+            await using var delete = new SqlCommand(
+                ArtifactConfigurationFileImportSql.DeleteConfigurationFileByPath,
+                conn,
+                tx);
             Add(delete, "@ArtifactId", artifactId);
+            Add(delete, "@RelativePath", stalePath);
             await delete.ExecuteNonQueryAsync(ct);
         }
 
-        const string insertSql = @"
-INSERT INTO omp.ArtifactConfigurationFiles
-(
-    ArtifactId,
-    RelativePath,
-    FileContent,
-    IsEnabled
-)
-VALUES
-(
-    @ArtifactId,
-    @RelativePath,
-    @FileContent,
-    1
-);";
-
         foreach (var configurationFile in configurationFiles)
         {
-            await using var insert = new SqlCommand(insertSql, conn, tx);
-            Add(insert, "@ArtifactId", artifactId);
-            Add(insert, "@RelativePath", configurationFile.RelativePath);
-            Add(insert, "@FileContent", configurationFile.FileContent);
-            await insert.ExecuteNonQueryAsync(ct);
+            await using var upsert = new SqlCommand(
+                ArtifactConfigurationFileImportSql.UpsertPackageConfigurationFile,
+                conn,
+                tx);
+            Add(upsert, "@ArtifactId", artifactId);
+            Add(upsert, "@RelativePath", configurationFile.RelativePath);
+            Add(upsert, "@FileContent", configurationFile.FileContent);
+            await upsert.ExecuteNonQueryAsync(ct);
         }
 
         await tx.CommitAsync(ct);
         return configurationFiles.Count;
+    }
+
+    public async Task<ArtifactConfigurationCarryForwardResult> CarryForwardArtifactConfigurationFilesAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(
+            ArtifactConfigurationFileImportSql.CarryForwardOperatorEdits,
+            conn);
+        Add(cmd, "@ArtifactId", artifactId);
+
+        string? sourceVersion = null;
+        var items = new List<ArtifactConfigurationCarryForwardItem>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            sourceVersion ??= reader.IsDBNull(0) ? null : reader.GetString(0);
+            items.Add(new ArtifactConfigurationCarryForwardItem(
+                reader.GetString(1),
+                Enum.Parse<ArtifactConfigurationCarryForwardOutcome>(reader.GetString(2))));
+        }
+
+        return items.Count == 0
+            ? ArtifactConfigurationCarryForwardResult.Empty
+            : new ArtifactConfigurationCarryForwardResult(sourceVersion, items);
     }
 
     public async Task<ArtifactDuplicateInfo?> FindArtifactBySha256Async(string sha256, CancellationToken ct)

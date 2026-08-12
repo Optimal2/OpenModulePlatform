@@ -639,6 +639,11 @@ BEGIN
         ArtifactId int NOT NULL,
         RelativePath nvarchar(400) NOT NULL,
         FileContent nvarchar(max) NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_FileContent DEFAULT(N''),
+        -- Pristine content as last delivered by an artifact package or deployment
+        -- profile. NULL means unknown lineage (legacy row or operator-created row).
+        -- Operator edits change FileContent only; import compares FileContent with
+        -- this baseline to preserve operator edits across version imports.
+        PackageFileContent nvarchar(max) NULL,
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ArtifactConfigurationFiles_UpdatedUtc DEFAULT SYSUTCDATETIME(),
@@ -647,6 +652,13 @@ BEGIN
         CONSTRAINT UQ_omp_ArtifactConfigurationFiles_Artifact_Path
             UNIQUE(ArtifactId, RelativePath)
     );
+END
+GO
+
+IF COL_LENGTH(N'omp.ArtifactConfigurationFiles', N'PackageFileContent') IS NULL
+BEGIN
+    ALTER TABLE omp.ArtifactConfigurationFiles ADD
+        PackageFileContent nvarchar(max) NULL;
 END
 GO
 

@@ -8,6 +8,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- Operator-edited artifact configuration files (`omp.ArtifactConfigurationFiles`)
+  are no longer lost silently when a new artifact version is imported with
+  packaged configuration files. Each package-registered row now stores the
+  pristine packaged content in the new `PackageFileContent` baseline column, and
+  HostAgent import, Portal upload, Portal universal import, and the Bootstrapper
+  run a shared three-way carry-forward: when the packaged file is unchanged
+  against the previous version's baseline, the operator-edited content and
+  enabled state follow the new version automatically. When the packaged file
+  changed over an operator edit, or the row predates the baseline column, the
+  package file wins and the import result warns about the affected files instead
+  of dropping the edits silently. Re-registering the same artifact version also
+  preserves operator edits while the packaged file is unchanged.
+
 - HostAgent now redeploys web apps and service apps when the artifact content
   SHA-256 changes behind an unchanged artifact id and version. The already-applied
   check compares the desired `omp.HostArtifactStates.ContentSha256` with the
