@@ -19,6 +19,10 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
+# Shared runtime-configuration rule (appsettings*.json, odv.site.config.js) —
+# the canonical build-time mirror used by every packaging script (R3-G7).
+. (Join-Path $PSScriptRoot '..\omp\runtime-configuration-files.ps1')
+
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $ConfigPath = Join-Path $PSScriptRoot 'hostagent-first.local.psd1'
 }
@@ -448,15 +452,6 @@ function Compress-FolderToZip {
     Compress-Archive -Path (Join-Path $Source '*') -DestinationPath $Destination -Force
 }
 
-function Remove-RuntimeConfigurationFilesFromFolder {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    Get-ChildItem -LiteralPath $Path -File -Recurse | Where-Object {
-        [string]::Equals($_.Name, 'appsettings.json', [StringComparison]::OrdinalIgnoreCase) -or
-        ($_.Name.StartsWith('appsettings.', [StringComparison]::OrdinalIgnoreCase) -and $_.Name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase))
-    } | Remove-Item -Force
-}
-
 function Compress-ArtifactPayloadFolderToZip {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -468,7 +463,7 @@ function Compress-ArtifactPayloadFolderToZip {
     try {
         New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
         Get-ChildItem -LiteralPath $Source -Force | Copy-Item -Destination $stagingRoot -Recurse -Force
-        Remove-RuntimeConfigurationFilesFromFolder -Path $stagingRoot
+        Remove-OmpRuntimeConfigurationFilesFromFolder -Path $stagingRoot
         Compress-FolderToZip -Source $stagingRoot -Destination $Destination
     }
     finally {
@@ -1240,6 +1235,9 @@ foreach ($component in $components) {
             -BuildRoot $buildRoot `
             -ConfigurationFiles $configurationFiles `
             -MinModuleDefinitionVersion $minModuleDefinitionVersion
+        Assert-OmpArtifactPackageHasNoRuntimeConfiguration `
+            -ZipPath $destination `
+            -Description "Artifact package for $componentKey"
         Copy-AvailableArtifactPackage -Source $destination -DestinationRoot $availableArtifactsRoot -CopiedFiles $availableArtifactPackageFiles
         $componentPayloadSources[$componentKey] = "data/global/artifacts/$artifactPackageName"
 
@@ -1323,6 +1321,9 @@ else {
         -SiteConfigPath $openDocViewerSiteConfigPath `
         -BuildRoot $buildRoot
 }
+Assert-OmpArtifactPackageHasNoRuntimeConfiguration `
+    -ZipPath $openDocViewerArtifactPackagePath `
+    -Description 'OpenDocViewer artifact package'
 Copy-AvailableArtifactPackage -Source $openDocViewerArtifactPackagePath -DestinationRoot $availableArtifactsRoot -CopiedFiles $availableArtifactPackageFiles
 
 Write-Step 'Copying SQL scripts'

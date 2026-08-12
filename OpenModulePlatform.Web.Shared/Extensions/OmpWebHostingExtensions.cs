@@ -243,6 +243,10 @@ public static class OmpWebHostingExtensions
             .GetSection(optionsSectionName)
             .Get<WebAppOptions>() ?? new WebAppOptions();
 
+        var authOptions = app.Configuration
+            .GetSection(OmpAuthOptions.SectionName)
+            .Get<OmpAuthOptions>() ?? new OmpAuthOptions();
+
         if (options.UseForwardedHeaders)
         {
             app.UseForwardedHeaders();
@@ -386,13 +390,14 @@ public static class OmpWebHostingExtensions
         app.MapPost(PortalTopBarService.ToggleFavoritePath, async (
             HttpContext context,
             PortalTopBarService portalTopBarService,
+            IAntiforgery antiforgery,
             CancellationToken ct) =>
         {
-            // R3-E2 note: these POSTs are CSRF-protected by SameSite=Lax on the
-            // auth cookie. The rendered and JS-built forms now also carry an
-            // antiforgery token; explicit server-side ValidateRequestAsync is
-            // deferred until the Portal test fixture can render full pages to
-            // mint tokens and the change is coordinated on the shared topbar.
+            if (!await ValidateTopbarAntiforgeryAsync(context, antiforgery, authOptions))
+            {
+                return Results.BadRequest();
+            }
+
             if (!context.Request.HasFormContentType)
             {
                 return Results.BadRequest();
@@ -430,8 +435,14 @@ public static class OmpWebHostingExtensions
         app.MapPost(NotificationService.MarkReadPath, async (
             HttpContext context,
             NotificationService notificationService,
+            IAntiforgery antiforgery,
             CancellationToken ct) =>
         {
+            if (!await ValidateTopbarAntiforgeryAsync(context, antiforgery, authOptions))
+            {
+                return Results.BadRequest();
+            }
+
             if (!context.Request.HasFormContentType)
             {
                 return Results.BadRequest();
@@ -467,8 +478,14 @@ public static class OmpWebHostingExtensions
         app.MapPost(NotificationService.MarkAllReadPath, async (
             HttpContext context,
             NotificationService notificationService,
+            IAntiforgery antiforgery,
             CancellationToken ct) =>
         {
+            if (!await ValidateTopbarAntiforgeryAsync(context, antiforgery, authOptions))
+            {
+                return Results.BadRequest();
+            }
+
             var userId = NotificationService.TryGetOmpUserId(context.User);
             if (userId is null)
             {
@@ -503,8 +520,14 @@ public static class OmpWebHostingExtensions
         app.MapPost(MessageService.MarkAllReadPath, async (
             HttpContext context,
             MessageService messageService,
+            IAntiforgery antiforgery,
             CancellationToken ct) =>
         {
+            if (!await ValidateTopbarAntiforgeryAsync(context, antiforgery, authOptions))
+            {
+                return Results.BadRequest();
+            }
+
             var userId = MessageService.TryGetOmpUserId(context.User);
             if (userId is null)
             {
@@ -1278,6 +1301,31 @@ public static class OmpWebHostingExtensions
 
         network = new SystemNetIPNetwork(prefix, prefixLength);
         return true;
+    }
+
+    // R3-E2: the topbar POSTs are CSRF-protected by SameSite=Lax on the auth
+    // cookie, and the rendered and JS-built topbar forms always carry an
+    // antiforgery token. Validating that token server-side is opt-in because
+    // it rejects POSTs from pages rendered before the tokens existed.
+    private static async Task<bool> ValidateTopbarAntiforgeryAsync(
+        HttpContext context,
+        IAntiforgery antiforgery,
+        OmpAuthOptions authOptions)
+    {
+        if (!authOptions.ValidateTopbarAntiforgery)
+        {
+            return true;
+        }
+
+        try
+        {
+            await antiforgery.ValidateRequestAsync(context);
+            return true;
+        }
+        catch (AntiforgeryValidationException)
+        {
+            return false;
+        }
     }
 
     private static bool IsXmlHttpRequest(HttpRequest request)
