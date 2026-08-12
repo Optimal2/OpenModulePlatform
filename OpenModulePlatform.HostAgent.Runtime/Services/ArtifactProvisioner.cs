@@ -9,6 +9,15 @@ public sealed class ArtifactProvisioner
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly ILogger<ArtifactProvisioner> _logger;
 
+    // Skip re-hashing an already-verified artifact when its cheap
+    // size/mtime signature is unchanged, so the convergence loop does not read
+    // and SHA-256 every artifact in full every cycle (R3-D2). Artifacts are
+    // immutable, so a matching signature almost always means unchanged content;
+    // a periodic forced re-hash still catches rare same-size/mtime corruption.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Signature, string? Hash, DateTimeOffset VerifiedUtc)> _verifiedCache
+        = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan ReHashInterval = TimeSpan.FromHours(1);
+
     public ArtifactProvisioner(
         IOptionsMonitor<HostAgentSettings> settings,
         ILogger<ArtifactProvisioner> logger)
@@ -17,24 +26,144 @@ public sealed class ArtifactProvisioner
         _logger = logger;
     }
 
+    private void RemoveExistingCorruptCopies(string localPath)
+    {
+        var directory = Path.GetDirectoryName(localPath);
+        var name = Path.GetFileName(localPath);
+        if (string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(name) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        foreach (var candidate in Directory.EnumerateFileSystemEntries(directory, $"{name}.corrupt-*"))
+        {
+            try
+            {
+                if (Directory.Exists(candidate))
+                {
+                    Directory.Delete(candidate, recursive: true);
+                }
+                else
+                {
+                    File.Delete(candidate);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "Could not remove an earlier quarantined artifact copy '{CorruptPath}'.", candidate);
+            }
+        }
+    }
+
+    // Cheap change signature (stat only, no content read): file length+mtime,
+    // or a directory's file count + total length + newest mtime. Returns null
+    // if the path cannot be enumerated, which disables the shortcut safely.
+    private static string? ComputeCheapSignature(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                var info = new FileInfo(path);
+                return $"f:{info.Length}:{info.LastWriteTimeUtc.Ticks}";
+            }
+
+            if (Directory.Exists(path))
+            {
+                long count = 0, totalLength = 0, maxTicks = 0;
+                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                {
+                    var info = new FileInfo(file);
+                    count++;
+                    totalLength += info.Length;
+                    var ticks = info.LastWriteTimeUtc.Ticks;
+                    if (ticks > maxTicks)
+                    {
+                        maxTicks = ticks;
+                    }
+                }
+
+                return $"d:{count}:{totalLength}:{maxTicks}";
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim> _artifactLocks = new();
+
     public async Task<ArtifactProvisioningResult> EnsureAsync(
         ArtifactDescriptor artifact,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(artifact);
 
+        // Serialize provisioning of the SAME artifact: the RPC EnsureArtifact
+        // and the convergence cycle could otherwise both stage it and collide
+        // on File.Move(overwrite:false), publishing a spurious Failed status
+        // for a correct artifact (R3-D7).
+        var gate = _artifactLocks.GetOrAdd(artifact.ArtifactId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await EnsureCoreAsync(artifact, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task<ArtifactProvisioningResult> EnsureCoreAsync(
+        ArtifactDescriptor artifact,
+        CancellationToken cancellationToken)
+    {
         var settings = _settings.CurrentValue;
 
         var localPath = ResolveLocalPath(settings, artifact);
         var expectedHash = NormalizeHash(artifact.Sha256);
 
+        // A missing expected hash means content integrity cannot be checked at
+        // all. Surface it as an error instead of silently accepting whatever is
+        // on disk (R3-D6); the artifact row should always carry a SHA.
+        if (expectedHash is null)
+        {
+            _logger.LogError(
+                "Artifact {ArtifactId} has no Sha256 in the catalog; content integrity cannot be verified and any local/downloaded content is accepted unchecked.",
+                artifact.ArtifactId);
+        }
+
         if (File.Exists(localPath) || Directory.Exists(localPath))
         {
+            var signature = ComputeCheapSignature(localPath);
+            if (signature is not null
+                && _verifiedCache.TryGetValue(localPath, out var cachedVerification)
+                && cachedVerification.Signature == signature
+                && DateTimeOffset.UtcNow - cachedVerification.VerifiedUtc < ReHashInterval
+                && (expectedHash is null || string.Equals(cachedVerification.Hash, expectedHash, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ArtifactProvisioningResult.Succeeded(localPath, cachedVerification.Hash);
+            }
+
             var existingHash = await ArtifactHash.ComputeSha256Async(localPath, cancellationToken);
             if (expectedHash is null || string.Equals(existingHash, expectedHash, StringComparison.OrdinalIgnoreCase))
             {
+                if (signature is not null)
+                {
+                    _verifiedCache[localPath] = (signature, existingHash, DateTimeOffset.UtcNow);
+                }
+
                 return ArtifactProvisioningResult.Succeeded(localPath, existingHash);
             }
+
+            // Remove any earlier quarantined copies for this artifact first, so
+            // repeated mismatches cannot pile up full copies and fill the cache
+            // volume (R3-D8); at most one .corrupt-* per artifact survives.
+            RemoveExistingCorruptCopies(localPath);
 
             var corruptPath = $"{localPath}.corrupt-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
             _logger.LogWarning(
@@ -45,6 +174,7 @@ public sealed class ArtifactProvisioner
                 existingHash,
                 corruptPath);
 
+            _verifiedCache.TryRemove(localPath, out _);
             MoveExisting(localPath, corruptPath);
         }
 

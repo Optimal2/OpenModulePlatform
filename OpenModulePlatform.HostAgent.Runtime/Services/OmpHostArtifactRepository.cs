@@ -2803,6 +2803,10 @@ BEGIN
     RETURN;
 END;
 
+-- The artifact must actually be assigned to THIS host: a requirement enabled
+-- for the host that either points at this artifact directly or shares its
+-- target/type. Without this an RPC caller could materialize any enabled
+-- artifact from the central catalog into the host's cache (R3-D4).
 SELECT TOP (1)
     @hostId AS HostId,
     ar.ArtifactId,
@@ -2815,7 +2819,15 @@ FROM omp.Artifacts ar
 WHERE ar.ArtifactId = @artifactId
   AND ar.IsEnabled = 1
   AND ar.RelativePath IS NOT NULL
-  AND LTRIM(RTRIM(ar.RelativePath)) <> N'';";
+  AND LTRIM(RTRIM(ar.RelativePath)) <> N''
+  AND EXISTS
+  (
+      SELECT 1
+      FROM omp.HostArtifactRequirements req
+      WHERE req.HostId = @hostId
+        AND req.IsEnabled = 1
+        AND req.ArtifactId = ar.ArtifactId
+  );";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -3180,6 +3192,10 @@ WITH Desired AS
       AND ar.RelativePath IS NOT NULL
       AND LTRIM(RTRIM(ar.RelativePath)) <> N''
 )
+-- Group by DesiredLocalPath too: two requirements for the same artifact with
+-- DIFFERENT desired local paths are two distinct provisioning targets, so
+-- MIN(DesiredLocalPath) silently dropped the second and it never converged
+-- (R3-D9). Each distinct target now gets its own row.
 SELECT TOP (@maxArtifacts)
     HostId,
     ArtifactId,
@@ -3189,9 +3205,9 @@ SELECT TOP (@maxArtifacts)
     RelativePath,
     Sha256,
     MIN(RequirementKey) AS RequirementKey,
-    MIN(DesiredLocalPath) AS DesiredLocalPath
+    DesiredLocalPath
 FROM Desired
-GROUP BY HostId, ArtifactId, Version, PackageType, TargetName, RelativePath, Sha256
+GROUP BY HostId, ArtifactId, Version, PackageType, TargetName, RelativePath, Sha256, DesiredLocalPath
 ORDER BY PackageType, TargetName, Version, ArtifactId;";
 
         var result = new List<ArtifactDescriptor>();

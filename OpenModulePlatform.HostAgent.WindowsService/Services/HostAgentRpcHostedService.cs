@@ -167,7 +167,7 @@ public sealed class HostAgentRpcHostedService : BackgroundService
                 callerName ?? "unknown",
                 requestedBy ?? "unknown");
 
-            var response = await ExecuteRequestAsync(request, timeoutCts.Token);
+            var response = await ExecuteRequestAsync(request, IsPrivilegedCaller(pipe), timeoutCts.Token);
             await WriteResponseAsync(writer, response, timeoutCts.Token);
         }
         catch (OperationCanceledException ex) when (!serviceCancellationToken.IsCancellationRequested)
@@ -282,18 +282,57 @@ public sealed class HostAgentRpcHostedService : BackgroundService
 
     private static IEnumerable<SecurityIdentifier> GetDefaultRpcClientSids()
     {
+        // Only LocalSystem and Administrators by default: the legitimate
+        // clients (WorkerManager and its workers) run as LocalSystem, while
+        // granting LocalService/NetworkService let any unrelated service under
+        // those well-known accounts call the pipe (R3-D3). Deployments that run
+        // a client under another account add it via RpcAllowedClientAccounts /
+        // RpcAllowedClientServiceNames.
         yield return new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
         yield return new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
-        yield return new SecurityIdentifier(WellKnownSidType.LocalServiceSid, null);
-        yield return new SecurityIdentifier(WellKnownSidType.NetworkServiceSid, null);
+    }
+
+    // quiesce stops the whole convergence loop, so it must not be reachable by
+    // every account the pipe ACL allows - only LocalSystem or an administrator
+    // (R3-D1). Non-Windows never reaches this service, so treat that as denied.
+    private static bool IsPrivilegedCaller(NamedPipeServerStream pipe)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            var privileged = false;
+            pipe.RunAsClient(() =>
+            {
+                using var identity = WindowsIdentity.GetCurrent();
+                var principal = new WindowsPrincipal(identity);
+                privileged = identity.IsSystem
+                    || principal.IsInRole(WindowsBuiltInRole.Administrator);
+            });
+            return privileged;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     private async Task<HostAgentRpcResponse> ExecuteRequestAsync(
         HostAgentRpcRequest request,
+        bool isPrivilegedCaller,
         CancellationToken cancellationToken)
     {
         if (string.Equals(request.Operation, "quiesce", StringComparison.OrdinalIgnoreCase))
         {
+            if (!isPrivilegedCaller)
+            {
+                _logger.LogWarning("Rejected HostAgent quiesce RPC from a non-privileged caller.");
+                return HostAgentRpcResponse.Failed("Quiesce requires an administrator or LocalSystem caller.");
+            }
+
             _process.RequestQuiesce();
             return HostAgentRpcResponse.Succeeded($"Quiesce accepted by {_process.ServiceName}.");
         }
