@@ -3812,18 +3812,30 @@ SELECT COUNT(1) FROM @changes;
                 connection,
                 prepared.ArtifactRelativePath);
 
+            // Carry-forward must run only the FIRST time this artifact version's
+            // config is registered, matching the HostAgent/Portal import paths.
+            // The Bootstrapper re-registers config on every run (AddMissingOnly),
+            // and an operator's deliberate revert to package default is
+            // indistinguishable from a pristine row, so re-running carry-forward
+            // would re-apply the sibling version's stale edit over that revert
+            // every refresh (R4-D2). Decide before the replace mutates the rows.
+            var alreadyRegistered = await ArtifactHasConfigurationRowsAsync(connection, artifactId);
+
             await ReplaceArtifactConfigurationFilesAsync(
                 connection,
                 artifactId,
                 prepared.ConfigurationFiles);
 
-            // Preserve operator-edited configuration content from the previous
-            // artifact version when the prepared file itself is unchanged, and
-            // log files whose operator edits could not be carried forward.
-            await CarryForwardArtifactConfigurationFilesAsync(
-                connection,
-                artifactId,
-                prepared.ArtifactRelativePath);
+            if (!alreadyRegistered)
+            {
+                // Preserve operator-edited configuration content from the previous
+                // artifact version when the prepared file itself is unchanged, and
+                // log files whose operator edits could not be carried forward.
+                await CarryForwardArtifactConfigurationFilesAsync(
+                    connection,
+                    artifactId,
+                    prepared.ArtifactRelativePath);
+            }
 
             Console.WriteLine(
                 $"> Artifact config files {prepared.ArtifactRelativePath}: {prepared.ConfigurationFiles.Count}");
@@ -4022,6 +4034,23 @@ WHERE target.ArtifactId = @targetArtifactId
         }
 
         return rows;
+    }
+
+    private static async Task<bool> ArtifactHasConfigurationRowsAsync(
+        SqlConnection connection,
+        int artifactId)
+    {
+        const string sql = """
+SELECT CASE WHEN EXISTS
+(
+    SELECT 1 FROM omp.ArtifactConfigurationFiles WHERE ArtifactId = @artifactId
+) THEN 1 ELSE 0 END;
+""";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@artifactId", artifactId);
+        var result = await command.ExecuteScalarAsync();
+        return result is int flag && flag == 1;
     }
 
     private static async Task<int> ResolveArtifactIdByRelativePathAsync(

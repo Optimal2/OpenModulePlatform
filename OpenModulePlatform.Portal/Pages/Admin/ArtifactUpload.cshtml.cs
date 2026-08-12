@@ -283,10 +283,28 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             {
                 try
                 {
-                    packagedConfigurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
-                        artifactId,
-                        package.ConfigurationFiles,
-                        ct);
+                    if (existingIdentity is null)
+                    {
+                        // New registration: replace + carry-forward in one
+                        // transaction so a crash between them cannot strand the
+                        // version with pristine rows and later drop the previous
+                        // version's operator edits (R4-D4).
+                        var (replacedCount, carryForward) = await _repo.ReplaceAndCarryForwardArtifactConfigurationFilesAsync(
+                            artifactId,
+                            package.ConfigurationFiles,
+                            ct);
+                        packagedConfigurationFileCount = replacedCount;
+                        carryForwardResult = carryForward;
+                    }
+                    else
+                    {
+                        // Existing-identity re-import: plain replace, no
+                        // carry-forward (never re-apply over a deliberate revert).
+                        packagedConfigurationFileCount = await _repo.ReplaceArtifactConfigurationFilesAsync(
+                            artifactId,
+                            package.ConfigurationFiles,
+                            ct);
+                    }
                 }
                 catch (SqlException)
                 {
@@ -295,25 +313,6 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                         + T("Configuration files from the artifact package could not be saved. Review the artifact edit page before deploying this version.");
 
                     return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
-                }
-
-                if (existingIdentity is null)
-                {
-                    // Preserve operator-edited configuration content from the
-                    // previous artifact version when the packaged file itself is
-                    // unchanged, and report files that need manual review.
-                    try
-                    {
-                        carryForwardResult = await _repo.CarryForwardArtifactConfigurationFilesAsync(artifactId, ct);
-                    }
-                    catch (SqlException)
-                    {
-                        StatusMessage = T("Artifact uploaded and registered.")
-                            + " "
-                            + T("Operator-edited configuration files from the previous version could not be checked. Review the artifact edit page before deploying this version.");
-
-                        return RedirectToPage("/Admin/ArtifactEdit", new { id = artifactId });
-                    }
                 }
             }
 

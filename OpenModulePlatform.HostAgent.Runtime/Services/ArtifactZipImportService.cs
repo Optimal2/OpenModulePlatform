@@ -841,17 +841,15 @@ public sealed class ArtifactZipImportService
             string? configurationCarryForwardMessage = null;
             if (package.ConfigurationFiles.Count > 0)
             {
-                copiedConfigurationFiles = await _repository.ReplaceArtifactConfigurationFilesAsync(
+                // Replace + carry-forward in one transaction so a crash between
+                // them can no longer register the new version with pristine rows
+                // and permanently drop the previous version's operator edits on a
+                // later existing-identity re-import (R4-D4).
+                var (replacedCount, carryForward) = await _repository.ReplaceAndCarryForwardArtifactConfigurationFilesAsync(
                     artifactId,
                     package.ConfigurationFiles,
                     cancellationToken);
-
-                // Preserve operator-edited configuration content from the previous
-                // artifact version when the packaged file itself is unchanged, and
-                // surface files whose operator edits could not be carried forward.
-                var carryForward = await _repository.CarryForwardArtifactConfigurationFilesAsync(
-                    artifactId,
-                    cancellationToken);
+                copiedConfigurationFiles = replacedCount;
                 configurationCarryForwardMessage = carryForward.BuildImportMessage();
             }
             else if (importSettings.CopyConfigurationFilesFromPreviousVersion)

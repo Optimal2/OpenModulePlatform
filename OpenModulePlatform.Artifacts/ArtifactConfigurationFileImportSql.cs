@@ -23,7 +23,13 @@ public static class ArtifactConfigurationFileImportSql
     /// package content wins, which matches the pre-baseline behavior.
     /// </summary>
     public const string UpsertPackageConfigurationFile = @"
-UPDATE omp.ArtifactConfigurationFiles
+-- UPDLOCK + SERIALIZABLE on the probing UPDATE so two concurrent imports of the
+-- same artifact (the standard multi-host rollout against one database) cannot
+-- both see zero updated rows and both INSERT — the loser otherwise hit the
+-- unique index and failed the whole import (R4-D3). The range lock is held to
+-- the end of the enclosing transaction, serializing the insert path per
+-- (ArtifactId, RelativePath).
+UPDATE omp.ArtifactConfigurationFiles WITH (UPDLOCK, SERIALIZABLE)
 SET FileContent = CASE
         WHEN PackageFileContent IS NOT NULL
              AND CAST(PackageFileContent AS varbinary(max)) = CAST(@FileContent AS varbinary(max))
@@ -165,11 +171,17 @@ LEFT JOIN omp.ArtifactConfigurationFiles target
 WHERE sourceFile.ArtifactId = @SourceArtifactId
   AND
   (
-      -- Operator-edited previous rows the new package no longer ships.
+      -- Operator-edited previous rows the new package no longer ships. Includes
+      -- operator-CREATED rows that have no package baseline (NULL) — the most
+      -- unambiguously operator-owned content — which the baseline-only check used
+      -- to drop silently (R4-D5). Both are reported as MissingInPackage.
       (target.ArtifactConfigurationFileId IS NULL
-       AND sourceFile.PackageFileContent IS NOT NULL
-       AND (CAST(sourceFile.FileContent AS varbinary(max)) <> CAST(sourceFile.PackageFileContent AS varbinary(max))
-            OR sourceFile.IsEnabled = 0))
+       AND (
+           (sourceFile.PackageFileContent IS NOT NULL
+            AND (CAST(sourceFile.FileContent AS varbinary(max)) <> CAST(sourceFile.PackageFileContent AS varbinary(max))
+                 OR sourceFile.IsEnabled = 0))
+           OR sourceFile.PackageFileContent IS NULL
+       ))
       OR
       -- Rows in both versions whose effective content differs, where the
       -- target row is still pristine package content. Rows whose previous
