@@ -43,7 +43,7 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         CancellationToken ct)
         => Task.FromResult(new HostAgentLeaseResult(true, Guid.NewGuid(), Guid.NewGuid(), serviceName));
 
-    public Task ReleaseHostAgentLeaseAsync(Guid hostId, string serviceName, CancellationToken ct)
+    public Task ReleaseHostAgentLeaseAsync(Guid hostId, string serviceName, Guid? leaseToken, CancellationToken ct)
         => Task.CompletedTask;
 
     public Task<bool> RenewHostAgentLeaseAsync(Guid hostId, Guid leaseToken, int leaseSeconds, CancellationToken ct)
@@ -198,7 +198,7 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         return Task.FromResult(NextDeployment);
     }
 
-    public Task CompleteHostDeploymentAsync(
+    public Task<bool> CompleteHostDeploymentAsync(
         long hostDeploymentId,
         Guid leaseToken,
         bool succeeded,
@@ -206,7 +206,7 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         CancellationToken ct)
     {
         CompletedDeployments.Add(new CompletedDeployment(hostDeploymentId, leaseToken, succeeded, outcomeMessage));
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     public Task<bool> RenewHostDeploymentLeaseAsync(

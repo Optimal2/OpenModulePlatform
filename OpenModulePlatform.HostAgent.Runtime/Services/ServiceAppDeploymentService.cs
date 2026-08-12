@@ -76,10 +76,34 @@ public sealed class ServiceAppDeploymentService
             hostKey,
             deployments.Count);
 
-        var resolvedServiceNames = deployments
-            .ToDictionary(
-                d => d.AppInstanceId,
-                d => ServiceAppDeploymentNaming.ResolveServiceName(d, ResolveExecutableRelativePath(d)));
+        // Resolve names defensively. ResolveExecutableRelativePath throws when an
+        // artifact's cache directory is gone (the desired-set query only checks the
+        // DB row) or when the artifact root has zero or several .exe files. This
+        // pre-pass runs OUTSIDE the per-deployment try/catch in DeployAsync, so one
+        // such artifact used to abort the whole method: every other service app on
+        // the host stopped converging, no per-deployment result was published (so
+        // the Portal showed nothing but a generic cycle failure), and everything
+        // sequenced after service-app deployment -- self-upgrade, file mirroring,
+        // host jobs and telemetry -- never ran (R6-D1). Skip the unresolvable entry
+        // here; DeployAsync hits the same exception inside its own catch and
+        // publishes a proper per-deployment failure for it.
+        var resolvedServiceNames = new Dictionary<Guid, string>();
+        foreach (var deployment in deployments)
+        {
+            try
+            {
+                resolvedServiceNames[deployment.AppInstanceId] =
+                    ServiceAppDeploymentNaming.ResolveServiceName(deployment, ResolveExecutableRelativePath(deployment));
+            }
+            catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not resolve the service name for a desired service app; it is skipped in the rename-cleanup pre-pass and reported individually. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId);
+            }
+        }
 
         foreach (var deployment in deployments)
         {
@@ -389,11 +413,21 @@ public sealed class ServiceAppDeploymentService
 
             if (!string.IsNullOrWhiteSpace(postDeployIdentityCheck.WarningMessage))
             {
+                // The deployment itself completed here -- only the runtime IDENTITY
+                // needs attention (e.g. ManualActionRequired when credential
+                // automation is disabled). Publishing state Warning demoted the row
+                // out of IsAlreadyApplied, so the next cycle stopped, re-mirrored and
+                // restarted the service, and the identity warning recurred: a
+                // permanent stop/start loop every RefreshSeconds (R6-D2). Succeeded
+                // with a diagnostic warning keeps the operator signal in LastWarning
+                // without breaking idempotency.
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
                     WithDeploySetWarning(
                         AddIdentityCheck(
-                            AppDeploymentResult.Warning(targetPath, serviceName, postDeployIdentityCheck.WarningMessage),
+                            AppDeploymentResult
+                                .Succeeded(targetPath, serviceName, applied: true)
+                                .WithDiagnosticWarning(postDeployIdentityCheck.WarningMessage),
                             postDeployIdentityCheck)),
                     cancellationToken);
                 return;
@@ -481,24 +515,42 @@ public sealed class ServiceAppDeploymentService
         // auto-started again — self-healing stayed disabled for days after the cause
         // cleared, until someone intervened by hand (R5-D13). Reset the window once
         // the last attempt is older than the cool-down.
+        // The timestamp must record the last REAL start attempt, so evaluate first
+        // and only write when we actually go on to attempt a start. The previous
+        // AddOrUpdate refreshed LastAttemptUtc on every evaluation -- including the
+        // suppressed ones past the threshold -- and reconcile runs every 30 s, so the
+        // 30-minute gap could never open and the cool-down never elapsed: the decay
+        // this code claims to implement did nothing, leaving self-healing disabled
+        // exactly as before R5-D13 (R6-D4).
         var nowUtc = DateTime.UtcNow;
-        var attemptState = _consecutiveStartAttemptsByServiceName.AddOrUpdate(
-            serviceName,
-            _ => new StartAttemptState(1, nowUtc),
-            (_, existing) => nowUtc - existing.LastAttemptUtc > StartAttemptResetWindow
-                ? new StartAttemptState(1, nowUtc)
-                : new StartAttemptState(existing.Count + 1, nowUtc));
-        var attempts = attemptState.Count;
+        _consecutiveStartAttemptsByServiceName.TryGetValue(serviceName, out var previousAttemptState);
+        var withinWindow = previousAttemptState is not null
+            && nowUtc - previousAttemptState.LastAttemptUtc <= StartAttemptResetWindow;
+        var attempts = (withinWindow ? previousAttemptState!.Count : 0) + 1;
         if (attempts > MaxConsecutiveStartAttempts)
         {
+            // Deliberately do NOT touch LastAttemptUtc here: leaving it at the last
+            // real attempt is what lets the cool-down window actually expire.
             var persistentWarning = $"Service '{serviceName}' was stopped during reconcile and has exceeded the maximum number of restart attempts ({MaxConsecutiveStartAttempts}). Manual intervention required.";
             _logger.LogWarning(
                 "Service app reconcile detected a stopped service but will not restart it because the crash-loop threshold has been reached. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, Attempts={Attempts}",
                 deployment.AppInstanceId,
                 serviceName,
                 attempts);
-            return AppDeploymentResult.Warning(targetPath, serviceName, persistentWarning);
+            // Succeeded-with-warning, not Warning: reconcile only runs on the
+            // already-applied fast path, so the deployment content IS in place and
+            // only the RUN state is wrong. Publishing state Warning demoted the row
+            // out of IsAlreadyApplied (which requires Succeeded), so the very next
+            // cycle stopped the service, re-mirrored it and started it again --
+            // every RefreshSeconds, indefinitely (R6-D2). The warning stays visible
+            // via LastWarning; applied:false leaves LastAppliedUtc untouched.
+            return AppDeploymentResult
+                .Succeeded(targetPath, serviceName, applied: false)
+                .WithDiagnosticWarning(persistentWarning);
         }
+
+        // A real start attempt happens below, so record it now (see R6-D4).
+        _consecutiveStartAttemptsByServiceName[serviceName] = new StartAttemptState(attempts, nowUtc);
 
         _logger.LogWarning(
             "Service app reconcile detected a stopped service and will attempt to start it. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}, Attempt={Attempt}",
@@ -509,10 +561,10 @@ public sealed class ServiceAppDeploymentService
         try
         {
             _serviceControl.StartServiceIfStopped(serviceName, settings.ServiceAppStartTimeoutSeconds);
-            return AppDeploymentResult.Warning(
-                targetPath,
-                serviceName,
-                $"Service '{serviceName}' was stopped during reconcile; attempted restart. Verify service health.");
+            return AppDeploymentResult
+                .Succeeded(targetPath, serviceName, applied: false)
+                .WithDiagnosticWarning(
+                    $"Service '{serviceName}' was stopped during reconcile; attempted restart. Verify service health.");
         }
         catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
         {
@@ -521,10 +573,10 @@ public sealed class ServiceAppDeploymentService
                 "Service app reconcile failed to restart a stopped service. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}",
                 deployment.AppInstanceId,
                 serviceName);
-            return AppDeploymentResult.Warning(
-                targetPath,
-                serviceName,
-                $"Service '{serviceName}' was stopped during reconcile; attempted restart failed. {ex.Message}");
+            return AppDeploymentResult
+                .Succeeded(targetPath, serviceName, applied: false)
+                .WithDiagnosticWarning(
+                    $"Service '{serviceName}' was stopped during reconcile; attempted restart failed. {ex.Message}");
         }
     }
 

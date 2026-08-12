@@ -323,7 +323,9 @@ public sealed class HostAgentSelfUpgradeService
             isActive: false,
             statusMessage,
             cancellationToken);
-        await _repository.ReleaseHostAgentLeaseAsync(hostId, _process.ServiceName, cancellationToken);
+        // No token available on the failed-takeover path; the unconditional delete
+        // is intentional here (R6-D3).
+        await _repository.ReleaseHostAgentLeaseAsync(hostId, _process.ServiceName, leaseToken: null, cancellationToken);
 
         _logger.LogError(
             "HostAgent takeover failed before the previous service was retired. CurrentService={CurrentService}, StatusMessage={StatusMessage}",

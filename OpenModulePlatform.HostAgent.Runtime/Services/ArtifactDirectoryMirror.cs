@@ -228,8 +228,20 @@ internal static class ArtifactDirectoryMirror
     {
         try
         {
-            var info = new DirectoryInfo(path);
-            return info.Exists && info.Attributes.HasFlag(FileAttributes.ReparsePoint);
+            // File.GetAttributes covers BOTH files and directories. The previous
+            // DirectoryInfo-based check required info.Exists, which is always false
+            // for a file, so the file-target guard in CopySourceFiles was a silent
+            // no-op and only the parent-directory check did anything (R6-D7). The
+            // sibling guard in ArtifactConfigurationFileWriter already got this right.
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
         }
         catch (IOException)
         {

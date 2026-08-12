@@ -28,6 +28,12 @@ public sealed class HostAgentEngine
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<HostAgentEngine> _logger;
     private HostAgentLeaseResult? _activeLease;
+
+    /// <summary>
+    /// True while a deploy-set consistency block message is the published status, so
+    /// the next consistent cycle knows it has something to clear (R6-D5).
+    /// </summary>
+    private bool _deploySetBlockPublished;
     private DateTimeOffset _lastSupersededCleanupUtc = DateTimeOffset.MinValue;
 
     public HostAgentEngine(
@@ -218,6 +224,20 @@ public sealed class HostAgentEngine
                     lease.HostId.Value,
                     consistencySummary,
                     leaseRenewalCancellation.Token);
+                _deploySetBlockPublished = true;
+            }
+            else if (_deploySetBlockPublished)
+            {
+                // Clear the block text once the artifact set is consistent again.
+                // The steady-state runtime-state publish passes
+                // preserveExistingStatusMessage: true, so nothing else ever
+                // overwrites it and the Portal kept showing "Block is active"
+                // indefinitely after the set was repaired -- the old
+                // throw-and-abort behaviour self-cleared, this one did not (R6-D5).
+                await PublishDeploySetBlockResolvedRuntimeStateAsync(
+                    lease.HostId.Value,
+                    leaseRenewalCancellation.Token);
+                _deploySetBlockPublished = false;
             }
 
             foreach (var artifact in artifacts)
@@ -299,6 +319,9 @@ public sealed class HostAgentEngine
             await _repository.ReleaseHostAgentLeaseAsync(
                 activeLease.HostId.Value,
                 _process.ServiceName,
+                // Only release OUR lease: a slow shutdown must never delete a row a
+                // successor process has already acquired under a new token (R6-D3).
+                activeLease.LeaseToken,
                 cancellationToken);
         }
         catch (Exception ex) when (IsExpectedShutdownFailure(ex))
@@ -375,19 +398,32 @@ public sealed class HostAgentEngine
             var message =
                 $"Template materialization completed. Module instance changes: {materialization.ModuleInstanceChanges}; app instance changes: {materialization.AppInstanceChanges}.";
 
-            await _repository.CompleteHostDeploymentAsync(
+            // Honour the rowcount: a lost lease means the deployment was re-claimed
+            // under a new token and this completion updated nothing, so claiming
+            // success in the log would be false (R6-D8).
+            var completed = await _repository.CompleteHostDeploymentAsync(
                 deployment.HostDeploymentId,
                 deployment.LeaseToken,
                 succeeded: true,
                 outcomeMessage: message,
                 processingCancellation.Token);
 
-            _logger.LogInformation(
-                "Completed host deployment. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}, ModuleInstanceChanges={ModuleInstanceChanges}, AppInstanceChanges={AppInstanceChanges}",
-                hostKey,
-                deployment.HostDeploymentId,
-                materialization.ModuleInstanceChanges,
-                materialization.AppInstanceChanges);
+            if (completed)
+            {
+                _logger.LogInformation(
+                    "Completed host deployment. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}, ModuleInstanceChanges={ModuleInstanceChanges}, AppInstanceChanges={AppInstanceChanges}",
+                    hostKey,
+                    deployment.HostDeploymentId,
+                    materialization.ModuleInstanceChanges,
+                    materialization.AppInstanceChanges);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Host deployment completion did not update any row; the lease was lost and the deployment re-claimed elsewhere. HostKey={HostKey}, HostDeploymentId={HostDeploymentId}",
+                    hostKey,
+                    deployment.HostDeploymentId);
+            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && processingCancellation.IsCancellationRequested)
         {
@@ -674,6 +710,38 @@ public sealed class HostAgentEngine
     // (R5-D11) Record the deploy-set consistency block in the host runtime state so
     // it is visible in Portal, instead of only appearing as a repeated "cycle
     // failed" log from the previous throw-and-abort behavior.
+    /// <summary>
+    /// Replaces a previously published deploy-set block message once the artifact
+    /// set is consistent again (R6-D5).
+    /// </summary>
+    private async Task PublishDeploySetBlockResolvedRuntimeStateAsync(
+        Guid hostId,
+        CancellationToken cancellationToken)
+    {
+        const string message = "Deploy-set consistency block resolved; deployments are converging normally.";
+        _logger.LogInformation("{DeploySetBlockResolvedMessage}", message);
+
+        try
+        {
+            await _repository.PublishHostAgentRuntimeStateAsync(
+                hostId,
+                _process,
+                _process.RuntimeMode,
+                artifactId: null,
+                AppContext.BaseDirectory,
+                isActive: true,
+                message,
+                cancellationToken);
+        }
+        catch (Exception ex) when (IsExpectedShutdownFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to clear the deploy-set consistency block from HostAgent runtime state. HostId={HostId}",
+                hostId);
+        }
+    }
+
     private async Task PublishDeploySetBlockRuntimeStateAsync(
         Guid hostId,
         DeploySetConsistencyCheckSummary summary,

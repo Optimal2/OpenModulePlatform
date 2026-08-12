@@ -42,9 +42,14 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
 
         Assert.Single(repository.PublishedServiceAppResults);
         var result = repository.PublishedServiceAppResults[0].Result;
-        Assert.Equal(HostDeploymentStatuses.Warning, result.State);
-        Assert.Contains($"Service '{deployment.DeployedRuntimeName}' was stopped during reconcile", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("attempted restart", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        // Succeeded + diagnostic warning, NOT state Warning: reconcile runs on the
+        // already-applied path, and publishing Warning demoted the row out of
+        // IsAlreadyApplied so the next cycle re-deployed the service -- a permanent
+        // stop/mirror/start loop every RefreshSeconds (R6-D2). The warning is still
+        // surfaced, via DiagnosticWarningMessage / LastWarning.
+        Assert.Equal(HostDeploymentStatuses.Succeeded, result.State);
+        Assert.Contains($"Service '{deployment.DeployedRuntimeName}' was stopped during reconcile", result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("attempted restart", result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Single(control.StartAttempts, deployment.DeployedRuntimeName!);
         Assert.True(control.IsServiceRunning(deployment.DeployedRuntimeName!));
         Assert.False(File.Exists(DeploymentRuntimeStopMarker.GetPath(targetPath)));
@@ -172,17 +177,20 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             Assert.Single(repository.PublishedServiceAppResults);
 
             var result = repository.PublishedServiceAppResults[^1].Result;
+            // State stays Succeeded throughout so the deployment keeps its
+            // already-applied fast path; the escalation is carried by the diagnostic
+            // warning instead (R6-D2).
             if (i < Threshold)
             {
-                Assert.Equal(HostDeploymentStatuses.Warning, result.State);
-                Assert.Contains($"Service '{deployment.DeployedRuntimeName}' was stopped during reconcile", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-                Assert.DoesNotContain("exceeded the maximum number of restart attempts", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(HostDeploymentStatuses.Succeeded, result.State);
+                Assert.Contains($"Service '{deployment.DeployedRuntimeName}' was stopped during reconcile", result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("exceeded the maximum number of restart attempts", result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
                 Assert.Equal(i + 1, control.StartAttempts.Count);
             }
             else
             {
-                Assert.Equal(HostDeploymentStatuses.Warning, result.State);
-                Assert.Contains("exceeded the maximum number of restart attempts", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(HostDeploymentStatuses.Succeeded, result.State);
+                Assert.Contains("exceeded the maximum number of restart attempts", result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
                 Assert.Equal(Threshold, control.StartAttempts.Count);
             }
 
@@ -196,10 +204,12 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         var (service, repository, control, deployment, targetPath) = CreateScenario();
         control.SetState(deployment.DeployedRuntimeName!, "STOPPED");
 
-        // First reconcile: stopped -> start -> warning.
+        // First reconcile: stopped -> start -> succeeded with a diagnostic warning
+        // (state stays Succeeded to preserve the already-applied fast path, R6-D2).
         await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
         Assert.Single(repository.PublishedServiceAppResults);
-        Assert.Equal(HostDeploymentStatuses.Warning, repository.PublishedServiceAppResults[0].Result.State);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedServiceAppResults[0].Result.State);
+        Assert.Contains("was stopped during reconcile", repository.PublishedServiceAppResults[0].Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Single(control.StartAttempts);
         repository.PublishedServiceAppResults.Clear();
 
@@ -214,7 +224,8 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         control.SetState(deployment.DeployedRuntimeName!, "STOPPED");
         await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
         Assert.Single(repository.PublishedServiceAppResults);
-        Assert.Equal(HostDeploymentStatuses.Warning, repository.PublishedServiceAppResults[0].Result.State);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedServiceAppResults[0].Result.State);
+        Assert.Contains("was stopped during reconcile", repository.PublishedServiceAppResults[0].Result.DiagnosticWarningMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, control.StartAttempts.Count);
     }
 

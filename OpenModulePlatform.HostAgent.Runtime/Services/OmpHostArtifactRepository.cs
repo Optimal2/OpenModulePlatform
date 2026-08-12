@@ -158,18 +158,28 @@ SELECT CAST(0 AS bit) AS Acquired, @hostId AS HostId, CAST(NULL AS uniqueidentif
     public async Task ReleaseHostAgentLeaseAsync(
         Guid hostId,
         string serviceName,
+        Guid? leaseToken,
         CancellationToken ct)
     {
+        // Scope the delete to the caller's own lease token when it has one. Acquire
+        // deliberately allows the SAME service name to re-acquire with a fresh token,
+        // so a slow shutdown that ran after the next process had already taken the
+        // lease used to delete the NEW owner's row: its next renewal returned 0 rows,
+        // it logged a spurious lease-loss and aborted its cycle, and the host was
+        // briefly unleased (R6-D3). A null token keeps the unconditional delete for
+        // the failed-takeover path, which has no token to match.
         const string sql = @"
 DELETE FROM omp.HostAgentLeases
 WHERE HostId = @hostId
-  AND ServiceName = @serviceName;";
+  AND ServiceName = @serviceName
+  AND (@leaseToken IS NULL OR LeaseToken = @leaseToken);";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@hostId", hostId);
         cmd.Parameters.AddWithValue("@serviceName", serviceName);
+        cmd.Parameters.AddWithValue("@leaseToken", (object?)leaseToken ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -2088,7 +2098,16 @@ WHERE HostDeploymentId = @hostDeploymentId
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task CompleteHostDeploymentAsync(
+    /// <summary>
+    /// Marks a host deployment complete. Returns false when the row was not updated
+    /// because the lease was lost and the deployment re-claimed under a new token.
+    /// </summary>
+    /// <remarks>
+    /// The rowcount used to be discarded, so a caller whose lease had been taken over
+    /// still logged a successful completion for work it no longer owned (R6-D8). The
+    /// host-jobs path already returns its rowcount for the same reason.
+    /// </remarks>
+    public async Task<bool> CompleteHostDeploymentAsync(
         long hostDeploymentId,
         Guid leaseToken,
         bool succeeded,
@@ -2117,7 +2136,7 @@ WHERE HostDeploymentId = @hostDeploymentId
         cmd.Parameters.AddWithValue("@status", succeeded ? HostDeploymentStatuses.Succeeded : HostDeploymentStatuses.Failed);
         cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
         cmd.Parameters.AddWithValue("@outcomeMessage", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
     private static string? SanitizeOutcomeMessage(string? outcomeMessage)
