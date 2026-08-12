@@ -121,6 +121,30 @@ internal static class ArtifactConfigurationFileWriter
         return true;
     }
 
+    private static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     public static async Task ApplyAsync(
         string targetRoot,
         IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
@@ -133,11 +157,34 @@ internal static class ArtifactConfigurationFileWriter
 
             var path = ResolveTargetPath(targetRoot, file);
             var fileContent = Render(file.FileContent, variables);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-            if (File.Exists(path) && FileContentEquals(path, fileContent))
+            // ResolveTargetPath confines the path lexically, but that does not
+            // resolve reparse points: a symlink planted at the target file (or a
+            // junction in its parent chain) would make this write escape targetRoot
+            // and overwrite an arbitrary file as the LocalSystem host agent —
+            // e.g. replacing appsettings.json with a link to a SYSTEM-owned file
+            // (R5S-D1). Refuse to follow a link at write time.
+            var directory = Path.GetDirectoryName(path)!;
+            if (IsReparsePoint(directory))
             {
-                continue;
+                throw new IOException(
+                    $"Refusing to write a configuration file through a reparse point directory: '{directory}'.");
+            }
+
+            Directory.CreateDirectory(directory);
+
+            if (File.Exists(path))
+            {
+                if (IsReparsePoint(path))
+                {
+                    throw new IOException(
+                        $"Refusing to overwrite a configuration file that is a reparse point (symlink): '{path}'.");
+                }
+
+                if (FileContentEquals(path, fileContent))
+                {
+                    continue;
+                }
             }
 
             await File.WriteAllTextAsync(path, fileContent, Utf8NoBom, cancellationToken);

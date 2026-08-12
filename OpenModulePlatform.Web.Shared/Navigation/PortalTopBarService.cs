@@ -1454,7 +1454,15 @@ END";
         {
             if (Uri.TryCreate(routePath, UriKind.Absolute, out var absoluteRoute))
             {
-                return absoluteRoute.ToString();
+                // Only http(s) absolute routes are emitted as nav hrefs. R4-E2 added
+                // this allowlist to the sibling ResolveTargetUrl but left ResolveHref
+                // untouched, so a javascript:/data: RoutePath registered for an app
+                // still parsed as an absolute URI and was rendered as href="..." in
+                // the shared top bar for every user — script execution in the app's
+                // origin from app-registration write access (R5S-E1).
+                return absoluteRoute.Scheme is "http" or "https"
+                    ? absoluteRoute.ToString()
+                    : null;
             }
 
             var hostRoot = ResolveHostRoot(request, app);
@@ -1466,7 +1474,10 @@ END";
         var publicUrl = Clean(app.PublicUrl);
         if (!string.IsNullOrWhiteSpace(publicUrl))
         {
-            return publicUrl;
+            // Run PublicUrl through the same scheme/relative validation instead of
+            // emitting it verbatim, so a javascript:/data: PublicUrl cannot slip
+            // into the href either (R5S-E1).
+            return ResolveTargetUrl(request, publicUrl);
         }
 
         if (IsPortalApp(app))
