@@ -11,6 +11,29 @@
 
 @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
 
+@if (!Model.IsCreate && Model.Artifact is not null && Model.VersionStatus is not null
+     && (Model.VersionStatus.HasNewerVersion
+         || (!Model.VersionStatus.IsDesiredVersion && Model.VersionStatus.DesiredVersion is not null)))
+{
+    @* (R5-F10) Warn before saving edits to a version that is not desired / is being superseded. *@
+    <div class="status-banner" role="alert">
+        @if (Model.VersionStatus.DesiredVersion is not null)
+        {
+            @string.Format(
+                L["You are editing configuration for version {0}, but the desired version is {1}. These edits will not apply to the desired version unless they are carried forward."].Value,
+                Model.Artifact.Version,
+                Model.VersionStatus.DesiredVersion)
+        }
+        else
+        {
+            @string.Format(
+                L["You are editing configuration for version {0}, but a newer version {1} exists. Make sure you intend to edit this version and not the newer one."].Value,
+                Model.Artifact.Version,
+                Model.VersionStatus.LatestVersion)
+        }
+    </div>
+}
+
 @if (Model.Artifact is not null)
 {
     <section class="card">
@@ -57,6 +80,7 @@
     <form method="post" asp-page-handler="UploadContent" enctype="multipart/form-data" class="card form-grid">
         <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
         <input type="hidden" asp-for="Input.ArtifactId" />
+        <input type="hidden" asp-for="Input.LoadedRowVersion" />
 
         <h3>@L["Upload file content"]</h3>
         <p class="muted">@L["Upload a text file or a zip file containing exactly one text file. Zip upload is useful when request filters block script-like text content."]</p>
@@ -76,6 +100,7 @@
     <form method="post" asp-page-handler="Content" class="card form-grid">
         <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
         <input type="hidden" asp-for="Input.ArtifactId" />
+        <input type="hidden" asp-for="Input.LoadedRowVersion" />
 
         <h3>@L["Manual text edit"]</h3>
         <p class="muted">@L["Use this only when the environment allows posting this content as a form field. File upload is safer behind strict request filters."]</p>

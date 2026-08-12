@@ -759,7 +759,7 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             instanceTemplateAppInstanceId,
             ct);
 
-    public async Task<string> UpgradeInstanceTemplateAppArtifactAsync(
+    public async Task<(string TargetVersion, ArtifactConfigurationCarryForwardResult CarryForward)> UpgradeInstanceTemplateAppArtifactAsync(
         int instanceTemplateAppInstanceId,
         int artifactId,
         CancellationToken ct)
@@ -828,7 +828,12 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             await update.ExecuteNonQueryAsync(ct);
         }
 
-        return targetVersion;
+        // Carry operator edits from the superseded version forward to the new
+        // desired version. Previously carry-forward ran only at artifact import,
+        // so a version bump stranded edits made to the old version (R5-F11).
+        var carryForward = await CarryForwardArtifactConfigurationFilesAsync(artifactId, ct);
+
+        return (targetVersion, carryForward);
     }
 
     public async Task<InstanceTemplateHostEditData?> GetInstanceTemplateHostAsync(
@@ -2734,12 +2739,14 @@ WHERE ModuleKey = @ModuleKey;";
         int artifactConfigurationFileId,
         CancellationToken ct)
     {
+        // UpdatedUtc is carried as an optimistic concurrency token (R5-F13).
         const string sql = @"
 SELECT ArtifactConfigurationFileId,
        ArtifactId,
        RelativePath,
        FileContent,
-       IsEnabled
+       IsEnabled,
+       UpdatedUtc
 FROM omp.ArtifactConfigurationFiles
 WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
 
@@ -2760,7 +2767,8 @@ WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
             ArtifactId = rdr.GetInt32(1),
             RelativePath = rdr.GetString(2),
             FileContent = rdr.GetString(3),
-            IsEnabled = rdr.GetBoolean(4)
+            IsEnabled = rdr.GetBoolean(4),
+            UpdatedUtc = rdr.GetDateTime(5)
         };
     }
 
@@ -2804,6 +2812,18 @@ ORDER BY RelativePath, ArtifactConfigurationFileId;";
     public async Task<int> SaveArtifactConfigurationFileAsync(
         ArtifactConfigurationFileEditData input,
         CancellationToken ct)
+        => await SaveArtifactConfigurationFileAsync(input, expectedUpdatedUtc: null, ct);
+
+    /// <summary>
+    /// Saves the configuration file row. When <paramref name="expectedUpdatedUtc"/>
+    /// is supplied, the update is applied only if the row still carries that
+    /// timestamp; otherwise an <see cref="ArtifactConfigurationConcurrencyException"/>
+    /// is thrown so a stale editor cannot silently clobber a newer save (R5-F13).
+    /// </summary>
+    public async Task<int> SaveArtifactConfigurationFileAsync(
+        ArtifactConfigurationFileEditData input,
+        DateTime? expectedUpdatedUtc,
+        CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -2833,7 +2853,19 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
             return input.ArtifactConfigurationFileId;
         }
 
-        const string updateSql = @"
+        // Optimistic concurrency: when a load-time token is supplied, only update
+        // the row if it has not changed since it was loaded (R5-F13).
+        var updateSql = expectedUpdatedUtc.HasValue
+            ? @"
+UPDATE omp.ArtifactConfigurationFiles
+SET ArtifactId = @ArtifactId,
+    RelativePath = @RelativePath,
+    FileContent = @FileContent,
+    IsEnabled = @IsEnabled,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId
+  AND UpdatedUtc = @ExpectedUpdatedUtc;"
+            : @"
 UPDATE omp.ArtifactConfigurationFiles
 SET ArtifactId = @ArtifactId,
     RelativePath = @RelativePath,
@@ -2844,8 +2876,99 @@ WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
 
         await using var update = new SqlCommand(updateSql, conn);
         BindArtifactConfigurationFile(update, input, includePrimaryKey: true);
-        await update.ExecuteNonQueryAsync(ct);
+        if (expectedUpdatedUtc.HasValue)
+        {
+            Add(update, "@ExpectedUpdatedUtc", expectedUpdatedUtc.Value);
+        }
+
+        var affected = await update.ExecuteNonQueryAsync(ct);
+        if (expectedUpdatedUtc.HasValue && affected == 0)
+        {
+            throw new ArtifactConfigurationConcurrencyException();
+        }
+
         return input.ArtifactConfigurationFileId;
+    }
+
+    /// <summary>
+    /// Determines whether the version of the artifact being edited is the desired
+    /// version and whether a newer enabled version exists, so the config editor
+    /// can warn before edits are saved to a soon-superseded version (R5-F10).
+    /// </summary>
+    public async Task<ArtifactConfigVersionStatus> GetArtifactConfigVersionStatusAsync(
+        int artifactId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+DECLARE @AppId int, @PackageType nvarchar(100), @TargetName nvarchar(200);
+SELECT @AppId = AppId, @PackageType = PackageType, @TargetName = TargetName
+FROM omp.Artifacts
+WHERE ArtifactId = @ArtifactId;
+
+SELECT ar.ArtifactId,
+       ar.Version,
+       CASE WHEN EXISTS (
+           SELECT 1 FROM omp.InstanceTemplateAppInstances tai
+           WHERE tai.DesiredArtifactId = ar.ArtifactId AND tai.IsEnabled = 1
+       ) THEN 1 ELSE 0 END AS IsDesired
+FROM omp.Artifacts ar
+WHERE ar.AppId = @AppId
+  AND ar.PackageType = @PackageType
+  AND ISNULL(ar.TargetName, N'') = ISNULL(@TargetName, N'')
+  AND ar.IsEnabled = 1;";
+
+        var status = new ArtifactConfigVersionStatus();
+        string? editedVersion = null;
+        string? latestVersion = null;
+        string? desiredOtherVersion = null;
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+
+        while (await rdr.ReadAsync(ct))
+        {
+            var candidateId = rdr.GetInt32(0);
+            var candidateVersion = rdr.GetString(1);
+            var isDesired = rdr.GetBoolean(2);
+
+            if (candidateId == artifactId)
+            {
+                editedVersion = candidateVersion;
+            }
+
+            if (latestVersion is null
+                || ArtifactVersionComparer.Compare(candidateVersion, latestVersion) > 0)
+            {
+                latestVersion = candidateVersion;
+            }
+
+            if (isDesired)
+            {
+                if (candidateId == artifactId)
+                {
+                    status.IsDesiredVersion = true;
+                }
+                else
+                {
+                    desiredOtherVersion = candidateVersion;
+                }
+            }
+        }
+
+        status.LatestVersion = latestVersion;
+        status.HasNewerVersion = editedVersion is not null
+            && latestVersion is not null
+            && ArtifactVersionComparer.Compare(latestVersion, editedVersion) > 0;
+
+        if (!status.IsDesiredVersion)
+        {
+            status.DesiredVersion = desiredOtherVersion;
+        }
+
+        return status;
     }
 
     public Task DeleteArtifactConfigurationFileAsync(

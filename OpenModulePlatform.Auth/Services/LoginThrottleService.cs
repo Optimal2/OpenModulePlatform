@@ -23,6 +23,13 @@ public sealed class LoginThrottleService
 
     private readonly IMemoryCache _cache;
 
+    // Serializes the get-or-create of a throttle entry. IMemoryCache.GetOrCreate is
+    // not atomic, so on a "cold" key concurrent first-hits could each build their own
+    // Attempts instance; the per-instance lock below then guarded different objects
+    // and the losing writer's increment was overwritten, so lockout could never be
+    // reached under parallel first-hit guessing (R5-F9).
+    private readonly object _createLock = new();
+
     public LoginThrottleService(IMemoryCache cache)
     {
         _cache = cache;
@@ -58,11 +65,7 @@ public sealed class LoginThrottleService
 
         var cacheKey = CacheKey(normalized);
         var now = DateTimeOffset.UtcNow;
-        var attempts = _cache.GetOrCreate(cacheKey, entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = FailureWindow;
-            return new Attempts { FirstUtc = now };
-        })!;
+        var attempts = GetOrCreateAttempts(cacheKey, now);
 
         // Serialize the read-modify-write: concurrent failures for one key used
         // to race on Count++ and lose increments, so the lockout could never be
@@ -128,11 +131,7 @@ public sealed class LoginThrottleService
 
         var cacheKey = ClientCacheKey(normalized);
         var now = DateTimeOffset.UtcNow;
-        var attempts = _cache.GetOrCreate(cacheKey, entry =>
-        {
-            entry.AbsoluteExpirationRelativeToNow = FailureWindow;
-            return new Attempts { FirstUtc = now };
-        })!;
+        var attempts = GetOrCreateAttempts(cacheKey, now);
 
         lock (attempts)
         {
@@ -152,6 +151,26 @@ public sealed class LoginThrottleService
             _cache.Set(cacheKey, attempts, attempts.LockedUntilUtc is { } lockUntil
                 ? lockUntil - now
                 : FailureWindow);
+        }
+    }
+
+    private Attempts GetOrCreateAttempts(string cacheKey, DateTimeOffset now)
+    {
+        // Fast path: an existing entry needs no locking.
+        if (_cache.TryGetValue(cacheKey, out Attempts? existing) && existing is not null)
+        {
+            return existing;
+        }
+
+        // Cold key: serialize creation so all concurrent first-hits observe the same
+        // single Attempts instance and their per-instance locks contend correctly (R5-F9).
+        lock (_createLock)
+        {
+            return _cache.GetOrCreate(cacheKey, entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = FailureWindow;
+                return new Attempts { FirstUtc = now };
+            })!;
         }
     }
 

@@ -609,13 +609,25 @@ public static class OmpWebHostingExtensions
                 });
             }
 
-            var notificationUnreadCount = await notificationService.GetUnreadCountAsync(userId.Value, ct);
+            // Compute the toast summaries first and reuse their unread counts for the
+            // badges below: the summary already runs the same unread-count query, so a
+            // separate GetUnreadCountAsync/GetUnreadMessageCountAsync per request just
+            // opened another connection and counted the same rows a second time (R5-E1).
+            var notificationSummary = await notificationService.GetToastSummaryForUserAsync(
+                userId.Value,
+                afterNotificationId,
+                limit: 5,
+                ct);
             // Fetch one extra row so hasMore is accurate: an exactly-full page with
             // nothing beyond it must not report hasMore. Only the page size is returned.
             var fetchedNotifications = await notificationService.GetRecentForUserAsync(userId.Value, DefaultNotificationPageSize + 1, ct);
             var notifications = fetchedNotifications.Take(DefaultNotificationPageSize).ToList();
-            var messageUnreadCount = await messageService.GetUnreadMessageCountAsync(userId.Value, ct);
             var portalBaseUrl = webAppOptions.Value.PortalTopBar?.PortalBaseUrl ?? "/";
+            var messageSummary = await messageService.GetToastSummaryForUserAsync(
+                userId.Value,
+                afterMessageId,
+                limit: 5,
+                ct);
             var messageConversations = await messageService.GetConversationsForUserAsync(
                 userId.Value,
                 ct,
@@ -625,7 +637,7 @@ public static class OmpWebHostingExtensions
             {
                 ["notifications"] = new
                 {
-                    unreadCount = notificationUnreadCount,
+                    unreadCount = notificationSummary.UnreadCount,
                     items = notifications.Select(row => new
                     {
                         notificationId = row.NotificationId,
@@ -643,7 +655,7 @@ public static class OmpWebHostingExtensions
                 },
                 ["messages"] = new
                 {
-                    unreadCount = messageUnreadCount,
+                    unreadCount = messageSummary.UnreadCount,
                     items = messageConversations.Select(row => new
                     {
                         conversationId = row.ConversationId,
@@ -661,12 +673,6 @@ public static class OmpWebHostingExtensions
 
             // Always include the latest ids so first polls without an "after" baseline
             // can initialize their client-side baseline from real values instead of 0.
-            var notificationSummary = await notificationService.GetToastSummaryForUserAsync(
-                userId.Value,
-                afterNotificationId,
-                limit: 5,
-                ct);
-
             response["latestNotificationId"] = notificationSummary.LatestNotificationId;
             response["newNotificationCount"] = notificationSummary.NewNotificationCount;
             response["newNotifications"] = notificationSummary.NewNotifications.Select(row => new
@@ -676,12 +682,6 @@ public static class OmpWebHostingExtensions
                 content = ToToastSnippet(row.Content),
                 targetUrl = IsSafeLocalDestination(row.DestinationUrl) ? row.DestinationUrl : "/notifications"
             });
-
-            var messageSummary = await messageService.GetToastSummaryForUserAsync(
-                userId.Value,
-                afterMessageId,
-                limit: 5,
-                ct);
 
             response["latestMessageId"] = messageSummary.LatestMessageId;
             response["newMessageCount"] = messageSummary.NewMessageCount;

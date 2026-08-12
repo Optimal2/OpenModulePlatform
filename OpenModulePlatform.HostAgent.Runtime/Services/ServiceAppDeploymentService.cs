@@ -45,6 +45,13 @@ public sealed class ServiceAppDeploymentService
         string hostKey,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         CancellationToken cancellationToken)
+        => await DeployDesiredServiceAppsAsync(hostKey, deploySetWarningsByModuleInstanceKey, null, cancellationToken);
+
+    public async Task DeployDesiredServiceAppsAsync(
+        string hostKey,
+        IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
+        IReadOnlySet<string>? blockedModuleInstanceKeys,
+        CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
         if (!settings.DeployServiceApps)
@@ -77,7 +84,7 @@ public sealed class ServiceAppDeploymentService
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, resolvedServiceNames, deploySetWarningsByModuleInstanceKey, cancellationToken);
+            await DeployAsync(settings, deployment, resolvedServiceNames, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, cancellationToken);
         }
     }
 
@@ -86,6 +93,7 @@ public sealed class ServiceAppDeploymentService
         ServiceAppDeploymentDescriptor deployment,
         IReadOnlyDictionary<Guid, string> resolvedServiceNames,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
+        IReadOnlySet<string>? blockedModuleInstanceKeys,
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
@@ -118,6 +126,28 @@ public sealed class ServiceAppDeploymentService
             var executableRelativePath = ResolveExecutableRelativePath(deployment);
             serviceName = ServiceAppDeploymentNaming.ResolveServiceName(deployment, executableRelativePath);
             targetPath = ServiceAppDeploymentNaming.ResolveTargetPath(settings, deployment, serviceName);
+
+            // (R5-D11) Deploy-set consistency Block: skip only this affected
+            // module-instance's deployment (leaving the currently deployed version
+            // live) and record the reason, instead of the cycle aborting host-wide.
+            if (blockedModuleInstanceKeys is not null
+                && blockedModuleInstanceKeys.Contains(deployment.ModuleInstanceKey))
+            {
+                var blockMessage = string.IsNullOrWhiteSpace(deploySetWarning)
+                    ? "Deploy-set consistency Block is active for this module instance; deployment was skipped until a consistent artifact set is imported."
+                    : deploySetWarning;
+                _logger.LogWarning(
+                    "Service app deployment skipped due to deploy-set consistency Block. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, ModuleInstance={ModuleInstanceKey}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    deployment.ModuleInstanceKey);
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    AppDeploymentResult.Warning(targetPath, serviceName, blockMessage),
+                    cancellationToken);
+                return;
+            }
+
             var targetExecutablePath = DeploymentPath.CombineUnderRoot(
                 targetPath,
                 executableRelativePath,

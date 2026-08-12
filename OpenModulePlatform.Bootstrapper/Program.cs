@@ -466,7 +466,17 @@ internal static partial class Program
     {
         Console.Write($"{prompt} [Y/N, default N]: ");
         var answer = Console.ReadLine();
-        return string.Equals(answer?.Trim(), "Y", StringComparison.OrdinalIgnoreCase);
+        if (answer is null)
+        {
+            // R5-G3: no interactive input (EOF/redirected/detached console).
+            // Returning false silently aborted the run with exit code 2 and no
+            // explanation; state the reason so the operator can react.
+            Console.WriteLine();
+            Console.WriteLine("No interactive console is available to confirm. Re-run with --yes to proceed non-interactively, or launch the graphical installer (install-hostagent-first.cmd).");
+            return false;
+        }
+
+        return string.Equals(answer.Trim(), "Y", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void WriteUsage()
@@ -2337,9 +2347,12 @@ END
         if (!string.IsNullOrWhiteSpace(artifactVersion))
         {
             var versionLiteral = ConvertToSqlUnicodeLiteral(artifactVersion);
+            // R5S-G6: the SQL literal is inserted via a MatchEvaluator so the
+            // replacement is treated literally; a value like "1.0$'" would
+            // otherwise have "$'" interpreted as a Regex substitution token.
             result = ArtifactVersionDeclarationRegex().Replace(
                 result,
-                $"DECLARE @ArtifactVersion nvarchar(50) = {versionLiteral};",
+                _ => $"DECLARE @ArtifactVersion nvarchar(50) = {versionLiteral};",
                 1);
         }
 
@@ -2377,13 +2390,15 @@ END
             : options.BootstrapPortalAdminPrincipalType.Trim();
         var principalTypeLiteral = ConvertToSqlUnicodeLiteral(principalType);
 
+        // R5S-G6: insert SQL literals via a MatchEvaluator so a principal value
+        // containing Regex substitution tokens (e.g. "$'") is inserted literally.
         var result = BootstrapPrincipalDeclarationRegex().Replace(
             sqlText,
-            $"DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = {principalLiteral};");
+            _ => $"DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = {principalLiteral};");
 
         return BootstrapPrincipalTypeDeclarationRegex().Replace(
             result,
-            $"DECLARE @BootstrapPortalAdminPrincipalType nvarchar(50) = {principalTypeLiteral};");
+            _ => $"DECLARE @BootstrapPortalAdminPrincipalType nvarchar(50) = {principalTypeLiteral};");
     }
 
     private static string? ResolveArtifactVersionOverride(
@@ -2464,7 +2479,9 @@ END
         var pattern = @"(?im)^\s*DECLARE\s+@" + Regex.Escape(sanitizedVariableName) + @"\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';\s*$";
         var replacement = $"DECLARE @{sanitizedVariableName} nvarchar(50) = {ConvertToSqlUnicodeLiteral(value)};";
 
-        return Regex.Replace(sqlText, pattern, replacement, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
+        // R5S-G6: MatchEvaluator inserts the literal verbatim; a value such as
+        // "1.0$'" must not be reinterpreted as a Regex substitution token.
+        return Regex.Replace(sqlText, pattern, _ => replacement, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
     }
 
     private static async Task ExecuteSqlBatchesAsync(
@@ -3073,25 +3090,131 @@ END;
         return true;
     }
 
+    private const long MaxArtifactConfigReadManifestBytes = 1024 * 1024;
+    private const long MaxArtifactConfigReadFileBytes = 1024 * 1024 * 5;
+
     private static IReadOnlyList<ArtifactPackageConfigurationFile> ExtractArtifactPackageConfigurationFiles(
         string source,
         string artifactStoreRoot)
     {
-        var stagingPath = Path.Join(
-            artifactStoreRoot,
-            ".bootstrapper-artifact-config-staging",
-            Guid.NewGuid().ToString("N"));
+        // R5-G5: for an AddMissingOnly artifact that already exists we only need
+        // its configuration files, not its (potentially multi-GB) payload. The
+        // previous path called ArtifactPackageExtractor.Extract, which unpacked
+        // the ENTIRE payload to a staging folder just to hand back the small
+        // configuration entries, then deleted it. Read the manifest and the
+        // referenced configuration entries straight out of the zip instead.
+        _ = artifactStoreRoot;
+        return ReadArtifactPackageConfigurationFilesOnly(source);
+    }
 
-        try
+    private static IReadOnlyList<ArtifactPackageConfigurationFile> ReadArtifactPackageConfigurationFilesOnly(string source)
+    {
+        using var archive = ZipFile.OpenRead(source);
+        var manifestEntry = archive.Entries.FirstOrDefault(entry =>
+            string.Equals(
+                NormalizeArtifactZipEntryName(entry.FullName),
+                ArtifactPackageExtractor.ManifestEntryName,
+                StringComparison.OrdinalIgnoreCase));
+        if (manifestEntry is null)
         {
-            var package = new ArtifactPackageExtractor()
-                .Extract(source, stagingPath);
-            return package.ConfigurationFiles;
+            // Legacy artifact zips (no manifest envelope) carry no configuration files.
+            return [];
         }
-        finally
+
+        if (manifestEntry.Length > MaxArtifactConfigReadManifestBytes)
         {
-            TryDeleteDirectory(stagingPath);
+            throw new InvalidOperationException(
+                $"Artifact package manifest exceeds the limit of {MaxArtifactConfigReadManifestBytes} bytes.");
         }
+
+        JsonObject manifest;
+        using (var manifestStream = manifestEntry.Open())
+        using (var manifestReader = new StreamReader(
+            manifestStream,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+            detectEncodingFromByteOrderMarks: true))
+        {
+            manifest = JsonNode.Parse(manifestReader.ReadToEnd()) as JsonObject
+                ?? throw new InvalidOperationException("Artifact package manifest must be a JSON object.");
+        }
+
+        var nodes = manifest["configurationFiles"]?.AsArray();
+        if (nodes is null || nodes.Count == 0)
+        {
+            return [];
+        }
+
+        var files = new List<ArtifactPackageConfigurationFile>();
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes)
+        {
+            var item = node?.AsObject()
+                ?? throw new InvalidOperationException("Each artifact package configurationFiles item must be an object.");
+            var relativePath = NormalizeArtifactConfigRelativePath(
+                item["relativePath"]?.GetValue<string>()
+                    ?? throw new InvalidOperationException("Artifact package configurationFiles[].relativePath is required."));
+            var sourcePath = NormalizeArtifactZipEntryName(
+                item["source"]?.GetValue<string>()
+                    ?? item["path"]?.GetValue<string>()
+                    ?? throw new InvalidOperationException("Artifact package configurationFiles[].source is required."));
+
+            if (!seenPaths.Add(relativePath))
+            {
+                throw new InvalidOperationException(
+                    $"Artifact package contains duplicate configuration relative path '{relativePath}'.");
+            }
+
+            var sourceEntry = archive.Entries.FirstOrDefault(candidate =>
+                !string.IsNullOrEmpty(candidate.Name)
+                && string.Equals(NormalizeArtifactZipEntryName(candidate.FullName), sourcePath, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"Artifact package references missing file '{sourcePath}'.");
+
+            if (sourceEntry.Length > MaxArtifactConfigReadFileBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Artifact package configuration file '{sourceEntry.FullName}' exceeds the limit of {MaxArtifactConfigReadFileBytes} bytes.");
+            }
+
+            using var contentStream = sourceEntry.Open();
+            using var contentReader = new StreamReader(
+                contentStream,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true),
+                detectEncodingFromByteOrderMarks: true);
+            files.Add(new ArtifactPackageConfigurationFile(relativePath, contentReader.ReadToEnd()));
+        }
+
+        return files;
+    }
+
+    private static string NormalizeArtifactZipEntryName(string fullName)
+    {
+        var normalized = fullName.Replace('\\', '/').Trim();
+        if (normalized.Length == 0 || normalized.StartsWith('/'))
+        {
+            throw new InvalidOperationException("The artifact package contains an invalid entry path.");
+        }
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 || segments.Any(static segment => segment is "." or ".."))
+        {
+            throw new InvalidOperationException("The artifact package contains a path that escapes the package root.");
+        }
+
+        return string.Join('/', segments);
+    }
+
+    private static string NormalizeArtifactConfigRelativePath(string relativePath)
+    {
+        var normalized = relativePath.Trim().Replace('\\', '/').Trim('/');
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0
+            || normalized.Contains(':', StringComparison.Ordinal)
+            || segments.Any(static segment => segment is "." or ".."))
+        {
+            throw new InvalidOperationException("Configuration file relative paths must stay inside the deployed artifact root.");
+        }
+
+        return string.Join('/', segments);
     }
 
     private static async Task RegisterPackageArtifactsAsync(
@@ -5910,11 +6033,42 @@ ORDER BY ArtifactId;
     private static string NormalizePathForMatch(string path)
         => path.Replace('\\', '/').TrimStart('/').Trim();
 
+    private const uint AttachParentProcess = 0xFFFFFFFF;
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool AttachConsole(uint dwProcessId);
+
     private static void EnsureConsole()
     {
-        // Intentionally managed-only: older versions attached the WinExe bootstrapper
-        // to the parent console with kernel32, but the installer now uses GUI status
-        // and log files as its supported diagnostic surface.
+        // R5-G3: the Bootstrapper is a GUI-subsystem (WinExe) process, so when it
+        // is launched from a console (install-hostagent-first-console.cmd) its
+        // stdout/stderr/stdin are not wired to that console and every
+        // Console.Write is silently discarded - the operator sees nothing and
+        // only an exit code. Attach to the launching process's console (if any)
+        // and rebind the standard streams so the console entrypoint produces
+        // output and can read confirmations. A double-click launch has no parent
+        // console; AttachConsole fails there and the streams are left as-is.
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        if (!AttachConsole(AttachParentProcess))
+        {
+            return;
+        }
+
+        try
+        {
+            Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+            Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
+            Console.SetIn(new StreamReader(Console.OpenStandardInput()));
+        }
+        catch (IOException)
+        {
+            // Rebinding the streams is best-effort; a failure here must not abort the run.
+        }
     }
 
     private static string ConvertToSqlBracketName(string value)

@@ -100,6 +100,26 @@ public sealed class ManagedWorkerProcess
     }
 
     /// <summary>
+    /// Resets an in-progress drain when the configuration change that triggered it
+    /// was reverted to the running configuration before the in-flight job finished.
+    /// Without this the drain event stays set and the worker starts no new jobs yet
+    /// keeps reporting Running, idling indefinitely (R5-F1). Returns true when a
+    /// pending drain was actually cleared.
+    /// </summary>
+    public bool CancelDrain()
+    {
+        if (!DrainStartedUtc.HasValue)
+        {
+            return false;
+        }
+
+        DrainEvent?.Reset();
+        DrainStartedUtc = null;
+        DrainTimeoutLogged = false;
+        return true;
+    }
+
+    /// <summary>
     /// True while the worker reports an in-flight job through its busy event.
     /// Workers without drain support never set the busy event and read as idle,
     /// which keeps the pre-drain restart behavior for them.

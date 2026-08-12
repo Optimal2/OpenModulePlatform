@@ -895,11 +895,41 @@
         return form;
     }
 
+    function computeNotificationItemsSignature(items) {
+        return items.map(function (item) {
+            return String(item.notificationId || '') + ':' + (item.isUnread ? '1' : '0');
+        }).join('|');
+    }
+
+    function computeNotificationListSignature(list) {
+        return Array.from(list.querySelectorAll('[data-portal-topbar-notification-form]')).map(function (form) {
+            return String(form.dataset.notificationId || '') + ':' + (form.classList.contains('is-unread') ? '1' : '0');
+        }).join('|');
+    }
+
     function replaceNotificationList(root, notificationState) {
         var list = root ? root.querySelector('[data-portal-topbar-notifications-list]') : null;
         if (!list || !notificationState || !Array.isArray(notificationState.items)) {
             return;
         }
+
+        var nextEnd = notificationState.hasMore === true ? 'false' : 'true';
+
+        // Skip the teardown/rebuild when the incoming set matches what is already
+        // rendered. Rebuilding the list on every poll reset the tray's scroll
+        // position while the pointer hovered over it (R5-E9).
+        if (list.dataset.notificationEnd === nextEnd
+            && computeNotificationListSignature(list) === computeNotificationItemsSignature(notificationState.items)) {
+            list.dataset.notificationLoading = 'false';
+            updateNotificationEmptyState(root);
+            setNotificationLazyState(root, false, false);
+            return;
+        }
+
+        var scroller = list.closest('.portal-topbar__tray-body')
+            || list.closest('.portal-topbar__notifications-menu')
+            || list;
+        var previousScrollTop = scroller ? scroller.scrollTop : 0;
 
         list.textContent = '';
         notificationState.items.forEach(function (item) {
@@ -907,9 +937,14 @@
         });
 
         list.dataset.notificationLoading = 'false';
-        list.dataset.notificationEnd = notificationState.hasMore === true ? 'false' : 'true';
+        list.dataset.notificationEnd = nextEnd;
         updateNotificationEmptyState(root);
         setNotificationLazyState(root, false, false);
+
+        // Restore scroll so an unrelated content change does not yank the tray (R5-E9).
+        if (scroller && previousScrollTop > 0) {
+            scroller.scrollTop = previousScrollTop;
+        }
     }
 
     function messageConversationInitials(value) {
@@ -1998,8 +2033,33 @@
         }));
     }
 
+    // A pushed summary payload carries this user's counts/items and may only be
+    // rendered when the push was delivered to the current user's own SignalR
+    // group. Role/broadcast/authenticated/app/module fan-out reaches many users,
+    // so its payload is not necessarily this user's and must never overwrite the
+    // topbar; those envelopes fall back to the per-user authenticated summary
+    // refresh instead. The direct per-user push carries no target metadata and
+    // is delivered by the server to this user's group alone (R5S-E2).
+    function isUserScopedPushEnvelope(envelope) {
+        if (!envelope || typeof envelope !== 'object') {
+            return false;
+        }
+
+        var targetKind = envelope.targetKind;
+        if (targetKind === undefined || targetKind === null || targetKind === '') {
+            return true;
+        }
+
+        return String(targetKind).toLowerCase() === 'user';
+    }
+
     function tryApplyTopbarSummaryFromPushPayload(envelope) {
         if (!envelope || typeof envelope !== 'object' || !envelope.payload || typeof envelope.payload !== 'object') {
+            return false;
+        }
+
+        // Only render counts/items from a push that is scoped to this user (R5S-E2).
+        if (!isUserScopedPushEnvelope(envelope)) {
             return false;
         }
 
@@ -2196,6 +2256,28 @@
         }
     }
 
+    // Network or tab visibility returned: if push mode is configured but the
+    // channel is currently down (e.g. the automatic-reconnect budget ran out
+    // while offline), clear any pending backoff, reset the attempt counter and
+    // re-establish the push connection so the client does not stay stuck on the
+    // polling fallback after coming back online (R5-E6).
+    function rearmTopbarPushIfNeeded() {
+        if (!topbarPollingState.root) {
+            return;
+        }
+
+        var config = getTopbarPollingConfig(topbarPollingState.root);
+        if (config.mode !== TOPBAR_UPDATE_PUSH_MODE) {
+            return;
+        }
+
+        if (!topbarPollingState.pushConnection && !topbarPollingState.pushStarting) {
+            clearTopbarPushReconnect();
+            topbarPollingState.pushReconnectAttempts = 0;
+            startTopbarPush(config);
+        }
+    }
+
     function registerTopbarSummaryRefreshHandlers() {
         if (topbarPollingState.handlersRegistered) {
             return;
@@ -2203,11 +2285,17 @@
 
         topbarPollingState.handlersRegistered = true;
         window.addEventListener('focus', function () {
+            rearmTopbarPushIfNeeded();
             if (isTopbarAutomaticRefreshActive(getTopbarPollingConfig(topbarPollingState.root))) {
                 runTopbarSummaryRefreshSoon(false);
             }
         });
+        window.addEventListener('online', rearmTopbarPushIfNeeded);
         document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') {
+                rearmTopbarPushIfNeeded();
+            }
+
             var config = getTopbarPollingConfig(topbarPollingState.root);
             if (!isTopbarAutomaticRefreshActive(config)) {
                 return;

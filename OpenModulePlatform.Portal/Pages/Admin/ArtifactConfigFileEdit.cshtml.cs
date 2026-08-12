@@ -40,6 +40,12 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
 
     public ArtifactEditData? Artifact { get; private set; }
 
+    /// <summary>
+    /// Tells the view whether the edited version is the desired/active one or is
+    /// about to be superseded, so it can warn before saving (R5-F10).
+    /// </summary>
+    public ArtifactConfigVersionStatus? VersionStatus { get; private set; }
+
     [TempData]
     public string? StatusMessage { get; set; }
 
@@ -86,13 +92,17 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
             return NotFound();
         }
 
+        // (R5-F10) Load whether this is the desired/latest version for the warning banner.
+        VersionStatus = await _repo.GetArtifactConfigVersionStatusAsync(row.ArtifactId, ct);
+
         Input = new InputModel
         {
             ArtifactConfigurationFileId = row.ArtifactConfigurationFileId,
             ArtifactId = row.ArtifactId,
             RelativePath = row.RelativePath,
             FileContent = row.FileContent,
-            IsEnabled = row.IsEnabled
+            IsEnabled = row.IsEnabled,
+            LoadedRowVersion = row.UpdatedUtc.Ticks // (R5-F13) optimistic concurrency token
         };
 
         return Page();
@@ -158,6 +168,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         }
 
         SetTitles("Edit artifact configuration file");
+        var expectedRowVersion = Input.LoadedRowVersion; // (R5-F13) capture before Input is reloaded
         var row = await LoadExistingRowForContentUpdateAsync(ct);
         if (row is null)
         {
@@ -182,9 +193,16 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         try
         {
             row.FileContent = await ReadUploadedTextFileAsync(UploadedFile, ct);
-            await _repo.SaveArtifactConfigurationFileAsync(row, ct);
+            await _repo.SaveArtifactConfigurationFileAsync(row, ExpectedRowVersion(expectedRowVersion), ct);
             StatusMessage = T("Artifact configuration file content updated.");
             return RedirectToPage("/Admin/ArtifactConfigFileEdit", new { id = row.ArtifactConfigurationFileId });
+        }
+        catch (ArtifactConfigurationConcurrencyException)
+        {
+            // (R5-F13) Someone else saved since this editor loaded; reject instead of clobbering.
+            Input.LoadedRowVersion = row.UpdatedUtc.Ticks;
+            ModelState.AddModelError(string.Empty, T("This configuration file was changed by someone else since you opened it. Your upload was not saved. Review the current content and try again."));
+            return Page();
         }
         catch (DecoderFallbackException)
         {
@@ -216,6 +234,7 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
 
         SetTitles("Edit artifact configuration file");
         var postedFileContent = Input.FileContent ?? string.Empty;
+        var expectedRowVersion = Input.LoadedRowVersion; // (R5-F13) capture before Input is reloaded
         var row = await LoadExistingRowForContentUpdateAsync(ct);
         if (row is null)
         {
@@ -225,9 +244,17 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
         try
         {
             row.FileContent = postedFileContent;
-            await _repo.SaveArtifactConfigurationFileAsync(row, ct);
+            await _repo.SaveArtifactConfigurationFileAsync(row, ExpectedRowVersion(expectedRowVersion), ct);
             StatusMessage = T("Artifact configuration file content updated.");
             return RedirectToPage("/Admin/ArtifactConfigFileEdit", new { id = row.ArtifactConfigurationFileId });
+        }
+        catch (ArtifactConfigurationConcurrencyException)
+        {
+            // (R5-F13) Someone else saved since this editor loaded; reject and keep the operator's text.
+            Input.FileContent = postedFileContent;
+            Input.LoadedRowVersion = row.UpdatedUtc.Ticks;
+            ModelState.AddModelError(string.Empty, T("This configuration file was changed by someone else since you opened it. Your changes were not saved. Review the current content and try again."));
+            return Page();
         }
         catch (SqlException ex)
         {
@@ -238,6 +265,10 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
             return Page();
         }
     }
+
+    // (R5-F13) Treat a missing/zero token as "no check" so create-flow and legacy posts still save.
+    private static DateTime? ExpectedRowVersion(long ticks)
+        => ticks > 0 ? new DateTime(ticks, DateTimeKind.Utc) : null;
 
     public async Task<IActionResult> OnPostDelete(CancellationToken ct)
     {
@@ -316,13 +347,17 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
             return NotFoundRow();
         }
 
+        // (R5-F10) Keep the version warning banner accurate on re-render.
+        VersionStatus = await _repo.GetArtifactConfigVersionStatusAsync(row.ArtifactId, ct);
+
         Input = new InputModel
         {
             ArtifactConfigurationFileId = row.ArtifactConfigurationFileId,
             ArtifactId = row.ArtifactId,
             RelativePath = row.RelativePath,
             FileContent = row.FileContent,
-            IsEnabled = row.IsEnabled
+            IsEnabled = row.IsEnabled,
+            LoadedRowVersion = row.UpdatedUtc.Ticks // (R5-F13) current row token
         };
 
         return row;
@@ -421,5 +456,11 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
 
         [Display(Name = "Enabled")]
         public bool IsEnabled { get; set; } = true;
+
+        /// <summary>
+        /// UpdatedUtc ticks captured when the row was loaded, used as an optimistic
+        /// concurrency token so concurrent editors do not clobber each other (R5-F13).
+        /// </summary>
+        public long LoadedRowVersion { get; set; }
     }
 }

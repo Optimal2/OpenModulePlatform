@@ -253,9 +253,17 @@ public sealed class LoginModel : PageModel
 
         if (!result.Succeeded || result.Principal is null)
         {
-            _loginThrottle.RecordFailure(throttleKey);
-            _loginThrottle.RecordClientFailure(clientAddress);
-            ErrorMessage = T("Windows credentials could not be validated.");
+            // A domain-controller-unreachable result is an infrastructure fault, not a
+            // bad-credential attempt, so it must not increment the lockout counter (R5-F8).
+            if (!result.IsInfrastructureError)
+            {
+                _loginThrottle.RecordFailure(throttleKey);
+                _loginThrottle.RecordClientFailure(clientAddress);
+            }
+
+            ErrorMessage = T(result.IsInfrastructureError
+                ? "Windows credentials could not be validated because the directory service is unavailable. Please try again shortly."
+                : "Windows credentials could not be validated.");
             await PreparePageAsync(ct);
             return Page();
         }

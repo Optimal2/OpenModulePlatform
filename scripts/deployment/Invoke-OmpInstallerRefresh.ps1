@@ -24,6 +24,39 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# R5-G1: the detached runner knows the name+PID of any process blocking the
+# package swap, but that only ever reached the runner's log file - the CLI sat
+# silent while it waited. Echo new log content to the console as it appears so
+# the operator can see what is blocking without opening the log.
+$script:LogEchoPosition = 0
+function Write-NewLogLines {
+    param([string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    try {
+        $content = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+    }
+    catch {
+        # The runner may hold the file briefly; try again on the next tick.
+        return
+    }
+
+    if ($null -eq $content -or $content.Length -le $script:LogEchoPosition) {
+        return
+    }
+
+    $new = $content.Substring($script:LogEchoPosition)
+    $script:LogEchoPosition = $content.Length
+    foreach ($line in ($new -split "`r?`n")) {
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            Write-Host "  | $line"
+        }
+    }
+}
+
 $ConfigPath = (Resolve-Path $ConfigPath).Path
 if (-not $InstallerRoot) {
     $hostDir = Split-Path $ConfigPath -Parent
@@ -81,10 +114,20 @@ if ($runnerPid) {
         Select-Object -First 1
     if ($runnerProcess) {
         Write-Host "Waiting for detached refresh runner (PID $runnerPid)..."
-        if (-not $runnerProcess.WaitForExit($TimeoutSeconds * 1000)) {
-            Write-Error "Refresh runner (PID $runnerPid) did not finish within $TimeoutSeconds seconds."
-            exit 1
+        # R5-G1: poll instead of a single blocking WaitForExit so the runner's
+        # log (including any "Waiting for processes running from the package to
+        # exit: <name> (PID n)" blocker line) is echoed live to the console.
+        $runnerDeadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        while (-not $runnerProcess.HasExited) {
+            Write-NewLogLines -Path $logFile
+            if ((Get-Date) -ge $runnerDeadline) {
+                Write-NewLogLines -Path $logFile
+                Write-Error "Refresh runner (PID $runnerPid) did not finish within $TimeoutSeconds seconds."
+                exit 1
+            }
+            Start-Sleep -Milliseconds 500
         }
+        Write-NewLogLines -Path $logFile
     }
 }
 elseif ($launcherExit -ne 0 -and $null -ne $launcherExit) {
@@ -102,11 +145,14 @@ elseif ($launcherExit -ne 0 -and $null -ne $launcherExit) {
 $deadline = (Get-Date).AddSeconds(30)
 $refreshCompleted = $false
 while ((Get-Date) -lt $deadline) {
+    # R5-G1: keep echoing any log content flushed after the runner exited.
+    Write-NewLogLines -Path $logFile
     $logText = if (Test-Path $logFile) { Get-Content $logFile -Raw -ErrorAction SilentlyContinue } else { $null }
     if ($logText -match 'Installer package refresh failed\.') { break }
     if ($logText -match 'Installer package refresh completed\.') { $refreshCompleted = $true; break }
     Start-Sleep -Seconds 2
 }
+Write-NewLogLines -Path $logFile
 
 if (-not $refreshCompleted) {
     if (Test-Path $logFile) {

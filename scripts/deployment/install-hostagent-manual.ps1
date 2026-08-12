@@ -103,12 +103,47 @@ function Invoke-Sc {
     }
 }
 
+function Get-RedactedScArguments {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+
+    # R5S-G4 (and R5S-G1 "not logged elsewhere"): sc.exe receives the service
+    # account password as the plaintext token following 'password='. Never let
+    # that value reach an exception message, transcript, or host output - replace
+    # the value that follows a bare 'password=' token, and any inline form.
+    $redacted = @()
+    $redactNext = $false
+    foreach ($arg in $Arguments) {
+        $text = [string]$arg
+        if ($redactNext) {
+            $redacted += '***'
+            $redactNext = $false
+            continue
+        }
+
+        if ($text -match '^(?i)password=$') {
+            $redacted += $text
+            $redactNext = $true
+            continue
+        }
+
+        if ($text -match '^(?i)(password=)(.+)$') {
+            $redacted += ($Matches[1] + '***')
+            continue
+        }
+
+        $redacted += $text
+    }
+
+    return $redacted
+}
+
 function Invoke-ScChecked {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
     $result = Invoke-Sc -Arguments $Arguments
     if ($result.ExitCode -ne 0) {
-        throw "sc.exe $($Arguments -join ' ') failed with exit code $($result.ExitCode): $($result.Output)"
+        $safeArguments = Get-RedactedScArguments -Arguments $Arguments
+        throw "sc.exe $($safeArguments -join ' ') failed with exit code $($result.ExitCode): $($result.Output)"
     }
 
     return $result
@@ -523,6 +558,12 @@ function Install-OrUpdateService {
                 throw 'Service account password cannot be empty.'
             }
 
+            # R5S-G1 documented residual: sc.exe requires the account password as
+            # a command-line argument (visible to Event 4688/Sysmon/EDR process
+            # auditing). A full switch to a no-command-line path (Win32
+            # ChangeServiceConfig / Win32_Service.Change) is deferred as too
+            # invasive for this recovery tool; Get-RedactedScArguments guarantees
+            # the value is never additionally logged (exception/transcript/host).
             $arguments += @('obj=', $AccountName.Trim(), 'password=', $plainPassword)
         }
         elseif (-not [string]::IsNullOrWhiteSpace($AccountName)) {

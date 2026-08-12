@@ -8,6 +8,9 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 public sealed class HostAgentEngine
 {
     private const int MinimumLeaseSeconds = 30;
+    // (R5-D3) Steady-state superseded-service/orphan-directory cleanup shells full
+    // sc.exe enumerations; gate it to at most this interval instead of every cycle.
+    private static readonly TimeSpan SupersededCleanupInterval = TimeSpan.FromHours(1);
     private readonly object _leaseStateLock = new();
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly IOmpHostArtifactRepository _repository;
@@ -25,6 +28,7 @@ public sealed class HostAgentEngine
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<HostAgentEngine> _logger;
     private HostAgentLeaseResult? _activeLease;
+    private DateTimeOffset _lastSupersededCleanupUtc = DateTimeOffset.MinValue;
 
     public HostAgentEngine(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -66,9 +70,13 @@ public sealed class HostAgentEngine
 
         var hostKey = settings.ResolveHostKey();
         var runtimeMode = _process.RuntimeMode;
+        // (R5-D3) Resolve the desired HostAgent upgrade row once per cycle and thread
+        // it through the lease-takeover check, superseded-service cleanup and upgrade
+        // preparation instead of each re-querying the repository.
+        var desiredUpgrade = await _selfUpgradeService.GetDesiredUpgradeAsync(hostKey, cancellationToken);
         var leaseSeconds = Math.Max(MinimumLeaseSeconds, settings.RefreshSeconds * 3);
         var forceLeaseTakeover = runtimeMode == HostAgentRuntimeMode.Takeover
-            || await _selfUpgradeService.ShouldForceLeaseTakeoverAsync(hostKey, cancellationToken);
+            || _selfUpgradeService.ShouldForceLeaseTakeover(desiredUpgrade);
         var lease = await _repository.TryAcquireHostAgentLeaseAsync(
             hostKey,
             _process.ServiceName,
@@ -126,9 +134,17 @@ public sealed class HostAgentEngine
             {
                 await _selfUpgradeService.CompleteTakeoverAsync(hostKey, lease.HostId.Value, leaseRenewalCancellation.Token);
             }
-            else
+            else if (desiredUpgrade is not null && ShouldRunSupersededCleanup())
             {
-                await _selfUpgradeService.CleanupSupersededHostAgentServicesAsync(hostKey, lease.HostId.Value, leaseRenewalCancellation.Token);
+                // (R5-D3) Gate steady-state superseded-service/orphan cleanup so it
+                // runs at most hourly instead of every cycle; a completed takeover
+                // still cleans up immediately via CompleteTakeoverAsync.
+                await _selfUpgradeService.CleanupSupersededHostAgentServicesAsync(
+                    hostKey,
+                    lease.HostId.Value,
+                    desiredUpgrade,
+                    leaseRenewalCancellation.Token);
+                _lastSupersededCleanupUtc = _timeProvider.GetUtcNow();
             }
 
             if (_process.IsQuiesceRequested)
@@ -173,12 +189,36 @@ public sealed class HostAgentEngine
                 hostKey,
                 artifacts.Count);
 
+            // (R5-D7) The desired-artifact query is capped at MaxArtifactsPerCycle
+            // with a deterministic order, so when more artifacts are desired than the
+            // cap the same tail is excluded every cycle and never provisions. Surface
+            // the truncation so it is not silent.
+            if (settings.MaxArtifactsPerCycle > 0 && artifacts.Count >= settings.MaxArtifactsPerCycle)
+            {
+                _logger.LogWarning(
+                    "Desired artifact count reached the per-cycle cap; additional desired artifacts may be truncated and will not provision this cycle. HostKey={HostKey}, MaxArtifactsPerCycle={MaxArtifactsPerCycle}. Increase HostAgent:MaxArtifactsPerCycle if this persists.",
+                    hostKey,
+                    settings.MaxArtifactsPerCycle);
+            }
+
             var consistencySummary = await _deploySetConsistencyService.CheckAsync(
                 hostKey,
                 artifacts,
                 leaseRenewalCancellation.Token);
-            _deploySetConsistencyService.ThrowIfBlocked(consistencySummary);
             var deploySetWarningsByModuleInstanceKey = BuildDeploySetWarningsByModuleInstanceKey(consistencySummary);
+            // (R5-D11) In Block mode, scope the block to the affected module-instances'
+            // deployments instead of throwing and aborting the whole cycle. Artifact
+            // provisioning, self-upgrade, job processing and telemetry below still run;
+            // the block reason is published into the host runtime state and onto each
+            // skipped deployment result.
+            var blockedModuleInstanceKeys = _deploySetConsistencyService.GetBlockedModuleInstanceKeys(consistencySummary);
+            if (blockedModuleInstanceKeys.Count > 0)
+            {
+                await PublishDeploySetBlockRuntimeStateAsync(
+                    lease.HostId.Value,
+                    consistencySummary,
+                    leaseRenewalCancellation.Token);
+            }
 
             foreach (var artifact in artifacts)
             {
@@ -189,6 +229,7 @@ public sealed class HostAgentEngine
             await _webAppDeploymentService.DeployDesiredWebAppsAsync(
                 hostKey,
                 deploySetWarningsByModuleInstanceKey,
+                blockedModuleInstanceKeys,
                 leaseRenewalCancellation.Token);
             await _webAppHealthMonitor.ProbePortalAsync(
                 lease.HostId.Value,
@@ -197,8 +238,9 @@ public sealed class HostAgentEngine
             await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(
                 hostKey,
                 deploySetWarningsByModuleInstanceKey,
+                blockedModuleInstanceKeys,
                 leaseRenewalCancellation.Token);
-            await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, leaseRenewalCancellation.Token);
+            await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, desiredUpgrade, leaseRenewalCancellation.Token);
             await _fileMirrorService.MirrorConfiguredFilesAsync(leaseRenewalCancellation.Token);
 
             if (settings.ProcessHostAgentJobs)
@@ -625,6 +667,45 @@ public sealed class HostAgentEngine
             or DbException
             or UnauthorizedAccessException
             or TimeoutException;
+
+    private bool ShouldRunSupersededCleanup()
+        => _timeProvider.GetUtcNow() - _lastSupersededCleanupUtc >= SupersededCleanupInterval;
+
+    // (R5-D11) Record the deploy-set consistency block in the host runtime state so
+    // it is visible in Portal, instead of only appearing as a repeated "cycle
+    // failed" log from the previous throw-and-abort behavior.
+    private async Task PublishDeploySetBlockRuntimeStateAsync(
+        Guid hostId,
+        DeploySetConsistencyCheckSummary summary,
+        CancellationToken cancellationToken)
+    {
+        var first = summary.Deviations[0];
+        var message =
+            $"Deploy-set consistency Block is active: {summary.DeviationCount} module instance(s) have version mismatches and their deployments are skipped this cycle. " +
+            $"First: ModuleInstance={first.ModuleInstanceKey} ({first.ModuleKey}), Set={first.SetKey}, Versions={first.ActualVersions ?? "unknown"}. " +
+            "Rebuild and import a consistent artifact set, or switch HostAgent:DeploySetConsistencyMode to Warn.";
+        _logger.LogWarning("{DeploySetBlockMessage}", message);
+
+        try
+        {
+            await _repository.PublishHostAgentRuntimeStateAsync(
+                hostId,
+                _process,
+                _process.RuntimeMode,
+                artifactId: null,
+                AppContext.BaseDirectory,
+                isActive: true,
+                message,
+                cancellationToken);
+        }
+        catch (Exception ex) when (IsExpectedShutdownFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to publish deploy-set consistency block into HostAgent runtime state. HostId={HostId}",
+                hostId);
+        }
+    }
 
     private static IReadOnlyDictionary<string, string> BuildDeploySetWarningsByModuleInstanceKey(
         DeploySetConsistencyCheckSummary summary)
