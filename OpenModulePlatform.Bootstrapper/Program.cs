@@ -5590,6 +5590,25 @@ VALUES
             info.WorkingDirectory = workingDirectory;
         }
 
+        if (string.Equals(fileName, "powershell", StringComparison.OrdinalIgnoreCase))
+        {
+            // A pwsh 7 launcher's PSModulePath breaks Windows PowerShell 5.1
+            // children (5.1 resolves pwsh's incompatible core modules first).
+            // Hand them the machine-scope path and skip the policy check for
+            // our own repo scripts. Mirrors RunProcessStreaming in
+            // Program.Refresh.cs.
+            var machineModulePath = Environment.GetEnvironmentVariable(
+                "PSModulePath",
+                EnvironmentVariableTarget.Machine);
+            if (!string.IsNullOrWhiteSpace(machineModulePath))
+            {
+                info.Environment["PSModulePath"] = machineModulePath;
+            }
+
+            info.ArgumentList.Add("-ExecutionPolicy");
+            info.ArgumentList.Add("Bypass");
+        }
+
         foreach (var argument in arguments)
         {
             info.ArgumentList.Add(argument);
