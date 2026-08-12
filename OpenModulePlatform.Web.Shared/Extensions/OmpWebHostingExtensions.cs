@@ -388,6 +388,11 @@ public static class OmpWebHostingExtensions
             PortalTopBarService portalTopBarService,
             CancellationToken ct) =>
         {
+            // R3-E2 note: these POSTs are CSRF-protected by SameSite=Lax on the
+            // auth cookie. The rendered and JS-built forms now also carry an
+            // antiforgery token; explicit server-side ValidateRequestAsync is
+            // deferred until the Portal test fixture can render full pages to
+            // mint tokens and the change is coordinated on the shared topbar.
             if (!context.Request.HasFormContentType)
             {
                 return Results.BadRequest();
@@ -797,6 +802,15 @@ public static class OmpWebHostingExtensions
                 SetHeaderIfMissing(headers, "X-Frame-Options", "SAMEORIGIN");
                 SetHeaderIfMissing(headers, "Permissions-Policy", "camera=(), microphone=(), geolocation=()");
 
+                // HSTS only over HTTPS: a plain-HTTP internal deployment never
+                // emits it (and browsers ignore it there anyway), so this is
+                // safe without a config knob while adding downgrade protection
+                // wherever TLS is used (R3-E10).
+                if (httpContext.Request.IsHttps)
+                {
+                    SetHeaderIfMissing(headers, "Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+                }
+
                 // OMP still has trusted inline scripts and styles in legacy module pages.
                 // Add CSP only after those pages have been migrated to nonce/hash based assets.
                 return Task.CompletedTask;
@@ -922,6 +936,15 @@ public static class OmpWebHostingExtensions
         if (!string.IsNullOrWhiteSpace(dataProtectionKeyPath))
         {
             dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyPath));
+
+            // Encrypt the key ring at rest by default: without this a reader of
+            // the shared key directory could forge auth cookies for every OMP
+            // app (R3-E8). DPAPI is Windows-only; on other platforms the
+            // directory ACL is the protection.
+            if (authOptions.ProtectKeysWithDpapi && OperatingSystem.IsWindows())
+            {
+                dataProtectionBuilder.ProtectKeysWithDpapi();
+            }
         }
 
         services.AddAuthentication(OmpAuthDefaults.AuthenticationScheme)
@@ -934,7 +957,11 @@ public static class OmpWebHostingExtensions
                 options.Cookie.HttpOnly = true;
                 options.Cookie.IsEssential = true;
                 options.Cookie.SameSite = SameSiteMode.Lax;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                // Secure by default (R3-E5): SameAsRequest let a single HTTP
+                // request issue the session cookie without the Secure flag.
+                options.Cookie.SecurePolicy = string.Equals(authOptions.CookieSecurePolicy?.Trim(), "sameAsRequest", StringComparison.OrdinalIgnoreCase)
+                    ? CookieSecurePolicy.SameAsRequest
+                    : CookieSecurePolicy.Always;
                 options.LoginPath = NormalizeLocalAuthPath(authOptions.LoginPath, OmpAuthDefaults.LoginPath);
                 options.AccessDeniedPath = NormalizeLocalAuthPath(authOptions.AccessDeniedPath, OmpAuthDefaults.AccessDeniedPath);
                 options.SlidingExpiration = true;

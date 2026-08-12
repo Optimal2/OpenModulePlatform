@@ -105,6 +105,12 @@ public sealed class RbacService
         }
     }
 
+    // Resolving the role context is the hot path of every page: branding, the
+    // top bar and the security gate each ask for it, and it runs several
+    // queries. Memoize it per request in HttpContext.Items so a single page
+    // render resolves it once instead of ~15-20 DB round-trips (R3-E1).
+    private const string RoleContextItemsKey = "OMP.RbacService.RoleContext";
+
     public async Task<UserRoleContext> GetUserRoleContextAsync(
         ClaimsPrincipal user,
         CancellationToken ct)
@@ -114,6 +120,28 @@ public sealed class RbacService
             return UserRoleContext.Empty;
         }
 
+        // Only cache the context of the request's own user (the common case);
+        // callers passing a different principal bypass the cache.
+        var httpContext = _httpContextAccessor.HttpContext;
+        var cacheable = httpContext is not null && ReferenceEquals(user, httpContext.User);
+        if (cacheable && httpContext!.Items.TryGetValue(RoleContextItemsKey, out var cached) && cached is UserRoleContext cachedContext)
+        {
+            return cachedContext;
+        }
+
+        var context = await ResolveUserRoleContextAsync(user, ct);
+        if (cacheable)
+        {
+            httpContext!.Items[RoleContextItemsKey] = context;
+        }
+
+        return context;
+    }
+
+    private async Task<UserRoleContext> ResolveUserRoleContextAsync(
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
         var rolePrincipals = await GetRolePrincipalsFromUserAsync(user, ct);
         if (rolePrincipals.Count == 0)
         {

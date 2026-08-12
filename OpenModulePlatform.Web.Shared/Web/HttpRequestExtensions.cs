@@ -7,14 +7,11 @@ public static class HttpRequestExtensions
 {
     public static string GetPublicBaseUrl(this HttpRequest request)
     {
-        var scheme = request.Headers.TryGetValue("X-Forwarded-Proto", out var proto) && !string.IsNullOrWhiteSpace(proto)
-            ? proto.ToString()
-            : request.Scheme;
-
-        var host = request.Headers.TryGetValue("X-Forwarded-Host", out var forwardedHost) && !string.IsNullOrWhiteSpace(forwardedHost)
-            ? forwardedHost.ToString()
-            : request.Host.Value;
-
-        return $"{scheme}://{host}";
+        // Use request.Scheme/Host, which the ForwardedHeaders middleware
+        // already populated from X-Forwarded-* ONLY for trusted proxies
+        // (KnownProxies/KnownNetworks). Reading the raw X-Forwarded-* headers
+        // here bypassed that trust model and let any client spoof the host in
+        // absolute links - host header injection / phishing (R3-E3).
+        return $"{request.Scheme}://{request.Host.Value}";
     }
 }

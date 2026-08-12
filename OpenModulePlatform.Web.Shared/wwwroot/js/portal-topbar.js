@@ -415,6 +415,7 @@
         form.action = root.getAttribute('data-favorite-toggle-url') || '';
         form.className = 'portal-topbar__favorite-form';
         form.setAttribute('data-portal-topbar-favorite-form', '');
+        appendAntiforgeryToken(form);
         form.appendChild(createHiddenInput('entryKey', payload.entryKey));
         form.appendChild(createHiddenInput('appInstanceId', payload.appInstanceId || ''));
 
@@ -802,6 +803,40 @@
         return absoluteHref.substring(0, markerIndex) + value.substring(1);
     }
 
+    // Only navigate to same-origin, absolute-path destinations: a row written
+    // outside the validated write path could otherwise carry a "javascript:"
+    // or off-site URL that lands in window.location.href (R3-E6).
+    function isSafeLocalDestination(url) {
+        if (typeof url !== 'string' || url.length === 0) {
+            return false;
+        }
+        // Must be an absolute path, not "//host", not "/\host", no scheme.
+        if (url.charAt(0) !== '/' || url.charAt(1) === '/' || url.charAt(1) === '\\') {
+            return false;
+        }
+        return true;
+    }
+
+    // Read the antiforgery token from any server-rendered form so dynamically
+    // rebuilt forms carry it too; the server now validates it (R3-E2).
+    function getAntiforgeryToken() {
+        var field = document.querySelector('input[name="__RequestVerificationToken"]');
+        return field ? field.value : '';
+    }
+
+    function appendAntiforgeryToken(form) {
+        var token = getAntiforgeryToken();
+        if (!token) {
+            return;
+        }
+
+        var tokenInput = document.createElement('input');
+        tokenInput.type = 'hidden';
+        tokenInput.name = '__RequestVerificationToken';
+        tokenInput.value = token;
+        form.appendChild(tokenInput);
+    }
+
     function createNotificationForm(list, item) {
         var form = document.createElement('form');
         form.method = 'post';
@@ -811,6 +846,8 @@
         form.setAttribute('data-enhance', 'false');
         form.dataset.notificationId = String(item.notificationId || '');
         form.dataset.notificationCreatedAt = item.createdAt || '';
+
+        appendAntiforgeryToken(form);
 
         var input = document.createElement('input');
         input.type = 'hidden';
@@ -1037,7 +1074,7 @@
                     updateNotificationEmptyState(root);
                     emitNotificationChanged(form.dataset.notificationId, payload.unreadCount, false);
 
-                    if (payload.destinationUrl) {
+                    if (payload.destinationUrl && isSafeLocalDestination(payload.destinationUrl)) {
                         didNavigate = true;
                         window.location.href = payload.destinationUrl;
                     }

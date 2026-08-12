@@ -79,15 +79,29 @@ public sealed class OmpConfigurationService
             return await GetGlobalStringAsync(category, setting, ct);
         }
 
+        // Cache the resolved value like the global variant: branding alone asks
+        // for several effective settings on every request, and they change
+        // rarely (R3-E9). The key includes the user, role and permission set so
+        // different principals never share a value.
+        var permissionKey = string.Join('|', permissionNames);
+        var cacheKey = string.Create(CultureInfo.InvariantCulture,
+            $"omp-cfg-eff::{category.Trim()}::{setting.Trim()}::{userId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{activeRoleId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{permissionKey}");
+        if (_cache.TryGetValue<string?>(cacheKey, out var cachedValue))
+        {
+            return cachedValue;
+        }
+
         try
         {
-            return await QueryEffectiveStringAsync(
+            var value = await QueryEffectiveStringAsync(
                 category.Trim(),
                 setting.Trim(),
                 userId,
                 activeRoleId,
                 permissionNames,
                 ct);
+            _cache.Set(cacheKey, value, CacheLifetime);
+            return value;
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
