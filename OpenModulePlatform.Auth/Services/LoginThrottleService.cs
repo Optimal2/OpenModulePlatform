@@ -13,6 +13,11 @@ namespace OpenModulePlatform.Auth.Services;
 public sealed class LoginThrottleService
 {
     private const int MaxFailures = 10;
+    // Per-source failures across ALL usernames: bounds password spraying (one
+    // password tried against many accounts), which the per-username counter never
+    // limited because each account accrues only one failure (R4-F3). Higher than
+    // the per-username cap so ordinary shared-NAT traffic is not locked out.
+    private const int MaxClientFailures = 50;
     private static readonly TimeSpan FailureWindow = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan Lockout = TimeSpan.FromMinutes(15);
 
@@ -59,23 +64,30 @@ public sealed class LoginThrottleService
             return new Attempts { FirstUtc = now };
         })!;
 
-        // Reset the window if the oldest counted failure aged out.
-        if (now - attempts.FirstUtc > FailureWindow)
+        // Serialize the read-modify-write: concurrent failures for one key used
+        // to race on Count++ and lose increments, so the lockout could never be
+        // reached under trivially reproducible parallel guessing (R4-F2). Lock on
+        // the cached instance so all writers for the same key contend on it.
+        lock (attempts)
         {
-            attempts.Count = 0;
-            attempts.FirstUtc = now;
-            attempts.LockedUntilUtc = null;
-        }
+            // Reset the window if the oldest counted failure aged out.
+            if (now - attempts.FirstUtc > FailureWindow)
+            {
+                attempts.Count = 0;
+                attempts.FirstUtc = now;
+                attempts.LockedUntilUtc = null;
+            }
 
-        attempts.Count++;
-        if (attempts.Count >= MaxFailures)
-        {
-            attempts.LockedUntilUtc = now.Add(Lockout);
-        }
+            attempts.Count++;
+            if (attempts.Count >= MaxFailures)
+            {
+                attempts.LockedUntilUtc = now.Add(Lockout);
+            }
 
-        _cache.Set(cacheKey, attempts, attempts.LockedUntilUtc is { } lockUntil
-            ? lockUntil - now
-            : FailureWindow);
+            _cache.Set(cacheKey, attempts, attempts.LockedUntilUtc is { } lockUntil
+                ? lockUntil - now
+                : FailureWindow);
+        }
     }
 
     public void RecordSuccess(string key)
@@ -87,7 +99,65 @@ public sealed class LoginThrottleService
         }
     }
 
+    /// <summary>
+    /// True when this client address has accumulated too many failed sign-in
+    /// attempts across all usernames (spray defense, R4-F3). No-op for an empty
+    /// address (e.g. a proxy that hides the client IP), which falls back to the
+    /// per-username throttle alone.
+    /// </summary>
+    public bool IsClientLockedOut(string? clientAddress)
+    {
+        var normalized = Normalize(clientAddress ?? string.Empty);
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+
+        return _cache.TryGetValue(ClientCacheKey(normalized), out Attempts? attempts)
+            && attempts?.LockedUntilUtc is { } until
+            && until > DateTimeOffset.UtcNow;
+    }
+
+    public void RecordClientFailure(string? clientAddress)
+    {
+        var normalized = Normalize(clientAddress ?? string.Empty);
+        if (normalized.Length == 0)
+        {
+            return;
+        }
+
+        var cacheKey = ClientCacheKey(normalized);
+        var now = DateTimeOffset.UtcNow;
+        var attempts = _cache.GetOrCreate(cacheKey, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = FailureWindow;
+            return new Attempts { FirstUtc = now };
+        })!;
+
+        lock (attempts)
+        {
+            if (now - attempts.FirstUtc > FailureWindow)
+            {
+                attempts.Count = 0;
+                attempts.FirstUtc = now;
+                attempts.LockedUntilUtc = null;
+            }
+
+            attempts.Count++;
+            if (attempts.Count >= MaxClientFailures)
+            {
+                attempts.LockedUntilUtc = now.Add(Lockout);
+            }
+
+            _cache.Set(cacheKey, attempts, attempts.LockedUntilUtc is { } lockUntil
+                ? lockUntil - now
+                : FailureWindow);
+        }
+    }
+
     private static string CacheKey(string normalized) => $"omp-login-throttle::{normalized}";
+
+    private static string ClientCacheKey(string normalized) => $"omp-login-throttle-client::{normalized}";
 
     private static string Normalize(string key) => (key ?? string.Empty).Trim().ToLowerInvariant();
 }

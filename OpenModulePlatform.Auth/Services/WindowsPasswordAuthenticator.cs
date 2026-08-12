@@ -166,6 +166,25 @@ public sealed class WindowsPasswordAuthenticator
         }
     }
 
+    /// <summary>
+    /// Produces a stable canonical key for an alternate-Windows account so the
+    /// login throttle counts the different spellings of one account against a
+    /// single budget. "operator", ".\operator" and "MACHINE\operator" all resolve
+    /// to the same local account, so without this each spelling got its own
+    /// failure budget and multiplied the allowed guesses (R4-F1).
+    /// </summary>
+    public static string BuildCanonicalAccountKey(string? accountName)
+    {
+        if (!TrySplitAccountName(accountName, out var userName, out var domain))
+        {
+            return (accountName ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        return string.IsNullOrWhiteSpace(domain)
+            ? userName.ToLowerInvariant()
+            : $"{domain.ToLowerInvariant()}\\{userName.ToLowerInvariant()}";
+    }
+
     private static bool TrySplitAccountName(
         string? accountName,
         out string userName,
