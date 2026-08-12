@@ -552,7 +552,27 @@ public sealed class WebAppDeploymentService
     {
         if (!string.IsNullOrWhiteSpace(deployment.InstallPath))
         {
-            return Path.GetFullPath(deployment.InstallPath.Trim());
+            var installPath = deployment.InstallPath.Trim();
+            if (Path.IsPathRooted(installPath))
+            {
+                return Path.GetFullPath(installPath);
+            }
+
+            // A relative InstallPath must resolve under the configured web-apps
+            // root, not against the Windows service's working directory
+            // (C:\Windows\System32). The bare Path.GetFullPath silently mirrored the
+            // app into System32 and reported success (R5-D9). Mirror the service-app
+            // rule: rooted passes through, relative combines under WebAppsRoot.
+            if (string.IsNullOrWhiteSpace(settings.WebAppsRoot))
+            {
+                throw new InvalidOperationException(
+                    $"Web app instance '{deployment.AppInstanceKey}' has a relative InstallPath ('{installPath}') but HostAgent:WebAppsRoot is not configured.");
+            }
+
+            return DeploymentPath.CombineUnderRoot(
+                settings.WebAppsRoot.Trim(),
+                installPath,
+                $"Web app instance '{deployment.AppInstanceKey}' InstallPath");
         }
 
         var appPath = ResolveRelativeIisAppPath(deployment);

@@ -51,6 +51,7 @@ public sealed partial class OmpHostArtifactRepository : IOmpHostArtifactReposito
         CancellationToken ct)
     {
         const string sql = @"
+SET XACT_ABORT ON;
 DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
 DECLARE @leaseUntilUtc datetime2(3) = DATEADD(second, @leaseSeconds, @nowUtc);
 DECLARE @hostId uniqueidentifier;
@@ -108,25 +109,50 @@ SELECT CAST(0 AS bit) AS Acquired, @hostId AS HostId, CAST(NULL AS uniqueidentif
         var token = Guid.NewGuid();
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostKey", hostKey);
-        cmd.Parameters.AddWithValue("@serviceName", serviceName);
-        cmd.Parameters.AddWithValue("@runtimeMode", runtimeMode);
-        cmd.Parameters.AddWithValue("@forceTakeover", forceTakeover);
-        cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(5, leaseSeconds));
-        cmd.Parameters.AddWithValue("@leaseToken", token);
 
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        if (!await rdr.ReadAsync(ct))
+        // Hold the UPDLOCK/HOLDLOCK on the lease row from the existence check
+        // through the INSERT/UPDATE. Without a transaction each statement
+        // autocommits and the lock releases right after the SELECT, so two
+        // services racing a takeover could both read the same expired/matching row
+        // and both write — each returning Acquired=1 and running a full
+        // convergence cycle concurrently until the loser's next renewal failed
+        // (R5-D2). SET XACT_ABORT ON keeps a mid-batch error from leaving the
+        // transaction open.
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
         {
-            return new HostAgentLeaseResult(false, null, null, null);
-        }
+            await using var cmd = new SqlCommand(sql, conn, tx);
+            cmd.Parameters.AddWithValue("@hostKey", hostKey);
+            cmd.Parameters.AddWithValue("@serviceName", serviceName);
+            cmd.Parameters.AddWithValue("@runtimeMode", runtimeMode);
+            cmd.Parameters.AddWithValue("@forceTakeover", forceTakeover);
+            cmd.Parameters.AddWithValue("@leaseSeconds", Math.Max(5, leaseSeconds));
+            cmd.Parameters.AddWithValue("@leaseToken", token);
 
-        return new HostAgentLeaseResult(
-            rdr.GetBoolean(0),
-            rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
-            rdr.IsDBNull(2) ? null : rdr.GetGuid(2),
-            rdr.IsDBNull(3) ? null : rdr.GetString(3));
+            HostAgentLeaseResult result;
+            await using (var rdr = await cmd.ExecuteReaderAsync(ct))
+            {
+                result = await rdr.ReadAsync(ct)
+                    ? new HostAgentLeaseResult(
+                        rdr.GetBoolean(0),
+                        rdr.IsDBNull(1) ? null : rdr.GetGuid(1),
+                        rdr.IsDBNull(2) ? null : rdr.GetGuid(2),
+                        rdr.IsDBNull(3) ? null : rdr.GetString(3))
+                    : new HostAgentLeaseResult(false, null, null, null);
+            }
+
+            await tx.CommitAsync(ct);
+            return result;
+        }
+        catch
+        {
+            if (tx.Connection is not null)
+            {
+                await tx.RollbackAsync(CancellationToken.None);
+            }
+
+            throw;
+        }
     }
 
     public async Task ReleaseHostAgentLeaseAsync(
