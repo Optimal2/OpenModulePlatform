@@ -19,7 +19,10 @@ public sealed class ServiceAppDeploymentService
     private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<ServiceAppDeploymentService> _logger;
     private readonly IWindowsServiceControl _serviceControl;
-    private readonly ConcurrentDictionary<string, int> _consecutiveStartAttemptsByServiceName = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly TimeSpan StartAttemptResetWindow = TimeSpan.FromMinutes(30);
+    private readonly ConcurrentDictionary<string, StartAttemptState> _consecutiveStartAttemptsByServiceName = new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed record StartAttemptState(int Count, DateTime LastAttemptUtc);
 
     public ServiceAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -442,7 +445,20 @@ public sealed class ServiceAppDeploymentService
             return null;
         }
 
-        var attempts = _consecutiveStartAttemptsByServiceName.AddOrUpdate(serviceName, 1, static (_, count) => count + 1);
+        // Decay the crash-loop counter over time. It previously reset only when the
+        // service was observed RUNNING or the host process restarted, so after three
+        // failed starts during (say) a nightly SQL outage the service was never
+        // auto-started again — self-healing stayed disabled for days after the cause
+        // cleared, until someone intervened by hand (R5-D13). Reset the window once
+        // the last attempt is older than the cool-down.
+        var nowUtc = DateTime.UtcNow;
+        var attemptState = _consecutiveStartAttemptsByServiceName.AddOrUpdate(
+            serviceName,
+            _ => new StartAttemptState(1, nowUtc),
+            (_, existing) => nowUtc - existing.LastAttemptUtc > StartAttemptResetWindow
+                ? new StartAttemptState(1, nowUtc)
+                : new StartAttemptState(existing.Count + 1, nowUtc));
+        var attempts = attemptState.Count;
         if (attempts > MaxConsecutiveStartAttempts)
         {
             var persistentWarning = $"Service '{serviceName}' was stopped during reconcile and has exceeded the maximum number of restart attempts ({MaxConsecutiveStartAttempts}). Manual intervention required.";

@@ -1161,6 +1161,23 @@ public static class OmpWebHostingExtensions
             ForwardedHeaders.XForwardedProto |
             ForwardedHeaders.XForwardedHost;
 
+        // Honor X-Forwarded-For too, but ONLY when the operator has declared a
+        // trusted proxy in front (known proxies/networks, or explicit trust-all).
+        // Without X-Forwarded-For, every client behind a reverse proxy collapses to
+        // the proxy's IP, so the per-client-IP login throttle (R4-F3) shares a
+        // single bucket across the whole organization and one attacker locks
+        // everyone out (R5-F6). The ForwardedHeaders middleware only applies XFF
+        // when the immediate peer is a configured known proxy, so with no proxy
+        // declared we keep XFF off and a direct client still cannot spoof its
+        // address (preserving the R5S non-spoofable property).
+        var trustsConfiguredProxy = webAppOptions.ForwardedHeadersTrustAllProxies
+            || webAppOptions.ForwardedHeadersKnownProxies.Length > 0
+            || webAppOptions.ForwardedHeadersKnownNetworks.Length > 0;
+        if (trustsConfiguredProxy)
+        {
+            options.ForwardedHeaders |= ForwardedHeaders.XForwardedFor;
+        }
+
         if (webAppOptions.ForwardedHeadersTrustAllProxies)
         {
             options.KnownIPNetworks.Clear();
