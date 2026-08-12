@@ -357,6 +357,33 @@ internal static partial class Program
         }
     }
 
+    // Builds the PSModulePath handed to Windows PowerShell 5.1 children: the
+    // machine-scope path (so 5.1 finds its own Microsoft.PowerShell.* modules
+    // instead of pwsh 7's incompatible ones), with the current user's Windows
+    // PowerShell module folder prepended. Replacing the whole path with only the
+    // machine scope dropped user-scope modules (Install-Module -Scope CurrentUser),
+    // breaking sibling-repo hooks that import them (R4-G9).
+    internal static string BuildWindowsPowerShellModulePath()
+    {
+        var machineModulePath = Environment.GetEnvironmentVariable(
+            "PSModulePath",
+            EnvironmentVariableTarget.Machine) ?? string.Empty;
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        var userScope = string.IsNullOrWhiteSpace(userProfile)
+            ? string.Empty
+            : Path.Combine(userProfile, "WindowsPowerShell", "Modules");
+
+        if (string.IsNullOrWhiteSpace(userScope))
+        {
+            return machineModulePath;
+        }
+
+        return string.IsNullOrWhiteSpace(machineModulePath)
+            ? userScope
+            : $"{userScope};{machineModulePath}";
+    }
+
     private static void RunProcessStreaming(
         string fileName,
         IReadOnlyList<string> arguments,
@@ -384,12 +411,10 @@ internal static partial class Program
             // Give 5.1 children the machine-scope path instead of the
             // launcher's, and skip the policy check outright: these are our
             // own repo scripts, not downloaded content.
-            var machineModulePath = Environment.GetEnvironmentVariable(
-                "PSModulePath",
-                EnvironmentVariableTarget.Machine);
-            if (!string.IsNullOrWhiteSpace(machineModulePath))
+            var modulePath = BuildWindowsPowerShellModulePath();
+            if (!string.IsNullOrWhiteSpace(modulePath))
             {
-                info.Environment["PSModulePath"] = machineModulePath;
+                info.Environment["PSModulePath"] = modulePath;
             }
 
             info.ArgumentList.Add("-ExecutionPolicy");
@@ -1177,9 +1202,15 @@ internal static partial class Program
             throw new InvalidOperationException("Generated package root must not overlap the destination package root.");
         }
 
-        var backup = destination.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + ".backup-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        var destinationTrimmed = destination.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var backup = destinationTrimmed + ".backup-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
         DeleteDirectoryIfExists(backup);
+
+        // Sweep stale timestamped backups from earlier runs: each run used a new
+        // timestamp and only cleaned its own name, so a backup that survived a
+        // locked delete accumulated multi-GB copies beside the package root until
+        // an operator noticed (R4-G11).
+        CleanupStaleBackups(destinationTrimmed);
 
         if (Directory.Exists(destination))
         {
@@ -1195,16 +1226,32 @@ internal static partial class Program
         catch
         {
             // The rollback must be as resilient as the forward move: a raw
-            // Directory.Move here could itself fail on the same transient AV/
-            // sync lock and leave the install root missing with the original
-            // stranded under the backup name (R3-G4).
-            DeleteDirectoryIfExists(destination);
+            // Directory.Move/Delete here could itself fail on the same transient
+            // AV/sync lock and leave the install root missing with the original
+            // stranded under the backup name (R3-G4, R4-G1). Retry the delete so
+            // the restore below can proceed.
+            DeleteDirectoryWithRetry(destination);
             if (Directory.Exists(backup))
             {
                 MoveDirectoryWithRetry(backup, destination);
             }
 
             throw;
+        }
+    }
+
+    private static void CleanupStaleBackups(string destinationTrimmed)
+    {
+        var parent = Path.GetDirectoryName(destinationTrimmed);
+        if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
+        {
+            return;
+        }
+
+        var prefix = Path.GetFileName(destinationTrimmed) + ".backup-";
+        foreach (var directory in Directory.EnumerateDirectories(parent, prefix + "*"))
+        {
+            DeleteDirectoryBestEffort(directory);
         }
     }
 
@@ -1265,6 +1312,31 @@ internal static partial class Program
         }
 
         Directory.Delete(path, recursive: true);
+    }
+
+    private static void DeleteDirectoryWithRetry(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        // Same transient AV/sync lock class the moves retry against: a single
+        // raw Delete in the rollback path could throw and prevent the restore,
+        // leaving the install root missing (R4-G1).
+        const int maxAttempts = 5;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+                return;
+            }
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < maxAttempts)
+            {
+                Thread.Sleep(200 * attempt);
+            }
+        }
     }
 
     private static void DeleteDirectoryBestEffort(string path)
