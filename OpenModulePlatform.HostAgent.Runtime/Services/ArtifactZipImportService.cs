@@ -58,6 +58,8 @@ public sealed class ArtifactZipImportService
         Directory.CreateDirectory(processedPath);
         Directory.CreateDirectory(failedPath);
 
+        PruneImportArchivesAndStaging(settings, importSettings, processedPath, failedPath);
+
         var importPaths = Directory.EnumerateFiles(importPath, "*", SearchOption.TopDirectoryOnly)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .Take(importSettings.MaxFilesPerCycle)
@@ -74,6 +76,109 @@ public sealed class ArtifactZipImportService
         {
             cancellationToken.ThrowIfCancellationRequested();
             await ImportOneAsync(settings, importSettings, path, processedPath, failedPath, cancellationToken);
+        }
+    }
+
+    // Best-effort housekeeping run once per import cycle. Both classes of leftover
+    // grew without bound: archived processed/failed import files (D15) and import
+    // staging trees orphaned when a self-upgrade takeover hard-killed an agent
+    // mid-import (D6). Multi-GB universal packages made either one fill the store
+    // volume over time, eventually failing imports with disk-full errors.
+    private void PruneImportArchivesAndStaging(
+        HostAgentSettings settings,
+        HostAgentArtifactZipImportSettings importSettings,
+        string processedPath,
+        string failedPath)
+    {
+        var nowUtc = DateTime.UtcNow;
+
+        if (importSettings.ProcessedRetentionDays > 0)
+        {
+            var retentionCutoff = nowUtc.AddDays(-importSettings.ProcessedRetentionDays);
+            SweepEntriesOlderThan(processedPath, retentionCutoff, includeDirectories: false);
+            SweepEntriesOlderThan(failedPath, retentionCutoff, includeDirectories: false);
+        }
+
+        // In-flight staging entries are seconds to minutes old, so a 24 h floor
+        // never touches live work — only trees a crash left behind.
+        var stagingCutoff = nowUtc.AddHours(-24);
+        if (!string.IsNullOrWhiteSpace(settings.CentralArtifactRoot))
+        {
+            SweepEntriesOlderThan(
+                Path.Join(Path.GetFullPath(settings.CentralArtifactRoot.Trim()), ".hostagent-import-staging"),
+                stagingCutoff,
+                includeDirectories: true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.LocalArtifactCacheRoot))
+        {
+            SweepEntriesOlderThan(
+                Path.Join(Path.GetFullPath(settings.LocalArtifactCacheRoot.Trim()), ".staging"),
+                stagingCutoff,
+                includeDirectories: true);
+        }
+    }
+
+    private void SweepEntriesOlderThan(string root, DateTime cutoffUtc, bool includeDirectories)
+    {
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly))
+            {
+                TryDeleteAgedEntry(file, cutoffUtc, isDirectory: false);
+            }
+
+            if (includeDirectories)
+            {
+                foreach (var directory in Directory.EnumerateDirectories(root, "*", SearchOption.TopDirectoryOnly))
+                {
+                    TryDeleteAgedEntry(directory, cutoffUtc, isDirectory: true);
+                }
+            }
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import housekeeping could not enumerate '{Root}'.", root);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import housekeeping could not enumerate '{Root}'.", root);
+        }
+    }
+
+    private void TryDeleteAgedEntry(string path, DateTime cutoffUtc, bool isDirectory)
+    {
+        try
+        {
+            var lastWriteUtc = isDirectory
+                ? Directory.GetLastWriteTimeUtc(path)
+                : File.GetLastWriteTimeUtc(path);
+            if (lastWriteUtc >= cutoffUtc)
+            {
+                return;
+            }
+
+            if (isDirectory)
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            else
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import housekeeping could not delete aged entry '{Path}'.", path);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import housekeeping could not delete aged entry '{Path}'.", path);
         }
     }
 

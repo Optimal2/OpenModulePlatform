@@ -545,6 +545,11 @@ public sealed class HostAgentArtifactZipImportSettings
 
     public int MaxFilesPerCycle { get; set; } = 10;
 
+    // Archived processed/failed import files (universal packages are multi-GB) were
+    // kept forever, so the store volume slowly filled with dead zips (R5-D15). Prune
+    // archives older than this many days; 0 disables pruning (keep forever).
+    public int ProcessedRetentionDays { get; set; } = 30;
+
     public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
 
     public long MaxArtifactPackageTotalUncompressedBytes { get; set; } = 10L * 1024 * 1024 * 1024;
