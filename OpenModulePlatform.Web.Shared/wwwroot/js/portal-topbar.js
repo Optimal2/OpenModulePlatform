@@ -678,6 +678,9 @@
         var safeCount = Math.max(0, Number(count) || 0);
         badge.textContent = notificationBadgeText(safeCount);
         badge.hidden = safeCount === 0;
+        // Remember the authoritative server count so a later DOM-only refresh does
+        // not have to guess it from the ~10 rendered rows (R6-E2).
+        root.dataset.portalTopbarUnreadCount = String(safeCount);
         updateNotificationMarkAllState(root, safeCount);
     }
 
@@ -725,6 +728,17 @@
         var markAll = root.querySelector('[data-portal-topbar-notification-mark-all-form]');
         if (markAll) {
             var safeCount = Number(unreadCount);
+            if (!Number.isFinite(safeCount)) {
+                // Fall back to the last authoritative server count before guessing
+                // from the DOM. The tray renders only the newest ~10 rows, so a user
+                // whose newest rows are all read but who still has older unread ones
+                // had "Mark all as read" hidden on every refresh -- the badge said 5,
+                // the action was unreachable (R6-E2). The DOM scan remains as a last
+                // resort for the very first render.
+                var remembered = Number(root.dataset.portalTopbarUnreadCount);
+                safeCount = Number.isFinite(remembered) ? remembered : Number.NaN;
+            }
+
             var hasUnread = Number.isFinite(safeCount)
                 ? safeCount > 0
                 : !!root.querySelector('[data-portal-topbar-notification-form].is-unread');

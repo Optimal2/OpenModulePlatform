@@ -186,6 +186,25 @@ public sealed class WorkerManagerHostedService : BackgroundService
             {
                 if (!managed.HasEquivalentConfiguration(desired))
                 {
+                    // Never tear down a RUNNING worker for a configuration we already
+                    // know we cannot start. Two of the compared fields (InstallRootPath,
+                    // IsProvisionedFromHostArtifactCache) and the plugin path derived
+                    // from them come from HostArtifactStates at query time, so a
+                    // provisioning state that briefly leaves Succeeded reads as a
+                    // "configuration change" back to a stale legacy path. The old code
+                    // drained, stopped, adopted the new definition and only then hit
+                    // ValidateReadableStartupFile -- leaving the worker stopped and
+                    // unable to start until the HostAgent state recovered (R6-F3).
+                    if (managed.IsRunning() && !IsStartableDefinition(desired, out var startabilityProblem))
+                    {
+                        _logger.LogWarning(
+                            "Ignoring a worker configuration change this cycle because the new definition is not startable; the running worker is left untouched. WorkerInstanceId={WorkerInstanceId}, Problem={Problem}",
+                            desired.WorkerInstanceId,
+                            startabilityProblem);
+                        await PublishRunningObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
+                        continue;
+                    }
+
                     if (!await TryDrainForConfigurationChangeAsync(managed, desired, cancellationToken))
                     {
                         // The worker is still busy with an in-flight job. Keep the
@@ -815,6 +834,26 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         return workerProcessPath;
+    }
+
+    /// <summary>
+    /// Preflight for a replacement definition: can we actually start it? Used to
+    /// avoid stopping a healthy worker for a configuration we already know is broken
+    /// (R6-F3). Same readability check the start path performs, without throwing.
+    /// </summary>
+    private static bool IsStartableDefinition(DesiredWorkerInstance desired, out string problem)
+    {
+        try
+        {
+            ValidateReadableStartupFile(desired.PluginAssemblyPath, "Worker plugin assembly");
+            problem = string.Empty;
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            problem = ex.Message;
+            return false;
+        }
     }
 
     private static void ValidateReadableStartupFile(string path, string description)
