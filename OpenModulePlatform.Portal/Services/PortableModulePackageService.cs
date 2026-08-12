@@ -1594,19 +1594,25 @@ public sealed class PortableModulePackageService
             {
                 try
                 {
-                    await _repo.ReplaceArtifactConfigurationFilesAsync(artifactId, package.ConfigurationFiles, ct);
-
                     if (existingIdentity is null)
                     {
-                        // Preserve operator-edited configuration content from the
-                        // previous artifact version when the packaged file itself
-                        // is unchanged, and report files needing manual review.
-                        var carryForward = await _repo.CarryForwardArtifactConfigurationFilesAsync(artifactId, ct);
+                        // New registration: replace + carry-forward atomically so
+                        // a crash between them cannot drop the previous version's
+                        // operator edits on a later re-import (R4-D4).
+                        var (_, carryForward) = await _repo.ReplaceAndCarryForwardArtifactConfigurationFilesAsync(
+                            artifactId,
+                            package.ConfigurationFiles,
+                            ct);
                         var carryForwardMessage = carryForward.BuildImportMessage();
                         if (!string.IsNullOrWhiteSpace(carryForwardMessage))
                         {
                             warning = AppendWarning(warning, carryForwardMessage);
                         }
+                    }
+                    else
+                    {
+                        // Existing-identity re-import: plain replace, no carry-forward.
+                        await _repo.ReplaceArtifactConfigurationFilesAsync(artifactId, package.ConfigurationFiles, ct);
                     }
                 }
                 catch (SqlException ex)

@@ -237,10 +237,21 @@ public sealed class ArtifactProvisioner
             throw new InvalidOperationException($"Artifact '{artifact.ArtifactId}' has no RelativePath.");
         }
 
+        // A rooted RelativePath used to bypass the CentralArtifactRoot
+        // confinement entirely, letting a catalog row point the SYSTEM-level
+        // HostAgent at any host-local path and copy it into the artifact cache —
+        // while the import side (ResolveUnderRoot) treats the store as a hard
+        // boundary and rejects rooted paths. Enforce the same boundary here so a
+        // tampered catalog row cannot cross it (R4-D7).
         var relativeOrRooted = artifact.RelativePath.Trim();
-        return Path.IsPathRooted(relativeOrRooted)
-            ? Path.GetFullPath(relativeOrRooted)
-            : CombineUnderRoot(settings.CentralArtifactRoot, relativeOrRooted, nameof(artifact.RelativePath));
+        if (Path.IsPathRooted(relativeOrRooted))
+        {
+            throw new InvalidOperationException(
+                $"Artifact '{artifact.ArtifactId}' has a rooted RelativePath '{relativeOrRooted}', which is not allowed; "
+                + "artifact sources must resolve under the central artifact root.");
+        }
+
+        return CombineUnderRoot(settings.CentralArtifactRoot, relativeOrRooted, nameof(artifact.RelativePath));
     }
 
     private static string ResolveLocalPath(HostAgentSettings settings, ArtifactDescriptor artifact)
