@@ -19,6 +19,10 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
 public sealed class WorkerManagerHostedService : BackgroundService
 {
     private const string WorkerProcessHostExecutableName = "OpenModulePlatform.WorkerProcessHost.exe";
+
+    // Kept below the HostAgent RPC server's 8 pipe instances so a worker fan-out can
+    // never exhaust that shared pipe and stall every other caller (R6-F4).
+    private const int MaxConcurrentArtifactResolves = 4;
     private static readonly NamedWaitHandleOptions ShutdownEventOptions = new()
     {
         CurrentUserOnly = true
@@ -103,11 +107,29 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
     private async Task ReconcileWorkersAsync(CancellationToken cancellationToken)
     {
-        var desiredWorkers = await ResolveDesiredWorkerArtifactsAsync(
-            await _catalog.GetDesiredWorkersAsync(cancellationToken),
-            cancellationToken);
+        var catalogWorkers = await _catalog.GetDesiredWorkersAsync(cancellationToken);
+        var desiredWorkers = await ResolveDesiredWorkerArtifactsAsync(catalogWorkers, cancellationToken);
 
+        // "Still desired" must come from the CATALOG, not from the resolved list.
+        // ResolveDesiredWorkerArtifactAsync returns null on a transient artifact
+        // problem (a HostAgent provisioning state that briefly leaves Succeeded, a
+        // failed ensureArtifact RPC), which dropped the worker from the resolved
+        // list and therefore into undesiredWorkers -- so a healthy worker was
+        // stopped mid-document-job, and killed after the stop timeout, because of a
+        // temporary bookkeeping failure in another service (R6-F2). A worker is
+        // undesired only when the catalog no longer lists it; an unresolvable one
+        // simply is not started or updated this cycle and is retried next cycle.
+        var catalogIds = catalogWorkers
+            .Select(worker => worker.WorkerInstanceId)
+            .ToHashSet();
         var desiredById = desiredWorkers.ToDictionary(worker => worker.WorkerInstanceId);
+        var unresolvedCount = catalogIds.Count - desiredById.Count;
+        if (unresolvedCount > 0)
+        {
+            _logger.LogWarning(
+                "{UnresolvedCount} desired worker(s) could not be resolved this cycle and are left as-is; they are retried next cycle.",
+                unresolvedCount);
+        }
         var runtimeKind = GetRuntimeKindOrNull();
 
         var exitedWorkers = _managedWorkers.Values
@@ -132,7 +154,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         var undesiredWorkers = _managedWorkers.Values
-            .Where(worker => !desiredById.ContainsKey(worker.Definition.WorkerInstanceId))
+            .Where(worker => !catalogIds.Contains(worker.Definition.WorkerInstanceId))
             .ToList();
 
         foreach (var existing in undesiredWorkers)
@@ -269,8 +291,29 @@ public sealed class WorkerManagerHostedService : BackgroundService
         // case N x TimeoutSeconds (e.g. all workers waiting when the HostAgent is
         // down). Parallelizing bounds the wait to roughly a single call (R5-F5).
         // Order is preserved because Task.WhenAll keeps the input ordering.
+        //
+        // Bound the concurrency (R6-F4). Every worker instance under one app instance
+        // shares the same artifact, so the fan-out issued N IDENTICAL ensureArtifact
+        // RPCs at once. Serially those were free (the first provisioned, the rest hit
+        // the verified-cache fast path); in parallel they all block on the same
+        // per-artifact semaphore while each holds a HostAgent pipe instance. The
+        // HostAgent accepts at most 8, so a rollout on a host with more workers made
+        // its accept loop throw and stall for 5 s at a time -- for every caller of
+        // that shared pipe, not just us.
+        using var resolveConcurrency = new SemaphoreSlim(Math.Max(1, MaxConcurrentArtifactResolves));
         var resolveTasks = desiredWorkers
-            .Select(desired => ResolveDesiredWorkerArtifactAsync(settings, desired, cancellationToken))
+            .Select(async desired =>
+            {
+                await resolveConcurrency.WaitAsync(cancellationToken);
+                try
+                {
+                    return await ResolveDesiredWorkerArtifactAsync(settings, desired, cancellationToken);
+                }
+                finally
+                {
+                    resolveConcurrency.Release();
+                }
+            })
             .ToArray();
 
         var resolvedResults = await Task.WhenAll(resolveTasks);
@@ -333,6 +376,18 @@ public sealed class WorkerManagerHostedService : BackgroundService
             await PublishRunningObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
             return;
         }
+
+        // The process is gone: release its handles BEFORE trying to start a
+        // replacement. ObserveExitIfNeeded is what disposes the shutdown/drain/busy
+        // handles, and it was only ever called from the exited-worker snapshot taken
+        // once at the top of the cycle. A worker that exited AFTER that snapshot (a
+        // crash, or the WorkerProcessHost memory guard recycling it) therefore still
+        // had its named shutdown event held open by THIS process, so CreateShutdownEvent
+        // found createdNew == false and threw "shutdown event already exists" -- a
+        // self-inflicted phantom failure that published a bogus Failed observation and,
+        // since R5-F3 records the attempt earlier, also burned a restart-policy slot
+        // (R6-F1). Self-heals next cycle, but the failure was entirely avoidable.
+        managed.ObserveExitIfNeeded();
 
         var settings = _settings.CurrentValue;
 
