@@ -49,6 +49,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.MvcOptions>(options =>
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<OpenModulePlatform.Auth.Services.LoginThrottleService>();
 builder.Services.AddSingleton<SqlConnectionFactory>();
 builder.Services.AddScoped<OmpConfigurationService>();
 builder.Services.AddScoped<RbacService>();
@@ -150,7 +151,9 @@ app.MapGet("/runtime-versions", (HttpContext context) =>
     context.Response.Headers.CacheControl = "no-store";
 
     return Results.Json(OmpRuntimeAssemblyVersionCheck.CreateReport());
-});
+    // Require authentication so the assembly version report is not exposed to
+    // anonymous callers for platform fingerprinting (R3-F3).
+}).RequireAuthorization();
 
 app.MapPost("/logout", async (
     HttpContext context,
