@@ -61,7 +61,9 @@ public sealed class CultureSelectionService
             IsEssential = true,
             HttpOnly = false,
             SameSite = SameSiteMode.Lax,
-            Secure = true,
+            // Follow the connection so language selection is not silently dropped
+            // on a plain-HTTP deployment (R4-E5).
+            Secure = response.HttpContext.Request.IsHttps,
             Path = "/"
         };
 

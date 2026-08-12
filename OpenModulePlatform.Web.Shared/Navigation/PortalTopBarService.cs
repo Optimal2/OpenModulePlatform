@@ -1101,11 +1101,16 @@ WHERE user_id = @user_id
             return false;
         }
 
-        return appRelativePath.Contains("/edit", StringComparison.OrdinalIgnoreCase)
-            || appRelativePath.Contains("/admin", StringComparison.OrdinalIgnoreCase)
-            || appRelativePath.Contains("/create", StringComparison.OrdinalIgnoreCase)
-            || appRelativePath.Contains("/new", StringComparison.OrdinalIgnoreCase)
-            || appRelativePath.Contains("/delete", StringComparison.OrdinalIgnoreCase);
+        // Match whole path segments, not substrings: Contains("/new") also fired
+        // for ordinary pages like /news or /editorial, so non-admins lost those
+        // nav entries and role-switch return URLs to them were rejected (R4-E14).
+        var segments = appRelativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Any(segment =>
+            segment.Equals("edit", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("admin", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("create", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("new", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("delete", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool HasInferredAdminAccess(TopBarAppEntry app, IReadOnlySet<string> permissions)
@@ -1378,19 +1383,31 @@ END";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
+        // Serialize the toggle and match the FULL key including app_instance_id:
+        // - Without the transaction + UPDLOCK/SERIALIZABLE a double-clicked star
+        //   fired two concurrent toggles that both passed EXISTS and both
+        //   INSERTed, so the second hit the unique index and 500'd.
+        // - Matching on (user_id, entry_key) alone deleted the sibling favorite of
+        //   another app instance that shares entry_key (R4-E8).
         const string sql = @"
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+
 IF EXISTS
 (
     SELECT 1
-    FROM omp_portal.user_navigation_favorites
+    FROM omp_portal.user_navigation_favorites WITH (UPDLOCK, SERIALIZABLE)
     WHERE user_id = @user_id
       AND entry_key = @entry_key
+      AND ((app_instance_id = @app_instance_id) OR (app_instance_id IS NULL AND @app_instance_id IS NULL))
 )
 BEGIN
     DELETE FROM omp_portal.user_navigation_favorites
     WHERE user_id = @user_id
-      AND entry_key = @entry_key;
+      AND entry_key = @entry_key
+      AND ((app_instance_id = @app_instance_id) OR (app_instance_id IS NULL AND @app_instance_id IS NULL));
 
+    COMMIT;
     SELECT CAST(0 AS bit);
 END
 ELSE
@@ -1398,6 +1415,7 @@ BEGIN
     INSERT INTO omp_portal.user_navigation_favorites(user_id, entry_key, app_instance_id, sort_order)
     VALUES(@user_id, @entry_key, @app_instance_id, @sort_order);
 
+    COMMIT;
     SELECT CAST(1 AS bit);
 END";
 
@@ -1411,11 +1429,22 @@ END";
         return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
+    // Schema shape is an install-time fact, so probe it once per process instead
+    // of on every topbar render/summary poll (R4-E11).
+    private static bool? _hostBaseUrlColumnExists;
+
     private static async Task<bool> HostBaseUrlColumnExistsAsync(SqlConnection conn, CancellationToken ct)
     {
+        if (_hostBaseUrlColumnExists is { } cached)
+        {
+            return cached;
+        }
+
         const string sql = "SELECT CAST(CASE WHEN COL_LENGTH('omp.Hosts', 'BaseUrl') IS NULL THEN 0 ELSE 1 END AS bit);";
         await using var cmd = new SqlCommand(sql, conn);
-        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
+        var exists = Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));
+        _hostBaseUrlColumnExists = exists;
+        return exists;
     }
 
     private static string? ResolveHref(HttpRequest request, TopBarAppEntry app)
@@ -1501,10 +1530,25 @@ END";
         var trimmed = targetUrl.Trim();
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
         {
-            return absoluteUri.ToString();
+            // Only http(s) absolute URLs are rendered as nav hrefs. Without this
+            // an absolute URI parsed successfully for javascript:/data: schemes
+            // too, and the value was emitted as href="..." in the shared top bar
+            // for every user — so portal-entry write access became script
+            // execution in each app's origin (R4-E2).
+            return absoluteUri.Scheme is "http" or "https"
+                ? absoluteUri.ToString()
+                : null;
         }
 
         if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.Contains('\\', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // A relative value must not smuggle in a scheme (e.g. "javascript:...")
+        // that the browser resolves against the current document.
+        if (trimmed.Contains(':', StringComparison.Ordinal)
+            && !trimmed.StartsWith("/", StringComparison.Ordinal))
         {
             return null;
         }
@@ -1572,10 +1616,25 @@ END";
         var trimmed = targetUrl.Trim();
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
         {
-            return absoluteUri.ToString();
+            // Only http(s) absolute URLs are rendered as nav hrefs. Without this
+            // an absolute URI parsed successfully for javascript:/data: schemes
+            // too, and the value was emitted as href="..." in the shared top bar
+            // for every user — so portal-entry write access became script
+            // execution in each app's origin (R4-E2).
+            return absoluteUri.Scheme is "http" or "https"
+                ? absoluteUri.ToString()
+                : null;
         }
 
         if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.Contains('\\', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // A relative value must not smuggle in a scheme (e.g. "javascript:...")
+        // that the browser resolves against the current document.
+        if (trimmed.Contains(':', StringComparison.Ordinal)
+            && !trimmed.StartsWith("/", StringComparison.Ordinal))
         {
             return null;
         }
