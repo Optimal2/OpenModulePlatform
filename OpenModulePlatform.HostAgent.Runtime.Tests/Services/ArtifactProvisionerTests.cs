@@ -127,8 +127,11 @@ public sealed class ArtifactProvisionerTests : IDisposable
     }
 
     [Fact]
-    public async Task EnsureAsync_CorruptRenamePathIsUnique()
+    public async Task EnsureAsync_RepeatedCorruption_KeepsAtMostOneQuarantineCopy()
     {
+        // Earlier quarantined copies are removed before a new one is made, so
+        // repeated mismatches cannot pile up full copies and fill the cache
+        // volume (R3-D8); at most one .corrupt-* survives.
         var sourcePath = WriteSourceFile("file.txt", "right");
         var expectedHash = await HashAsync(sourcePath);
         var localPath = Path.Join(_localRoot, "pkg", "target", "1.0");
@@ -142,8 +145,7 @@ public sealed class ArtifactProvisionerTests : IDisposable
         await CreateProvisioner().EnsureAsync(CreateDescriptor("file.txt", expectedHash), CancellationToken.None);
 
         var corruptPaths = Directory.GetFiles(Path.GetDirectoryName(localPath)!, "*.corrupt-*");
-        Assert.Equal(2, corruptPaths.Length);
-        Assert.Equal(2, corruptPaths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Single(corruptPaths);
     }
 
     [Fact]
