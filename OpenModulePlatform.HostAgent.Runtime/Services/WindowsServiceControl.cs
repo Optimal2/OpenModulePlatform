@@ -113,21 +113,74 @@ public sealed class WindowsServiceControl : IWindowsServiceControl
                 "auto",
                 "DisplayName=",
                 displayName);
-        }
-        else
-        {
-            RunScChecked(
-                "config",
-                serviceName,
-                "binPath=",
-                binaryPath,
-                "start=",
-                "auto",
-                "DisplayName=",
-                displayName);
+            RunScChecked("description", serviceName, description);
+            return;
         }
 
+        // Only rewrite configuration when it actually drifted. sc config + sc
+        // description previously ran every convergence cycle for every service app
+        // — an SCM registry write and several sc.exe spawns per service per 30 s
+        // even when nothing changed (R5-D4). If the current sc qc output already
+        // matches, skip both. Any parse uncertainty falls through to reconfigure,
+        // so the worst case is exactly the old behavior.
+        if (ServiceConfigMatches(serviceName, binaryPath, displayName))
+        {
+            return;
+        }
+
+        RunScChecked(
+            "config",
+            serviceName,
+            "binPath=",
+            binaryPath,
+            "start=",
+            "auto",
+            "DisplayName=",
+            displayName);
+
         RunScChecked("description", serviceName, description);
+    }
+
+    private static bool ServiceConfigMatches(string serviceName, string quotedBinaryPath, string displayName)
+    {
+        var result = RunSc("qc", serviceName);
+        if (result.ExitCode != 0)
+        {
+            return false;
+        }
+
+        string? binPath = null;
+        string? startType = null;
+        string? display = null;
+        foreach (var line in result.Output.Split('\n'))
+        {
+            var separatorIndex = line.IndexOf(':');
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            var key = line[..separatorIndex].Trim();
+            var value = line[(separatorIndex + 1)..].Trim();
+            if (key.Equals("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase))
+            {
+                binPath = value;
+            }
+            else if (key.Equals("START_TYPE", StringComparison.OrdinalIgnoreCase))
+            {
+                startType = value;
+            }
+            else if (key.Equals("DISPLAY_NAME", StringComparison.OrdinalIgnoreCase))
+            {
+                display = value;
+            }
+        }
+
+        return binPath is not null
+            && string.Equals(binPath, quotedBinaryPath, StringComparison.OrdinalIgnoreCase)
+            && startType is not null
+            && startType.Contains("AUTO_START", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(display, displayName, StringComparison.Ordinal);
     }
 
     public void DeleteService(string serviceName)

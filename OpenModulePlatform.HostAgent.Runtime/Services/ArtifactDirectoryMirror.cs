@@ -157,9 +157,26 @@ internal static class ArtifactDirectoryMirror
         string sourcePath,
         string targetPath,
         CancellationToken cancellationToken)
-        => ExecuteFileOperationWithRetry(
+    {
+        // Skip the copy when the target already matches on length and last-write
+        // time. The mirror ran every convergence cycle and re-copied every file
+        // unconditionally, so a large mirror (e.g. a 2 GB tools folder) re-read and
+        // re-wrote its full byte volume every 30 s — hundreds of GB/hour of pure
+        // idle disk churn — even when nothing changed (R5-D5). File.Copy preserves
+        // LastWriteTimeUtc, so this signature is stable across cycles.
+        var source = new FileInfo(sourcePath);
+        var target = new FileInfo(targetPath);
+        if (target.Exists
+            && source.Length == target.Length
+            && source.LastWriteTimeUtc == target.LastWriteTimeUtc)
+        {
+            return;
+        }
+
+        ExecuteFileOperationWithRetry(
             () => File.Copy(sourcePath, targetPath, overwrite: true),
             cancellationToken);
+    }
 
     private static void DeleteFileWithRetry(
         string path,
