@@ -375,6 +375,27 @@ internal static partial class Program
             info.WorkingDirectory = workingDirectory;
         }
 
+        if (string.Equals(fileName, "powershell", StringComparison.OrdinalIgnoreCase))
+        {
+            // When the refresh is launched from a pwsh 7 session (the CLI
+            // wrapper), the inherited PSModulePath puts pwsh's module folders
+            // first and Windows PowerShell 5.1 then fails to load its own
+            // Microsoft.PowerShell.* modules ("running scripts is disabled").
+            // Give 5.1 children the machine-scope path instead of the
+            // launcher's, and skip the policy check outright: these are our
+            // own repo scripts, not downloaded content.
+            var machineModulePath = Environment.GetEnvironmentVariable(
+                "PSModulePath",
+                EnvironmentVariableTarget.Machine);
+            if (!string.IsNullOrWhiteSpace(machineModulePath))
+            {
+                info.Environment["PSModulePath"] = machineModulePath;
+            }
+
+            info.ArgumentList.Add("-ExecutionPolicy");
+            info.ArgumentList.Add("Bypass");
+        }
+
         foreach (var argument in arguments)
         {
             info.ArgumentList.Add(argument);
