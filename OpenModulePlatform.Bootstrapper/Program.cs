@@ -5666,15 +5666,13 @@ ORDER BY ArtifactId;
         {
             // A pwsh 7 launcher's PSModulePath breaks Windows PowerShell 5.1
             // children (5.1 resolves pwsh's incompatible core modules first).
-            // Hand them the machine-scope path and skip the policy check for
-            // our own repo scripts. Mirrors RunProcessStreaming in
-            // Program.Refresh.cs.
-            var machineModulePath = Environment.GetEnvironmentVariable(
-                "PSModulePath",
-                EnvironmentVariableTarget.Machine);
-            if (!string.IsNullOrWhiteSpace(machineModulePath))
+            // Hand them the machine scope plus the user-scope module folder, and
+            // skip the policy check for our own repo scripts. Mirrors
+            // RunProcessStreaming in Program.Refresh.cs (R4-G9).
+            var modulePath = BuildWindowsPowerShellModulePath();
+            if (!string.IsNullOrWhiteSpace(modulePath))
             {
-                info.Environment["PSModulePath"] = machineModulePath;
+                info.Environment["PSModulePath"] = modulePath;
             }
 
             info.ArgumentList.Add("-ExecutionPolicy");

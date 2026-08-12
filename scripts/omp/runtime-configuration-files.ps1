@@ -64,12 +64,17 @@ function Get-OmpNestedZipEntryNames {
 
     $names = [System.Collections.Generic.List[string]]::new()
     $stream = $Entry.Open()
+    # Spool the nested payload zip to a temp FILE, not a MemoryStream: buffering
+    # the whole entry in RAM cost its full size per package and threw "Stream was
+    # too long" once a nested payload passed ~2 GB, failing every build/refresh
+    # (R4-G3). A FileStream is seekable, so ZipArchive still accepts it.
+    $tempFile = [System.IO.Path]::GetTempFileName()
     try {
-        $memory = [System.IO.MemoryStream]::new()
+        $fileStream = [System.IO.FileStream]::new($tempFile, [System.IO.FileMode]::Create, [System.IO.FileAccess]::ReadWrite)
         try {
-            $stream.CopyTo($memory)
-            $memory.Position = 0
-            $nested = [System.IO.Compression.ZipArchive]::new($memory, [System.IO.Compression.ZipArchiveMode]::Read)
+            $stream.CopyTo($fileStream)
+            $fileStream.Position = 0
+            $nested = [System.IO.Compression.ZipArchive]::new($fileStream, [System.IO.Compression.ZipArchiveMode]::Read)
             try {
                 foreach ($nestedEntry in $nested.Entries) {
                     if (-not [string]::IsNullOrWhiteSpace($nestedEntry.Name)) {
@@ -82,11 +87,12 @@ function Get-OmpNestedZipEntryNames {
             }
         }
         finally {
-            $memory.Dispose()
+            $fileStream.Dispose()
         }
     }
     finally {
         $stream.Dispose()
+        Remove-Item -LiteralPath $tempFile -Force -ErrorAction SilentlyContinue
     }
 
     return $names.ToArray()

@@ -2082,7 +2082,7 @@ $uninstallCmd = @'
 @echo off
 setlocal
 set ROOT=%~dp0
-powershell.exe -NoLogo -NoProfile -File "%ROOT%uninstall-hostagent-first.ps1" -ConfigPath "%ROOT%bootstrap.local.sample.json"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%ROOT%uninstall-hostagent-first.ps1" -ConfigPath "%ROOT%bootstrap.local.sample.json"
 endlocal
 '@
 Set-Content -LiteralPath (Join-Path $packageRoot 'uninstall-hostagent-first.cmd') -Value $uninstallCmd -Encoding ASCII
@@ -2091,7 +2091,7 @@ $uninstallCleanCmd = @'
 @echo off
 setlocal
 set ROOT=%~dp0
-powershell.exe -NoLogo -NoProfile -File "%ROOT%uninstall-hostagent-first.ps1" -ConfigPath "%ROOT%bootstrap.local.sample.json" -RemoveRuntimeFiles
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%ROOT%uninstall-hostagent-first.ps1" -ConfigPath "%ROOT%bootstrap.local.sample.json" -RemoveRuntimeFiles
 endlocal
 '@
 Set-Content -LiteralPath (Join-Path $packageRoot 'uninstall-hostagent-first-clean.cmd') -Value $uninstallCleanCmd -Encoding ASCII

@@ -72,7 +72,13 @@ $runnerPid = ($launcherOutput | Select-String 'RunnerPid:\s*(\d+)' | ForEach-Obj
 if ($runnerPid) {
     # The runner may already have exited (fast refresh); only an actual
     # timeout is fatal here. The marker poll below is the real authority.
-    $runnerProcess = Get-Process -Id ([int]$runnerPid) -ErrorAction SilentlyContinue
+    # Verify the process NAME too: Windows reuses PIDs aggressively, so if the
+    # runner exits between handoff and this check the PID can already belong to
+    # an unrelated long-lived process (e.g. an MSBuild node), and waiting on it
+    # would block the full timeout even though the refresh finished (R4-G10).
+    $runnerProcess = Get-Process -Id ([int]$runnerPid) -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProcessName -eq 'OpenModulePlatform.Bootstrapper' } |
+        Select-Object -First 1
     if ($runnerProcess) {
         Write-Host "Waiting for detached refresh runner (PID $runnerPid)..."
         if (-not $runnerProcess.WaitForExit($TimeoutSeconds * 1000)) {
