@@ -32,6 +32,8 @@ public sealed class LoginModel : PageModel
     private readonly IStringLocalizer<AuthResource> _localizer;
     private readonly IOptions<RequestLocalizationOptions> _localizationOptions;
 
+    private readonly OpenModulePlatform.Auth.Services.LoginThrottleService _loginThrottle;
+
     public LoginModel(
         OmpAuthRepository repository,
         OmpBrandingService brandingService,
@@ -39,6 +41,7 @@ public sealed class LoginModel : PageModel
         WindowsPasswordAuthenticator windowsPasswordAuthenticator,
         OmpOidcProviderStatus oidcProviderStatus,
         OmpAuthenticationPropertiesFactory authenticationPropertiesFactory,
+        OpenModulePlatform.Auth.Services.LoginThrottleService loginThrottle,
         IStringLocalizer<AuthResource> localizer,
         IOptions<RequestLocalizationOptions> localizationOptions)
     {
@@ -48,6 +51,7 @@ public sealed class LoginModel : PageModel
         _windowsPasswordAuthenticator = windowsPasswordAuthenticator;
         _oidcProviderStatus = oidcProviderStatus;
         _authenticationPropertiesFactory = authenticationPropertiesFactory;
+        _loginThrottle = loginThrottle;
         _localizer = localizer;
         _localizationOptions = localizationOptions;
     }
@@ -146,9 +150,19 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        if (_loginThrottle.IsLockedOut(UserName))
+        {
+            ErrorMessage = T("Too many failed sign-in attempts. Please wait a few minutes and try again.");
+            ShowLocalAccountPrompt = true;
+            ShowOtherSignInOptions = true;
+            await PreparePageAsync(ct);
+            return Page();
+        }
+
         var result = await _repository.ResolveLocalPasswordAsync(UserName, Password, ct);
         if (result.User is null)
         {
+            _loginThrottle.RecordFailure(UserName);
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The user name or password is incorrect.", ct);
             ShowLocalAccountPrompt = true;
             ShowOtherSignInOptions = true;
@@ -156,6 +170,7 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        _loginThrottle.RecordSuccess(UserName);
         await SignInAsync(result.User, ct);
         return RedirectToSafeReturnUrl();
     }
@@ -219,12 +234,21 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        var throttleKey = $"adfs:{AlternateWindowsUserName}";
+        if (_loginThrottle.IsLockedOut(throttleKey))
+        {
+            ErrorMessage = T("Too many failed sign-in attempts. Please wait a few minutes and try again.");
+            await PreparePageAsync(ct);
+            return Page();
+        }
+
         var result = _windowsPasswordAuthenticator.Authenticate(
             AlternateWindowsUserName,
             AlternateWindowsPassword);
 
         if (!result.Succeeded || result.Principal is null)
         {
+            _loginThrottle.RecordFailure(throttleKey);
             ErrorMessage = T("Windows credentials could not be validated.");
             await PreparePageAsync(ct);
             return Page();
@@ -238,6 +262,7 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        _loginThrottle.RecordSuccess(throttleKey);
         await SignInAsync(user, ct);
         return RedirectToSafeReturnUrl();
     }
@@ -308,7 +333,9 @@ public sealed class LoginModel : PageModel
             OmpAuthDefaults.ConfigurationCategory,
             OmpAuthDefaults.SelfRegistrationEnabledSetting,
             ct);
-        return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: true);
+        // Opt-in by default (R3-F2): anonymous self-registration on the login
+        // page is an attack surface, so it must be turned on deliberately.
+        return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: false);
     }
 
     private string? ValidateRegistrationInput()
