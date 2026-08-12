@@ -67,13 +67,35 @@ public sealed class DesiredWorkerInstance
 
     public static string ResolvePluginAssemblyPath(string installRootPath, string pluginRelativePath)
     {
+        // PluginRelativePath comes from the OMP database (omp.AppWorkerDefinitions),
+        // so it is untrusted input. Without the same rooted-rejection and
+        // containment check the DB catalog path enforces
+        // (OmpDatabaseWorkerInstanceCatalog.ResolvePluginAssemblyPath), a value
+        // like "..\..\Windows\System32\evil.dll" escapes the install root and
+        // would be loaded and executed as the worker service account (R3-C1).
+        if (Path.IsPathRooted(pluginRelativePath.Trim()))
+        {
+            throw new InvalidOperationException(
+                $"PluginRelativePath '{pluginRelativePath}' is rooted; it must be relative to the artifact install path.");
+        }
+
         var installRoot = Path.GetFullPath(installRootPath.Trim());
         var normalizedInstallRoot = installRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var sanitizedRelativePath = pluginRelativePath.Trim()
             .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        return string.IsNullOrWhiteSpace(sanitizedRelativePath)
+        var candidatePath = string.IsNullOrWhiteSpace(sanitizedRelativePath)
             ? Path.GetFullPath(normalizedInstallRoot)
             : Path.GetFullPath($"{normalizedInstallRoot}{Path.DirectorySeparatorChar}{sanitizedRelativePath}");
+
+        var normalizedRoot = normalizedInstallRoot + Path.DirectorySeparatorChar;
+        if (!candidatePath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(candidatePath, installRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"PluginRelativePath '{pluginRelativePath}' resolves outside the install root '{installRootPath}'.");
+        }
+
+        return candidatePath;
     }
 }
