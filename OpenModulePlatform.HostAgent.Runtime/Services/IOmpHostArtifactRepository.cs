@@ -19,7 +19,7 @@ public interface IOmpHostArtifactRepository
         int leaseSeconds,
         CancellationToken ct);
 
-    Task ReleaseHostAgentLeaseAsync(Guid hostId, string serviceName, CancellationToken ct);
+    Task ReleaseHostAgentLeaseAsync(Guid hostId, string serviceName, Guid? leaseToken, CancellationToken ct);
 
     Task<bool> RenewHostAgentLeaseAsync(Guid hostId, Guid leaseToken, int leaseSeconds, CancellationToken ct);
 
@@ -109,7 +109,8 @@ public interface IOmpHostArtifactRepository
         int maxAttempts,
         CancellationToken ct);
 
-    Task CompleteHostDeploymentAsync(
+    /// <summary>False when the lease was lost and the row was not updated (R6-D8).</summary>
+    Task<bool> CompleteHostDeploymentAsync(
         long hostDeploymentId,
         Guid leaseToken,
         bool succeeded,

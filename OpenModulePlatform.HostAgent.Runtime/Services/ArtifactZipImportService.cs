@@ -1463,6 +1463,21 @@ public sealed class ArtifactZipImportService
         return fullPath;
     }
 
+    private static void TrySetArchivedTimestamp(string path)
+    {
+        try
+        {
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+        }
+        catch (IOException)
+        {
+            // Best effort: a stale timestamp only affects when retention prunes.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private void MoveImportFile(string importPath, string destinationRoot, string? errorMessage)
     {
         try
@@ -1476,6 +1491,16 @@ public sealed class ArtifactZipImportService
             if (File.Exists(importPath))
             {
                 MoveFile(importPath, destination);
+
+                // Stamp the archive with the time it was ARCHIVED. File.Move and
+                // File.Copy both preserve the source's last-write time, so a package
+                // whose zip mtime was already older than ProcessedRetentionDays (a
+                // rollback, or a re-import from a release archive) was deleted by the
+                // retention sweep on the very next import cycle -- minutes after
+                // landing in processed/ or failed/, destroying the artifact an
+                // operator needed to inspect (R6-D6). Retention measures age since
+                // archiving, so that is what the timestamp must reflect.
+                TrySetArchivedTimestamp(destination);
             }
 
             if (!string.IsNullOrWhiteSpace(errorMessage))
