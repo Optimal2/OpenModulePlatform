@@ -54,10 +54,18 @@ internal static class ArtifactDirectoryMirror
                 continue;
             }
 
-            Directory.CreateDirectory(DeploymentPath.CombineUnderRoot(
+            var targetSubdirectory = DeploymentPath.CombineUnderRoot(
                 targetDirectory,
                 relative,
-                "Artifact target directory"));
+                "Artifact target directory");
+            // CombineUnderRoot is purely lexical: a directory junction planted at
+            // a mirrored path (e.g. by a compromised app-pool identity that has
+            // Modify on the deploy dir) is lexically "under root" but physically
+            // points elsewhere, so File.Copy would overwrite files through it as
+            // the LocalSystem host agent (R5S-D1). Refuse to mirror through a
+            // reparse point.
+            ThrowIfReparsePoint(targetSubdirectory);
+            Directory.CreateDirectory(targetSubdirectory);
         }
 
         foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
@@ -73,7 +81,10 @@ internal static class ArtifactDirectoryMirror
                 targetDirectory,
                 relative,
                 "Artifact target file path");
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            var targetParent = Path.GetDirectoryName(target)!;
+            ThrowIfReparsePoint(targetParent);
+            ThrowIfReparsePoint(target);
+            Directory.CreateDirectory(targetParent);
             CopyFileWithRetry(file, target, cancellationToken);
         }
     }
@@ -84,7 +95,22 @@ internal static class ArtifactDirectoryMirror
         IReadOnlyCollection<string> excludedEntries,
         CancellationToken cancellationToken)
     {
-        foreach (var file in Directory.EnumerateFiles(targetDirectory, "*", SearchOption.AllDirectories))
+        // Never recurse through a reparse point while pruning stale entries. The
+        // stale-delete walk deletes any target file with no matching source; a
+        // directory junction planted in the target (lexically "under root", since
+        // CombineUnderRoot does not resolve links) would otherwise be followed into
+        // its real target — e.g. C:\Windows\System32 — and every file there, having
+        // no source counterpart, deleted by the LocalSystem host agent (R5S-D1).
+        // AttributesToSkip stops the descent; the junction link itself is left in
+        // place (harmless — the mirror no longer traverses it) rather than removed.
+        var enumerationOptions = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            IgnoreInaccessible = true,
+        };
+
+        foreach (var file in Directory.EnumerateFiles(targetDirectory, "*", enumerationOptions))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(targetDirectory, file);
@@ -103,7 +129,7 @@ internal static class ArtifactDirectoryMirror
             }
         }
 
-        var directories = Directory.EnumerateDirectories(targetDirectory, "*", SearchOption.AllDirectories)
+        var directories = Directory.EnumerateDirectories(targetDirectory, "*", enumerationOptions)
             .OrderByDescending(path => path.Length)
             .ToList();
 
@@ -178,6 +204,36 @@ internal static class ArtifactDirectoryMirror
         if (cancellationToken.WaitHandle.WaitOne(FileOperationRetryDelay))
         {
             cancellationToken.ThrowIfCancellationRequested();
+        }
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            var info = new DirectoryInfo(path);
+            return info.Exists && info.Attributes.HasFlag(FileAttributes.ReparsePoint);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    // Throw IOException (not a bespoke type) so the existing deployment failure
+    // handlers treat a planted junction as a normal, ret/logged deployment fault
+    // rather than letting it escape and crash the host cycle.
+    private static void ThrowIfReparsePoint(string path)
+    {
+        if (IsReparsePoint(path))
+        {
+            throw new IOException(
+                $"Refusing to mirror through a reparse point (junction/symlink) in the deployment target: '{path}'. " +
+                "A link here would let the copy escape the artifact target root.");
         }
     }
 

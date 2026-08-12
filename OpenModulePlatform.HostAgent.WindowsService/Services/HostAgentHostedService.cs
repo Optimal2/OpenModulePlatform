@@ -74,8 +74,19 @@ public sealed class HostAgentHostedService : BackgroundService
         {
             await _engine.RunOnceAsync(cancellationToken);
         }
-        catch (Exception ex) when (IsRecoverableCycleFailure(ex))
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // One convergence cycle must never take down the whole Windows service.
+            // The previous curated allowlist (InvalidOperationException, IOException,
+            // DbException, ...) missed realistic types thrown deep in the cycle —
+            // InvalidDataException from a corrupt self-upgrade zip, ManagementException
+            // from a WMI blip during service-identity repair, Win32Exception from
+            // Process.Start on the web-app path — and any uncaught type escaped
+            // ExecuteAsync, where .NET's default BackgroundServiceExceptionBehavior
+            // .StopHost stopped the service and left it crash-looping every cycle
+            // instead of logging one failed cycle and continuing (R5-D1). Catch every
+            // non-cancellation fault at this boundary; OperationCanceledException still
+            // propagates to the shutdown handler.
             LogCycleFailure(ex);
         }
     }
@@ -84,17 +95,6 @@ public sealed class HostAgentHostedService : BackgroundService
     {
         return stoppingToken.IsCancellationRequested
             && (ex.CancellationToken == stoppingToken || !ex.CancellationToken.CanBeCanceled);
-    }
-
-    private static bool IsRecoverableCycleFailure(Exception exception)
-    {
-        return exception is InvalidOperationException
-            or IOException
-            or DbException
-            or UnauthorizedAccessException
-            or TimeoutException
-            or CryptographicException
-            or JsonException;
     }
 
     private void LogCycleFailure(Exception exception)
@@ -124,4 +124,15 @@ public sealed class HostAgentHostedService : BackgroundService
     private static bool IsRecoverableShutdownFailure(Exception exception)
         => IsRecoverableCycleFailure(exception)
             || exception is OperationCanceledException;
+
+    private static bool IsRecoverableCycleFailure(Exception exception)
+    {
+        return exception is InvalidOperationException
+            or IOException
+            or DbException
+            or UnauthorizedAccessException
+            or TimeoutException
+            or CryptographicException
+            or JsonException;
+    }
 }
