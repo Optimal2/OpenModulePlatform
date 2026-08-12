@@ -355,6 +355,92 @@ internal static partial class Program
         return result.HasWarnings ? 1 : 0;
     }
 
+    /// <summary>
+    /// CLI entry point for the complete update flow of an EXISTING installation:
+    /// refresh the installer data folder from every configured source repository,
+    /// build one global universal package, and stage it in this host's HostAgent
+    /// import folder (optionally waiting for the HostAgent to consume it).
+    /// </summary>
+    /// <remarks>
+    /// Runs the same InstallerForm core as the GUI's "Refresh + stage global package"
+    /// button, so the CLI, the GUI and the AI Orchestrator cannot drift apart. The
+    /// import folder comes from the host profile, so the flow always targets the
+    /// installation whose config was passed in.
+    /// </remarks>
+    private static async Task<int> RunRefreshAndStagePackageAsync(CliOptions cli)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Console.Error.WriteLine("Refresh and stage currently uses the Windows installer profile loader.");
+            return 1;
+        }
+
+        if (string.IsNullOrWhiteSpace(cli.ConfigPath))
+        {
+            WriteUsage();
+            return 1;
+        }
+
+        var configPath = Path.GetFullPath(cli.ConfigPath);
+        var config = await ReadJsonAsync<BootstrapConfig>(configPath);
+        var payloadRoot = ResolvePayloadRoot(cli, configPath);
+
+        var logPath = Path.Join(
+            Path.GetTempPath(),
+            $"omp-installer-refresh-stage-{DateTime.UtcNow:yyyyMMddHHmmss}.log");
+
+        void WriteProgress(string message)
+        {
+            var line = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} {message}";
+            File.AppendAllText(logPath, line + Environment.NewLine, Encoding.UTF8);
+            Console.WriteLine(message);
+        }
+
+        WriteProgress($"Refresh and stage log: {logPath}");
+        WriteProgress($"Config:  {configPath}");
+        WriteProgress($"Payload: {payloadRoot}");
+
+        var previousSynchronizationContext = SynchronizationContext.Current;
+        using var form = new InstallerForm(
+            [
+                new BootstrapConfigProfile(
+                    string.IsNullOrWhiteSpace(config.Profile.DisplayName)
+                        ? Path.GetFileNameWithoutExtension(configPath)
+                        : config.Profile.DisplayName,
+                    configPath,
+                    ResolveProfileMachineNames(config))
+            ],
+            config,
+            configPath,
+            payloadRoot,
+            cli,
+            initializeUi: false);
+
+        try
+        {
+            // Same reason as the sync path: no message loop exists headlessly, so
+            // async continuations must not be posted back to WinForms.
+            SynchronizationContext.SetSynchronizationContext(null);
+
+            var result = await form.RefreshAndStageGlobalPackageCoreAsync(
+                WriteProgress,
+                quickMode: !cli.FullContentCheck,
+                skipRefresh: cli.SkipRefresh,
+                waitForImportSeconds: cli.WaitForImportSeconds);
+
+            if (result.ExitCode == 0)
+            {
+                WriteProgress("Refresh and stage completed.");
+            }
+
+            return result.ExitCode;
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousSynchronizationContext);
+        }
+    }
+
     private static async Task<int> RunPackageObjectSyncForActionAsync(
         CliOptions cli,
         BootstrapConfig config,
@@ -1615,72 +1701,208 @@ internal static partial class Program
                 "Global universal package created and staged for import.",
                 "Refresh and stage completed with warnings. Review the log for details.",
                 "Refresh and stage failed.",
-                async () =>
+                async () => (await RefreshAndStageGlobalPackageCoreAsync(
+                    progress: null,
+                    quickMode: _quickPackageObjectRefresh.Checked)).ExitCode);
+        }
+
+        /// <summary>
+        /// Outcome of one refresh-and-stage run.
+        /// </summary>
+        internal sealed record RefreshAndStagePackageResult(
+            int ExitCode,
+            string? PackagePath,
+            int ItemCount,
+            string? StagedPath,
+            bool ImportEnabled,
+            bool Imported);
+
+        /// <summary>
+        /// The one implementation of "refresh + stage global package".
+        /// </summary>
+        /// <remarks>
+        /// "Refresh" here means updating the installer's data folder (data/global,
+        /// data/hosts) from the configured source repositories — NOT rebuilding the
+        /// installer binaries, which is the separate --refresh-installer-package
+        /// operation. The GUI button, the CLI verb --refresh-and-stage-package and
+        /// the AI Orchestrator all funnel through THIS method so a refresh behaves
+        /// identically on every surface. The import folder is resolved from the host
+        /// profile, so running it on a host always stages into that host's folder.
+        /// </remarks>
+        internal async Task<RefreshAndStagePackageResult> RefreshAndStageGlobalPackageCoreAsync(
+            Action<string>? progress = null,
+            bool quickMode = true,
+            bool skipRefresh = false,
+            int waitForImportSeconds = 0)
+        {
+            void Report(string message)
+            {
+                if (progress is null)
                 {
-                    var sync = await SyncDeveloperPackageObjectsCoreAsync(
-                        quickMode: _quickPackageObjectRefresh.Checked);
-                    foreach (var line in sync.Lines)
+                    Console.WriteLine(message);
+                }
+                else
+                {
+                    progress(message);
+                }
+            }
+
+            var importRoot = ResolveHostAgentArtifactImportPath();
+
+            // ---- Step 1: refresh the installer data folder from all source repos ----
+            if (skipRefresh)
+            {
+                Report("> Step 1/3 refresh SKIPPED; building from the existing installer data folder.");
+            }
+            else
+            {
+                Report("> Step 1/3 refresh: updating the installer data folder from the configured source repositories.");
+                var sync = await SyncDeveloperPackageObjectsCoreAsync(progress, quickMode);
+                foreach (var line in sync.Lines)
+                {
+                    Report(line);
+                }
+
+                if (sync.ConfigUpdated)
+                {
+                    Report("> Configuration targets were updated in memory for this run. Package-object sync does not rewrite tracked host config files.");
+                }
+
+                if (sync.HasWarnings)
+                {
+                    Report("> Package object refresh had warnings. The universal package was not created.");
+                    return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
+                }
+            }
+
+            // ---- Step 2: build the global universal package (latest versions only) ----
+            Report("> Step 2/3 build: creating the global universal package from the installer data folder.");
+            var candidates = FilterLatestUniversalPackageVersionedObjects(
+                CollectUniversalPackageCandidates(
+                    _payloadRoot,
+                    hostChoice: null,
+                    includeGlobal: true,
+                    includeHostSpecific: false));
+            if (candidates.Count == 0)
+            {
+                Report("> No global package objects were found in the object archive; nothing to package.");
+                return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
+            }
+
+            var version = DateTime.Now.ToString("yyyyMMdd-HHmm");
+            var exportsRoot = Path.Join(_payloadRoot, "exports");
+            Directory.CreateDirectory(exportsRoot);
+            var outputPath = Path.Join(exportsRoot, $"omp-universal__global__{version}.zip");
+            var request = new UniversalPackageBuildRequest(
+                "omp-universal",
+                version,
+                "OpenModulePlatform universal package",
+                "Global package created by the refresh-and-stage action.",
+                HostKey: null,
+                "No target host (global package)",
+                outputPath,
+                candidates);
+            var result = CreateUniversalPackageZip(request);
+            Report($"> Universal module package: {result.PackagePath}");
+            Report($"> Items: {result.ItemCount}");
+
+            // ---- Step 3: stage into THIS host's HostAgent import folder ----
+            if (string.IsNullOrWhiteSpace(importRoot))
+            {
+                Report("> WARN: HostAgent:ArtifactZipImport:ImportPath is not configured for this profile; the package was not staged for import.");
+                return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, null, false, false);
+            }
+
+            Directory.CreateDirectory(importRoot);
+            var importTarget = Path.Join(importRoot, Path.GetFileName(outputPath));
+            File.Copy(outputPath, importTarget, overwrite: true);
+            Report($"> Step 3/3 stage: staged package in HostAgent import folder: {importTarget}");
+
+            var importEnabled = IsHostAgentArtifactImportEnabled();
+            if (!importEnabled)
+            {
+                Report("> Note: HostAgent:ArtifactZipImport:IsEnabled is false in this profile, so the HostAgent will not pick the file up until import is enabled.");
+            }
+
+            // ---- Optional follow-up: watch the HostAgent consume the package ----
+            var imported = false;
+            if (waitForImportSeconds > 0)
+            {
+                imported = await WaitForHostAgentImportAsync(
+                    importRoot,
+                    importTarget,
+                    waitForImportSeconds,
+                    Report);
+                if (!imported)
+                {
+                    return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, importTarget, importEnabled, false);
+                }
+            }
+
+            return new RefreshAndStagePackageResult(0, result.PackagePath, result.ItemCount, importTarget, importEnabled, imported);
+        }
+
+        /// <summary>
+        /// Waits for the running HostAgent to consume a staged package, reporting
+        /// whether it landed in processed/ or failed/.
+        /// </summary>
+        private static async Task<bool> WaitForHostAgentImportAsync(
+            string importRoot,
+            string importTarget,
+            int waitSeconds,
+            Action<string> report)
+        {
+            report($"> Waiting up to {waitSeconds}s for the HostAgent to import the package...");
+            var fileName = Path.GetFileName(importTarget);
+            var deadline = DateTime.UtcNow.AddSeconds(waitSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (!File.Exists(importTarget))
+                {
+                    var failed = FindImportOutcomeFile(Path.Join(importRoot, "failed"), fileName);
+                    if (failed is not null)
                     {
-                        Console.WriteLine(line);
+                        report($"> Import FAILED: the HostAgent moved the package to {failed}");
+                        return false;
                     }
 
-                    if (sync.ConfigUpdated)
-                    {
-                        Console.WriteLine("> Configuration targets were updated in memory for this run. Package-object sync does not rewrite tracked host config files.");
-                    }
+                    var processed = FindImportOutcomeFile(Path.Join(importRoot, "processed"), fileName);
+                    report(processed is not null
+                        ? $"> Import completed: the HostAgent moved the package to {processed}"
+                        : "> Import completed: the package left the import folder.");
+                    return true;
+                }
 
-                    if (sync.HasWarnings)
-                    {
-                        Console.WriteLine("> Package object refresh had warnings. The universal package was not created.");
-                        return 1;
-                    }
+                await Task.Delay(TimeSpan.FromSeconds(5));
+            }
 
-                    var candidates = FilterLatestUniversalPackageVersionedObjects(
-                        CollectUniversalPackageCandidates(
-                            _payloadRoot,
-                            hostChoice: null,
-                            includeGlobal: true,
-                            includeHostSpecific: false));
-                    if (candidates.Count == 0)
-                    {
-                        Console.WriteLine("> No global package objects were found in the object archive; nothing to package.");
-                        return 1;
-                    }
+            report("> The package is still in the import folder after the wait. The HostAgent may be busy, stopped, or import may be disabled.");
+            return false;
+        }
 
-                    var version = DateTime.Now.ToString("yyyyMMdd-HHmm");
-                    var exportsRoot = Path.Join(_payloadRoot, "exports");
-                    Directory.CreateDirectory(exportsRoot);
-                    var outputPath = Path.Join(exportsRoot, $"omp-universal__global__{version}.zip");
-                    var request = new UniversalPackageBuildRequest(
-                        "omp-universal",
-                        version,
-                        "OpenModulePlatform universal package",
-                        "Global package created by the refresh-and-stage action.",
-                        HostKey: null,
-                        "No target host (global package)",
-                        outputPath,
-                        candidates);
-                    var result = CreateUniversalPackageZip(request);
-                    Console.WriteLine($"> Universal module package: {result.PackagePath}");
-                    Console.WriteLine($"> Items: {result.ItemCount}");
+        private static string? FindImportOutcomeFile(string directory, string stagedFileName)
+        {
+            if (!Directory.Exists(directory))
+            {
+                return null;
+            }
 
-                    if (string.IsNullOrWhiteSpace(importRoot))
-                    {
-                        Console.WriteLine("> WARN: HostAgent:ArtifactZipImport:ImportPath is not configured for this profile; the package was not staged for import.");
-                        return 1;
-                    }
-
-                    Directory.CreateDirectory(importRoot);
-                    var importTarget = Path.Join(importRoot, Path.GetFileName(outputPath));
-                    File.Copy(outputPath, importTarget, overwrite: true);
-                    Console.WriteLine($"> Staged package in HostAgent import folder: {importTarget}");
-                    if (!IsHostAgentArtifactImportEnabled())
-                    {
-                        Console.WriteLine("> Note: HostAgent:ArtifactZipImport:IsEnabled is false in this profile, so the HostAgent will not pick the file up until import is enabled.");
-                    }
-
-                    return 0;
-                });
+            try
+            {
+                // The HostAgent archives the file under a timestamp-prefixed name.
+                return Directory
+                    .EnumerateFiles(directory, "*" + stagedFileName, SearchOption.TopDirectoryOnly)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .FirstOrDefault();
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
         }
 
         private string ResolveHostAgentArtifactImportPath()

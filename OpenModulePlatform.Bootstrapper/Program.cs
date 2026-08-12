@@ -57,6 +57,12 @@ internal static partial class Program
                 return await RunSyncPackageObjectsAsync(cli);
             }
 
+            if (cli.RefreshAndStagePackage)
+            {
+                EnsureConsole();
+                return await RunRefreshAndStagePackageAsync(cli);
+            }
+
             var useGui = cli.Gui || (args.Length == 0 && OperatingSystem.IsWindows() && Environment.UserInteractive);
             if (!useGui)
             {
@@ -490,6 +496,14 @@ internal static partial class Program
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --gui [--config <bootstrap.json> | --config-dir <configs>] [--payload-root <path>] [--payload-zip <zip>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> [--payload-root <path>] [--parent-process-id <pid>] [--restart-gui] [--log-file <path>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --sync-package-objects --config <bootstrap.json> [--payload-root <path>] [--full-content-check]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-and-stage-package --config <bootstrap.json> [--payload-root <path>] [--full-content-check] [--skip-refresh] [--wait-for-import | --wait-for-import-seconds <n>]");
+        Console.WriteLine();
+        Console.WriteLine("Updating an EXISTING installation:");
+        Console.WriteLine("  Use --refresh-and-stage-package. It refreshes the installer data folder from every configured");
+        Console.WriteLine("  source repository, builds one global universal package, and stages it in this host's HostAgent");
+        Console.WriteLine("  import folder (resolved from the config). Add --wait-for-import to follow the HostAgent import.");
+        Console.WriteLine("  Do NOT use --upgrade-or-complete against an existing installation; that is for new installs.");
+        Console.WriteLine("  Note: --refresh-installer-package rebuilds the installer BINARIES and is a different operation.");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
@@ -6141,6 +6155,9 @@ internal sealed record AvailableArtifactPackage(
 
 internal sealed class CliOptions
 {
+    // Matches the AI Orchestrator's import watch window.
+    public const int DefaultImportWaitSeconds = 180;
+
     public string ConfigPath { get; private init; } = string.Empty;
 
     public string ConfigDirectory { get; private init; } = string.Empty;
@@ -6158,6 +6175,18 @@ internal sealed class CliOptions
     public bool RefreshInstallerPackage { get; private init; }
 
     public bool SyncPackageObjects { get; private init; }
+
+    // Complete update flow for an existing installation: refresh the installer data
+    // folder from all source repos -> build one global universal package -> stage it
+    // in this host's HostAgent import folder.
+    public bool RefreshAndStagePackage { get; private init; }
+
+    // Build+stage from the existing data folder without refreshing it first.
+    public bool SkipRefresh { get; private init; }
+
+    // 0 = stage and return; >0 = also wait that many seconds for the HostAgent to
+    // consume the staged package and report processed/failed.
+    public int WaitForImportSeconds { get; private init; }
 
     public bool SyncPackageObjectsBeforeAction { get; private init; }
 
@@ -6214,6 +6243,18 @@ internal sealed class CliOptions
                     break;
                 case "--sync-package-objects":
                     options.SyncPackageObjects = true;
+                    break;
+                case "--refresh-and-stage-package":
+                    options.RefreshAndStagePackage = true;
+                    break;
+                case "--skip-refresh":
+                    options.SkipRefresh = true;
+                    break;
+                case "--wait-for-import":
+                    options.WaitForImportSeconds = DefaultImportWaitSeconds;
+                    break;
+                case "--wait-for-import-seconds":
+                    options.WaitForImportSeconds = int.Parse(ReadValue(args, ref i, arg), System.Globalization.CultureInfo.InvariantCulture);
                     break;
                 case "--sync-package-objects-before-action":
                     options.SyncPackageObjectsBeforeAction = true;
@@ -6281,6 +6322,12 @@ internal sealed class CliOptions
 
         public bool SyncPackageObjects { get; set; }
 
+        public bool RefreshAndStagePackage { get; set; }
+
+        public bool SkipRefresh { get; set; }
+
+        public int WaitForImportSeconds { get; set; }
+
         public bool SyncPackageObjectsBeforeAction { get; set; }
 
         public bool FullContentCheck { get; set; }
@@ -6301,11 +6348,16 @@ internal sealed class CliOptions
 
         public CliOptions ToOptions()
         {
-            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects }
+            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects, RefreshAndStagePackage }
                 .Count(static item => item);
             if (selectedModes > 1)
             {
-                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, refresh-installer-package, or sync-package-objects.");
+                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, refresh-installer-package, sync-package-objects, or refresh-and-stage-package.");
+            }
+
+            if ((SkipRefresh || WaitForImportSeconds > 0) && !RefreshAndStagePackage)
+            {
+                throw new InvalidOperationException("--skip-refresh and --wait-for-import can only be used with --refresh-and-stage-package.");
             }
 
             if ((RemoveRuntimeFiles || RemoveDatabaseObjects) && !Uninstall)
@@ -6329,6 +6381,9 @@ internal sealed class CliOptions
                 ShowHelp = ShowHelp,
                 RefreshInstallerPackage = RefreshInstallerPackage,
                 SyncPackageObjects = SyncPackageObjects,
+                RefreshAndStagePackage = RefreshAndStagePackage,
+                SkipRefresh = SkipRefresh,
+                WaitForImportSeconds = WaitForImportSeconds,
                 SyncPackageObjectsBeforeAction = SyncPackageObjectsBeforeAction,
                 FullContentCheck = FullContentCheck,
                 UpgradeOrComplete = UpgradeOrComplete,
