@@ -104,6 +104,8 @@ internal static partial class Program
         // swap the package. The runner inherits --log-file so callers can
         // follow a deterministic log; without one, a path is generated here
         // and printed before this process exits.
+        CleanupStaleRunnerDirectories();
+
         var runnerRoot = Path.Join(
             Path.GetTempPath(),
             "omp-installer-refresh-runner-" + Guid.NewGuid().ToString("N"));
@@ -166,7 +168,41 @@ internal static partial class Program
             return;
         }
 
-        CopyDirectoryRecursive(executableDirectory, runnerRoot);
+        // Copy only the Bootstrapper's own runtime files (top-level .exe/.dll/
+        // .json next to it), NOT the whole package tree. The executable lives
+        // at the package root, so a recursive copy dragged data\global\
+        // artifacts, sql and tools - potentially gigabytes - into %TEMP% on
+        // every refresh, and nothing ever cleaned it (R3-G1).
+        foreach (var file in Directory.EnumerateFiles(executableDirectory, "*", SearchOption.TopDirectoryOnly))
+        {
+            File.Copy(file, Path.Join(runnerRoot, Path.GetFileName(file)), overwrite: true);
+        }
+    }
+
+    // Best-effort removal of runner copies left by earlier refreshes; the
+    // runner process cannot delete its own directory while running, so the next
+    // refresh cleans up the previous ones (R3-G1).
+    private static void CleanupStaleRunnerDirectories()
+    {
+        try
+        {
+            var tempRoot = Path.GetTempPath();
+            foreach (var directory in Directory.EnumerateDirectories(tempRoot, "omp-installer-refresh-runner-*", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Still in use by a running runner, or locked; skip it.
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Temp not enumerable; nothing to clean.
+        }
     }
 
     private static int RunInstallerPackageRefreshWithProgress(CliOptions cli, string logPath)
@@ -1137,10 +1173,14 @@ internal static partial class Program
         }
         catch
         {
+            // The rollback must be as resilient as the forward move: a raw
+            // Directory.Move here could itself fail on the same transient AV/
+            // sync lock and leave the install root missing with the original
+            // stranded under the backup name (R3-G4).
             DeleteDirectoryIfExists(destination);
             if (Directory.Exists(backup))
             {
-                Directory.Move(backup, destination);
+                MoveDirectoryWithRetry(backup, destination);
             }
 
             throw;

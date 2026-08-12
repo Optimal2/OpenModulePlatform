@@ -627,7 +627,16 @@ function New-ArtifactPackage {
                 throw "Artifact configuration file entries require RelativePath, SourcePath, and PackageSourcePath."
             }
 
+            # PackageSourcePath comes from a component manifest (including
+            # sibling repos), so a value like 'configuration/../../x' would
+            # write outside the staging root. Confine it under the staging root
+            # before copying (R3-G3).
             $configurationDestination = Join-Path $stagingRoot $packageSourcePath.Replace('/', '\')
+            $fullStagingRoot = [System.IO.Path]::GetFullPath($stagingRoot).TrimEnd('\') + '\'
+            $fullDestination = [System.IO.Path]::GetFullPath($configurationDestination)
+            if (-not $fullDestination.StartsWith($fullStagingRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "PackageSourcePath '$packageSourcePath' escapes the staging root and was rejected."
+            }
             Copy-RequiredFile -Source $sourcePath -Destination $configurationDestination
             $manifestConfigurationFiles += [ordered]@{
                 relativePath = $relativePath.Replace('\', '/').Trim('/')

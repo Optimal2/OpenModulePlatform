@@ -6159,6 +6159,12 @@ internal sealed class BootstrapConfig
     public List<ArtifactPayloadOptions> Artifacts { get; set; } = [];
 
     public HostAgentInstallOptions HostAgent { get; set; } = new();
+
+    // Preserve properties this model does not know about (schema, future
+    // fields) across a typed round-trip, so the refresh merge of a package
+    // config no longer silently drops them (R3-G2).
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement> ExtensionData { get; set; } = [];
 }
 
 internal sealed class BootstrapProfileOptions

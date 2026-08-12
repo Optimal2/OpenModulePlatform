@@ -35,7 +35,10 @@ if (-not (Test-Path $exe)) {
     throw "Bootstrapper executable was not found: $exe"
 }
 
-$logFile = Join-Path ([IO.Path]::GetTempPath()) ("omp-installer-refresh-cli-{0:yyyyMMddHHmmss}.log" -f (Get-Date).ToUniversalTime())
+# Include the PID so two refreshes started in the same second do not share a
+# log file (which the runner truncates with append:false, letting the poll read
+# the wrong run's marker) (R3-G9).
+$logFile = Join-Path ([IO.Path]::GetTempPath()) ("omp-installer-refresh-cli-{0:yyyyMMddHHmmss}-{1}.log" -f (Get-Date).ToUniversalTime(), $PID)
 
 Write-Host "Refresh: $exe"
 Write-Host "Config:  $ConfigPath"
@@ -85,9 +88,12 @@ elseif ($launcherExit -ne 0 -and $null -ne $launcherExit) {
 
 # The runner writes the completion marker only after the package swap, so
 # poll the log for the definitive result instead of trusting a single early
-# read. A failure marker (or the timeout) aborts before sync/apply can run
-# against a half-replaced package.
-$deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+# read. The runner has ALREADY exited by this point (waited on above), so the
+# marker should be present within a short flush window; a runner that crashed
+# without writing it must fail fast rather than block the full timeout again
+# (R3-G6). A failure marker aborts before sync/apply can run against a
+# half-replaced package.
+$deadline = (Get-Date).AddSeconds(30)
 $refreshCompleted = $false
 while ((Get-Date) -lt $deadline) {
     $logText = if (Test-Path $logFile) { Get-Content $logFile -Raw -ErrorAction SilentlyContinue } else { $null }
