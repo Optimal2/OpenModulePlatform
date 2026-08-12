@@ -37,6 +37,16 @@ public sealed class OmpAuthOptions
     public bool ProtectKeysWithDpapi { get; set; } = true;
 
     /// <summary>
+    /// Enforce server-side antiforgery-token validation on the shared topbar
+    /// POST endpoints (favorites, notification/message mark-read). The
+    /// endpoints are CSRF-protected by SameSite=Lax on the auth cookie either
+    /// way, and the topbar forms always carry a token, so this is
+    /// defence-in-depth (R3-E2). Off by default: enabling it rejects POSTs
+    /// from pages cached before the tokens were introduced.
+    /// </summary>
+    public bool ValidateTopbarAntiforgery { get; set; }
+
+    /// <summary>
     /// Optional central OIDC/AD FS sign-in provider for OMP Auth.
     /// </summary>
     public OmpOidcOptions Oidc { get; set; } = new();
