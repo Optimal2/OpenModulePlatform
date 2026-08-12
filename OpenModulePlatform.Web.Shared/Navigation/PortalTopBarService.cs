@@ -134,6 +134,7 @@ public sealed class PortalTopBarService
                 userId,
                 roleContext.ActiveRoleId,
                 permissions,
+                options?.TopBarPolling,
                 ct);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
@@ -350,6 +351,7 @@ public sealed class PortalTopBarService
                 userId,
                 roleContext.ActiveRoleId,
                 permissions,
+                options?.TopBarPolling,
                 ct);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
@@ -944,8 +946,19 @@ public sealed class PortalTopBarService
         int? userId,
         int? activeRoleId,
         IReadOnlyCollection<string> effectivePermissions,
+        TopBarPollingOptions? topBarPolling,
         CancellationToken ct)
     {
+        // An explicit local opt-out wins over the platform default. WebApp:TopBarPolling
+        // :Enabled = false was only honored by the DB-failure fallback model, so an
+        // operator who set it in an app's appsettings.json saw polling continue
+        // unchanged -- and the knob started working only once the OMP database became
+        // unreachable. A dead configuration switch (R6-E3).
+        if (topBarPolling?.Enabled == false)
+        {
+            return PortalTopBarNotificationUpdateOptions.FromWebAppOptions(topBarPolling);
+        }
+
         var modeValue = await _configuration.GetEffectiveStringAsync(
             PortalTopBarNotificationUpdateOptions.ConfigCategory,
             PortalTopBarNotificationUpdateOptions.ModeConfigSetting,
