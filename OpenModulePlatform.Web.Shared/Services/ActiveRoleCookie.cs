@@ -19,7 +19,10 @@ public static class ActiveRoleCookie
             new CookieOptions
             {
                 Path = "/",
-                Secure = true
+                // Must match the Secure flag the cookie was set with, which now
+                // follows the connection so plain-HTTP deployments work; a
+                // mismatched deletion cookie would not clear the role (R4-E5).
+                Secure = response.HttpContext.Request.IsHttps
             });
     }
 }

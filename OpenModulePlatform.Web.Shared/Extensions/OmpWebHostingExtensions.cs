@@ -312,6 +312,15 @@ public static class OmpWebHostingExtensions
                 IStringLocalizer<SharedResource> localizer,
                 OmpBrandingService brandingService) =>
             {
+                // Clamp before handing the value to Kestrel: a direct request to
+                // /status/99 or /status/1000 otherwise threw
+                // ArgumentOutOfRangeException from the StatusCode setter and
+                // produced a 500 through the exception handler (R4-E7).
+                if (statusCode < 400 || statusCode > 599)
+                {
+                    statusCode = StatusCodes.Status500InternalServerError;
+                }
+
                 var branding = await brandingService.GetBrandingAsync(context.RequestAborted);
                 var feature = context.Features.Get<IStatusCodeReExecuteFeature>();
                 var requestedUrl = feature is null
@@ -351,14 +360,31 @@ public static class OmpWebHostingExtensions
             }
 
             return Results.LocalRedirect("/");
-        });
+        }).AllowAnonymous();
+        // Anonymous: the login page (itself anonymous) renders the shared topbar
+        // with a language switcher; without this the fallback policy in apps with
+        // AllowAnonymous=false redirected the language GET to the login page, so
+        // the language never changed until after sign-in (R4-E6).
 
         // Both the OmpAuth and RBAC set-active-role paths run the same handler,
         // so register one delegate against both to keep them in lockstep.
         Func<HttpContext, IAntiforgery, RbacService, CancellationToken, Task<IResult>> setActiveRoleHandler =
             async (context, antiforgery, rbac, ct) =>
             {
-                await antiforgery.ValidateRequestAsync(context);
+                try
+                {
+                    await antiforgery.ValidateRequestAsync(context);
+                }
+                catch (AntiforgeryValidationException)
+                {
+                    // A stale token (app restart with a new key ring, or a second
+                    // tab re-authenticated as another account) used to throw out
+                    // of this minimal endpoint — the MVC antiforgery redirect
+                    // filter does not apply here — and surface as a generic 500.
+                    // Degrade to 400 like the other antiforgery consumers (R4-E4).
+                    return Results.BadRequest();
+                }
+
                 var selection = await ReadActiveRoleSelectionAsync(context, ct);
                 if (!selection.IsValid)
                 {
@@ -876,7 +902,11 @@ public static class OmpWebHostingExtensions
                     IsEssential = true,
                     HttpOnly = true,
                     SameSite = SameSiteMode.Lax,
-                    Secure = true,
+                    // Follow the connection instead of hardcoding Secure: on a
+                    // plain-HTTP deployment (the sameAsRequest auth-cookie case)
+                    // a Secure cookie is silently dropped, so role switching
+                    // no-opped with no error (R4-E5).
+                    Secure = context.Request.IsHttps,
                     Path = "/"
                 });
         }

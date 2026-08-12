@@ -41,14 +41,20 @@ public sealed class OmpConfigurationService
             return cachedValue;
         }
 
-        string? value = null;
+        string? value;
         try
         {
             value = await QueryGlobalStringAsync(category.Trim(), setting.Trim(), ct);
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
+            // Do NOT cache on failure: a read error used to cache null for the
+            // full lifetime, and callers that fail open on a missing value (e.g.
+            // the AuthenticatedUsers domain allowlist) then dropped their
+            // restriction for every request in that window (R4-E1). Returning
+            // uncached lets the next request retry.
             LogConfigReadFailure(ex, category, setting, effective: false);
+            return null;
         }
 
         _cache.Set(cacheKey, value, CacheLifetime);
@@ -105,6 +111,7 @@ public sealed class OmpConfigurationService
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
+            // Do not cache a read failure (R4-E1).
             LogConfigReadFailure(ex, category, setting, effective: true);
         }
 
