@@ -69,15 +69,12 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
             {
                 // Normal service shutdown; let the background service exit quietly.
             }
-            catch (SqlException ex)
-            {
-                await HandleDispatcherLoopFailureAsync(ex, options, stoppingToken);
-            }
-            catch (InvalidOperationException ex)
-            {
-                await HandleDispatcherLoopFailureAsync(ex, options, stoppingToken);
-            }
-            catch (TimeoutException ex)
+            // Catch-all (except shutdown cancellation): an unexpected exception
+            // type - NullReference, SocketException, ObjectDisposed - would
+            // otherwise escape ExecuteAsync and, with the default
+            // BackgroundServiceExceptionBehavior.StopHost, take down the whole
+            // web app (R3-E4). The loop backs off and retries instead.
+            catch (Exception ex) when (!(ex is OperationCanceledException && stoppingToken.IsCancellationRequested))
             {
                 await HandleDispatcherLoopFailureAsync(ex, options, stoppingToken);
             }

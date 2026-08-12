@@ -56,9 +56,13 @@ public abstract class OmpSecurePageModel<TResource> : OmpPageModel<TResource> wh
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToArray() ?? Array.Empty<string>();
 
+        // An empty permission list is almost always a mistake (a typo that
+        // produced no names, or a caller that meant "authenticated only").
+        // Fail closed: require at least an authenticated user instead of
+        // granting access to anyone, so a bad list cannot open a page (R3-E7).
         if (required.Length == 0)
         {
-            return null;
+            return User.Identity?.IsAuthenticated == true ? null : Forbid();
         }
 
         var mode = modeOverride ?? WebAppOptions.PermissionMode;

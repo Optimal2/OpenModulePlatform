@@ -245,6 +245,7 @@
                                         @if (Model.CanUsePersistentFavorites && group.IsFavoritable)
                                         {
                                             <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
+                                                @Html.AntiForgeryToken()
                                                 <input type="hidden" name="entryKey" value="@group.EntryKey" />
                                                 <input type="hidden" name="appInstanceId" value="@(group.AppInstanceId?.ToString("D") ?? string.Empty)" />
                                                 <button type="submit"
@@ -277,6 +278,7 @@
                                         @if (Model.CanUsePersistentFavorites && entry.IsFavoritable)
                                         {
                                             <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
+                                                @Html.AntiForgeryToken()
                                                 <input type="hidden" name="entryKey" value="@entry.EntryKey" />
                                                 <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
                                                 <button type="submit"
@@ -321,6 +323,7 @@
                                             <span>@EntryText(entry)</span>
                                         </a>
                                         <form method="post" action="@Model.FavoriteToggleUrl" class="portal-topbar__favorite-form" data-portal-topbar-favorite-form data-enhance="false">
+                                            @Html.AntiForgeryToken()
                                             <input type="hidden" name="entryKey" value="@entry.EntryKey" />
                                             <input type="hidden" name="appInstanceId" value="@(entry.AppInstanceId?.ToString("D") ?? string.Empty)" />
                                             <button type="submit"
@@ -425,6 +428,7 @@
                                           data-notification-id="@notification.NotificationId"
                                           data-notification-created-at="@notification.CreatedAt.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
                                           data-enhance="false">
+                                        @Html.AntiForgeryToken()
                                         <input type="hidden" name="notificationId" value="@notification.NotificationId" />
                                         <button type="submit"
                                                 class="portal-topbar__notification-row portal-topbar__notification-row--@notification.Level"
@@ -461,6 +465,7 @@
                                   data-portal-topbar-notification-mark-all-form
                                   data-enhance="false"
                                   hidden="@(Model.UnreadNotificationCount == 0)">
+                                @Html.AntiForgeryToken()
                                 <input type="hidden" name="returnUrl" value="@returnUrl" />
                                 <button type="submit" class="portal-topbar__tray-action portal-topbar__notifications-mark-all">
                                     @L[Model.MarkAllNotificationsReadTextKey]
@@ -538,6 +543,7 @@
                                   data-portal-topbar-message-mark-all-form
                                   data-enhance="false"
                                   hidden="@(Model.UnreadMessageCount == 0)">
+                                @Html.AntiForgeryToken()
                                 <input type="hidden" name="returnUrl" value="@returnUrl" />
                                 <button type="submit" class="portal-topbar__tray-action portal-topbar__messages-action">
                                     @L[Model.MarkAllMessagesReadTextKey]
