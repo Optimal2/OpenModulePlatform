@@ -445,11 +445,29 @@ WHERE user_id = @user_id
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
     }
 
+    // The notifications table is an install-time fact, so cache a positive probe
+    // result and stop re-running OBJECT_ID on every count/list/summary call (R5-E8,
+    // same pattern as R4-E11). Only "true" is cached: a "false" from an early-boot
+    // or not-yet-installed probe keeps retrying instead of disabling the feature for
+    // the whole process lifetime.
+    private static bool _notificationsTableExists;
+
     private static async Task<bool> NotificationsTableExistsAsync(SqlConnection conn, CancellationToken ct)
     {
+        if (_notificationsTableExists)
+        {
+            return true;
+        }
+
         const string sql = "SELECT CAST(CASE WHEN OBJECT_ID(N'omp.notifications', N'U') IS NULL THEN 0 ELSE 1 END AS bit);";
         await using var cmd = new SqlCommand(sql, conn);
-        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        var exists = Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        if (exists)
+        {
+            _notificationsTableExists = true;
+        }
+
+        return exists;
     }
 
     private static async Task<bool> UserExistsAsync(SqlConnection conn, int userId, CancellationToken ct)

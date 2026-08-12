@@ -1826,6 +1826,17 @@ $bootstrapConfig = [ordered]@{
 
 $configsRoot = Join-Path $packageRoot 'configs'
 New-Item -ItemType Directory -Force -Path $configsRoot | Out-Null
+
+# R5S-G5: bootstrap.local.sample.json is a redistributed template. If the
+# packaging .psd1 filled in SqlPassword/RunAsPassword/ServiceApp/IisAppPool
+# secrets they would otherwise be baked in as plaintext and shipped to every
+# recipient. Leave the secret fields blank - the target operator supplies them
+# at install time and they are DPAPI-protected on the target.
+$bootstrapConfig.sql.password = ''
+$bootstrapConfig.hostAgent.serviceAccountPassword = ''
+$bootstrapConfig.hostAgent.serviceAppPassword = ''
+$bootstrapConfig.hostAgent.iisAppPoolPassword = ''
+
 $bootstrapConfigJson = $bootstrapConfig | ConvertTo-Json -Depth 18
 $rootBootstrapConfigPath = Join-Path $packageRoot 'bootstrap.local.sample.json'
 $profileBootstrapConfigPath = Join-Path $configsRoot 'bootstrap.local.sample.json'

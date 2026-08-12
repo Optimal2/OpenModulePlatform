@@ -1118,8 +1118,20 @@ WHERE a.attachment_id = @attachment_id
             await rdr.GetFieldValueAsync<byte[]>(2, ct));
     }
 
+    // The messages schema is an install-time fact, so cache a positive probe result
+    // and stop re-running these OBJECT_ID checks on every message call (R5-E8, same
+    // pattern as R4-E11). Only "true" is cached: a "false" from an early-boot or
+    // not-yet-installed probe keeps retrying instead of disabling messages for the
+    // whole process lifetime.
+    private static bool _messagesTablesExist;
+
     private static async Task<bool> MessagesTablesExistAsync(SqlConnection conn, CancellationToken ct)
     {
+        if (_messagesTablesExist)
+        {
+            return true;
+        }
+
         const string sql = @"
 SELECT CAST(CASE
     WHEN OBJECT_ID(N'omp.conversations', N'U') IS NOT NULL
@@ -1130,7 +1142,13 @@ SELECT CAST(CASE
     THEN 1 ELSE 0 END AS bit);";
 
         await using var cmd = new SqlCommand(sql, conn);
-        return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        var exists = Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        if (exists)
+        {
+            _messagesTablesExist = true;
+        }
+
+        return exists;
     }
 
     private static async Task<bool> UserCanAccessConversationAsync(

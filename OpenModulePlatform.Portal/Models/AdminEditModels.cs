@@ -165,6 +165,39 @@ public sealed class ArtifactConfigurationFileEditData
     public string FileContent { get; set; } = string.Empty;
 
     public bool IsEnabled { get; set; }
+
+    /// <summary>
+    /// Last-write timestamp used as an optimistic concurrency token so two
+    /// operators (or two tabs) cannot silently clobber each other (R5-F13).
+    /// </summary>
+    public DateTime UpdatedUtc { get; set; }
+}
+
+/// <summary>
+/// Thrown when an artifact configuration file save is rejected because the
+/// underlying row changed since it was loaded (optimistic concurrency, R5-F13).
+/// </summary>
+public sealed class ArtifactConfigurationConcurrencyException : Exception
+{
+}
+
+/// <summary>
+/// Tells the config editor whether the artifact version being edited is the
+/// desired/active version or is about to be superseded (R5-F10).
+/// </summary>
+public sealed class ArtifactConfigVersionStatus
+{
+    /// <summary>This artifact is the desired version on at least one enabled installation row.</summary>
+    public bool IsDesiredVersion { get; set; }
+
+    /// <summary>The version currently selected as desired for this app/target, when it is not the edited one.</summary>
+    public string? DesiredVersion { get; set; }
+
+    /// <summary>The newest enabled artifact version for the same app/package-type/target.</summary>
+    public string? LatestVersion { get; set; }
+
+    /// <summary>A newer enabled artifact version than the one being edited exists.</summary>
+    public bool HasNewerVersion { get; set; }
 }
 
 /// <summary>

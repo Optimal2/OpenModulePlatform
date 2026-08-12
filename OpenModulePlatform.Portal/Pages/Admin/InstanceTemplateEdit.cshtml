@@ -55,6 +55,14 @@
 
 <div id="@StatusSectionId" class="section-navigator-target">
     @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
+    @if (Model.CarryForwardMessages.Count > 0)
+    {
+        @* Durable inline carry-forward warnings, not lost like TempData (R5-F12). *@
+        foreach (var carryForwardMessage in Model.CarryForwardMessages)
+        {
+            <div class="status-banner">@carryForwardMessage</div>
+        }
+    }
 </div>
 
 <section id="@HostsSectionId" class="card section-card section-card--wide section-navigator-target">

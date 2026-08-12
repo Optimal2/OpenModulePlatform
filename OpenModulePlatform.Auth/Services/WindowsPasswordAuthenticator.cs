@@ -62,8 +62,11 @@ public sealed class WindowsPasswordAuthenticator
         }
         catch (PrincipalServerDownException ex)
         {
+            // The domain controller is unreachable: this is an infrastructure fault,
+            // not a bad-credential attempt, so it must not count toward the login
+            // lockout that is meant to bound password guessing (R5-F8).
             _log.LogWarning(ex, "Alternate Windows sign-in could not reach the account authority for '{AccountName}'.", accountName);
-            return WindowsPasswordAuthenticationResult.Failed("Windows credentials could not be validated.");
+            return WindowsPasswordAuthenticationResult.InfrastructureError("Windows credentials could not be validated because the directory service is unavailable.");
         }
         catch (PrincipalOperationException ex)
         {
@@ -262,7 +265,8 @@ public sealed class WindowsPasswordAuthenticator
 
 public sealed record WindowsPasswordAuthenticationResult(
     ClaimsPrincipal? Principal,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    bool IsInfrastructureError = false)
 {
     public bool Succeeded => Principal is not null;
 
@@ -271,4 +275,9 @@ public sealed record WindowsPasswordAuthenticationResult(
 
     public static WindowsPasswordAuthenticationResult Failed(string errorMessage)
         => new(null, errorMessage);
+
+    // A non-credential failure (e.g. the directory service is unreachable). The caller
+    // must not count this toward the login lockout (R5-F8).
+    public static WindowsPasswordAuthenticationResult InfrastructureError(string errorMessage)
+        => new(null, errorMessage, IsInfrastructureError: true);
 }

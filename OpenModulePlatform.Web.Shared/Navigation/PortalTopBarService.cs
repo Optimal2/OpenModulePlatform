@@ -7,6 +7,7 @@ using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Data;
@@ -31,6 +32,14 @@ public sealed class PortalTopBarService
     public const string ToggleFavoritePath = "/navigation/favorites/toggle";
     public const string SummaryPath = PortalTopBarModel.DefaultTopBarSummaryPath;
 
+    // The enabled-app list and portal-entry rows are global and near-static; per-user
+    // access is still filtered in memory on every render. Cache the raw lists for a
+    // short window so a page render stops re-opening a SqlConnection and re-running
+    // these joins on every component invocation (R5-E2).
+    private const string EnabledWebAppsCacheKey = "omp-topbar:enabled-web-apps";
+    private const string PortalEntryRowsCacheKey = "omp-topbar:portal-entry-rows";
+    private static readonly TimeSpan NavCacheLifetime = TimeSpan.FromSeconds(30);
+
     private readonly SqlConnectionFactory _db;
     private readonly RbacService _rbac;
     private readonly CultureSelectionService _cultureSelectionService;
@@ -40,6 +49,7 @@ public sealed class PortalTopBarService
     private readonly NotificationService _notifications;
     private readonly MessageService _messages;
     private readonly BannerService _banners;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<PortalTopBarService> _log;
 
     public PortalTopBarService(
@@ -52,6 +62,7 @@ public sealed class PortalTopBarService
         NotificationService notifications,
         MessageService messages,
         BannerService banners,
+        IMemoryCache cache,
         ILogger<PortalTopBarService> log)
     {
         _db = db;
@@ -63,6 +74,7 @@ public sealed class PortalTopBarService
         _notifications = notifications;
         _messages = messages;
         _banners = banners;
+        _cache = cache;
         _log = log;
     }
 
@@ -1273,6 +1285,19 @@ WHERE user_id = @user_id
 
     private async Task<IReadOnlyList<TopBarPortalEntryRow>> GetPortalEntryRowsAsync(CancellationToken ct)
     {
+        if (_cache.TryGetValue<IReadOnlyList<TopBarPortalEntryRow>>(PortalEntryRowsCacheKey, out var cached)
+            && cached is not null)
+        {
+            return cached;
+        }
+
+        var rows = await LoadPortalEntryRowsAsync(ct);
+        _cache.Set(PortalEntryRowsCacheKey, rows, NavCacheLifetime);
+        return rows;
+    }
+
+    private async Task<IReadOnlyList<TopBarPortalEntryRow>> LoadPortalEntryRowsAsync(CancellationToken ct)
+    {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -1674,6 +1699,19 @@ END";
     }
 
     private async Task<IReadOnlyList<TopBarAppEntry>> GetEnabledWebAppsAsync(CancellationToken ct)
+    {
+        if (_cache.TryGetValue<IReadOnlyList<TopBarAppEntry>>(EnabledWebAppsCacheKey, out var cached)
+            && cached is not null)
+        {
+            return cached;
+        }
+
+        var apps = await LoadEnabledWebAppsAsync(ct);
+        _cache.Set(EnabledWebAppsCacheKey, apps, NavCacheLifetime);
+        return apps;
+    }
+
+    private async Task<IReadOnlyList<TopBarAppEntry>> LoadEnabledWebAppsAsync(CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);

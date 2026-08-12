@@ -49,6 +49,24 @@ public sealed class DeploySetConsistencyService
         return new DeploySetConsistencyCheckSummary(results, deviations);
     }
 
+    // (R5-D11) In Block mode, return the module-instance keys whose deployments
+    // must be skipped this cycle. Callers scope the block to those deployments
+    // instead of aborting the whole cycle, so self-upgrade, job processing and
+    // telemetry still run. Returns an empty set outside Block mode.
+    public IReadOnlySet<string> GetBlockedModuleInstanceKeys(DeploySetConsistencyCheckSummary summary)
+    {
+        var mode = DeploySetConsistencyModes.Normalize(_settings.CurrentValue.DeploySetConsistencyMode);
+        if (!string.Equals(mode, DeploySetConsistencyModes.Block, StringComparison.OrdinalIgnoreCase))
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return summary.Deviations
+            .Select(deviation => deviation.ModuleInstanceKey)
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     public void ThrowIfBlocked(DeploySetConsistencyCheckSummary summary)
     {
         var mode = DeploySetConsistencyModes.Normalize(_settings.CurrentValue.DeploySetConsistencyMode);

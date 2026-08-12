@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
+using System.Threading;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
@@ -9,6 +10,13 @@ public sealed class OmpConfigurationService
 {
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(2);
     private const string FalseSqlCondition = "0 = 1";
+
+    // A monotonic generation token folded into every cache key. Removing only the
+    // exact global key left every effective-scoped copy of a setting (which folds
+    // in the global fallback) serving a stale value for the full cache lifetime,
+    // so an updated config was not picked up. Bumping the generation makes the
+    // global entry and all effective entries unreachable at once (R5-E3).
+    private static long _generation;
 
     private readonly SqlConnectionFactory _db;
     private readonly IMemoryCache _cache;
@@ -91,7 +99,7 @@ public sealed class OmpConfigurationService
         // different principals never share a value.
         var permissionKey = string.Join('|', permissionNames);
         var cacheKey = string.Create(CultureInfo.InvariantCulture,
-            $"omp-cfg-eff::{category.Trim()}::{setting.Trim()}::{userId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{activeRoleId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{permissionKey}");
+            $"omp-cfg-eff::{Interlocked.Read(ref _generation)}::{category.Trim()}::{setting.Trim()}::{userId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{activeRoleId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{permissionKey}");
         if (_cache.TryGetValue<string?>(cacheKey, out var cachedValue))
         {
             return cachedValue;
@@ -125,13 +133,21 @@ public sealed class OmpConfigurationService
             return;
         }
 
-        _cache.Remove(CreateGlobalCacheKey(category, setting));
+        // Bump the generation so both the global entry and every effective-scoped
+        // copy of the setting are invalidated, not just the exact global key (R5-E3).
+        InvalidateAll();
     }
+
+    /// <summary>
+    /// Invalidates every cached configuration value so subsequent reads reload from the database.
+    /// Call this after any configuration write so updated values are picked up immediately.
+    /// </summary>
+    public void InvalidateAll() => Interlocked.Increment(ref _generation);
 
     private static string CreateGlobalCacheKey(string category, string setting)
         => string.Create(
             CultureInfo.InvariantCulture,
-            $"omp-config:global:{category.Trim().ToLowerInvariant()}:{setting.Trim().ToLowerInvariant()}");
+            $"omp-config:global:{Interlocked.Read(ref _generation)}:{category.Trim().ToLowerInvariant()}:{setting.Trim().ToLowerInvariant()}");
 
     private void LogConfigReadFailure(Exception ex, string category, string setting, bool effective)
     {

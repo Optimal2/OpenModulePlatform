@@ -275,6 +275,13 @@ internal static partial class Program
         var payloadRoot = ResolvePayloadRoot(cli, configPath);
         WaitForParentProcess(cli.ParentProcessId);
 
+        // R5-G2: check for package locks BEFORE the multi-minute rebuild. The
+        // blocker check used to run only after the build, at the file-swap, so
+        // every attempt paid the full build cost then failed on a locked file.
+        // This fails fast (naming the blocking process/PID) - and nudges an idle
+        // GUI to close (R5-G4) - so the build only starts once the swap can win.
+        WaitForPackageProcessesToExit(payloadRoot);
+
         var config = await ReadJsonAsync<BootstrapConfig>(configPath);
         var sourceRoot = ResolvePrimaryDeveloperSourceRoot(config, payloadRoot, configPath);
         var packageConfigPath = ResolveDeveloperPackageConfigPath(config, sourceRoot);
@@ -549,7 +556,16 @@ internal static partial class Program
                 generatedPackageRoot,
                 generatedTemplateConfigPath);
             Directory.CreateDirectory(Path.GetDirectoryName(generatedConfigPath)!);
-            await File.WriteAllTextAsync(generatedConfigPath, json + Environment.NewLine, Encoding.UTF8);
+            // R5S-G2/R5S-G3: this config is written INTO the redistributable
+            // installer package (and is later copied into its .backup-* snapshots
+            // during the swap). Strip GUI-entered service/SQL/app-pool passwords
+            // so plaintext production secrets never leave the build machine; the
+            // target operator supplies them at install time and they are
+            // DPAPI-protected on the target (the same model as the HostAgent
+            // account credential). A host-profile config kept OUTSIDE the package
+            // takes the metadata-only branch above and retains its local secrets.
+            var redistributableJson = RedactRedistributablePackageConfigSecrets(json);
+            await File.WriteAllTextAsync(generatedConfigPath, redistributableJson + Environment.NewLine, Encoding.UTF8);
             wroteAnyConfig = true;
         }
 
@@ -561,6 +577,42 @@ internal static partial class Program
         {
             File.Delete(generatedSampleProfile);
         }
+    }
+
+    // R5S-G2/R5S-G3: secret bootstrap-config fields (camelCase, matching the Web
+    // JSON naming the installer serializes with) that must never be persisted
+    // into a redistributable package.
+    private static readonly string[] RedistributableHostAgentSecretProperties =
+    [
+        "serviceAccountPassword",
+        "serviceAppPassword",
+        "iisAppPoolPassword"
+    ];
+
+    private static string RedactRedistributablePackageConfigSecrets(string json)
+    {
+        if (JsonNode.Parse(json) is not JsonObject root)
+        {
+            return json;
+        }
+
+        if (root["sql"] is JsonObject sql && sql.ContainsKey("password"))
+        {
+            sql["password"] = string.Empty;
+        }
+
+        if (root["hostAgent"] is JsonObject hostAgent)
+        {
+            foreach (var property in RedistributableHostAgentSecretProperties)
+            {
+                if (hostAgent.ContainsKey(property))
+                {
+                    hostAgent[property] = string.Empty;
+                }
+            }
+        }
+
+        return root.ToJsonString(JsonOptions);
     }
 
     private static async Task WriteGeneratedPayloadMetadataIntoJsonFileAsync(string configPath, BootstrapConfig generatedConfig)
@@ -1190,8 +1242,41 @@ internal static partial class Program
                     + ". Close the installer window (or stop the processes) and run the refresh again.");
             }
 
+            // R5-G4 (root cause of the deploy-lock incident): the manual installer
+            // GUI launched from the package root keeps the directory locked for
+            // its whole idle lifetime, blocking the file-swap. Politely ask any
+            // blocker that owns a window (the idle GUI) to close so it releases
+            // the lock. Console/service blockers own no window and are unaffected;
+            // this is best-effort and the bounded wait/throw above still guards.
+            foreach (var blocker in blockers)
+            {
+                TryCloseIdleGuiBlocker(blocker);
+            }
+
             Console.WriteLine($"Waiting for processes running from the package to exit: {blockerNames}");
             Thread.Sleep(TimeSpan.FromSeconds(5));
+        }
+    }
+
+    // R5-G4: best-effort WM_CLOSE to an idle GUI holding the package lock.
+    // Process.CloseMainWindow posts WM_CLOSE only when the process owns a main
+    // window, so a console or service blocker is left untouched.
+    private static void TryCloseIdleGuiBlocker(Process blocker)
+    {
+        try
+        {
+            blocker.Refresh();
+            if (blocker.HasExited || blocker.MainWindowHandle == IntPtr.Zero)
+            {
+                return;
+            }
+
+            blocker.CloseMainWindow();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException)
+        {
+            // The process exited or its window is no longer accessible; the swap
+            // proceeds once the lock clears, or the wait/throw reports the blocker.
         }
     }
 

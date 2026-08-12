@@ -169,6 +169,10 @@ public sealed class WorkerManagerHostedService : BackgroundService
                         // The worker is still busy with an in-flight job. Keep the
                         // old configuration running and retry during the next cycle;
                         // a version-change restart never interrupts a running job.
+                        // A draining worker publishes no heartbeat of its own, so
+                        // refresh its liveness timestamp here to keep the liveness
+                        // check from flagging a healthy draining worker as Stale (R5-F4).
+                        await PublishRunningObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
                         continue;
                     }
 
@@ -180,6 +184,17 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
                     await StopWorkerAsync(managed, runtimeKind, "worker configuration changed", cancellationToken);
                     managed.UpdateDefinition(desired);
+                }
+                else if (managed.CancelDrain())
+                {
+                    // The configuration change that started a drain was reverted to
+                    // the running configuration before the in-flight job completed;
+                    // resume the worker instead of letting it idle forever (R5-F1).
+                    _logger.LogInformation(
+                        "Worker configuration change reverted before drain completed; resuming worker. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}",
+                        desired.AppInstanceId,
+                        desired.WorkerInstanceId,
+                        desired.WorkerTypeKey);
                 }
 
                 await EnsureWorkerRunningAsync(managed, runtimeKind, cancellationToken);
@@ -248,48 +263,64 @@ public sealed class WorkerManagerHostedService : BackgroundService
         CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
-        var resolvedWorkers = new List<DesiredWorkerInstance>(desiredWorkers.Count);
 
-        foreach (var desired in desiredWorkers)
+        // Resolve every desired worker's artifact concurrently: each HostAgent RPC
+        // already carries its own timeout, so issuing them serially made the worst
+        // case N x TimeoutSeconds (e.g. all workers waiting when the HostAgent is
+        // down). Parallelizing bounds the wait to roughly a single call (R5-F5).
+        // Order is preserved because Task.WhenAll keeps the input ordering.
+        var resolveTasks = desiredWorkers
+            .Select(desired => ResolveDesiredWorkerArtifactAsync(settings, desired, cancellationToken))
+            .ToArray();
+
+        var resolvedResults = await Task.WhenAll(resolveTasks);
+
+        return resolvedResults
+            .Where(resolved => resolved is not null)
+            .Select(resolved => resolved!)
+            .ToList();
+    }
+
+    private async Task<DesiredWorkerInstance?> ResolveDesiredWorkerArtifactAsync(
+        WorkerManagerSettings settings,
+        DesiredWorkerInstance desired,
+        CancellationToken cancellationToken)
+    {
+        var resolved = desired;
+        var shouldAskHostAgent = ShouldRequestArtifactFromHostAgent(settings, desired);
+
+        if (shouldAskHostAgent)
         {
-            var resolved = desired;
-            var shouldAskHostAgent = ShouldRequestArtifactFromHostAgent(settings, desired);
+            var response = await _hostAgentRpcClient.EnsureArtifactAsync(
+                desired.ArtifactId!.Value,
+                null,
+                cancellationToken);
 
-            if (shouldAskHostAgent)
+            if (response?.Success == true && !string.IsNullOrWhiteSpace(response.LocalPath))
             {
-                var response = await _hostAgentRpcClient.EnsureArtifactAsync(
-                    desired.ArtifactId!.Value,
-                    null,
-                    cancellationToken);
-
-                if (response?.Success == true && !string.IsNullOrWhiteSpace(response.LocalPath))
-                {
-                    resolved = desired.WithInstallRootPath(response.LocalPath);
-                }
-                else
-                {
-                    _logger.LogWarning(
-                        "HostAgent could not provision worker artifact. WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}, Error={Error}",
-                        desired.WorkerInstanceId,
-                        desired.ArtifactId,
-                        response?.ErrorMessage ?? "no response");
-                }
+                resolved = desired.WithInstallRootPath(response.LocalPath);
             }
-
-            if (string.IsNullOrWhiteSpace(resolved.PluginAssemblyPath))
+            else
             {
                 _logger.LogWarning(
-                    "Skipping desired worker with unresolved plugin path. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}",
-                    resolved.AppInstanceId,
-                    resolved.WorkerInstanceId,
-                    resolved.ArtifactId);
-                continue;
+                    "HostAgent could not provision worker artifact. WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}, Error={Error}",
+                    desired.WorkerInstanceId,
+                    desired.ArtifactId,
+                    response?.ErrorMessage ?? "no response");
             }
-
-            resolvedWorkers.Add(resolved);
         }
 
-        return resolvedWorkers;
+        if (string.IsNullOrWhiteSpace(resolved.PluginAssemblyPath))
+        {
+            _logger.LogWarning(
+                "Skipping desired worker with unresolved plugin path. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}",
+                resolved.AppInstanceId,
+                resolved.WorkerInstanceId,
+                resolved.ArtifactId);
+            return null;
+        }
+
+        return resolved;
     }
 
     private async Task EnsureWorkerRunningAsync(
@@ -329,6 +360,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
         }
 
+        // Record the attempt before the start sequence so a failure that happens
+        // early (path resolution, file validation, named-event or process creation)
+        // still counts toward the restart-backoff policy instead of retrying every
+        // cycle in a tight ~15s churn (R5-F3).
+        managed.RecordStartAttempt(nowUtc, restartWindow);
+
         var workerProcessPath = await ResolveWorkerProcessPathAsync(settings, cancellationToken);
         ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
         ValidateReadableStartupFile(managed.Definition.PluginAssemblyPath, "Worker plugin assembly");
@@ -346,7 +383,6 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
         var process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
         startupResources.AttachProcess(process);
-        managed.RecordStartAttempt(nowUtc, restartWindow);
 
         StartWorkerProcess(process, managed.Definition.WorkerInstanceId, workerProcessPath);
 
@@ -989,7 +1025,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 }
 
                 var parentProcessId = ReadManagementUInt32(process, "ParentProcessId");
-                if (IsLiveWorkerManagerParent(parentProcessId, managerProcessPath))
+                var childStartTimeUtc = ReadManagementDateTimeUtc(process, "CreationDate");
+                if (IsLiveWorkerManagerParent(parentProcessId, managerProcessPath, childStartTimeUtc))
                 {
                     continue;
                 }
@@ -1033,7 +1070,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
     private static string CreateWorkerProcessHostQuery()
     {
         var executableNameLiteral = CreateSafeWqlStringLiteral(WorkerProcessHostExecutableName);
-        return "SELECT ProcessId, ParentProcessId, ExecutablePath, CommandLine FROM Win32_Process WHERE Name = "
+        return "SELECT ProcessId, ParentProcessId, ExecutablePath, CommandLine, CreationDate FROM Win32_Process WHERE Name = "
             + executableNameLiteral;
     }
 
@@ -1057,7 +1094,10 @@ public sealed class WorkerManagerHostedService : BackgroundService
         => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-';
 
     [SupportedOSPlatform("windows")]
-    private static bool IsLiveWorkerManagerParent(int parentProcessId, string managerProcessPath)
+    private static bool IsLiveWorkerManagerParent(
+        int parentProcessId,
+        string managerProcessPath,
+        DateTimeOffset? childStartTimeUtc)
     {
         if (parentProcessId <= 0)
         {
@@ -1068,6 +1108,17 @@ public sealed class WorkerManagerHostedService : BackgroundService
         {
             using var parent = Process.GetProcessById(parentProcessId);
             if (parent.HasExited)
+            {
+                return false;
+            }
+
+            // Guard against parent-PID reuse: Windows recycles process ids, so the
+            // process now holding the recorded ParentProcessId may be a newer,
+            // unrelated process. A genuine parent always starts before its child, so
+            // a "parent" that started after the worker host cannot be its real parent
+            // and the worker host is therefore orphaned (R5-F2).
+            if (childStartTimeUtc.HasValue
+                && parent.StartTime.ToUniversalTime() > childStartTimeUtc.Value.UtcDateTime)
             {
                 return false;
             }
@@ -1105,6 +1156,26 @@ public sealed class WorkerManagerHostedService : BackgroundService
             int value => value,
             _ => 0
         };
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static DateTimeOffset? ReadManagementDateTimeUtc(ManagementBaseObject process, string propertyName)
+    {
+        // Win32_Process exposes CreationDate as a CIM_DATETIME string; a missing or
+        // unparseable value simply disables the start-time PID-reuse guard (R5-F2).
+        if (process[propertyName] is not string rawValue || string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        try
+        {
+            return ManagementDateTimeConverter.ToDateTime(rawValue).ToUniversalTime();
+        }
+        catch (Exception ex) when (ex is ArgumentException or ArgumentOutOfRangeException or FormatException)
+        {
+            return null;
+        }
     }
 
     private static StringComparison GetPathComparison()

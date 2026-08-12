@@ -51,9 +51,26 @@ public sealed class HostAgentSelfUpgradeService
         _logger = logger;
     }
 
+    // (R5-D3) Resolve the desired-upgrade row once per cycle so the lease-takeover
+    // check, superseded-service cleanup and upgrade preparation can share it,
+    // instead of each issuing its own repository query (and, for cleanup, a full
+    // sc.exe enumeration) every steady-state cycle.
+    public async Task<HostAgentUpgradeDescriptor?> GetDesiredUpgradeAsync(
+        string hostKey,
+        CancellationToken cancellationToken)
+    {
+        if (!_settings.CurrentValue.SelfUpgrade.IsEnabled)
+        {
+            return null;
+        }
+
+        return await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
+    }
+
     public async Task CheckAndPrepareUpgradeAsync(
         string hostKey,
         Guid hostId,
+        HostAgentUpgradeDescriptor? desired,
         CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
@@ -62,7 +79,9 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
-        var desired = await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
+        // (R5-D3) Reuse the upgrade row resolved once for this cycle; only re-query
+        // when a caller did not pre-resolve it.
+        desired ??= await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
         if (desired is null)
         {
             return;
@@ -70,11 +89,9 @@ public sealed class HostAgentSelfUpgradeService
 
         if (IsCurrentVersion(desired))
         {
-            if (string.Equals(ResolveServiceName(settings, desired), _process.ServiceName, StringComparison.OrdinalIgnoreCase))
-            {
-                await CleanupSupersededHostAgentServicesAsync(hostKey, hostId, cancellationToken);
-            }
-
+            // (R5-D3) Superseded-service cleanup for the steady state now runs on a
+            // slow timer driven by the engine (or immediately after a takeover via
+            // CompleteTakeoverAsync), not on every cycle from here.
             return;
         }
 
@@ -173,18 +190,17 @@ public sealed class HostAgentSelfUpgradeService
         throw new InvalidOperationException(message);
     }
 
-    public async Task<bool> ShouldForceLeaseTakeoverAsync(
-        string hostKey,
-        CancellationToken cancellationToken)
+    // (R5-D3) Takes the upgrade row already resolved once for this cycle instead of
+    // issuing its own repository query.
+    public bool ShouldForceLeaseTakeover(HostAgentUpgradeDescriptor? desired)
     {
-        var settings = _settings.CurrentValue;
-        if (!settings.SelfUpgrade.IsEnabled)
+        if (desired is null)
         {
             return false;
         }
 
-        var desired = await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
-        return desired is not null
+        var settings = _settings.CurrentValue;
+        return settings.SelfUpgrade.IsEnabled
             && IsCurrentVersion(desired)
             && string.Equals(ResolveServiceName(settings, desired), _process.ServiceName, StringComparison.OrdinalIgnoreCase);
     }
@@ -253,7 +269,7 @@ public sealed class HostAgentSelfUpgradeService
             $"HostAgent takeover completed for host '{hostKey}'.",
             cancellationToken);
 
-        await CleanupSupersededHostAgentServicesAsync(hostKey, hostId, cancellationToken);
+        await CleanupSupersededHostAgentServicesAsync(hostKey, hostId, currentDesired, cancellationToken);
 
         _logger.LogInformation(
             "Completed HostAgent takeover. CurrentService={CurrentService}, PreviousService={PreviousService}",
@@ -368,6 +384,7 @@ public sealed class HostAgentSelfUpgradeService
     public async Task CleanupSupersededHostAgentServicesAsync(
         string hostKey,
         Guid hostId,
+        HostAgentUpgradeDescriptor? desired,
         CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
@@ -376,7 +393,9 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
-        var desired = await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
+        // (R5-D3) Reuse the upgrade row resolved once for this cycle when the caller
+        // supplied it; fall back to a query for callers that did not.
+        desired ??= await _repository.GetDesiredHostAgentUpgradeAsync(hostKey, cancellationToken);
         if (desired is null || !IsCurrentVersion(desired))
         {
             return;
@@ -447,9 +466,39 @@ public sealed class HostAgentSelfUpgradeService
 
     private static string ResolveInstallPath(HostAgentSettings settings, HostAgentUpgradeDescriptor desired)
     {
-        var root = FirstNonEmpty(desired.InstallRoot, settings.SelfUpgrade.InstallRoot, settings.ServicesRoot, AppContext.BaseDirectory);
+        var root = ResolveInstallRoot(settings, desired);
         var folderName = "HostAgent-" + SanitizeForPath(desired.Version);
         return DeploymentPath.CombineUnderRoot(Path.GetFullPath(root), folderName, nameof(settings.SelfUpgrade.InstallRoot));
+    }
+
+    private static string ResolveInstallRoot(HostAgentSettings settings, HostAgentUpgradeDescriptor desired)
+    {
+        var configuredRoot = new[] { desired.InstallRoot, settings.SelfUpgrade.InstallRoot, settings.ServicesRoot }
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            return configuredRoot;
+        }
+
+        // (R5-D10) No InstallRoot/ServicesRoot is configured, so the install root
+        // falls back to the running directory. On web-only hosts the running
+        // directory is itself the versioned 'HostAgent-<version>' folder, so
+        // nesting the next upgrade inside it would deepen the path on every
+        // upgrade. When the current base directory is already a versioned folder,
+        // fall back to its PARENT so upgrades install as siblings and self-heal
+        // without new required configuration.
+        var baseDirectory = Path.GetFullPath(AppContext.BaseDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (Path.GetFileName(baseDirectory).StartsWith("HostAgent-", StringComparison.OrdinalIgnoreCase))
+        {
+            var parent = Path.GetDirectoryName(baseDirectory);
+            if (!string.IsNullOrWhiteSpace(parent))
+            {
+                return parent;
+            }
+        }
+
+        return AppContext.BaseDirectory;
     }
 
     private string ResolveServiceName(HostAgentSettings settings, HostAgentUpgradeDescriptor desired)

@@ -282,8 +282,32 @@
             }
         } finally {
             state.running = false;
-            scheduleNext(getPollingDelay(config));
+            // When the shared top bar holds a live push channel, stop the periodic
+            // poll: push events (and focus/reactivation) drive updates instead, so
+            // the toast poller no longer duplicates the top bar's summary hits in
+            // push mode (R5-E1). Polling resumes automatically when push drops.
+            if (!isPushActive()) {
+                scheduleNext(getPollingDelay(config));
+            }
         }
+    }
+
+    function isPushActive() {
+        return !!(window.ompPushChannel && window.ompPushChannel.connected);
+    }
+
+    function handlePushChannelStateChange() {
+        if (isPushActive()) {
+            if (state.timer) {
+                window.clearTimeout(state.timer);
+                state.timer = null;
+            }
+
+            return;
+        }
+
+        // Push channel went down: fall back to polling right away.
+        scheduleNext(0);
     }
 
     function applySummary(payload, config) {
@@ -478,7 +502,31 @@
             || normalized.indexOf("topbar.message-") === 0;
     }
 
+    // A pushed summary payload holds this user's counts/items and may only be
+    // trusted when the push was delivered to the current user's own SignalR
+    // group. Role/broadcast/app/module fan-out reaches many users, so its payload
+    // is not necessarily this user's; those fall back to the per-user summary
+    // poll instead. The direct per-user push carries no target metadata and is
+    // delivered by the server to this user's group alone (R5S-E2).
+    function isUserScopedPushDetail(detail) {
+        var envelope = detail && detail.envelope ? detail.envelope : null;
+        if (!envelope || typeof envelope !== "object") {
+            return true;
+        }
+
+        var targetKind = envelope.targetKind;
+        if (targetKind === undefined || targetKind === null || targetKind === "") {
+            return true;
+        }
+
+        return String(targetKind).toLowerCase() === "user";
+    }
+
     function tryApplyToastSummaryFromPushPayload(detail) {
+        if (!isUserScopedPushDetail(detail)) {
+            return false;
+        }
+
         var payload = detail && detail.payload ? detail.payload
             : (detail.envelope && detail.envelope.payload ? detail.envelope.payload : null);
         if (!payload || typeof payload !== "object") {
@@ -745,6 +793,7 @@
         });
 
         window.addEventListener(pushEventName, handlePushEvent);
+        window.addEventListener("omp:push-channel-state", handlePushChannelStateChange);
 
         scheduleNext(0);
     }

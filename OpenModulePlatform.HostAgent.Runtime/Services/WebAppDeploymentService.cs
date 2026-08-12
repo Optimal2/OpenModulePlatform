@@ -44,6 +44,13 @@ public sealed class WebAppDeploymentService
         string hostKey,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         CancellationToken cancellationToken)
+        => await DeployDesiredWebAppsAsync(hostKey, deploySetWarningsByModuleInstanceKey, null, cancellationToken);
+
+    public async Task DeployDesiredWebAppsAsync(
+        string hostKey,
+        IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
+        IReadOnlySet<string>? blockedModuleInstanceKeys,
+        CancellationToken cancellationToken)
     {
         var settings = _settings.CurrentValue;
         if (!settings.DeployWebApps)
@@ -76,7 +83,7 @@ public sealed class WebAppDeploymentService
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, deploySetWarningsByModuleInstanceKey, isMultiHost, cancellationToken);
+            await DeployAsync(settings, deployment, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, isMultiHost, cancellationToken);
         }
     }
 
@@ -84,6 +91,7 @@ public sealed class WebAppDeploymentService
         HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
+        IReadOnlySet<string>? blockedModuleInstanceKeys,
         bool isMultiHost,
         CancellationToken cancellationToken)
     {
@@ -132,6 +140,27 @@ public sealed class WebAppDeploymentService
             runtimeName = appPoolName ?? (UseAppCmdAppPoolControl(settings)
                 ? GetIisAppPoolName(iisAppName)
                 : iisAppName);
+
+            // (R5-D11) Deploy-set consistency Block: skip only this affected
+            // module-instance's deployment (leaving the currently deployed version
+            // live) and record the reason, instead of the cycle aborting host-wide.
+            if (blockedModuleInstanceKeys is not null
+                && blockedModuleInstanceKeys.Contains(deployment.ModuleInstanceKey))
+            {
+                var blockMessage = string.IsNullOrWhiteSpace(deploySetWarning)
+                    ? "Deploy-set consistency Block is active for this module instance; deployment was skipped until a consistent artifact set is imported."
+                    : deploySetWarning;
+                _logger.LogWarning(
+                    "Web app deployment skipped due to deploy-set consistency Block. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, ModuleInstance={ModuleInstanceKey}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    deployment.ModuleInstanceKey);
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    AppDeploymentResult.Warning(targetPath, runtimeName, blockMessage),
+                    cancellationToken);
+                return;
+            }
 
             var configuredConnectionString = _repository.GetConfiguredConnectionString();
             var configurationFiles = await _repository.GetArtifactConfigurationFilesAsync(
