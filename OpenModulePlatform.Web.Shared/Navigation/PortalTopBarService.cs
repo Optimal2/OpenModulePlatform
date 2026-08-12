@@ -1615,7 +1615,15 @@ END";
         {
             if (Uri.TryCreate(routePath, UriKind.Absolute, out var absoluteRoute))
             {
-                return absoluteRoute.ToString();
+                // Same http(s) allowlist as the HttpRequest overload. R4-E2 hardened
+                // ResolveTargetUrl and R5S-E1 hardened the HttpRequest ResolveHref,
+                // but THIS overload -- the one the Blazor render path uses when no
+                // HttpContext is available -- was left with the original behaviour, so
+                // a javascript:/data: RoutePath still became a clickable top-bar href
+                // for every user of a Blazor module (R6-E1).
+                return absoluteRoute.Scheme is "http" or "https"
+                    ? absoluteRoute.ToString()
+                    : null;
             }
 
             var hostRoot = ResolveHostRoot(currentUri, app);
@@ -1627,7 +1635,10 @@ END";
         var publicUrl = Clean(app.PublicUrl);
         if (!string.IsNullOrWhiteSpace(publicUrl))
         {
-            return publicUrl;
+            // Was returned verbatim -- weaker even than the pre-R4-E2 state, so
+            // javascript:, data: and protocol-relative //evil.host all passed.
+            // Validate it exactly like the HttpRequest overload does (R6-E1).
+            return ResolveTargetUrl(currentUri, publicUrl);
         }
 
         if (IsPortalApp(app))
