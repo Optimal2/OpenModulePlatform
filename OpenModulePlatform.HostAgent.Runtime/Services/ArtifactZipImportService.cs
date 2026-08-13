@@ -119,9 +119,60 @@ public sealed class ArtifactZipImportService
         }
     }
 
+    /// <summary>
+    /// Throws when <paramref name="path"/> exists and is a reparse point
+    /// (junction/symlink), so this SYSTEM service never reads, writes or deletes
+    /// THROUGH a link an unprivileged account could have planted (R7-S2/R7-S3).
+    /// </summary>
+    private static void EnsureNotReparsePoint(string path, string description)
+    {
+        try
+        {
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new IOException(
+                    $"{description} is a reparse point (junction/symlink): '{path}'. Refusing to use it.");
+            }
+        }
+        catch (FileNotFoundException)
+        {
+        }
+        catch (DirectoryNotFoundException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private void SweepEntriesOlderThan(string root, DateTime cutoffUtc, bool includeDirectories)
     {
         if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        // EnumerateFiles traverses a junction AT THE ROOT transparently, and this
+        // sweep then File.Deletes everything past the cutoff -- as SYSTEM. The
+        // processed/failed roots default to subdirectories of the operator-writable
+        // import folder, so replacing one with a junction to System32 turned this
+        // housekeeping pass into arbitrary file deletion (R7-S3). Skip a linked root
+        // entirely rather than deleting through it.
+        try
+        {
+            if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            {
+                _logger.LogWarning(
+                    "HostAgent import housekeeping skipped '{Root}' because it is a reparse point (junction/symlink); refusing to delete through it.",
+                    root);
+                return;
+            }
+        }
+        catch (IOException)
+        {
+            return;
+        }
+        catch (UnauthorizedAccessException)
         {
             return;
         }
@@ -192,6 +243,15 @@ public sealed class ArtifactZipImportService
     {
         var storeRoot = Path.GetFullPath(settings.CentralArtifactRoot.Trim());
         var tempRoot = Path.Join(storeRoot, ".hostagent-import-staging");
+        // The staging root has a fixed, predictable name inside a tree the installer
+        // grants the IIS app-pool identities Modify on, and Directory.CreateDirectory
+        // is a silent no-op when the name is already a junction. A compromised
+        // app-pool account could therefore point it at, say, System32 and have this
+        // SYSTEM service extract attacker-chosen files through it. Containment here
+        // was purely lexical (Path.GetFullPath does not resolve reparse points), so
+        // the R5S-D1 hardening of the mirror/config writer never covered the import
+        // path (R7-S2).
+        EnsureNotReparsePoint(tempRoot, "HostAgent import staging root");
         Directory.CreateDirectory(tempRoot);
 
         var tempImportPath = Path.Join(tempRoot, $"{Guid.NewGuid():N}{Path.GetExtension(importPath)}");
@@ -222,6 +282,26 @@ public sealed class ArtifactZipImportService
                     result.ImportedCount,
                     result.SkippedCount,
                     result.FailedCount);
+
+                // A package whose items ALL failed used to be archived to processed\
+                // just like a clean one, because FailedCount was only logged. Every
+                // downstream success signal keys on that move -- including the
+                // installer CLI's --wait-for-import, which then reported a successful
+                // deploy for an installation that received nothing (R7-G1). Route a
+                // package with failed items to failed\ with the reasons attached.
+                if (result.FailedCount > 0)
+                {
+                    var failureDetail = string.Join(
+                        Environment.NewLine,
+                        result.Items
+                            .Where(static item => item.Status == "Failed")
+                            .Select(static item => $"{item.Kind} {item.Path}: {item.Message}"));
+                    MoveImportFile(
+                        importPath,
+                        failedPath,
+                        $"{result.FailedCount} of {result.Items.Count} package item(s) failed to import.{Environment.NewLine}{failureDetail}");
+                    return;
+                }
             }
             else
             {

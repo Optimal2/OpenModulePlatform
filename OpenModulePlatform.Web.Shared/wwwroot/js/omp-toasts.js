@@ -522,6 +522,46 @@
         return String(targetKind).toLowerCase() === "user";
     }
 
+    // Only navigate to same-origin, absolute-path destinations. The POLL path is
+    // validated server-side (IsSafeLocalDestination in the summary endpoint), but
+    // push payloads reached window.location.href unchecked, so anything able to
+    // enqueue a user-targeted push event could ship targetUrl: "javascript:..." and
+    // get script execution in the viewing app's origin -- a much lower bar than the
+    // DB-admin access the earlier href hardening assumed (R7-E1). Mirrors
+    // isSafeLocalDestination in portal-topbar.js (R3-E6).
+    function isSafeLocalDestination(url) {
+        if (typeof url !== "string" || url.length === 0) {
+            return false;
+        }
+
+        return url.charAt(0) === "/" && url.charAt(1) !== "/" && url.charAt(1) !== "\\";
+    }
+
+    // Drop any push-supplied destination that is not a safe local path; the toast
+    // then falls back to the configured notifications/messages URL (R7-E1).
+    function sanitizePushToastItems(items) {
+        if (!Array.isArray(items)) {
+            return items;
+        }
+
+        return items.map(function (item) {
+            if (!item || typeof item !== "object") {
+                return item;
+            }
+
+            if (!isSafeLocalDestination(item.targetUrl)) {
+                var copy = {};
+                Object.keys(item).forEach(function (key) {
+                    copy[key] = item[key];
+                });
+                copy.targetUrl = null;
+                return copy;
+            }
+
+            return item;
+        });
+    }
+
     function tryApplyToastSummaryFromPushPayload(detail) {
         if (!isUserScopedPushDetail(detail)) {
             return false;
@@ -545,12 +585,14 @@
         if (hasNotificationData) {
             syntheticPayload.latestNotificationId = latestNotificationId;
             syntheticPayload.newNotificationCount = payload.newNotificationCount;
-            syntheticPayload.newNotifications = payload.newNotifications;
+            // Sanitize push-supplied destinations; the poll path is validated
+            // server-side but this one reached window.location.href raw (R7-E1).
+            syntheticPayload.newNotifications = sanitizePushToastItems(payload.newNotifications);
         }
         if (hasMessageData) {
             syntheticPayload.latestMessageId = latestMessageId;
             syntheticPayload.newMessageCount = payload.newMessageCount;
-            syntheticPayload.newMessages = payload.newMessages;
+            syntheticPayload.newMessages = sanitizePushToastItems(payload.newMessages);
         }
 
         applySummary(syntheticPayload, getConfig());
