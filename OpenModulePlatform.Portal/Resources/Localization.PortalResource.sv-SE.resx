@@ -3185,4 +3185,101 @@
   <data name="This is the desired artifact version. HostAgent deploys it after its next cycle." xml:space="preserve"><value>Detta är önskad artefaktversion. HostAgent driftsätter den efter nästa cykel.</value></data>
   <data name="You are editing configuration for version {0}, but a newer version {1} exists. Make sure you intend to edit this version and not the newer one." xml:space="preserve"><value>Du redigerar konfiguration för version {0}, men en nyare version {1} finns. Säkerställ att du avser att redigera den här versionen och inte den nyare.</value></data>
   <data name="You are editing configuration for version {0}, but the desired version is {1}. These edits will not apply to the desired version unless they are carried forward." xml:space="preserve"><value>Du redigerar konfiguration för version {0}, men önskad version är {1}. De här ändringarna gäller inte för önskad version om de inte förs vidare.</value></data>
+  <data name="Play notification sounds" xml:space="preserve"><value>Spela upp aviseringsljud</value></data>
+  <data name="When this is turned off, notification and message toasts are shown silently." xml:space="preserve"><value>När detta är avstängt visas aviserings- och meddelandenotiser tyst.</value></data>
+  <data name="Worker" xml:space="preserve"><value>Worker</value></data>
+  <data name="Desired app" xml:space="preserve"><value>Önskad app</value></data>
+  <data name="View" xml:space="preserve"><value>Visa</value></data>
+  <data name="Create app worker definition" xml:space="preserve"><value>Skapa app-workerdefinition</value></data>
+  <data name="Edit app worker definition" xml:space="preserve"><value>Redigera app-workerdefinition</value></data>
+  <data name="This page maps an app definition to the manager-driven worker runtime. The mapping stays generic and only describes runtime kind, worker type key and plugin assembly path relative to the deployed install root." xml:space="preserve"><value>Den här sidan kopplar en appdefinition till den managerstyrda workerkörtiden. Kopplingen är generisk och beskriver bara körtidstyp, workertypnyckel och sökväg till plugin-assemblyn relativt den driftsatta installationsroten.</value></data>
+  <data name="Only apps that should be hosted through the worker manager need a row here." xml:space="preserve"><value>Bara appar som ska köras via workermanagern behöver en rad här.</value></data>
+  <data name="Use a stable runtime identifier such as windows-worker-plugin." xml:space="preserve"><value>Använd en stabil körtidsidentifierare, till exempel windows-worker-plugin.</value></data>
+  <data name="This must match the worker factory key exposed by the plugin assembly." xml:space="preserve"><value>Detta måste matcha den workerfabriksnyckel som plugin-assemblyn exponerar.</value></data>
+  <data name="Relative path under the deployed app-instance install root, for example plugins/MyWorker/MyWorker.dll." xml:space="preserve"><value>Relativ sökväg under appinstansens driftsatta installationsrot, till exempel plugins/MyWorker/MyWorker.dll.</value></data>
+  <data name="Save worker definition" xml:space="preserve"><value>Spara workerdefinition</value></data>
+  <data name="Delete this app worker definition?" xml:space="preserve"><value>Ta bort den här app-workerdefinitionen?</value></data>
+  <data name="Deleting the row stops the manager-driven plugin runtime from selecting this app definition. Existing app instances remain intact." xml:space="preserve"><value>Att ta bort raden gör att den managerstyrda plugin-körtiden inte längre väljer den här appdefinitionen. Befintliga appinstanser påverkas inte.</value></data>
+  <data name="Delete worker definition" xml:space="preserve"><value>Ta bort workerdefinition</value></data>
+  <data name="App worker definition saved." xml:space="preserve"><value>App-workerdefinitionen har sparats.</value></data>
+  <data name="App worker definition deleted." xml:space="preserve"><value>App-workerdefinitionen har tagits bort.</value></data>
+  <data name="Enter a runtime kind." xml:space="preserve"><value>Ange en körtidstyp.</value></data>
+  <data name="Use a stable worker type key with letters, digits, dash, underscore or dot." xml:space="preserve"><value>Använd en stabil workertypnyckel med bokstäver, siffror, bindestreck, understreck eller punkt.</value></data>
+  <data name="Plugin path must be a relative path under the install root and must not contain parent traversal." xml:space="preserve"><value>Plugin-sökvägen måste vara relativ under installationsroten och får inte innehålla föräldrasegment.</value></data>
+  <data name="App worker definitions opt an app into the manager-driven plugin runtime. They stay app-level so classic service apps can continue to exist beside the new worker track." xml:space="preserve"><value>App-workerdefinitioner ansluter en app till den managerstyrda plugin-körtiden. De ligger på appnivå så att klassiska service-appar kan finnas kvar vid sidan av det nya workerspåret.</value></data>
+  <data name="Open worker runtime" xml:space="preserve"><value>Öppna workerkörtid</value></data>
+  <data name="No app worker definitions found. This can mean that no apps use the worker runtime yet or that the database schema has not been updated." xml:space="preserve"><value>Inga app-workerdefinitioner hittades. Det kan betyda att ingen app använder workerkörtiden än, eller att databasschemat inte har uppdaterats.</value></data>
+  <data name="Worker type" xml:space="preserve"><value>Workertyp</value></data>
+  <data name="Plugin path" xml:space="preserve"><value>Plugin-sökväg</value></data>
+  <data name="ArtifactUpload:ArtifactStoreRoot is not configured. Set it to the same root used by HostAgent:CentralArtifactRoot." xml:space="preserve"><value>ArtifactUpload:ArtifactStoreRoot är inte konfigurerad. Sätt den till samma rot som HostAgent:CentralArtifactRoot använder.</value></data>
+  <data name="Relative path must stay inside the artifact store and cannot contain rooted paths or parent directory segments." xml:space="preserve"><value>Den relativa sökvägen måste hålla sig inom artefaktlagret och får inte innehålla rotade sökvägar eller föräldrasegment.</value></data>
+  <data name="The target artifact path already exists. Choose a new immutable version path." xml:space="preserve"><value>Målets artefaktsökväg finns redan. Välj en ny oföränderlig versionssökväg.</value></data>
+  <data name="Select one artifact zip file." xml:space="preserve"><value>Välj en artefakt-zipfil.</value></data>
+  <data name="The uploaded artifact must be a .zip file." xml:space="preserve"><value>Den uppladdade artefakten måste vara en .zip-fil.</value></data>
+  <data name="Package type is required." xml:space="preserve"><value>Pakettyp är obligatoriskt.</value></data>
+  <data name="Target name is required." xml:space="preserve"><value>Målnamn är obligatoriskt.</value></data>
+  <data name="The artifact content already existed, so the immutable payload was left unchanged." xml:space="preserve"><value>Artefaktinnehållet fanns redan, så den oföränderliga nyttolasten lämnades orörd.</value></data>
+  <data name="Updated {0} configuration file row(s) from the artifact package." xml:space="preserve"><value>Uppdaterade {0} konfigurationsfilrad(er) från artefaktpaketet.</value></data>
+  <data name="Selected this artifact as desired version for {0} matching deployment row(s)." xml:space="preserve"><value>Valde den här artefakten som önskad version för {0} matchande driftsättningsrad(er).</value></data>
+  <data name="Level" xml:space="preserve"><value>Nivå</value></data>
+  <data name="Scheduled" xml:space="preserve"><value>Schemalagd</value></data>
+  <data name="Expired" xml:space="preserve"><value>Utgången</value></data>
+  <data name="Role" xml:space="preserve"><value>Roll</value></data>
+  <data name="Provisioning" xml:space="preserve"><value>Provisionering</value></data>
+  <data name="inactive" xml:space="preserve"><value>inaktiv</value></data>
+  <data name="No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated." xml:space="preserve"><value>Inga appinstanser med workerkörtid hittades. Det kan betyda att inga app-workerdefinitioner finns än, eller att databasschemat inte har uppdaterats.</value></data>
+  <data name="Observed" xml:space="preserve"><value>Observerad</value></data>
+  <data name="PID" xml:space="preserve"><value>PID</value></data>
+  <data name="Starting" xml:space="preserve"><value>Startar</value></data>
+  <data name="Stopping" xml:space="preserve"><value>Stoppar</value></data>
+  <data name="Should run" xml:space="preserve"><value>Ska köra</value></data>
+  <data name="Should stop" xml:space="preserve"><value>Ska stoppa</value></data>
+  <data name="Unmanaged" xml:space="preserve"><value>Ohanterad</value></data>
+  <data name="Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires UTC: {3}." xml:space="preserve"><value>Återvinning av app-poolen är blockerad eftersom ett driftsättningslås är aktivt för {0}. Ägare: {1}. Orsak: {2}. Går ut UTC: {3}.</value></data>
+  <data name="Application-pool recycle is blocked because the deployment lock state could not be cleared safely for {0}. {1}" xml:space="preserve"><value>Återvinning av app-poolen är blockerad eftersom driftsättningslåsets tillstånd inte kunde rensas säkert för {0}. {1}</value></data>
+  <data name="Application-pool recycle is blocked because a deployment lock is active for {0}. Wait for the current deployment to finish or for the lock to expire." xml:space="preserve"><value>Återvinning av app-poolen är blockerad eftersom ett driftsättningslås är aktivt för {0}. Vänta tills den pågående driftsättningen är klar eller tills låset går ut.</value></data>
+  <data name="The host no longer exists; nothing was changed." xml:space="preserve"><value>Värden finns inte längre; ingenting ändrades.</value></data>
+  <data name="Stale" xml:space="preserve"><value>Inaktuell</value></data>
+  <data name="minutes." xml:space="preserve"><value>minuter.</value></data>
+  <data name="No data" xml:space="preserve"><value>Inga data</value></data>
+  <data name="State" xml:space="preserve"><value>Tillstånd</value></data>
+  <data name="Set" xml:space="preserve"><value>Satt</value></data>
+  <data name="Enter an absolute HTTP or HTTPS URL." xml:space="preserve"><value>Ange en absolut HTTP- eller HTTPS-URL.</value></data>
+  <data name="Applied module definitions" xml:space="preserve"><value>Tillämpade moduldefinitioner</value></data>
+  <data name="Current module definition versions stored in this OMP database. Use this list to confirm which database and metadata contract is active before troubleshooting artifact behavior." xml:space="preserve"><value>Aktuella moduldefinitionsversioner lagrade i den här OMP-databasen. Använd listan för att bekräfta vilken databas och vilket metadatakontrakt som är aktivt innan du felsöker artefaktbeteende.</value></data>
+  <data name="No applied module definitions found." xml:space="preserve"><value>Inga tillämpade moduldefinitioner hittades.</value></data>
+  <data name="Applied version" xml:space="preserve"><value>Tillämpad version</value></data>
+  <data name="Stored versions" xml:space="preserve"><value>Lagrade versioner</value></data>
+  <data name="Integrity" xml:space="preserve"><value>Integritet</value></data>
+  <data name="Applied UTC" xml:space="preserve"><value>Tillämpad UTC</value></data>
+  <data name="Check that ArtifactUpload:AvailableModuleDefinitionsRoot and ArtifactUpload:AvailableArtifactsRoot point to the HostAgent _available package library folders and that the Portal appsettings.json has been redeployed." xml:space="preserve"><value>Kontrollera att ArtifactUpload:AvailableModuleDefinitionsRoot och ArtifactUpload:AvailableArtifactsRoot pekar på HostAgents _available-paketbiblioteksmappar och att Portalens appsettings.json har driftsatts om.</value></data>
+  <data name="SQL" xml:space="preserve"><value>SQL</value></data>
+  <data name="Format" xml:space="preserve"><value>Format</value></data>
+  <data name="Processed {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}." xml:space="preserve"><value>Behandlade {0} universella modulpaket. Importerade/uppdaterade: {1}. Hoppade över: {2}. Misslyckades: {3}.</value></data>
+  <data name="Breakdown by kind: " xml:space="preserve"><value>Fördelning per typ: </value></data>
+  <data name="First {0} failures (see log for full list): " xml:space="preserve"><value>Första {0} felen (se loggen för hela listan): </value></data>
+  <data name="All items were already up to date — nothing to do." xml:space="preserve"><value>Alla poster var redan aktuella — ingenting att göra.</value></data>
+  <data name="All items were already up to date. Enable Quick import to skip these automatically next time." xml:space="preserve"><value>Alla poster var redan aktuella. Aktivera Snabbimport för att hoppa över dessa automatiskt nästa gång.</value></data>
+  <data name="Box saved." xml:space="preserve"><value>Rutan har sparats.</value></data>
+  <data name="Link saved." xml:space="preserve"><value>Länken har sparats.</value></data>
+  <data name="Order saved." xml:space="preserve"><value>Ordningen har sparats.</value></data>
+  <data name="Group renamed." xml:space="preserve"><value>Gruppen har bytt namn.</value></data>
+  <data name="Title is required." xml:space="preserve"><value>Titel är obligatoriskt.</value></data>
+  <data name="Title can be at most 200 characters." xml:space="preserve"><value>Titeln får vara högst 200 tecken.</value></data>
+  <data name="Only relative URLs within this site or app links are allowed." xml:space="preserve"><value>Endast relativa URL:er inom den här webbplatsen eller applänkar är tillåtna.</value></data>
+  <data name="Unknown permission." xml:space="preserve"><value>Okänd behörighet.</value></data>
+  <data name="Role name must be 1-200 characters and contain only letters, digits, dash, underscore or dot." xml:space="preserve"><value>Rollnamnet måste vara 1–200 tecken och får bara innehålla bokstäver, siffror, bindestreck, understreck eller punkt.</value></data>
+  <data name="Not found" xml:space="preserve"><value>Hittades inte</value></data>
+  <data name="disabled" xml:space="preserve"><value>inaktiverad</value></data>
+  <data name="This view shows app instances whose app definition is mapped to the manager-driven worker runtime, together with the latest observed runtime status published by the worker manager." xml:space="preserve"><value>Den här vyn visar appinstanser vars appdefinition är kopplad till den managerstyrda workerkörtiden, tillsammans med den senaste observerade körtidsstatus som workermanagern publicerat.</value></data>
+  <data name="Open app workers" xml:space="preserve"><value>Öppna app-workers</value></data>
+  <data name="Open app instances" xml:space="preserve"><value>Öppna appinstanser</value></data>
+  <data name="Last exit" xml:space="preserve"><value>Senaste avslut</value></data>
+  <data name="Started" xml:space="preserve"><value>Startad</value></data>
+  <data name="Exit code" xml:space="preserve"><value>Avslutskod</value></data>
+  <data name="Conversation updated" xml:space="preserve"><value>Konversationen uppdaterad</value></data>
+  <data name="Notifications" xml:space="preserve"><value>Aviseringar</value></data>
+  <data name="Mark all as read" xml:space="preserve"><value>Markera alla som lästa</value></data>
+  <data name="..." xml:space="preserve"><value>...</value></data>
+  <data name="Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-..." xml:space="preserve"><value>Använd samma AD-nyckelformat som Windows-inloggningen slår upp, till exempel DOMAIN\\username, name:DOMAIN\\username eller sid:S-1-5-21-...</value></data>
 </root>
