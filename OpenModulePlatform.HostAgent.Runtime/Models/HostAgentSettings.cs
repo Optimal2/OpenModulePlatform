@@ -310,6 +310,17 @@ public sealed class HostResourceTelemetrySettings
 
     public bool CollectServiceProcesses { get; set; } = true;
 
+    /// <summary>
+    /// Samples the worker processes WorkerManager starts, keyed by worker instance (R8-P5-20).
+    /// </summary>
+    /// <remarks>
+    /// These are neither IIS app pools nor Windows services, so without this the host summary
+    /// silently omits the entire worker fleet -- eight processes and about a third of OMP's memory
+    /// on this installation. The switch matches the other two sources so an operator can turn one
+    /// collector off without losing the rest.
+    /// </remarks>
+    public bool CollectWorkerProcesses { get; set; } = true;
+
     public void Validate()
     {
         if (!Enabled)

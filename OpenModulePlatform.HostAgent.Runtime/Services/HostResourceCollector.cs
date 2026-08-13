@@ -18,6 +18,11 @@ public sealed partial class HostResourceCollector
     private const string ServiceMemoryKeyPrefix = "service.memory.";
     private const string ServiceStateKeyPrefix = "service.state.";
 
+    /// <summary>1 = an app pool with a live worker process, 0 = stopped or idled out (R8-P5-21).</summary>
+    private const string IisAppPoolStateKeyPrefix = "iis.apppool.state.";
+    private const string WorkerCpuKeyPrefix = "worker.";
+    private const string WorkerMemoryKeyPrefix = "worker.memory.";
+
     private sealed record ProcessTelemetryTarget(
         int ProcessId,
         string CpuSampleKey,
@@ -72,7 +77,14 @@ public sealed partial class HostResourceCollector
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
             var samples = new List<HostResourceSample>();
-            await Task.Run(() => CollectSamples(settings, samples, linkedCts.Token), linkedCts.Token);
+
+            // Read before the sync sweep: the process ids come from the database, and
+            // CollectSamples runs on the thread pool without a connection (R8-P5-20).
+            var workerProcesses = settings.CollectWorkerProcesses
+                ? await _repository.GetLocalWorkerProcessTargetsAsync(hostId, linkedCts.Token)
+                : [];
+
+            await Task.Run(() => CollectSamples(settings, samples, workerProcesses, linkedCts.Token), linkedCts.Token);
 
             if (samples.Count == 0)
             {
@@ -202,7 +214,11 @@ public sealed partial class HostResourceCollector
             hostId);
     }
 
-    private void CollectSamples(HostResourceTelemetrySettings settings, List<HostResourceSample> samples, CancellationToken cancellationToken)
+    private void CollectSamples(
+        HostResourceTelemetrySettings settings,
+        List<HostResourceSample> samples,
+        IReadOnlyList<(string WorkerInstanceKey, int ProcessId)> workerProcesses,
+        CancellationToken cancellationToken)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -223,6 +239,17 @@ public sealed partial class HostResourceCollector
         if (settings.CollectServiceProcesses)
         {
             CollectServiceProcessTargets(settings, targets, samples, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        foreach (var (workerInstanceKey, processId) in workerProcesses)
+        {
+            var normalizedWorkerKey = NormalizeKeySegment(workerInstanceKey);
+            targets.Add(new ProcessTelemetryTarget(
+                processId,
+                $"{WorkerCpuKeyPrefix}{normalizedWorkerKey}",
+                $"{WorkerMemoryKeyPrefix}{normalizedWorkerKey}"));
         }
 
         CollectProcessTargetSamples(settings, targets, samples, cancellationToken);
@@ -307,6 +334,19 @@ public sealed partial class HostResourceCollector
             var normalizedPoolName = NormalizeKeySegment(appPoolName);
             var cpuSampleKey = $"{IisAppPoolCpuKeyPrefix}{normalizedPoolName}";
             var memorySampleKey = $"{IisAppPoolMemoryKeyPrefix}{normalizedPoolName}";
+            var stateSampleKey = $"{IisAppPoolStateKeyPrefix}{normalizedPoolName}";
+            var hasWorkerProcess = activeWorkerProcesses.ContainsKey(appPoolName);
+
+            // R8-P5-21: the service sweep publishes service.state so the Portal can tell a stopped
+            // service from an idle one, and says so in a comment. The app pool sweep wrote 0 CPU
+            // and 0 MB with no such key, so eight idled-out pools were indistinguishable from
+            // running pools measuring zero -- and still counted toward the component total.
+            samples.Add(new HostResourceSample
+            {
+                SampleKey = stateSampleKey,
+                SampleValue = hasWorkerProcess ? 1 : 0,
+                SampledUtc = DateTime.UtcNow
+            });
 
             try
             {

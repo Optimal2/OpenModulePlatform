@@ -23,6 +23,11 @@ internal static class HostResourceSampleKeyParser
     private const string ServiceCpuPrefix = "service.";
     private const string ServiceMemoryPrefix = "service.memory.";
     private const string ServiceStatePrefix = "service.state.";
+    private const string IisAppPoolStatePrefix = "iis.apppool.state.";
+    private const string WorkerCpuPrefix = "worker.";
+    private const string WorkerMemoryPrefix = "worker.memory.";
+    private const string WorkerRuntimeKind = "Worker process";
+    private const string IisAppPoolStateRuntimeKind = "IIS app pool state";
 
     public static HostResourceSampleKeyParts Parse(string? sampleKey)
     {
@@ -39,11 +44,35 @@ internal static class HostResourceSampleKeyParser
                 HostResourceMetricKind.Memory);
         }
 
+        if (sampleKey.StartsWith(IisAppPoolStatePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return new HostResourceSampleKeyParts(
+                IisAppPoolStateRuntimeKind,
+                sampleKey[IisAppPoolStatePrefix.Length..],
+                HostResourceMetricKind.State);
+        }
+
         if (sampleKey.StartsWith(IisAppPoolCpuPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return new HostResourceSampleKeyParts(
                 IisAppPoolRuntimeKind,
                 sampleKey[IisAppPoolCpuPrefix.Length..],
+                HostResourceMetricKind.Cpu);
+        }
+
+        if (sampleKey.StartsWith(WorkerMemoryPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return new HostResourceSampleKeyParts(
+                WorkerRuntimeKind,
+                sampleKey[WorkerMemoryPrefix.Length..],
+                HostResourceMetricKind.Memory);
+        }
+
+        if (sampleKey.StartsWith(WorkerCpuPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return new HostResourceSampleKeyParts(
+                WorkerRuntimeKind,
+                sampleKey[WorkerCpuPrefix.Length..],
                 HostResourceMetricKind.Cpu);
         }
 
@@ -131,7 +160,7 @@ internal static class HostResourceSampleKeyParser
             return sampleKey ?? string.Empty;
         }
 
-        foreach (var prefix in new[] { IisAppPoolMemoryPrefix, ServiceMemoryPrefix, ServiceStatePrefix, IisAppPoolCpuPrefix, ServiceCpuPrefix })
+        foreach (var prefix in new[] { IisAppPoolMemoryPrefix, IisAppPoolStatePrefix, WorkerMemoryPrefix, ServiceMemoryPrefix, ServiceStatePrefix, IisAppPoolCpuPrefix, WorkerCpuPrefix, ServiceCpuPrefix })
         {
             if (sampleKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {

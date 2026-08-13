@@ -40,4 +40,33 @@ public sealed class HostResourceSampleKeyParserTests
         Assert.Equal("OMP.HostAgent.0.3.169", parts.RuntimeName);
         Assert.Equal(HostResourceMetricKind.Memory, parts.MetricKind);
     }
+
+    /// <summary>
+    /// The worker fleet and the app pool state key must parse, or their samples are stored and
+    /// then dropped on the way out.
+    /// </summary>
+    /// <remarks>
+    /// R8-P5-20 and R8-P5-21. Both prefixes overlap a shorter one that was already handled --
+    /// "worker.memory." sits under "worker." and "iis.apppool.state." under "iis.apppool." -- so
+    /// the longer prefix has to be tested before the shorter one. Getting that order wrong does
+    /// not fail the build; it silently files every memory sample as a CPU sample.
+    /// </remarks>
+    [Theory]
+    [InlineData("worker.memory.ibs-packager-worker-1", "Worker process", "ibs-packager-worker-1", HostResourceMetricKind.Memory)]
+    [InlineData("worker.ibs-packager-worker-1", "Worker process", "ibs-packager-worker-1", HostResourceMetricKind.Cpu)]
+    [InlineData("iis.apppool.state.OMP_portal", "IIS app pool state", "OMP_portal", HostResourceMetricKind.State)]
+    [InlineData("iis.apppool.memory.OMP_portal", "IIS app pool", "OMP_portal", HostResourceMetricKind.Memory)]
+    [InlineData("iis.apppool.OMP_portal", "IIS app pool", "OMP_portal", HostResourceMetricKind.Cpu)]
+    internal void Parse_handles_worker_and_app_pool_state_keys(
+        string sampleKey,
+        string expectedRuntimeKind,
+        string expectedRuntimeName,
+        HostResourceMetricKind expectedMetricKind)
+    {
+        var parts = HostResourceSampleKeyParser.Parse(sampleKey);
+
+        Assert.Equal(expectedRuntimeKind, parts.RuntimeKind);
+        Assert.Equal(expectedRuntimeName, parts.RuntimeName);
+        Assert.Equal(expectedMetricKind, parts.MetricKind);
+    }
 }
