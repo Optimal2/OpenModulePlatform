@@ -83,6 +83,54 @@ public static class OmpReparsePointGuard
     }
 
     /// <summary>
+    /// Prepares a file that HostAgent owns outright for an overwrite: refuses every directory
+    /// above it up to <paramref name="stopAtRoot"/>, and removes the file itself when it turns
+    /// out to be a reparse point.
+    /// </summary>
+    /// <remarks>
+    /// R8-P2-8. The deployment control files -- app_offline.htm, the deployment lock and the
+    /// runtime stop marker -- all live inside a web root that IIS application-pool identities can
+    /// write, and all three are written by HostAgent as LocalSystem. Throwing on a planted link
+    /// would be the wrong answer: it hands an unprivileged account a way to block every future
+    /// deployment by creating one symlink. These files carry no state worth preserving and no
+    /// legitimate reason to be links, so the link is deleted and the real file written in its
+    /// place. Deleting a symlink removes the link, never its target.
+    ///
+    /// The directories above are a different matter and still throw. A junction there means the
+    /// deployment target itself is not what the caller believes, which is not something to repair
+    /// silently underneath an operator.
+    /// </remarks>
+    public static void PrepareOwnedFileForWrite(string path, string stopAtRoot, string description)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var fullPath = Path.GetFullPath(path);
+        var parent = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(parent))
+        {
+            EnsureNoReparsePointInPath(parent, stopAtRoot, description);
+        }
+
+        if (!IsReparsePoint(fullPath))
+        {
+            return;
+        }
+
+        try
+        {
+            File.Delete(fullPath);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // A directory junction cannot be removed with File.Delete.
+            Directory.Delete(fullPath);
+        }
+    }
+
+    /// <summary>
     /// True when the path exists and is a junction or symlink. A missing or unreadable path is
     /// not a reparse point as far as callers are concerned.
     /// </summary>

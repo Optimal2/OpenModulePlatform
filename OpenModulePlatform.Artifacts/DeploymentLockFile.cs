@@ -64,6 +64,11 @@ public static class DeploymentLockFile
             ?? throw new InvalidOperationException($"Could not resolve deployment lock directory for '{path}'.");
         Directory.CreateDirectory(directory);
 
+        // App_Data sits inside a web root that application-pool identities can write,
+        // so both the lock file and the App_Data directory itself are plantable, while
+        // this write runs as LocalSystem (R8-P2-8).
+        OmpReparsePointGuard.PrepareOwnedFileForWrite(path, applicationRoot, "Deployment lock file");
+
         var tempPath = Path.Join(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
@@ -83,6 +88,18 @@ public static class DeploymentLockFile
         if (!File.Exists(path))
         {
             return DeploymentLockStatus.NotLocked(path);
+        }
+
+        // Reading through a planted link turns this into an oracle: the caller reports
+        // the lock's owner and reason back to the operator, so a symlink at any file
+        // LocalSystem can read leaks its first line as a parse failure message, and an
+        // arbitrarily large target is read into memory before the JSON parser sees it.
+        if (OmpReparsePointGuard.IsReparsePoint(path))
+        {
+            return DeploymentLockStatus.Locked(
+                path,
+                null,
+                "Deployment lock file is a reparse point (junction/symlink) and was not read.");
         }
 
         try

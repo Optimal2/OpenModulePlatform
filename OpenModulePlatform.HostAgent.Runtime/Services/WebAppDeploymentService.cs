@@ -1228,6 +1228,15 @@ public sealed class WebAppDeploymentService
     {
         Directory.CreateDirectory(targetPath);
         var path = Path.Join(targetPath, "app_offline.htm");
+
+        // The web root is application-pool writable by design (Bootstrapper grants
+        // Modify (OI)(CI)), so app_offline.htm is a file an unprivileged account can
+        // pre-create as a symlink -- and this write runs as LocalSystem, before the
+        // mirror and the config writer that are hardened. Pointed at web.config or a
+        // HostAgent settings file, it would overwrite it with this maintenance page
+        // (R8-P2-8).
+        OmpReparsePointGuard.PrepareOwnedFileForWrite(path, targetPath, "app_offline.htm");
+
         var content = $"""
 <!doctype html>
 <html lang="en">
