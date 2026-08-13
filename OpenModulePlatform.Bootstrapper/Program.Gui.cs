@@ -655,7 +655,6 @@ internal static partial class Program
         private static readonly Dictionary<string, Dictionary<string, string>> _msBuildPropertyMapCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, IReadOnlyList<string>> _scopedDirectoryFileCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, string> _scopedFileContentStampCache = new(StringComparer.Ordinal);
-        private static string? _scopedStampDeclineReason;
         private int _unbumpedVersionWarningCount;
 
         private TabControl? _advancedActionTabs;
