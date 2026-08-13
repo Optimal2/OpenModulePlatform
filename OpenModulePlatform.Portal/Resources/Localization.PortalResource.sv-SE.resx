@@ -3282,4 +3282,9 @@
   <data name="Mark all as read" xml:space="preserve"><value>Markera alla som lästa</value></data>
   <data name="..." xml:space="preserve"><value>...</value></data>
   <data name="Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-..." xml:space="preserve"><value>Använd samma AD-nyckelformat som Windows-inloggningen slår upp, till exempel DOMAIN\\username, name:DOMAIN\\username eller sid:S-1-5-21-...</value></data>
+  <data name="The operation collided with another change and was rolled back. Try again." xml:space="preserve"><value>Åtgärden krockade med en annan ändring och återställdes. Försök igen.</value></data>
+  <data name="The operation timed out waiting for a database lock. Try again." xml:space="preserve"><value>Åtgärden fick vänta för länge på ett databaslås. Försök igen.</value></data>
+  <data name="The runtime row could not be deleted." xml:space="preserve"><value>Körningsraden kunde inte tas bort.</value></data>
+  <data name="The desired app could not be removed." xml:space="preserve"><value>Den önskade appen kunde inte tas bort.</value></data>
+  <data name="The config setting could not be saved." xml:space="preserve"><value>Konfigurationsinställningen kunde inte sparas.</value></data>
 </root>

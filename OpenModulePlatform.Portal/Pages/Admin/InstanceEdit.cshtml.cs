@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/InstanceEdit.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Portal.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
@@ -169,13 +170,10 @@ public sealed class InstanceEditModel : OmpPortalPageModel
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific duplicate text
+    // is worth keeping, so it stays here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number switch
-        {
-            2601 or 2627 => "A row with the same key already exists.",
-            547 => "Delete or update dependent rows first.",
-            _ => fallback
-        };
+        => PortalTextLocalizer.DescribeSqlError(ex, fallback, "A row with the same key already exists.");
 
     public sealed class InputModel
     {

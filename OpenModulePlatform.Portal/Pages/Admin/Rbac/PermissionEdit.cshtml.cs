@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/Rbac/PermissionEdit.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Portal.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
@@ -176,13 +177,10 @@ public sealed class PermissionEditModel : Pages.Admin.OmpPortalPageModel
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific duplicate text
+    // is worth keeping, so it stays here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number switch
-        {
-            2601 or 2627 => "A permission with the same name already exists.",
-            547 => "Delete or update dependent rows first.",
-            _ => fallback
-        };
+        => PortalTextLocalizer.DescribeSqlError(ex, fallback, "A permission with the same name already exists.");
 
     public sealed class InputModel
     {

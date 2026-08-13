@@ -235,13 +235,10 @@ public sealed class AppWorkerEditModel : OmpPortalPageModel
         return !segments.Any(x => x == "." || x == "..");
     }
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific duplicate text
+    // is worth keeping, so it stays here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number switch
-        {
-            2601 or 2627 => "A worker definition already exists for the selected app.",
-            547 => "Select a valid existing app definition first.",
-            _ => fallback
-        };
+        => PortalTextLocalizer.DescribeSqlError(ex, fallback, "A worker definition already exists for the selected app.");
 
     public sealed class InputModel
     {

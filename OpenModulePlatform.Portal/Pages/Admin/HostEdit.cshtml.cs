@@ -264,13 +264,10 @@ public sealed class HostEditModel : OmpPortalPageModel
             : cleaned;
     }
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific duplicate text
+    // is worth keeping, so it stays here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number switch
-        {
-            2601 or 2627 => "A host with the same key already exists in the selected instance.",
-            547 => "The host is still referenced by data that Portal cannot detach automatically.",
-            _ => fallback
-        };
+        => PortalTextLocalizer.DescribeSqlError(ex, fallback, "A host with the same key already exists in the selected instance.");
 
     public sealed class InputModel
     {

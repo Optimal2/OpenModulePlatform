@@ -433,13 +433,10 @@ public sealed class ArtifactConfigFileEditModel : OmpPortalPageModel
             && segments.All(segment => segment.IndexOfAny(invalidFileNameChars) < 0);
     }
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific duplicate text
+    // is worth keeping, so it stays here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number switch
-        {
-            2601 or 2627 => "This artifact already has a configuration file with the same relative path.",
-            547 => "Delete or update dependent rows first.",
-            _ => fallback
-        };
+        => PortalTextLocalizer.DescribeSqlError(ex, fallback, "This artifact already has a configuration file with the same relative path.");
 
     public sealed class InputModel
     {

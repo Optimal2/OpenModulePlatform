@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal/Localization/PortalTextLocalizer.cs
 using System.Text.RegularExpressions;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Localization;
 
 namespace OpenModulePlatform.Portal.Localization;
@@ -159,4 +160,43 @@ public static partial class PortalTextLocalizer
 
     [GeneratedRegex(@"^The uploaded file exceeds the limit of (?<bytes>\d+) bytes\.$", RegexOptions.CultureInvariant)]
     private static partial Regex UploadLimitRegex();
+
+    /// <summary>
+    /// Turns a <see cref="SqlException"/> into display text for the operator. Returns the
+    /// English key text; the caller passes it through its own <c>T(...)</c> so the resx
+    /// lookup happens in the page's resource, exactly as before.
+    /// </summary>
+    /// <param name="exception">The SQL failure.</param>
+    /// <param name="fallback">Page-specific text for a failure with no better description.</param>
+    /// <param name="duplicateMessage">
+    /// Page-specific text for a unique-constraint violation. Naming the entity is worth
+    /// keeping, which is why each page still supplies its own.
+    /// </param>
+    /// <remarks>
+    /// R8-P5-7. This existed as a private ToFriendlySqlMessage copied into fourteen page
+    /// models, with eight further pages catching SqlException and showing nothing useful at
+    /// all -- the same structural cause as R8-P2: a helper nobody could reference. The copies
+    /// now delegate here.
+    ///
+    /// Two behaviours are new to every caller. Application THROWs (error numbers at or above
+    /// 50000) carry a deliberate, specific message that the copies discarded in favour of the
+    /// generic fallback; it is now returned so the page's T() can translate it -- most of
+    /// those texts already have entries, as the Display table above shows. And deadlock
+    /// (1205) and lock timeout (1222) get their own text, because "try again" is genuinely
+    /// the right advice for both and the generic fallback does not say so.
+    /// </remarks>
+    public static string DescribeSqlError(
+        SqlException exception,
+        string fallback,
+        string? duplicateMessage = null,
+        string? foreignKeyMessage = null)
+        => exception.Number switch
+        {
+            >= 50000 => exception.Message,
+            2601 or 2627 => duplicateMessage ?? "A row with the same key already exists.",
+            547 => foreignKeyMessage ?? "Delete or update dependent rows first.",
+            1205 => "The operation collided with another change and was rolled back. Try again.",
+            1222 => "The operation timed out waiting for a database lock. Try again.",
+            _ => fallback
+        };
 }
