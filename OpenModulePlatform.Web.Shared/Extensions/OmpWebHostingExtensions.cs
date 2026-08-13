@@ -816,6 +816,34 @@ public static class OmpWebHostingExtensions
     /// users have hit intermittently after POST-redirect flows. Part of
     /// UseOmpWebDefaults; apps that wire their own pipeline call it directly.
     /// </summary>
+    /// <summary>
+    /// Registers the platform's forwarded-headers policy for an app that builds its own
+    /// pipeline instead of going through <see cref="AddOmpWebDefaults{TAppResource}"/>.
+    /// </summary>
+    /// <remarks>
+    /// R5-F6 put the policy inside AddOmpWebDefaults, which every app uses -- except the Auth
+    /// app, which hand-rolls its pipeline. The Auth app is also the only consumer of
+    /// LoginThrottleService, so the per-client-IP throttle the fix was written for never got
+    /// a real client address: behind a reverse proxy the whole organization shared one lockout
+    /// bucket and a single attacker could lock everyone out. The fix existed but could not
+    /// reach the one component that needed it (R8-INV-8 / R5-F6).
+    /// </remarks>
+    public static IServiceCollection AddOmpForwardedHeaders(
+        this IServiceCollection services,
+        WebAppOptions webAppOptions)
+    {
+        services.AddOptions<ForwardedHeadersOptions>()
+            .Configure<ILoggerFactory>((options, loggerFactory) =>
+            {
+                var logger = loggerFactory.CreateLogger(
+                    "OpenModulePlatform.Web.Shared.ForwardedHeaders");
+
+                ConfigureForwardedHeaders(options, webAppOptions, logger);
+            });
+
+        return services;
+    }
+
     public static IApplicationBuilder UseOmpRedirectContentLength(this IApplicationBuilder app)
     {
         return app.Use(static async (context, next) =>

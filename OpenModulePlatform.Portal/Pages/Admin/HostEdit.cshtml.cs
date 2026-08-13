@@ -161,8 +161,13 @@ public sealed class HostEditModel : OmpPortalPageModel
 
         try
         {
-            await _repo.DeleteHostAsync(Input.HostId, ct);
-            StatusMessage = T("Host deleted.");
+            // Only claim success when the host row actually went away: with two operators or
+            // two tabs it may already be gone, and a green banner would assert an action that
+            // never happened (R8-P3-9, same reasoning as R6-C6/R7-C7).
+            var deleted = await _repo.DeleteHostAsync(Input.HostId, ct);
+            StatusMessage = deleted
+                ? T("Host deleted.")
+                : T("The host no longer exists; nothing was changed.");
             return RedirectToPage("/Admin/Hosts");
         }
         catch (SqlException ex)

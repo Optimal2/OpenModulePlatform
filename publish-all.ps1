@@ -253,11 +253,14 @@ if ($Parallel) {
             Set-Location $workingRoot
             New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
 
-            & {
-                $PSNativeCommandUseErrorActionPreference = $false
-                $lines = & $dotnetPath @publishArgs 2>&1 | ForEach-Object { $_.ToString() }
-                $exitCode = $LASTEXITCODE
-            }
+            # R7-G2 fixed this exact child-scope bug in the sequential sibling above and left
+            # the parallel branch untouched -- the same defect class this whole round is about.
+            # Assigning inside & { } creates child-scope variables, so $exitCode stayed 0 and
+            # $lines stayed empty: every parallel publish reported success with an empty log,
+            # and PUBLISH_README documents -Parallel as the recommended fast path (R8-P4-1).
+            $PSNativeCommandUseErrorActionPreference = $false
+            $lines = & $dotnetPath @publishArgs 2>&1 | ForEach-Object { $_.ToString() }
+            $exitCode = $LASTEXITCODE
 
             $text = if ($lines.Count -gt 0) {
                 [string]::Join([Environment]::NewLine, $lines)

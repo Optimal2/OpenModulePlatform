@@ -1324,9 +1324,51 @@ WHERE HostId = @HostId;";
         return input.HostId;
     }
 
-    public async Task DeleteHostAsync(Guid hostId, CancellationToken ct)
+    /// <summary>
+    /// Deletes a host and every row that references it. Returns false when the host row was
+    /// already gone.
+    /// </summary>
+    /// <remarks>
+    /// omp.Hosts has fifteen FK children and there is no ON DELETE CASCADE anywhere in the
+    /// host/artifact/app-instance core, so a missing child is a hard runtime error rather than
+    /// a silent orphan. This method handled seven of them, which meant that any host that had
+    /// ever run a HostAgent -- and therefore had lease, runtime-state and resource rows --
+    /// could not be deleted from the Portal at all; the transaction rolled back on the first
+    /// FK and the operator saw a raw SQL error. The FK-ordered version already existed as
+    /// OmpHostArtifactRepository.Maintenance DeleteOrphanHostAsync (R8-P3-1 / R7-F23).
+    /// </remarks>
+    public async Task<bool> DeleteHostAsync(Guid hostId, CancellationToken ct)
     {
         const string sql = @"
+SET NOCOUNT ON;
+
+-- MaintenanceFindings and HostAgentJobs carry a nullable HostId, but existing rows hold the
+-- value, so the FK blocks the delete unless they are unlinked or removed first.
+UPDATE omp.MaintenanceFindings
+SET HostId = NULL
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostAgentJobs
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostAgentLeases
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostAgentRuntimeStates
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostAgentDesiredStates
+WHERE HostId = @HostId;
+
+DELETE FROM omp.WebAppHealthStates
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostResourceSamples
+WHERE HostId = @HostId;
+
+DELETE FROM omp.HostResourceLatest
+WHERE HostId = @HostId;
+
 DELETE FROM omp.HostAppDeploymentStates
 WHERE HostId = @HostId;
 
@@ -1353,15 +1395,22 @@ SET HostId = NULL,
 WHERE HostId = @HostId;
 
 DELETE FROM omp.Hosts
-WHERE HostId = @HostId;";
+WHERE HostId = @HostId;
+DECLARE @affected int = @@ROWCOUNT;
+
+SELECT @affected;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@HostId", hostId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        // @@ROWCOUNT captured directly after the target statement, not the ExecuteNonQuery
+        // return value -- that is the SUM across the whole batch and would report success as
+        // soon as the host had a single child row (R8-P3-9).
+        var affected = await cmd.ExecuteScalarAsync(ct);
         await tx.CommitAsync(ct);
+        return affected is int rows && rows > 0;
     }
 
     // -------------------------------------------------------------------------
@@ -1791,6 +1840,34 @@ WHERE ArtifactId = @ArtifactId;
 
 DELETE FROM omp.ArtifactConfigurationFiles
 WHERE ArtifactId = @ArtifactId;
+
+-- HostAgentDesiredStates.ArtifactId is NOT NULL, so the row has to go rather than be
+-- unlinked; the three nullable references below are cleared instead (R8-P3-2 / R7-F26).
+DELETE FROM omp.HostAgentDesiredStates
+WHERE ArtifactId = @ArtifactId;
+
+UPDATE omp.AppInstances
+SET ArtifactId = NULL,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ArtifactId = @ArtifactId;
+
+UPDATE omp.WorkerInstances
+SET ArtifactId = NULL,
+    UpdatedUtc = SYSUTCDATETIME()
+WHERE ArtifactId = @ArtifactId;
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = NULL
+WHERE DesiredArtifactId = @ArtifactId;
+
+-- Module-owned cross-schema reference. Guarded by OBJECT_ID so the statement is a no-op on
+-- an installation without IbsPackager; the retention job discovers these dynamically, which
+-- is why it protected artifacts the Portal was willing to delete.
+IF OBJECT_ID(N'omp_ibs_packager.ChannelTypeVersions', N'U') IS NOT NULL
+BEGIN
+    EXEC sp_executesql N'UPDATE omp_ibs_packager.ChannelTypeVersions SET ArtifactId = NULL WHERE ArtifactId = @ArtifactId;',
+        N'@ArtifactId int', @ArtifactId = @ArtifactId;
+END;
 
 DELETE FROM omp.Artifacts
 WHERE ArtifactId = @ArtifactId;";

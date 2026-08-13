@@ -17,6 +17,14 @@ var authWebAppOptions = new WebAppOptions
     DefaultCulture = "sv-SE",
     SupportedCultures = ["sv-SE", "en-US"]
 };
+
+// Bind the shared WebApp section so the forwarded-headers trust settings are configurable
+// here too. This app hand-rolls its pipeline rather than using AddOmpWebDefaults, so it
+// never picked up the R5-F6 policy -- and it is the only consumer of LoginThrottleService,
+// which means the per-client-IP throttle was reading the proxy's address and the whole
+// organization shared one lockout bucket (R8-INV-8).
+builder.Configuration.GetSection(WebAppOptions.DefaultSectionName).Bind(authWebAppOptions);
+builder.Services.AddOmpForwardedHeaders(authWebAppOptions);
 var cultureSelectionService = new CultureSelectionService();
 
 builder.AddOmpWebLogging();
