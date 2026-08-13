@@ -17,12 +17,17 @@
 @inject IHttpContextAccessor HttpContextAccessor
 @implements IDisposable
 
+@* data-portal-topbar-unread-count below: the mark-all control needs a server-rendered unread
+   count or it hides itself on first render in push and manual mode (R7-E2).
+
+   Keep explanatory comments outside the element. A Razor comment placed inside an attribute list
+   is not stripped -- it is emitted as literal text, which turns each word into a bogus attribute,
+   breaks the Blazor render batch and terminates the circuit. That is what removed the entire top
+   bar from the Blazor module, and with it the app's interactivity (R8-P4-16). *@
 @if (_portalTopBar.IsVisible && _portalTopBar.PortalLink is not null)
 {
     <div class="portal-topbar"
          data-portal-topbar-root
-         @* See the Razor view: the mark-all control needs a server-rendered unread count
-            or it hides itself on first render in push and manual mode (R7-E2). *@
          data-portal-topbar-unread-count="@_portalTopBar.UnreadNotificationCount"
          data-favorite-toggle-url="@_portalTopBar.FavoriteToggleUrl"
          data-add-favorite-text="@L[_portalTopBar.AddFavoriteTextKey]"

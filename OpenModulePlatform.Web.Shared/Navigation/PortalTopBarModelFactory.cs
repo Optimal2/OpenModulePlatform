@@ -87,51 +87,17 @@ public static class PortalTopBarModelFactory
         };
     }
 
+    /// <summary>
+    /// Delegates to the shared helper so the fallback model builds hrefs the same way the live one
+    /// does.
+    /// </summary>
+    /// <remarks>
+    /// R8-P1-6 hardened OmpUrlPathHelper and left this second copy behind -- a fix applied to one
+    /// of a pair, which is the exact defect class this round exists to sweep for. Both copies used
+    /// Uri.IsWellFormedUriString as the only test, and that is true for "javascript:alert(1)".
+    /// </remarks>
     internal static string CombinePortalHref(string portalBaseUrl, string href)
-    {
-        if (Uri.IsWellFormedUriString(href, UriKind.Absolute))
-        {
-            return href;
-        }
-
-        var normalizedBaseUrl = NormalizeBasePath(portalBaseUrl);
-        var normalizedHref = string.IsNullOrWhiteSpace(href)
-            ? "/"
-            : href.Trim();
-
-        if (normalizedBaseUrl == "/")
-        {
-            return normalizedHref.StartsWith("/", StringComparison.Ordinal)
-                ? normalizedHref
-                : $"/{normalizedHref.TrimStart('/')}";
-        }
-
-        if (normalizedHref is "/" or "")
-        {
-            return normalizedBaseUrl;
-        }
-
-        return $"{normalizedBaseUrl.TrimEnd('/')}/{normalizedHref.TrimStart('/')}";
-    }
-
-    private static string NormalizeBasePath(string? portalBaseUrl)
-    {
-        if (string.IsNullOrWhiteSpace(portalBaseUrl) || portalBaseUrl == "/")
-        {
-            return "/";
-        }
-
-        var trimmed = portalBaseUrl.Trim();
-
-        if (Uri.IsWellFormedUriString(trimmed, UriKind.Absolute))
-        {
-            return trimmed.TrimEnd('/');
-        }
-
-        return trimmed.StartsWith("/", StringComparison.Ordinal)
-            ? trimmed.TrimEnd('/')
-            : $"/{trimmed.TrimStart('/').TrimEnd('/')}";
-    }
+        => OmpUrlPathHelper.CombinePortalHref(portalBaseUrl, href);
 
     private static int PositiveOrDefault(int? value, int fallback)
         => value is > 0 ? value.Value : fallback;
