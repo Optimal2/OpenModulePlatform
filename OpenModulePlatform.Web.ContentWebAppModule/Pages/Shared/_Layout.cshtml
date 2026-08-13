@@ -48,6 +48,10 @@
     <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-secure-page-navigation.js"></script>
     <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-toasts.js"></script>
     <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-feedback.js"></script>
+    @* R8-P5-4: this layout loaded the feedback script but not the forms script, so pages
+       in this module fell back to native window.confirm dialogs, whose buttons render in
+       the language of the browser rather than the language of the page. *@
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-forms.js"></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

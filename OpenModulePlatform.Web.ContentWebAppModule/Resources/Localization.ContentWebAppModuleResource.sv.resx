@@ -126,4 +126,8 @@
   <data name="Loaded content files. Added {0} HTML page(s) and {1} server report page(s)." xml:space="preserve"><value>Innehållsfiler har laddats. Lade till {0} HTML-sida/sidor och {1} serverrapport-sida/sidor.</value></data>
   <data name="No new content pages were created. Discovered files already had pages or matching slugs." xml:space="preserve"><value>Inga nya innehållssidor skapades. Hittade filer hade redan sidor eller matchande sluggar.</value></data>
   <data name="The content page no longer exists." xml:space="preserve"><value>Innehållssidan finns inte längre.</value></data>
+  <data name="Server report unavailable" xml:space="preserve"><value>Serverrapporten är inte tillgänglig</value></data>
+  <data name="The server report could not be rendered." xml:space="preserve"><value>Serverrapporten kunde inte visas.</value></data>
+  <data name="HTML content file unavailable" xml:space="preserve"><value>HTML-innehållsfilen är inte tillgänglig</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Avbryt</value></data>
 </root>

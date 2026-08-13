@@ -2703,7 +2703,6 @@
   <data name="Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically." xml:space="preserve"><value>Ange en AD-användare per rad. Länkade AD-konton tilldelas automatiskt som sin OMP-användare.</value></data>
   <data name="Add AD users" xml:space="preserve"><value>Lägg till AD-användare</value></data>
   <data name="AD groups" xml:space="preserve"><value>AD-grupper</value></data>
-  <data name="Enter one AD group SID or DOMAIN\\Group per line. Local group names are resolved to a SID when possible." xml:space="preserve"><value>Ange ett AD-grupp-SID eller DOMAIN\\Group per rad. Lokala gruppnamn slås upp till SID när det går.</value></data>
   <data name="Add AD groups" xml:space="preserve"><value>Lägg till AD-grupper</value></data>
   <data name="Bind OMP users, AD users or AD groups to the role." xml:space="preserve"><value>Koppla OMP-användare, AD-användare eller AD-grupper till rollen.</value></data>
   <data name="OmpUser" xml:space="preserve"><value>OMP-användare</value></data>
@@ -3292,4 +3291,5 @@
   <data name="Request" xml:space="preserve"><value>Begär</value></data>
   <data name="Regenerate" xml:space="preserve"><value>Återskapa</value></data>
   <data name="Switch role" xml:space="preserve"><value>Byt roll</value></data>
+  <data name="Enter one AD group SID or DOMAIN\Group per line. Local group names are resolved to a SID when possible." xml:space="preserve"><value>Ange ett AD-grupp-SID eller DOMÄN\Grupp per rad. Lokala gruppnamn slås upp till ett SID när det går.</value></data>
 </root>

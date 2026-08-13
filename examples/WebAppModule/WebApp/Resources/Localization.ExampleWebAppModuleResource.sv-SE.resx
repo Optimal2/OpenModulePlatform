@@ -108,4 +108,4 @@
     <value>OpenDocViewer exempeldokument</value>
   </data><data name="No supported files were selected." xml:space="preserve">
     <value>Inga filer med stöd i ODV valdes.</value>
-  </data></root>
+  </data><data name="OpenDocViewer" xml:space="preserve"><value>OpenDocViewer</value></data></root>
