@@ -525,6 +525,22 @@ internal static partial class Program
     {
         private const char SourceStateStampFieldSeparator = '\t';
 
+        /// <summary>Derived or tooling directories that must not feed the scoped source stamp (R8-P6-3).</summary>
+        private static readonly string[] ScopedStampExcludedDirectories =
+            ["bin", "obj", ".git", ".vs", ".vscode", "node_modules", "TestResults", "artifacts"];
+
+        /// <summary>MSBuild directory files that apply to a project from an ancestor directory.</summary>
+        private static readonly string[] ScopedStampSharedBuildFiles =
+            [
+                "Directory.Build.props",
+                "Directory.Build.targets",
+                "Directory.Packages.props",
+                "global.json",
+                "nuget.config",
+                "NuGet.config",
+                "NuGet.Config"
+            ];
+
         private readonly IReadOnlyList<BootstrapConfigProfile> _configProfiles;
         private BootstrapConfig _config;
         private readonly string _configPath;
@@ -635,6 +651,13 @@ internal static partial class Program
         // Multiple manifest components often share one repository root; cache source stamps so package
         // sync does not repeat the same Git and fallback source-state checks for every component.
         private readonly Dictionary<string, string> _sourceStateStampCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string?> _scopedSourceStateStampCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, Dictionary<string, string>> _msBuildPropertyMapCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, IReadOnlyList<string>> _scopedDirectoryFileCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, string> _scopedFileContentStampCache = new(StringComparer.Ordinal);
+        private static string? _scopedStampDeclineReason;
+        private int _unbumpedVersionWarningCount;
+
         private TabControl? _advancedActionTabs;
         private TabPage? _packageToolsTab;
         private bool _hasExistingInstallation;
@@ -3332,6 +3355,17 @@ internal static partial class Program
 
             lines.Add(string.Empty);
             lines.Add($"Summary: {updated} updated, {unchanged} already current, {warnings} warning(s).");
+            if (_unbumpedVersionWarningCount > 0)
+            {
+                // Deliberately not counted as a blocking warning (R8-P6-3): this cannot see the
+                // target host registry, so a component that was rebuilt but never imported would
+                // be a false positive. The host rejects a genuine conflict at import with a precise
+                // error; this line only makes the cause visible before that happens.
+                lines.Add(
+                    $"Note: {_unbumpedVersionWarningCount} component(s) were rebuilt at an unchanged version. "
+                    + "Bump them before deploying if those versions are already registered on the target host.");
+            }
+
             return new DeveloperPackageObjectSyncResult(warnings > 0, configUpdated, lines);
         }
 
@@ -3350,6 +3384,7 @@ internal static partial class Program
                 string.Empty
             };
             var warnings = 0;
+            _unbumpedVersionWarningCount = 0;
             var synced = 0;
             var skipped = 0;
             var seenProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -4055,6 +4090,56 @@ internal static partial class Program
             return true;
         }
 
+        /// <summary>
+        /// Warns when a component is about to be rebuilt at a version it has already been built
+        /// at, which is the local, early symptom of a missing version bump.
+        /// </summary>
+        /// <remarks>
+        /// R8-P6-3. Without this the first sign of trouble is the host rejecting the package
+        /// minutes later with "already exists ... use a new version number for changed artifact
+        /// content", after a full refresh-and-stage cycle. The lockstep validator catches the same
+        /// mistake, but only against origin/main -- so a component bumped once and then edited
+        /// again before the push looks correct to it while the host has already registered that
+        /// version. This check compares against what was actually built here, which is the state
+        /// the host agrees with.
+        /// </remarks>
+        private void WarnWhenRebuildingUnbumpedVersion(
+            ManifestComponent component,
+            string? existingPackagePath,
+            List<string> lines)
+        {
+            if (string.IsNullOrWhiteSpace(existingPackagePath))
+            {
+                return;
+            }
+
+            var stampPath = GetArtifactBuildStampPath(existingPackagePath);
+            if (!File.Exists(stampPath))
+            {
+                return;
+            }
+
+            try
+            {
+                var stampDocument = JsonNode.Parse(File.ReadAllText(stampPath, Encoding.UTF8));
+                var stampedVersion = GetJsonStringProperty(stampDocument, "artifactVersion");
+                if (!string.Equals(stampedVersion, component.Version, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                _unbumpedVersionWarningCount++;
+                lines.Add(
+                    $"  WARN    {component.ComponentKey}: source changed but version {component.Version} is unchanged "
+                    + "since the last build. If this version is already registered on the target host the import will "
+                    + "reject it -- bump the component before deploying.");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+            {
+                // A stamp we cannot read is not worth failing a sync over.
+            }
+        }
+
         private bool TryReuseStampedArtifactPackage(
             ManifestComponent component,
             string packageName,
@@ -4126,9 +4211,12 @@ internal static partial class Program
         {
             try
             {
-                var sourceStateStamp = GetSourceStateStamp(component.SourceRoot);
+                // R8-P6-3: prefer the per-component scope; fall back to the repository-wide stamp
+                // only when the project closure cannot be resolved.
+                var sourceStateStamp = TryGetScopedSourceStateStamp(component)
+                    ?? GetSourceStateStamp(component.SourceRoot);
                 var stampText = string.Join('\n',
-                    "artifact-source-stamp-v1",
+                    "artifact-source-stamp-v2",
                     Path.GetFullPath(component.SourceRoot),
                     component.RepositoryKey,
                     component.ComponentKey,
@@ -4294,6 +4382,239 @@ internal static partial class Program
             return GetTextSha256Hex(text);
         }
 
+        /// <summary>
+        /// Computes a source-state stamp scoped to the files that actually feed one component's
+        /// artifact: its own project directory, the transitive project-reference closure, and the
+        /// MSBuild directory files that apply to them. Returns <c>null</c> when the closure cannot
+        /// be resolved, so the caller falls back to the repository-wide stamp.
+        /// </summary>
+        /// <remarks>
+        /// R8-P6-3. The stamp used to be repository-wide (git HEAD plus every dirty file), so a
+        /// single commit -- or one edited file anywhere in the repository -- invalidated the stamp
+        /// of every component in it. All of them were rebuilt at their unchanged versions, and the
+        /// host then rejected each rebuilt package with "already exists ... use a new version
+        /// number for changed artifact content". The only strategy that converged was bumping
+        /// every component of a repository at once, which cost five deploy rounds per batch and is
+        /// exactly what the lockstep validator exists to avoid. Scoping the stamp per component
+        /// makes the rebuild decision agree with the cascade rules in
+        /// scripts/omp/validate-component-versions.ps1: change IbsPackager.Runtime and web, worker
+        /// and file-drop all rebuild (they reference it); change only the FileDrop project and
+        /// only file-drop rebuilds.
+        ///
+        /// Deliberately excluded: omp-components.json. It carries every component's version, so
+        /// including it would reintroduce exactly the repository-wide coupling this removes.
+        /// The component's own version is already a separate field of the artifact stamp.
+        /// </remarks>
+        private string? TryGetScopedSourceStateStamp(ManifestComponent component)
+        {
+            if (string.IsNullOrWhiteSpace(component.ProjectPath))
+            {
+                return null;
+            }
+
+            var sourceRoot = Path.GetFullPath(component.SourceRoot);
+            var projectFile = ArtifactSourceStamp.TryResolveComponentProjectFile(sourceRoot, component.ProjectPath);
+            if (projectFile is null)
+            {
+                return null;
+            }
+
+            if (_scopedSourceStateStampCache.TryGetValue(projectFile, out var cached))
+            {
+                return cached;
+            }
+
+            ArtifactSourceStamp.ResetDeclineReason();
+            var stamp = ComputeScopedSourceStateStamp(sourceRoot, projectFile);
+            if (stamp is null && Environment.GetEnvironmentVariable("OMP_STAMP_DIAG") == "1")
+            {
+                Console.Error.WriteLine($"[stamp-diag] {component.ComponentKey}: scoping declined -- {ArtifactSourceStamp.DeclineReason ?? "unknown"}");
+            }
+
+            _scopedSourceStateStampCache[projectFile] = stamp;
+            return stamp;
+        }
+
+        private static string? ComputeScopedSourceStateStamp(string sourceRoot, string projectFile)
+        {
+            try
+            {
+                var projectFiles = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (!ArtifactSourceStamp.TryCollectProjectClosure(projectFile, sourceRoot, projectFiles, depth: 0))
+                {
+                    return null;
+                }
+
+                // Every directory that contributes source, plus the MSBuild directory files that
+                // apply to it (Directory.Build.props and friends live above the project).
+                var scopedDirectories = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                var scopedFiles = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var project in projectFiles)
+                {
+                    var projectDirectory = Path.GetDirectoryName(project);
+                    if (string.IsNullOrWhiteSpace(projectDirectory))
+                    {
+                        continue;
+                    }
+
+                    scopedDirectories.Add(projectDirectory);
+                    CollectDirectoryBuildFiles(projectDirectory, scopedFiles);
+                }
+
+                if (scopedDirectories.Count == 0)
+                {
+                    return null;
+                }
+
+                foreach (var directory in scopedDirectories)
+                {
+                    // Skip nested projects: they are either already in the closure or genuinely
+                    // unrelated, and hashing them twice would couple siblings back together.
+                    var isNested = scopedDirectories.Any(other =>
+                        !string.Equals(other, directory, StringComparison.OrdinalIgnoreCase)
+                        && IsSameOrChildPath(other, directory));
+                    if (isNested)
+                    {
+                        continue;
+                    }
+
+                    foreach (var file in GetScopedDirectoryFiles(directory))
+                    {
+                        scopedFiles.Add(file);
+                    }
+                }
+
+                var lines = new List<string> { "scoped-source-state-v1", sourceRoot };
+                foreach (var file in scopedFiles)
+                {
+                    var relativePath = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/');
+                    lines.Add(string.Join(
+                        SourceStateStampFieldSeparator,
+                        "file",
+                        relativePath,
+                        GetScopedFileContentStamp(file)));
+                }
+
+                return GetTextSha256Hex(string.Join('\n', lines));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Collects the MSBuild directory files that apply to <paramref name="projectDirectory"/>,
+        /// walking up to (and including) the source root.
+        /// </summary>
+        /// <summary>
+        /// Collects the MSBuild directory files that apply to <paramref name="projectDirectory"/>,
+        /// walking up to and including the repository root that contains it. The walk is not
+        /// bounded by the component's own source root, because a cross-repository reference such
+        /// as OpenModulePlatform.Web.Shared is governed by its own repository's build files.
+        /// </summary>
+        private static void CollectDirectoryBuildFiles(string projectDirectory, SortedSet<string> scopedFiles)
+        {
+            var current = projectDirectory;
+            for (var level = 0; level < 16 && !string.IsNullOrWhiteSpace(current); level++)
+            {
+                foreach (var name in ScopedStampSharedBuildFiles)
+                {
+                    var path = Path.Join(current, name);
+                    if (File.Exists(path))
+                    {
+                        scopedFiles.Add(Path.GetFullPath(path));
+                    }
+                }
+
+                if (Directory.Exists(Path.Join(current, ".git")) || File.Exists(Path.Join(current, ".git")))
+                {
+                    break;
+                }
+
+                current = Path.GetDirectoryName(current);
+            }
+        }
+
+        /// <summary>
+        /// Content stamp for one scoped source file. Cached because shared projects such as
+        /// OpenModulePlatform.Web.Shared appear in the closure of many components and would
+        /// otherwise be re-hashed once per component.
+        /// </summary>
+        private static string GetScopedFileContentStamp(string file)
+        {
+            var info = new FileInfo(file);
+            var key = string.Join(
+                '|',
+                file,
+                info.Length.ToString(CultureInfo.InvariantCulture),
+                info.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture));
+            if (_scopedFileContentStampCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            var stamp = string.Join(
+                SourceStateStampFieldSeparator,
+                info.Length.ToString(CultureInfo.InvariantCulture),
+                GetFileSha256Hex(file));
+            _scopedFileContentStampCache[key] = stamp;
+            return stamp;
+        }
+
+        private static IReadOnlyList<string> GetScopedDirectoryFiles(string directory)
+        {
+            if (_scopedDirectoryFileCache.TryGetValue(directory, out var cached))
+            {
+                return cached;
+            }
+
+            var scopedFiles = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectScopedSourceFiles(directory, scopedFiles);
+            var result = scopedFiles.ToArray();
+            _scopedDirectoryFileCache[directory] = result;
+            return result;
+        }
+
+        private static void CollectScopedSourceFiles(string directory, SortedSet<string> scopedFiles)
+        {
+            var pending = new Stack<string>();
+            pending.Push(directory);
+
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+
+                foreach (var file in Directory.EnumerateFiles(current, "*", new EnumerationOptions
+                {
+                    RecurseSubdirectories = false,
+                    AttributesToSkip = FileAttributes.ReparsePoint,
+                    IgnoreInaccessible = true
+                }))
+                {
+                    scopedFiles.Add(Path.GetFullPath(file));
+                }
+
+                foreach (var child in Directory.EnumerateDirectories(current, "*", new EnumerationOptions
+                {
+                    RecurseSubdirectories = false,
+                    AttributesToSkip = FileAttributes.ReparsePoint,
+                    IgnoreInaccessible = true
+                }))
+                {
+                    var name = Path.GetFileName(child);
+                    if (ScopedStampExcludedDirectories.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        // Build output is derived, not source; hashing it would make the stamp
+                        // change on every build and defeat the purpose.
+                        continue;
+                    }
+
+                    pending.Push(child);
+                }
+            }
+        }
+
         private static void CopyArtifactBuildStampIfPresent(string sourcePackagePath, string targetPackagePath)
         {
             var sourceStampPath = GetArtifactBuildStampPath(sourcePackagePath);
@@ -4343,6 +4664,8 @@ internal static partial class Program
                 {
                     return builtPackage;
                 }
+
+                WarnWhenRebuildingUnbumpedVersion(component, existingPackagePath, lines);
 
                 builtPackage = TryBuildSourceArtifactPackage(component, packageName, lines);
                 builtPackages[packageName] = builtPackage;
