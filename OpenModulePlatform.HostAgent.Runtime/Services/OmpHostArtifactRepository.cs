@@ -5385,7 +5385,11 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
     private static bool IsForeignKeyOnDeleteClause(string sqlText, int deleteIndex)
     {
         var beforeDelete = sqlText[..deleteIndex].TrimEnd();
-        return Regex.IsMatch(beforeDelete, @"(?is)\bON$");
+        // THEN as well as ON: "WHEN NOT MATCHED BY SOURCE THEN DELETE" is a MERGE action whose
+        // scope is the merge predicate, so requiring a WHERE on it is meaningless -- but the
+        // scan read it as an unguarded delete and blocked a module definition at import. Same
+        // false-positive class as the comment scanning (R8-P3-14).
+        return Regex.IsMatch(beforeDelete, @"(?is)\b(?:ON|THEN)$");
     }
 
     private static string? ValidateReadOnlyModuleDefinitionSql(string sqlText)
