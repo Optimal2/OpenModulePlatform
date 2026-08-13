@@ -2348,6 +2348,12 @@ public sealed class PortableModulePackageService
         }
 
         var fullPath = Path.GetFullPath(path.Trim());
+
+        // R8-P2-13. The Portal writes uploaded artifacts into the same store root the HostAgent
+        // hardened itself against, and had no reparse guard on any of it -- so a junction planted
+        // on the store root or a directory inside it redirected the whole upload, as the Portal
+        // app pool. Every caller resolves its root through here, so one check covers them all.
+        OmpReparsePointGuard.EnsureNotReparsePoint(fullPath, $"ArtifactUpload:{optionName}");
         Directory.CreateDirectory(fullPath);
         return fullPath;
     }

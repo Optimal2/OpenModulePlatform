@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
+using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
@@ -71,7 +72,7 @@ public sealed class ArtifactProvisioner
             if (Directory.Exists(path))
             {
                 long count = 0, totalLength = 0, maxTicks = 0;
-                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+                foreach (var file in Directory.EnumerateFiles(path, "*", OmpReparsePointGuard.RecursiveNoFollow))
                 {
                     var info = new FileInfo(file);
                     count++;
@@ -188,6 +189,16 @@ public sealed class ArtifactProvisioner
         }
 
         var stagingRoot = CombineUnderRoot(settings.LocalArtifactCacheRoot, ".staging", nameof(settings.LocalArtifactCacheRoot));
+
+        // R8-P2-11. This provisioner writes as SYSTEM into the artifact cache and had no reparse
+        // guard at all, while the import service two files over has had one since R7-S2. Both the
+        // staging tree it creates and the final artifact path it moves into are checked, and the
+        // whole path is walked rather than only the leaf: a junction on an intermediate directory
+        // redirects everything below it while the leaf looks ordinary.
+        OmpReparsePointGuard.EnsureNoReparsePointInPath(
+            stagingRoot,
+            settings.LocalArtifactCacheRoot,
+            "Artifact staging root");
         Directory.CreateDirectory(stagingRoot);
         var stagingPath = CombineUnderRoot(stagingRoot, $"artifact-{artifact.ArtifactId}-{Guid.NewGuid():N}", nameof(stagingRoot));
 
@@ -212,6 +223,11 @@ public sealed class ArtifactProvisioner
                     $"Downloaded artifact hash mismatch. Expected {expectedHash}, actual {stagedHash}.");
             }
 
+            OmpReparsePointGuard.EnsureNoReparsePointInPath(
+                Path.GetDirectoryName(localPath)!,
+                settings.LocalArtifactCacheRoot,
+                "Artifact target directory");
+            OmpReparsePointGuard.EnsureNotReparsePoint(localPath, "Artifact target path");
             Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
             if (File.Exists(stagingPath))
             {
@@ -352,7 +368,7 @@ public sealed class ArtifactProvisioner
             Directory.CreateDirectory(CombineUnderRoot(targetDirectory, relativeDirectory, nameof(targetDirectory)));
         }
 
-        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", OmpReparsePointGuard.RecursiveNoFollow))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relativeFile = Path.GetRelativePath(sourceDirectory, file);
