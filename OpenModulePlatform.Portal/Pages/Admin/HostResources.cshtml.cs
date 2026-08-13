@@ -104,8 +104,13 @@ public sealed class HostResourcesModel : OmpPortalPageModel
                 continue;
             }
 
+            // A state sample belongs to the same row as its runtime's CPU and memory, so it is
+            // folded back onto the owning kind. This used to be hardcoded to "Windows service"
+            // because services were the only source of state samples; the moment app pools began
+            // publishing state too (R8-P5-21), all sixteen of them appeared a second time as
+            // phantom "Windows service" rows with no CPU or memory (R8-P5-23).
             var runtimeKind = sampleKey.MetricKind == HostResourceMetricKind.State
-                ? "Windows service"
+                ? HostResourceSampleKeyParser.ToOwningRuntimeKind(sampleKey.RuntimeKind)
                 : sampleKey.RuntimeKind;
             var normalizedRuntimeName = HostResourceSampleKeyParser.NormalizeRuntimeName(sampleKey.RuntimeName);
             var key = (row.HostId, runtimeKind, normalizedRuntimeName);
