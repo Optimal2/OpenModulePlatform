@@ -101,6 +101,21 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
 
 var app = builder.Build();
 
+// R5-F6. AddOmpForwardedHeaders above registers the options, but this app builds its
+// pipeline by hand instead of going through OmpWebHostingExtensions, and it never called
+// the middleware -- so the options were configured and then read by nobody. Behind a
+// reverse proxy every request therefore carried the proxy's address, and
+// LoginThrottleService, whose only consumer is this app, keyed its lockout bucket on it:
+// one organization, one shared bucket, so a single wrong password anywhere locked
+// everyone out and a distributed guess was never throttled at all.
+//
+// It runs first, before anything reads RemoteIpAddress. Ordering matches the shared
+// pipeline in OmpWebHostingExtensions, and the same UseForwardedHeaders flag gates it.
+if (authWebAppOptions.UseForwardedHeaders)
+{
+    app.UseForwardedHeaders();
+}
+
 app.UseRequestLocalization(app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>().Value);
 app.UseOmpSecurityHeaders();
 // Login/logout round-trips are all redirects; without the explicit

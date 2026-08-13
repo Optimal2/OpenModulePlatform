@@ -128,13 +128,31 @@ public sealed class ArtifactProvisioner
         var localPath = ResolveLocalPath(settings, artifact);
         var expectedHash = NormalizeHash(artifact.Sha256);
 
-        // A missing expected hash means content integrity cannot be checked at
-        // all. Surface it as an error instead of silently accepting whatever is
-        // on disk (R3-D6); the artifact row should always carry a SHA.
+        // A missing expected hash means content integrity cannot be checked at all. The
+        // code used to log this as an error under a comment claiming it was surfaced
+        // "instead of silently accepting" -- and then accept it anyway, which is both at
+        // once and told the operator the opposite of what happened (R3-D6).
+        //
+        // Which behaviour is right depends on the installation, so it is a setting.
+        // Accepting is defensible: artifact identity still has to match, which is what
+        // R8-P2-10 concluded. Refusing is defensible too. The default keeps the existing
+        // behaviour so no running installation changes on upgrade.
         if (expectedHash is null)
         {
+            if (settings.RequireArtifactHash)
+            {
+                _logger.LogError(
+                    "Artifact {ArtifactId} has no Sha256 in the catalog and HostAgent:RequireArtifactHash is set; refusing to provision it.",
+                    artifact.ArtifactId);
+
+                return ArtifactProvisioningResult.Failed(
+                    ArtifactProvisioningState.Failed,
+                    localPath,
+                    $"Artifact {artifact.ArtifactId} has no Sha256 in the catalog and RequireArtifactHash is enabled.");
+            }
+
             _logger.LogError(
-                "Artifact {ArtifactId} has no Sha256 in the catalog; content integrity cannot be verified and any local/downloaded content is accepted unchecked.",
+                "Artifact {ArtifactId} has no Sha256 in the catalog; content integrity is NOT verified and the local/downloaded content is accepted unchecked. Set HostAgent:RequireArtifactHash to refuse instead.",
                 artifact.ArtifactId);
         }
 
