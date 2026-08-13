@@ -54,6 +54,15 @@ public sealed class ArtifactZipImportService
         var processedPath = Path.GetFullPath(importSettings.ResolveProcessedPath());
         var failedPath = Path.GetFullPath(importSettings.ResolveFailedPath());
 
+        // R7-S3 hardened the housekeeping sweep that DELETES inside these roots but not the
+        // path that WRITES into them. Both default to subdirectories of the same
+        // operator-writable import folder, and creating a junction needs no privilege, so a
+        // junctioned failed\ let an attacker-controlled file be written through it as
+        // LocalSystem (R8-P2-2).
+        EnsureNotReparsePoint(importPath, "HostAgent import folder");
+        EnsureNotReparsePoint(processedPath, "HostAgent processed archive");
+        EnsureNotReparsePoint(failedPath, "HostAgent failed archive");
+
         Directory.CreateDirectory(importPath);
         Directory.CreateDirectory(processedPath);
         Directory.CreateDirectory(failedPath);
@@ -959,7 +968,17 @@ public sealed class ArtifactZipImportService
                         $"An artifact with identical extracted content already exists: {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType}).");
                 }
 
-                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                // R7-S2 guarded the staging root and left the destination in the same method
+                // unguarded. ResolveUnderRoot is correct but purely lexical -- it does not
+                // resolve reparse points -- and BuildDefaultRelativePath is deterministic from
+                // the package file name, so the path is predictable. A junction on the parent
+                // or on the target itself lands this Move inside another application's install
+                // directory as LocalSystem, which the mirror then copies out to the web root
+                // (R8-P2-1).
+                var finalParent = Path.GetDirectoryName(finalPath)!;
+                EnsureNotReparsePoint(finalParent, "artifact store target parent");
+                Directory.CreateDirectory(finalParent);
+                EnsureNotReparsePoint(finalPath, "artifact store target");
                 try
                 {
                     MoveDirectory(package.ArtifactContentPath, finalPath);
@@ -1171,6 +1190,8 @@ public sealed class ArtifactZipImportService
 
         try
         {
+            // Same reparse gap as the primary write path above (R8-P2-1).
+            EnsureNotReparsePoint(existingFinalPath, "artifact store target");
             MoveDirectory(packageArtifactContentPath, existingFinalPath);
             return true;
         }
@@ -1562,6 +1583,9 @@ public sealed class ArtifactZipImportService
     {
         try
         {
+            // Re-check here as well as at cycle start: the archive roots live in the writable
+            // import folder, so a junction can appear between the two points (R8-P2-2).
+            EnsureNotReparsePoint(destinationRoot, "HostAgent import archive");
             Directory.CreateDirectory(destinationRoot);
             var destination = ImportFileArchiveDestination.CreateUniquePath(
                 destinationRoot,

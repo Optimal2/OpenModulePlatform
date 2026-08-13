@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.407",
+  "repositoryVersion": "0.3.408",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -100,7 +100,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.182",
+      "version": "0.3.183",
       "minModuleDefinitionVersion": "0.3.106",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
