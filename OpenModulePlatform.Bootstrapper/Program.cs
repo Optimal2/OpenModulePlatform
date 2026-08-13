@@ -797,12 +797,22 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
     {
         Directory.CreateDirectory(path);
 
+        // R8-P2-16..23. CreateDirectory succeeds silently on an existing junction, so
+        // this grant could land on whatever the junction points at -- and what it grants
+        // is Modify to an IIS application-pool identity, which is the very privilege the
+        // whole P2 threat model is about. This directory is one we create ourselves, so
+        // finding a link here means someone put it there.
+        OmpReparsePointGuard.EnsureNotReparsePoint(path, "Access-grant target directory");
+
         var granted = false;
         foreach (var accountName in accountNames)
         {
+            // /L makes icacls act on a link rather than its target. Harmless on an
+            // ordinary directory, and the difference between hardening this path and
+            // handing out Modify somewhere else entirely if one appears later.
             var result = RunProcess(
                 "icacls.exe",
-                [path, "/grant", $"{accountName}:(OI)(CI)({permission})"],
+                [path, "/grant", $"{accountName}:(OI)(CI)({permission})", "/L"],
                 throwOnFailure: false);
             if (result.ExitCode == 0)
             {

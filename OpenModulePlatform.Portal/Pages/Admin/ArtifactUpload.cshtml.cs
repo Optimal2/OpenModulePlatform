@@ -712,16 +712,10 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             var value => SanitizePathSegment(value)
         };
 
+    // R8-P2-16..23: delegates to the shared implementation, which also strips
+    // separators and '..' segments this copy let through.
     private static string SanitizePathSegment(string value)
-    {
-        var sanitized = value.Trim();
-        foreach (var invalid in Path.GetInvalidFileNameChars())
-        {
-            sanitized = sanitized.Replace(invalid, '-');
-        }
-
-        return sanitized.Replace(' ', '-');
-    }
+        => OmpArtifactNaming.SanitizePathSegment(value);
 
     private static string FillBlank(string? current, string replacement)
         => string.IsNullOrWhiteSpace(current) ? replacement : current.Trim();
