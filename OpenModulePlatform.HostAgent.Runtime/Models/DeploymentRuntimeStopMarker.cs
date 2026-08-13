@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Models;
 
@@ -42,6 +43,15 @@ public sealed class DeploymentRuntimeStopMarker
             return null;
         }
 
+        // App_Data is inside a web root that application-pool identities can write, and
+        // this marker is read and written by HostAgent as LocalSystem (R8-P2-8). An
+        // unreadable marker is already treated as absent below, so refusing a link here
+        // costs the caller nothing it does not already handle.
+        if (OmpReparsePointGuard.IsReparsePoint(path))
+        {
+            return null;
+        }
+
         try
         {
             var json = File.ReadAllText(path);
@@ -66,6 +76,7 @@ public sealed class DeploymentRuntimeStopMarker
     {
         var path = GetPath(targetPath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        OmpReparsePointGuard.PrepareOwnedFileForWrite(path, targetPath, "Deployment runtime stop marker");
         var now = DateTimeOffset.UtcNow;
         var marker = new DeploymentRuntimeStopMarker
         {
