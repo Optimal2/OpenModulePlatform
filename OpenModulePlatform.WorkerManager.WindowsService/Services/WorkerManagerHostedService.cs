@@ -24,8 +24,6 @@ public sealed class WorkerManagerHostedService : BackgroundService
     // never exhaust that shared pipe and stall every other caller (R6-F4).
     private const int MaxConcurrentArtifactResolves = 4;
 
-    // How often a still-wedged drain re-warns, so it stays visible (R6-F6).
-    private static readonly TimeSpan DrainTimeoutReminderInterval = TimeSpan.FromMinutes(15);
     private static readonly NamedWaitHandleOptions ShutdownEventOptions = new()
     {
         CurrentUserOnly = true
@@ -303,29 +301,33 @@ public sealed class WorkerManagerHostedService : BackgroundService
             return Task.FromResult(true);
         }
 
-        // Re-warn periodically, not once. DrainTimeoutLogged latched, so a drain that
-        // never completes (a plugin that leaks a JobScope keeps the busy event set
-        // forever) produced exactly one warning and then went silent -- and since
-        // R5-F4 the worker also publishes a fresh heartbeat every cycle, which
-        // suppresses the staleness detector that used to be the only recurring signal.
-        // A wedged worker would look healthy indefinitely while admitting no jobs
-        // (R6-F6). The worker is still never killed; this only keeps it visible.
+        // R6-F6 made this warn periodically because the drain never ended, so a wedged
+        // worker needed a recurring signal (its own heartbeat suppresses the staleness
+        // detector). W6 ends the drain instead, so there is nothing left to remind about
+        // and the reminder bookkeeping is gone with it.
         var drainTimeout = TimeSpan.FromSeconds(Math.Max(1, _settings.CurrentValue.DrainTimeoutSeconds));
         if (managed.DrainStartedUtc.HasValue
-            && nowUtc - managed.DrainStartedUtc.Value >= drainTimeout
-            && (!managed.DrainTimeoutLogged
-                || !managed.DrainTimeoutLastLoggedUtc.HasValue
-                || nowUtc - managed.DrainTimeoutLastLoggedUtc.Value >= DrainTimeoutReminderInterval))
+            && nowUtc - managed.DrainStartedUtc.Value >= drainTimeout)
         {
-            managed.DrainTimeoutLogged = true;
-            managed.DrainTimeoutLastLoggedUtc = nowUtc;
-            _logger.LogWarning(
-                "Worker drain exceeded the configured timeout and the worker is still busy; the restart stays deferred until the in-flight job completes. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, DrainTimeoutSeconds={DrainTimeoutSeconds}, DrainStartedUtc={DrainStartedUtc:O}, DrainingFor={DrainingFor}",
+            // W6. The timeout used to only log -- forever, every reminder interval, while
+            // the worker admitted no jobs and the channel silently stopped delivering. A
+            // deadline that never expires is not a deadline, and a worker whose busy flag
+            // is stuck (a plugin leaking a JobScope is the documented case) will never
+            // clear it no matter how long it is given.
+            //
+            // Letting the restart proceed is the safe answer, not the risky one: an
+            // interrupted job is exactly what the lease mechanism exists for. The lease
+            // expires, the job returns to pending and another worker picks it up. That is
+            // a bounded, self-healing outcome. A permanently drained worker is not.
+            _logger.LogError(
+                "Worker drain exceeded the configured timeout and the worker is still reporting busy; proceeding with the restart. Any in-flight job returns to pending when its lease expires. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, DrainTimeoutSeconds={DrainTimeoutSeconds}, DrainStartedUtc={DrainStartedUtc:O}, DrainingFor={DrainingFor}",
                 desired.AppInstanceId,
                 desired.WorkerInstanceId,
                 _settings.CurrentValue.DrainTimeoutSeconds,
                 managed.DrainStartedUtc.Value,
                 nowUtc - managed.DrainStartedUtc.Value);
+
+            return Task.FromResult(true);
         }
 
         return Task.FromResult(false);

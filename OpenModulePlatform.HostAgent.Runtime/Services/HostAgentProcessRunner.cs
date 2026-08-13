@@ -8,6 +8,10 @@ internal static class HostAgentProcessRunner
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan StreamDrainTimeout = TimeSpan.FromSeconds(5);
 
+    private const string StreamDrainIncompleteNote =
+        "(output was truncated: the process exited but its redirected streams stayed open, "
+        + "which usually means a child process inherited them)";
+
     public static HostAgentProcessResult Run(
         string fileName,
         IEnumerable<string> arguments,
@@ -55,8 +59,25 @@ internal static class HostAgentProcessRunner
                 $"Process '{Path.GetFileName(fileName)}' did not exit within {effectiveTimeout.TotalSeconds:0.#} seconds. Arguments: {FormatArguments(argumentList, sensitiveList)}.{CreateOutputDiagnostic(output, error, sensitiveList)}");
         }
 
-        var stdOut = outputTask.GetAwaiter().GetResult();
-        var stdErr = errorTask.GetAwaiter().GetResult();
+        // R9-A2. The process exiting does not mean its pipes closed. A grandchild that
+        // inherited the redirected handles keeps them open, and ReadToEndAsync then never
+        // completes -- so these two lines could block the HostAgent cycle forever. The
+        // path runs icacls, appcmd and netsh, all of which can spawn helpers.
+        //
+        // WaitForExit() with no argument would drain the readers for us, but it has the
+        // same unbounded wait. Bound the drain instead and take whatever arrived; the exit
+        // code is the part callers act on, and the timeout branch above already treats
+        // partial output as acceptable.
+        var drained = Task.WhenAll(outputTask, errorTask).Wait(ToMilliseconds(StreamDrainTimeout));
+        var stdOut = TryReadCompletedTask(outputTask);
+        var stdErr = TryReadCompletedTask(errorTask);
+        if (!drained)
+        {
+            stdErr = string.IsNullOrEmpty(stdErr)
+                ? StreamDrainIncompleteNote
+                : stdErr + Environment.NewLine + StreamDrainIncompleteNote;
+        }
+
         return new HostAgentProcessResult(process.ExitCode, stdOut, stdErr);
     }
 

@@ -526,6 +526,27 @@ internal static class ArtifactConfigurationFileWriter
     private static bool FileContentEquals(string path, string expectedContent)
     {
         var expectedBytes = Utf8NoBom.GetBytes(expectedContent);
+
+        // R9-B1: length first. This file lives in a web root that application-pool
+        // identities can write, so it can be swapped for an arbitrarily large one, and
+        // reading it whole to answer "is it equal?" pulled that into memory as LocalSystem
+        // -- a denial of service against the agent, from a check that never needed the
+        // bytes at all. A file of a different length cannot be equal, and the common case
+        // (a file that IS equal) still reads exactly as much as before.
+        FileInfo info;
+        try
+        {
+            info = new FileInfo(path);
+            if (!info.Exists || info.Length != expectedBytes.LongLength)
+            {
+                return false;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
         var actualBytes = File.ReadAllBytes(path);
         return actualBytes.AsSpan().SequenceEqual(expectedBytes);
     }
