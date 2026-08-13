@@ -505,7 +505,13 @@ public sealed class HostAgentEngine
         }
     }
 
-    private static async Task StopHostDeploymentLeaseRenewalAsync(
+    /// <remarks>
+    /// Same finally-block hazard as StopLeaseRenewalAsync. Here it also matters that
+    /// ProcessNextHostDeploymentAsync rethrows OperationCanceledException to signal a clean
+    /// shutdown: a throw from this cleanup replaced that signal, so a normal stop was logged
+    /// as a critical failure (R8-P4-4).
+    /// </remarks>
+    private async Task StopHostDeploymentLeaseRenewalAsync(
         CancellationTokenSource processingCancellation,
         Task leaseRenewal)
     {
@@ -517,6 +523,10 @@ public sealed class HostAgentEngine
         catch (OperationCanceledException)
         {
             return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Host deployment lease renewal ended with an error while stopping.");
         }
     }
 
@@ -613,7 +623,17 @@ public sealed class HostAgentEngine
         }
     }
 
-    private static async Task StopLeaseRenewalAsync(
+    /// <summary>
+    /// Awaits a cancelled lease renewal and never lets its fault propagate.
+    /// </summary>
+    /// <remarks>
+    /// Called from a finally block, where a throw REPLACES the in-flight exception. The
+    /// renewal loop's own filter covers only a handful of types, so anything else faulted the
+    /// task and the rethrow here masked the real cycle outcome and skipped the rest of the
+    /// cleanup. WorkerProcessHostedService already does this correctly with SuppressThrowing
+    /// (R8-P4-4).
+    /// </remarks>
+    private async Task StopLeaseRenewalAsync(
         CancellationTokenSource cycleCancellation,
         Task<bool> leaseRenewal)
     {
@@ -625,6 +645,10 @@ public sealed class HostAgentEngine
         catch (OperationCanceledException)
         {
             return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "HostAgent lease renewal ended with an error while stopping.");
         }
     }
 

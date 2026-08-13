@@ -1048,7 +1048,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 workerProcessPath,
                 Path.GetFullPath(managerProcessPath));
         }
-        catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or Win32Exception or NotSupportedException)
+        catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or Win32Exception or NotSupportedException or System.Runtime.InteropServices.COMException)
         {
             _logger.LogWarning(
                 ex,
@@ -1363,7 +1363,13 @@ public sealed class WorkerManagerHostedService : BackgroundService
             or ArgumentException
             or ManagementException
             or Win32Exception
-            or NotSupportedException;
+            or NotSupportedException
+            // System.Management surfaces DCOM faults as COMException, not ManagementException:
+            // RPC_S_SERVER_UNAVAILABLE when the WMI service restarts, 0x80041033 during
+            // shutdown. Only one of the five WMI call sites in the solution listed it, and the
+            // startup orphan scan runs outside this cycle guard entirely -- so a COMException
+            // there faulted ExecuteAsync and crash-looped the service (R8-P4-6).
+            or System.Runtime.InteropServices.COMException;
 
     private static EventWaitHandle CreateShutdownEvent(DesiredWorkerInstance definition)
     {

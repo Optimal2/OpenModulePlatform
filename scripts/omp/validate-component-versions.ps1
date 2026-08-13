@@ -592,8 +592,18 @@ else {
 $baseManifest = $null
 $baseComponentsByKey = $null
 if ($baseRefAvailable) {
+    # Fail loudly when the baseline manifest cannot be read. Swallowing the git error left
+    # $baseComponentsByKey empty while $baseRefAvailable stayed true, so every consumer lookup
+    # missed, no consumer was ever flagged as unbumped, and the script still printed
+    # "validation passed" -- the entire cascade check silently disabled. Reachable on a
+    # blobless clone, after a rebase or squash, or with a -BaseCommit predating the manifest.
+    # The IbsPackager sibling already errors on both an unreadable manifest and invalid JSON
+    # (R8-P4-7).
     $baseManifestText = Remove-Utf8Bom -Text ((git -C $repositoryRoot show "$baseRef`:omp-components.json" 2>$null) -join "`n")
-    if (-not [string]::IsNullOrWhiteSpace($baseManifestText)) {
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($baseManifestText)) {
+        Add-ValidationError -Errors $errors -Message "Could not read 'omp-components.json' at '$baseRef' (git exit code $LASTEXITCODE). The cascade and lockstep checks cannot run without a baseline manifest."
+    }
+    else {
         $baseManifest = ConvertFrom-JsonDocument -Json $baseManifestText -Depth $jsonDepth
     }
 
