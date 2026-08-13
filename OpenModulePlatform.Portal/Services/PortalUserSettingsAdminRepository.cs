@@ -197,15 +197,20 @@ public sealed class PortalUserSettingsAdminRepository
         return true;
     }
 
-    public async Task DeleteValueAsync(int userId, int userSettingDefinitionId, CancellationToken cancellationToken)
+    /// <remarks>R8-P3-9: reports whether a stored value was actually removed. A setting is held in
+    /// one of two typed tables, so the two deletes are summed deliberately -- exactly one of them
+    /// can match, and summing here is safe because each statement is counted on its own rather
+    /// than taken from one ExecuteNonQuery across a batch.</remarks>
+    public async Task<bool> DeleteValueAsync(int userId, int userSettingDefinitionId, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-        await DeleteValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+        var removed = await DeleteValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
 
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return removed;
     }
 
     private static async Task<PortalUserSettingDefinitionRow?> GetDefinitionAsync(
@@ -297,18 +302,19 @@ public sealed class PortalUserSettingsAdminRepository
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task DeleteValueAsync(
+    private static async Task<bool> DeleteValueAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         int userId,
         int userSettingDefinitionId,
         CancellationToken cancellationToken)
     {
-        await DeleteIntValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
-        await DeleteStringValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+        var intRows = await DeleteIntValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+        var stringRows = await DeleteStringValueAsync(connection, transaction, userId, userSettingDefinitionId, cancellationToken).ConfigureAwait(false);
+        return intRows + stringRows > 0;
     }
 
-    private static async Task DeleteIntValueAsync(
+    private static async Task<int> DeleteIntValueAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         int userId,
@@ -324,10 +330,10 @@ public sealed class PortalUserSettingsAdminRepository
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         command.Parameters.Add("@definition_id", SqlDbType.Int).Value = userSettingDefinitionId;
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task DeleteStringValueAsync(
+    private static async Task<int> DeleteStringValueAsync(
         SqlConnection connection,
         SqlTransaction transaction,
         int userId,
@@ -343,7 +349,7 @@ public sealed class PortalUserSettingsAdminRepository
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         command.Parameters.Add("@definition_id", SqlDbType.Int).Value = userSettingDefinitionId;
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static PortalUserSettingDefinitionRow ReadDefinition(SqlDataReader reader)

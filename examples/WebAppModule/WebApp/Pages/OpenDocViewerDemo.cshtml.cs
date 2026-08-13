@@ -4,6 +4,7 @@ using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using OpenModulePlatform.Web.Shared.Web;
 
 namespace OpenModulePlatform.Web.ExampleWebAppModule.Pages;
 
@@ -40,7 +41,7 @@ public sealed class OpenDocViewerDemoModel : ExampleWebAppModulePageModel
 
         SetTitles("OpenDocViewer integration");
         UserId = string.IsNullOrWhiteSpace(User.Identity?.Name) ? "anonymous" : User.Identity.Name!;
-        OpenDocViewerBaseUrl = NormalizeViewerBaseUrl(_openDocViewerOptions.BaseUrl);
+        OpenDocViewerBaseUrl = OmpUrlSafety.NormalizeViewerBaseUrl(_openDocViewerOptions.BaseUrl, "/opendocviewer/");
 
         var bundle = OpenDocViewerExampleBundleFactory.BuildSampleBundle(
             Request,
@@ -62,14 +63,4 @@ public sealed class OpenDocViewerDemoModel : ExampleWebAppModulePageModel
         return Page();
     }
 
-    private static string NormalizeViewerBaseUrl(string? baseUrl)
-    {
-        var value = string.IsNullOrWhiteSpace(baseUrl)
-            ? "/opendocviewer/"
-            : baseUrl.Trim();
-
-        return value.Contains('?', StringComparison.Ordinal) || value.EndsWith("/", StringComparison.Ordinal)
-            ? value
-            : value + "/";
-    }
 }

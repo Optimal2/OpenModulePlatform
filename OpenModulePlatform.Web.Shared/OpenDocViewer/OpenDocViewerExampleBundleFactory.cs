@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using System.Text.Json;
+using OpenModulePlatform.Web.Shared.Web;
 
 namespace OpenModulePlatform.Web.Shared.OpenDocViewer;
 
@@ -81,7 +82,7 @@ public static class OpenDocViewerExampleBundleFactory
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var baseUrl = NormalizeViewerBaseUrl(options.BaseUrl);
+        var baseUrl = OmpUrlSafety.NormalizeViewerBaseUrl(options.BaseUrl, "/opendocviewer/");
         var separator = baseUrl.Contains('?', StringComparison.Ordinal) ? "&" : "?";
         return $"{baseUrl}{separator}sessionurl={Uri.EscapeDataString(bundleUrl)}";
     }
@@ -131,17 +132,6 @@ public static class OpenDocViewerExampleBundleFactory
             value,
             label
         };
-
-    private static string NormalizeViewerBaseUrl(string? baseUrl)
-    {
-        var value = string.IsNullOrWhiteSpace(baseUrl)
-            ? "/opendocviewer/"
-            : baseUrl.Trim();
-
-        return value.Contains("?", StringComparison.Ordinal) || value.EndsWith("/", StringComparison.Ordinal)
-            ? value
-            : value + "/";
-    }
 
     private static string CombinePath(string? pathBase, string relativePath)
     {

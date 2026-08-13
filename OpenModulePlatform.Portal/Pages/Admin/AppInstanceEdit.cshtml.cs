@@ -10,6 +10,7 @@ using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 using OpenModulePlatform.Portal.Localization;
+using OpenModulePlatform.Web.Shared.Web;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -264,11 +265,16 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
                 nameof(Input.AppInstanceKey), T("Use a stable key with letters, digits, dash, underscore or dot."));
         }
 
+        // R8-P1-8: "absolute" was the only requirement, and javascript: and data: are perfectly
+        // absolute. Nothing renders this unchecked today, but HostEdit and the iFrame URL editor
+        // both allowlist the scheme, and leaving one editor in the pattern weaker is how the four
+        // rounds of href hardening kept finding a fifth copy.
         if (!string.IsNullOrWhiteSpace(Input.PublicUrl)
-            && !Uri.TryCreate(Input.PublicUrl, UriKind.Absolute, out _))
+            && (!Uri.TryCreate(Input.PublicUrl.Trim(), UriKind.Absolute, out var publicUri)
+                || !OmpUrlSafety.IsAllowedAbsoluteScheme(publicUri)))
         {
             ModelState.AddModelError(
-                nameof(Input.PublicUrl), T("Public URL must be an absolute URL."));
+                nameof(Input.PublicUrl), T("Public URL must be an absolute http or https URL."));
         }
     }
 

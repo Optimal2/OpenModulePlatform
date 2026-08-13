@@ -1270,7 +1270,11 @@
 
         const link = document.createElement('a');
         link.className = 'dashboard-entry-list__item';
-        link.href = href;
+        // The entry list is rebuilt from payloads that can arrive over the push channel, so the
+        // href gets the same treatment as the notification destination above and the top bar's
+        // rows (R8-P1-3). '#' keeps the row clickable-looking but inert rather than silently
+        // dropping the entry.
+        link.href = isSafeLocalDestination(href) ? href : '#';
 
         const logo = document.createElement('span');
         logo.className = 'dashboard-entry-list__logo';
@@ -2955,13 +2959,17 @@
             container.appendChild(document.createTextNode(text));
         }
 
-        if (track.source) {
+        // track.src and track.url are normalized through new URL(...) when the playlist is
+        // parsed; track.source was the one field that reached an href raw (R8-P1-7). A playlist
+        // is operator-supplied JSON, so a javascript: source landed straight in this anchor.
+        const trackSourceHref = toHttpSourceHref(track.source);
+        if (trackSourceHref) {
             if (container.childNodes.length > 0) {
                 container.appendChild(document.createTextNode(' - '));
             }
 
             const link = document.createElement('a');
-            link.href = track.source;
+            link.href = trackSourceHref;
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
             link.textContent = getMusicSourceLabel(track.source);
@@ -3031,6 +3039,24 @@
             blankImageObjectUrls.delete(source);
         });
         widgetUrls.clear();
+    }
+
+    /// Resolves a track's "source" link to an absolute http(s) URL, or null when it is anything
+    /// else. Scheme allowlisting is the check that matters here: new URL() happily parses
+    /// javascript: and data: URLs (R8-P1-7).
+    function toHttpSourceHref(source) {
+        if (typeof source !== 'string' || source.trim().length === 0) {
+            return null;
+        }
+
+        try {
+            const resolved = new URL(source.trim(), document.baseURI);
+            return resolved.protocol === 'http:' || resolved.protocol === 'https:'
+                ? resolved.toString()
+                : null;
+        } catch {
+            return null;
+        }
     }
 
     function getMusicSourceLabel(source) {

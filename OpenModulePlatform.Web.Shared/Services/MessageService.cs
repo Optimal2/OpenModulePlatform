@@ -1018,7 +1018,7 @@ ORDER BY display_name,
         cmd.Parameters.Add("@query", SqlDbType.NVarChar, 100).Value = ToDbValue(cleanedQuery);
         cmd.Parameters.Add("@like_query", SqlDbType.NVarChar, 104).Value = string.IsNullOrWhiteSpace(cleanedQuery)
             ? DBNull.Value
-            : $"%{cleanedQuery}%";
+            : OmpSqlPattern.ContainsPattern(cleanedQuery);
 
         var rows = new List<MessageUserOption>();
         await using var rdr = await cmd.ExecuteReaderAsync(ct);

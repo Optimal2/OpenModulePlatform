@@ -649,8 +649,34 @@ IF OBJECT_ID(N'omp.HostResourceSamples', N'U') IS NOT NULL DELETE FROM omp.HostR
 IF OBJECT_ID(N'omp.HostResourceLatest', N'U') IS NOT NULL DELETE FROM omp.HostResourceLatest WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.HostDeploymentAssignments', N'U') IS NOT NULL DELETE FROM omp.HostDeploymentAssignments WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL DELETE FROM omp.HostDeployments WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NOT NULL DELETE FROM omp.HostAgentJobs WHERE HostId = @hostId;
+
+-- R8-P3-8: omp.WorkerInstances and omp.AppInstances are themselves parents, and this method is
+-- the reference implementation the Portal's delete paths were measured against -- so its own gap
+-- mattered twice over. The orphan finder excludes hosts that still have AppInstances or
+-- HostAppDeploymentStates, which is why the gap never fired in practice; that makes it a
+-- defensive ordering rather than a live bug, and defensive ordering that does not hold is worse
+-- than none, because the next caller trusts it.
+IF OBJECT_ID(N'omp_ibs_packager.ChannelWorkerLeases', N'U') IS NOT NULL
+    DELETE FROM omp_ibs_packager.ChannelWorkerLeases
+    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId);
+IF OBJECT_ID(N'omp_ibs_packager.ChannelRuntimeStates', N'U') IS NOT NULL
+    UPDATE omp_ibs_packager.ChannelRuntimeStates
+    SET WorkerInstanceId = NULL
+    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId);
+IF OBJECT_ID(N'omp_ibs_packager.Channels', N'U') IS NOT NULL
+    UPDATE omp_ibs_packager.Channels
+    SET WorkerInstanceId = NULL
+    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId);
+IF OBJECT_ID(N'omp.WorkerInstanceRuntimeStates', N'U') IS NOT NULL
+    DELETE FROM omp.WorkerInstanceRuntimeStates
+    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId)
+       OR AppInstanceId IN (SELECT AppInstanceId FROM omp.AppInstances WHERE HostId = @hostId);
 IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL DELETE FROM omp.WorkerInstances WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.HostAppDeploymentStates', N'U') IS NOT NULL DELETE FROM omp.HostAppDeploymentStates WHERE HostId = @hostId;
+IF OBJECT_ID(N'omp.AppInstanceRuntimeStates', N'U') IS NOT NULL
+    DELETE FROM omp.AppInstanceRuntimeStates
+    WHERE AppInstanceId IN (SELECT AppInstanceId FROM omp.AppInstances WHERE HostId = @hostId);
 IF OBJECT_ID(N'omp.AppInstances', N'U') IS NOT NULL DELETE FROM omp.AppInstances WHERE HostId = @hostId;
 
 -- Delete the orphan host itself.

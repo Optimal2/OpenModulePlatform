@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using OpenModulePlatform.Web.Shared.Web;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
@@ -6,10 +7,13 @@ public static class OmpUrlPathHelper
 {
     public static string CombinePortalHref(string? portalBaseUrl, string? href)
     {
+        // R8-P1-6: IsWellFormedUriString was the only test here, and it is true for
+        // "javascript:alert(1)" -- an absolute URI is not the same thing as a safe one. The
+        // scheme allowlist is what decides whether an absolute href may be returned as-is.
         if (!string.IsNullOrWhiteSpace(href)
-            && Uri.IsWellFormedUriString(href, UriKind.Absolute))
+            && Uri.TryCreate(href.Trim(), UriKind.Absolute, out var absoluteHref))
         {
-            return href.Trim();
+            return OmpUrlSafety.IsAllowedAbsoluteScheme(absoluteHref) ? href.Trim() : "/";
         }
 
         var normalizedBaseUrl = NormalizeBasePath(portalBaseUrl);
@@ -41,9 +45,15 @@ public static class OmpUrlPathHelper
 
         var trimmed = basePath.Trim();
 
-        if (Uri.IsWellFormedUriString(trimmed, UriKind.Absolute))
+        // PortalBaseUrl is operator-configured and every href in the top bar is built on top of
+        // it, so an absolute value has to clear the scheme allowlist before it is accepted as a
+        // prefix. Falling back to "/" keeps the app usable with same-origin links rather than
+        // emitting a base nobody validated (R8-P1-6).
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteBase))
         {
-            return trimmed.TrimEnd('/');
+            return OmpUrlSafety.IsAllowedAbsoluteScheme(absoluteBase)
+                ? trimmed.TrimEnd('/')
+                : "/";
         }
 
         return trimmed.StartsWith("/", StringComparison.Ordinal)
