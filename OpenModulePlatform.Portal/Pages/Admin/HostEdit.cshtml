@@ -114,7 +114,9 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Delete this host? App and worker instances are kept, but their host placement and HostAgent deployment state for this host are removed."]');">
+        data-omp-confirm="@L["Delete this host? App and worker instances are kept, but their host placement and HostAgent deployment state for this host are removed."]"
+        data-omp-confirm-ok="@L["Delete"]"
+        data-omp-confirm-cancel="@L["Cancel"]">
         <input type="hidden" asp-for="Input.HostId" />
         <h3>@L["Danger zone"]</h3>
         <p class="muted">@L["Use host deletion for stale or incorrect host rows. App and worker instances are detached from this host instead of being deleted."]</p>

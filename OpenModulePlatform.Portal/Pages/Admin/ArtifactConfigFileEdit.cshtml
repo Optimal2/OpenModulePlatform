@@ -120,7 +120,9 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed."]');">
+        data-omp-confirm="@L["Delete this artifact configuration file? HostAgent will stop managing the file, but existing deployed files are not removed."]"
+        data-omp-confirm-ok="@L["Delete"]"
+        data-omp-confirm-cancel="@L["Cancel"]">
         <input type="hidden" asp-for="Input.ArtifactConfigurationFileId" />
         <input type="hidden" asp-for="Input.ArtifactId" />
         <h3>@L["Danger zone"]</h3>

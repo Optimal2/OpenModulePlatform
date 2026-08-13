@@ -246,7 +246,7 @@
                                 <div class="toolbar compact-toolbar">
                                     <a class="action-link" href="~/admin/users/edit/@Model.UserRow.UserId?portalSettingDefinitionId=@setting.UserSettingDefinitionId">@L["Edit"]</a>
                                     <form method="post" asp-page-handler="DeletePortalSetting" asp-route-userSettingDefinitionId="@setting.UserSettingDefinitionId" class="inline-form">
-                                        <button type="submit" class="btn-danger-subtle" onclick="return confirm('@L["Delete this portal setting value?"]');">@L["Delete"]</button>
+                                        <button type="submit" class="btn-danger-subtle" data-omp-confirm="@L["Delete this portal setting value?"]" data-omp-confirm-ok="@L["Delete"]" data-omp-confirm-cancel="@L["Cancel"]">@L["Delete"]</button>
                                     </form>
                                 </div>
                             </td>

@@ -226,7 +226,9 @@
                                     method="post"
                                     asp-page-handler="DeleteRuntime"
                                     asp-route-appInstanceId="@row.AppInstanceId"
-                                    onsubmit="return confirm('@L["Delete this worker runtime row?"]');">
+                                    data-omp-confirm="@L["Delete this worker runtime row?"]"
+                                    data-omp-confirm-ok="@L["Delete"]"
+                                    data-omp-confirm-cancel="@L["Cancel"]">
                                     <button type="submit" class="btn btn-link-danger">@L["Delete runtime row"]</button>
                                 </form>
                             }

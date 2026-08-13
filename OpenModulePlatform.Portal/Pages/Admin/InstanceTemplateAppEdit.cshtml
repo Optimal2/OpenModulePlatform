@@ -218,7 +218,9 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Remove this desired app from the installation?"]');">
+        data-omp-confirm="@L["Remove this desired app from the installation?"]"
+        data-omp-confirm-ok="@L["Remove"]"
+        data-omp-confirm-cancel="@L["Cancel"]">
         <input type="hidden" asp-for="Input.InstanceTemplateAppInstanceId" />
         <input type="hidden" asp-for="Input.InstanceTemplateId" />
         <h3>@L["Danger zone"]</h3>

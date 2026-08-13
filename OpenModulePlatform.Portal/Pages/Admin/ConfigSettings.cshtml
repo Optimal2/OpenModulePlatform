@@ -146,7 +146,9 @@
                                     method="post"
                                     asp-page-handler="Delete"
                                     asp-route-configId="@row.ConfigId"
-                                    onsubmit="return confirm('@L["Delete this config setting value?"]');">
+                                    data-omp-confirm="@L["Delete this config setting value?"]"
+                                    data-omp-confirm-ok="@L["Delete"]"
+                                    data-omp-confirm-cancel="@L["Cancel"]">
                                     <button type="submit"
                                             class="btn btn-danger admin-icon-button admin-icon-button--delete"
                                             title="@L["Delete"]"

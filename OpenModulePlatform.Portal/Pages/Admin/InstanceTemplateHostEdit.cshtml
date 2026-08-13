@@ -92,7 +92,9 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Remove this host from the installation? Desired app rows using it must be moved or removed first."]');">
+        data-omp-confirm="@L["Remove this host from the installation? Desired app rows using it must be moved or removed first."]"
+        data-omp-confirm-ok="@L["Remove"]"
+        data-omp-confirm-cancel="@L["Cancel"]">
         <input type="hidden" asp-for="Input.InstanceTemplateHostId" />
         <input type="hidden" asp-for="Input.InstanceTemplateId" />
         <h3>@L["Danger zone"]</h3>

@@ -231,7 +231,9 @@
                                 <form method="post"
                                       asp-page-handler="RecycleWebAppAppPool"
                                       class="inline-form"
-                                      onsubmit="return confirm('@L["Recycle this application pool? HostAgent will validate the host state before recycling it."]');">
+                                      data-omp-confirm="@L["Recycle this application pool? HostAgent will validate the host state before recycling it."]"
+                                      data-omp-confirm-ok="@L["Recycle"]"
+                                      data-omp-confirm-cancel="@L["Cancel"]">
                                     <input type="hidden" name="hostId" value="@row.HostId" />
                                     <input type="hidden" name="healthKey" value="@row.HealthKey" />
                                     <input type="hidden" name="appPoolName" value="@row.AppPoolName" />
@@ -554,7 +556,9 @@
                             <form method="post"
                                   asp-page-handler="RequestHostAgentUpgrade"
                                   class="inline-form"
-                                  onsubmit="return confirm('@L["Request HostAgent upgrade for this host? The active HostAgent installs the selected artifact during its next cycle."]');">
+                                  data-omp-confirm="@L["Request HostAgent upgrade for this host? The active HostAgent installs the selected artifact during its next cycle."]"
+                                  data-omp-confirm-ok="@L["Request"]"
+                                  data-omp-confirm-cancel="@L["Cancel"]">
                                 <input type="hidden" name="hostId" value="@row.HostId" />
                                 <select name="artifactId" aria-label="@L["HostAgent artifact"]">
                                     @foreach (var option in Model.HostAgentArtifactOptions)
