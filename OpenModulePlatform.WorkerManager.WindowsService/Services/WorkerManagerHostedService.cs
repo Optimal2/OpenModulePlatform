@@ -198,12 +198,30 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     // drained, stopped, adopted the new definition and only then hit
                     // ValidateReadableStartupFile -- leaving the worker stopped and
                     // unable to start until the HostAgent state recovered (R6-F3).
-                    if (managed.IsRunning() && !IsStartableDefinition(desired, out var startabilityProblem))
+                    var startability = managed.IsRunning()
+                        ? await IsStartableDefinitionAsync(desired, cancellationToken)
+                        : (IsStartable: true, Problem: string.Empty);
+                    if (!startability.IsStartable)
                     {
+                        // This branch sits above TryDrainForConfigurationChangeAsync, so
+                        // once it starts firing the drain path is never re-entered. A drain
+                        // begun on an earlier cycle would stay set forever: the worker holds
+                        // its process and admits zero jobs, while line below refreshes its
+                        // liveness so the R5-F4 staleness check sees a healthy worker and the
+                        // R6-F6 drain-timeout warning never fires again. Cancel it here so a
+                        // worker whose new definition turns out to be unstartable goes back
+                        // to accepting work (R7-F1).
+                        if (managed.CancelDrain())
+                        {
+                            _logger.LogInformation(
+                                "Resumed a worker that was draining for a configuration change which turned out not to be startable. WorkerInstanceId={WorkerInstanceId}",
+                                desired.WorkerInstanceId);
+                        }
+
                         _logger.LogWarning(
                             "Ignoring a worker configuration change this cycle because the new definition is not startable; the running worker is left untouched. WorkerInstanceId={WorkerInstanceId}, Problem={Problem}",
                             desired.WorkerInstanceId,
-                            startabilityProblem);
+                            startability.Problem);
                         await PublishRunningObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
                         continue;
                     }
@@ -458,10 +476,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
         ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
         ValidateReadableStartupFile(managed.Definition.PluginAssemblyPath, "Worker plugin assembly");
 
-        using var startupResources = new WorkerStartupResources(
-            CreateShutdownEvent(managed.Definition),
-            CreateManagedWorkerEvent(BuildDrainEventName(managed.Definition.WorkerInstanceId)),
-            CreateManagedWorkerEvent(BuildBusyEventName(managed.Definition.WorkerInstanceId)));
+        // Create the three handles one at a time and own each as soon as it exists.
+        // Passing them as constructor arguments meant a throw from the second or third
+        // call left the earlier handle(s) orphaned for the life of the manager process --
+        // and because CreateShutdownEvent refuses a name that already exists, a leaked
+        // shutdown handle made every later start attempt for that worker fail with
+        // "shutdown event already exists" until the service was restarted (R7-F3).
+        using var startupResources = new WorkerStartupResources();
+        startupResources.SetShutdownEvent(CreateShutdownEvent(managed.Definition));
+        startupResources.SetDrainEvent(CreateManagedWorkerEvent(BuildDrainEventName(managed.Definition.WorkerInstanceId)));
+        startupResources.SetBusyEvent(CreateManagedWorkerEvent(BuildBusyEventName(managed.Definition.WorkerInstanceId)));
 
         var ompConnectionString = _configuration.GetConnectionString("OmpDb");
         if (string.IsNullOrWhiteSpace(ompConnectionString))
@@ -863,20 +887,31 @@ public sealed class WorkerManagerHostedService : BackgroundService
     /// <summary>
     /// Preflight for a replacement definition: can we actually start it? Used to
     /// avoid stopping a healthy worker for a configuration we already know is broken
-    /// (R6-F3). Same readability check the start path performs, without throwing.
+    /// (R6-F3). Same readability checks the start path performs, without throwing.
     /// </summary>
-    private static bool IsStartableDefinition(DesiredWorkerInstance desired, out string problem)
+    /// <remarks>
+    /// The start path validates two files; this checked only the plugin assembly, so the
+    /// resolved WorkerProcessHost executable -- which comes from the same volatile
+    /// HostArtifactStates join R6-F3 was written to defend against -- could still fail
+    /// after the worker had already been drained and stopped. That is R6-F3's exact
+    /// failure mode reproduced through the un-preflighted file, and each retry burns a
+    /// restart-policy slot (R7-F2).
+    /// </remarks>
+    private async Task<(bool IsStartable, string Problem)> IsStartableDefinitionAsync(
+        DesiredWorkerInstance desired,
+        CancellationToken cancellationToken)
     {
         try
         {
             ValidateReadableStartupFile(desired.PluginAssemblyPath, "Worker plugin assembly");
-            problem = string.Empty;
-            return true;
+
+            var workerProcessPath = await ResolveWorkerProcessPathAsync(_settings.CurrentValue, cancellationToken);
+            ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
+            return (true, string.Empty);
         }
         catch (InvalidOperationException ex)
         {
-            problem = ex.Message;
-            return false;
+            return (false, ex.Message);
         }
     }
 
@@ -1386,21 +1421,24 @@ public sealed class WorkerManagerHostedService : BackgroundService
     {
         private bool _ownsResources = true;
 
-        public WorkerStartupResources(
-            EventWaitHandle shutdownEvent,
-            EventWaitHandle drainEvent,
-            EventWaitHandle busyEvent)
-        {
-            ShutdownEvent = shutdownEvent;
-            DrainEvent = drainEvent;
-            BusyEvent = busyEvent;
-        }
+        private EventWaitHandle? _shutdownEvent;
+        private EventWaitHandle? _drainEvent;
+        private EventWaitHandle? _busyEvent;
 
-        public EventWaitHandle ShutdownEvent { get; }
+        public EventWaitHandle ShutdownEvent
+            => _shutdownEvent ?? throw new InvalidOperationException("The shutdown event has not been created yet.");
 
-        public EventWaitHandle DrainEvent { get; }
+        public EventWaitHandle DrainEvent
+            => _drainEvent ?? throw new InvalidOperationException("The drain event has not been created yet.");
 
-        public EventWaitHandle BusyEvent { get; }
+        public EventWaitHandle BusyEvent
+            => _busyEvent ?? throw new InvalidOperationException("The busy event has not been created yet.");
+
+        public void SetShutdownEvent(EventWaitHandle handle) => _shutdownEvent = handle;
+
+        public void SetDrainEvent(EventWaitHandle handle) => _drainEvent = handle;
+
+        public void SetBusyEvent(EventWaitHandle handle) => _busyEvent = handle;
 
         public Process? Process { get; private set; }
 
@@ -1422,9 +1460,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
 
             Process?.Dispose();
-            ShutdownEvent.Dispose();
-            DrainEvent.Dispose();
-            BusyEvent.Dispose();
+            _shutdownEvent?.Dispose();
+            _drainEvent?.Dispose();
+            _busyEvent?.Dispose();
         }
     }
 

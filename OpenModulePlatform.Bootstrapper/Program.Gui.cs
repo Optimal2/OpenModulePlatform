@@ -1832,7 +1832,9 @@ internal static partial class Program
                     importRoot,
                     importTarget,
                     waitForImportSeconds,
-                    Report);
+                    Report,
+                    ResolveHostAgentImportArchivePath(importRoot, "ProcessedPath", "processed"),
+                    ResolveHostAgentImportArchivePath(importRoot, "FailedPath", "failed"));
                 if (!imported)
                 {
                     return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, importTarget, importEnabled, false);
@@ -1850,7 +1852,9 @@ internal static partial class Program
             string importRoot,
             string importTarget,
             int waitSeconds,
-            Action<string> report)
+            Action<string> report,
+            string processedRoot,
+            string failedRoot)
         {
             report($"> Waiting up to {waitSeconds}s for the HostAgent to import the package...");
             var fileName = Path.GetFileName(importTarget);
@@ -1859,18 +1863,25 @@ internal static partial class Program
             {
                 if (!File.Exists(importTarget))
                 {
-                    var failed = FindImportOutcomeFile(Path.Join(importRoot, "failed"), fileName);
+                    var failed = FindImportOutcomeFile(failedRoot, fileName);
                     if (failed is not null)
                     {
                         report($"> Import FAILED: the HostAgent moved the package to {failed}");
                         return false;
                     }
 
-                    var processed = FindImportOutcomeFile(Path.Join(importRoot, "processed"), fileName);
-                    report(processed is not null
-                        ? $"> Import completed: the HostAgent moved the package to {processed}"
-                        : "> Import completed: the package left the import folder.");
-                    return true;
+                    var processed = FindImportOutcomeFile(processedRoot, fileName);
+                    if (processed is not null)
+                    {
+                        report($"> Import completed: the HostAgent moved the package to {processed}");
+                        return true;
+                    }
+
+                    // The package left the import folder but turned up in neither archive.
+                    // That is not evidence of a successful import, and reporting it as one
+                    // let a rejected deploy exit 0 (R7-G6).
+                    report($"> Import result UNKNOWN: the package left the import folder but was not found in {processedRoot} or {failedRoot}. Check the HostAgent log and its configured ProcessedPath/FailedPath.");
+                    return false;
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(5));
@@ -1916,6 +1927,33 @@ internal static partial class Program
             return importPath.Contains('{', StringComparison.Ordinal)
                 ? string.Empty
                 : importPath;
+        }
+
+        /// <summary>
+        /// Resolves the configured processed/failed archive path, falling back to the
+        /// default subfolder of the import root when the profile does not set one.
+        /// </summary>
+        /// <remarks>
+        /// ProcessedPath and FailedPath are first-class HostAgent settings and are honoured
+        /// everywhere else in the toolchain. Hardcoding importRoot\processed and
+        /// importRoot\failed meant that on a profile pointing them elsewhere both lookups
+        /// came back empty and the wait reported "Import completed: the package left the
+        /// import folder" for a deploy the HostAgent had rejected (R7-G6).
+        /// </remarks>
+        private string ResolveHostAgentImportArchivePath(string importRoot, string settingName, string defaultFolderName)
+        {
+            var artifactZipImport = GetJsonObjectProperty(
+                GetJsonObjectProperty(_config.HostAgent.AppSettings, "HostAgent"),
+                "ArtifactZipImport");
+            var configured = GetJsonStringProperty(artifactZipImport, settingName);
+            if (!string.IsNullOrWhiteSpace(configured) && !configured.Contains('{', StringComparison.Ordinal))
+            {
+                return configured;
+            }
+
+            return string.IsNullOrWhiteSpace(importRoot)
+                ? string.Empty
+                : Path.Join(importRoot, defaultFolderName);
         }
 
         private bool IsHostAgentArtifactImportEnabled()

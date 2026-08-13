@@ -234,17 +234,19 @@ public sealed class ServiceAppDeploymentService
                     serviceName,
                     serviceIdentity,
                     cancellationToken);
-                if (!string.IsNullOrWhiteSpace(identityCheck.WarningMessage))
-                {
-                    await _repository.PublishAppDeploymentResultAsync(
-                        deployment,
-                        WithDeploySetWarning(
-                            AddIdentityCheck(
-                                AppDeploymentResult.Warning(targetPath, serviceName, identityCheck.WarningMessage),
-                                identityCheck)),
-                        cancellationToken);
-                    return;
-                }
+                // Publishing Warning here degraded the row out of the already-applied
+                // fast path (IsAlreadyApplied requires Succeeded), so the next cycle ran a
+                // full redeploy -- stopping and restarting the Windows service -- and the
+                // cycle after that landed here again. A service whose logon account needs
+                // manual attention was therefore stopped and started every other
+                // convergence cycle, indefinitely. R6-D2 fixed the two sibling warning
+                // sites and left this one; it also put the text in ErrorMessage, so the
+                // Portal showed the same condition as an error here and as a warning
+                // there. Fall through to the reconcile call as well: the early return was
+                // the only thing restarting a stopped service on this path, and dropping
+                // it without the fall-through would trade a restart loop for a service
+                // that never comes back (R7-D1).
+                var identityWarning = identityCheck.WarningMessage;
 
                 var reconcileRunningResult = await EnsureServiceRunningIfDesiredAsync(
                     settings,
@@ -257,7 +259,10 @@ public sealed class ServiceAppDeploymentService
                 {
                     await _repository.PublishAppDeploymentResultAsync(
                         deployment,
-                        WithDeploySetWarning(AddIdentityCheck(reconcileRunningResult, identityCheck)),
+                        WithDeploySetWarning(
+                            AddIdentityCheck(
+                                WithIdentityWarning(reconcileRunningResult, identityWarning),
+                                identityCheck)),
                         cancellationToken);
                     return;
                 }
@@ -266,7 +271,9 @@ public sealed class ServiceAppDeploymentService
                     deployment,
                     WithDeploySetWarning(
                         AddIdentityCheck(
-                            AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
+                            WithIdentityWarning(
+                                AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
+                                identityWarning),
                             identityCheck)),
                     cancellationToken);
                 return;
@@ -968,6 +975,15 @@ public sealed class ServiceAppDeploymentService
         identity = new HostAgentServiceAppIdentitySettings();
         return false;
     }
+
+    /// <summary>
+    /// Attaches an identity warning as a diagnostic warning, keeping the deployment state
+    /// itself Succeeded so the row stays in the already-applied fast path (R7-D1).
+    /// </summary>
+    private static AppDeploymentResult WithIdentityWarning(AppDeploymentResult result, string? warningMessage)
+        => string.IsNullOrWhiteSpace(warningMessage)
+            ? result
+            : result.WithDiagnosticWarning(warningMessage);
 
     private static AppDeploymentResult AddIdentityCheck(
         AppDeploymentResult result,

@@ -1093,6 +1093,12 @@ if (-not $SkipRestore) {
     $publishArgs.Restore = $true
 }
 & $publishScript @publishArgs
+# publish-all.ps1 throws on a failed publish, but check the exit code too -- the sibling
+# sign step a thousand lines above does, and this call site was the one place a non-zero
+# result could pass through silently (R7-G2).
+if ($LASTEXITCODE -ne 0) {
+    throw "publish-all.ps1 failed with exit code $LASTEXITCODE."
+}
 
 Write-Step 'Copying component payloads'
 $componentPayloadSources = @{}

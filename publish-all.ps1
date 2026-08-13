@@ -62,11 +62,22 @@ function Invoke-DotnetCommand {
     $lines = @()
     $exitCode = 0
 
-    & {
+    # The & { } block runs in a CHILD scope, so assigning $lines and $exitCode inside it
+    # created child-scope variables and the outer ones kept their initial values. Every
+    # publish therefore reported ExitCode 0 with empty output: Success was always true,
+    # the "one or more publish operations failed" throw was unreachable, and each
+    # .publish.log was written empty. A dotnet publish that failed after copying most of
+    # its files shipped a partial folder as a green build (R7-G2). Assign in this scope
+    # and let the block only set the child-scope preference and location.
+    $previousLocation = Get-Location
+    try {
         $PSNativeCommandUseErrorActionPreference = $false
         Set-Location $WorkingDirectory
         $lines = & $DotnetPath @Arguments 2>&1 | ForEach-Object { $_.ToString() }
         $exitCode = $LASTEXITCODE
+    }
+    finally {
+        Set-Location $previousLocation
     }
 
     $text = if ($lines.Count -gt 0) {
