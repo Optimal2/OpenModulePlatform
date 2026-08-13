@@ -229,7 +229,12 @@ public sealed class HostAgentJobProcessor
             or UnauthorizedAccessException
             or TimeoutException;
 
-    private static async Task StopJobLeaseRenewalAsync(
+    /// <remarks>
+    /// Same finally-block hazard as the two siblings in HostAgentEngine: a throw here replaces
+    /// the in-flight exception and skips the remaining cleanup, so the job's real outcome is
+    /// lost (R8-P4-4).
+    /// </remarks>
+    private async Task StopJobLeaseRenewalAsync(
         CancellationTokenSource processingCancellation,
         Task leaseRenewal)
     {
@@ -241,6 +246,10 @@ public sealed class HostAgentJobProcessor
         catch (OperationCanceledException)
         {
             return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "HostAgent job lease renewal ended with an error while stopping.");
         }
     }
 
