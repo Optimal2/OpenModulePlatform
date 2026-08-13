@@ -2,6 +2,16 @@
 (() => {
     'use strict';
 
+    // Same guard as portal-topbar.js:823 (R3-E6). Only same-origin, absolute-path
+    // destinations are followed, so a row written outside the validated write path cannot
+    // carry a "javascript:" or off-site URL into window.location (R8-P1-2).
+    function isSafeLocalDestination(url) {
+        if (typeof url !== 'string' || url.length === 0) {
+            return false;
+        }
+        return url.charAt(0) === '/' && url.charAt(1) !== '/' && url.charAt(1) !== '\\';
+    }
+
     const minWidth = 160;
     const minHeight = 96;
     const defaultGridSize = 32;
@@ -1519,7 +1529,11 @@
                     const payload = await postForm(form.action, token, { notificationId });
                     markDashboardNotificationRead(root, notificationId, payload?.unreadCount);
                     const destinationUrl = payload?.destinationUrl || form.querySelector('[data-destination-url]')?.dataset.destinationUrl || '';
-                    if (destinationUrl) {
+                    // portal-topbar.js grinds the identical flow through isSafeLocalDestination
+                    // (R3-E6); this file had no such helper at all, and the server only filters
+                    // the toast targetUrl -- so the same notification row was safe in the top bar
+                    // and executed here (R8-P1-2).
+                    if (isSafeLocalDestination(destinationUrl)) {
                         window.location.href = destinationUrl;
                     }
                 } catch (error) {

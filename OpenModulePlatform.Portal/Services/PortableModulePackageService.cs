@@ -171,7 +171,15 @@ public sealed class PortableModulePackageService
                 var bundlePath = Path.Join(tempRoot, Path.GetFileName(bundleFile.FileName));
                 await CopyUploadToFileAsync(bundleFile, bundlePath, _options.MaxUploadBytes, ct);
                 var extractedRoot = Path.Join(tempRoot, "bundle");
-                ZipFile.ExtractToDirectory(bundlePath, extractedRoot, overwriteFiles: true);
+                // ZipFile.ExtractToDirectory applies no entry cap and no size cap of any kind,
+                // which made this the one extraction site in the codebase that bypassed
+                // ArtifactPackageExtractionLimits -- the sibling call further down already goes
+                // through the R7-S8-hardened reader. A ~10 MB bundle could expand to ~10 GB in
+                // %TEMP% as the Portal app pool (R8-P2-3).
+                ArtifactPackageExtractor.ExtractZipWithLimits(
+                    bundlePath,
+                    extractedRoot,
+                    ArtifactPackageExtractionLimits.Default);
 
                 var definitionPath = FindSingleModuleDefinitionFile(extractedRoot);
                 var definition = await ReadDefinitionAsync(

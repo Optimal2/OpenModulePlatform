@@ -648,6 +648,26 @@ WHERE PermissionId = @PermissionId;";
                 roleId,
                 ct);
 
+            // Two module-owned children were missed, so a role granted read access to a
+            // content page could not be deleted (R8-P3-6).
+            await DeleteByRoleAsync(
+                conn,
+                (SqlTransaction)tx,
+                @"IF OBJECT_ID(N'omp_portal.widget_permissions', N'U') IS NOT NULL
+    EXEC sp_executesql N'DELETE FROM omp_portal.widget_permissions WHERE role_id = @RoleId;',
+        N'@RoleId int', @RoleId = @RoleId;",
+                roleId,
+                ct);
+
+            await DeleteByRoleAsync(
+                conn,
+                (SqlTransaction)tx,
+                @"IF OBJECT_ID(N'omp_content.content_role_access', N'U') IS NOT NULL
+    EXEC sp_executesql N'DELETE FROM omp_content.content_role_access WHERE role_id = @RoleId;',
+        N'@RoleId int', @RoleId = @RoleId;",
+                roleId,
+                ct);
+
             await DeleteByRoleAsync(
                 conn,
                 (SqlTransaction)tx,
@@ -675,10 +695,42 @@ WHERE PermissionId = @PermissionId;";
         await using var tx = await conn.BeginTransactionAsync(ct);
         try
         {
+            // omp.Permissions has five FK children and there is no ON DELETE CASCADE, so a
+            // missing one is a hard error rather than an orphan. Only RolePermissions was
+            // cleared here, while the DeleteRoleAsync sibling above already clears
+            // config_settings for its own scope column -- the asymmetry was exact: the role
+            // path cleared ConfigRole, the permission path never cleared ConfigPermission.
+            // With IbsPackager installed, SyncIbsPackagerPermissionsAsync creates AppPermissions
+            // rows automatically, which made every module permission undeletable (R8-P3-3 /
+            // R7-F25).
             await DeleteByPermissionAsync(
                 conn,
                 (SqlTransaction)tx,
                 "DELETE FROM omp.RolePermissions WHERE PermissionId = @PermissionId;",
+                permissionId,
+                ct);
+
+            await DeleteByPermissionAsync(
+                conn,
+                (SqlTransaction)tx,
+                "DELETE FROM omp.AppPermissions WHERE PermissionId = @PermissionId;",
+                permissionId,
+                ct);
+
+            await DeleteByPermissionAsync(
+                conn,
+                (SqlTransaction)tx,
+                "DELETE FROM omp.config_settings WHERE ConfigPermission = @PermissionId;",
+                permissionId,
+                ct);
+
+            // Module-owned; guarded so the statement is a no-op where the module is absent.
+            await DeleteByPermissionAsync(
+                conn,
+                (SqlTransaction)tx,
+                @"IF OBJECT_ID(N'omp_portal.widget_permissions', N'U') IS NOT NULL
+    EXEC sp_executesql N'DELETE FROM omp_portal.widget_permissions WHERE permission_id = @PermissionId;',
+        N'@PermissionId int', @PermissionId = @PermissionId;",
                 permissionId,
                 ct);
 
