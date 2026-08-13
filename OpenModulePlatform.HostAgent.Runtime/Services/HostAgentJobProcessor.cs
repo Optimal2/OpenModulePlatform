@@ -1849,7 +1849,11 @@ public sealed class HostAgentJobProcessor
         MaintenanceFindingAction? action,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveMaintenanceDirectory(action, out var directory, out var error))
+        if (!TryResolveMaintenanceDirectory(
+                action,
+                ResolveMaintenanceAllowedRoots(_settings.CurrentValue),
+                out var directory,
+                out var error))
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Error", error);
         }
@@ -1863,7 +1867,11 @@ public sealed class HostAgentJobProcessor
         string hostKey,
         CancellationToken cancellationToken)
     {
-        if (!TryResolveMaintenanceDirectoryPath(action, out var directory, out var error))
+        if (!TryResolveMaintenanceDirectoryPath(
+                action,
+                ResolveMaintenanceAllowedRoots(_settings.CurrentValue),
+                out var directory,
+                out var error))
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Error", error);
         }
@@ -2034,12 +2042,41 @@ public sealed class HostAgentJobProcessor
         }
     }
 
+    /// <summary>
+    /// The roots a maintenance cleanup may delete inside, derived from local configuration
+    /// rather than from the job payload.
+    /// </summary>
+    /// <remarks>
+    /// The finding row asserts that its directory sits below the configured HostAgent
+    /// install root, but the cleanup-time check validated the payload path against the
+    /// payload's own InstallRoot -- vacuous for InstallRoot = C:\. The correctly hardened
+    /// sibling CleanupOrphanServiceAppDirectoryFindingAsync re-derives its root from
+    /// settings.ServicesRoot at cleanup time; this path did not, and every deployed web app
+    /// holds the same OmpDb connection string the SYSTEM agent uses, so a compromised
+    /// app-pool identity can write the finding and the job (R7-S6).
+    /// </remarks>
+    private static IReadOnlyList<string> ResolveMaintenanceAllowedRoots(HostAgentSettings settings)
+    {
+        var roots = new List<string>(2)
+        {
+            ResolveHostAgentInstallRoot(settings)
+        };
+
+        if (!string.IsNullOrWhiteSpace(settings.ServicesRoot))
+        {
+            roots.Add(Path.GetFullPath(settings.ServicesRoot.Trim()));
+        }
+
+        return roots;
+    }
+
     private static bool TryResolveMaintenanceDirectory(
         MaintenanceFindingAction? action,
+        IReadOnlyList<string> allowedRoots,
         out string directory,
         out string error)
     {
-        if (!TryResolveMaintenanceDirectoryPath(action, out directory, out error))
+        if (!TryResolveMaintenanceDirectoryPath(action, allowedRoots, out directory, out error))
         {
             return false;
         }
@@ -2058,6 +2095,7 @@ public sealed class HostAgentJobProcessor
 
     private static bool TryResolveMaintenanceDirectoryPath(
         MaintenanceFindingAction? action,
+        IReadOnlyList<string> allowedRoots,
         out string directory,
         out string error)
     {
@@ -2087,6 +2125,15 @@ public sealed class HostAgentJobProcessor
         if (!IsSameOrChildPath(installRoot, candidate))
         {
             error = $"Refusing to delete a directory outside the configured install root: {candidate}.";
+            return false;
+        }
+
+        // The check above compares the payload path against the payload's own install
+        // root, so it is only a narrowing. The binding check is against local
+        // configuration (R7-S6).
+        if (!allowedRoots.Any(root => IsSameOrChildPath(root, candidate)))
+        {
+            error = $"Refusing to delete a directory outside this host's configured HostAgent roots: {candidate}.";
             return false;
         }
 

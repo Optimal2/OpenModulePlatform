@@ -5238,10 +5238,17 @@ VALUES
 
         var principalLiteral = ToSqlUnicodeLiteral(principal.Principal);
         var principalTypeLiteral = ToSqlUnicodeLiteral(principal.PrincipalType);
+
+        // MatchEvaluator, not the string overload: ToSqlUnicodeLiteral appends a closing
+        // quote, so any principal ending in $ produces the Regex substitution token $'
+        // ("text after the match") and splices the rest of the script into the literal.
+        // A machine account or gMSA (CONTOSO\OMPHOST01$) is an ordinary operator entry.
+        // The Bootstrapper fixed exactly this in R5S-G6; both runtime copies were missed
+        // (R7-S7).
         var patched = Regex.Replace(
             sqlText,
             @"DECLARE\s+@BootstrapPortalAdminPrincipal\s+nvarchar\(\d+\)\s*=\s*N'(?:''|[^'])*';",
-            $"DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = {principalLiteral};",
+            _ => $"DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = {principalLiteral};",
             RegexOptions.IgnoreCase);
 
         // The historical Portal initialization script hardcodes ADUser because the
@@ -5250,12 +5257,12 @@ VALUES
         patched = Regex.Replace(
             patched,
             @"PrincipalType\s*=\s*N'ADUser'",
-            $"PrincipalType = {principalTypeLiteral}",
+            _ => $"PrincipalType = {principalTypeLiteral}",
             RegexOptions.IgnoreCase);
         patched = Regex.Replace(
             patched,
             @"VALUES\s*\(\s*@PortalAdminsRoleId\s*,\s*N'ADUser'\s*,\s*@BootstrapPortalAdminPrincipal\s*\)",
-            $"VALUES(@PortalAdminsRoleId, {principalTypeLiteral}, @BootstrapPortalAdminPrincipal)",
+            _ => $"VALUES(@PortalAdminsRoleId, {principalTypeLiteral}, @BootstrapPortalAdminPrincipal)",
             RegexOptions.IgnoreCase);
 
         return patched;

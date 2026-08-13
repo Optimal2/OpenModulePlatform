@@ -1829,11 +1829,27 @@ ORDER BY ai.SortOrder,
             || string.Equals(app.AppInstanceKey, "omp_portal", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// True for a host base URL we are willing to use as the root of an emitted href.
+    /// </summary>
+    /// <remarks>
+    /// omp.Hosts.BaseUrl was the one DB-supplied value still reaching an href without a
+    /// scheme check. R4-E2, R5S-E1 and R6-E1 all stopped at RoutePath/PublicUrl/target_url
+    /// and never touched the host root those same paths fall back to. .NET gives unknown
+    /// schemes with // an authority, so a BaseUrl of javascript://x survives
+    /// GetLeftPart(Authority) and CombineHostRootAndRoute then appends the RoutePath after
+    /// it -- a clickable javascript: href. An off-site https value silently repoints every
+    /// top-bar entry for that host, platform-wide (R7-E3).
+    /// </remarks>
+    private static bool IsAllowedHostBaseUrl(Uri uri)
+        => uri.Scheme is "http" or "https";
+
     private static string? ResolveHostRoot(HttpRequest request, TopBarAppEntry app)
     {
         var hostBaseUrl = Clean(app.HostBaseUrl);
         if (!string.IsNullOrWhiteSpace(hostBaseUrl)
-            && Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var absoluteBaseUrl))
+            && Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var absoluteBaseUrl)
+            && IsAllowedHostBaseUrl(absoluteBaseUrl))
         {
             return absoluteBaseUrl.GetLeftPart(UriPartial.Authority);
         }
@@ -1845,7 +1861,8 @@ ORDER BY ai.SortOrder,
     {
         var hostBaseUrl = Clean(app.HostBaseUrl);
         if (!string.IsNullOrWhiteSpace(hostBaseUrl)
-            && Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var absoluteBaseUrl))
+            && Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var absoluteBaseUrl)
+            && IsAllowedHostBaseUrl(absoluteBaseUrl))
         {
             return absoluteBaseUrl.GetLeftPart(UriPartial.Authority);
         }

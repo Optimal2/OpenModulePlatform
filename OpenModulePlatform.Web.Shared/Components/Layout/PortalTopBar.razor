@@ -21,6 +21,9 @@
 {
     <div class="portal-topbar"
          data-portal-topbar-root
+         @* See the Razor view: the mark-all control needs a server-rendered unread count
+            or it hides itself on first render in push and manual mode (R7-E2). *@
+         data-portal-topbar-unread-count="@_portalTopBar.UnreadNotificationCount"
          data-favorite-toggle-url="@_portalTopBar.FavoriteToggleUrl"
          data-add-favorite-text="@L[_portalTopBar.AddFavoriteTextKey]"
          data-remove-favorite-text="@L[_portalTopBar.RemoveFavoriteTextKey]"

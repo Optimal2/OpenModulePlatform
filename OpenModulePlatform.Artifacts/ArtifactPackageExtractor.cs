@@ -159,6 +159,7 @@ public sealed class ArtifactPackageExtractor
     {
         var fileCount = 0;
         long totalUncompressedBytes = 0;
+        long actualUncompressedBytes = 0;
         Directory.CreateDirectory(targetRoot);
 
         foreach (var entry in archive.Entries)
@@ -200,7 +201,17 @@ public sealed class ArtifactPackageExtractor
 
             validateEntry?.Invoke(relativeName);
             Directory.CreateDirectory(Path.GetDirectoryName(entryPath)!);
-            entry.ExtractToFile(entryPath, overwrite: false);
+
+            // entry.Length is attacker-written central-directory metadata, so the two
+            // checks above only bound what the archive claims. ExtractToFile then streamed
+            // without a cap: a ~10 MB package declaring tiny entry sizes over a ~1032:1
+            // deflate stream wrote ~10 GB into the artifact store as SYSTEM. Enforce the
+            // remaining budget against bytes actually written, the way the nested-payload
+            // copy 150 lines below already did (R7-S8).
+            var entryBudget = Math.Min(
+                limits.MaxEntryUncompressedBytes,
+                limits.MaxTotalUncompressedBytes - actualUncompressedBytes);
+            actualUncompressedBytes += ExtractEntryToNewFileWithLimit(entry, entryPath, entryBudget);
             fileCount++;
         }
 
@@ -346,6 +357,39 @@ public sealed class ArtifactPackageExtractor
                     $"{packageDescription} total uncompressed size exceeds the limit of {limits.MaxTotalUncompressedBytes} bytes.");
             }
         }
+    }
+
+    /// <summary>
+    /// Extracts one entry to a new file, aborting as soon as the bytes actually written
+    /// exceed <paramref name="maxBytes"/>, and returns the number of bytes written.
+    /// </summary>
+    /// <remarks>
+    /// CreateNew rather than Create so a duplicate entry name still fails the way
+    /// ExtractToFile(overwrite: false) did.
+    /// </remarks>
+    private static long ExtractEntryToNewFileWithLimit(
+        ZipArchiveEntry entry,
+        string destinationPath,
+        long maxBytes)
+    {
+        using var source = entry.Open();
+        using var target = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write);
+        var buffer = new byte[81920];
+        long totalBytes = 0;
+        int read;
+        while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            totalBytes += read;
+            if (totalBytes > maxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Artifact package entry '{entry.FullName}' expanded past the remaining uncompressed budget of {maxBytes} bytes. The archive's declared entry sizes do not match its contents.");
+            }
+
+            target.Write(buffer, 0, read);
+        }
+
+        return totalBytes;
     }
 
     private static void CopyEntryToFileWithLimit(

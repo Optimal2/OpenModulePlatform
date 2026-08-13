@@ -266,6 +266,7 @@ public sealed class UniversalModulePackageReader
         ArtifactPackageExtractionLimits limits)
     {
         long totalUncompressedBytes = 0;
+        long actualUncompressedBytes = 0;
         foreach (var entry in archive.Entries)
         {
             var entryName = NormalizePackagePath(entry.FullName);
@@ -290,8 +291,45 @@ public sealed class UniversalModulePackageReader
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            entry.ExtractToFile(destinationPath, overwrite: false);
+
+            // Both checks above read entry.Length, which is attacker-written central-
+            // directory metadata. Enforce the remaining budget against bytes actually
+            // written so a package that declares tiny entries cannot expand to gigabytes
+            // in the artifact store (R7-S8).
+            var entryBudget = Math.Min(
+                limits.MaxEntryUncompressedBytes,
+                limits.MaxTotalUncompressedBytes - actualUncompressedBytes);
+            actualUncompressedBytes += ExtractEntryToNewFileWithLimit(entry, destinationPath, entryBudget);
         }
+    }
+
+    /// <summary>
+    /// Extracts one entry to a new file, aborting as soon as the bytes actually written
+    /// exceed <paramref name="maxBytes"/>, and returns the number of bytes written.
+    /// </summary>
+    private static long ExtractEntryToNewFileWithLimit(
+        ZipArchiveEntry entry,
+        string destinationPath,
+        long maxBytes)
+    {
+        using var source = entry.Open();
+        using var target = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write);
+        var buffer = new byte[81920];
+        long totalBytes = 0;
+        int read;
+        while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            totalBytes += read;
+            if (totalBytes > maxBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Universal module package entry '{entry.FullName}' expanded past the remaining uncompressed budget of {maxBytes} bytes. The archive's declared entry sizes do not match its contents.");
+            }
+
+            target.Write(buffer, 0, read);
+        }
+
+        return totalBytes;
     }
 
     private static ZipArchiveEntry? FindEntry(ZipArchive archive, string entryName)
