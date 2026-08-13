@@ -157,7 +157,9 @@ else if (Model.IsActiveTab(SettingsModel.PortalTab))
     <form method="post"
           asp-page-handler="ResetDashboard"
           class="card danger-zone"
-          onsubmit="return confirm('@L["This resets your dashboard to the shared default layout. Continue?"]');">
+          data-omp-confirm="@L["This resets your dashboard to the shared default layout. Continue?"]"
+          data-omp-confirm-ok="@L["Continue"]"
+          data-omp-confirm-cancel="@L["Cancel"]">
         <h3>@L["Dashboard"]</h3>
         <p class="muted">@L["Reset to the shared default dashboard layout."]</p>
         <div class="toolbar">
@@ -168,7 +170,9 @@ else if (Model.IsActiveTab(SettingsModel.PortalTab))
     <form method="post"
           asp-page-handler="ClearDashboard"
           class="card danger-zone"
-          onsubmit="return confirm('@L["This removes all widgets from your dashboard. Continue?"]');">
+          data-omp-confirm="@L["This removes all widgets from your dashboard. Continue?"]"
+          data-omp-confirm-ok="@L["Continue"]"
+          data-omp-confirm-cancel="@L["Cancel"]">
         <h3>@L["Dashboard"]</h3>
         <p class="muted">@L["Clear your dashboard and keep it empty until you add widgets again."]</p>
         <div class="toolbar">
@@ -184,7 +188,9 @@ else if (Model.IsPortalAdmin)
 
         <form method="post"
               asp-page-handler="SaveDefaultDashboard"
-              onsubmit="return confirm('@L["This replaces the shared default dashboard layout with your current dashboard layout. Continue?"]');">
+              data-omp-confirm="@L["This replaces the shared default dashboard layout with your current dashboard layout. Continue?"]"
+              data-omp-confirm-ok="@L["Continue"]"
+              data-omp-confirm-cancel="@L["Cancel"]">
             <p>@L["Users without a personal dashboard layout use the shared default layout."]</p>
             <div class="toolbar">
                 <button type="submit" class="btn btn-danger">@L["Save current layout as default"]</button>

@@ -346,7 +346,10 @@
         const picker = root.querySelector('[data-widget-picker]');
         const token = root.querySelector('[data-dashboard-token-form] input[name="__RequestVerificationToken"]')?.value || '';
 
-        bindRoleSwitchConfirmations(root);
+        // R8-P5-16: the role-switch confirmation was a fifth page-local copy of the same
+        // window.confirm wiring. It is now the shared [data-omp-confirm] contract on the
+        // form itself, which also gets the dialog's localized buttons -- the native one
+        // renders OK/Cancel in the browser's language whatever the page says.
 
         if (!canvas || !editToggle || root.dataset.canEdit !== 'true') {
             if (canvas) {
@@ -601,25 +604,6 @@
             updateCanvasHeight(root, canvas, state);
             updateDirtyState();
         }
-    }
-
-    function bindRoleSwitchConfirmations(root) {
-        if (root.dataset.dashboardRoleSwitchBound === 'true') {
-            return;
-        }
-
-        root.dataset.dashboardRoleSwitchBound = 'true';
-        root.addEventListener('click', (event) => {
-            const link = event.target.closest('[data-dashboard-role-switch]');
-            if (!link || !root.contains(link)) {
-                return;
-            }
-
-            const message = link.dataset.confirmMessage || '';
-            if (message && !window.confirm(message)) {
-                event.preventDefault();
-            }
-        });
     }
 
     function bindWidget(root, canvas, widget, token, nextOrder, state, onChange = () => {}) {

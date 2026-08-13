@@ -320,7 +320,7 @@
                                       asp-route-id="@row.InstanceTemplateAppInstanceId"
                                       asp-route-templateId="@Model.Template.InstanceTemplateId"
                                       class="inline-form"
-                                      data-confirm-submit="@L["Remove this desired app from the installation?"]">
+                                      data-omp-confirm="@L["Remove this desired app from the installation?"]">
                                     <button type="submit"
                                             class="btn-link-danger admin-icon-button admin-icon-button--delete"
                                             title="@L["Remove desired app"]"
@@ -344,16 +344,3 @@
     </div>
 </div>
 
-<script>
-    document.addEventListener("submit", event => {
-        const form = event.target.closest("[data-confirm-submit]");
-        if (!form) {
-            return;
-        }
-
-        const message = form.dataset.confirmSubmit || "";
-        if (message && !window.confirm(message)) {
-            event.preventDefault();
-        }
-    });
-</script>

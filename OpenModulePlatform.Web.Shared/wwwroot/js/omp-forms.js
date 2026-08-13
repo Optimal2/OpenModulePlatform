@@ -136,6 +136,48 @@
             });
         }, true);
 
+        // R8-P5-16: submit buttons, not only whole forms. A form-level attribute cannot
+        // express "confirm Delete but not Save" when both buttons live in the same form,
+        // which is why four Portal pages had each written their own click handler around
+        // window.confirm -- and each of those lost the localized button labels, because
+        // the native dialog renders OK/Cancel in the browser's language regardless of
+        // what the page says.
+        document.addEventListener('click', (event) => {
+            const button = event.target instanceof Element
+                ? event.target.closest('button[data-omp-confirm]')
+                : null;
+            if (!button || button.disabled) {
+                return;
+            }
+
+            const form = button.form;
+            if (form && confirmedForms.has(form)) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            ompConfirm(button.getAttribute('data-omp-confirm'), labelsFrom(button)).then((ok) => {
+                if (!ok) {
+                    return;
+                }
+
+                if (!form) {
+                    button.click();
+                    return;
+                }
+
+                // The form's own submit handler must not ask a second time for the same
+                // click; the button already carried the question.
+                confirmedForms.add(form);
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit(button);
+                } else {
+                    form.submit();
+                }
+            });
+        }, true);
+
         document.addEventListener('click', (event) => {
             const link = event.target instanceof Element
                 ? event.target.closest('a[data-omp-confirm]')

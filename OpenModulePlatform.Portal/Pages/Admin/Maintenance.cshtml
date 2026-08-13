@@ -74,7 +74,9 @@
                 <button type="submit"
                         asp-page-handler="CleanupMaintenanceFindings"
                         class="btn btn-danger"
-                        data-confirm-message="@L["Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything."]">
+                        data-omp-confirm="@L["Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything."]"
+                        data-omp-confirm-ok="@L["Queue cleanup"]"
+                        data-omp-confirm-cancel="@L["Cancel"]">
                     @L["Queue cleanup"]
                 </button>
                 <button type="submit"
@@ -292,7 +294,9 @@
             <button type="submit"
                     asp-page-handler="CleanupArtifacts"
                     class="btn maintenance-retention-action maintenance-retention-action--queue"
-                    data-confirm-message="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]"
+                    data-omp-confirm="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]"
+                    data-omp-confirm-ok="@L["Queue artifact cleanup"]"
+                    data-omp-confirm-cancel="@L["Cancel"]"
                     data-maintenance-retention-queue
                     disabled>
                 <span class="maintenance-retention-action__icon" aria-hidden="true"></span>
@@ -439,17 +443,6 @@ else
             box.checked = selector.checked;
         }
     });
-})();
-
-(() => {
-    for (const button of document.querySelectorAll('button[data-confirm-message]')) {
-        button.addEventListener('click', (event) => {
-            const message = button.getAttribute('data-confirm-message');
-            if (message && !window.confirm(message)) {
-                event.preventDefault();
-            }
-        });
-    }
 })();
 
 (() => {

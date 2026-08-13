@@ -31,7 +31,9 @@
             <form method="post" asp-page-handler="ResetDefaults">
                 <button type="submit"
                         class="admin-icon-button admin-icon-button--reset"
-                        onclick="return confirm('@L["Regenerate standard seeded navigation entries? Custom entries are kept."]');"
+                        data-omp-confirm="@L["Regenerate standard seeded navigation entries? Custom entries are kept."]"
+                        data-omp-confirm-ok="@L["Regenerate"]"
+                        data-omp-confirm-cancel="@L["Cancel"]"
                         title="@L["Reset default entries"]"
                         aria-label="@L["Reset default entries"]">
                     <span class="visually-hidden">@L["Reset default entries"]</span>
@@ -278,7 +280,9 @@
                             <form method="post" asp-page-handler="Delete" asp-route-portalEntryId="@row.PortalEntryId">
                                 <button type="submit"
                                         class="btn-danger-subtle admin-icon-button admin-icon-button--delete"
-                                        data-confirm="@L["Remove this navigation entry?"]"
+                                        data-omp-confirm="@L["Remove this navigation entry?"]"
+                                        data-omp-confirm-ok="@L["Remove"]"
+                                        data-omp-confirm-cancel="@L["Cancel"]"
                                         title="@L["Remove"]"
                                         aria-label="@L["Remove"]">
                                     <span class="visually-hidden">@L["Remove"]</span>
@@ -768,12 +772,8 @@
             });
 
             list.addEventListener("click", event => {
-                const confirmTarget = event.target.closest("[data-confirm]");
-                if (confirmTarget && !window.confirm(confirmTarget.dataset.confirm)) {
-                    event.preventDefault();
-                    return;
-                }
-
+                // R8-P5-16: the confirmation moved to the shared [data-omp-confirm]
+                // wiring, which intercepts the click before this handler runs.
                 const editorToggle = event.target.closest("[data-portal-entry-editor-toggle]");
                 if (editorToggle) {
                     const panel = document.getElementById(editorToggle.getAttribute("aria-controls"));

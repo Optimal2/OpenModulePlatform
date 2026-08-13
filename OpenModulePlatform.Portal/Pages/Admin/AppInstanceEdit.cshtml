@@ -301,7 +301,9 @@ else
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Delete this app instance?"]');">
+        data-omp-confirm="@L["Delete this app instance?"]"
+        data-omp-confirm-ok="@L["Delete"]"
+        data-omp-confirm-cancel="@L["Cancel"]">
         <input type="hidden" asp-for="Input.AppInstanceId" />
         <h3>@L["Danger zone"]</h3>
         <p class="muted">@L["Delete removes the runtime row. Make sure no external system still relies on this app instance key."]</p>

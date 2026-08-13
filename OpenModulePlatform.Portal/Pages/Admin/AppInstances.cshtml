@@ -80,7 +80,9 @@ else
                               asp-page-handler="DeleteRuntime"
                               asp-route-appInstanceId="@row.AppInstanceId"
                               class="inline-form"
-                              onsubmit="return confirm('@L["Delete this runtime row? If the installation topology still expects it, HostAgent may recreate it."]');">
+                              data-omp-confirm="@L["Delete this runtime row? If the installation topology still expects it, HostAgent may recreate it."]"
+                              data-omp-confirm-ok="@L["Delete"]"
+                              data-omp-confirm-cancel="@L["Cancel"]">
                             <button type="submit"
                                     class="btn btn-link-danger admin-icon-button admin-icon-button--delete"
                                     title="@L["Delete runtime row"]"

@@ -35,7 +35,9 @@
                           action="@BuildRoleActionUrl()"
                           class="dashboard-role-list__form"
                           data-dashboard-role-switch
-                          data-confirm-message="@L["Switch active role to {0}?", role.Name]"
+                          data-omp-confirm="@L["Switch active role to {0}?", role.Name]"
+                          data-omp-confirm-ok="@L["Switch role"]"
+                          data-omp-confirm-cancel="@L["Cancel"]"
                           data-enhance="false">
                         <input type="hidden" name="roleId" value="@role.RoleId" />
                         <input type="hidden" name="returnUrl" value="@returnUrl" />

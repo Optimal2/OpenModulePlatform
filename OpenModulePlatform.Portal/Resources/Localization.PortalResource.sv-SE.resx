@@ -3287,4 +3287,9 @@
   <data name="The runtime row could not be deleted." xml:space="preserve"><value>Körningsraden kunde inte tas bort.</value></data>
   <data name="The desired app could not be removed." xml:space="preserve"><value>Den önskade appen kunde inte tas bort.</value></data>
   <data name="The config setting could not be saved." xml:space="preserve"><value>Konfigurationsinställningen kunde inte sparas.</value></data>
+  <data name="Continue" xml:space="preserve"><value>Fortsätt</value></data>
+  <data name="Recycle" xml:space="preserve"><value>Återvinn</value></data>
+  <data name="Request" xml:space="preserve"><value>Begär</value></data>
+  <data name="Regenerate" xml:space="preserve"><value>Återskapa</value></data>
+  <data name="Switch role" xml:space="preserve"><value>Byt roll</value></data>
 </root>

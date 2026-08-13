@@ -53,7 +53,9 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Delete this permission? Role links will also be removed."]');">
+        data-omp-confirm="@L["Delete this permission? Role links will also be removed."]"
+        data-omp-confirm-ok="@L["Delete"]"
+        data-omp-confirm-cancel="@L["Cancel"]">
         <input type="hidden" asp-for="Input.PermissionId" />
         <h3>@L["Danger zone"]</h3>
         <p class="muted">@L["Deleting a permission removes it from all roles."]</p>
