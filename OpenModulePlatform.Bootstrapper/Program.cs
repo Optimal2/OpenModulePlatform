@@ -2232,8 +2232,109 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
         };
     }
 
+    /// <summary>
+    /// Replaces comments and string literals with equal-length blanks so the safety scans below
+    /// match real statements only.
+    /// </summary>
+    /// <remarks>
+    /// Without this the scans read prose. A comment reading "DELETE: channels with job or review
+    /// history are hidden" was flagged as an unsafe DELETE, which blocked two module definitions
+    /// at import. The failure stayed invisible until R7-G1 stopped routing packages with failed
+    /// items to processed, so items had been dropping silently for some time. Blanking rather
+    /// than removing keeps offsets stable for the ON DELETE lookbehind (R8-P3-14).
+    /// </remarks>
+    private static string BlankSqlCommentsAndLiterals(string sqlText)
+    {
+        var buffer = new StringBuilder(sqlText.Length);
+        var index = 0;
+        while (index < sqlText.Length)
+        {
+            var current = sqlText[index];
+
+            if (current == '-' && index + 1 < sqlText.Length && sqlText[index + 1] == '-')
+            {
+                while (index < sqlText.Length && sqlText[index] != '\n' && sqlText[index] != '\r')
+                {
+                    buffer.Append(' ');
+                    index++;
+                }
+
+                continue;
+            }
+
+            if (current == '/' && index + 1 < sqlText.Length && sqlText[index + 1] == '*')
+            {
+                var depth = 0;
+                while (index < sqlText.Length)
+                {
+                    if (sqlText[index] == '/' && index + 1 < sqlText.Length && sqlText[index + 1] == '*')
+                    {
+                        depth++;
+                        buffer.Append("  ");
+                        index += 2;
+                        continue;
+                    }
+
+                    if (sqlText[index] == '*' && index + 1 < sqlText.Length && sqlText[index + 1] == '/')
+                    {
+                        depth--;
+                        buffer.Append("  ");
+                        index += 2;
+                        if (depth <= 0)
+                        {
+                            break;
+                        }
+
+                        continue;
+                    }
+
+                    buffer.Append(sqlText[index] == '\n' || sqlText[index] == '\r' ? sqlText[index] : ' ');
+                    index++;
+                }
+
+                continue;
+            }
+
+            if (current == '\'')
+            {
+                buffer.Append(' ');
+                index++;
+                while (index < sqlText.Length)
+                {
+                    if (sqlText[index] == '\'')
+                    {
+                        buffer.Append(' ');
+                        index++;
+
+                        // A doubled quote is an escaped quote inside the literal, not its end.
+                        if (index < sqlText.Length && sqlText[index] == '\'')
+                        {
+                            buffer.Append(' ');
+                            index++;
+                            continue;
+                        }
+
+                        break;
+                    }
+
+                    buffer.Append(sqlText[index] == '\n' || sqlText[index] == '\r' ? sqlText[index] : ' ');
+                    index++;
+                }
+
+                continue;
+            }
+
+            buffer.Append(current);
+            index++;
+        }
+
+        return buffer.ToString();
+    }
+
     private static string? ValidateSafeModuleDefinitionSql(string sqlText)
     {
+        sqlText = BlankSqlCommentsAndLiterals(sqlText);
+
         if (ModuleDefinitionUseDatabaseDirectiveRegex().IsMatch(sqlText))
         {
             return "Module definition SQL must not contain USE database directives.";
