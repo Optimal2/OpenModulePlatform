@@ -867,9 +867,16 @@ public sealed class WebAppDeploymentService
         out string error)
     {
         var lastError = string.Empty;
+
+        // R8-P2-16..23: /L acts on a link rather than its target. Without it, a junction
+        // planted on this path would have received Modify for an application-pool
+        // identity on whatever it points at. Unlike the Bootstrapper's equivalent this
+        // does not refuse a link outright, because the path here comes from deployment
+        // configuration and an installation deliberately placed behind a junction is
+        // supported.
         var grantResults = accountNames.Select(accountName => RunProcess(
             "icacls.exe",
-            [path, "/grant", $"{accountName}:(OI)(CI)({permission})"]));
+            [path, "/grant", $"{accountName}:(OI)(CI)({permission})", "/L"]));
 
         foreach (var result in grantResults)
         {

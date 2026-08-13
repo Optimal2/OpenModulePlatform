@@ -2027,13 +2027,15 @@ public sealed class PortableModulePackageService
             var value => SanitizePathSegment(value)
         };
 
+    // R8-P2-16..23: the parts come from database rows and were interpolated straight
+    // into a file name. The shared builder sanitizes every one of them.
     private static string CreateArtifactPackageFileName(
         string moduleKey,
         string appKey,
         string packageType,
         string targetName,
         string version)
-        => $"{moduleKey}__{appKey}__{packageType}__{targetName}__{version}.zip";
+        => OmpArtifactNaming.CreateArtifactPackageFileName(moduleKey, appKey, packageType, targetName, version);
 
     private static JsonObject CreateUniversalPackageItem(string kind, string path, string? version = null)
     {

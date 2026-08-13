@@ -888,16 +888,33 @@ public sealed class HostAgentSelfUpgradeService
         return created;
     }
 
+    /// <summary>
+    /// Locates the HostAgent service executable under a staged upgrade root.
+    /// </summary>
+    /// <remarks>
+    /// R8-P2-16..23. Whatever this returns is registered as the binary of a LocalSystem
+    /// Windows service, so it is the single most consequential path resolution in the
+    /// codebase. The recursive search followed junctions, which meant a link planted
+    /// anywhere under the staged root could point the search -- and then the service --
+    /// at an executable outside it. The enumeration now refuses to descend into reparse
+    /// points, and the chosen file is checked against the root it was supposed to come
+    /// from before it is handed back.
+    /// </remarks>
     private static string FindHostAgentExecutable(string root)
     {
         var direct = Path.Join(root, "OpenModulePlatform.HostAgent.WindowsService.exe");
-        if (File.Exists(direct))
+        if (File.Exists(direct) && !OmpReparsePointGuard.IsReparsePoint(direct))
         {
             return direct;
         }
 
         var matches = Directory.Exists(root)
-            ? Directory.EnumerateFiles(root, "OpenModulePlatform.HostAgent.WindowsService.exe", SearchOption.AllDirectories)
+            ? Directory.EnumerateFiles(
+                    root,
+                    "OpenModulePlatform.HostAgent.WindowsService.exe",
+                    OmpReparsePointGuard.RecursiveNoFollow)
+                .Where(path => !OmpReparsePointGuard.IsReparsePoint(path))
+                .Where(path => OmpPathContainment.IsSameOrChildPath(root, path))
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToArray()
             : [];

@@ -350,13 +350,15 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         return fullPath;
     }
 
+    // R8-P2-16..23: the parts come from database rows and were interpolated straight
+    // into a file name. The shared builder sanitizes every one of them.
     private static string CreateArtifactPackageFileName(
         string moduleKey,
         string appKey,
         string packageType,
         string targetName,
         string version)
-        => $"{moduleKey}__{appKey}__{packageType}__{targetName}__{version}.zip";
+        => OmpArtifactNaming.CreateArtifactPackageFileName(moduleKey, appKey, packageType, targetName, version);
 
     private static void TryDeleteTemporaryFile(string path)
     {
