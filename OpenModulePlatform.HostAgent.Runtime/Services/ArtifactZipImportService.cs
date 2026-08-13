@@ -129,30 +129,14 @@ public sealed class ArtifactZipImportService
     }
 
     /// <summary>
-    /// Throws when <paramref name="path"/> exists and is a reparse point
-    /// (junction/symlink), so this SYSTEM service never reads, writes or deletes
-    /// THROUGH a link an unprivileged account could have planted (R7-S2/R7-S3).
+    /// Delegates to the shared guard so this service and every other writer enforce one rule.
     /// </summary>
+    /// <remarks>
+    /// This method used to be the implementation, private to this file, which is exactly why the
+    /// protection never spread: no other file could call it (R8-P2).
+    /// </remarks>
     private static void EnsureNotReparsePoint(string path, string description)
-    {
-        try
-        {
-            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new IOException(
-                    $"{description} is a reparse point (junction/symlink): '{path}'. Refusing to use it.");
-            }
-        }
-        catch (FileNotFoundException)
-        {
-        }
-        catch (DirectoryNotFoundException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-    }
+        => OmpReparsePointGuard.EnsureNotReparsePoint(path, description);
 
     private void SweepEntriesOlderThan(string root, DateTime cutoffUtc, bool includeDirectories)
     {

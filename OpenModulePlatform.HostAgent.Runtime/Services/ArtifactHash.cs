@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
@@ -19,8 +20,22 @@ public static class ArtifactHash
             && string.Equals(desiredSha256.Trim(), deployedSha256.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <remarks>
+    /// R8-P2-10. This is the only integrity check an artifact gets, and it enumerated with
+    /// SearchOption.AllDirectories -- straight through any junction planted in the artifact tree,
+    /// hashing whatever was on the other side and reporting it as the artifact's content. The
+    /// enumeration now skips reparse points and the root itself is checked, so a link cannot be
+    /// used to make foreign content hash as an approved artifact.
+    ///
+    /// A residual race remains between enumeration and File.OpenRead: a file could be replaced by
+    /// a link in that window. Windows offers no portable way to open a handle that refuses to
+    /// follow one, and the artifact tree is SYSTEM-owned, so this is left as the narrower risk
+    /// rather than papered over with a check that cannot actually close it.
+    /// </remarks>
     public static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
+        OmpReparsePointGuard.EnsureNotReparsePoint(path, "Artifact path");
+
         if (File.Exists(path))
         {
             await using var stream = File.OpenRead(path);
@@ -33,7 +48,7 @@ public static class ArtifactHash
         }
 
         using var sha = SHA256.Create();
-        var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+        var files = Directory.EnumerateFiles(path, "*", OmpReparsePointGuard.RecursiveNoFollow)
             .OrderBy(file => Path.GetRelativePath(path, file), StringComparer.OrdinalIgnoreCase)
             .ToList();
 

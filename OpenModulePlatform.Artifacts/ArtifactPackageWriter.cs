@@ -98,7 +98,13 @@ public sealed class ArtifactPackageWriter
     private static void CreatePayloadZip(string payloadDirectoryPath, string destinationZipPath)
     {
         using var payload = ZipFile.Open(destinationZipPath, ZipArchiveMode.Create);
-        var files = Directory.EnumerateFiles(payloadDirectoryPath, "*", SearchOption.AllDirectories)
+
+        // R8-P2-12. SearchOption.AllDirectories walks straight through a junction planted in the
+        // payload tree, and every file on the other side was then packed into a zip the Portal
+        // serves as a download -- an exfiltration path with web delivery attached. Skipping
+        // reparse points at enumeration is the only place this can be stopped: by the time a path
+        // reaches CreateEntryFromFile it looks like an ordinary file below the payload root.
+        var files = Directory.EnumerateFiles(payloadDirectoryPath, "*", OmpReparsePointGuard.RecursiveNoFollow)
             .OrderBy(file => Path.GetRelativePath(payloadDirectoryPath, file), StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in files)
