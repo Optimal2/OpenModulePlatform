@@ -360,6 +360,27 @@ public sealed class ArtifactPackageExtractor
     }
 
     /// <summary>
+    /// Extracts a plain zip under <paramref name="targetRoot"/> with the same containment and
+    /// size limits every other extraction path in the platform enforces.
+    /// </summary>
+    /// <remarks>
+    /// Exists so callers that were reaching for ZipFile.ExtractToDirectory have a bounded
+    /// alternative. That API applies no entry cap, no declared-size cap and no actual-bytes
+    /// cap, which left the Portal's bundle upload as the one extraction site in the codebase
+    /// that bypassed ArtifactPackageExtractionLimits entirely (R8-P2-3).
+    /// </remarks>
+    public static int ExtractZipWithLimits(
+        string zipPath,
+        string targetRoot,
+        ArtifactPackageExtractionLimits limits)
+    {
+        using var archive = ZipFile.OpenRead(zipPath);
+        ValidateArchiveEntryCount(archive, "Package bundle");
+        ValidateArchiveSizes(archive, "Package bundle", limits);
+        return ExtractArchiveEntries(archive, targetRoot, requiredPrefix: string.Empty, validateEntry: null, limits);
+    }
+
+    /// <summary>
     /// Extracts one entry to a new file, aborting as soon as the bytes actually written
     /// exceed <paramref name="maxBytes"/>, and returns the number of bytes written.
     /// </summary>

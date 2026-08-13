@@ -1427,12 +1427,23 @@ public sealed class ServiceAppDeploymentService
         return HostAgentCredentialAutomationModes.Disabled;
     }
 
+    /// <remarks>
+    /// ManagementException belongs here because this file drives WMI directly in the deploy
+    /// path -- ChangeServiceStartAccount goes through ManagementObjectSearcher and
+    /// InvokeMethod("Change", ...). That is the exact "service-identity repair" R5-D1's own
+    /// comment names as a ManagementException source. The deploy loop has no per-deployment
+    /// try/catch, so a WMI blip skipped the remaining service apps and everything sequenced
+    /// after them in the cycle: self-upgrade, file mirroring, jobs and telemetry -- the R6-D1
+    /// blast radius, reintroduced through a too-narrow filter (R8-P4-3).
+    /// </remarks>
     private static bool IsExpectedDeploymentFailure(Exception exception)
         => exception is InvalidOperationException
             or IOException
             or UnauthorizedAccessException
             or TimeoutException
-            or System.ComponentModel.Win32Exception;
+            or System.ComponentModel.Win32Exception
+            or System.Management.ManagementException
+            or System.Runtime.InteropServices.COMException;
 
     private static bool IsExpectedRecoveryStartFailure(Exception exception)
         => exception is InvalidOperationException
