@@ -35,6 +35,21 @@ public static class AppLinkBuilder
             : null;
     }
 
+    /// <summary>
+    /// True for absolute URLs we are willing to emit as an href.
+    /// </summary>
+    /// <remarks>
+    /// Uri.TryCreate succeeds for javascript:, data: and vbscript:, and Razor's @
+    /// HTML-encodes the value but does not neutralise a scheme inside href. The same
+    /// shape was hardened three times in Web.Shared (R4-E2 on ResolveTargetUrl,
+    /// R5S-E1 and R6-E1 on the two ResolveHref overloads); this Portal copy -- which
+    /// feeds dashboard tiles, portal entries and module dashboards -- was never
+    /// covered, and its PublicUrl branch was emitted without being parsed at all
+    /// (R7-S1).
+    /// </remarks>
+    private static bool IsAllowedAbsoluteHref(Uri uri)
+        => uri.Scheme is "http" or "https";
+
     public static string? ResolveHref(HttpRequest request, PortalAppEntry app)
     {
         var routePath = Clean(app.RoutePath);
@@ -42,7 +57,7 @@ public static class AppLinkBuilder
         {
             if (Uri.TryCreate(routePath, UriKind.Absolute, out var absoluteRoute))
             {
-                return absoluteRoute.ToString();
+                return IsAllowedAbsoluteHref(absoluteRoute) ? absoluteRoute.ToString() : null;
             }
 
             var hostRoot = ResolveHostRoot(request, app);
@@ -54,6 +69,20 @@ public static class AppLinkBuilder
         var publicUrl = Clean(app.PublicUrl);
         if (!string.IsNullOrWhiteSpace(publicUrl))
         {
+            // Absolute values must pass the scheme allowlist; a relative value must
+            // not smuggle in a scheme or a protocol-relative //host (R7-S1).
+            if (Uri.TryCreate(publicUrl, UriKind.Absolute, out var absolutePublicUrl))
+            {
+                return IsAllowedAbsoluteHref(absolutePublicUrl) ? absolutePublicUrl.ToString() : null;
+            }
+
+            if (publicUrl.StartsWith("//", StringComparison.Ordinal)
+                || publicUrl.Contains('\\', StringComparison.Ordinal)
+                || (publicUrl.Contains(':', StringComparison.Ordinal) && !publicUrl.StartsWith('/')))
+            {
+                return null;
+            }
+
             return publicUrl;
         }
 
