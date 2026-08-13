@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Localization;
+using OpenModulePlatform.Web.ContentWebAppModule.Localization;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 
 namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
@@ -19,15 +21,18 @@ public sealed class ServerReportRenderer
     private readonly ServerReportDefinitionLoader _definitionLoader;
     private readonly ServerReportQueryRunner _queryRunner;
     private readonly ILogger<ServerReportRenderer> _logger;
+    private readonly IStringLocalizer<ContentWebAppModuleResource> _localizer;
 
     public ServerReportRenderer(
         ServerReportDefinitionLoader definitionLoader,
         ServerReportQueryRunner queryRunner,
-        ILogger<ServerReportRenderer> logger)
+        ILogger<ServerReportRenderer> logger,
+        IStringLocalizer<ContentWebAppModuleResource> localizer)
     {
         _definitionLoader = definitionLoader;
         _queryRunner = queryRunner;
         _logger = logger;
+        _localizer = localizer;
     }
 
     public async Task<string> RenderAsync(string? reportKey, CancellationToken ct)
@@ -50,12 +55,12 @@ public sealed class ServerReportRenderer
         catch (OperationCanceledException ex)
         {
             _logger.LogError(ex, "Unexpected server report rendering cancellation for key {ReportKey}", reportKey);
-            return RenderError("The server report could not be rendered.");
+            return RenderError(_localizer["The server report could not be rendered."].Value);
         }
         catch (SystemException ex)
         {
             _logger.LogError(ex, "Unexpected server report rendering failure for key {ReportKey}", reportKey);
-            return RenderError("The server report could not be rendered.");
+            return RenderError(_localizer["The server report could not be rendered."].Value);
         }
     }
 
@@ -82,12 +87,12 @@ public sealed class ServerReportRenderer
         catch (OperationCanceledException ex)
         {
             _logger.LogError(ex, "Unexpected server report JavaScript rendering cancellation for key {ReportKey}", reportKey);
-            return RenderJavaScriptError(reportKey, variableName, "The server report could not be rendered.");
+            return RenderJavaScriptError(reportKey, variableName, _localizer["The server report could not be rendered."].Value);
         }
         catch (SystemException ex)
         {
             _logger.LogError(ex, "Unexpected server report JavaScript rendering failure for key {ReportKey}", reportKey);
-            return RenderJavaScriptError(reportKey, variableName, "The server report could not be rendered.");
+            return RenderJavaScriptError(reportKey, variableName, _localizer["The server report could not be rendered."].Value);
         }
     }
 
@@ -204,11 +209,17 @@ public sealed class ServerReportRenderer
         html.Append("</section>");
     }
 
-    private static string RenderError(string message)
+    // R8-P5-4: this HTML is rendered to end users, not administrators, and the heading
+    // was hardcoded English while the message came straight off the exception. Both now
+    // go through the module resource; Display leaves an unknown text unchanged, so no
+    // information is lost when a report defines its own wording.
+    private string RenderError(string message)
     {
         var html = new StringBuilder();
-        html.Append("<section class=\"server-report server-report--error\"><h2>Server report unavailable</h2><p>");
-        AppendEncoded(html, message);
+        html.Append("<section class=\"server-report server-report--error\"><h2>");
+        AppendEncoded(html, _localizer["Server report unavailable"].Value);
+        html.Append("</h2><p>");
+        AppendEncoded(html, ContentWebAppTextLocalizer.Display(_localizer, message));
         html.Append("</p></section>");
         return html.ToString();
     }
@@ -238,7 +249,7 @@ public sealed class ServerReportRenderer
         return html.ToString();
     }
 
-    private static string RenderJavaScriptError(string? reportKey, string? variableName, string message)
+    private string RenderJavaScriptError(string? reportKey, string? variableName, string message)
     {
         var resolvedVariableName = ResolveJavaScriptVariableName(reportKey, variableName);
         var report = new JavaScriptServerReport

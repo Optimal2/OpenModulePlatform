@@ -210,7 +210,9 @@
         method="post"
         asp-page-handler="Delete"
         class="card danger-zone"
-        onsubmit="return confirm('@L["Delete this page permanently?"]');">
+        data-omp-confirm="@L["Delete this page permanently?"]"
+        data-omp-confirm-ok="@L["Delete"]"
+        data-omp-confirm-cancel="@L["Cancel"]">
         <input type="hidden" asp-for="Input.ContentId" />
         <h2>@L["Delete page"]</h2>
         <p class="muted">@L["Delete removes the page and its role access rows. It cannot be undone."]</p>

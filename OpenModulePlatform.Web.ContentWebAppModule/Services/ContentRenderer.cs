@@ -1,5 +1,7 @@
 // File: OpenModulePlatform.Web.ContentWebAppModule/Services/ContentRenderer.cs
 using Markdig;
+using Microsoft.Extensions.Localization;
+using OpenModulePlatform.Web.ContentWebAppModule.Localization;
 using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -17,13 +19,16 @@ public sealed partial class ContentRenderer
 
     private readonly HtmlContentFileLoader _htmlFileLoader;
     private readonly ServerReportRenderer _serverReportRenderer;
+    private readonly IStringLocalizer<ContentWebAppModuleResource> _localizer;
 
     public ContentRenderer(
         HtmlContentFileLoader htmlFileLoader,
-        ServerReportRenderer serverReportRenderer)
+        ServerReportRenderer serverReportRenderer,
+        IStringLocalizer<ContentWebAppModuleResource> localizer)
     {
         _htmlFileLoader = htmlFileLoader;
         _serverReportRenderer = serverReportRenderer;
+        _localizer = localizer;
     }
 
     public async Task<string> RenderToHtmlAsync(
@@ -60,8 +65,12 @@ public sealed partial class ContentRenderer
         }
         catch (HtmlContentFileException ex)
         {
-            return "<section class=\"server-report server-report--error\"><h2>HTML content file unavailable</h2><p>"
-                + DefaultHtmlEncoder.Encode(ex.Message)
+            // R8-P5-4: end users see this block, and both the heading and the message
+            // were English regardless of the requested culture.
+            return "<section class=\"server-report server-report--error\"><h2>"
+                + DefaultHtmlEncoder.Encode(_localizer["HTML content file unavailable"].Value)
+                + "</h2><p>"
+                + DefaultHtmlEncoder.Encode(ContentWebAppTextLocalizer.Display(_localizer, ex.Message))
                 + "</p></section>";
         }
     }

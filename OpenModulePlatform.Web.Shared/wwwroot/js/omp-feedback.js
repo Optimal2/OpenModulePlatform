@@ -6,8 +6,28 @@
 (function () {
     'use strict';
 
+    // R8-P5-10..15: a page may render the feedback block more than once -- typically a
+    // status message near the top and a validation summary next to the form far below.
+    // querySelector took the first one, so on the pages that do this the operator was
+    // scrolled to a success notice while the error they needed to read stayed off-screen.
+    // Prefer whichever block actually carries an error; fall back to the first.
+    var pick = function () {
+        var blocks = document.querySelectorAll('[data-omp-feedback]');
+        if (blocks.length === 0) {
+            return null;
+        }
+
+        for (var i = 0; i < blocks.length; i++) {
+            if (blocks[i].querySelector('[role="alert"]')) {
+                return blocks[i];
+            }
+        }
+
+        return blocks[0];
+    };
+
     var reveal = function () {
-        var feedback = document.querySelector('[data-omp-feedback]');
+        var feedback = pick();
         if (!feedback) {
             return;
         }
