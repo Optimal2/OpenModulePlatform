@@ -10,6 +10,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
+using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
@@ -473,9 +474,33 @@ public sealed class HostAgentSelfUpgradeService
         return DeploymentPath.CombineUnderRoot(Path.GetFullPath(root), folderName, nameof(settings.SelfUpgrade.InstallRoot));
     }
 
+    /// <summary>
+    /// Resolves where an upgrade installs, preferring what this host is configured with over what
+    /// the database asks for.
+    /// </summary>
+    /// <remarks>
+    /// R8-P2-9. desired.InstallRoot is a database column, and it used to win over both
+    /// SelfUpgrade.InstallRoot and ServicesRoot. Anyone able to write that column therefore chose
+    /// where this SYSTEM service installed itself -- and the install path is where the upgrade
+    /// writes the SQL connection string and copies the credential store, so the column was a
+    /// direct route to both. The local configuration now wins; the database value is honoured only
+    /// when it resolves inside a configured root, which keeps the per-host override working for
+    /// the layouts that use it while removing the escalation.
+    /// </remarks>
     private static string ResolveInstallRoot(HostAgentSettings settings, HostAgentUpgradeDescriptor desired)
     {
-        var configuredRoot = new[] { desired.InstallRoot, settings.SelfUpgrade.InstallRoot, settings.ServicesRoot }
+        var localRoot = new[] { settings.SelfUpgrade.InstallRoot, settings.ServicesRoot }
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+        var requestedRoot = desired.InstallRoot?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(requestedRoot)
+            && !string.IsNullOrWhiteSpace(localRoot)
+            && OmpPathContainment.IsSameOrChildPath(localRoot, requestedRoot))
+        {
+            return requestedRoot;
+        }
+
+        var configuredRoot = new[] { localRoot, requestedRoot }
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
         if (!string.IsNullOrWhiteSpace(configuredRoot))
         {
@@ -561,6 +586,16 @@ public sealed class HostAgentSelfUpgradeService
                 throw new DirectoryNotFoundException($"Provisioned HostAgent artifact path was not found: '{sourceLocalPath}'.");
             }
 
+            // R8-P2-9. This is the most sensitive write in the codebase -- the install path is
+            // where WriteTakeoverSettings puts the SQL connection string and where the credential
+            // store is copied -- and it had no reparse check anywhere in the file. A junction on
+            // the install path or a directory above it redirected a recursive SYSTEM delete and
+            // then the credential write. The whole path is walked, not just the leaf.
+            OmpReparsePointGuard.EnsureNoReparsePointInPath(
+                installPath,
+                Path.GetPathRoot(installPath) ?? string.Empty,
+                "HostAgent install path");
+
             if (Directory.Exists(installPath))
             {
                 Directory.Delete(installPath, recursive: true);
@@ -610,6 +645,8 @@ public sealed class HostAgentSelfUpgradeService
         connectionStrings["OmpDb"] = _repository.GetConfiguredConnectionString();
         EnsureDefaultLoggingSettings(json);
 
+        // The settings file carries the SQL connection string (R8-P2-9).
+        OmpReparsePointGuard.EnsureNotReparsePoint(targetSettingsPath, "HostAgent settings file");
         Directory.CreateDirectory(Path.GetDirectoryName(targetSettingsPath)!);
         File.WriteAllText(
             targetSettingsPath,
@@ -685,6 +722,12 @@ public sealed class HostAgentSelfUpgradeService
         {
             return;
         }
+
+        // Neither end of a credential-store copy may be a link (R8-P2-9): a link on the source
+        // reads someone else's file into the new install, and one on the target writes the store
+        // wherever it points.
+        OmpReparsePointGuard.EnsureNotReparsePoint(sourceCredentialStorePath, "Credential store source");
+        OmpReparsePointGuard.EnsureNotReparsePoint(targetCredentialStorePath, "Credential store target");
 
         var fullSourcePath = Path.GetFullPath(sourceCredentialStorePath);
         var fullTargetPath = Path.GetFullPath(targetCredentialStorePath);
