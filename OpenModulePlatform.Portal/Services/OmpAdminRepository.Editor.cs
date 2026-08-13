@@ -2878,7 +2878,12 @@ WHERE ArtifactConfigurationFileId = @ArtifactConfigurationFileId;";
         BindArtifactConfigurationFile(update, input, includePrimaryKey: true);
         if (expectedUpdatedUtc.HasValue)
         {
-            Add(update, "@ExpectedUpdatedUtc", expectedUpdatedUtc.Value);
+            // Type this one explicitly. AddWithValue infers SqlDbType.DateTime for a
+            // DateTime, whose 1/300-second grid cannot represent most datetime2(3)
+            // values, so the token came back rounded, WHERE UpdatedUtc = @Expected
+            // matched no rows, and the operator was told someone else had changed the
+            // file -- on most saves, with no concurrent editor at all (R7-F24).
+            update.Parameters.Add("@ExpectedUpdatedUtc", SqlDbType.DateTime2, 3).Value = expectedUpdatedUtc.Value;
         }
 
         var affected = await update.ExecuteNonQueryAsync(ct);

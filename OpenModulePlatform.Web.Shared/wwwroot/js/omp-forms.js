@@ -93,48 +93,68 @@
         };
     }
 
+    // Forms whose confirmation has just been accepted, so the re-submit passes through.
+    const confirmedForms = new WeakSet();
+
+    // Delegated from the document rather than bound per element at load time. Several
+    // pages replace a container's innerHTML on a push event or a 60-second poll --
+    // IbsPackager's manual review list, jobs list and review history all do -- and the
+    // replacement markup carried no listeners, so the confirmation on Force, Reject and
+    // Run-again silently stopped appearing within a minute of page load. Those are
+    // irreversible actions, which is exactly what the dialog exists to guard (R7-C2).
     function initConfirmWiring() {
-        for (const form of document.querySelectorAll('form[data-omp-confirm]')) {
-            let confirmed = false;
-            form.addEventListener('submit', (event) => {
-                if (confirmed) {
-                    confirmed = false;
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-omp-confirm')) {
+                return;
+            }
+
+            if (confirmedForms.has(form)) {
+                confirmedForms.delete(form);
+                return;
+            }
+
+            event.preventDefault();
+            // Nothing downstream should act on a submit the operator has not confirmed.
+            event.stopPropagation();
+
+            const submitter = event.submitter;
+            ompConfirm(form.getAttribute('data-omp-confirm'), labelsFrom(form)).then((ok) => {
+                if (!ok) {
                     return;
                 }
 
-                event.preventDefault();
-                ompConfirm(form.getAttribute('data-omp-confirm'), labelsFrom(form)).then((ok) => {
-                    if (ok) {
-                        confirmed = true;
-                        // requestSubmit keeps submit-event side effects (e.g. validation)
-                        // and falls back to submit() on older engines.
-                        if (typeof form.requestSubmit === 'function') {
-                            form.requestSubmit();
-                        } else {
-                            form.submit();
-                        }
-                    }
-                });
+                confirmedForms.add(form);
+                // requestSubmit keeps submit-event side effects (e.g. validation) and
+                // preserves which button was pressed; it falls back to submit() on
+                // older engines.
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit(submitter && submitter.form === form ? submitter : undefined);
+                } else {
+                    form.submit();
+                }
             });
-        }
+        }, true);
 
-        for (const link of document.querySelectorAll('a[data-omp-confirm]')) {
-            link.addEventListener('click', (event) => {
-                event.preventDefault();
-                ompConfirm(link.getAttribute('data-omp-confirm'), labelsFrom(link)).then((ok) => {
-                    if (ok) {
-                        window.location.href = link.href;
-                    }
-                });
+        document.addEventListener('click', (event) => {
+            const link = event.target instanceof Element
+                ? event.target.closest('a[data-omp-confirm]')
+                : null;
+            if (!link) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            ompConfirm(link.getAttribute('data-omp-confirm'), labelsFrom(link)).then((ok) => {
+                if (ok) {
+                    window.location.href = link.href;
+                }
             });
-        }
+        }, true);
     }
 
     window.ompConfirm = ompConfirm;
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initConfirmWiring);
-    } else {
-        initConfirmWiring();
-    }
+    initConfirmWiring();
 })();

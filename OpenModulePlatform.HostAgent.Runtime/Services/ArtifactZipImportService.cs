@@ -1613,10 +1613,26 @@ public sealed class ArtifactZipImportService
         => exception is InvalidOperationException
             && IsArtifactCompatibilityMessage(exception.Message);
 
+    /// <summary>
+    /// True only for artifacts this installation was never meant to receive, which are
+    /// genuinely skippable.
+    /// </summary>
+    /// <remarks>
+    /// These two rejections used to be treated alike. They are not the same thing:
+    /// "does not allow artifacts" means no slot matches the appKey/packageType/targetName,
+    /// which is the normal outcome for a universal package carrying artifacts for modules
+    /// this host does not have. "not compatible with module definition" means the slot
+    /// exists but the version falls outside its min/max range -- the exact lockstep failure
+    /// the version validators exist to prevent. Counting the latter as Skipped kept
+    /// FailedCount at zero, so R7-G1's routing sent the package to processed\ and
+    /// --wait-for-import reported a successful deploy for an installation still running the
+    /// old binaries (R7-G3). Note that ValidateModuleDefinitionRequirement's
+    /// "requires module definition ... or later" already fell through to Failed, which is
+    /// what made the asymmetry visible.
+    /// </remarks>
     private static bool IsArtifactCompatibilityMessage(string? message)
         => !string.IsNullOrWhiteSpace(message)
-            && (message.Contains("not compatible with module definition", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("does not allow artifacts", StringComparison.OrdinalIgnoreCase));
+            && message.Contains("does not allow artifacts", StringComparison.OrdinalIgnoreCase);
 
     private static void MoveDirectory(string source, string destination)
     {

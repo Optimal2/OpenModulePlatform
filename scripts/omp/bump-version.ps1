@@ -686,13 +686,22 @@ try {
 
     if ($UpdateModuleMinimums -and $moduleVersionByKey.Count -gt 0) {
         foreach ($component in $components) {
-            $moduleKey = [string]$component.moduleKey
-            if (-not $moduleVersionByKey.ContainsKey($moduleKey)) {
+            # $moduleKey used to be the name here -- and PowerShell variable names are
+            # case-insensitive, so it WAS the [string[]]$ModuleKey parameter. The type
+            # constraint coerced the assignment to a one-element String[], which no
+            # Hashtable string key can ever match, so the loop body was unreachable and
+            # -UpdateModuleMinimums printed a green table while writing nothing. The
+            # documented repair command could not repair (R7-G4). Use
+            # Get-JsonPropertyValue for minModuleDefinitionVersion too: 10 of 13
+            # components do not carry the property, and direct access under
+            # Set-StrictMode would turn the silent no-op into a crash mid-write.
+            $componentModuleKey = [string](Get-JsonPropertyValue -Object $component -Name 'moduleKey')
+            if ([string]::IsNullOrWhiteSpace($componentModuleKey) -or -not $moduleVersionByKey.ContainsKey($componentModuleKey)) {
                 continue
             }
 
-            $oldMinimum = [string]$component.minModuleDefinitionVersion
-            $newMinimum = [string]$moduleVersionByKey[$moduleKey]
+            $oldMinimum = [string](Get-JsonPropertyValue -Object $component -Name 'minModuleDefinitionVersion')
+            $newMinimum = [string]$moduleVersionByKey[$componentModuleKey]
             Set-JsonProperty -Object $component -Name 'minModuleDefinitionVersion' -Value $newMinimum
             [void]$updates.Add([pscustomobject]@{
                 Item = 'component-min-module-definition'

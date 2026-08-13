@@ -1630,11 +1630,32 @@ public sealed class WebAppDeploymentService
         return result;
     }
 
+    /// <summary>
+    /// Deployment faults this service records against the deployment row instead of
+    /// letting them abort the whole HostAgent cycle.
+    /// </summary>
+    /// <remarks>
+    /// Win32Exception and TargetInvocationException were missing, while both siblings --
+    /// IsExpectedRecoveryStartFailure just below, and the ServiceApp equivalent -- already
+    /// listed Win32Exception. This path starts icacls.exe, netsh.exe and appcmd.exe
+    /// without a prior existence check, and every IIS configuration call goes through
+    /// reflection without BindingFlags.DoNotWrapExceptions, so a Microsoft.Web.Administration
+    /// failure (an applicationHost.config ACL, for instance) surfaced as
+    /// TargetInvocationException. Neither matched, so the exception escaped DeployAsync and
+    /// HostAgentEngine.RunOnceAsync, skipping the Portal health probe, service-app deploy,
+    /// self-upgrade, file mirroring, job processing and telemetry for that cycle -- with no
+    /// per-deployment result published. Same blast radius R6-D1 closed for service apps
+    /// (R7-D2).
+    /// </remarks>
     private static bool IsExpectedDeploymentFailure(Exception exception)
         => exception is InvalidOperationException
             or IOException
             or UnauthorizedAccessException
-            or TimeoutException;
+            or TimeoutException
+            or System.ComponentModel.Win32Exception
+            || (exception is System.Reflection.TargetInvocationException invocation
+                && invocation.InnerException is not null
+                && IsExpectedDeploymentFailure(invocation.InnerException));
 
     private static bool IsExpectedRecoveryStartFailure(Exception exception)
         => exception is InvalidOperationException
