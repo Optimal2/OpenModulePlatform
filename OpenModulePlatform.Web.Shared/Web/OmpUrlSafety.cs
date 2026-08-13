@@ -123,4 +123,25 @@ public static class OmpUrlSafety
 
         return IsSafeRelativeHref(trimmed) ? trimmed : null;
     }
+
+    /// <summary>
+    /// Normalizes a configured viewer base URL to a safe value with a trailing slash, falling back
+    /// to <paramref name="fallback"/> when the configured value is missing or unsafe.
+    /// </summary>
+    /// <remarks>
+    /// R8-P1-5. Three copies of this existed -- two in OpenModulePlatform, one in IbsPackager --
+    /// and all three did nothing but trim and append a slash before the result was rendered as
+    /// both an anchor href and an iframe src. R7-E3 settled the principle for omp.Hosts.BaseUrl
+    /// but it was never carried here. The trailing slash is skipped when the value already carries
+    /// a query string, because appending one there would corrupt the last parameter.
+    /// </remarks>
+    public static string NormalizeViewerBaseUrl(string? baseUrl, string fallback)
+    {
+        var value = SanitizeBaseUrl(baseUrl) ?? fallback;
+
+        return value.Contains('?', StringComparison.Ordinal)
+            || value.EndsWith('/')
+            ? value
+            : value + "/";
+    }
 }

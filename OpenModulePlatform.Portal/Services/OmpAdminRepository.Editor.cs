@@ -410,7 +410,9 @@ VALUES
         return input.AppId;
     }
 
-    public async Task DeleteAppWorkerDefinitionAsync(int appId, CancellationToken ct)
+    /// <remarks>R8-P3-9: reports whether a row was actually removed, so the caller can tell
+    /// "deleted" from "already gone". The IbsPackager half of this landed in R7-C7.</remarks>
+    public async Task<bool> DeleteAppWorkerDefinitionAsync(int appId, CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -422,15 +424,14 @@ VALUES
 
         await using var cmd = new SqlCommand("DELETE FROM omp.AppWorkerDefinitions WHERE AppId = @Id;", conn);
         Add(cmd, "@Id", appId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
-    public async Task DeleteManualWorkerRuntimeAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
+    /// <remarks>R8-P3-9: reports whether the row was actually removed.</remarks>
+    public async Task<bool> DeleteManualWorkerRuntimeAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        var hasAppInstanceRuntimeStates = await TableExistsAsync(conn, "omp.AppInstanceRuntimeStates", ct);
-        var hasHostAppDeploymentStates = await TableExistsAsync(conn, "omp.HostAppDeploymentStates", ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
         var templateAppInstanceId = await GetTemplateAppInstanceIdAsync(conn, tx, appInstanceId, ct);
@@ -451,27 +452,9 @@ VALUES
             throw new InvalidOperationException("Stop the worker runtime before deleting the runtime row.");
         }
 
-        if (hasAppInstanceRuntimeStates)
-        {
-            await ExecuteNonQueryAsync(
-                conn,
-                tx,
-                "DELETE FROM omp.AppInstanceRuntimeStates WHERE AppInstanceId = @Id;",
-                appInstanceId,
-                ct);
-        }
+        await ClearAppInstanceChildrenAsync(conn, tx, appInstanceId, ct);
 
-        if (hasHostAppDeploymentStates)
-        {
-            await ExecuteNonQueryAsync(
-                conn,
-                tx,
-                "DELETE FROM omp.HostAppDeploymentStates WHERE AppInstanceId = @Id;",
-                appInstanceId,
-                ct);
-        }
-
-        await ExecuteNonQueryAsync(
+        var affected = await ExecuteNonQueryCountAsync(
             conn,
             tx,
             "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
@@ -479,6 +462,7 @@ VALUES
             ct);
 
         await tx.CommitAsync(ct);
+        return affected > 0;
     }
 
     public async Task<IReadOnlyList<ArtifactSelectionOption>> GetArtifactOptionsAsync(CancellationToken ct)
@@ -931,10 +915,15 @@ WHERE InstanceTemplateHostId = @InstanceTemplateHostId;";
         return input.InstanceTemplateHostId;
     }
 
-    public async Task DeleteInstanceTemplateHostAsync(int instanceTemplateHostId, CancellationToken ct)
+    /// <remarks>R8-P3-9: the row count is captured straight after the DELETE, because the batch
+    /// also disables hosts and assignments and ExecuteNonQuery would sum all of it.</remarks>
+    public async Task<bool> DeleteInstanceTemplateHostAsync(int instanceTemplateHostId, CancellationToken ct)
     {
         const string sql = @"
+SET NOCOUNT ON;
+
 DECLARE @InstanceTemplateId int;
+DECLARE @affected int;
 DECLARE @HostKey nvarchar(128);
 DECLARE @InstanceId uniqueidentifier;
 
@@ -945,6 +934,7 @@ WHERE InstanceTemplateHostId = @Id;
 
 DELETE FROM omp.InstanceTemplateHosts
 WHERE InstanceTemplateHostId = @Id;
+SET @affected = @@ROWCOUNT;
 
 SELECT TOP (1) @InstanceId = InstanceId
 FROM omp.Instances
@@ -982,7 +972,9 @@ BEGIN
     INNER JOIN omp.Hosts host ON host.HostId = desired.HostId
     WHERE host.InstanceId = @InstanceId
       AND host.HostKey = @HostKey;
-END";
+END
+
+SELECT @affected;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -991,8 +983,9 @@ END";
         {
             await using var cmd = new SqlCommand(sql, conn, tx);
             Add(cmd, "@Id", instanceTemplateHostId);
-            await cmd.ExecuteNonQueryAsync(ct);
+            var affected = await cmd.ExecuteScalarAsync(ct);
             await tx.CommitAsync(ct);
+            return affected is int rows && rows > 0;
         }
         catch
         {
@@ -1823,9 +1816,16 @@ WHERE ArtifactId = @ArtifactId;";
         return input.ArtifactId;
     }
 
-    public async Task DeleteArtifactAsync(int artifactId, CancellationToken ct)
+    /// <remarks>
+    /// R8-P3-9: reports whether the artifact row itself was removed. ExecuteNonQuery would have
+    /// returned the sum across the whole batch and reported success as soon as the artifact had a
+    /// single referencing row -- the trap a naive conversion walks straight into.
+    /// </remarks>
+    public async Task<bool> DeleteArtifactAsync(int artifactId, CancellationToken ct)
     {
         const string sql = @"
+SET NOCOUNT ON;
+
 DELETE FROM omp.HostAppDeploymentStates
 WHERE ArtifactId = @ArtifactId;
 
@@ -1870,7 +1870,10 @@ BEGIN
 END;
 
 DELETE FROM omp.Artifacts
-WHERE ArtifactId = @ArtifactId;";
+WHERE ArtifactId = @ArtifactId;
+DECLARE @affected int = @@ROWCOUNT;
+
+SELECT @affected;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -1880,8 +1883,9 @@ WHERE ArtifactId = @ArtifactId;";
         {
             await using var cmd = new SqlCommand(sql, conn, tx);
             Add(cmd, "@ArtifactId", artifactId);
-            await cmd.ExecuteNonQueryAsync(ct);
+            var affected = await cmd.ExecuteScalarAsync(ct);
             await tx.CommitAsync(ct);
+            return affected is int rows && rows > 0;
         }
         catch
         {
@@ -3927,23 +3931,19 @@ WHERE AppInstanceId = @AppInstanceId;";
         return input.AppInstanceId;
     }
 
-    public Task DeleteAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
+    public Task<bool> DeleteAppInstanceAsync(Guid appInstanceId, CancellationToken ct)
         => DeleteAppInstanceCoreAsync(appInstanceId, blockTemplateManagedRows: true, ct);
 
-    public Task DeleteRuntimeAppInstanceRowAsync(Guid appInstanceId, CancellationToken ct)
+    public Task<bool> DeleteRuntimeAppInstanceRowAsync(Guid appInstanceId, CancellationToken ct)
         => DeleteAppInstanceCoreAsync(appInstanceId, blockTemplateManagedRows: false, ct);
 
-    private async Task DeleteAppInstanceCoreAsync(
+    private async Task<bool> DeleteAppInstanceCoreAsync(
         Guid appInstanceId,
         bool blockTemplateManagedRows,
         CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        var hasWorkerInstances = await TableExistsAsync(conn, "omp.WorkerInstances", ct);
-        var hasWorkerInstanceRuntimeStates = await TableExistsAsync(conn, "omp.WorkerInstanceRuntimeStates", ct);
-        var hasAppInstanceRuntimeStates = await TableExistsAsync(conn, "omp.AppInstanceRuntimeStates", ct);
-        var hasHostAppDeploymentStates = await TableExistsAsync(conn, "omp.HostAppDeploymentStates", ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
         var templateAppInstanceId = await GetTemplateAppInstanceIdAsync(conn, tx, appInstanceId, ct);
@@ -3953,47 +3953,9 @@ WHERE AppInstanceId = @AppInstanceId;";
                 "This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.");
         }
 
-        if (hasWorkerInstanceRuntimeStates)
-        {
-            await ExecuteNonQueryAsync(
-                conn,
-                tx,
-                "DELETE FROM omp.WorkerInstanceRuntimeStates WHERE AppInstanceId = @Id;",
-                appInstanceId,
-                ct);
-        }
+        await ClearAppInstanceChildrenAsync(conn, tx, appInstanceId, ct);
 
-        if (hasWorkerInstances)
-        {
-            await ExecuteNonQueryAsync(
-                conn,
-                tx,
-                "DELETE FROM omp.WorkerInstances WHERE AppInstanceId = @Id;",
-                appInstanceId,
-                ct);
-        }
-
-        if (hasAppInstanceRuntimeStates)
-        {
-            await ExecuteNonQueryAsync(
-                conn,
-                tx,
-                "DELETE FROM omp.AppInstanceRuntimeStates WHERE AppInstanceId = @Id;",
-                appInstanceId,
-                ct);
-        }
-
-        if (hasHostAppDeploymentStates)
-        {
-            await ExecuteNonQueryAsync(
-                conn,
-                tx,
-                "DELETE FROM omp.HostAppDeploymentStates WHERE AppInstanceId = @Id;",
-                appInstanceId,
-                ct);
-        }
-
-        await ExecuteNonQueryAsync(
+        var affected = await ExecuteNonQueryCountAsync(
             conn,
             tx,
             "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
@@ -4001,6 +3963,7 @@ WHERE AppInstanceId = @AppInstanceId;";
             ct);
 
         await tx.CommitAsync(ct);
+        return affected > 0;
     }
 
     // -------------------------------------------------------------------------
@@ -5036,7 +4999,223 @@ VALUES
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>
+    /// Clears every row that references an app instance, in FK order, so the caller can delete the
+    /// omp.AppInstances row itself. Throws with an actionable message when a child that cannot be
+    /// unlinked would block the delete.
+    /// </summary>
+    /// <remarks>
+    /// R8-P3-4 and R8-P3-7. There is no ON DELETE CASCADE anywhere in the app-instance core, so a
+    /// missed child is a hard SQL error in the operator's face rather than a silent orphan. Two
+    /// delete paths had drifted apart and both were incomplete: DeleteAppInstanceCoreAsync missed
+    /// WebAppHealthStates and every cross-schema child, and DeleteManualWorkerRuntimeAppInstance
+    /// Async missed omp.WorkerInstances and omp.WorkerInstanceRuntimeStates -- the two tables it is
+    /// named after -- so it could never succeed for a worker that had ever registered.
+    ///
+    /// Both now share this helper. Writing a third copy is what produced the drift in the first
+    /// place, and it is the defect class R8 was convened to sweep for.
+    ///
+    /// The two NOT NULL cross-schema children cannot be unlinked, so they are reported instead of
+    /// deleted: silently removing an operator's channels or content pages as a side effect of
+    /// deleting a runtime row would be worse than refusing.
+    /// </remarks>
+    private static async Task ClearAppInstanceChildrenAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid appInstanceId,
+        CancellationToken ct)
+    {
+        await BlockWhenBlockingChildRowsExistAsync(conn, tx, appInstanceId, ct);
+
+        // omp.WorkerInstances is itself a parent. Its cross-schema children have to go before the
+        // worker rows do, and they are keyed by WorkerInstanceId rather than AppInstanceId.
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp_ibs_packager.ChannelWorkerLeases",
+            @"DELETE FROM omp_ibs_packager.ChannelWorkerLeases
+WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @Id);",
+            appInstanceId,
+            ct);
+
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp_ibs_packager.ChannelRuntimeStates",
+            @"UPDATE omp_ibs_packager.ChannelRuntimeStates
+SET WorkerInstanceId = NULL
+WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @Id);",
+            appInstanceId,
+            ct);
+
+        // Channels.WorkerInstanceId is nullable, so a channel survives the worker row it ran on.
+        // Channels.AppInstanceId is not, which is why the guard above refuses that case outright.
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp_ibs_packager.Channels",
+            @"UPDATE omp_ibs_packager.Channels
+SET WorkerInstanceId = NULL
+WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @Id);",
+            appInstanceId,
+            ct);
+
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp.WorkerInstanceRuntimeStates",
+            @"DELETE FROM omp.WorkerInstanceRuntimeStates
+WHERE AppInstanceId = @Id
+   OR WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @Id);",
+            appInstanceId,
+            ct);
+
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp.WorkerInstances",
+            "DELETE FROM omp.WorkerInstances WHERE AppInstanceId = @Id;",
+            appInstanceId,
+            ct);
+
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp.AppInstanceRuntimeStates",
+            "DELETE FROM omp.AppInstanceRuntimeStates WHERE AppInstanceId = @Id;",
+            appInstanceId,
+            ct);
+
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp.HostAppDeploymentStates",
+            "DELETE FROM omp.HostAppDeploymentStates WHERE AppInstanceId = @Id;",
+            appInstanceId,
+            ct);
+
+        await ExecuteOptionalTableStatementAsync(
+            conn,
+            tx,
+            "omp.WebAppHealthStates",
+            "DELETE FROM omp.WebAppHealthStates WHERE AppInstanceId = @Id;",
+            appInstanceId,
+            ct);
+    }
+
+    /// <summary>
+    /// Refuses the delete when a child with a NOT NULL reference to the app instance exists, naming
+    /// what has to be removed first.
+    /// </summary>
+    private static async Task BlockWhenBlockingChildRowsExistAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid appInstanceId,
+        CancellationToken ct)
+    {
+        var blockers = new List<string>();
+
+        var channelCount = await CountOptionalTableRowsAsync(
+            conn,
+            tx,
+            "omp_ibs_packager.Channels",
+            "SELECT COUNT(*) FROM omp_ibs_packager.Channels WHERE AppInstanceId = @Id;",
+            appInstanceId,
+            ct);
+        if (channelCount > 0)
+        {
+            blockers.Add($"{channelCount} IbsPackager channel(s)");
+        }
+
+        var contentCount = await CountOptionalTableRowsAsync(
+            conn,
+            tx,
+            "omp_content.contents",
+            "SELECT COUNT(*) FROM omp_content.contents WHERE app_instance_id = @Id;",
+            appInstanceId,
+            ct);
+        if (contentCount > 0)
+        {
+            blockers.Add($"{contentCount} content page(s)");
+        }
+
+        if (blockers.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "This app instance still owns "
+                + string.Join(" and ", blockers)
+                + ". Remove them in the owning module before deleting the app instance.");
+        }
+    }
+
+    /// <summary>
+    /// Runs a statement only when the table exists, so an installation without a given module is
+    /// unaffected. The table name is a compile-time constant, never operator input.
+    /// </summary>
+    private static async Task ExecuteOptionalTableStatementAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string qualifiedTable,
+        string sql,
+        Guid appInstanceId,
+        CancellationToken ct)
+    {
+        if (!await OptionalTableExistsAsync(conn, tx, qualifiedTable, ct))
+        {
+            return;
+        }
+
+        await ExecuteNonQueryAsync(conn, tx, sql, appInstanceId, ct);
+    }
+
+    private static async Task<int> CountOptionalTableRowsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string qualifiedTable,
+        string sql,
+        Guid appInstanceId,
+        CancellationToken ct)
+    {
+        if (!await OptionalTableExistsAsync(conn, tx, qualifiedTable, ct))
+        {
+            return 0;
+        }
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@Id", appInstanceId);
+        return await cmd.ExecuteScalarAsync(ct) is int count ? count : 0;
+    }
+
+    private static async Task<bool> OptionalTableExistsAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string qualifiedTable,
+        CancellationToken ct)
+    {
+        await using var cmd = new SqlCommand(
+            "SELECT CASE WHEN OBJECT_ID(@table, N'U') IS NULL THEN 0 ELSE 1 END;",
+            conn,
+            tx);
+        Add(cmd, "@table", qualifiedTable);
+        return await cmd.ExecuteScalarAsync(ct) is int found && found == 1;
+    }
+
     private static async Task ExecuteNonQueryAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string sql,
+        object id,
+        CancellationToken ct)
+    {
+        await ExecuteNonQueryCountAsync(conn, tx, sql, id, ct);
+    }
+
+    /// <summary>
+    /// Runs a single-statement command and returns its row count. Single-statement is the whole
+    /// point: ExecuteNonQuery sums across a batch, so this is only trustworthy per statement
+    /// (R8-P3-9).
+    /// </summary>
+    private static async Task<int> ExecuteNonQueryCountAsync(
         SqlConnection conn,
         SqlTransaction tx,
         string sql,
@@ -5045,7 +5224,7 @@ VALUES
     {
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@Id", id);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)

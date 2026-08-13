@@ -2,6 +2,7 @@ using OpenModulePlatform.Web.iFrameWebAppModule.Services;
 using OpenModulePlatform.Web.iFrameWebAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -100,7 +101,17 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
             return Page();
         }
 
-        SelectedUrl = selectedRow.Url;
+        // R8-P1-4: the write path validates the scheme, the read path did not -- exactly the
+        // asymmetry R3-E6 and R4-E2 rejected for portal entries. Rows predating the write-side
+        // guard, or written by any other route into the table, reached <iframe src> unchecked.
+        var safeUrl = OmpUrlSafety.SanitizeHref(selectedRow.Url);
+        if (safeUrl is null)
+        {
+            SelectedError = T("The selected URL is not a valid web address and was not opened.");
+            return Page();
+        }
+
+        SelectedUrl = safeUrl;
         SelectedDisplayName = selectedRow.DisplayName;
         return Page();
     }

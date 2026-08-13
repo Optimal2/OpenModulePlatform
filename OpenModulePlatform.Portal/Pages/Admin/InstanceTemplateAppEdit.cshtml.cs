@@ -9,6 +9,7 @@ using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Configuration;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Web.Shared.Web;
 
 namespace OpenModulePlatform.Portal.Pages.Admin;
 
@@ -335,12 +336,14 @@ public sealed class InstanceTemplateAppEditModel : OmpPortalPageModel
                 T("Use a stable key with letters, digits, dash, underscore or dot."));
         }
 
+        // Same scheme allowlist as AppInstanceEdit and HostEdit (R8-P1-8).
         if (!string.IsNullOrWhiteSpace(Input.PublicUrl)
-            && !Uri.TryCreate(Input.PublicUrl, UriKind.Absolute, out _))
+            && (!Uri.TryCreate(Input.PublicUrl.Trim(), UriKind.Absolute, out var publicUri)
+                || !OmpUrlSafety.IsAllowedAbsoluteScheme(publicUri)))
         {
             ModelState.AddModelError(
                 nameof(Input.PublicUrl),
-                T("Public URL must be an absolute URL."));
+                T("Public URL must be an absolute http or https URL."));
         }
     }
 

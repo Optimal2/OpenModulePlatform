@@ -290,7 +290,7 @@ ORDER BY display_name,
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@maxResults", maxResults);
         cmd.Parameters.AddWithValue("@term", term);
-        cmd.Parameters.AddWithValue("@termPattern", $"%{term}%");
+        cmd.Parameters.AddWithValue("@termPattern", OmpSqlPattern.ContainsPattern(term));
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -390,7 +390,7 @@ ORDER BY Principal;";
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@maxResults", maxResults);
         cmd.Parameters.AddWithValue("@term", term);
-        cmd.Parameters.AddWithValue("@termPattern", $"%{term}%");
+        cmd.Parameters.AddWithValue("@termPattern", OmpSqlPattern.ContainsPattern(term));
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -432,7 +432,7 @@ ORDER BY Principal;";
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@maxResults", maxResults);
         cmd.Parameters.AddWithValue("@term", term);
-        cmd.Parameters.AddWithValue("@termPattern", $"%{term}%");
+        cmd.Parameters.AddWithValue("@termPattern", OmpSqlPattern.ContainsPattern(term));
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
@@ -612,7 +612,9 @@ WHERE PermissionId = @PermissionId;";
     /// <summary>
     /// Deletes a role and its linking rows in a single transaction.
     /// </summary>
-    public async Task DeleteRoleAsync(int roleId, CancellationToken ct)
+    /// <remarks>R8-P3-9: reports whether the row itself was removed, not whether any of the
+    /// cascade statements matched.</remarks>
+    public async Task<bool> DeleteRoleAsync(int roleId, CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -668,7 +670,7 @@ WHERE PermissionId = @PermissionId;";
                 roleId,
                 ct);
 
-            await DeleteByRoleAsync(
+            var affected = await DeleteByRoleAsync(
                 conn,
                 (SqlTransaction)tx,
                 "DELETE FROM omp.Roles WHERE RoleId = @RoleId;",
@@ -676,6 +678,7 @@ WHERE PermissionId = @PermissionId;";
                 ct);
 
             await tx.CommitAsync(ct);
+            return affected > 0;
         }
         catch
         {
@@ -687,7 +690,9 @@ WHERE PermissionId = @PermissionId;";
     /// <summary>
     /// Deletes a permission and any role links in a single transaction.
     /// </summary>
-    public async Task DeletePermissionAsync(int permissionId, CancellationToken ct)
+    /// <remarks>R8-P3-9: reports whether the row itself was removed, not whether any of the
+    /// cascade statements matched.</remarks>
+    public async Task<bool> DeletePermissionAsync(int permissionId, CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -734,7 +739,7 @@ WHERE PermissionId = @PermissionId;";
                 permissionId,
                 ct);
 
-            await DeleteByPermissionAsync(
+            var affected = await DeleteByPermissionAsync(
                 conn,
                 (SqlTransaction)tx,
                 "DELETE FROM omp.Permissions WHERE PermissionId = @PermissionId;",
@@ -742,6 +747,7 @@ WHERE PermissionId = @PermissionId;";
                 ct);
 
             await tx.CommitAsync(ct);
+            return affected > 0;
         }
         catch
         {
@@ -873,7 +879,7 @@ END";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task DeleteByRoleAsync(
+    private static async Task<int> DeleteByRoleAsync(
         SqlConnection conn,
         SqlTransaction tx,
         string sql,
@@ -882,10 +888,10 @@ END";
     {
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@RoleId", roleId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task DeleteByPermissionAsync(
+    private static async Task<int> DeleteByPermissionAsync(
         SqlConnection conn,
         SqlTransaction tx,
         string sql,
@@ -894,7 +900,7 @@ END";
     {
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@PermissionId", permissionId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static void Add(SqlCommand cmd, string name, object? value)

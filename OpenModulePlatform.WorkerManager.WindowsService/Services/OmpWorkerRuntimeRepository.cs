@@ -263,9 +263,14 @@ END";
         cmd.Parameters.AddWithValue("@workerTypeKey", observation.WorkerTypeKey.Trim());
         cmd.Parameters.AddWithValue("@observedState", observation.ObservedState);
         cmd.Parameters.AddWithValue("@processId", (object?)observation.ProcessId ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("@startedUtc", ToDbValue(observation.StartedUtc));
-        cmd.Parameters.AddWithValue("@lastSeenUtc", ToDbValue(observation.LastSeenUtc));
-        cmd.Parameters.AddWithValue("@lastExitUtc", ToDbValue(observation.LastExitUtc));
+        // R8-P3-12: bound explicitly rather than through AddWithValue. AddWithValue infers
+        // datetime2 at the default scale of 7 for a DateTime, and the three target columns are
+        // datetime2(3), so SQL Server rounds on the way in. Every value written here is later read
+        // back and compared, and the same latent mismatch is what surfaced in R7-F24 as soon as a
+        // locking token started depending on an exact round trip.
+        AddDateTime2(cmd, "@startedUtc", observation.StartedUtc);
+        AddDateTime2(cmd, "@lastSeenUtc", observation.LastSeenUtc);
+        AddDateTime2(cmd, "@lastExitUtc", observation.LastExitUtc);
         cmd.Parameters.AddWithValue("@lastExitCode", (object?)observation.LastExitCode ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@statusMessage", ToStatusMessageValue(observation.StatusMessage));
         cmd.Parameters.AddWithValue("@touchAppInstanceHeartbeat", touchAppInstanceHeartbeat);
@@ -275,6 +280,16 @@ END";
     private static object ToDbValue(DateTimeOffset? value)
     {
         return value.HasValue ? value.Value.UtcDateTime : DBNull.Value;
+    }
+
+    /// <summary>
+    /// Binds a UTC timestamp at the scale the target columns actually use (R8-P3-12).
+    /// </summary>
+    private static void AddDateTime2(SqlCommand cmd, string name, DateTimeOffset? value)
+    {
+        var parameter = cmd.Parameters.Add(name, System.Data.SqlDbType.DateTime2);
+        parameter.Scale = 3;
+        parameter.Value = ToDbValue(value);
     }
 
     private static object ToNullableStringValue(string? value, int maxLength)

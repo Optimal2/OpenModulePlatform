@@ -239,13 +239,16 @@ WHERE ConfigId = @ConfigId;";
         return input.ConfigId;
     }
 
-    public async Task DeleteValueAsync(int configId, CancellationToken ct)
+    /// <remarks>R8-P3-9: returns whether a row was actually removed, so the caller can tell
+    /// "deleted" from "already gone" instead of reporting success either way. The IbsPackager half
+    /// of this was done in R7-C7; the OMP siblings were never carried across.</remarks>
+    public async Task<bool> DeleteValueAsync(int configId, CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand("DELETE FROM omp.config_settings WHERE ConfigId = @ConfigId;", conn);
         Add(cmd, "@ConfigId", configId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
     private async Task<IReadOnlyList<OptionItem>> GetOptionsAsync(string sql, CancellationToken ct)

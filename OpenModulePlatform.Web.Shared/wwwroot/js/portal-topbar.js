@@ -533,7 +533,10 @@
 
             var existingLink = existing.querySelector('.portal-topbar__favorite-link');
             if (existingLink) {
-                existingLink.href = payload.href || '#';
+                // Same push path, same guard as the message row below (R7-E1): the favorite row
+                // was missed when that fix went in, so a push event could still carry a
+                // javascript: or off-site href into this anchor (R8-P1-3).
+                existingLink.href = isSafeLocalDestination(payload.href) ? payload.href : '#';
                 renderFavoriteLinkText(existingLink, groupTitle, entryTitle, label || payload.label || payload.entryKey);
             }
         } else if (existing) {

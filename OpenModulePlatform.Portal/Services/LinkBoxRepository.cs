@@ -205,7 +205,10 @@ WHERE box_key = @boxKey AND group_key = @oldGroup;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task DeleteItemAsync(long linkBoxItemId, CancellationToken ct)
+    /// <remarks>R8-P3-9: returns whether a row was actually removed, so the caller can tell
+    /// "deleted" from "already gone" instead of reporting success either way. The IbsPackager half
+    /// of this was done in R7-C7; the OMP siblings were never carried across.</remarks>
+    public async Task<bool> DeleteItemAsync(long linkBoxItemId, CancellationToken ct)
     {
         const string sql = "DELETE FROM omp.link_box_items WHERE link_box_item_id = @id;";
 
@@ -213,7 +216,7 @@ WHERE box_key = @boxKey AND group_key = @oldGroup;";
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@id", linkBoxItemId);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
     public async Task<IReadOnlyList<string>> GetPermissionNamesAsync(CancellationToken ct)
