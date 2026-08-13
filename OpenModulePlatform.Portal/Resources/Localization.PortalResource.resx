@@ -2858,4 +2858,316 @@
     <value>The uploaded zip exceeds the configured limit of {0} bytes.</value>
   </data>
   <data name="Stored definition versions" xml:space="preserve"><value>Stored definition versions</value></data>
+  <data name="Play notification sounds" xml:space="preserve"><value>Play notification sounds</value></data>
+  <data name="When this is turned off, notification and message toasts are shown silently." xml:space="preserve"><value>When this is turned off, notification and message toasts are shown silently.</value></data>
+  <data name="Worker" xml:space="preserve"><value>Worker</value></data>
+  <data name="Desired app" xml:space="preserve"><value>Desired app</value></data>
+  <data name="View" xml:space="preserve"><value>View</value></data>
+  <data name="Create app worker definition" xml:space="preserve"><value>Create app worker definition</value></data>
+  <data name="Edit app worker definition" xml:space="preserve"><value>Edit app worker definition</value></data>
+  <data name="This page maps an app definition to the manager-driven worker runtime. The mapping stays generic and only describes runtime kind, worker type key and plugin assembly path relative to the deployed install root." xml:space="preserve"><value>This page maps an app definition to the manager-driven worker runtime. The mapping stays generic and only describes runtime kind, worker type key and plugin assembly path relative to the deployed install root.</value></data>
+  <data name="Only apps that should be hosted through the worker manager need a row here." xml:space="preserve"><value>Only apps that should be hosted through the worker manager need a row here.</value></data>
+  <data name="Use a stable runtime identifier such as windows-worker-plugin." xml:space="preserve"><value>Use a stable runtime identifier such as windows-worker-plugin.</value></data>
+  <data name="This must match the worker factory key exposed by the plugin assembly." xml:space="preserve"><value>This must match the worker factory key exposed by the plugin assembly.</value></data>
+  <data name="Relative path under the deployed app-instance install root, for example plugins/MyWorker/MyWorker.dll." xml:space="preserve"><value>Relative path under the deployed app-instance install root, for example plugins/MyWorker/MyWorker.dll.</value></data>
+  <data name="Save worker definition" xml:space="preserve"><value>Save worker definition</value></data>
+  <data name="Delete this app worker definition?" xml:space="preserve"><value>Delete this app worker definition?</value></data>
+  <data name="Deleting the row stops the manager-driven plugin runtime from selecting this app definition. Existing app instances remain intact." xml:space="preserve"><value>Deleting the row stops the manager-driven plugin runtime from selecting this app definition. Existing app instances remain intact.</value></data>
+  <data name="Delete worker definition" xml:space="preserve"><value>Delete worker definition</value></data>
+  <data name="App worker definition saved." xml:space="preserve"><value>App worker definition saved.</value></data>
+  <data name="App worker definition deleted." xml:space="preserve"><value>App worker definition deleted.</value></data>
+  <data name="Enter a runtime kind." xml:space="preserve"><value>Enter a runtime kind.</value></data>
+  <data name="Use a stable worker type key with letters, digits, dash, underscore or dot." xml:space="preserve"><value>Use a stable worker type key with letters, digits, dash, underscore or dot.</value></data>
+  <data name="Plugin path must be a relative path under the install root and must not contain parent traversal." xml:space="preserve"><value>Plugin path must be a relative path under the install root and must not contain parent traversal.</value></data>
+  <data name="App worker definitions opt an app into the manager-driven plugin runtime. They stay app-level so classic service apps can continue to exist beside the new worker track." xml:space="preserve"><value>App worker definitions opt an app into the manager-driven plugin runtime. They stay app-level so classic service apps can continue to exist beside the new worker track.</value></data>
+  <data name="Open worker runtime" xml:space="preserve"><value>Open worker runtime</value></data>
+  <data name="No app worker definitions found. This can mean that no apps use the worker runtime yet or that the database schema has not been updated." xml:space="preserve"><value>No app worker definitions found. This can mean that no apps use the worker runtime yet or that the database schema has not been updated.</value></data>
+  <data name="Worker type" xml:space="preserve"><value>Worker type</value></data>
+  <data name="Plugin path" xml:space="preserve"><value>Plugin path</value></data>
+  <data name="ArtifactUpload:ArtifactStoreRoot is not configured. Set it to the same root used by HostAgent:CentralArtifactRoot." xml:space="preserve"><value>ArtifactUpload:ArtifactStoreRoot is not configured. Set it to the same root used by HostAgent:CentralArtifactRoot.</value></data>
+  <data name="Relative path must stay inside the artifact store and cannot contain rooted paths or parent directory segments." xml:space="preserve"><value>Relative path must stay inside the artifact store and cannot contain rooted paths or parent directory segments.</value></data>
+  <data name="The target artifact path already exists. Choose a new immutable version path." xml:space="preserve"><value>The target artifact path already exists. Choose a new immutable version path.</value></data>
+  <data name="Select one artifact zip file." xml:space="preserve"><value>Select one artifact zip file.</value></data>
+  <data name="The uploaded artifact must be a .zip file." xml:space="preserve"><value>The uploaded artifact must be a .zip file.</value></data>
+  <data name="Package type is required." xml:space="preserve"><value>Package type is required.</value></data>
+  <data name="Target name is required." xml:space="preserve"><value>Target name is required.</value></data>
+  <data name="The artifact content already existed, so the immutable payload was left unchanged." xml:space="preserve"><value>The artifact content already existed, so the immutable payload was left unchanged.</value></data>
+  <data name="Updated {0} configuration file row(s) from the artifact package." xml:space="preserve"><value>Updated {0} configuration file row(s) from the artifact package.</value></data>
+  <data name="Selected this artifact as desired version for {0} matching deployment row(s)." xml:space="preserve"><value>Selected this artifact as desired version for {0} matching deployment row(s).</value></data>
+  <data name="Level" xml:space="preserve"><value>Level</value></data>
+  <data name="Scheduled" xml:space="preserve"><value>Scheduled</value></data>
+  <data name="Expired" xml:space="preserve"><value>Expired</value></data>
+  <data name="Role" xml:space="preserve"><value>Role</value></data>
+  <data name="Provisioning" xml:space="preserve"><value>Provisioning</value></data>
+  <data name="inactive" xml:space="preserve"><value>inactive</value></data>
+  <data name="No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated." xml:space="preserve"><value>No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated.</value></data>
+  <data name="Observed" xml:space="preserve"><value>Observed</value></data>
+  <data name="PID" xml:space="preserve"><value>PID</value></data>
+  <data name="Starting" xml:space="preserve"><value>Starting</value></data>
+  <data name="Stopping" xml:space="preserve"><value>Stopping</value></data>
+  <data name="Should run" xml:space="preserve"><value>Should run</value></data>
+  <data name="Should stop" xml:space="preserve"><value>Should stop</value></data>
+  <data name="Unmanaged" xml:space="preserve"><value>Unmanaged</value></data>
+  <data name="Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires UTC: {3}." xml:space="preserve"><value>Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires UTC: {3}.</value></data>
+  <data name="Application-pool recycle is blocked because the deployment lock state could not be cleared safely for {0}. {1}" xml:space="preserve"><value>Application-pool recycle is blocked because the deployment lock state could not be cleared safely for {0}. {1}</value></data>
+  <data name="Application-pool recycle is blocked because a deployment lock is active for {0}. Wait for the current deployment to finish or for the lock to expire." xml:space="preserve"><value>Application-pool recycle is blocked because a deployment lock is active for {0}. Wait for the current deployment to finish or for the lock to expire.</value></data>
+  <data name="The host no longer exists; nothing was changed." xml:space="preserve"><value>The host no longer exists; nothing was changed.</value></data>
+  <data name="Stale" xml:space="preserve"><value>Stale</value></data>
+  <data name="minutes." xml:space="preserve"><value>minutes.</value></data>
+  <data name="No data" xml:space="preserve"><value>No data</value></data>
+  <data name="State" xml:space="preserve"><value>State</value></data>
+  <data name="Set" xml:space="preserve"><value>Set</value></data>
+  <data name="Enter an absolute HTTP or HTTPS URL." xml:space="preserve"><value>Enter an absolute HTTP or HTTPS URL.</value></data>
+  <data name="Applied module definitions" xml:space="preserve"><value>Applied module definitions</value></data>
+  <data name="Current module definition versions stored in this OMP database. Use this list to confirm which database and metadata contract is active before troubleshooting artifact behavior." xml:space="preserve"><value>Current module definition versions stored in this OMP database. Use this list to confirm which database and metadata contract is active before troubleshooting artifact behavior.</value></data>
+  <data name="No applied module definitions found." xml:space="preserve"><value>No applied module definitions found.</value></data>
+  <data name="Applied version" xml:space="preserve"><value>Applied version</value></data>
+  <data name="Stored versions" xml:space="preserve"><value>Stored versions</value></data>
+  <data name="Integrity" xml:space="preserve"><value>Integrity</value></data>
+  <data name="Applied UTC" xml:space="preserve"><value>Applied UTC</value></data>
+  <data name="Check that ArtifactUpload:AvailableModuleDefinitionsRoot and ArtifactUpload:AvailableArtifactsRoot point to the HostAgent _available package library folders and that the Portal appsettings.json has been redeployed." xml:space="preserve"><value>Check that ArtifactUpload:AvailableModuleDefinitionsRoot and ArtifactUpload:AvailableArtifactsRoot point to the HostAgent _available package library folders and that the Portal appsettings.json has been redeployed.</value></data>
+  <data name="SQL" xml:space="preserve"><value>SQL</value></data>
+  <data name="Format" xml:space="preserve"><value>Format</value></data>
+  <data name="Processed {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}." xml:space="preserve"><value>Processed {0} universal module packages. Imported/updated: {1}. Skipped: {2}. Failed: {3}.</value></data>
+  <data name="Breakdown by kind: " xml:space="preserve"><value>Breakdown by kind: </value></data>
+  <data name="First {0} failures (see log for full list): " xml:space="preserve"><value>First {0} failures (see log for full list): </value></data>
+  <data name="All items were already up to date — nothing to do." xml:space="preserve"><value>All items were already up to date — nothing to do.</value></data>
+  <data name="All items were already up to date. Enable Quick import to skip these automatically next time." xml:space="preserve"><value>All items were already up to date. Enable Quick import to skip these automatically next time.</value></data>
+  <data name="Box saved." xml:space="preserve"><value>Box saved.</value></data>
+  <data name="Link saved." xml:space="preserve"><value>Link saved.</value></data>
+  <data name="Order saved." xml:space="preserve"><value>Order saved.</value></data>
+  <data name="Group renamed." xml:space="preserve"><value>Group renamed.</value></data>
+  <data name="Title is required." xml:space="preserve"><value>Title is required.</value></data>
+  <data name="Title can be at most 200 characters." xml:space="preserve"><value>Title can be at most 200 characters.</value></data>
+  <data name="Only relative URLs within this site or app links are allowed." xml:space="preserve"><value>Only relative URLs within this site or app links are allowed.</value></data>
+  <data name="Unknown permission." xml:space="preserve"><value>Unknown permission.</value></data>
+  <data name="..." xml:space="preserve"><value>...</value></data>
+  <data name="Role name must be 1-200 characters and contain only letters, digits, dash, underscore or dot." xml:space="preserve"><value>Role name must be 1-200 characters and contain only letters, digits, dash, underscore or dot.</value></data>
+  <data name="Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-..." xml:space="preserve"><value>Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-...</value></data>
+  <data name="Not found" xml:space="preserve"><value>Not found</value></data>
+  <data name="disabled" xml:space="preserve"><value>disabled</value></data>
+  <data name="This view shows app instances whose app definition is mapped to the manager-driven worker runtime, together with the latest observed runtime status published by the worker manager." xml:space="preserve"><value>This view shows app instances whose app definition is mapped to the manager-driven worker runtime, together with the latest observed runtime status published by the worker manager.</value></data>
+  <data name="Open app workers" xml:space="preserve"><value>Open app workers</value></data>
+  <data name="Open app instances" xml:space="preserve"><value>Open app instances</value></data>
+  <data name="Last exit" xml:space="preserve"><value>Last exit</value></data>
+  <data name="Started" xml:space="preserve"><value>Started</value></data>
+  <data name="Exit code" xml:space="preserve"><value>Exit code</value></data>
+  <data name="Conversation updated" xml:space="preserve"><value>Conversation updated</value></data>
+  <data name="Notifications" xml:space="preserve"><value>Notifications</value></data>
+  <data name="Mark all as read" xml:space="preserve"><value>Mark all as read</value></data>
+  <data name="You are editing configuration for version {0}, but the desired version is {1}. These edits will not apply to the desired version unless they are carried forward." xml:space="preserve"><value>You are editing configuration for version {0}, but the desired version is {1}. These edits will not apply to the desired version unless they are carried forward.</value></data>
+  <data name="You are editing configuration for version {0}, but a newer version {1} exists. Make sure you intend to edit this version and not the newer one." xml:space="preserve"><value>You are editing configuration for version {0}, but a newer version {1} exists. Make sure you intend to edit this version and not the newer one.</value></data>
+  <data name="This configuration file was changed by someone else since you opened it. Your upload was not saved. Review the current content and try again." xml:space="preserve"><value>This configuration file was changed by someone else since you opened it. Your upload was not saved. Review the current content and try again.</value></data>
+  <data name="This configuration file was changed by someone else since you opened it. Your changes were not saved. Review the current content and try again." xml:space="preserve"><value>This configuration file was changed by someone else since you opened it. Your changes were not saved. Review the current content and try again.</value></data>
+  <data name="Relative path is required." xml:space="preserve"><value>Relative path is required.</value></data>
+  <data name="Artifacts are deployable outputs of an app definition. Keep artifact metadata and HostAgent-managed configuration files precise so app instances can reference the right build." xml:space="preserve"><value>Artifacts are deployable outputs of an app definition. Keep artifact metadata and HostAgent-managed configuration files precise so app instances can reference the right build.</value></data>
+  <data name="Upload artifact" xml:space="preserve"><value>Upload artifact</value></data>
+  <data name="Upload one immutable artifact zip, unpack it into the central artifact store, and register it for HostAgent deployment." xml:space="preserve"><value>Upload one immutable artifact zip, unpack it into the central artifact store, and register it for HostAgent deployment.</value></data>
+  <data name="Recognized filename format:" xml:space="preserve"><value>Recognized filename format:</value></data>
+  <data name="Select package type" xml:space="preserve"><value>Select package type</value></data>
+  <data name="Updates matching desired app rows so HostAgent starts deploying this artifact on its next cycle." xml:space="preserve"><value>Updates matching desired app rows so HostAgent starts deploying this artifact on its next cycle.</value></data>
+  <data name="The artifact could not be selected as the desired version automatically. Choose it from the installation template page." xml:space="preserve"><value>The artifact could not be selected as the desired version automatically. Choose it from the installation template page.</value></data>
+  <data name="HostAgent self-upgrade" xml:space="preserve"><value>HostAgent self-upgrade</value></data>
+  <data name="A deployment lock is active." xml:space="preserve"><value>A deployment lock is active.</value></data>
+  <data name="Application-pool recycle is disabled until the active deployment finishes or the lock expires." xml:space="preserve"><value>Application-pool recycle is disabled until the active deployment finishes or the lock expires.</value></data>
+  <data name="Owner" xml:space="preserve"><value>Owner</value></data>
+  <data name="Expires UTC" xml:space="preserve"><value>Expires UTC</value></data>
+  <data name="Recycle this application pool? HostAgent will validate the host state before recycling it." xml:space="preserve"><value>Recycle this application pool? HostAgent will validate the host state before recycling it.</value></data>
+  <data name="No enabled hosts were found." xml:space="preserve"><value>No enabled hosts were found.</value></data>
+  <data name="Select the desired HostAgent artifact per host. The active HostAgent installs the selected version and hands over to it during its next cycle." xml:space="preserve"><value>Select the desired HostAgent artifact per host. The active HostAgent installs the selected version and hands over to it during its next cycle.</value></data>
+  <data name="No HostAgent artifacts are available. Import a host-agent artifact before requesting a self-upgrade." xml:space="preserve"><value>No HostAgent artifacts are available. Import a host-agent artifact before requesting a self-upgrade.</value></data>
+  <data name="Upgrade target" xml:space="preserve"><value>Upgrade target</value></data>
+  <data name="Mode" xml:space="preserve"><value>Mode</value></data>
+  <data name="Service prefix" xml:space="preserve"><value>Service prefix</value></data>
+  <data name="Install root" xml:space="preserve"><value>Install root</value></data>
+  <data name="Request HostAgent upgrade for this host? The active HostAgent installs the selected artifact during its next cycle." xml:space="preserve"><value>Request HostAgent upgrade for this host? The active HostAgent installs the selected artifact during its next cycle.</value></data>
+  <data name="HostAgent artifact" xml:space="preserve"><value>HostAgent artifact</value></data>
+  <data name="Request upgrade" xml:space="preserve"><value>Request upgrade</value></data>
+  <data name="Target service" xml:space="preserve"><value>Target service</value></data>
+  <data name="Target mode" xml:space="preserve"><value>Target mode</value></data>
+  <data name="Target last seen" xml:space="preserve"><value>Target last seen</value></data>
+  <data name="Reference" xml:space="preserve"><value>Reference</value></data>
+  <data name="Summary" xml:space="preserve"><value>Summary</value></data>
+  <data name="Current" xml:space="preserve"><value>Current</value></data>
+  <data name="This is the desired artifact version. HostAgent deploys it after its next cycle." xml:space="preserve"><value>This is the desired artifact version. HostAgent deploys it after its next cycle.</value></data>
+  <data name="Desired app added." xml:space="preserve"><value>Desired app added.</value></data>
+  <data name="Desired app updated." xml:space="preserve"><value>Desired app updated.</value></data>
+  <data name="Select a host role." xml:space="preserve"><value>Select a host role.</value></data>
+  <data name="OMP scan" xml:space="preserve"><value>OMP scan</value></data>
+  <data name="Scan the shared installation and every enabled host for stale HostAgent runtime rows, stopped old HostAgent services, stopped old WorkerManager services, and leftover HostAgent folders. The scan only reports candidates; cleanup is queued separately after review." xml:space="preserve"><value>Scan the shared installation and every enabled host for stale HostAgent runtime rows, stopped old HostAgent services, stopped old WorkerManager services, and leftover HostAgent folders. The scan only reports candidates; cleanup is queued separately after review.</value></data>
+  <data name="Start OMP scan" xml:space="preserve"><value>Start OMP scan</value></data>
+  <data name="No open maintenance findings. Start a scan to collect new findings." xml:space="preserve"><value>No open maintenance findings. Start a scan to collect new findings.</value></data>
+  <data name="Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything." xml:space="preserve"><value>Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything.</value></data>
+  <data name="Queue cleanup" xml:space="preserve"><value>Queue cleanup</value></data>
+  <data name="Ignore selected" xml:space="preserve"><value>Ignore selected</value></data>
+  <data name="Select all maintenance findings" xml:space="preserve"><value>Select all maintenance findings</value></data>
+  <data name="Safety" xml:space="preserve"><value>Safety</value></data>
+  <data name="Last seen UTC" xml:space="preserve"><value>Last seen UTC</value></data>
+  <data name="Select maintenance finding {0}" xml:space="preserve"><value>Select maintenance finding {0}</value></data>
+  <data name="Details" xml:space="preserve"><value>Details</value></data>
+  <data name="Recommended action" xml:space="preserve"><value>Recommended action</value></data>
+  <data name="Why this is considered safe" xml:space="preserve"><value>Why this is considered safe</value></data>
+  <data name="Result" xml:space="preserve"><value>Result</value></data>
+  <data name="Shared" xml:space="preserve"><value>Shared</value></data>
+  <data name="Severity" xml:space="preserve"><value>Severity</value></data>
+  <data name="Confidence" xml:space="preserve"><value>Confidence</value></data>
+  <data name="Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back." xml:space="preserve"><value>Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back.</value></data>
+  <data name="Select at least one maintenance finding first." xml:space="preserve"><value>Select at least one maintenance finding first.</value></data>
+  <data name="Queued cleanup for {0} of {1} selected maintenance finding(s) across {2} HostAgent job(s)." xml:space="preserve"><value>Queued cleanup for {0} of {1} selected maintenance finding(s) across {2} HostAgent job(s).</value></data>
+  <data name="Ignored {0} maintenance finding(s). They are hidden until a future scan reports them again." xml:space="preserve"><value>Ignored {0} maintenance finding(s). They are hidden until a future scan reports them again.</value></data>
+  <data name="Review the stored definition, its artifact compatibility slots, and the current artifact selections before applying it." xml:space="preserve"><value>Review the stored definition, its artifact compatibility slots, and the current artifact selections before applying it.</value></data>
+  <data name="Definition version" xml:space="preserve"><value>Definition version</value></data>
+  <data name="Applied" xml:space="preserve"><value>Applied</value></data>
+  <data name="Stored" xml:space="preserve"><value>Stored</value></data>
+  <data name="This definition does not match {0} current artifact references." xml:space="preserve"><value>This definition does not match {0} current artifact references.</value></data>
+  <data name="Allow temporary incompatible artifact selections" xml:space="preserve"><value>Allow temporary incompatible artifact selections</value></data>
+  <data name="Use this only when the matching artifact upload or desired-version change will be done immediately after applying the module definition." xml:space="preserve"><value>Use this only when the matching artifact upload or desired-version change will be done immediately after applying the module definition.</value></data>
+  <data name="Apply module definition" xml:space="preserve"><value>Apply module definition</value></data>
+  <data name="Back to module definitions" xml:space="preserve"><value>Back to module definitions</value></data>
+  <data name="SQL integrity check" xml:space="preserve"><value>SQL integrity check</value></data>
+  <data name="Portal checks the portable SQL scripts embedded in this module definition before any repair is executed." xml:space="preserve"><value>Portal checks the portable SQL scripts embedded in this module definition before any repair is executed.</value></data>
+  <data name="Execute detected SQL repairs" xml:space="preserve"><value>Execute detected SQL repairs</value></data>
+  <data name="This definition does not contain SQL scripts." xml:space="preserve"><value>This definition does not contain SQL scripts.</value></data>
+  <data name="Script" xml:space="preserve"><value>Script</value></data>
+  <data name="Phase" xml:space="preserve"><value>Phase</value></data>
+  <data name="Last execution" xml:space="preserve"><value>Last execution</value></data>
+  <data name="Current incompatible artifact references" xml:space="preserve"><value>Current incompatible artifact references</value></data>
+  <data name="Compatible artifact slots" xml:space="preserve"><value>Compatible artifact slots</value></data>
+  <data name="This definition does not declare artifact slots." xml:space="preserve"><value>This definition does not declare artifact slots.</value></data>
+  <data name="Version range" xml:space="preserve"><value>Version range</value></data>
+  <data name="Relative path template" xml:space="preserve"><value>Relative path template</value></data>
+  <data name="Definition JSON" xml:space="preserve"><value>Definition JSON</value></data>
+  <data name="The definition is not compatible with one or more currently selected artifacts. Confirm temporary incompatibility if the matching artifact update is the next step." xml:space="preserve"><value>The definition is not compatible with one or more currently selected artifacts. Confirm temporary incompatibility if the matching artifact update is the next step.</value></data>
+  <data name="Module definition applied." xml:space="preserve"><value>Module definition applied.</value></data>
+  <data name="Module definition applied with {0} temporarily incompatible artifact references." xml:space="preserve"><value>Module definition applied with {0} temporarily incompatible artifact references.</value></data>
+  <data name="No executable module definition SQL repairs were needed." xml:space="preserve"><value>No executable module definition SQL repairs were needed.</value></data>
+  <data name="Executed {0} module definition SQL repair scripts." xml:space="preserve"><value>Executed {0} module definition SQL repair scripts.</value></data>
+  <data name="Module definition versions" xml:space="preserve"><value>Module definition versions</value></data>
+  <data name="Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review." xml:space="preserve"><value>Module definitions describe the database and metadata contract that artifact versions are validated against. Older definition versions remain available for review.</value></data>
+  <data name="Module integrity matrix" xml:space="preserve"><value>Module integrity matrix</value></data>
+  <data name="Execute detected SQL repairs for all modules" xml:space="preserve"><value>Execute detected SQL repairs for all modules</value></data>
+  <data name="No module definitions found." xml:space="preserve"><value>No module definitions found.</value></data>
+  <data name="Metadata" xml:space="preserve"><value>Metadata</value></data>
+  <data name="Database" xml:space="preserve"><value>Database</value></data>
+  <data name="Dependencies" xml:space="preserve"><value>Dependencies</value></data>
+  <data name="Repairable" xml:space="preserve"><value>Repairable</value></data>
+  <data name="Not recorded" xml:space="preserve"><value>Not recorded</value></data>
+  <data name="Issues" xml:space="preserve"><value>Issues</value></data>
+  <data name="Incompatible" xml:space="preserve"><value>Incompatible</value></data>
+  <data name="Artifact slots" xml:space="preserve"><value>Artifact slots</value></data>
+  <data name="Executed {0} module definition SQL repair scripts across active module definitions." xml:space="preserve"><value>Executed {0} module definition SQL repair scripts across active module definitions.</value></data>
+  <data name="Upload module definition" xml:space="preserve"><value>Upload module definition</value></data>
+  <data name="Upload one versioned module definition JSON document. The definition can be stored first or applied immediately so future artifact imports are validated against it." xml:space="preserve"><value>Upload one versioned module definition JSON document. The definition can be stored first or applied immediately so future artifact imports are validated against it.</value></data>
+  <data name="The JSON must contain moduleKey, definitionVersion, and compatibleArtifacts when the module has deployable artifacts." xml:space="preserve"><value>The JSON must contain moduleKey, definitionVersion, and compatibleArtifacts when the module has deployable artifacts.</value></data>
+  <data name="Applying the definition makes it the active contract for the module and updates the module/app metadata described by the JSON." xml:space="preserve"><value>Applying the definition makes it the active contract for the module and updates the module/app metadata described by the JSON.</value></data>
+  <data name="Use this only when the matching artifact versions will be uploaded or selected next. During that short window the active definition and selected artifacts may not match." xml:space="preserve"><value>Use this only when the matching artifact versions will be uploaded or selected next. During that short window the active definition and selected artifacts may not match.</value></data>
+  <data name="Normally a changed definition should get a new version. Replacement is only for correcting a document that was uploaded with the same module key and definition version." xml:space="preserve"><value>Normally a changed definition should get a new version. Replacement is only for correcting a document that was uploaded with the same module key and definition version.</value></data>
+  <data name="The same module definition already exists." xml:space="preserve"><value>The same module definition already exists.</value></data>
+  <data name="Module definition uploaded." xml:space="preserve"><value>Module definition uploaded.</value></data>
+  <data name="Module definition uploaded but not applied because current artifact selections are incompatible. Review and confirm temporary incompatibility if this is intentional." xml:space="preserve"><value>Module definition uploaded but not applied because current artifact selections are incompatible. Review and confirm temporary incompatibility if this is intentional.</value></data>
+  <data name="Module definition uploaded and applied." xml:space="preserve"><value>Module definition uploaded and applied.</value></data>
+  <data name="Module definition uploaded and applied with {0} temporarily incompatible artifact references." xml:space="preserve"><value>Module definition uploaded and applied with {0} temporarily incompatible artifact references.</value></data>
+  <data name="Select one module definition JSON file." xml:space="preserve"><value>Select one module definition JSON file.</value></data>
+  <data name="The uploaded module definition must be a .json file." xml:space="preserve"><value>The uploaded module definition must be a .json file.</value></data>
+  <data name="Import universal module package" xml:space="preserve"><value>Import universal module package</value></data>
+  <data name="Use this for the new universal package format with omp-universal-package.json and standard object folders. Each object is imported independently so one failed item does not stop the rest." xml:space="preserve"><value>Use this for the new universal package format with omp-universal-package.json and standard object folders. Each object is imported independently so one failed item does not stop the rest.</value></data>
+  <data name="Universal module package zip" xml:space="preserve"><value>Universal module package zip</value></data>
+  <data name="Preview lets you choose individual items. Import all applies every supported item immediately." xml:space="preserve"><value>Preview lets you choose individual items. Import all applies every supported item immediately.</value></data>
+  <data name="Apply module definitions" xml:space="preserve"><value>Apply module definitions</value></data>
+  <data name="Replace existing module definitions with same key and version" xml:space="preserve"><value>Replace existing module definitions with same key and version</value></data>
+  <data name="Replace existing host configs and overlays with same key and version" xml:space="preserve"><value>Replace existing host configs and overlays with same key and version</value></data>
+  <data name="Preview and choose" xml:space="preserve"><value>Preview and choose</value></data>
+  <data name="Import all" xml:space="preserve"><value>Import all</value></data>
+  <data name="Package contents" xml:space="preserve"><value>Package contents</value></data>
+  <data name="Target host: {0}" xml:space="preserve"><value>Target host: {0}</value></data>
+  <data name="Import selected items" xml:space="preserve"><value>Import selected items</value></data>
+  <data name="Export universal module package" xml:space="preserve"><value>Export universal module package</value></data>
+  <data name="Package key" xml:space="preserve"><value>Package key</value></data>
+  <data name="Package version" xml:space="preserve"><value>Package version</value></data>
+  <data name="Target host profile" xml:space="preserve"><value>Target host profile</value></data>
+  <data name="Optional" xml:space="preserve"><value>Optional</value></data>
+  <data name="Leave empty for a global/generic package." xml:space="preserve"><value>Leave empty for a global/generic package.</value></data>
+  <data name="Include compatible artifacts for selected modules" xml:space="preserve"><value>Include compatible artifacts for selected modules</value></data>
+  <data name="Include historical artifact versions for selected modules" xml:space="preserve"><value>Include historical artifact versions for selected modules</value></data>
+  <data name="Host configs" xml:space="preserve"><value>Host configs</value></data>
+  <data name="Config overlays" xml:space="preserve"><value>Config overlays</value></data>
+  <data name="Export universal zip" xml:space="preserve"><value>Export universal zip</value></data>
+  <data name="Host configuration" xml:space="preserve"><value>Host configuration</value></data>
+  <data name="Config overlay" xml:space="preserve"><value>Config overlay</value></data>
+  <data name="Dashboard widget" xml:space="preserve"><value>Dashboard widget</value></data>
+  <data name="Widget runtime data" xml:space="preserve"><value>Widget runtime data</value></data>
+  <data name="Imported" xml:space="preserve"><value>Imported</value></data>
+  <data name="Replaced" xml:space="preserve"><value>Replaced</value></data>
+  <data name="Updated" xml:space="preserve"><value>Updated</value></data>
+  <data name="Skipped" xml:space="preserve"><value>Skipped</value></data>
+  <data name="Module {0} {1}; artifacts imported or replaced: {2}; failed artifacts: {3}." xml:space="preserve"><value>Module {0} {1}; artifacts imported or replaced: {2}; failed artifacts: {3}.</value></data>
+  <data name="Host {0} {1}." xml:space="preserve"><value>Host {0} {1}.</value></data>
+  <data name="Overlay {0} {1}; configuration files: {2}." xml:space="preserve"><value>Overlay {0} {1}; configuration files: {2}.</value></data>
+  <data name="Created: {0}; updated: {1}; skipped: {2}; permission rows: {3}." xml:space="preserve"><value>Created: {0}; updated: {1}; skipped: {2}; permission rows: {3}.</value></data>
+  <data name="Data documents: {0}; binary rows inserted: {1}; binary rows reused: {2}." xml:space="preserve"><value>Data documents: {0}; binary rows inserted: {1}; binary rows reused: {2}.</value></data>
+  <data name="Definition versions" xml:space="preserve"><value>Definition versions</value></data>
+  <data name="Box settings" xml:space="preserve"><value>Box settings</value></data>
+  <data name="Groups" xml:space="preserve"><value>Groups</value></data>
+  <data name="Links" xml:space="preserve"><value>Links</value></data>
+  <data name="Add link" xml:space="preserve"><value>Add link</value></data>
+  <data name="Curate the links shown in the platform's link boxes. Links and boxes can be limited to a permission; labels and titles that match a translation key are localized, anything else is shown as written." xml:space="preserve"><value>Curate the links shown in the platform's link boxes. Links and boxes can be limited to a permission; labels and titles that match a translation key are localized, anything else is shown as written.</value></data>
+  <data name="Box key" xml:space="preserve"><value>Box key</value></data>
+  <data name="Required permission" xml:space="preserve"><value>Required permission</value></data>
+  <data name="Visible to everyone" xml:space="preserve"><value>Visible to everyone</value></data>
+  <data name="Only users holding the permission see the box at all." xml:space="preserve"><value>Only users holding the permission see the box at all.</value></data>
+  <data name="Save box" xml:space="preserve"><value>Save box</value></data>
+  <data name="Groups tint the links in the box. Colors are assigned in the order groups first appear among the links, so reordering links can shift which group gets which color." xml:space="preserve"><value>Groups tint the links in the box. Colors are assigned in the order groups first appear among the links, so reordering links can shift which group gets which color.</value></data>
+  <data name="This box has no groups yet." xml:space="preserve"><value>This box has no groups yet.</value></data>
+  <data name="Rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="No group" xml:space="preserve"><value>No group</value></data>
+  <data name="Renaming a group updates all of its links; renaming it to an existing group merges them. Leave the name empty to remove the group from its links." xml:space="preserve"><value>Renaming a group updates all of its links; renaming it to an existing group merges them. Leave the name empty to remove the group from its links.</value></data>
+  <data name="This box has no links yet." xml:space="preserve"><value>This box has no links yet.</value></data>
+  <data name="Label" xml:space="preserve"><value>Label</value></data>
+  <data name="Drag to reorder" xml:space="preserve"><value>Drag to reorder</value></data>
+  <data name="Remove this link?" xml:space="preserve"><value>Remove this link?</value></data>
+  <data name="Enter a relative URL like /admin/hosts, or pick an app link -- app links resolve to the app's address and only show for users with access to the app." xml:space="preserve"><value>Enter a relative URL like /admin/hosts, or pick an app link -- app links resolve to the app's address and only show for users with access to the app.</value></data>
+  <data name="Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint." xml:space="preserve"><value>Optional. Links sharing a group key share a tint; matching a built-in group reuses its tint.</value></data>
+  <data name="Only users holding the permission see the link." xml:space="preserve"><value>Only users holding the permission see the link.</value></data>
+  <data name="Link added." xml:space="preserve"><value>Link added.</value></data>
+  <data name="Group can be at most 100 characters." xml:space="preserve"><value>Group can be at most 100 characters.</value></data>
+  <data name="Link removed." xml:space="preserve"><value>Link removed.</value></data>
+  <data name="Label is required." xml:space="preserve"><value>Label is required.</value></data>
+  <data name="Label can be at most 200 characters." xml:space="preserve"><value>Label can be at most 200 characters.</value></data>
+  <data name="URL is required." xml:space="preserve"><value>URL is required.</value></data>
+  <data name="URL can be at most 400 characters." xml:space="preserve"><value>URL can be at most 400 characters.</value></data>
+  <data name="Repair duplicate ADFS user" xml:space="preserve"><value>Repair duplicate ADFS user</value></data>
+  <data name="Preview a duplicate ADFS-created user repair before making changes. The repair moves enabled ADFS auth links to the target user, disables this duplicate user, and does not move user-owned content." xml:space="preserve"><value>Preview a duplicate ADFS-created user repair before making changes. The repair moves enabled ADFS auth links to the target user, disables this duplicate user, and does not move user-owned content.</value></data>
+  <data name="Target user ID to keep" xml:space="preserve"><value>Target user ID to keep</value></data>
+  <data name="This page's user is treated as the duplicate user that will be disabled if the repair succeeds." xml:space="preserve"><value>This page's user is treated as the duplicate user that will be disabled if the repair succeeds.</value></data>
+  <data name="Preview ADFS repair" xml:space="preserve"><value>Preview ADFS repair</value></data>
+  <data name="{0} ADFS auth link(s) can move. {1} auth link(s) will remain on the duplicate user." xml:space="preserve"><value>{0} ADFS auth link(s) can move. {1} auth link(s) will remain on the duplicate user.</value></data>
+  <data name="Target user" xml:space="preserve"><value>Target user</value></data>
+  <data name="Duplicate user" xml:space="preserve"><value>Duplicate user</value></data>
+  <data name="ADFS auth links to move" xml:space="preserve"><value>ADFS auth links to move</value></data>
+  <data name="No enabled ADFS auth links can be moved." xml:space="preserve"><value>No enabled ADFS auth links can be moved.</value></data>
+  <data name="Enabled non-ADFS links blocking repair" xml:space="preserve"><value>Enabled non-ADFS links blocking repair</value></data>
+  <data name="These enabled links would remain on the duplicate account. The first repair flow blocks this case so sign-ins are not stranded silently." xml:space="preserve"><value>These enabled links would remain on the duplicate account. The first repair flow blocks this case so sign-ins are not stranded silently.</value></data>
+  <data name="Disabled or deleted ADFS links ignored" xml:space="preserve"><value>Disabled or deleted ADFS links ignored</value></data>
+  <data name="Move ADFS links to target user and disable this duplicate user. User-owned content will not move." xml:space="preserve"><value>Move ADFS links to target user and disable this duplicate user. User-owned content will not move.</value></data>
+  <data name="Run ADFS repair" xml:space="preserve"><value>Run ADFS repair</value></data>
+  <data name="Confirm that ADFS links should be moved and this duplicate user disabled." xml:space="preserve"><value>Confirm that ADFS links should be moved and this duplicate user disabled.</value></data>
+  <data name="ADFS duplicate repair completed. Moved {0} ADFS auth link(s) to target user {1} and disabled duplicate user {2}." xml:space="preserve"><value>ADFS duplicate repair completed. Moved {0} ADFS auth link(s) to target user {1} and disabled duplicate user {2}.</value></data>
+  <data name="Repair completed." xml:space="preserve"><value>Repair completed.</value></data>
+  <data name="Preview is ready. Review the auth links, then confirm the repair." xml:space="preserve"><value>Preview is ready. Review the auth links, then confirm the repair.</value></data>
+  <data name="The target user was not found." xml:space="preserve"><value>The target user was not found.</value></data>
+  <data name="The duplicate user was not found." xml:space="preserve"><value>The duplicate user was not found.</value></data>
+  <data name="The target user and duplicate user must be different users." xml:space="preserve"><value>The target user and duplicate user must be different users.</value></data>
+  <data name="System or reserved users cannot be repaired here." xml:space="preserve"><value>System or reserved users cannot be repaired here.</value></data>
+  <data name="The target user must be active." xml:space="preserve"><value>The target user must be active.</value></data>
+  <data name="The duplicate user is already deleted or has an unsupported account status." xml:space="preserve"><value>The duplicate user is already deleted or has an unsupported account status.</value></data>
+  <data name="The ADFS authentication provider was not found." xml:space="preserve"><value>The ADFS authentication provider was not found.</value></data>
+  <data name="The duplicate user has no enabled ADFS auth links to move." xml:space="preserve"><value>The duplicate user has no enabled ADFS auth links to move.</value></data>
+  <data name="The duplicate user has enabled non-ADFS auth links. Remove or review those links before running this repair." xml:space="preserve"><value>The duplicate user has enabled non-ADFS auth links. Remove or review those links before running this repair.</value></data>
+  <data name="Conflicting ADFS auth links were found. No repair can run until the auth-link data is reviewed." xml:space="preserve"><value>Conflicting ADFS auth links were found. No repair can run until the auth-link data is reviewed.</value></data>
+  <data name="The duplicate user's ADFS auth links changed during the repair. Preview again before retrying." xml:space="preserve"><value>The duplicate user's ADFS auth links changed during the repair. Preview again before retrying.</value></data>
+  <data name="The ADFS duplicate repair could not be completed." xml:space="preserve"><value>The ADFS duplicate repair could not be completed.</value></data>
+  <data name="{0} (id: {1}, status: {2})" xml:space="preserve"><value>{0} (id: {1}, status: {2})</value></data>
+  <data name="Enter the target user ID to keep." xml:space="preserve"><value>Enter the target user ID to keep.</value></data>
+  <data name="Edit links" xml:space="preserve"><value>Edit links</value></data>
+  <data name="Link boxes" xml:space="preserve"><value>Link boxes</value></data>
 </root>
