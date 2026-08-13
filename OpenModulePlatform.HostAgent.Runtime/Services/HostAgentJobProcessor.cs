@@ -745,9 +745,18 @@ public sealed class HostAgentJobProcessor
                             }
                         }
                     }
+                    // R8-P4-12: the same list as the outer filter, on purpose. The two
+                    // were asymmetric -- this one had no ArgumentException or
+                    // UnauthorizedAccessException -- so a single process that exited
+                    // mid-enumeration fell through to the outer catch and abandoned the
+                    // whole scan, when the intent here is to skip that one process and
+                    // keep looking. Nothing crashed; the operator just got a less useful
+                    // message than the code was written to produce.
                     catch (Exception moduleEx) when (moduleEx is System.ComponentModel.Win32Exception
                         or InvalidOperationException
-                        or NotSupportedException)
+                        or NotSupportedException
+                        or ArgumentException
+                        or UnauthorizedAccessException)
                     {
                         // Module enumeration is best-effort; inaccessible or exited
                         // processes are simply skipped.
@@ -758,7 +767,9 @@ public sealed class HostAgentJobProcessor
         catch (Exception scanEx) when (scanEx is ArgumentException
             or IOException
             or NotSupportedException
-            or UnauthorizedAccessException)
+            or UnauthorizedAccessException
+            or InvalidOperationException
+            or System.ComponentModel.Win32Exception)
         {
             // Diagnostics must never turn a delete failure into a job crash.
         }
