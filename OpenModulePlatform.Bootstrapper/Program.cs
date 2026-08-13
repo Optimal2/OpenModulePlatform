@@ -6113,7 +6113,7 @@ ORDER BY ArtifactId;
         return fullPath;
     }
 
-    private static bool IsSameOrChildPath(string rootPath, string candidatePath)
+    internal static bool IsSameOrChildPath(string rootPath, string candidatePath)
     {
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
