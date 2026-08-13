@@ -121,18 +121,20 @@ public sealed class HostAgentHostedService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// Shutdown cleanup is best-effort, so nothing it throws may escape.
+    /// </summary>
+    /// <remarks>
+    /// R5-D1 replaced the cycle boundary's curated allowlist with "anything that is not
+    /// OperationCanceledException", because the list missed realistic types thrown deep in the
+    /// cycle and an uncaught one stopped the whole Windows service. That change was never
+    /// carried across to the shutdown path, which kept the rejected list -- and the fact that
+    /// the old predicate is now reachable only from here is the evidence. This call sits in a
+    /// finally block, so an unmatched exception replaces the OperationCanceledException that
+    /// signals a clean stop, faults ExecuteAsync into the same StopHost crash loop R5-D1
+    /// eliminated, and skips the lease release so the successor waits out the full window
+    /// (R8-P4-2).
+    /// </remarks>
     private static bool IsRecoverableShutdownFailure(Exception exception)
-        => IsRecoverableCycleFailure(exception)
-            || exception is OperationCanceledException;
-
-    private static bool IsRecoverableCycleFailure(Exception exception)
-    {
-        return exception is InvalidOperationException
-            or IOException
-            or DbException
-            or UnauthorizedAccessException
-            or TimeoutException
-            or CryptographicException
-            or JsonException;
-    }
+        => exception is not null;
 }

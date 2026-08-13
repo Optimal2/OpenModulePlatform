@@ -1064,13 +1064,18 @@ ORDER BY pe.default_sort_order,
             return null;
         }
 
+        // This method is the fifth copy of a shape that was hardened in R4-E2, R5S-E1, R6-E1
+        // and R7-S1 -- and the only one none of those rounds touched, so it still carried the
+        // pre-R4-E2 body verbatim. The access check downstream does not help: it reads
+        // AbsolutePath, which for "javascript:alert(1)" is "alert(1)" and does not start with
+        // "/", so the entry rendered as visible to everyone (R8-P1-1).
         var trimmed = targetUrl.Trim();
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
         {
-            return absoluteUri.ToString();
+            return OmpUrlSafety.IsAllowedAbsoluteScheme(absoluteUri) ? absoluteUri.ToString() : null;
         }
 
-        if (trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.Contains('\\', StringComparison.Ordinal))
+        if (!OmpUrlSafety.IsSafeRelativeHref(trimmed))
         {
             return null;
         }
