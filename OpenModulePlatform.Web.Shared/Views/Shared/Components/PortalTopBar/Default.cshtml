@@ -123,6 +123,12 @@
 {
     <div class="portal-topbar"
          data-portal-topbar-root
+         @* updateNotificationMarkAllState prefers this dataset value over scanning the
+            rendered rows, but nothing wrote it on first render, so the mark-all control
+            was hidden whenever the unread notifications sat outside the newest ten. In
+            poll mode the first summary repaired it; in push and manual mode nothing did
+            (R7-E2). *@
+         data-portal-topbar-unread-count="@Model.UnreadNotificationCount"
          data-favorite-toggle-url="@Model.FavoriteToggleUrl"
          data-add-favorite-text="@L[Model.AddFavoriteTextKey]"
          data-remove-favorite-text="@L[Model.RemoveFavoriteTextKey]"

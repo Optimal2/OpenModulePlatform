@@ -2351,9 +2351,10 @@ END
         string scriptPath,
         string payloadRoot)
     {
-        var result = UseDatabaseRegex().Replace(
-            sqlText,
-            "USE " + ConvertToSqlBracketName(options.Database));
+        // Third instance of the R5S-G6 shape: a database name containing $ would be read
+        // as a Regex substitution token by the string overload (R7-S7).
+        var useDatabaseStatement = "USE " + ConvertToSqlBracketName(options.Database);
+        var result = UseDatabaseRegex().Replace(sqlText, _ => useDatabaseStatement);
 
         result = PatchBootstrapPrincipal(result, options);
 

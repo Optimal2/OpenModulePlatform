@@ -103,9 +103,13 @@ public static class AppLinkBuilder
 
     private static string? ResolveHostRoot(HttpRequest request, PortalAppEntry app)
     {
+        // Same gap as the Web.Shared ResolveHostRoot pair: omp.Hosts.BaseUrl reached an
+        // href with no scheme check, so javascript://x survived GetLeftPart(Authority)
+        // and the RoutePath was appended after it (R7-E3).
         var hostBaseUrl = Clean(app.HostBaseUrl);
         if (!string.IsNullOrWhiteSpace(hostBaseUrl)
-            && Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var absoluteBaseUrl))
+            && Uri.TryCreate(hostBaseUrl, UriKind.Absolute, out var absoluteBaseUrl)
+            && IsAllowedAbsoluteHref(absoluteBaseUrl))
         {
             return absoluteBaseUrl.GetLeftPart(UriPartial.Authority);
         }

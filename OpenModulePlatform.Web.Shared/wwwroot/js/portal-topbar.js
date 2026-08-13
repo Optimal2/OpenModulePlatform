@@ -992,7 +992,10 @@
         var link = document.createElement('a');
         var unreadCount = Math.max(0, Number(item.unreadCount) || 0);
         link.className = 'portal-topbar__message-row' + (unreadCount > 0 ? ' is-unread' : '');
-        link.href = item.href || '/messages';
+        // The poll path gets its href from the server's BuildConversationHref, but the
+        // push path copies payload.messages.items straight here, so a user-scoped push
+        // event could carry a javascript: or off-site href into an anchor (R7-E1).
+        link.href = isSafeLocalDestination(item.href) ? item.href : '/messages';
         link.setAttribute('data-enhance-nav', 'false');
 
         var avatar = document.createElement('span');
