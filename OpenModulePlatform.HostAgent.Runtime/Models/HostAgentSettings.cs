@@ -34,6 +34,23 @@ public sealed class HostAgentSettings
 
     public bool ProvisionExplicitRequirements { get; set; } = true;
 
+    /// <summary>
+    /// Refuse to provision an artifact whose catalog row carries no Sha256, instead of
+    /// accepting the local or downloaded content unverified.
+    /// </summary>
+    /// <remarks>
+    /// R3-D6. Both behaviours are defensible and the code used to claim one while doing
+    /// the other: it logged the missing hash as an error and then accepted the content
+    /// anyway, under a comment saying it surfaced the problem "instead of silently
+    /// accepting". Accepting is not indefensible -- artifact identity (app, package type,
+    /// target, version) still has to match, and that is what R8-P2-10 concluded -- but it
+    /// means content integrity is unchecked, which an installation may reasonably refuse.
+    ///
+    /// The default keeps today's behaviour, so no running installation changes when it
+    /// upgrades. Set it to true where every artifact row is known to carry a SHA.
+    /// </remarks>
+    public bool RequireArtifactHash { get; set; }
+
     public bool ProcessHostAgentJobs { get; set; } = true;
 
     public int MaxHostAgentJobsPerCycle { get; set; } = 5;
