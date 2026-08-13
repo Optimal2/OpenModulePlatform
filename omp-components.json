@@ -62,6 +62,25 @@
         "example-webapp-blazor",
         "example-serviceapp-web",
         "example-workerapp-web"
+      ],
+      "externalConsumers": [
+        {
+          "repositoryKey": "ibspackager",
+          "repositoryPathHint": "../IbsPackager",
+          "componentKey": "ibs-packager-web"
+        }
+      ]
+    },
+    {
+      "projectPath": "OpenModulePlatform.Worker.Abstractions/OpenModulePlatform.Worker.Abstractions.csproj",
+      "description": "Worker host contracts consumed by module workers",
+      "consumers": [],
+      "externalConsumers": [
+        {
+          "repositoryKey": "ibspackager",
+          "repositoryPathHint": "../IbsPackager",
+          "componentKey": "ibs-packager-worker"
+        }
       ]
     }
   ],

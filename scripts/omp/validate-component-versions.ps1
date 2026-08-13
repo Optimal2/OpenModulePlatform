@@ -650,7 +650,29 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
             continue
         }
 
-        $consumers = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'consumers')
+        # R8-P4-17. The cascade rule stopped at the repository boundary: this loop
+        # works out which components consume a shared project, but only OMP's own.
+        # IbsPackager.Web references Web.Shared straight out of the sibling
+        # repository, and nothing here knew it. The solution still compiles -- the
+        # reference is by project, not by package -- so the mismatch only surfaced
+        # when the host rejected the artifact at import, at the end of a full
+        # refresh-and-stage run. That happened three deploys in a row on
+        # 2026-08-13.
+        #
+        # This is a warning rather than an error on purpose: the bump has to happen
+        # in the other repository, so OMP cannot satisfy its own check. The gate
+        # that blocks is Check 14 in IbsPackager's validator, which compares the
+        # recorded tree id of this project against the sibling's actual state. The
+        # warning here exists so an OMP author learns about the sibling now instead
+        # of at the far end of a deploy.
+        $externalConsumers = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'externalConsumers' | Where-Object { $null -ne $_ })
+        foreach ($externalConsumer in $externalConsumers) {
+            $externalRepositoryKey = [string](Get-OptionalPropertyValue -Object $externalConsumer -Name 'repositoryKey')
+            $externalComponentKey = [string](Get-OptionalPropertyValue -Object $externalConsumer -Name 'componentKey')
+            Add-ValidationWarning -Warnings $warnings -Message "Shared project '$projectPath' changed and is consumed by '$externalComponentKey' in the '$externalRepositoryKey' repository. Bump that component there and re-record with 'scripts/validate-component-versions.ps1 -UpdateSharedDependencies', or the host will reject its artifact at import."
+        }
+
+        $consumers = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'consumers' | Where-Object { $null -ne $_ })
         if ($consumers.Count -eq 0) {
             continue
         }
