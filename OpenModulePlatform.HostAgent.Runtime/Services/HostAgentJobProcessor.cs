@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
+using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
@@ -1023,23 +1024,13 @@ public sealed class HostAgentJobProcessor
         return Path.GetFullPath(Path.Join(cacheRoot, relativePath));
     }
 
+    /// <remarks>
+    /// Delegates to the shared helper. This was one of three private copies, not all of which
+    /// normalized their inputs, so a path with ".." segments could pass a containment check that
+    /// was meant to stop exactly that (R8-P2-16..23).
+    /// </remarks>
     private static bool IsSameOrChildPath(string rootPath, string candidatePath)
-    {
-        var fullRoot = Path.GetFullPath(rootPath);
-        var fullCandidate = Path.GetFullPath(candidatePath);
-        var comparison = GetPathComparison();
-
-        if (string.Equals(fullRoot, fullCandidate, comparison))
-        {
-            return true;
-        }
-
-        var normalizedRoot = Path.EndsInDirectorySeparator(fullRoot)
-            ? fullRoot
-            : fullRoot + Path.DirectorySeparatorChar;
-
-        return fullCandidate.StartsWith(normalizedRoot, comparison);
-    }
+        => OmpPathContainment.IsSameOrChildPath(rootPath, candidatePath);
 
     private static StringComparison GetPathComparison()
         => OperatingSystem.IsWindows()

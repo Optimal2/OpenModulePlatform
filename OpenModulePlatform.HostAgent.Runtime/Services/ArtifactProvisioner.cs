@@ -334,23 +334,13 @@ public sealed class ArtifactProvisioner
         return fullPath;
     }
 
+    /// <remarks>
+    /// Delegates to the shared helper. This was one of three private copies, not all of which
+    /// normalized their inputs, so a path with ".." segments could pass a containment check that
+    /// was meant to stop exactly that (R8-P2-16..23).
+    /// </remarks>
     private static bool IsSameOrChildPath(string rootPath, string candidatePath)
-    {
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-
-        if (string.Equals(rootPath, candidatePath, comparison))
-        {
-            return true;
-        }
-
-        var normalizedRoot = Path.EndsInDirectorySeparator(rootPath)
-            ? rootPath
-            : rootPath + Path.DirectorySeparatorChar;
-
-        return candidatePath.StartsWith(normalizedRoot, comparison);
-    }
+        => OmpPathContainment.IsSameOrChildPath(rootPath, candidatePath);
 
     private static string? NormalizeHash(string? hash)
     {

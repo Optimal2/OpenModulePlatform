@@ -6113,18 +6113,13 @@ ORDER BY ArtifactId;
         return fullPath;
     }
 
+    /// <remarks>
+    /// Delegates to the shared helper. This was one of three private copies, not all of which
+    /// normalized their inputs, so a path with ".." segments could pass a containment check that
+    /// was meant to stop exactly that (R8-P2-16..23).
+    /// </remarks>
     internal static bool IsSameOrChildPath(string rootPath, string candidatePath)
-    {
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-
-        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootPath));
-        var candidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidatePath));
-
-        return candidate.Equals(root, comparison)
-            || candidate.StartsWith(root + Path.DirectorySeparatorChar, comparison);
-    }
+        => OmpPathContainment.IsSameOrChildPath(rootPath, candidatePath);
 
     private static void TryDeleteFileOrDirectory(string path)
     {
