@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/ConfigSettings.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Portal.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
@@ -186,11 +187,18 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
             StatusMessage = Input.ConfigId == 0 ? T("Config setting added.") : T("Config setting updated.");
             return RedirectToPage("/Admin/ConfigSettings", new { configId = id });
         }
-        catch (SqlException ex) when (ex.Number is 2601 or 2627)
+        // R8-P5-7: the filter used to stop at 2601/2627, so every other SQL failure --
+        // a deadlock, a lock timeout, an application THROW from the settings gate --
+        // left the page as an unhandled 500 instead of feedback the operator could act
+        // on. The shared helper covers all of them and still names the duplicate case.
+        catch (SqlException ex)
         {
             ModelState.AddModelError(
                 string.Empty,
-                T("A value for the same setting and scope already exists."));
+                T(PortalTextLocalizer.DescribeSqlError(
+                    ex,
+                    "The config setting could not be saved.",
+                    "A value for the same setting and scope already exists.")));
 
             return Page();
         }

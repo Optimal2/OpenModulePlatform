@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/Rbac/Role.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Portal.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
@@ -626,13 +627,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             userId > 0;
     }
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific duplicate text
+    // is worth keeping, so it stays here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number switch
-        {
-            2601 or 2627 => "A role with the same name already exists.",
-            547 => "Delete or update dependent rows first.",
-            _ => fallback
-        };
+        => PortalTextLocalizer.DescribeSqlError(ex, fallback, "A role with the same name already exists.");
 
     private async Task LoadOriginalValuesAsync(CancellationToken ct)
     {

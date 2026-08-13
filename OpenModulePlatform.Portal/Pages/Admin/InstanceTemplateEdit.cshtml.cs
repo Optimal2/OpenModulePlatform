@@ -89,9 +89,15 @@ public sealed class InstanceTemplateEditModel : OmpPortalPageModel
             await _repo.DeleteInstanceTemplateAppInstanceAsync(id, ct);
             StatusMessage = T("Desired app removed.");
         }
-        catch (SqlException)
+        // R8-P5-7: see AppInstances -- one message for every SQL failure, and the
+        // application THROW's own text discarded.
+        catch (SqlException ex)
         {
-            StatusMessage = T("The desired app could not be removed. Delete or update dependent rows first.");
+            StatusMessage = T(PortalTextLocalizer.DescribeSqlError(
+                ex,
+                "The desired app could not be removed.",
+                duplicateMessage: null,
+                foreignKeyMessage: "The desired app could not be removed. Delete or update dependent rows first."));
         }
 
         return RedirectToPage("/Admin/InstanceTemplateEdit", new { id = templateId });

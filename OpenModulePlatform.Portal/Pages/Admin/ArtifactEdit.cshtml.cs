@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/ArtifactEdit.cshtml.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Portal.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
@@ -376,10 +377,14 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
         }
     }
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific reference text
+    // is worth keeping, so it stays here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number == 547
-            ? "This artifact is still referenced by desired app, worker, HostAgent, or host artifact requirement rows. Update those references first, or disable the artifact instead of deleting it."
-            : fallback;
+        => PortalTextLocalizer.DescribeSqlError(
+            ex,
+            fallback,
+            duplicateMessage: null,
+            foreignKeyMessage: "This artifact is still referenced by desired app, worker, HostAgent, or host artifact requirement rows. Update those references first, or disable the artifact instead of deleting it.");
 
     public sealed class InputModel
     {

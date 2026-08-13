@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Portal.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
@@ -210,13 +211,14 @@ public sealed partial class InstanceTemplateHostEditModel : OmpPortalPageModel
     private static string? Clean(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // R8-P5-7: delegates to the shared helper; the entity-specific texts are worth
+    // keeping, so they stay here as the only page-local part.
     private static string ToFriendlySqlMessage(SqlException ex)
-        => ex.Number switch
-        {
-            2601 or 2627 => "A host with the same key already exists in this installation.",
-            547 => "Move or delete desired app rows that use this host first.",
-            _ => "The host could not be saved."
-        };
+        => PortalTextLocalizer.DescribeSqlError(
+            ex,
+            "The host could not be saved.",
+            "A host with the same key already exists in this installation.",
+            "Move or delete desired app rows that use this host first.");
 
     public sealed class InputModel
     {

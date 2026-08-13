@@ -390,15 +390,17 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
            || string.Equals(app.AppType, "WebApp", StringComparison.OrdinalIgnoreCase)
            || string.Equals(app.AppType, "Portal", StringComparison.OrdinalIgnoreCase);
 
+    // R8-P5-7: the placement THROW range keeps its own summary and therefore has to be
+    // tested before the shared helper, which would otherwise return the raw message for
+    // it. Everything else delegates.
     private static string ToFriendlySqlMessage(SqlException ex, string fallback)
-        => ex.Number switch
-        {
-            2601 or 2627 => "An app instance with the same key or active host placement already exists.",
-            >= 51050 and <= 51061 => "Only one active desired app row can exist for the selected app and host placement.",
-            51063 => ex.Message,
-            547 => "Update dependent references first.",
-            _ => fallback
-        };
+        => ex.Number is >= 51050 and <= 51061
+            ? "Only one active desired app row can exist for the selected app and host placement."
+            : PortalTextLocalizer.DescribeSqlError(
+                ex,
+                fallback,
+                "An app instance with the same key or active host placement already exists.",
+                "Update dependent references first.");
 
     public sealed class InputModel
     {
