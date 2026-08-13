@@ -1666,12 +1666,26 @@ public sealed class WebAppDeploymentService
                 && invocation.InnerException is not null
                 && IsExpectedDeploymentFailure(invocation.InnerException));
 
+    /// <summary>
+    /// Faults while restarting a runtime during recovery, recorded rather than allowed to
+    /// abort the HostAgent cycle.
+    /// </summary>
+    /// <remarks>
+    /// R8-P4-10. This did not get the TargetInvocationException unwrapping its sibling
+    /// twelve lines up received in R7-D2 -- the fix was applied to one of the pair. Recovery
+    /// happens to run through appcmd today, so nothing unwrapped is reaching it, but this
+    /// file holds two parallel IIS APIs and the reflection-based one wraps everything.
+    /// Leaving the pair asymmetric is how the R7-D2 blast radius comes back.
+    /// </remarks>
     private static bool IsExpectedRecoveryStartFailure(Exception exception)
         => exception is InvalidOperationException
             or IOException
             or UnauthorizedAccessException
             or TimeoutException
-            or System.ComponentModel.Win32Exception;
+            or System.ComponentModel.Win32Exception
+            || (exception is System.Reflection.TargetInvocationException invocation
+                && invocation.InnerException is not null
+                && IsExpectedRecoveryStartFailure(invocation.InnerException));
 
     private sealed record AppCmdResult(int ExitCode, string StdOut, string StdErr);
 

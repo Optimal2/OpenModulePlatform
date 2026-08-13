@@ -1445,12 +1445,28 @@ public sealed class ServiceAppDeploymentService
             or System.Management.ManagementException
             or System.Runtime.InteropServices.COMException;
 
+    /// <summary>
+    /// Faults while restarting a service during recovery, recorded rather than allowed to
+    /// abort the HostAgent cycle.
+    /// </summary>
+    /// <remarks>
+    /// R8-P4-10. Kept in step with IsExpectedDeploymentFailure directly above, which is the
+    /// same list. Recovery restarts a Windows service through the same WMI and
+    /// ServiceController surface the deployment path uses, so ManagementException and
+    /// COMException reach here for the same reasons they reach that one; they were listed in
+    /// only one of the pair.
+    /// </remarks>
     private static bool IsExpectedRecoveryStartFailure(Exception exception)
         => exception is InvalidOperationException
             or IOException
             or UnauthorizedAccessException
             or TimeoutException
-            or System.ComponentModel.Win32Exception;
+            or System.ComponentModel.Win32Exception
+            or System.Management.ManagementException
+            or System.Runtime.InteropServices.COMException
+            || (exception is System.Reflection.TargetInvocationException invocation
+                && invocation.InnerException is not null
+                && IsExpectedRecoveryStartFailure(invocation.InnerException));
 
     private sealed record ServiceAppIdentityResolution(string UserName, string Password, string Source)
     {

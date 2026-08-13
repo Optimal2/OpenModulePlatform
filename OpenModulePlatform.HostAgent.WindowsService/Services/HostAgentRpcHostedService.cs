@@ -135,13 +135,23 @@ public sealed class HostAgentRpcHostedService : BackgroundService
         string? callerName,
         CancellationToken serviceCancellationToken)
     {
+        // The pipe is disposed by this declaration whatever happens below, so it stays
+        // outside the try -- a using declaration cannot itself throw.
         await using var ownedPipe = pipe;
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(serviceCancellationToken);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _settings.CurrentValue.RpcRequestTimeoutSeconds)));
         string? requestedBy = null;
 
         try
         {
+            // R8-P4-11: the timeout setup used to sit out here with the pipe. This
+            // method is started fire-and-forget (Task.Run with no continuation), so an
+            // exception before the try had nowhere to go: it became an unobserved task
+            // exception, logged by nobody, and the caller saw a pipe that simply closed.
+            // Both statements can throw for real reasons -- a disposed service token
+            // source during shutdown, and an out-of-range RpcRequestTimeoutSeconds from
+            // configuration.
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(serviceCancellationToken);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, _settings.CurrentValue.RpcRequestTimeoutSeconds)));
+
             using var reader = new StreamReader(pipe, leaveOpen: true);
             await using var writer = new StreamWriter(pipe, leaveOpen: true) { AutoFlush = true };
 
