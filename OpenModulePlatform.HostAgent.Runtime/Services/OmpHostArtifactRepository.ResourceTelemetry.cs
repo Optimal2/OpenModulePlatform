@@ -26,7 +26,6 @@ public sealed partial class OmpHostArtifactRepository
     /// ObservedState 1..3 are the running states; anything else has no live process to sample.
     /// </remarks>
     public async Task<IReadOnlyList<(string WorkerInstanceKey, int ProcessId)>> GetLocalWorkerProcessTargetsAsync(
-        Guid hostId,
         CancellationToken ct)
     {
         const string sql = @"
@@ -37,12 +36,13 @@ SELECT COALESCE(NULLIF(LTRIM(RTRIM(rs.WorkerInstanceKey)), N''), CONVERT(nvarcha
 FROM omp.WorkerInstanceRuntimeStates rs
 INNER JOIN omp.WorkerInstances wi ON wi.WorkerInstanceId = rs.WorkerInstanceId
 LEFT JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
--- omp.WorkerInstances.HostId is null for every row on this installation: a worker instance takes
--- its host from the app instance it belongs to, and the repositories that read worker placement
--- all resolve it as COALESCE(wi.HostId, ai.HostId). Filtering on wi.HostId alone matched nothing
--- and produced no samples at all.
-WHERE COALESCE(wi.HostId, ai.HostId) = @hostId
-  AND rs.ProcessId IS NOT NULL
+-- No host filter. Both omp.WorkerInstances.HostId and omp.AppInstances.HostId are null for every
+-- worker row here: a host-agnostic app instance is placed by template and host role, not by a
+-- stored host id, so there is nothing to filter on. Two successive attempts to attribute by host
+-- in SQL therefore returned nothing at all. The caller keeps only the rows whose process id
+-- belongs to a live worker host process on this machine, which is both the accurate test and the
+-- one the collector can actually make.
+WHERE rs.ProcessId IS NOT NULL
   AND rs.ProcessId > 0
   AND rs.ObservedState IN (1, 2, 3);";
 
@@ -51,7 +51,6 @@ WHERE COALESCE(wi.HostId, ai.HostId) = @hostId
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@hostId", SqlDbType.UniqueIdentifier).Value = hostId;
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))

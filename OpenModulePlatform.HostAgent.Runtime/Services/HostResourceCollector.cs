@@ -22,6 +22,7 @@ public sealed partial class HostResourceCollector
     private const string IisAppPoolStateKeyPrefix = "iis.apppool.state.";
     private const string WorkerCpuKeyPrefix = "worker.";
     private const string WorkerMemoryKeyPrefix = "worker.memory.";
+    private const string WorkerProcessHostProcessName = "OpenModulePlatform.WorkerProcessHost";
 
     private sealed record ProcessTelemetryTarget(
         int ProcessId,
@@ -81,7 +82,7 @@ public sealed partial class HostResourceCollector
             // Read before the sync sweep: the process ids come from the database, and
             // CollectSamples runs on the thread pool without a connection (R8-P5-20).
             var workerProcesses = settings.CollectWorkerProcesses
-                ? await _repository.GetLocalWorkerProcessTargetsAsync(hostId, linkedCts.Token)
+                ? await _repository.GetLocalWorkerProcessTargetsAsync(linkedCts.Token)
                 : [];
 
             await Task.Run(() => CollectSamples(settings, samples, workerProcesses, linkedCts.Token), linkedCts.Token);
@@ -214,6 +215,34 @@ public sealed partial class HostResourceCollector
             hostId);
     }
 
+
+    /// <summary>
+    /// True when the process id belongs to a live worker host process on this machine.
+    /// </summary>
+    /// <remarks>
+    /// Locality cannot be decided in SQL: worker instances here are host-agnostic, with a null
+    /// HostId on both the worker instance and its app instance, so a query filtering on either
+    /// returns nothing (R8-P5-20). Matching the executable name is the accurate test on a multi
+    /// -host installation, where another host's process id could otherwise collide with a live
+    /// local process that has nothing to do with OMP.
+    /// </remarks>
+    private static bool IsLocalWorkerHostProcess(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return string.Equals(
+                process.ProcessName,
+                WorkerProcessHostProcessName,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // The process exited between the read and this check, or the id is not local.
+            return false;
+        }
+    }
+
     private void CollectSamples(
         HostResourceTelemetrySettings settings,
         List<HostResourceSample> samples,
@@ -243,8 +272,16 @@ public sealed partial class HostResourceCollector
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // The rows carry no usable host column, so locality is established here instead: keep a
+        // worker only when its process id is a live worker host process on this machine. That also
+        // rules out a stale id whose number has since been reused by something unrelated.
         foreach (var (workerInstanceKey, processId) in workerProcesses)
         {
+            if (!IsLocalWorkerHostProcess(processId))
+            {
+                continue;
+            }
+
             var normalizedWorkerKey = NormalizeKeySegment(workerInstanceKey);
             targets.Add(new ProcessTelemetryTarget(
                 processId,
