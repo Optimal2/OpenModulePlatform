@@ -45,7 +45,17 @@ internal static class ArtifactDirectoryMirror
         IReadOnlyCollection<string> excludedEntries,
         CancellationToken cancellationToken)
     {
-        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", new EnumerationOptions
+                        {
+                            RecurseSubdirectories = true,
+                            // The source is the provisioned artifact path under the app-pool-writable
+                            // artifact store, so a junction there was followed and its target copied
+                            // into the web root, where IIS serves it statically. DeleteStaleTargetEntries
+                            // in this same file already sets this with the R5S-D1 rationale; the SOURCE
+                            // side never got it (R8-P2-7).
+                            AttributesToSkip = FileAttributes.ReparsePoint,
+                            IgnoreInaccessible = true,
+                        }))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(sourceDirectory, directory);
@@ -68,7 +78,17 @@ internal static class ArtifactDirectoryMirror
             Directory.CreateDirectory(targetSubdirectory);
         }
 
-        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", new EnumerationOptions
+                        {
+                            RecurseSubdirectories = true,
+                            // The source is the provisioned artifact path under the app-pool-writable
+                            // artifact store, so a junction there was followed and its target copied
+                            // into the web root, where IIS serves it statically. DeleteStaleTargetEntries
+                            // in this same file already sets this with the R5S-D1 rationale; the SOURCE
+                            // side never got it (R8-P2-7).
+                            AttributesToSkip = FileAttributes.ReparsePoint,
+                            IgnoreInaccessible = true,
+                        }))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(sourceDirectory, file);

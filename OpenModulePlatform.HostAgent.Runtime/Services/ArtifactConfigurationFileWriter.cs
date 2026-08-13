@@ -111,6 +111,18 @@ internal static class ArtifactConfigurationFileWriter
         foreach (var file in files)
         {
             var path = ResolveTargetPath(targetRoot, file);
+
+            // ApplyAsync checks both the directory and the file for reparse points with the
+            // R5S-D1 rationale; this method -- the gate that decides whether ApplyAsync even
+            // runs -- checked neither. A symlinked target makes FileContentEquals read the
+            // link's destination with no size bound, which is both an OOM vector as
+            // LocalSystem and a read oracle. Treat it as not-applied so ApplyAsync's own
+            // guard produces the real error (R8-P2-14).
+            if (IsReparsePoint(path))
+            {
+                return false;
+            }
+
             var expectedContent = Render(file.FileContent, variables);
             if (!File.Exists(path) || !FileContentEquals(path, expectedContent))
             {
