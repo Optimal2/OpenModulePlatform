@@ -110,6 +110,29 @@ internal static class HostResourceSampleKeyParser
     /// At least two numeric segments are required, so names that merely end in
     /// one number keep their identity.
     /// </summary>
+    /// <summary>
+    /// Maps a state runtime kind back to the kind whose CPU and memory it belongs with.
+    /// </summary>
+    /// <remarks>
+    /// R8-P5-23. Every state sample used to be assumed to come from a Windows service, so the page
+    /// hardcoded that kind. That held only while services were the sole publisher of state; once
+    /// IIS app pools started publishing one too, each pool grew a second, empty row under the
+    /// wrong kind. Deriving the owner from the parsed kind keeps the next source that publishes
+    /// state from repeating it.
+    /// </remarks>
+    public static string ToOwningRuntimeKind(string runtimeKind)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeKind))
+        {
+            return runtimeKind ?? string.Empty;
+        }
+
+        const string stateSuffix = " state";
+        return runtimeKind.EndsWith(stateSuffix, StringComparison.OrdinalIgnoreCase)
+            ? runtimeKind[..^stateSuffix.Length]
+            : runtimeKind;
+    }
+
     public static string NormalizeRuntimeName(string runtimeName)
     {
         if (string.IsNullOrEmpty(runtimeName))

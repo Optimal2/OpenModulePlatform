@@ -458,7 +458,7 @@ public sealed partial class HostResourceCollector
                         continue;
                     }
 
-                    var normalizedServiceName = NormalizeKeySegment(serviceName);
+                    var normalizedServiceName = StripTrailingVersion(NormalizeKeySegment(serviceName));
                     var isRunning = string.Equals(state, "Running", StringComparison.OrdinalIgnoreCase);
                     var sampledUtc = DateTime.UtcNow;
 
@@ -793,6 +793,47 @@ public sealed partial class HostResourceCollector
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+
+    /// <summary>
+    /// Removes a trailing dotted numeric version from a key segment, so every version of a
+    /// service writes into one series.
+    /// </summary>
+    /// <remarks>
+    /// R8-P5-24. The HostAgent's Windows service name carries its version -- OMP.HostAgent.0.3.189
+    /// -- so each upgrade started a brand new key. The chart already stitched the versions back
+    /// together with a LIKE, and history really was continuous, but omp.HostResourceLatest holds
+    /// one row per key and only the current version survives there: the Samples column read 8
+    /// while five days of history sat in the samples table. Writing the version-free key removes
+    /// the split at the source instead of papering over it in three read paths.
+    ///
+    /// Mirrors HostResourceSampleKeyParser.NormalizeRuntimeName, which does the same thing for
+    /// display and cannot be shared from here without the Portal referencing the HostAgent.
+    /// </remarks>
+    internal static string StripTrailingVersion(string value)
+    {
+        var index = value.Length;
+        while (index > 0)
+        {
+            var dot = value.LastIndexOf('.', index - 1);
+            if (dot <= 0 || dot == index - 1)
+            {
+                break;
+            }
+
+            for (var position = dot + 1; position < index; position++)
+            {
+                if (!char.IsDigit(value[position]))
+                {
+                    return value[..index];
+                }
+            }
+
+            index = dot;
+        }
+
+        return value[..index] is { Length: > 0 } trimmed ? trimmed : value;
+    }
 
     private static string NormalizeKeySegment(string value)
     {
