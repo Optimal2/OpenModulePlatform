@@ -1,3 +1,5 @@
+using OpenModulePlatform.Artifacts;
+
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 internal static class ArtifactDirectoryMirror
@@ -18,6 +20,18 @@ internal static class ArtifactDirectoryMirror
         {
             throw new DirectoryNotFoundException($"Provisioned app artifact path was not found: '{sourceDirectory}'.");
         }
+
+        // R5S-D1/R6-D7. AttributesToSkip filters the ENTRIES an enumeration returns; it
+        // says nothing about the root the enumeration starts from. Both roots were
+        // therefore unchecked: a junction on the target sends this whole mirror -- copy
+        // and stale-delete alike -- somewhere else, as LocalSystem, and the source root
+        // is application-pool writable by design. The finding was recorded twice and both
+        // times the fix landed on the entries.
+        //
+        // CreateDirectory succeeds silently on an existing junction, so the check has to
+        // come first.
+        OmpReparsePointGuard.EnsureNotReparsePoint(sourceDirectory, "Artifact mirror source root");
+        OmpReparsePointGuard.EnsureNotReparsePoint(targetDirectory, "Artifact mirror target root");
 
         Directory.CreateDirectory(targetDirectory);
         CopySourceFiles(sourceDirectory, targetDirectory, excludedEntries, cancellationToken);

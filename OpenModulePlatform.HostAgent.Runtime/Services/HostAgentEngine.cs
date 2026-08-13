@@ -715,11 +715,32 @@ public sealed class HostAgentEngine
             exception.Message);
     }
 
+    /// <summary>
+    /// Deployment faults the cycle records against the deployment row instead of letting
+    /// them abort the whole HostAgent cycle.
+    /// </summary>
+    /// <remarks>
+    /// R5-D1/R7-D2. Three copies of this list have drifted apart. R7-D2 added
+    /// TimeoutException and Win32Exception to the two in the deployment services, and
+    /// R8-P4-10 finished the recovery pair, but this one -- the outermost of the three,
+    /// the one that decides whether the whole cycle survives -- never got them. It sits
+    /// above both services, so anything they let through reaches it, and an escape here
+    /// skips the Portal health probe, service-app deploy, self-upgrade, file mirroring,
+    /// job processing and telemetry for that cycle with no per-deployment result
+    /// published. DbException stays: only this copy wraps the database work.
+    /// </remarks>
     private static bool IsExpectedDeploymentFailure(Exception exception)
         => exception is InvalidOperationException
             or IOException
             or DbException
-            or UnauthorizedAccessException;
+            or UnauthorizedAccessException
+            or TimeoutException
+            or System.ComponentModel.Win32Exception
+            or System.Management.ManagementException
+            or System.Runtime.InteropServices.COMException
+            || (exception is System.Reflection.TargetInvocationException invocation
+                && invocation.InnerException is not null
+                && IsExpectedDeploymentFailure(invocation.InnerException));
 
     private static bool IsExpectedShutdownFailure(Exception exception)
         => exception is InvalidOperationException
