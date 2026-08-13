@@ -8,6 +8,60 @@ public sealed partial class OmpHostArtifactRepository
 {
     private const int HostResourceSampleKeyMaxLength = 100;
 
+    /// <summary>
+    /// Returns the running worker processes on this host, as (worker instance key, process id).
+    /// </summary>
+    /// <remarks>
+    /// R8-P5-20. The resource collector sweeps IIS app pools and Windows services.
+    /// OpenModulePlatform.WorkerProcessHost is neither -- WorkerManager starts it -- so the whole
+    /// worker fleet was missing from the host summary. On this installation that was eight
+    /// processes at roughly 66 MB each: the page showed 1 070 MB while OMP actually held about
+    /// 1 600 MB, and nothing in the view suggested a third of it was unaccounted for.
+    ///
+    /// The process ids do not have to be discovered. WorkerManager already publishes them per
+    /// worker instance in omp.WorkerInstanceRuntimeStates, which is also what gives each sample a
+    /// stable name to be keyed by -- reading the ids back is both cheaper and better attributed
+    /// than matching on process name, which could only ever produce one anonymous lump.
+    ///
+    /// ObservedState 1..3 are the running states; anything else has no live process to sample.
+    /// </remarks>
+    public async Task<IReadOnlyList<(string WorkerInstanceKey, int ProcessId)>> GetLocalWorkerProcessTargetsAsync(
+        Guid hostId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SET NOCOUNT ON;
+
+SELECT COALESCE(NULLIF(LTRIM(RTRIM(rs.WorkerInstanceKey)), N''), CONVERT(nvarchar(50), wi.WorkerInstanceId)) AS WorkerInstanceKey,
+       rs.ProcessId
+FROM omp.WorkerInstanceRuntimeStates rs
+INNER JOIN omp.WorkerInstances wi ON wi.WorkerInstanceId = rs.WorkerInstanceId
+WHERE wi.HostId = @hostId
+  AND rs.ProcessId IS NOT NULL
+  AND rs.ProcessId > 0
+  AND rs.ObservedState IN (1, 2, 3);";
+
+        var targets = new List<(string WorkerInstanceKey, int ProcessId)>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@hostId", SqlDbType.UniqueIdentifier).Value = hostId;
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var key = reader.GetString(0);
+            var processId = reader.GetInt32(1);
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                targets.Add((key, processId));
+            }
+        }
+
+        return targets;
+    }
+
     public async Task UpsertHostResourceSamplesAsync(
         Guid hostId,
         IReadOnlyCollection<HostResourceSample> samples,
