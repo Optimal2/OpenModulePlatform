@@ -36,7 +36,12 @@ SELECT COALESCE(NULLIF(LTRIM(RTRIM(rs.WorkerInstanceKey)), N''), CONVERT(nvarcha
        rs.ProcessId
 FROM omp.WorkerInstanceRuntimeStates rs
 INNER JOIN omp.WorkerInstances wi ON wi.WorkerInstanceId = rs.WorkerInstanceId
-WHERE wi.HostId = @hostId
+LEFT JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
+-- omp.WorkerInstances.HostId is null for every row on this installation: a worker instance takes
+-- its host from the app instance it belongs to, and the repositories that read worker placement
+-- all resolve it as COALESCE(wi.HostId, ai.HostId). Filtering on wi.HostId alone matched nothing
+-- and produced no samples at all.
+WHERE COALESCE(wi.HostId, ai.HostId) = @hostId
   AND rs.ProcessId IS NOT NULL
   AND rs.ProcessId > 0
   AND rs.ObservedState IN (1, 2, 3);";
