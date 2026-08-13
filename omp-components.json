@@ -113,7 +113,7 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.35",
+      "version": "0.3.36",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip"
@@ -227,7 +227,7 @@
       "appKey": "example_workerapp_worker",
       "packageType": "worker",
       "targetName": "example-workerapp",
-      "version": "0.3.14",
+      "version": "0.3.15",
       "projectPath": "examples/WorkerAppModule/WorkerApp",
       "relativePathTemplate": "example-workerapp/worker/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Worker.ExampleWorkerAppModule.zip"
