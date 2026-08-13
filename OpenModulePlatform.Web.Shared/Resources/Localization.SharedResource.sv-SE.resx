@@ -44,14 +44,14 @@
   <data name="No new notifications" xml:space="preserve"><value>Inga nya notifikationer</value></data>
   <data name="No notifications" xml:space="preserve"><value>Inga notifikationer</value></data>
   <data name="Mark all as read" xml:space="preserve"><value>Markera alla som lästa</value></data>
-  <data name="View all notifications" xml:space="preserve"><value>Visa alla notifikationer</value></data>
+  <data name="View all notifications" xml:space="preserve"><value>Visa alla</value></data>
   <data name="Loading" xml:space="preserve"><value>Laddar</value></data>
   <data name="No more notifications" xml:space="preserve"><value>Inga fler notifikationer</value></data>
   <data name="Dismiss notification" xml:space="preserve"><value>Stäng notifikation</value></data>
   <data name="Messages" xml:space="preserve"><value>Meddelanden</value></data>
   <data name="No conversations" xml:space="preserve"><value>Inga konversationer</value></data>
   <data name="No messages" xml:space="preserve"><value>Inga meddelanden</value></data>
-  <data name="View all messages" xml:space="preserve"><value>Visa alla meddelanden</value></data>
+  <data name="View all messages" xml:space="preserve"><value>Visa alla</value></data>
   <data name="Maintenance" xml:space="preserve"><value>Underhåll</value></data>
   <data name="Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration." xml:space="preserve"><value>Använd underhållsåtgärder för att ta bort gammal plattformsdata som avsiktligt sparas i flera versioner. Artefaktrensning behåller de senaste registrerade versionerna per artefaktidentitet och tar bara bort äldre versioner som inte refereras av önskad runtime-konfiguration.</value></data>
   <data name="Artifact retention" xml:space="preserve"><value>Artefaktbevarande</value></data>

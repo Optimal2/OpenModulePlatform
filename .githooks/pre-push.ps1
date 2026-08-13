@@ -95,11 +95,35 @@ Write-Host '--- Tests passed ---'
 Write-Host ''
 
 # ---------------------------------------------------------------------------
-# 3. Validate component versions against the upstream base.
+# 3. Analyze PowerShell scripts.
+#
+# R8-P4-13: run-script-analyzer.ps1, the validator's own -SelfTest and
+# validate-webshared-contracts.ps1 all existed and none of them were wired to
+# this gate -- the contracts validator was not reachable from any gate at all.
+# The banner said "PRE-PUSH GATE PASSED" regardless, which is worse than having
+# no gate: it is a green light for checks that never ran. IbsPackager's
+# local-ci.ps1 has run all three since R3.
 # ---------------------------------------------------------------------------
-Write-Host '--- Step 3: validate-component-versions.ps1 ---'
+Write-Host '--- Step 3: run-script-analyzer.ps1 ---'
+$scriptAnalyzer = Join-Path $repoRoot 'scripts\omp\run-script-analyzer.ps1'
+& $scriptAnalyzer
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '--- POWERSHELL SCRIPT ANALYSIS FAILED ---' -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+Write-Host '--- Script analysis passed ---'
+Write-Host ''
+
+# ---------------------------------------------------------------------------
+# 4. Validate component versions against the upstream base.
+#
+# -SelfTest first: the validator's own helpers have PS5.1 pitfalls (BOM
+# handling, worktree change detection) and a validator that is silently broken
+# passes everything.
+# ---------------------------------------------------------------------------
+Write-Host '--- Step 4: validate-component-versions.ps1 ---'
 $componentValidator = Join-Path $repoRoot 'scripts\omp\validate-component-versions.ps1'
-& $componentValidator -BaseCommit $baseCommit
+& $componentValidator -BaseCommit $baseCommit -SelfTest
 if ($LASTEXITCODE -ne 0) {
     Write-Host '--- COMPONENT VERSION VALIDATION FAILED ---' -ForegroundColor Red
     exit $LASTEXITCODE
@@ -108,9 +132,9 @@ Write-Host '--- Component version validation passed ---'
 Write-Host ''
 
 # ---------------------------------------------------------------------------
-# 4. Validate module definitions.
+# 5. Validate module definitions.
 # ---------------------------------------------------------------------------
-Write-Host '--- Step 4: validate-module-definitions.ps1 ---'
+Write-Host '--- Step 5: validate-module-definitions.ps1 ---'
 $moduleValidator = Join-Path $repoRoot 'scripts\omp\validate-module-definitions.ps1'
 & $moduleValidator
 if ($LASTEXITCODE -ne 0) {
@@ -118,6 +142,19 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 Write-Host '--- Module definition validation passed ---'
+Write-Host ''
+
+# ---------------------------------------------------------------------------
+# 6. Validate Web.Shared contracts.
+# ---------------------------------------------------------------------------
+Write-Host '--- Step 6: validate-webshared-contracts.ps1 ---'
+$contractsValidator = Join-Path $repoRoot 'scripts\omp\validate-webshared-contracts.ps1'
+& $contractsValidator
+if ($LASTEXITCODE -ne 0) {
+    Write-Host '--- WEB.SHARED CONTRACT VALIDATION FAILED ---' -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+Write-Host '--- Web.Shared contract validation passed ---'
 Write-Host ''
 
 Write-Banner

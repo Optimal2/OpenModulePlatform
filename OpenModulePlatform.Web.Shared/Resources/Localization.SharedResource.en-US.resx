@@ -37,14 +37,14 @@
   <data name="No new notifications" xml:space="preserve"><value>No new notifications</value></data>
   <data name="No notifications" xml:space="preserve"><value>No notifications</value></data>
   <data name="Mark all as read" xml:space="preserve"><value>Mark all as read</value></data>
-  <data name="View all notifications" xml:space="preserve"><value>View all notifications</value></data>
+  <data name="View all notifications" xml:space="preserve"><value>View all</value></data>
   <data name="Loading" xml:space="preserve"><value>Loading</value></data>
   <data name="No more notifications" xml:space="preserve"><value>No more notifications</value></data>
   <data name="Dismiss notification" xml:space="preserve"><value>Dismiss notification</value></data>
   <data name="Messages" xml:space="preserve"><value>Messages</value></data>
   <data name="No conversations" xml:space="preserve"><value>No conversations</value></data>
   <data name="No messages" xml:space="preserve"><value>No messages</value></data>
-  <data name="View all messages" xml:space="preserve"><value>View all messages</value></data>
+  <data name="View all messages" xml:space="preserve"><value>View all</value></data>
   <data name="Maintenance" xml:space="preserve"><value>Maintenance</value></data>
   <data name="Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration." xml:space="preserve"><value>Use maintenance tasks to remove old platform data that is intentionally kept in multiple versions. Artifact cleanup keeps the newest registered versions per artifact identity and only deletes older versions that are not referenced by desired runtime configuration.</value></data>
   <data name="Artifact retention" xml:space="preserve"><value>Artifact retention</value></data>

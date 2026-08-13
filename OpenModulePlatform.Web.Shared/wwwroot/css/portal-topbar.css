@@ -753,7 +753,13 @@ span.portal-topbar__nav-group-link {
     min-width: 0;
 }
 
+/* The mark-all button lives inside a form, so the form -- not the button -- is the flex
+   item of the footer. A block form puts its button on a line box, and the strut descender
+   below it makes the form taller than the button; centring the form then leaves the button
+   sitting lower than the sibling link. display:contents lifts the button into the same flex
+   line as the link so both align on one row (R8-P5-19). Form submission is unaffected. */
 .portal-topbar__notifications-mark-all-form {
+    display: contents;
     margin: 0;
 }
 
@@ -932,6 +938,7 @@ span.portal-topbar__nav-group-link {
 }
 
 .portal-topbar__messages-mark-all-form {
+    display: contents;
     margin: 0;
 }
 
