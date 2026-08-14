@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -96,13 +97,9 @@ SELECT CAST(SCOPE_IDENTITY() AS int);",
             InitialCatalog = "master"
         };
 
-        await using var conn = new SqlConnection(builder.ConnectionString);
-        await conn.OpenAsync();
-
-        await using var cmd = new SqlCommand(
-            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];",
-            conn);
-        await cmd.ExecuteNonQueryAsync();
+        await OmpTestDatabaseProvisioner.CreateDatabaseAsync(
+            builder.ConnectionString,
+            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];");
     }
 
     private async Task ApplyCoreSetupScriptAsync()

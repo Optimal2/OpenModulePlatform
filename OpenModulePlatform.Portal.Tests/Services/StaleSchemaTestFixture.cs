@@ -4,6 +4,7 @@ using OpenModulePlatform.HostAgent.Runtime.Services;
 using HostAgentSqlConnectionFactory = OpenModulePlatform.HostAgent.Runtime.Services.SqlConnectionFactory;
 using PortalSqlConnectionFactory = OpenModulePlatform.Web.Shared.Services.SqlConnectionFactory;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -146,13 +147,9 @@ WHERE s.name = @schemaName
             InitialCatalog = "master"
         };
 
-        await using var conn = new SqlConnection(builder.ConnectionString);
-        await conn.OpenAsync();
-
-        await using var cmd = new SqlCommand(
-            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];",
-            conn);
-        await cmd.ExecuteNonQueryAsync();
+        await OmpTestDatabaseProvisioner.CreateDatabaseAsync(
+            builder.ConnectionString,
+            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];");
     }
 
     private async Task EnsureSchemaAsync()

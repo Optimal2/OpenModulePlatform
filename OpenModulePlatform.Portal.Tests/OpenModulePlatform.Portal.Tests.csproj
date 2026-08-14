@@ -37,6 +37,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- One shared copy: seven fixtures provisioned databases independently and a fix
+         applied to one of them would have left the other six. -->
+    <Compile Include="..\tests\shared\OmpTestDatabaseProvisioner.cs" Link="TestSupport\OmpTestDatabaseProvisioner.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 </Project>

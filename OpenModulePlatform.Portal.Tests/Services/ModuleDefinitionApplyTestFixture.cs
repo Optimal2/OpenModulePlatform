@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using OpenModulePlatform.Portal.Services;
 using PortalSqlConnectionFactory = OpenModulePlatform.Web.Shared.Services.SqlConnectionFactory;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -183,13 +184,9 @@ INSERT INTO omp.InstanceTemplates (TemplateKey) VALUES (N'default');");
             InitialCatalog = "master"
         };
 
-        await using var conn = new SqlConnection(builder.ConnectionString);
-        await conn.OpenAsync();
-
-        await using var cmd = new SqlCommand(
-            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];",
-            conn);
-        await cmd.ExecuteNonQueryAsync();
+        await OmpTestDatabaseProvisioner.CreateDatabaseAsync(
+            builder.ConnectionString,
+            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];");
     }
 
     private async Task EnsureSchemaAsync()
