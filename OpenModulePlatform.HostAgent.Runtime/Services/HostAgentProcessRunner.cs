@@ -6,11 +6,10 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 internal static class HostAgentProcessRunner
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan StreamDrainTimeout = TimeSpan.FromSeconds(5);
 
-    private const string StreamDrainIncompleteNote =
-        "(output was truncated: the process exited but its redirected streams stayed open, "
-        + "which usually means a child process inherited them)";
+    // R11-B4. The drain itself moved to OmpProcessStreamDrain so the Bootstrapper's
+    // RunProcess reaches the same implementation; this alias is only the kill-path wait.
+    private static readonly TimeSpan StreamDrainTimeout = OmpProcessStreamDrain.Timeout;
 
     public static HostAgentProcessResult Run(
         string fileName,
@@ -53,44 +52,16 @@ internal static class HostAgentProcessRunner
             TryKillProcessTree(process);
             TryWaitForExit(process, StreamDrainTimeout);
 
-            var output = TryReadCompletedTask(outputTask);
-            var error = TryReadCompletedTask(errorTask);
+            var output = OmpProcessStreamDrain.ReadCompletedOrEmpty(outputTask);
+            var error = OmpProcessStreamDrain.ReadCompletedOrEmpty(errorTask);
             throw new TimeoutException(
                 $"Process '{Path.GetFileName(fileName)}' did not exit within {effectiveTimeout.TotalSeconds:0.#} seconds. Arguments: {FormatArguments(argumentList, sensitiveList)}.{CreateOutputDiagnostic(output, error, sensitiveList)}");
         }
 
-        // R9-A2. The process exiting does not mean its pipes closed. A grandchild that
-        // inherited the redirected handles keeps them open, and ReadToEndAsync then never
-        // completes -- so these two lines could block the HostAgent cycle forever. The
-        // path runs icacls, appcmd and netsh, all of which can spawn helpers.
-        //
-        // WaitForExit() with no argument would drain the readers for us, but it has the
-        // same unbounded wait. Bound the drain instead and take whatever arrived; the exit
-        // code is the part callers act on, and the timeout branch above already treats
-        // partial output as acceptable.
-        //
-        // R10-S1: WhenAny, not WhenAll().Wait(). Wait() rethrows a faulted read wrapped in
-        // an AggregateException, and no exception filter in the deployment services lists
-        // that type -- so a broken pipe would have escaped and aborted the whole HostAgent
-        // cycle, which is the failure R9-A2 was written to prevent. WhenAny's own task
-        // never faults, so the outcome of the reads is inspected rather than thrown, and
-        // TryReadCompletedTask already yields empty for anything that did not succeed.
-        var drainDeadline = Task.Delay(StreamDrainTimeout);
-        var settled = Task.WhenAny(Task.WhenAll(outputTask, errorTask), drainDeadline)
-            .GetAwaiter()
-            .GetResult();
-
-        var stdOut = TryReadCompletedTask(outputTask);
-        var stdErr = TryReadCompletedTask(errorTask);
-
-        var note = ReferenceEquals(settled, drainDeadline)
-            ? StreamDrainIncompleteNote
-            : DescribeFaultedReads(outputTask, errorTask);
-        if (note is not null)
-        {
-            stdErr = string.IsNullOrEmpty(stdErr) ? note : stdErr + Environment.NewLine + note;
-        }
-
+        // R11-B4. The bounded drain and everything R9-A2 and R10-S1 taught it now live in
+        // OmpProcessStreamDrain, because the Bootstrapper's RunProcess needed the same
+        // thing and could not reach a private member.
+        var (stdOut, stdErr) = OmpProcessStreamDrain.Drain(outputTask, errorTask);
         return new HostAgentProcessResult(process.ExitCode, stdOut, stdErr);
     }
 
@@ -171,45 +142,6 @@ internal static class HostAgentProcessRunner
         {
             // The timeout exception below is still the operationally relevant failure.
         }
-    }
-
-    /// <summary>
-    /// Describes a redirected stream read that failed, or null when both succeeded.
-    /// </summary>
-    /// <remarks>
-    /// R10-S1. A faulted read is not a reason to abort the deployment cycle -- the process
-    /// exited and its exit code is what callers act on -- but it is a reason the output is
-    /// empty, and silently empty output reads as "the tool said nothing" rather than "we
-    /// could not hear it". Surfacing it as a diagnostic keeps the distinction without
-    /// turning a broken pipe into a failed deployment.
-    /// </remarks>
-    private static string? DescribeFaultedReads(Task<string> outputTask, Task<string> errorTask)
-    {
-        var reasons = new List<string>(2);
-        AppendFault(reasons, "stdout", outputTask);
-        AppendFault(reasons, "stderr", errorTask);
-        return reasons.Count == 0 ? null : "(output was incomplete: " + string.Join("; ", reasons) + ")";
-
-        static void AppendFault(List<string> reasons, string name, Task<string> task)
-        {
-            if (task.IsCompletedSuccessfully)
-            {
-                return;
-            }
-
-            var reason = task.Exception?.GetBaseException().Message ?? "the read did not complete";
-            reasons.Add($"{name} could not be read ({reason})");
-        }
-    }
-
-    private static string TryReadCompletedTask(Task<string> task)
-    {
-        if (!task.IsCompletedSuccessfully)
-        {
-            return string.Empty;
-        }
-
-        return task.GetAwaiter().GetResult();
     }
 
     private static string CreateOutputDiagnostic(string output, string error, string[]? sensitiveValues = null)

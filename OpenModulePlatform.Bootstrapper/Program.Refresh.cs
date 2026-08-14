@@ -226,22 +226,14 @@ internal static partial class Program
                 exitCode = 0;
                 form.SetStatus("Updated installer package created. Starting installer...");
             }
-            catch (JsonException ex)
+            catch (Exception ex)
             {
-                // Progress UI boundary: keep the background refresh failure visible while preserving the detailed log file.
-                Console.Error.WriteLine("Installer package refresh failed.");
-                Console.Error.WriteLine(ex);
-                form.SetStatus("Installer package refresh failed.");
-                MessageBox.Show(
-                    form,
-                    $"Installer package refresh failed. Details were written to:{Environment.NewLine}{logPath}{Environment.NewLine}{Environment.NewLine}{ex.Message}",
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-            catch (SystemException ex)
-            {
-                // Progress UI boundary: keep the background refresh failure visible while preserving the detailed log file.
+                // R11-B2. Progress UI boundary: keep the background refresh failure visible
+                // while preserving the detailed log file. This handler is subscribed to
+                // Shown as an async lambda, so it is an async void method: an exception
+                // outside the filter does not merely skip this dialog, it takes the whole
+                // installer down while a package refresh is half-written. Same reasoning as
+                // the GUI action boundary -- the widest filter is the correct one here.
                 Console.Error.WriteLine("Installer package refresh failed.");
                 Console.Error.WriteLine(ex);
                 form.SetStatus("Installer package refresh failed.");
