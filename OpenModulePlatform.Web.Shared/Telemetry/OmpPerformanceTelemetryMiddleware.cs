@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 
 namespace OpenModulePlatform.Web.Shared.Telemetry;
@@ -59,15 +60,56 @@ public static class OmpPerformanceTelemetryMiddleware
                 // Telemetry must never turn a served page into a failed one. Anything that
                 // goes wrong while recording is swallowed here, deliberately and narrowly:
                 // the request has already been handled by the time this runs.
+                //
+                // Swallowed, but not silent. The first version caught everything and did
+                // nothing at all, which would have hidden a defect in RecordRequest itself
+                // for as long as it existed -- and the whole point of this middleware is to
+                // make things visible. It is reported once per process: enough to find,
+                // not enough to flood a log on every request.
                 try
                 {
                     RecordRequest(context, telemetry, options, appKey, stopwatch.Elapsed.TotalMilliseconds);
                 }
                 catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
+                    ReportRecordingFailureOnce(context, ex);
                 }
             }
         });
+    }
+
+    /// <summary>Set once the first recording failure has been logged.</summary>
+    private static int _recordingFailureReported;
+
+    /// <summary>
+    /// Logs the first recording failure this process sees, and nothing after it.
+    /// </summary>
+    /// <remarks>
+    /// Reporting must not become its own failure, so the logger lookup is inside the try:
+    /// during shutdown the request services can already be disposed, and throwing from a
+    /// catch block would turn a swallowed telemetry problem into a failed request -- the
+    /// exact outcome this middleware is written to avoid.
+    /// </remarks>
+    private static void ReportRecordingFailureOnce(HttpContext context, Exception exception)
+    {
+        if (Interlocked.Exchange(ref _recordingFailureReported, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            context.RequestServices
+                .GetService<ILoggerFactory>()
+                ?.CreateLogger(typeof(OmpPerformanceTelemetryMiddleware))
+                .LogWarning(
+                    exception,
+                    "Performance telemetry could not record a request. Further occurrences are not logged. Measurements are incomplete until this is fixed.");
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Nothing left to try. The request itself has already been served.
+        }
     }
 
     private static void RecordRequest(

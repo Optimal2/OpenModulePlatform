@@ -3235,7 +3235,14 @@ internal static partial class Program
                         // warns and counts it; this one, reached in restore mode
                         // (--full-content-check), reported success for a build that did not
                         // happen (R7-G5).
-                        if (sourcePackage is null && !quickMode && !string.IsNullOrWhiteSpace(component.ProjectPath))
+                        //
+                        // No quickMode test here: fast mode returns from the two blocks
+                        // above, so this line is only reachable with quickMode false. The
+                        // first version of this guard said so anyway, which made it look
+                        // conditional on something that could not vary -- the same
+                        // decorative-condition trap R7-D5 was about, in code written to fix
+                        // R7-G5. CodeQL's constant-condition rule caught it.
+                        if (sourcePackage is null && !string.IsNullOrWhiteSpace(component.ProjectPath))
                         {
                             lines.Add($"  WARN    {component.ComponentKey}: {packageName} could not be selectively built; the existing payload was left in place and is NOT known to match the source.");
                             warnings++;
@@ -3306,7 +3313,10 @@ internal static partial class Program
                         // reports OK, so a failed build looks identical to a successful one
                         // (R7-G5). Reporting the fallback is what makes the two
                         // distinguishable.
-                        if (sourcePackage is null && !quickMode && !string.IsNullOrWhiteSpace(component.ProjectPath))
+                        //
+                        // The quickMode block directly above ends in continue, so this line
+                        // only runs with quickMode false. See the note at the sibling guard.
+                        if (sourcePackage is null && !string.IsNullOrWhiteSpace(component.ProjectPath))
                         {
                             lines.Add($"  WARN    {component.ComponentKey}: {packageName} could not be selectively built; falling back to the configured package at {currentSourcePath}, which is NOT known to match the source.");
                             warnings++;

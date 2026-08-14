@@ -294,8 +294,11 @@ function Get-ProjectReferences {
     $csprojText = Get-Content -LiteralPath $resolvedCsproj -Raw -Encoding UTF8
 
     $referencedDirs = [System.Collections.Generic.List[string]]::new()
-    $matches = [System.Text.RegularExpressions.Regex]::Matches($csprojText, '<ProjectReference\s+Include="([^"]+)"')
-    foreach ($match in $matches) {
+    # Not $matches: that is PowerShell's automatic variable, written by every -match in
+    # the same scope. Assigning to it is legal and quietly makes any later -match result
+    # in this function read as project references.
+    $projectReferenceMatches = [System.Text.RegularExpressions.Regex]::Matches($csprojText, '<ProjectReference\s+Include="([^"]+)"')
+    foreach ($match in $projectReferenceMatches) {
         $includePath = $match.Groups[1].Value
         $resolvedRefPath = [System.IO.Path]::GetFullPath((Join-Path $csprojDir $includePath))
         if (Test-Path -LiteralPath $resolvedRefPath -PathType Leaf) {
@@ -797,7 +800,13 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
         foreach ($consumerKey in $consumers) {
             $currentComponent = $null
             foreach ($component in @($manifest.components)) {
-                if (([string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')) -eq $consumerKey) {
+                # Ordinal, like every other component-key comparison in this file. -eq is
+                # case-insensitive, so a consumer key cased differently from the component
+                # key matched here and nowhere else.
+                if ([string]::Equals(
+                        [string](Get-OptionalPropertyValue -Object $component -Name 'componentKey'),
+                        [string]$consumerKey,
+                        [StringComparison]::Ordinal)) {
                     $currentComponent = $component
                     break
                 }
@@ -950,7 +959,13 @@ else {
         foreach ($consumerKey in $consumerKeys) {
             $currentComponent = $null
             foreach ($component in @($manifest.components)) {
-                if (([string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')) -eq $consumerKey) {
+                # Ordinal, like every other component-key comparison in this file. -eq is
+                # case-insensitive, so a consumer key cased differently from the component
+                # key matched here and nowhere else.
+                if ([string]::Equals(
+                        [string](Get-OptionalPropertyValue -Object $component -Name 'componentKey'),
+                        [string]$consumerKey,
+                        [StringComparison]::Ordinal)) {
                     $currentComponent = $component
                     break
                 }

@@ -96,6 +96,9 @@ WHEN NOT MATCHED THEN
         }
         catch (OperationCanceledException)
         {
+            // Shutdown, or the final flush exceeding its own 10-second budget. Neither is
+            // a fault: the interval's samples are gone either way, and logging on every
+            // application stop would be noise in every log this platform produces.
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)
         {
