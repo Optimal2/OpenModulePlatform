@@ -10,17 +10,20 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", now: "Nu", today: "I dag", week: "v.", open: "Öppna kalendern" }
-        : { time: "Time", clear: "Clear", now: "Now", today: "Today", week: "wk", open: "Open the calendar" };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "I dag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå" }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy" };
 
+    // The year placeholder follows the page language; its four letters keep
+    // the slot positions identical across languages.
     var templates = {
-        date: { display: "åååå-mm-dd", slots: [0, 1, 2, 3, 5, 6, 8, 9] },
+        date: { display: texts.year + "-mm-dd", slots: [0, 1, 2, 3, 5, 6, 8, 9] },
         time: { display: "--:--", slots: [0, 1, 3, 4] },
-        datetime: { display: "åååå-mm-dd --:--", slots: [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15] }
+        datetime: { display: texts.year + "-mm-dd --:--", slots: [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15] }
     };
 
     var panel = null;
     var panelInput = null;
+    var panelToggle = null;
 
     function pad(value) { return String(value).padStart(2, "0"); }
 
@@ -209,8 +212,34 @@
         };
     }
 
+    // A "datetime" input starts date-only and flips to full datetime via the
+    // Time chip in the panel. Off means the value simply has no time part
+    // (midnight); the declared mode never changes, only the working mode.
+    function setTimeVisible(st, visible) {
+        if (st.declaredMode !== "datetime" || (st.mode === "datetime") === visible) { return; }
+        if (visible) {
+            st.mode = "datetime";
+            st.template = templates.datetime;
+            st.digits = st.digits.slice(0, 8).concat(["", "", "", ""]);
+            if (st.digits.slice(0, 8).every(function (ch) { return ch !== ""; })) {
+                st.digits[8] = "0"; st.digits[9] = "0"; st.digits[10] = "0"; st.digits[11] = "0";
+            }
+        } else {
+            st.mode = "date";
+            st.template = templates.date;
+            st.digits = st.digits.slice(0, 8);
+        }
+        st.cursor = Math.min(st.cursor, st.template.slots.length - 1);
+        commit(st);
+    }
+
     function closePanel() {
         if (panel) { panel.remove(); panel = null; panelInput = null; }
+        if (panelToggle) {
+            panelToggle.classList.remove("omp-datetime__toggle--open");
+            panelToggle.setAttribute("aria-label", texts.open);
+            panelToggle = null;
+        }
     }
 
     function renderPanel(st) {
@@ -348,6 +377,16 @@
 
         var footer = document.createElement("div");
         footer.className = "omp-datetime-panel__footer";
+        if (st.declaredMode === "datetime") {
+            var timeChip = document.createElement("button");
+            timeChip.type = "button";
+            timeChip.className = "omp-datetime-panel__action";
+            if (st.mode === "datetime") { timeChip.classList.add("omp-datetime-panel__action--on"); }
+            timeChip.setAttribute("aria-pressed", st.mode === "datetime" ? "true" : "false");
+            timeChip.textContent = texts.time;
+            timeChip.addEventListener("click", function () { setTimeVisible(st, st.mode !== "datetime"); });
+            footer.appendChild(timeChip);
+        }
         var clear = document.createElement("button");
         clear.type = "button"; clear.className = "omp-datetime-panel__action"; clear.textContent = texts.clear;
         clear.addEventListener("click", function () {
@@ -371,7 +410,25 @@
                 if (st.mode === "datetime") { setTimePart(st, current.getUTCHours(), current.getUTCMinutes()); }
             }
         });
-        footer.append(clear, nowButton);
+        // Reset restores the value from when the panel was opened, so a
+        // series of exploratory clicks can be undone in one step.
+        var reset = document.createElement("button");
+        reset.type = "button"; reset.className = "omp-datetime-panel__action"; reset.textContent = texts.reset;
+        reset.addEventListener("click", function () {
+            if (st.declaredMode === "datetime") {
+                var stamp = st.openSnapshot || "";
+                setTimeVisible(st, stamp.indexOf("T") >= 0 && !/T00:00$/.test(stamp));
+            }
+            if (st.hidden.value !== st.openSnapshot) {
+                st.hidden.value = st.openSnapshot;
+                st.hidden.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            digitsFromCanonical(st, st.openSnapshot);
+            st.cursor = 0;
+            render(st);
+            renderPanel(st);
+        });
+        footer.append(clear, reset, nowButton);
         panel.appendChild(footer);
     }
 
@@ -381,11 +438,18 @@
         var now = new Date();
         st.shownYear = parts.year || now.getUTCFullYear();
         st.shownMonth = parts.month || now.getUTCMonth() + 1;
+        st.openSnapshot = st.hidden.value;
         panel = document.createElement("div");
         panel.className = "omp-datetime-panel";
         panelInput = st.input;
+        panelToggle = st.toggle;
+        st.toggle.classList.add("omp-datetime__toggle--open");
+        st.toggle.setAttribute("aria-label", texts.close);
         st.wrapper.appendChild(panel);
         renderPanel(st);
+        // The caret sits under the field's toggle icon so the panel reads as
+        // a speech bubble anchored to it.
+        panel.style.setProperty("--omp-caret-left", (st.toggle.offsetLeft + st.toggle.offsetWidth / 2) + "px");
     }
 
     function enhance(input) {
@@ -420,9 +484,17 @@
         wrapper.appendChild(toggle);
 
         var st = {
-            input: input, hidden: hidden, wrapper: wrapper, mode: mode,
-            template: template, digits: [], cursor: 0, shownYear: 0, shownMonth: 1
+            input: input, hidden: hidden, wrapper: wrapper, toggle: toggle,
+            mode: mode, declaredMode: mode, template: template,
+            digits: [], cursor: 0, shownYear: 0, shownMonth: 1, openSnapshot: ""
         };
+        // Datetime fields start date-only (time off, internally midnight);
+        // a stored value with an actual time keeps the time visible so the
+        // field never hides part of what it holds.
+        if (mode === "datetime" && !(hidden.value.indexOf("T") >= 0 && !/T00:00$/.test(hidden.value))) {
+            st.mode = "date";
+            st.template = templates.date;
+        }
         input._ompDatetime = st;
         input.type = "text";
         input.autocomplete = "off";
@@ -448,6 +520,14 @@
         // the canonical hidden value.
         input.addEventListener("omp-datetime-restore", function () {
             var digits = input.value.replace(/[^0-9]/g, "");
+            // A restored display string carries its own shape: 8 digits is a
+            // date-only value, 12 is a full datetime.
+            if (st.declaredMode === "datetime") {
+                var wantTime = digits.length > 8;
+                st.mode = wantTime ? "datetime" : "date";
+                st.template = wantTime ? templates.datetime : templates.date;
+                st.cursor = Math.min(st.cursor, st.template.slots.length - 1);
+            }
             var complete = digits.length === st.template.slots.length;
             st.digits = st.template.slots.map(function (_, index) { return complete ? digits[index] : ""; });
             st.hidden.value = complete ? (canonicalFromDigits(st) || "") : "";
