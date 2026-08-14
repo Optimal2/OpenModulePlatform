@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.437",
+  "repositoryVersion": "0.3.438",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -94,7 +94,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.551",
+      "version": "0.3.552",
       "minModuleDefinitionVersion": "0.3.104",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -121,7 +121,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.201",
+      "version": "0.3.202",
       "minModuleDefinitionVersion": "0.3.108",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",

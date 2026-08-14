@@ -206,6 +206,16 @@ function Get-EligibleFiles {
         }
     }
 
+    # PowerShell unrolls a returned collection into the pipeline, so this never reaches the
+    # caller as the List[string] it is declared to be -- it arrives as an object[], or as a
+    # bare string when a single file matched. The caller then called .GetRange() on it,
+    # which arrays do not have, so every run that actually found something to sign threw.
+    # Only the "nothing to sign" path worked, which is why it went unnoticed (R7-G7).
+    #
+    # The unrolling is left alone and handled where it lands: the caller wraps this in @()
+    # and slices. Returning `,$files` instead would suppress the unrolling, but combined
+    # with the caller's @() it produces a single-element array containing the whole list --
+    # verified by experiment, not assumed.
     return $files
 }
 
@@ -227,7 +237,7 @@ foreach ($required in @('Endpoint', 'CodeSigningAccountName', 'CertificateProfil
     }
 }
 
-$targets = Get-EligibleFiles -Roots $Path -Patterns $IncludePattern
+$targets = @(Get-EligibleFiles -Roots $Path -Patterns $IncludePattern)
 if ($targets.Count -eq 0) {
     Write-Host 'No unsigned first-party binaries were found under the given paths; nothing to sign.'
     exit 0
@@ -241,7 +251,7 @@ Write-Host "Signing $($targets.Count) file(s) with Trusted Signing profile '$($c
 $batchSize = 25
 for ($offset = 0; $offset -lt $targets.Count; $offset += $batchSize) {
     $count = [Math]::Min($batchSize, $targets.Count - $offset)
-    $batch = $targets.GetRange($offset, $count)
+    $batch = @($targets[$offset..($offset + $count - 1)])
     $arguments = @('sign', '/fd', 'SHA256', '/tr', $TimestampUrl, '/td', 'SHA256', '/dlib', $dlib, '/dmdf', $resolvedConfig) + @($batch)
     & $signTool @arguments
     if ($LASTEXITCODE -ne 0) {

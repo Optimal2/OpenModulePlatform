@@ -866,6 +866,15 @@ try {
 
         if ([string]::IsNullOrWhiteSpace($payloadPath)) {
             if (-not [string]::IsNullOrWhiteSpace($existingPackage)) {
+                # Reuse is right for components with nothing to publish, but it must not be
+                # silent when a build was explicitly requested: -BuildArtifacts then shipped
+                # a previously built zip while reporting a successful build, which is how a
+                # stale payload reaches a package that everything downstream treats as
+                # freshly built (R7-G14).
+                if ($BuildArtifacts) {
+                    Write-Warning "Component '$($component.componentKey)' has no publishable .NET or Node web projectPath, so -BuildArtifacts could not build it. Reusing the existing package instead: $existingPackage"
+                }
+
                 Copy-ExistingArtifactPackage -SourcePath $existingPackage -Destination (Join-Path $artifactsRoot $packageName)
                 continue
             }

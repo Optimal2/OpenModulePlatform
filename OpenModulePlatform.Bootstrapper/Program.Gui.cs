@@ -3228,6 +3228,20 @@ internal static partial class Program
                             lines,
                             existingPackagePath: payloadPath);
 
+                        // A selective build that produced nothing is a failure, and this
+                        // branch used to fall through to "OK: artifact package is present"
+                        // -- the previously built payload is indeed present, which is
+                        // exactly why the report was wrong. The sibling branch above already
+                        // warns and counts it; this one, reached in restore mode
+                        // (--full-content-check), reported success for a build that did not
+                        // happen (R7-G5).
+                        if (sourcePackage is null && !quickMode && !string.IsNullOrWhiteSpace(component.ProjectPath))
+                        {
+                            lines.Add($"  WARN    {component.ComponentKey}: {packageName} could not be selectively built; the existing payload was left in place and is NOT known to match the source.");
+                            warnings++;
+                            continue;
+                        }
+
                         var mirroredLibraryPath = Path.Join(ResolvePackageArtifactsRoot(_payloadRoot), packageName);
                         var refreshed = TryRefreshPackageLibraryArtifactFromSource(
                             sourcePackage,
@@ -3286,6 +3300,17 @@ internal static partial class Program
                             builtPackages,
                             lines,
                             existingPackagePath: currentSourcePath);
+
+                        // Same failure as above, one branch over: falling back to
+                        // currentSourcePath copies the previously built package and then
+                        // reports OK, so a failed build looks identical to a successful one
+                        // (R7-G5). Reporting the fallback is what makes the two
+                        // distinguishable.
+                        if (sourcePackage is null && !quickMode && !string.IsNullOrWhiteSpace(component.ProjectPath))
+                        {
+                            lines.Add($"  WARN    {component.ComponentKey}: {packageName} could not be selectively built; falling back to the configured package at {currentSourcePath}, which is NOT known to match the source.");
+                            warnings++;
+                        }
 
                         var packageToCopy = sourcePackage ?? currentSourcePath;
                         CopyFileIfDifferent(packageToCopy, payloadPath);
@@ -6445,6 +6470,29 @@ ORDER BY ar.ArtifactId DESC;
             }
 
             var hostChoice = SelectedHostChoice;
+
+            // A host-targeted package must not be written under a global file name.
+            // The suggested name always carries the host key, but the operator can edit the
+            // path, and the file name is what tells the receiving side whether the payload
+            // belongs in the global object tree or under one host. A package holding one
+            // host's configuration, filed as global, is the same leak class as the
+            // 2026-07-24 incident (R7-G18).
+            if (!string.IsNullOrWhiteSpace(hostChoice?.HostKey)
+                && Path.GetFileName(outputPath).Contains("__global__", StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show(
+                    this,
+                    $"The output file name says '__global__' but the package targets host '{hostChoice.HostKey}'."
+                        + $"{Environment.NewLine}{Environment.NewLine}"
+                        + "A host-targeted package filed under a global name can have its host configuration merged into the global object tree."
+                        + $"{Environment.NewLine}{Environment.NewLine}"
+                        + $"Rename the file so it carries the host key instead, for example '__{SanitizeUniversalPackageFilePart(hostChoice.HostKey)}__'.",
+                    "Create universal module package",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
             Request = new UniversalPackageBuildRequest(
                 _packageKeyBox.Text.Trim(),
                 _packageVersionBox.Text.Trim(),

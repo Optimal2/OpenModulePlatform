@@ -164,25 +164,30 @@ ORDER BY h.HostKey;
 
         # Artifact provisioning state for every desired artifact on each host —
         # this is what covers worker/channel-type packages that the app summary
-        # (web-app/service-app only) does not see. Only artifacts with an
-        # enabled requirement count: states left behind for retired versions
-        # are noise, not drift.
+        # (web-app/service-app only) does not see.
+        #
+        # Driven FROM the requirements, not from the states. The query used to start at
+        # omp.HostArtifactStates, which only has a row once the HostAgent has reported on
+        # the artifact -- so a requirement the agent had not yet acknowledged produced no
+        # row, no issue, and a clean "Converged" in exactly the window a deployment gate
+        # exists to catch (R7-G12). A missing state is now the strongest signal there is,
+        # not the absence of one.
         $artifactSql = @"
 SELECT h.HostKey, a.PackageType, a.TargetName, a.Version,
-       has.ProvisioningState, has.LastError, has.UpdatedUtc
-FROM omp.HostArtifactStates has
-INNER JOIN omp.Hosts h ON h.HostId = has.HostId
-INNER JOIN omp.Artifacts a ON a.ArtifactId = has.ArtifactId
+       CAST(has.ProvisioningState AS int) AS ProvisioningState,
+       CASE WHEN has.HostId IS NULL
+            THEN N'No HostAgent report for this required artifact yet.'
+            ELSE has.LastError END AS LastError,
+       has.UpdatedUtc
+FROM omp.HostArtifactRequirements r
+INNER JOIN omp.Hosts h ON h.HostId = r.HostId
+INNER JOIN omp.Artifacts a ON a.ArtifactId = r.ArtifactId
+LEFT JOIN omp.HostArtifactStates has
+    ON has.HostId = r.HostId
+   AND has.ArtifactId = r.ArtifactId
 WHERE h.IsEnabled = 1 $hostFilter
-  AND (has.ProvisioningState NOT IN (2) OR has.LastError IS NOT NULL)
-  AND EXISTS
-  (
-      SELECT 1
-      FROM omp.HostArtifactRequirements r
-      WHERE r.HostId = has.HostId
-        AND r.ArtifactId = has.ArtifactId
-        AND r.IsEnabled = 1
-  )
+  AND r.IsEnabled = 1
+  AND (has.HostId IS NULL OR has.ProvisioningState NOT IN (2) OR has.LastError IS NOT NULL)
 ORDER BY h.HostKey, a.PackageType, a.TargetName, a.Version;
 "@
 
@@ -208,7 +213,16 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.AppInstanceKey;
         $artifacts = Invoke-Query $conn $artifactSql
         $workers = Invoke-Query $conn $workerSql
 
-        $converged = $true
+        # Converged is a claim about hosts that were examined. Zero rows means no enabled
+        # host matched -- a wrong -HostKey, a disabled host, an empty database -- and
+        # answering "Converged" to that is answering a question nobody asked. The old code
+        # started at $true and only ever cleared it, so checking nothing passed (R7-G11).
+        $converged = $summary.Rows.Count -gt 0
+        $notes = @()
+        if ($summary.Rows.Count -eq 0) {
+            $notes += 'No enabled host matched the query; nothing was checked, so convergence is unknown.'
+        }
+
         foreach ($row in $summary.Rows) {
             if ([int]$row.Pending -gt 0 -or [int]$row.Failed -gt 0 -or [int]$row.Warnings -gt 0 -or [bool]$row.HostAgentUpgradePending) {
                 $converged = $false
@@ -221,6 +235,7 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.AppInstanceKey;
         return [pscustomobject]@{
             CheckedUtc = (Get-Date).ToUniversalTime().ToString('s') + 'Z'
             Converged  = $converged
+            Notes      = $notes
             Hosts      = @($summary | Select-Object HostKey, DesiredApps, InSync, Pending, Failed, Warnings, HostAgentDesired, HostAgentCurrent, HostAgentUpgradePending, HostAgentLastSeenUtc)
             ArtifactIssues = @($artifacts | Select-Object HostKey, PackageType, TargetName, Version, ProvisioningState, LastError, UpdatedUtc)
             WorkerIssues   = @($workers | Select-Object InstanceKey, ModuleInstanceKey, AppKey, AppInstanceKey, Placement, ObservedState, LastSeenUtc, LastExitCode, StatusMessage)
@@ -239,6 +254,9 @@ function Write-Snapshot {
     }
 
     Write-Host ("Converged: {0}   ({1})" -f $Snapshot.Converged, $Snapshot.CheckedUtc)
+    foreach ($note in $Snapshot.Notes) {
+        Write-Warning $note
+    }
     Write-Host ''
     $Snapshot.Hosts | Format-Table HostKey, DesiredApps, InSync, Pending, Failed, Warnings, HostAgentDesired, HostAgentCurrent, HostAgentUpgradePending -AutoSize | Out-String | Write-Host
     if ($Snapshot.ArtifactIssues.Count -gt 0) {
