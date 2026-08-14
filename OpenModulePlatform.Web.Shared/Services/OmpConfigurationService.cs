@@ -6,6 +6,16 @@ using System.Threading;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
+/// <summary>
+/// The outcome of a configuration read: the value, and whether the read failed.
+/// </summary>
+/// <param name="Value">The configured value, or null when unset or unreadable.</param>
+/// <param name="Failed">
+/// True when the query itself failed. A caller making a security decision must not treat
+/// this as "unset" (R4-E1).
+/// </param>
+public readonly record struct OmpConfigurationRead(string? Value, bool Failed);
+
 public sealed class OmpConfigurationService
 {
     private static readonly TimeSpan CacheLifetime = TimeSpan.FromMinutes(2);
@@ -36,17 +46,40 @@ public sealed class OmpConfigurationService
         string category,
         string setting,
         CancellationToken ct)
+        => (await ReadGlobalStringAsync(category, setting, ct)).Value;
+
+    /// <summary>
+    /// Reads a global setting and reports whether the read itself failed, so a caller can
+    /// tell "not configured" apart from "could not be read".
+    /// </summary>
+    /// <remarks>
+    /// R4-E1. <see cref="GetGlobalStringAsync"/> returns null for both, and for most
+    /// callers that is right: branding falling back to a default on a transient database
+    /// blip is better than an error page. For an access decision it is not. The
+    /// AuthenticatedUsers domain allowlist treats an absent value as "no restriction
+    /// configured, allow every domain" -- which is the correct default, and exactly the
+    /// wrong reading of a failed query. A read error would silently widen access for
+    /// every request until the database recovered.
+    ///
+    /// Callers that make security decisions use this overload and fail closed. Nothing is
+    /// cached on failure, so the next request retries rather than repeating the verdict
+    /// for the full cache lifetime.
+    /// </remarks>
+    public async Task<OmpConfigurationRead> ReadGlobalStringAsync(
+        string category,
+        string setting,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(setting))
         {
-            return null;
+            return new OmpConfigurationRead(null, Failed: false);
         }
 
         var cacheKey = CreateGlobalCacheKey(category, setting);
 
         if (_cache.TryGetValue<string?>(cacheKey, out var cachedValue))
         {
-            return cachedValue;
+            return new OmpConfigurationRead(cachedValue, Failed: false);
         }
 
         string? value;
@@ -62,11 +95,11 @@ public sealed class OmpConfigurationService
             // restriction for every request in that window (R4-E1). Returning
             // uncached lets the next request retry.
             LogConfigReadFailure(ex, category, setting, effective: false);
-            return null;
+            return new OmpConfigurationRead(null, Failed: true);
         }
 
         _cache.Set(cacheKey, value, CacheLifetime);
-        return value;
+        return new OmpConfigurationRead(value, Failed: false);
     }
 
     public async Task<string?> GetEffectiveStringAsync(

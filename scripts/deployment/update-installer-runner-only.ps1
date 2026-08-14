@@ -78,6 +78,54 @@ function Invoke-NativeChecked {
     }
 }
 
+function Close-IdleInstallerGui {
+    <#
+    .SYNOPSIS
+    Asks an installer GUI running out of the package root to close before the runner is
+    replaced.
+
+    .DESCRIPTION
+    R5-G4. The manual GUI runs from the package root and holds that directory for its whole
+    idle lifetime, so a forgotten window blocks every runner update -- which is the everyday
+    cause of a stuck deployment here.
+
+    The finding also proposed relaunching the GUI from a temporary copy. That is not done:
+    it changes how the installer starts, and getting it wrong disables the one tool needed
+    to ship the correction. Asking an idle window to close is the half that removes the
+    blocker without touching launch semantics, and CloseMainWindow is a request -- a GUI with
+    unsaved work refuses it and the copy below then fails loudly, exactly as before.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageRoot
+    )
+
+    $rootFull = [System.IO.Path]::GetFullPath($PackageRoot).TrimEnd('\')
+    $candidates = @(Get-Process -Name 'OpenModulePlatform.Bootstrapper' -ErrorAction SilentlyContinue)
+    foreach ($process in $candidates) {
+        $processPath = $null
+        try { $processPath = $process.Path } catch { continue }
+        if ([string]::IsNullOrWhiteSpace($processPath)) { continue }
+
+        $processDir = [System.IO.Path]::GetFullPath((Split-Path -Parent $processPath)).TrimEnd('\')
+        if (-not $processDir.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) { continue }
+
+        # Only a window can be asked; a CLI run has no main window and must not be touched.
+        if ($process.MainWindowHandle -eq [IntPtr]::Zero) {
+            Write-Host "A Bootstrapper CLI process is running from the package root (PID $($process.Id)); leaving it alone."
+            continue
+        }
+
+        Write-Host "Asking the installer GUI running from the package root to close (PID $($process.Id))..."
+        [void]$process.CloseMainWindow()
+        if ($process.WaitForExit(10000)) {
+            Write-Host "  closed."
+        }
+        else {
+            Write-Host "  still open; the runner replacement below will fail if it keeps the file locked."
+        }
+    }
+}
+
 function Update-PackageToolRunner {
     param(
         [Parameter(Mandatory = $true)][string]$PackageRoot,
@@ -189,6 +237,7 @@ try {
     }
 
     $targetExe = Join-Path $packageRootPath 'OpenModulePlatform.Bootstrapper.exe'
+    Close-IdleInstallerGui -PackageRoot $packageRootPath
     Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
     Update-PackageToolRunner -PackageRoot $packageRootPath -SourceExe $sourceExe
 

@@ -714,12 +714,24 @@ ORDER BY ua.user_auth_id;";
         IReadOnlyList<(string PrincipalType, string Principal)> principals,
         CancellationToken ct)
     {
-        var allowedDomainsValue = await _configuration.GetGlobalStringAsync(
+        var read = await _configuration.ReadGlobalStringAsync(
             OmpRbacDefaults.ConfigurationCategory,
             OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting,
             ct);
 
-        var allowedDomains = SplitDomainList(allowedDomainsValue);
+        // R4-E1, same reasoning as RbacService: an absent value legitimately means "no
+        // restriction configured", a failed read means nothing at all. This gate decides
+        // whether an unknown principal gets provisioned on first sight, so reading a
+        // database failure as "no restriction" is the one interpretation that must not
+        // happen. Fail closed; the next request retries because nothing is cached.
+        if (read.Failed)
+        {
+            _log.LogError(
+                "The AuthenticatedUsers domain allowlist could not be read; refusing provisioning for this sign-in rather than assuming no restriction is configured.");
+            return false;
+        }
+
+        var allowedDomains = SplitDomainList(read.Value);
         if (allowedDomains.Count == 0 || allowedDomains.Contains("*"))
         {
             return true;

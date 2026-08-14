@@ -388,12 +388,28 @@ ORDER BY r.Name, r.RoleId;";
         ClaimsPrincipal user,
         CancellationToken ct)
     {
-        var allowedDomainsValue = await _configuration.GetGlobalStringAsync(
+        var read = await _configuration.ReadGlobalStringAsync(
             OmpRbacDefaults.ConfigurationCategory,
             OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting,
             ct);
 
-        var allowedDomains = SplitDomainList(allowedDomainsValue);
+        // R4-E1. An absent value means "no domain restriction is configured", and allowing
+        // every domain is the right answer to that. A FAILED read produces the same absent
+        // value and the opposite correct answer: it says nothing about what the operator
+        // configured, so treating it as "no restriction" hands the ambient AuthenticatedUsers
+        // grant to every domain for as long as the database is unreachable.
+        //
+        // Fail closed. The database being unreadable already breaks most of the request --
+        // permissions themselves come from it -- so withholding an ambient grant costs
+        // little, while widening it silently costs a great deal.
+        if (read.Failed)
+        {
+            _log.LogError(
+                "The AuthenticatedUsers domain allowlist could not be read; denying the ambient AuthenticatedUsers grant for this request rather than assuming no restriction is configured.");
+            return false;
+        }
+
+        var allowedDomains = SplitDomainList(read.Value);
         if (allowedDomains.Count == 0 || allowedDomains.Contains("*"))
         {
             return true;
