@@ -45,7 +45,11 @@ WHEN NOT MATCHED THEN
     private readonly SqlConnectionFactory _db;
     private readonly ILogger<OmpPerformanceTelemetryHostedService> _logger;
 
+    /// <summary>The THROW number omp.CaptureQueryCostSnapshot raises when VIEW SERVER STATE is missing.</summary>
+    private const int QueryCostPermissionErrorNumber = 51001;
+
     private DateTime _lastMaintenanceUtc = DateTime.MinValue;
+    private bool _queryCostSnapshotsUnavailable;
 
     public OmpPerformanceTelemetryHostedService(
         OmpPerformanceTelemetry telemetry,
@@ -165,7 +169,7 @@ WHEN NOT MATCHED THEN
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
-        if (!_options.CaptureQueryCostSnapshots)
+        if (!_options.CaptureQueryCostSnapshots || _queryCostSnapshotsUnavailable)
         {
             return;
         }
@@ -174,12 +178,31 @@ WHEN NOT MATCHED THEN
         // server-wide, so several apps capturing it would store the same rows several
         // times; the snapshot is idempotent enough that duplicates are noise rather than
         // error, and hourly means at most a handful per hour.
-        await using var snapshotCommand = new SqlCommand("omp.CaptureQueryCostSnapshot", conn)
+        try
         {
-            CommandType = CommandType.StoredProcedure
-        };
-        snapshotCommand.Parameters.Add("@TopStatements", SqlDbType.Int).Value = _options.QueryCostSnapshotStatements;
-        snapshotCommand.Parameters.Add("@RetainDays", SqlDbType.Int).Value = _options.RetainDays;
-        await snapshotCommand.ExecuteNonQueryAsync(ct);
+            await using var snapshotCommand = new SqlCommand("omp.CaptureQueryCostSnapshot", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
+            snapshotCommand.Parameters.Add("@TopStatements", SqlDbType.Int).Value = _options.QueryCostSnapshotStatements;
+            snapshotCommand.Parameters.Add("@RetainDays", SqlDbType.Int).Value = _options.RetainDays;
+            await snapshotCommand.ExecuteNonQueryAsync(ct);
+        }
+        catch (SqlException ex) when (ex.Number == QueryCostPermissionErrorNumber)
+        {
+            // The application's SQL identity lacks VIEW SERVER STATE. Nothing here can fix
+            // that, and retrying every hour would log the same line forever, so it is said
+            // once -- clearly enough to act on -- and then left alone for this process.
+            //
+            // This is not hypothetical: on the first installation the snapshot found no
+            // permission, the DMV returned nothing, and the whole feature would have sat
+            // there looking enabled and collecting nothing.
+            _queryCostSnapshotsUnavailable = true;
+            _logger.LogWarning(
+                "Query cost snapshots are enabled but this application's SQL identity lacks VIEW SERVER STATE, so none will be captured by {AppKey}. "
+                    + "Grant it (GRANT VIEW SERVER STATE TO [<identity>]) or set Telemetry:CaptureQueryCostSnapshots to false. Message: {Message}",
+                AppDomain.CurrentDomain.FriendlyName,
+                ex.Message);
+        }
     }
 }
