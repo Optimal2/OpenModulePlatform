@@ -595,12 +595,9 @@ internal static partial class Program
 
         if (root["hostAgent"] is JsonObject hostAgent)
         {
-            foreach (var property in RedistributableHostAgentSecretProperties)
+            foreach (var property in RedistributableHostAgentSecretProperties.Where(hostAgent.ContainsKey))
             {
-                if (hostAgent.ContainsKey(property))
-                {
-                    hostAgent[property] = string.Empty;
-                }
+                hostAgent[property] = string.Empty;
             }
         }
 

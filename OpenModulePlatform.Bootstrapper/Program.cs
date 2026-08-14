@@ -989,16 +989,9 @@ SELECT CASE WHEN DATABASE_PRINCIPAL_ID(@UserName) IS NULL THEN 0 ELSE 1 END;";
         ModuleDefinitionDocument definition,
         IEnumerable<ModuleDefinitionDocument> packageDefinitions)
     {
-        foreach (var candidate in packageDefinitions)
-        {
-            if (string.Equals(candidate.ModuleKey, definition.ModuleKey, StringComparison.OrdinalIgnoreCase)
-                && CompareVersionText(candidate.DefinitionVersion, definition.DefinitionVersion) > 0)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return packageDefinitions.Any(candidate =>
+            string.Equals(candidate.ModuleKey, definition.ModuleKey, StringComparison.OrdinalIgnoreCase)
+            && CompareVersionText(candidate.DefinitionVersion, definition.DefinitionVersion) > 0);
     }
 
     private static IReadOnlySet<string> ResolveConfiguredModuleKeys(BootstrapConfig config)
