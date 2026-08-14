@@ -98,7 +98,9 @@ internal static class ServiceAppDeploymentNaming
         ServiceAppDeploymentDescriptor deployment,
         string executableRelativePath,
         string newServiceName,
-        IReadOnlyDictionary<Guid, string> resolvedServiceNamesByAppInstanceId)
+        string newTargetPath,
+        IReadOnlyDictionary<Guid, string> resolvedServiceNamesByAppInstanceId,
+        IReadOnlyList<HostRuntimeFootprint> hostRuntimeFootprints)
     {
         var oldServiceName = Clean(deployment.DeployedRuntimeName);
         if (string.IsNullOrWhiteSpace(oldServiceName))
@@ -148,6 +150,28 @@ internal static class ServiceAppDeploymentNaming
             }
         }
 
+        // The check above can only see the app instances that fit inside this cycle's
+        // artifact cap, and it silently loses any whose name failed to resolve in the
+        // pre-pass. Neither limitation is acceptable for an operation that ends in a
+        // recursive directory delete, so the same question is asked again against every
+        // footprint recorded on the host (R7-D4).
+        foreach (var footprint in hostRuntimeFootprints)
+        {
+            if (footprint.AppInstanceId == deployment.AppInstanceId)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(footprint.RuntimeName)
+                && string.Equals(footprint.RuntimeName.Trim(), oldServiceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return RenameCleanupEvaluation.Skip(
+                    oldServiceName,
+                    null,
+                    $"Another app instance on this host is deployed as runtime '{oldServiceName}'.");
+            }
+        }
+
         var oldTargetPathDeployment = new ServiceAppDeploymentDescriptor
         {
             AppInstanceKey = deployment.AppInstanceKey,
@@ -155,7 +179,98 @@ internal static class ServiceAppDeploymentNaming
             InstallationName = oldServiceName
         };
         var oldTargetPath = ResolveTargetPath(settings, oldTargetPathDeployment, oldServiceName);
-        return RenameCleanupEvaluation.Clean(oldServiceName, oldTargetPath);
+
+        // A rename that does not move the files has nothing to delete. This used to be
+        // checked at delete time only, which meant the log said "cleaned up" for a
+        // directory that was never touched.
+        if (PathsMayCollide(oldTargetPath, newTargetPath))
+        {
+            return RenameCleanupEvaluation.Skip(
+                oldServiceName,
+                oldTargetPath,
+                "The old and new deployments share a target path, so only the service name changed.");
+        }
+
+        // The finding this guard exists for: cleanup compared names and nothing else, so
+        // an old name whose folder happens to be another instance's live directory would
+        // have taken that directory with it. Comparing the resolved paths is the check
+        // that actually protects the files.
+        foreach (var footprint in hostRuntimeFootprints)
+        {
+            if (footprint.AppInstanceId == deployment.AppInstanceId
+                || string.IsNullOrWhiteSpace(footprint.TargetPath))
+            {
+                continue;
+            }
+
+            if (PathsMayCollide(footprint.TargetPath, oldTargetPath))
+            {
+                return RenameCleanupEvaluation.Skip(
+                    oldServiceName,
+                    oldTargetPath,
+                    $"Another app instance on this host is deployed under '{oldTargetPath}'.");
+            }
+        }
+
+        return RenameCleanupEvaluation.Clean(oldServiceName, oldTargetPath, ResolveExpectedExecutableFileName(executableRelativePath));
+    }
+
+    /// <summary>
+    /// The executable file name the old directory must contain for it to be a previous
+    /// deployment of this same app instance.
+    /// </summary>
+    /// <remarks>
+    /// <c>executableRelativePath</c> was passed into rename evaluation and never read.
+    /// It is the one piece of evidence that distinguishes "our own directory under an
+    /// older name" from "a directory that merely resolved to the same place", so the
+    /// caller checks the old directory's contents against it before deleting anything.
+    /// </remarks>
+    private static string? ResolveExpectedExecutableFileName(string? executableRelativePath)
+    {
+        var fileName = string.IsNullOrWhiteSpace(executableRelativePath)
+            ? null
+            : Path.GetFileName(executableRelativePath.Trim());
+        return string.IsNullOrWhiteSpace(fileName) ? null : fileName;
+    }
+
+    /// <summary>
+    /// True when the two paths cannot be shown to point at different directories.
+    /// </summary>
+    /// <remarks>
+    /// Every caller uses a <c>false</c> here as permission to delete a directory tree, so
+    /// a path that will not normalise answers <c>true</c>. Refusing a legitimate cleanup
+    /// leaves a stale folder and a logged reason; the opposite mistake deletes a live
+    /// installation.
+    /// </remarks>
+    internal static bool PathsMayCollide(string? left, string? right)
+    {
+        var normalizedLeft = NormalizePath(left);
+        var normalizedRight = NormalizePath(right);
+        if (normalizedLeft is null || normalizedRight is null)
+        {
+            return true;
+        }
+
+        return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase)
+            || normalizedLeft.StartsWith(normalizedRight + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || normalizedRight.StartsWith(normalizedLeft + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? NormalizePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Path.TrimEndingDirectorySeparator(Path.GetFullPath(value.Trim()));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
     }
 
     private static string ResolveExecutableRelativePath(ServiceAppDeploymentDescriptor deployment)
@@ -224,10 +339,14 @@ internal sealed record RenameCleanupEvaluation(
     bool ShouldCleanUp,
     string? OldServiceName,
     string? OldTargetPath,
-    string? Reason)
+    string? Reason,
+    string? ExpectedExecutableFileName = null)
 {
-    public static RenameCleanupEvaluation Clean(string oldServiceName, string oldTargetPath)
-        => new(true, oldServiceName, oldTargetPath, null);
+    public static RenameCleanupEvaluation Clean(
+        string oldServiceName,
+        string oldTargetPath,
+        string? expectedExecutableFileName)
+        => new(true, oldServiceName, oldTargetPath, null, expectedExecutableFileName);
 
     public static RenameCleanupEvaluation Skip(string? oldServiceName, string? oldTargetPath, string reason)
         => new(false, oldServiceName, oldTargetPath, reason);

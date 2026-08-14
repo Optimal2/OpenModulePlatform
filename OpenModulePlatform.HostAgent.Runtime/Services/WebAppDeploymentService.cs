@@ -211,7 +211,7 @@ public sealed class WebAppDeploymentService
                     : diagnosticWarning + Environment.NewLine + missingRequiredSectionsWarning;
             }
 
-            if (IsAlreadyApplied(deployment, targetPath, runtimeName)
+            if (IsAlreadyApplied(settings, deployment, targetPath, iisAppName, runtimeName)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
             {
                 await _repository.PublishAppDeploymentResultAsync(
@@ -416,9 +416,23 @@ public sealed class WebAppDeploymentService
         }
     }
 
+    /// <summary>
+    /// Whether the desired web app is already live, so this cycle can publish
+    /// <c>applied: false</c> and move on.
+    /// </summary>
+    /// <remarks>
+    /// The last condition is the one this method used to be missing. Every other check
+    /// reads database columns or the file system, and none of them notices that the IIS
+    /// application itself was removed -- so a deleted application served 404 forever while
+    /// the Portal showed green, because the deployment that would have recreated it kept
+    /// deciding it had nothing to do. The service-app sibling has always verified that its
+    /// Windows service still exists, and self-healed when it did not (R7-D3).
+    /// </remarks>
     private static bool IsAlreadyApplied(
+        HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment,
         string targetPath,
+        string iisAppName,
         string? appPoolName)
     {
         return deployment.DeploymentState == HostDeploymentStatuses.Succeeded
@@ -427,7 +441,34 @@ public sealed class WebAppDeploymentService
             && string.Equals(deployment.DeployedTargetPath, targetPath, StringComparison.OrdinalIgnoreCase)
             && string.Equals(deployment.DeployedRuntimeName ?? string.Empty, appPoolName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
             && ArtifactHash.MatchesDeployedContent(deployment.ContentSha256, deployment.DeployedContentSha256)
-            && Directory.Exists(targetPath);
+            && Directory.Exists(targetPath)
+            && IisApplicationIsPresentOrNotManaged(settings, iisAppName);
+    }
+
+    /// <summary>
+    /// True when IIS still hosts the application, or when this host does not manage IIS.
+    /// </summary>
+    /// <remarks>
+    /// A failure to ask IIS answers <c>true</c>. Being unable to read the application list
+    /// is not evidence that the application is gone, and treating it as such would
+    /// redeploy -- stopping the app pool and rewriting the content root -- every cycle for
+    /// as long as the appcmd call kept failing.
+    /// </remarks>
+    private static bool IisApplicationIsPresentOrNotManaged(HostAgentSettings settings, string iisAppName)
+    {
+        if (!settings.EnsureIisSite || string.IsNullOrWhiteSpace(iisAppName))
+        {
+            return true;
+        }
+
+        try
+        {
+            return IisApplicationExists(iisAppName);
+        }
+        catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
+        {
+            return true;
+        }
     }
 
     private sealed class OmpAuthValidationResult

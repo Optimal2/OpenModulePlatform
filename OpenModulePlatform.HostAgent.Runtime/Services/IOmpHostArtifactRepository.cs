@@ -83,6 +83,14 @@ public interface IOmpHostArtifactRepository
         int maxDeployments,
         CancellationToken ct);
 
+    /// <summary>
+    /// Every app instance's deployed runtime name and target path on this host, web and
+    /// service alike, with no cycle cap applied.
+    /// </summary>
+    Task<IReadOnlyList<HostRuntimeFootprint>> GetHostRuntimeFootprintsAsync(
+        string hostKey,
+        CancellationToken ct);
+
     Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
         int artifactId,
         string hostKey,

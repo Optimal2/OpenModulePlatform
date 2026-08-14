@@ -3922,6 +3922,40 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
         CancellationToken ct)
         => GetDeploymentRuntimeRecoveryCandidatesAsync(hostKey, "service-app", ct);
 
+    public async Task<IReadOnlyList<HostRuntimeFootprint>> GetHostRuntimeFootprintsAsync(
+        string hostKey,
+        CancellationToken ct)
+    {
+        // Deliberately unfiltered and uncapped: this is the set rename cleanup must not
+        // collide with, and an app instance left out of the answer is one whose live
+        // directory could be deleted (R7-D4). Both web and service deployments record
+        // their footprint here, and both matter -- an IIS application's content root is
+        // just as deletable as a service's.
+        const string sql = @"
+SELECT hds.AppInstanceId, hds.RuntimeName, hds.TargetPath
+FROM omp.HostAppDeploymentStates hds
+INNER JOIN omp.Hosts h ON h.HostId = hds.HostId
+WHERE h.HostKey = @hostKey
+  AND (hds.RuntimeName IS NOT NULL OR hds.TargetPath IS NOT NULL);";
+
+        var result = new List<HostRuntimeFootprint>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@hostKey", SqlDbType.NVarChar, 128).Value = hostKey;
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            result.Add(new HostRuntimeFootprint(
+                rdr.GetGuid(0),
+                rdr.IsDBNull(1) ? null : rdr.GetString(1),
+                rdr.IsDBNull(2) ? null : rdr.GetString(2)));
+        }
+
+        return result;
+    }
+
     public async Task PublishResultAsync(
         ArtifactDescriptor artifact,
         ArtifactProvisioningResult result,

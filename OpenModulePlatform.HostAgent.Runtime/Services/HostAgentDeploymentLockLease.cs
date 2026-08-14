@@ -57,7 +57,25 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
             now,
             now.Add(LockLease));
 
-        await DeploymentLockFile.WriteAsync(applicationRoot, document, ct);
+        // Clear an expired lock left behind by a crashed deployment, then claim. The read
+        // above only established that nobody holds the lock *now*; between that read and
+        // this write another HostAgent could reach the same conclusion, and an overwriting
+        // write would let both of them believe they own the deployment (R7-D6). The claim
+        // below is the atomic step, so the loser is told it lost.
+        DeploymentLockFile.TryDelete(DeploymentLockFile.GetPath(applicationRoot));
+
+        if (!await DeploymentLockFile.TryCreateExclusiveAsync(applicationRoot, document, ct))
+        {
+            var winner = DeploymentLockFile.ReadStatus(applicationRoot, DateTimeOffset.UtcNow);
+            return HostAgentDeploymentLockAcquireResult.Locked(
+                winner.IsLocked
+                    ? winner
+                    : DeploymentLockStatus.Locked(
+                        DeploymentLockFile.GetPath(applicationRoot),
+                        null,
+                        "Another deployment claimed the lock first."));
+        }
+
         return HostAgentDeploymentLockAcquireResult.Acquired(new HostAgentDeploymentLockLease(
             applicationRoot,
             document,
@@ -87,6 +105,20 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
         using var timer = new PeriodicTimer(_renewalInterval);
         while (await timer.WaitForNextTickAsync(ct))
         {
+            // Renewal overwrites the lock file, so it must first establish that the file
+            // is still ours. If this lease expired and another deployment claimed it, an
+            // unconditional write would hand ownership back to us while that deployment
+            // was mid-flight.
+            var current = DeploymentLockFile.ReadStatus(_applicationRoot, DateTimeOffset.UtcNow);
+            if (!string.Equals(current.Document?.LockId, _lockId, StringComparison.Ordinal))
+            {
+                _logger.LogWarning(
+                    "HostAgent deployment lock is no longer held by this lease; renewal stopped. LockId={LockId}, LockPath={LockPath}",
+                    _lockId,
+                    DeploymentLockFile.GetPath(_applicationRoot));
+                return;
+            }
+
             var now = DateTimeOffset.UtcNow;
             _document = _document with
             {
