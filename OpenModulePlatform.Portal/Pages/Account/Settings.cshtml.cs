@@ -33,6 +33,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
     private readonly RbacService _rbac;
     private readonly UserProfileImageService _profileImages;
     private readonly OmpConfigurationService _configuration;
+    private readonly ILogger<SettingsModel> _logger;
 
     public SettingsModel(
         IOptions<WebAppOptions> options,
@@ -40,7 +41,8 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         PortalUserSettingsService settings,
         PortalDashboardService dashboard,
         UserProfileImageService profileImages,
-        OmpConfigurationService configuration)
+        OmpConfigurationService configuration,
+        ILogger<SettingsModel> logger)
         : base(options, rbac)
     {
         _settings = settings;
@@ -48,6 +50,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
         _rbac = rbac;
         _profileImages = profileImages;
         _configuration = configuration;
+        _logger = logger;
     }
 
     [BindProperty]
@@ -470,11 +473,23 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     private async Task<bool> GetSelfRegistrationEnabledAsync(CancellationToken ct)
     {
-        var value = await _configuration.GetGlobalStringAsync(
+        var read = await _configuration.ReadGlobalStringAsync(
             OmpAuthDefaults.ConfigurationCategory,
             OmpAuthDefaults.SelfRegistrationEnabledSetting,
             ct);
-        return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: true);
+
+        // R10-S3. The default is deliberately "enabled", which is right for an absent
+        // value and wrong for an unreadable one: a database blip would silently turn
+        // self-registration on for an installation that had turned it off. Fail closed
+        // on a failed read; nothing is cached, so the next request retries.
+        if (read.Failed)
+        {
+            _logger.LogError(
+                "The self-registration setting could not be read; treating self-registration as disabled for this request rather than falling back to the enabled default.");
+            return false;
+        }
+
+        return OmpAuthDefaults.ParseEnabledConfigValue(read.Value, defaultValue: true);
     }
 
     private async Task<ExternalUserProvisioningMode> GetExternalUserProvisioningModeAsync(CancellationToken ct)
@@ -503,12 +518,24 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     private async Task<bool> IsAuthenticatedUsersProvisioningTriggerAllowedAsync(CancellationToken ct)
     {
-        var allowedDomainsValue = await _configuration.GetGlobalStringAsync(
+        var read = await _configuration.ReadGlobalStringAsync(
             OmpRbacDefaults.ConfigurationCategory,
             OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting,
             ct);
 
-        var allowedDomains = SplitDomainList(allowedDomainsValue);
+        // R10-S3, the third copy of this gate. R4-E1 hardened the two in Web.Shared and
+        // Auth and missed this one -- the missed-sibling pattern that the whole campaign
+        // keeps finding, applied to the campaign's own fix. An absent value means "no
+        // restriction configured"; a failed read means nothing at all, and reading it as
+        // "no restriction" widens provisioning to every domain while the database is down.
+        if (read.Failed)
+        {
+            _logger.LogError(
+                "The AuthenticatedUsers domain allowlist could not be read; refusing the provisioning trigger rather than assuming no restriction is configured.");
+            return false;
+        }
+
+        var allowedDomains = SplitDomainList(read.Value);
         if (allowedDomains.Count == 0 || allowedDomains.Contains("*"))
         {
             return true;

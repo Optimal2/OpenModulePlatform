@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/ModuleDefinitionEdit.cshtml.cs
+using OpenModulePlatform.Artifacts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
@@ -198,15 +199,13 @@ public sealed class ModuleDefinitionEditModel : OmpPortalPageModel
         return $"{safeModuleKey}-{safeVersion}.module-definition.json";
     }
 
+    // R10-T3: delegates to the shared sanitizer, which also strips '..'. This builds a
+    // download file name from a module key and version, and while a file name is not a
+    // path, it is the one place those values leave the application unescaped.
     private static string SanitizeFileNamePart(string value)
     {
-        var sanitized = value.Trim();
-        foreach (var invalid in Path.GetInvalidFileNameChars())
-        {
-            sanitized = sanitized.Replace(invalid, '-');
-        }
-
-        return string.IsNullOrWhiteSpace(sanitized) ? "module" : sanitized;
+        var sanitized = OmpArtifactNaming.SanitizePathSegment(value);
+        return string.IsNullOrWhiteSpace(sanitized) || sanitized == "-" ? "module" : sanitized;
     }
 
     public sealed class InputModel

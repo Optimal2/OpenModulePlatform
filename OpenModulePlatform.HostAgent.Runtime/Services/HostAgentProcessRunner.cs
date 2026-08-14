@@ -68,14 +68,27 @@ internal static class HostAgentProcessRunner
         // same unbounded wait. Bound the drain instead and take whatever arrived; the exit
         // code is the part callers act on, and the timeout branch above already treats
         // partial output as acceptable.
-        var drained = Task.WhenAll(outputTask, errorTask).Wait(ToMilliseconds(StreamDrainTimeout));
+        //
+        // R10-S1: WhenAny, not WhenAll().Wait(). Wait() rethrows a faulted read wrapped in
+        // an AggregateException, and no exception filter in the deployment services lists
+        // that type -- so a broken pipe would have escaped and aborted the whole HostAgent
+        // cycle, which is the failure R9-A2 was written to prevent. WhenAny's own task
+        // never faults, so the outcome of the reads is inspected rather than thrown, and
+        // TryReadCompletedTask already yields empty for anything that did not succeed.
+        var drainDeadline = Task.Delay(StreamDrainTimeout);
+        var settled = Task.WhenAny(Task.WhenAll(outputTask, errorTask), drainDeadline)
+            .GetAwaiter()
+            .GetResult();
+
         var stdOut = TryReadCompletedTask(outputTask);
         var stdErr = TryReadCompletedTask(errorTask);
-        if (!drained)
+
+        var note = ReferenceEquals(settled, drainDeadline)
+            ? StreamDrainIncompleteNote
+            : DescribeFaultedReads(outputTask, errorTask);
+        if (note is not null)
         {
-            stdErr = string.IsNullOrEmpty(stdErr)
-                ? StreamDrainIncompleteNote
-                : stdErr + Environment.NewLine + StreamDrainIncompleteNote;
+            stdErr = string.IsNullOrEmpty(stdErr) ? note : stdErr + Environment.NewLine + note;
         }
 
         return new HostAgentProcessResult(process.ExitCode, stdOut, stdErr);
@@ -157,6 +170,35 @@ internal static class HostAgentProcessRunner
         catch (System.ComponentModel.Win32Exception)
         {
             // The timeout exception below is still the operationally relevant failure.
+        }
+    }
+
+    /// <summary>
+    /// Describes a redirected stream read that failed, or null when both succeeded.
+    /// </summary>
+    /// <remarks>
+    /// R10-S1. A faulted read is not a reason to abort the deployment cycle -- the process
+    /// exited and its exit code is what callers act on -- but it is a reason the output is
+    /// empty, and silently empty output reads as "the tool said nothing" rather than "we
+    /// could not hear it". Surfacing it as a diagnostic keeps the distinction without
+    /// turning a broken pipe into a failed deployment.
+    /// </remarks>
+    private static string? DescribeFaultedReads(Task<string> outputTask, Task<string> errorTask)
+    {
+        var reasons = new List<string>(2);
+        AppendFault(reasons, "stdout", outputTask);
+        AppendFault(reasons, "stderr", errorTask);
+        return reasons.Count == 0 ? null : "(output was incomplete: " + string.Join("; ", reasons) + ")";
+
+        static void AppendFault(List<string> reasons, string name, Task<string> task)
+        {
+            if (task.IsCompletedSuccessfully)
+            {
+                return;
+            }
+
+            var reason = task.Exception?.GetBaseException().Message ?? "the read did not complete";
+            reasons.Add($"{name} could not be read ({reason})");
         }
     }
 

@@ -1,3 +1,4 @@
+using OpenModulePlatform.Artifacts;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -133,29 +134,12 @@ internal static class ArtifactConfigurationFileWriter
         return true;
     }
 
+    // R10-T2: delegates to the shared guard. R8-P2-11..13 moved this to
+    // OmpReparsePointGuard so every writer could reach one implementation; these
+    // private copies were left behind, which is how R6-D7 found one of them had
+    // quietly become a no-op in the first place.
     private static bool IsReparsePoint(string path)
-    {
-        try
-        {
-            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-        }
-        catch (FileNotFoundException)
-        {
-            return false;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return false;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
+        => OmpReparsePointGuard.IsReparsePoint(path);
 
     public static async Task ApplyAsync(
         string targetRoot,

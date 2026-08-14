@@ -153,7 +153,7 @@ public sealed class ArtifactZipImportService
         // entirely rather than deleting through it.
         try
         {
-            if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            if (OmpReparsePointGuard.IsReparsePoint(root))
             {
                 _logger.LogWarning(
                     "HostAgent import housekeeping skipped '{Root}' because it is a reparse point (junction/symlink); refusing to delete through it.",
