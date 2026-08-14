@@ -88,6 +88,9 @@
         st.input.value = display.join("");
         // null means partial or impossible (e.g. Feb 30); all-empty is "".
         st.input.classList.toggle("omp-datetime__input--invalid", canonicalFromDigits(st) === null);
+        if (st.clear) {
+            st.clear.hidden = !(st.digits.some(function (ch) { return ch !== ""; }) || st.hidden.value !== "");
+        }
     }
 
     function highlight(st) {
@@ -414,6 +417,8 @@
         // series of exploratory clicks can be undone in one step.
         var reset = document.createElement("button");
         reset.type = "button"; reset.className = "omp-datetime-panel__action"; reset.textContent = texts.reset;
+        // Nothing to undo until the value differs from when the panel opened.
+        reset.disabled = st.hidden.value === st.openSnapshot;
         reset.addEventListener("click", function () {
             if (st.declaredMode === "datetime") {
                 var stamp = st.openSnapshot || "";
@@ -477,6 +482,14 @@
             wrapper.appendChild(suffix);
         }
 
+        // Quick clear between the UTC suffix and the calendar icon; hidden
+        // while the field is empty or disabled.
+        var clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "omp-datetime__clear";
+        clearBtn.setAttribute("aria-label", texts.clear);
+        wrapper.appendChild(clearBtn);
+
         var toggle = document.createElement("button");
         toggle.type = "button";
         toggle.className = "omp-datetime__toggle";
@@ -484,7 +497,7 @@
         wrapper.appendChild(toggle);
 
         var st = {
-            input: input, hidden: hidden, wrapper: wrapper, toggle: toggle,
+            input: input, hidden: hidden, wrapper: wrapper, toggle: toggle, clear: clearBtn,
             mode: mode, declaredMode: mode, template: template,
             digits: [], cursor: 0, shownYear: 0, shownMonth: 1, openSnapshot: ""
         };
@@ -532,6 +545,19 @@
             st.digits = st.template.slots.map(function (_, index) { return complete ? digits[index] : ""; });
             st.hidden.value = complete ? (canonicalFromDigits(st) || "") : "";
             render(st);
+        });
+
+        clearBtn.addEventListener("click", function () {
+            if (input.disabled) { return; }
+            st.digits = st.template.slots.map(function () { return ""; });
+            st.cursor = 0;
+            if (st.hidden.value !== "") {
+                st.hidden.value = "";
+                st.hidden.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            render(st);
+            if (panelInput === input && panel) { renderPanel(st); }
+            input.focus();
         });
 
         toggle.addEventListener("click", function () {
