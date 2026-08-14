@@ -40,6 +40,21 @@ public sealed class PortalTopBarService
     private const string PortalEntryRowsCacheKey = "omp-topbar:portal-entry-rows";
     private static readonly TimeSpan NavCacheLifetime = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Database round trips made while building the topbar for the current request.
+    /// </summary>
+    /// <remarks>
+    /// The service is registered scoped, so one instance serves one request and this field
+    /// is per-request state rather than shared. It is incremented wherever a connection is
+    /// opened, which means the cached lookups only count on a miss -- exactly the number
+    /// that matters.
+    ///
+    /// This exists to answer R4-E10 with a measurement instead of an estimate: the finding
+    /// has been deferred since R4 on an assumption about what the topbar costs, and nobody
+    /// has ever had the figure from a real installation under real use.
+    /// </remarks>
+    private int _dbRoundTrips;
+
     private readonly SqlConnectionFactory _db;
     private readonly RbacService _rbac;
     private readonly CultureSelectionService _cultureSelectionService;
@@ -90,6 +105,36 @@ public sealed class PortalTopBarService
     }
 
     public async Task<PortalTopBarModel> CreateAsync(
+        WebAppOptions options,
+        HttpRequest request,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        // Measured, then handed to the request telemetry middleware through HttpContext.Items.
+        // Reporting through Items rather than calling the telemetry directly keeps this
+        // service unaware of the telemetry: the topbar's job is to build a model, and a
+        // measurement it cannot see is one it cannot get wrong.
+        var topBarStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        Interlocked.Exchange(ref _dbRoundTrips, 0);
+        try
+        {
+            return await CreateCoreAsync(options, request, user, ct);
+        }
+        finally
+        {
+            topBarStopwatch.Stop();
+            var items = request.HttpContext?.Items;
+            if (items is not null)
+            {
+                items[Telemetry.OmpPerformanceTelemetryMiddleware.TopBarDurationItemKey] =
+                    topBarStopwatch.Elapsed.TotalMilliseconds;
+                items[Telemetry.OmpPerformanceTelemetryMiddleware.TopBarDbCallsItemKey] =
+                    Volatile.Read(ref _dbRoundTrips);
+            }
+        }
+    }
+
+    private async Task<PortalTopBarModel> CreateCoreAsync(
         WebAppOptions options,
         HttpRequest request,
         ClaimsPrincipal user,
@@ -991,6 +1036,7 @@ WHERE d.setting_category = @setting_category
   AND d.value_kind = @value_kind
   AND d.is_enabled = 1;";
 
+        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
@@ -1019,6 +1065,7 @@ FROM omp.users
 WHERE user_id = @user_id
   AND account_status = 1;";
 
+        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
@@ -1311,6 +1358,7 @@ WHERE user_id = @user_id
 
     private async Task<IReadOnlyList<TopBarPortalEntryRow>> LoadPortalEntryRowsAsync(CancellationToken ct)
     {
+        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -1374,6 +1422,7 @@ END";
 
     private async Task<IReadOnlyList<FavoriteRef>> GetFavoriteRefsAsync(int userId, CancellationToken ct)
     {
+        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -1418,6 +1467,7 @@ END";
         PortalTopBarNavigationEntry entry,
         CancellationToken ct)
     {
+        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -1737,6 +1787,7 @@ END";
 
     private async Task<IReadOnlyList<TopBarAppEntry>> LoadEnabledWebAppsAsync(CancellationToken ct)
     {
+        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
