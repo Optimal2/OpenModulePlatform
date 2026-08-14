@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
@@ -14,14 +15,9 @@ public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
         _databaseName = $"OmpHostAgentTests_{Guid.NewGuid():N}";
         var baseConnectionString = GetBaseConnectionString();
 
-        using (var conn = new SqlConnection(baseConnectionString))
-        {
-            conn.Open();
-            using var cmd = new SqlCommand(
-                $"CREATE DATABASE [{_databaseName}] COLLATE Latin1_General_100_CI_AS_SC_UTF8;",
-                conn);
-            cmd.ExecuteNonQuery();
-        }
+        OmpTestDatabaseProvisioner.CreateDatabase(
+            baseConnectionString,
+            $"CREATE DATABASE [{_databaseName}] COLLATE Latin1_General_100_CI_AS_SC_UTF8;");
 
         var builder = new SqlConnectionStringBuilder(baseConnectionString)
         {
