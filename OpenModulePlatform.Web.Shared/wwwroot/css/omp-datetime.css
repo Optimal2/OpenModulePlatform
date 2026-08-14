@@ -28,7 +28,11 @@
     pointer-events: none;
 }
 
+/* The icon lives in a custom property so hover can re-assert it: host
+   apps commonly style button:hover with the background SHORTHAND, which
+   would otherwise wipe the background-image and leave a blank square. */
 .omp-datetime__toggle {
+    --omp-dt-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%230b57d0' stroke-width='1.5'%3E%3Crect x='1.5' y='2.5' width='13' height='12' rx='2'/%3E%3Cpath d='M1.5 6.5h13M5 1v3M11 1v3'/%3E%3C/svg%3E");
     position: absolute;
     right: 4px;
     display: inline-flex;
@@ -41,20 +45,22 @@
     border: none;
     border-radius: 6px;
     background: transparent no-repeat center / 14px 14px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%230b57d0' stroke-width='1.5'%3E%3Crect x='1.5' y='2.5' width='13' height='12' rx='2'/%3E%3Cpath d='M1.5 6.5h13M5 1v3M11 1v3'/%3E%3C/svg%3E");
+    background-image: var(--omp-dt-icon);
     cursor: pointer;
 }
 
 .omp-datetime__toggle:hover,
 .omp-datetime__toggle:focus-visible {
-    background-color: var(--accent, #e8f0fe);
+    border: none;
+    background: rgba(11, 87, 208, 0.08) no-repeat center / 14px 14px;
+    background-image: var(--omp-dt-icon);
 }
 
 /* While the panel is open the icon flips to an X, so it reads as the
    close button (clicking outside closes too). */
 .omp-datetime__toggle--open {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%230b57d0' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M3.5 3.5l9 9M12.5 3.5l-9 9'/%3E%3C/svg%3E");
-    background-color: var(--accent, #e8f0fe);
+    --omp-dt-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%230b57d0' stroke-width='1.7' stroke-linecap='round'%3E%3Cpath d='M3.5 3.5l9 9M12.5 3.5l-9 9'/%3E%3C/svg%3E");
+    background-color: rgba(11, 87, 208, 0.08);
 }
 
 .omp-datetime-panel {
