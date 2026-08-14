@@ -155,12 +155,31 @@ WHEN NOT MATCHED THEN
     {
         _lastMaintenanceUtc = DateTime.UtcNow;
 
-        await using var cmd = new SqlCommand("omp.RollUpAndPrunePerformanceSamples", conn)
+        await using (var cmd = new SqlCommand("omp.RollUpAndPrunePerformanceSamples", conn)
+        {
+            CommandType = CommandType.StoredProcedure
+        })
+        {
+            cmd.Parameters.Add("@RetainHours", SqlDbType.Int).Value = _options.RetainHours;
+            cmd.Parameters.Add("@RetainDays", SqlDbType.Int).Value = _options.RetainDays;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        if (!_options.CaptureQueryCostSnapshots)
+        {
+            return;
+        }
+
+        // Hourly, from whichever app got here first. sys.dm_exec_query_stats is
+        // server-wide, so several apps capturing it would store the same rows several
+        // times; the snapshot is idempotent enough that duplicates are noise rather than
+        // error, and hourly means at most a handful per hour.
+        await using var snapshotCommand = new SqlCommand("omp.CaptureQueryCostSnapshot", conn)
         {
             CommandType = CommandType.StoredProcedure
         };
-        cmd.Parameters.Add("@RetainHours", SqlDbType.Int).Value = _options.RetainHours;
-        cmd.Parameters.Add("@RetainDays", SqlDbType.Int).Value = _options.RetainDays;
-        await cmd.ExecuteNonQueryAsync(ct);
+        snapshotCommand.Parameters.Add("@TopStatements", SqlDbType.Int).Value = _options.QueryCostSnapshotStatements;
+        snapshotCommand.Parameters.Add("@RetainDays", SqlDbType.Int).Value = _options.RetainDays;
+        await snapshotCommand.ExecuteNonQueryAsync(ct);
     }
 }
