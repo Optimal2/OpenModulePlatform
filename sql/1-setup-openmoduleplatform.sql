@@ -1282,6 +1282,16 @@ BEGIN
     IF @TopStatements > 500 SET @TopStatements = 500;
     IF @RetainDays < 1 SET @RetainDays = 1;
 
+    -- Reading sys.dm_exec_query_stats needs the server-level VIEW SERVER STATE, which the
+    -- web applications' identities do not hold by default. Without this check the DMV
+    -- simply yields nothing, the procedure reports success, and the table stays empty
+    -- forever -- a mechanism that is switched on, believed to be working, and collecting
+    -- nothing. Say so instead.
+    IF HAS_PERMS_BY_NAME(NULL, NULL, 'VIEW SERVER STATE') <> 1
+    BEGIN
+        THROW 51001, 'CaptureQueryCostSnapshot requires VIEW SERVER STATE. Grant it to the identity the application connects as, or leave Telemetry:CaptureQueryCostSnapshots off.', 1;
+    END;
+
     DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
 
     INSERT INTO omp.QueryCostSnapshots
