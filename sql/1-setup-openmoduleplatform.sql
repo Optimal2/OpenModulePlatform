@@ -1121,8 +1121,37 @@ IF OBJECT_ID(N'omp.PruneHostResourceSamples', N'P') IS NULL
     EXEC(N'CREATE PROCEDURE omp.PruneHostResourceSamples AS BEGIN SET NOCOUNT ON; END');
 GO
 
+-- Daily host resource history.
+--
+-- The hourly table is retained for a week, which answers "was the server busy on
+-- Tuesday" and nothing about a trend. Usage on this platform grows over an autumn, so
+-- the question that actually gets asked -- did CPU or memory climb *because* more people
+-- started using it -- needs months of history. Simply raising the hourly retention grows
+-- a table written every 60 seconds per measurement point linearly; rolling up into days
+-- keeps the history and bounds the size, which is what the application performance tables
+-- already do.
+IF OBJECT_ID(N'omp.HostResourceSamplesDaily', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.HostResourceSamplesDaily
+    (
+        HostId uniqueidentifier NOT NULL,
+        SampleDateUtc date NOT NULL,
+        SampleKey nvarchar(100) NOT NULL,
+        SampleCount bigint NOT NULL,
+        TotalValue float NOT NULL,
+        MinValue float NULL,
+        MaxValue float NULL,
+        FirstSampledUtc datetime2(3) NOT NULL,
+        LastSampledUtc datetime2(3) NOT NULL,
+        CONSTRAINT PK_omp_HostResourceSamplesDaily PRIMARY KEY(HostId, SampleDateUtc, SampleKey),
+        CONSTRAINT FK_omp_HostResourceSamplesDaily_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId)
+    );
+END
+GO
+
 ALTER PROCEDURE omp.PruneHostResourceSamples
-    @RetainHours int = 168
+    @RetainHours int = 168,
+    @RetainDays int = 400
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -1131,12 +1160,157 @@ BEGIN
     IF @RetainHours < 1
         SET @RetainHours = 1;
 
+    IF @RetainDays < 1
+        SET @RetainDays = 1;
+
     DECLARE @cutoffUtc datetime2(3) = DATEADD(hour, -@RetainHours, SYSUTCDATETIME());
+    DECLARE @deleted int;
+
+    -- Fold into the daily table and drop the hourly rows in ONE transaction. Doing the
+    -- two separately means a crash between them silently discards the week of detail
+    -- without having preserved the summary -- and nobody notices, because the only
+    -- symptom is a hole in a chart nobody is looking at yet.
+    BEGIN TRANSACTION;
+
+    MERGE omp.HostResourceSamplesDaily WITH (HOLDLOCK) AS target
+    USING
+    (
+        SELECT HostId,
+               CAST(SampleBucketUtc AS date) AS SampleDateUtc,
+               SampleKey,
+               SUM(CAST(SampleCount AS bigint)) AS SampleCount,
+               SUM(SampleValue * SampleCount) AS TotalValue,
+               MIN(MinValue) AS MinValue,
+               MAX(MaxValue) AS MaxValue,
+               MIN(FirstSampledUtc) AS FirstSampledUtc,
+               MAX(LastSampledUtc) AS LastSampledUtc
+        FROM omp.HostResourceSamples
+        WHERE SampleBucketUtc < @cutoffUtc
+        GROUP BY HostId, CAST(SampleBucketUtc AS date), SampleKey
+    ) AS source
+    ON target.HostId = source.HostId
+       AND target.SampleDateUtc = source.SampleDateUtc
+       AND target.SampleKey = source.SampleKey
+    WHEN MATCHED THEN
+        UPDATE SET
+            SampleCount = target.SampleCount + source.SampleCount,
+            TotalValue = target.TotalValue + source.TotalValue,
+            MinValue = CASE WHEN source.MinValue < target.MinValue OR target.MinValue IS NULL THEN source.MinValue ELSE target.MinValue END,
+            MaxValue = CASE WHEN source.MaxValue > target.MaxValue OR target.MaxValue IS NULL THEN source.MaxValue ELSE target.MaxValue END,
+            FirstSampledUtc = CASE WHEN source.FirstSampledUtc < target.FirstSampledUtc THEN source.FirstSampledUtc ELSE target.FirstSampledUtc END,
+            LastSampledUtc = CASE WHEN source.LastSampledUtc > target.LastSampledUtc THEN source.LastSampledUtc ELSE target.LastSampledUtc END
+    WHEN NOT MATCHED THEN
+        INSERT(HostId, SampleDateUtc, SampleKey, SampleCount, TotalValue, MinValue, MaxValue, FirstSampledUtc, LastSampledUtc)
+        VALUES(source.HostId, source.SampleDateUtc, source.SampleKey, source.SampleCount, source.TotalValue, source.MinValue, source.MaxValue, source.FirstSampledUtc, source.LastSampledUtc);
 
     DELETE FROM omp.HostResourceSamples
     WHERE SampleBucketUtc < @cutoffUtc;
 
-    SELECT @@ROWCOUNT AS DeletedSampleCount;
+    SET @deleted = @@ROWCOUNT;
+
+    DELETE FROM omp.HostResourceSamplesDaily
+    WHERE SampleDateUtc < CAST(DATEADD(day, -@RetainDays, SYSUTCDATETIME()) AS date);
+
+    COMMIT TRANSACTION;
+
+    SELECT @deleted AS DeletedSampleCount;
+END
+GO
+
+------------------------------------------------------------------------------
+-- Durable query cost snapshots.
+--
+-- sys.dm_exec_query_stats is cleared by a restart and by plan cache eviction, so
+-- "which query costs the most in production" is only answerable about the time since
+-- the last restart. R11-Q1 and R11-Q2 were found through that view, and only because
+-- the machine happened to have been up for a while -- which is luck, not a method.
+--
+-- This table keeps a periodic snapshot of the heaviest statements so the question can
+-- be answered months later, and so a query that became slow can be shown to have
+-- become slow rather than always having been.
+--
+-- Only OMP's own statements are captured: the filter requires the plan to reference an
+-- omp object. No parameter values are stored, only statement text, which is the query
+-- shape rather than anyone's data.
+------------------------------------------------------------------------------
+
+IF OBJECT_ID(N'omp.QueryCostSnapshots', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.QueryCostSnapshots
+    (
+        QueryCostSnapshotId bigint IDENTITY(1,1) NOT NULL,
+        CapturedUtc datetime2(3) NOT NULL,
+        QueryHash binary(8) NOT NULL,
+        StatementText nvarchar(max) NOT NULL,
+        ExecutionCount bigint NOT NULL,
+        TotalWorkerTimeMs decimal(19,3) NOT NULL,
+        TotalElapsedTimeMs decimal(19,3) NOT NULL,
+        TotalLogicalReads bigint NOT NULL,
+        MaxElapsedTimeMs decimal(19,3) NOT NULL,
+        CreationTimeUtc datetime2(3) NULL,
+        CONSTRAINT PK_omp_QueryCostSnapshots PRIMARY KEY(QueryCostSnapshotId)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.QueryCostSnapshots')
+      AND name = N'IX_omp_QueryCostSnapshots_Captured'
+)
+BEGIN
+    CREATE INDEX IX_omp_QueryCostSnapshots_Captured
+        ON omp.QueryCostSnapshots(CapturedUtc DESC)
+        INCLUDE(QueryHash, TotalElapsedTimeMs, ExecutionCount);
+END
+GO
+
+IF OBJECT_ID(N'omp.CaptureQueryCostSnapshot', N'P') IS NULL
+    EXEC(N'CREATE PROCEDURE omp.CaptureQueryCostSnapshot AS BEGIN SET NOCOUNT ON; END');
+GO
+
+ALTER PROCEDURE omp.CaptureQueryCostSnapshot
+    @TopStatements int = 50,
+    @RetainDays int = 400
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    IF @TopStatements < 1 SET @TopStatements = 1;
+    IF @TopStatements > 500 SET @TopStatements = 500;
+    IF @RetainDays < 1 SET @RetainDays = 1;
+
+    DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+
+    INSERT INTO omp.QueryCostSnapshots
+        (CapturedUtc, QueryHash, StatementText, ExecutionCount,
+         TotalWorkerTimeMs, TotalElapsedTimeMs, TotalLogicalReads, MaxElapsedTimeMs, CreationTimeUtc)
+    SELECT TOP (@TopStatements)
+        @nowUtc,
+        qs.query_hash,
+        SUBSTRING(
+            st.text,
+            (qs.statement_start_offset / 2) + 1,
+            CASE WHEN qs.statement_end_offset = -1
+                 THEN DATALENGTH(st.text)
+                 ELSE (qs.statement_end_offset - qs.statement_start_offset) / 2 + 1
+            END),
+        qs.execution_count,
+        CAST(qs.total_worker_time / 1000.0 AS decimal(19,3)),
+        CAST(qs.total_elapsed_time / 1000.0 AS decimal(19,3)),
+        qs.total_logical_reads,
+        CAST(qs.max_elapsed_time / 1000.0 AS decimal(19,3)),
+        qs.creation_time
+    FROM sys.dm_exec_query_stats qs
+    CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+    WHERE st.text LIKE N'%omp%'
+      AND st.text NOT LIKE N'%omp.QueryCostSnapshots%'
+    ORDER BY qs.total_elapsed_time DESC;
+
+    DELETE FROM omp.QueryCostSnapshots
+    WHERE CapturedUtc < DATEADD(day, -@RetainDays, @nowUtc);
 END
 GO
 

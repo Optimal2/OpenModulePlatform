@@ -39,8 +39,26 @@ public sealed class OmpPerformanceTelemetryOptions
     /// </summary>
     public int MinimumDurationMsToRecord { get; set; }
 
+    /// <summary>
+    /// Whether the hourly maintenance pass also snapshots the heaviest SQL statements.
+    /// </summary>
+    /// <remarks>
+    /// <c>sys.dm_exec_query_stats</c> is wiped by a restart and by plan cache eviction, so
+    /// without this the answer to "which query costs the most" only covers the time since
+    /// the server last came up. Statement text is stored, never parameter values.
+    /// </remarks>
+    public bool CaptureQueryCostSnapshots { get; set; } = true;
+
+    /// <summary>How many statements each snapshot keeps, ordered by total elapsed time.</summary>
+    public int QueryCostSnapshotStatements { get; set; } = 50;
+
     public void Validate()
     {
+        if (QueryCostSnapshotStatements is < 1 or > 500)
+        {
+            throw new InvalidOperationException("Telemetry:QueryCostSnapshotStatements must be between 1 and 500.");
+        }
+
         if (FlushIntervalSeconds < 5)
         {
             throw new InvalidOperationException("Telemetry:FlushIntervalSeconds must be at least 5.");

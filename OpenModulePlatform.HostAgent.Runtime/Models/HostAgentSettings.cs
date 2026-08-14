@@ -321,6 +321,14 @@ public sealed class HostResourceTelemetrySettings
 
     public int RetainHours { get; set; } = 168;
 
+    /// <summary>How long the rolled-up daily host resource history is kept.</summary>
+    /// <remarks>
+    /// Hourly rows survive a week; beyond that they are folded into one row per host, day
+    /// and measurement. A year and a bit means the autumn's growth is still comparable to
+    /// the following autumn's, which is the question this history exists to answer.
+    /// </remarks>
+    public int RetainDays { get; set; } = 400;
+
     public int PruneIntervalSeconds { get; set; } = 3600;
 
     public bool CollectIisAppPools { get; set; } = true;
@@ -368,6 +376,11 @@ public sealed class HostResourceTelemetrySettings
         if (RetainHours < 1)
         {
             throw new InvalidOperationException("HostAgent:ResourceTelemetry:RetainHours must be at least 1.");
+        }
+
+        if (RetainDays < 1)
+        {
+            throw new InvalidOperationException("HostAgent:ResourceTelemetry:RetainDays must be at least 1.");
         }
 
         if (PruneIntervalSeconds < 1)

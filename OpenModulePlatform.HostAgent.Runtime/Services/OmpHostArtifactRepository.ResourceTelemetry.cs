@@ -162,14 +162,15 @@ WHEN NOT MATCHED THEN
         }
     }
 
-    public async Task<int> PruneHostResourceSamplesAsync(int retainHours, CancellationToken ct)
+    public async Task<int> PruneHostResourceSamplesAsync(int retainHours, int retainDays, CancellationToken ct)
     {
-        const string sql = "EXEC omp.PruneHostResourceSamples @RetainHours = @retainHours;";
+        const string sql = "EXEC omp.PruneHostResourceSamples @RetainHours = @retainHours, @RetainDays = @retainDays;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@retainHours", SqlDbType.Int, Math.Max(1, retainHours));
+        Add(cmd, "@retainDays", SqlDbType.Int, Math.Max(1, retainDays));
 
         var result = await cmd.ExecuteScalarAsync(ct);
         return result is int count

@@ -168,7 +168,7 @@ public sealed partial class HostResourceCollector
 
         try
         {
-            var deleted = await _repository.PruneHostResourceSamplesAsync(settings.RetainHours, cancellationToken);
+            var deleted = await _repository.PruneHostResourceSamplesAsync(settings.RetainHours, settings.RetainDays, cancellationToken);
 
             lock (_stateLock)
             {
