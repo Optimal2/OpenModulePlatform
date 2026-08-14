@@ -14,12 +14,22 @@
         : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy" };
 
     // The year placeholder follows the page language; its four letters keep
-    // the slot positions identical across languages.
+    // the slot positions identical across languages. Segments are digit-index
+    // ranges (year, month, day, hour, minute) - the field selects and moves
+    // by whole segments like the native datetime input.
     var templates = {
-        date: { display: texts.year + "-mm-dd", slots: [0, 1, 2, 3, 5, 6, 8, 9] },
-        time: { display: "--:--", slots: [0, 1, 3, 4] },
-        datetime: { display: texts.year + "-mm-dd --:--", slots: [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15] }
+        date: { display: texts.year + "-mm-dd", slots: [0, 1, 2, 3, 5, 6, 8, 9], segments: [[0, 3], [4, 5], [6, 7]] },
+        time: { display: "--:--", slots: [0, 1, 3, 4], segments: [[0, 1], [2, 3]] },
+        datetime: { display: texts.year + "-mm-dd --:--", slots: [0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15], segments: [[0, 3], [4, 5], [6, 7], [8, 9], [10, 11]] }
     };
+
+    function segmentAt(st, digitIndex) {
+        var segments = st.template.segments;
+        for (var i = 0; i < segments.length; i++) {
+            if (digitIndex >= segments[i][0] && digitIndex <= segments[i][1]) { return segments[i]; }
+        }
+        return segments[segments.length - 1];
+    }
 
     var panel = null;
     var panelInput = null;
@@ -93,10 +103,14 @@
         }
     }
 
+    // The whole segment the cursor sits in is selected, so the field reads
+    // as year/month/day/time parts rather than sixteen loose characters.
     function highlight(st) {
         var index = Math.min(st.cursor, st.template.slots.length - 1);
-        var position = st.template.slots[index];
-        try { st.input.setSelectionRange(position, position + 1); } catch (error) { /* unfocused */ }
+        var segment = segmentAt(st, index);
+        var start = st.template.slots[segment[0]];
+        var end = st.template.slots[segment[1]] + 1;
+        try { st.input.setSelectionRange(start, end); } catch (error) { /* unfocused */ }
     }
 
     function commit(st) {
@@ -142,9 +156,17 @@
         }
 
         if (event.key === "Backspace") {
+            // Clears the current segment; on an already empty segment it
+            // steps to the previous one instead (native-input feel).
             event.preventDefault();
-            if (st.digits[st.cursor] === "" && st.cursor > 0) { st.cursor -= 1; }
-            st.digits[st.cursor] = "";
+            var segment = segmentAt(st, st.cursor);
+            var hasDigit = false;
+            for (var i = segment[0]; i <= segment[1]; i++) { if (st.digits[i] !== "") { hasDigit = true; } }
+            if (!hasDigit && segment[0] > 0) {
+                segment = segmentAt(st, segment[0] - 1);
+            }
+            for (var j = segment[0]; j <= segment[1]; j++) { st.digits[j] = ""; }
+            st.cursor = segment[0];
             render(st);
             highlight(st);
             return;
@@ -161,8 +183,20 @@
             return;
         }
 
-        if (event.key === "ArrowLeft") { event.preventDefault(); st.cursor = Math.max(0, st.cursor - 1); highlight(st); return; }
-        if (event.key === "ArrowRight") { event.preventDefault(); st.cursor = Math.min(st.template.slots.length - 1, st.cursor + 1); highlight(st); return; }
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            var current = segmentAt(st, st.cursor);
+            if (current[0] > 0) { st.cursor = segmentAt(st, current[0] - 1)[0]; }
+            highlight(st);
+            return;
+        }
+        if (event.key === "ArrowRight") {
+            event.preventDefault();
+            var here = segmentAt(st, st.cursor);
+            if (here[1] < st.template.slots.length - 1) { st.cursor = here[1] + 1; }
+            highlight(st);
+            return;
+        }
         if (event.key === "Escape") { digitsFromCanonical(st, st.hidden.value); st.cursor = 0; render(st); closePanel(); return; }
         if (event.key === "Tab" || event.key === "Enter") {
             if (event.key === "Enter") { commit(st); }
@@ -236,6 +270,22 @@
         commit(st);
     }
 
+    // Month/year navigation in the panel head: with a complete date already
+    // selected, moving the shown month or year moves the DATE with it (day
+    // clamped to the target month's length) and commits immediately - no
+    // extra day click needed. Without a date it just navigates the view.
+    function navigateShown(st, year, month) {
+        st.shownYear = year;
+        st.shownMonth = month;
+        var parts = selectedParts(st);
+        if (parts.year !== null && parts.month !== null && parts.day !== null) {
+            var maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+            setDatePart(st, year, month, Math.min(parts.day, maxDay));
+        } else {
+            renderPanel(st);
+        }
+    }
+
     function closePanel() {
         if (panel) { panel.remove(); panel = null; panelInput = null; }
         if (panelToggle) {
@@ -261,7 +311,12 @@
             head.className = "omp-datetime-panel__head";
             var prev = document.createElement("button");
             prev.type = "button"; prev.className = "omp-datetime-panel__step"; prev.textContent = "‹";
-            prev.addEventListener("click", function () { st.shownMonth -= 1; if (st.shownMonth < 1) { st.shownMonth = 12; st.shownYear -= 1; } renderPanel(st); });
+            prev.addEventListener("click", function () {
+                var month = st.shownMonth - 1;
+                var year = st.shownYear;
+                if (month < 1) { month = 12; year -= 1; }
+                navigateShown(st, year, month);
+            });
             var monthSelect = document.createElement("select");
             monthSelect.className = "omp-datetime-panel__select";
             monthNames().forEach(function (name, index) {
@@ -269,7 +324,7 @@
                 option.value = String(index + 1); option.textContent = name; option.selected = index + 1 === shownMonth;
                 monthSelect.appendChild(option);
             });
-            monthSelect.addEventListener("change", function () { st.shownMonth = +monthSelect.value; renderPanel(st); });
+            monthSelect.addEventListener("change", function () { navigateShown(st, st.shownYear, +monthSelect.value); });
             var yearSelect = document.createElement("select");
             yearSelect.className = "omp-datetime-panel__select";
             for (var y = shownYear - 12; y <= shownYear + 12; y++) {
@@ -277,10 +332,15 @@
                 yearOption.value = String(y); yearOption.textContent = String(y); yearOption.selected = y === shownYear;
                 yearSelect.appendChild(yearOption);
             }
-            yearSelect.addEventListener("change", function () { st.shownYear = +yearSelect.value; renderPanel(st); });
+            yearSelect.addEventListener("change", function () { navigateShown(st, +yearSelect.value, st.shownMonth); });
             var next = document.createElement("button");
             next.type = "button"; next.className = "omp-datetime-panel__step"; next.textContent = "›";
-            next.addEventListener("click", function () { st.shownMonth += 1; if (st.shownMonth > 12) { st.shownMonth = 1; st.shownYear += 1; } renderPanel(st); });
+            next.addEventListener("click", function () {
+                var month = st.shownMonth + 1;
+                var year = st.shownYear;
+                if (month > 12) { month = 1; year += 1; }
+                navigateShown(st, year, month);
+            });
             head.append(prev, monthSelect, yearSelect, next);
             cal.appendChild(head);
 
@@ -520,13 +580,14 @@
         input.addEventListener("focus", function () { st.cursor = 0; highlight(st); });
         input.addEventListener("blur", function () { window.setTimeout(function () { onBlurCommit(st); }, 0); });
         input.addEventListener("mouseup", function (event) {
+            // A click anywhere in a part selects that whole segment.
             event.preventDefault();
             var position = input.selectionStart || 0;
             var best = 0;
             st.template.slots.forEach(function (slotPosition, index) {
                 if (slotPosition <= position) { best = index; }
             });
-            st.cursor = best;
+            st.cursor = segmentAt(st, best)[0];
             highlight(st);
         });
         // The lock/cancel flow restores display strings; re-parse them into
