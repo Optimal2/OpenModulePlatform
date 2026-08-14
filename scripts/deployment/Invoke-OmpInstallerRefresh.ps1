@@ -24,6 +24,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Exit with a specific code after reporting why.
+#
+# Every failure path here was `Write-Error` followed by `exit <code>`. Under
+# ErrorActionPreference = 'Stop' a Write-Error is a terminating error, so the script died on
+# the Write-Error line and the exit that followed never ran -- which made every failure
+# report 1, including the two paths written specifically to propagate the Bootstrapper's own
+# exit code (R7-G15). Writing to the error stream without terminating lets the intended code
+# through.
+function Exit-WithFailure {
+    param(
+        [Parameter(Mandatory = $true)][string]$Message,
+        [int]$Code = 1
+    )
+
+    Write-Error -Message $Message -ErrorAction Continue
+    exit $Code
+}
+
 # R5-G1: the detached runner knows the name+PID of any process blocking the
 # package swap, but that only ever reached the runner's log file - the CLI sat
 # silent while it waited. Echo new log content to the console as it appears so
@@ -93,8 +111,7 @@ $launcherProcess = Start-Process -FilePath $exe `
     -RedirectStandardOutput $launcherOutFile -RedirectStandardError $launcherErrFile `
     -NoNewWindow -PassThru
 if (-not $launcherProcess.WaitForExit($TimeoutSeconds * 1000)) {
-    Write-Error "Refresh launcher did not exit within $TimeoutSeconds seconds."
-    exit 1
+    Exit-WithFailure -Message "Refresh launcher did not exit within $TimeoutSeconds seconds."
 }
 $launcherExit = $launcherProcess.ExitCode
 $launcherOutput = @(Get-Content $launcherOutFile -ErrorAction SilentlyContinue) + @(Get-Content $launcherErrFile -ErrorAction SilentlyContinue)
@@ -122,8 +139,7 @@ if ($runnerPid) {
             Write-NewLogLines -Path $logFile
             if ((Get-Date) -ge $runnerDeadline) {
                 Write-NewLogLines -Path $logFile
-                Write-Error "Refresh runner (PID $runnerPid) did not finish within $TimeoutSeconds seconds."
-                exit 1
+                Exit-WithFailure -Message "Refresh runner (PID $runnerPid) did not finish within $TimeoutSeconds seconds."
             }
             Start-Sleep -Milliseconds 500
         }
@@ -131,8 +147,7 @@ if ($runnerPid) {
     }
 }
 elseif ($launcherExit -ne 0 -and $null -ne $launcherExit) {
-    Write-Error "Refresh launcher failed with exit code $launcherExit."
-    exit 1
+    Exit-WithFailure -Message "Refresh launcher failed with exit code $launcherExit." -Code $launcherExit
 }
 
 # The runner writes the completion marker only after the package swap, so
@@ -162,8 +177,7 @@ if (-not $refreshCompleted) {
     else {
         Write-Host "Refresh log was never created: $logFile"
     }
-    Write-Error 'Installer package refresh did not complete. See the log above.'
-    exit 1
+    Exit-WithFailure -Message "Installer package refresh did not complete. See the log above."
 }
 Write-Host 'Installer package refresh completed.'
 
@@ -190,8 +204,7 @@ $syncProcess = Start-Process -FilePath $exe `
 Write-Host "Sync log: $syncLog"
 if ($syncProcess.ExitCode -ne 0) {
     Get-Content $syncLog -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
-    Write-Error "Package-object sync failed with exit code $($syncProcess.ExitCode)."
-    exit $syncProcess.ExitCode
+    Exit-WithFailure -Message "Package-object sync failed with exit code $($syncProcess.ExitCode)." -Code $syncProcess.ExitCode
 }
 
 # The refresh replaced the package (including the exe); run upgrade/complete
@@ -210,8 +223,7 @@ $process = Start-Process -FilePath $exe `
 Write-Host "Apply log: $applyLog"
 Get-Content $applyLog -Tail 15 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $_" }
 if ($process.ExitCode -ne 0) {
-    Write-Error "Upgrade/complete failed with exit code $($process.ExitCode)."
-    exit $process.ExitCode
+    Exit-WithFailure -Message "Upgrade/complete failed with exit code $($process.ExitCode)." -Code $process.ExitCode
 }
 
 Write-Host 'Upgrade/complete finished. HostAgent picks up the new desired versions on its next cycle.'

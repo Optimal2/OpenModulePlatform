@@ -1068,6 +1068,22 @@ $availableArtifactPackageFiles = @{}
 $buildRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-hostagent-first-build-' + [Guid]::NewGuid().ToString('N'))
 $zipPath = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version.zip")
 
+# Clear out build roots abandoned by earlier runs.
+#
+# The cleanup at the end of this script is not in a finally block, so every failed run
+# since this script was written left its staging tree behind -- 1.06 GB across four failed
+# runs on 2026-08-11 alone (R7-G16). Wrapping the eleven hundred lines below in try/finally
+# would re-indent them all and bury the change in whitespace, so the leak is closed from
+# the other end instead: each run removes what previous runs abandoned. Anything older than
+# a day cannot belong to a run still in progress.
+$staleBuildRootCutoff = (Get-Date).AddDays(-1)
+foreach ($staleBuildRoot in @(Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory -Filter 'omp-hostagent-first-build-*' -ErrorAction SilentlyContinue)) {
+    if ($staleBuildRoot.LastWriteTime -lt $staleBuildRootCutoff) {
+        Write-Host "Removing abandoned build root from an earlier run: $($staleBuildRoot.FullName)"
+        Remove-Item -LiteralPath $staleBuildRoot.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 if (Test-Path -LiteralPath $packageRoot) {
     Remove-Item -LiteralPath $packageRoot -Recurse -Force
 }

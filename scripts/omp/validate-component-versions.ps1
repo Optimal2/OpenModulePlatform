@@ -105,6 +105,61 @@ function Add-ValidationError {
     [void]$Errors.Add($Message)
 }
 
+# ---------------------------------------------------------------------------
+# Git readers that cannot fail silently.
+# ---------------------------------------------------------------------------
+# Every diff-based check in this file asked git a question, sent git's error
+# output to $null, and then treated an empty answer as "nothing changed" --
+# which is also exactly what a failed git call produces. A blobless clone, a
+# squashed base commit, a missing object: any of them turned a check into a
+# no-op that still printed a pass (R7-G8). These two helpers make an unreadable
+# answer a validation error instead of a silent skip, in one place, so no call
+# site can forget.
+
+function Get-GitChangedFiles {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$BaseRef,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Errors,
+        [Parameter(Mandatory = $true)][string]$CheckDescription
+    )
+
+    $output = [string](git -C $RepositoryRoot diff --name-only "$BaseRef...HEAD" -- $Path 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        Add-ValidationError -Errors $Errors -Message "$CheckDescription could not run: 'git diff $BaseRef...HEAD -- $Path' exited with $LASTEXITCODE. $output"
+        return $null
+    }
+
+    return $output
+}
+
+function Get-GitFileTextAtRef {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$BaseRef,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Errors,
+        [Parameter(Mandatory = $true)][string]$CheckDescription
+    )
+
+    $lines = @(git -C $RepositoryRoot show "$BaseRef`:$Path" 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        # A path that simply did not exist at the base ref is a new file, not a
+        # failure, and every caller already handles empty text as "new". Anything
+        # else is a broken read and must be reported.
+        $joined = ($lines -join "`n")
+        if ($joined -match 'exists on disk, but not in|does not exist in|path .* does not exist') {
+            return ''
+        }
+
+        Add-ValidationError -Errors $Errors -Message "$CheckDescription could not run: 'git show ${BaseRef}:$Path' exited with $LASTEXITCODE. $joined"
+        return $null
+    }
+
+    return (Remove-Utf8Bom -Text ($lines -join "`n"))
+}
+
 function Add-ValidationWarning {
     param(
         [Parameter(Mandatory = $true)]
@@ -623,6 +678,67 @@ if ($baseRefAvailable) {
 }
 
 # ---------------------------------------------------------------------------
+# Consistent-artifact-set membership, resolved up front.
+# ---------------------------------------------------------------------------
+# The cascade and lockstep checks below say "bump component X". When X belongs to a
+# consistentArtifactSets set, doing exactly that breaks the set check further down --
+# every member has to move together -- so following the instruction produced the next
+# error, deterministically (R7-G17). The membership map is built here so those messages
+# can name the siblings that must be bumped in the same commit.
+$consistentSetSiblingsByComponentKey = [System.Collections.Generic.Dictionary[string, string[]]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($membershipModuleKey in $moduleDefinitionObjectsByKey.Keys) {
+    $membershipDefinition = $moduleDefinitionObjectsByKey[$membershipModuleKey]
+    foreach ($membershipSet in @(Get-OptionalPropertyValue -Object $membershipDefinition -Name 'consistentArtifactSets')) {
+        if ($null -eq $membershipSet) {
+            continue
+        }
+
+        $membershipComponentKeys = [System.Collections.Generic.List[string]]::new()
+        foreach ($membershipMember in @(Get-OptionalPropertyValue -Object $membershipSet -Name 'expectedArtifacts')) {
+            if ($null -eq $membershipMember) {
+                continue
+            }
+
+            $membershipTargetName = [string](Get-OptionalPropertyValue -Object $membershipMember -Name 'targetName')
+            $membershipPackageType = [string](Get-OptionalPropertyValue -Object $membershipMember -Name 'packageType')
+            foreach ($membershipComponent in @($manifest.components)) {
+                if ($null -eq $membershipComponent) {
+                    continue
+                }
+
+                if ([string]::Equals([string](Get-OptionalPropertyValue -Object $membershipComponent -Name 'targetName'), $membershipTargetName, [StringComparison]::OrdinalIgnoreCase) -and
+                    [string]::Equals([string](Get-OptionalPropertyValue -Object $membershipComponent -Name 'packageType'), $membershipPackageType, [StringComparison]::OrdinalIgnoreCase)) {
+                    $membershipKey = [string](Get-OptionalPropertyValue -Object $membershipComponent -Name 'componentKey')
+                    if (-not [string]::IsNullOrWhiteSpace($membershipKey)) {
+                        [void]$membershipComponentKeys.Add($membershipKey)
+                    }
+
+                    break
+                }
+            }
+        }
+
+        foreach ($membershipKey in $membershipComponentKeys) {
+            $siblings = @($membershipComponentKeys | Where-Object { $_ -ne $membershipKey })
+            if ($siblings.Count -gt 0) {
+                $consistentSetSiblingsByComponentKey[$membershipKey] = $siblings
+            }
+        }
+    }
+}
+
+function Get-ConsistentSetBumpHint {
+    param([string]$ComponentKey)
+
+    if ([string]::IsNullOrWhiteSpace($ComponentKey) -or -not $consistentSetSiblingsByComponentKey.ContainsKey($ComponentKey)) {
+        return ''
+    }
+
+    $siblings = $consistentSetSiblingsByComponentKey[$ComponentKey] -join ', '
+    return " '$ComponentKey' is in a consistentArtifactSets set, so bump it together with: $siblings."
+}
+
+# ---------------------------------------------------------------------------
 # Check 7: Shared project cascade version bumps.
 # ---------------------------------------------------------------------------
 # Normalize to a null-free array once so every loop below (Checks 7, 11 and the
@@ -645,8 +761,8 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
             $diffPath = Split-Path -Parent $projectPath
         }
 
-        $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $diffPath 2>$null)
-        if ([string]::IsNullOrWhiteSpace($changedFiles)) {
+        $changedFiles = Get-GitChangedFiles -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path $diffPath -Errors $errors -CheckDescription "Check 7 (shared project cascade) for '$projectPath'"
+        if ($null -eq $changedFiles -or [string]::IsNullOrWhiteSpace($changedFiles)) {
             continue
         }
 
@@ -706,7 +822,12 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
 
         if ($unbumpedConsumers.Count -gt 0) {
             $consumerList = ($unbumpedConsumers | Sort-Object) -join ', '
-            Add-ValidationError -Errors $errors -Message "Shared project '$projectPath' changed but the following consumers were not bumped: $consumerList. Run `.\\scripts\\omp\\bump-version.ps1 -CascadeFrom $projectPath` or manually bump the listed components."
+            $setHints = ''
+            foreach ($unbumpedConsumer in @($unbumpedConsumers | Sort-Object)) {
+                $setHints += Get-ConsistentSetBumpHint -ComponentKey $unbumpedConsumer
+            }
+
+            Add-ValidationError -Errors $errors -Message ("Shared project '$projectPath' changed but the following consumers were not bumped: $consumerList. Run `.\\scripts\\omp\\bump-version.ps1 -CascadeFrom $projectPath` or manually bump the listed components." + $setHints)
             $cascadeErrorCount++
         }
         else {
@@ -867,7 +988,17 @@ else {
         }
     }
     catch {
-        Add-ValidationWarning -Warnings $warnings -Message "Check 11: Could not perform Web.Shared binary identity comparison (infra or build issue): $_"
+        # A build failure is not an infrastructure hiccup. Every exception used to become a
+        # warning, and warnings do not affect the exit code, so 'dotnet build failed' --
+        # Web.Shared not compiling at all -- passed validation (R7-G10). Only failures that
+        # really are environmental stay warnings; a failed compile is an error.
+        $failureText = [string]$_
+        if ($failureText -match 'dotnet build failed|Build succeeded but .* was not found') {
+            Add-ValidationError -Errors $errors -Message "Check 11: Web.Shared did not build, so binary identity could not be compared: $failureText"
+        }
+        else {
+            Add-ValidationWarning -Warnings $warnings -Message "Check 11: Could not perform Web.Shared binary identity comparison (infra issue): $failureText"
+        }
     }
     finally {
         foreach ($pathToClean in @($sourceRoot, $parentOutputRoot, $headOutputRoot, $archivePath)) {
@@ -974,7 +1105,11 @@ else {
             continue
         }
 
-        $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $sqlPath 2>$null)
+        $changedFiles = Get-GitChangedFiles -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path $sqlPath -Errors $errors -CheckDescription "The SQL change check for '$sqlPath'"
+        if ($null -eq $changedFiles) {
+            continue
+        }
+
         if ([string]::IsNullOrWhiteSpace($changedFiles)) {
             $sqlFilesPassed++
             continue
@@ -982,8 +1117,11 @@ else {
 
         $headText = Get-Content -LiteralPath $fullSqlPath -Raw -Encoding UTF8
 
-        $baseTextLines = @(git -C $repositoryRoot show "$baseRef`:$sqlPath" 2>$null)
-        $baseText = Remove-Utf8Bom -Text ($baseTextLines -join "`n")
+        $baseText = Get-GitFileTextAtRef -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path $sqlPath -Errors $errors -CheckDescription "The SQL change check for '$sqlPath'"
+        if ($null -eq $baseText) {
+            continue
+        }
+
         $isNewFile = [string]::IsNullOrWhiteSpace($baseText)
 
         $headNormalized = ConvertTo-NormalizedSql -SqlText $headText
@@ -1017,8 +1155,11 @@ else {
         $headDefinition = ConvertFrom-JsonDocument -Json $headDefinitionText -Depth $jsonDepth
         $headDefinitionVersion = [string](Get-OptionalPropertyValue -Object $headDefinition -Name 'definitionVersion')
 
-        $baseDefinitionTextLines = @(git -C $repositoryRoot show "$baseRef`:$relativeDefinitionPath" 2>$null)
-        $baseDefinitionText = Remove-Utf8Bom -Text ($baseDefinitionTextLines -join "`n")
+        $baseDefinitionText = Get-GitFileTextAtRef -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path $relativeDefinitionPath -Errors $errors -CheckDescription "The module definition version check for '$relativeDefinitionPath'"
+        if ($null -eq $baseDefinitionText) {
+            continue
+        }
+
         $baseDefinitionVersion = $null
         if (-not [string]::IsNullOrWhiteSpace($baseDefinitionText)) {
             $baseDefinition = ConvertFrom-JsonDocument -Json $baseDefinitionText -Depth $jsonDepth
@@ -1111,8 +1252,11 @@ else {
 
         $definitionDiffChecked++
 
-        $baseDefinitionTextLines = @(git -C $repositoryRoot show "$baseRef`:$relativeDefinitionPath" 2>$null)
-        $baseDefinitionText = Remove-Utf8Bom -Text ($baseDefinitionTextLines -join "`n")
+        $baseDefinitionText = Get-GitFileTextAtRef -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path $relativeDefinitionPath -Errors $errors -CheckDescription "The module definition diff check for '$relativeDefinitionPath'"
+        if ($null -eq $baseDefinitionText) {
+            continue
+        }
+
         if ([string]::IsNullOrWhiteSpace($baseDefinitionText)) {
             $definitionDiffPassed++
             continue # new definition file; nothing to bump against
@@ -1133,7 +1277,19 @@ else {
         $baseDefinition = ConvertFrom-JsonDocument -Json $baseDefinitionText -Depth $jsonDepth
         $baseDefinitionVersion = [string](Get-OptionalPropertyValue -Object $baseDefinition -Name 'definitionVersion')
 
-        if (-not [string]::IsNullOrWhiteSpace($baseDefinitionVersion) -and [string]::Equals($baseDefinitionVersion, $headDefinitionVersion, [StringComparison]::Ordinal)) {
+        # The content changed, so this check passes only when a bump can be shown. It used
+        # to pass whenever the base version was blank or unreadable, which is the same
+        # evidence Check 8 treats as a hard error -- two checks reading one file and
+        # drawing opposite conclusions from the identical missing value (R7-G9). An
+        # unprovable bump is now a failure.
+        if ([string]::IsNullOrWhiteSpace($headDefinitionVersion)) {
+            Add-ValidationError -Errors $errors -Message "Module definition '$relativeDefinitionPath' (module '$moduleKey') changed but carries no definitionVersion. HostAgent rejects a re-imported definition version with different JSON and silently skips artifacts packaged with it. Add definitionVersion to the definition file and omp-components.json."
+        }
+        elseif ([string]::IsNullOrWhiteSpace($baseDefinitionVersion)) {
+            # No version at the base ref and one at HEAD is a bump by definition.
+            $definitionDiffPassed++
+        }
+        elseif ([string]::Equals($baseDefinitionVersion, $headDefinitionVersion, [StringComparison]::Ordinal)) {
             Add-ValidationError -Errors $errors -Message "Module definition '$relativeDefinitionPath' (module '$moduleKey') changed but definitionVersion is still '$headDefinitionVersion'. HostAgent rejects a re-imported definition version with different JSON and silently skips artifacts packaged with it. Bump definitionVersion in both the definition file and omp-components.json."
         }
         else {
@@ -1232,8 +1388,8 @@ else {
             }
 
             $relRefDir = $refDir.Substring($repositoryRoot.Length).TrimStart('\', '/')
-            $changedFiles = [string](git -C $repositoryRoot diff --name-only "$baseRef...HEAD" -- $relRefDir 2>$null)
-            if (-not [string]::IsNullOrWhiteSpace($changedFiles)) {
+            $changedFiles = Get-GitChangedFiles -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path $relRefDir -Errors $errors -CheckDescription "The referenced-project change check for '$relRefDir'"
+            if ($null -ne $changedFiles -and -not [string]::IsNullOrWhiteSpace($changedFiles)) {
                 [void]$changedRefDirs.Add($relRefDir)
             }
         }
@@ -1251,7 +1407,7 @@ else {
 
         if (-not [string]::IsNullOrWhiteSpace($baseVersion) -and [string]::Equals($baseVersion, $currentVersion, [StringComparison]::Ordinal)) {
             $changedRefList = ($changedRefDirs | Sort-Object) -join ', '
-            Add-ValidationError -Errors $errors -Message "Component '$componentKey' references changed project(s) ($changedRefList) since $baseRef but its version was not bumped. Bump the component version."
+            Add-ValidationError -Errors $errors -Message ("Component '$componentKey' references changed project(s) ($changedRefList) since $baseRef but its version was not bumped. Bump the component version." + (Get-ConsistentSetBumpHint -ComponentKey $componentKey))
             $transitiveErrorCount++
         }
         else {
