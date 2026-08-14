@@ -1095,11 +1095,23 @@ WHERE user_name = @user_name;";
 
     private async Task<bool> IsSelfRegistrationEnabledAsync(CancellationToken ct)
     {
-        var value = await _configuration.GetGlobalStringAsync(
+        var read = await _configuration.ReadGlobalStringAsync(
             OmpAuthDefaults.ConfigurationCategory,
             OmpAuthDefaults.SelfRegistrationEnabledSetting,
             ct);
-        return OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: true);
+
+        // R10-S3. The default is deliberately "enabled", which is right for an absent
+        // value and wrong for an unreadable one: a database blip would silently turn
+        // self-registration on for an installation that had turned it off. Fail closed
+        // on a failed read; nothing is cached, so the next request retries.
+        if (read.Failed)
+        {
+            _log.LogError(
+                "The self-registration setting could not be read; treating self-registration as disabled for this request rather than falling back to the enabled default.");
+            return false;
+        }
+
+        return OmpAuthDefaults.ParseEnabledConfigValue(read.Value, defaultValue: true);
     }
 
     private static async Task<IReadOnlyList<string>> GetMappedAdGroupPrincipalsAsync(

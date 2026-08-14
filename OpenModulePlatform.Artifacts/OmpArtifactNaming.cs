@@ -20,28 +20,43 @@ public static class OmpArtifactNaming
     /// Reduces a value to something safe to use as one path segment: no separators, no
     /// characters the filesystem rejects, no spaces.
     /// </summary>
-    public static string SanitizePathSegment(string? value)
+    public static string SanitizePathSegment(string? value) => SanitizePathSegment(value, '-');
+
+    /// <summary>
+    /// As <see cref="SanitizePathSegment(string?)"/>, but with the caller's replacement
+    /// character.
+    /// </summary>
+    /// <remarks>
+    /// R10-T3. Two more copies of this logic used '_' rather than '-', and they build
+    /// paths that already exist on disk and in the artifact catalog -- switching their
+    /// replacement character would move every artifact whose name contained a replaced
+    /// character, so the character stays with the caller and only the missing traversal
+    /// handling is shared. For a value with nothing to replace, which is every legitimate
+    /// one, the two produce identical output.
+    /// </remarks>
+    public static string SanitizePathSegment(string? value, char replacement)
     {
         var sanitized = (value ?? string.Empty).Trim();
         foreach (var invalid in Path.GetInvalidFileNameChars())
         {
-            sanitized = sanitized.Replace(invalid, '-');
+            sanitized = sanitized.Replace(invalid, replacement);
         }
 
         // GetInvalidFileNameChars covers the separators on Windows but not on every
         // platform, and '..' survives it everywhere: both would turn one segment into a
         // path. Neither is a legitimate part of an artifact identity field.
         sanitized = sanitized
-            .Replace('/', '-')
-            .Replace('\\', '-')
-            .Replace(' ', '-');
+            .Replace('/', replacement)
+            .Replace('\\', replacement)
+            .Replace(' ', replacement);
 
+        var collapsed = replacement.ToString();
         while (sanitized.Contains("..", StringComparison.Ordinal))
         {
-            sanitized = sanitized.Replace("..", "-", StringComparison.Ordinal);
+            sanitized = sanitized.Replace("..", collapsed, StringComparison.Ordinal);
         }
 
-        return sanitized.Length == 0 ? "-" : sanitized;
+        return sanitized.Length == 0 ? collapsed : sanitized;
     }
 
     /// <summary>

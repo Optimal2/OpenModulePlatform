@@ -1,3 +1,5 @@
+using OpenModulePlatform.Artifacts;
+
 namespace OpenModulePlatform.HostAgent.Runtime.Models;
 
 public sealed class ArtifactDescriptor
@@ -28,14 +30,12 @@ public sealed class ArtifactDescriptor
         return Path.Join(package, target, version);
     }
 
+    // R10-T3. This builds the artifact relative path, so the '_' replacement stays: it is
+    // baked into every path already on disk and in the catalog. What it lacked was the
+    // traversal handling -- GetInvalidFileNameChars never covers '..', and the values come
+    // from catalog rows, so a version of '..' walked the artifact out of its own root.
     private static string Sanitize(string? value, string fallback)
-    {
-        var normalized = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-        foreach (var invalid in Path.GetInvalidFileNameChars())
-        {
-            normalized = normalized.Replace(invalid, '_');
-        }
-
-        return normalized.Replace(' ', '_');
-    }
+        => OmpArtifactNaming.SanitizePathSegment(
+            string.IsNullOrWhiteSpace(value) ? fallback : value,
+            '_');
 }

@@ -258,34 +258,12 @@ internal static class ArtifactDirectoryMirror
         }
     }
 
+    // R10-T2: delegates to the shared guard. R8-P2-11..13 moved this to
+    // OmpReparsePointGuard so every writer could reach one implementation; these
+    // private copies were left behind, which is how R6-D7 found one of them had
+    // quietly become a no-op in the first place.
     private static bool IsReparsePoint(string path)
-    {
-        try
-        {
-            // File.GetAttributes covers BOTH files and directories. The previous
-            // DirectoryInfo-based check required info.Exists, which is always false
-            // for a file, so the file-target guard in CopySourceFiles was a silent
-            // no-op and only the parent-directory check did anything (R6-D7). The
-            // sibling guard in ArtifactConfigurationFileWriter already got this right.
-            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-        }
-        catch (FileNotFoundException)
-        {
-            return false;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return false;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
+        => OmpReparsePointGuard.IsReparsePoint(path);
 
     // Throw IOException (not a bespoke type) so the existing deployment failure
     // handlers treat a planted junction as a normal, ret/logged deployment fault

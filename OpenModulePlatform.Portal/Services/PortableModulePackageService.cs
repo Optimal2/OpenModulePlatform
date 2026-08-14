@@ -2370,16 +2370,13 @@ public sealed class PortableModulePackageService
         return path;
     }
 
+    // R10-T1: delegates to the shared implementation. R8-P2-16..23 moved this to
+    // OmpArtifactNaming and converted two of the four copies; these two were missed, and
+    // the shared version also strips separators and '..' segments that this one let
+    // through -- GetInvalidFileNameChars covers separators on Windows but not everywhere,
+    // and never covered '..'.
     private static string SanitizePathSegment(string value)
-    {
-        var sanitized = value.Trim();
-        foreach (var invalid in Path.GetInvalidFileNameChars())
-        {
-            sanitized = sanitized.Replace(invalid, '-');
-        }
-
-        return sanitized.Replace(' ', '-');
-    }
+        => OmpArtifactNaming.SanitizePathSegment(value);
 
     private static void MoveExistingArtifactToBackup(string finalPath, string backupPath)
     {
