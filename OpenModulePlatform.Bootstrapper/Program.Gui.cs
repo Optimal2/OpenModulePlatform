@@ -4502,16 +4502,14 @@ internal static partial class Program
                 // apply to it (Directory.Build.props and friends live above the project).
                 var scopedDirectories = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
                 var scopedFiles = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var project in projectFiles)
-                {
-                    var projectDirectory = Path.GetDirectoryName(project);
-                    if (string.IsNullOrWhiteSpace(projectDirectory))
-                    {
-                        continue;
-                    }
+                var projectDirectories = projectFiles
+                    .Select(Path.GetDirectoryName)
+                    .Where(directory => !string.IsNullOrWhiteSpace(directory));
 
-                    scopedDirectories.Add(projectDirectory);
-                    CollectDirectoryBuildFiles(projectDirectory, scopedFiles);
+                foreach (var projectDirectory in projectDirectories)
+                {
+                    scopedDirectories.Add(projectDirectory!);
+                    CollectDirectoryBuildFiles(projectDirectory!, scopedFiles);
                 }
 
                 if (scopedDirectories.Count == 0)

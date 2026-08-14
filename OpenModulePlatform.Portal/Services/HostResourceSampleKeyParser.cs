@@ -29,6 +29,21 @@ internal static class HostResourceSampleKeyParser
     private const string WorkerRuntimeKind = "Worker process";
     private const string IisAppPoolStateRuntimeKind = "IIS app pool state";
 
+    // Order matters: the longer, more specific prefixes come before the shorter ones they
+    // start with, so "service.memory." is matched before "service.". The array is static
+    // because it never varies -- it used to be allocated on every call inside a foreach.
+    private static readonly string[] NormalizablePrefixes =
+    [
+        IisAppPoolMemoryPrefix,
+        IisAppPoolStatePrefix,
+        WorkerMemoryPrefix,
+        ServiceMemoryPrefix,
+        ServiceStatePrefix,
+        IisAppPoolCpuPrefix,
+        WorkerCpuPrefix,
+        ServiceCpuPrefix
+    ];
+
     public static HostResourceSampleKeyParts Parse(string? sampleKey)
     {
         if (string.IsNullOrWhiteSpace(sampleKey))
@@ -183,15 +198,12 @@ internal static class HostResourceSampleKeyParser
             return sampleKey ?? string.Empty;
         }
 
-        foreach (var prefix in new[] { IisAppPoolMemoryPrefix, IisAppPoolStatePrefix, WorkerMemoryPrefix, ServiceMemoryPrefix, ServiceStatePrefix, IisAppPoolCpuPrefix, WorkerCpuPrefix, ServiceCpuPrefix })
-        {
-            if (sampleKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return prefix + NormalizeRuntimeName(sampleKey[prefix.Length..]);
-            }
-        }
+        var matchedPrefix = NormalizablePrefixes.FirstOrDefault(prefix =>
+            sampleKey.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
-        return sampleKey;
+        return matchedPrefix is null
+            ? sampleKey
+            : matchedPrefix + NormalizeRuntimeName(sampleKey[matchedPrefix.Length..]);
     }
 
     public static string? DeriveCounterpartSampleKey(string sampleKey)
