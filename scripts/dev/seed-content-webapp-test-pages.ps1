@@ -367,7 +367,7 @@ Some Markdown editors escape underscores. This should still render:
   <script>
     const rows = window.contentTestRows || [];
     document.getElementById(''content-inline-summary'').textContent =
-      `${rows.length} flattened report row(s) were loaded through an explicit DB_JSON_SCRIPT variable.`;
+      ```${rows.length} flattened report row(s) were loaded through an explicit DB_JSON_SCRIPT variable.``;
   </script>
 
   [DB_JSON="content-test-status"]
