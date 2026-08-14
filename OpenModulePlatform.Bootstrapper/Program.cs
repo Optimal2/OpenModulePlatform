@@ -5944,7 +5944,12 @@ ORDER BY ArtifactId;
         }
         else
         {
-            process.WaitForExit();
+            // R11-B4. Deliberately the overload, even for an unbounded wait. The argument
+            // -- less version waits for the redirected streams to reach EOF as well as for
+            // the process to exit, so a grandchild that inherited the handles hangs it
+            // forever even though the process itself is long gone. The overload waits only
+            // for exit; DrainRedirectedStreams below puts a bound on the EOF wait.
+            process.WaitForExit(Timeout.Infinite);
         }
 
         if (!exited)
@@ -5952,8 +5957,13 @@ ORDER BY ArtifactId;
             var timeoutMessage = $"{Path.GetFileName(fileName)} timed out after {timeout!.Value.TotalSeconds:n0} seconds.";
             try
             {
+                // R11-B4. WaitForExit() with no argument also waits for the redirected
+                // streams to reach EOF, and a grandchild that escaped the kill keeps them
+                // open -- so the call meant to clean up after a timeout had no timeout of
+                // its own. Bounded here; DrainRedirectedStreams below takes whatever
+                // arrived either way.
                 process.Kill(entireProcessTree: true);
-                process.WaitForExit();
+                process.WaitForExit(GetProcessTimeoutMilliseconds(TimeSpan.FromSeconds(5)));
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
@@ -5966,8 +5976,8 @@ ORDER BY ArtifactId;
                 return new ProcessResult(-1, string.Empty, killFailureMessage);
             }
 
-            var timedOutStdout = stdoutTask.GetAwaiter().GetResult();
-            var timedOutStderr = stderrTask.GetAwaiter().GetResult();
+            var (timedOutStdout, timedOutStderr) =
+                OmpProcessStreamDrain.Drain(stdoutTask, stderrTask);
             var timedOutError = string.IsNullOrWhiteSpace(timedOutStderr)
                 ? timeoutMessage
                 : timedOutStderr + Environment.NewLine + timeoutMessage;
@@ -5979,8 +5989,12 @@ ORDER BY ArtifactId;
             return new ProcessResult(-1, timedOutStdout, timedOutError);
         }
 
-        var stdout = stdoutTask.GetAwaiter().GetResult();
-        var stderr = stderrTask.GetAwaiter().GetResult();
+        // R11-B4. The shared bounded drain, so neither branch above can be left waiting on
+        // a pipe a surviving grandchild is holding open. This matters most in the GUI: a
+        // hang here leaves the operator watching a window that reports an action still in
+        // progress when nothing is progressing, and R11-B3 warns before letting them close
+        // out of it.
+        var (stdout, stderr) = OmpProcessStreamDrain.Drain(stdoutTask, stderrTask);
 
         if (throwOnFailure && process.ExitCode != 0)
         {

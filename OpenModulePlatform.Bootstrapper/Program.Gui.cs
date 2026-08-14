@@ -662,6 +662,10 @@ internal static partial class Program
         private bool _hasExistingInstallation;
         private bool _hasDeveloperSource;
 
+        // R11-B3. True from the moment an action starts until its finally block runs. Only
+        // ever touched on the UI thread: set in RunGuiOperationAsync, read in OnFormClosing.
+        private bool _operationInFlight;
+
         public InstallerForm(
             IReadOnlyList<BootstrapConfigProfile> configProfiles,
             BootstrapConfig config,
@@ -735,24 +739,74 @@ internal static partial class Program
 
             LoadConfigProfiles();
             LoadValues();
-            _primaryActionButton.Click += async (_, _) => await RunPrimaryActionAsync();
-            _installButton.Click += async (_, _) => await InstallAsync();
-            _upgradeCompleteButton.Click += async (_, _) => await UpgradeOrCompleteAsync();
-            _checkSourceButton.Click += async (_, _) => await CheckDeveloperSourceAsync();
-            _syncPackageObjectsButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
-            _refreshObjectArchiveButton.Click += async (_, _) => await SyncDeveloperPackageObjectsAsync();
-            _refreshAndStageGlobalPackageButton.Click += async (_, _) => await RefreshAndStageGlobalUniversalPackageAsync();
-            _syncAllProfilePackageObjectsButton.Click += async (_, _) => await SyncAllProfilePackageObjectsAsync();
-            _importUniversalPackageButton.Click += async (_, _) => await ImportUniversalPackageIntoArchiveAsync();
-            _prunePackageArchiveButton.Click += async (_, _) => await PrunePackageArchiveAsync();
-            _createUniversalPackageButton.Click += async (_, _) => await CreateUniversalPackageAsync();
-            _createUpdatedInstallerPackageButton.Click += async (_, _) => await CreateUpdatedInstallerPackageAsync();
-            _uninstallRuntimeButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false);
-            _cleanUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false);
-            _fullUninstallButton.Click += async (_, _) => await UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true);
+            _primaryActionButton.Click += HandlerFor(RunPrimaryActionAsync);
+            _installButton.Click += HandlerFor(InstallAsync);
+            _upgradeCompleteButton.Click += HandlerFor(UpgradeOrCompleteAsync);
+            _checkSourceButton.Click += HandlerFor(CheckDeveloperSourceAsync);
+            _syncPackageObjectsButton.Click += HandlerFor(SyncDeveloperPackageObjectsAsync);
+            _refreshObjectArchiveButton.Click += HandlerFor(SyncDeveloperPackageObjectsAsync);
+            _refreshAndStageGlobalPackageButton.Click += HandlerFor(RefreshAndStageGlobalUniversalPackageAsync);
+            _syncAllProfilePackageObjectsButton.Click += HandlerFor(SyncAllProfilePackageObjectsAsync);
+            _importUniversalPackageButton.Click += HandlerFor(ImportUniversalPackageIntoArchiveAsync);
+            _prunePackageArchiveButton.Click += HandlerFor(PrunePackageArchiveAsync);
+            _createUniversalPackageButton.Click += HandlerFor(CreateUniversalPackageAsync);
+            _createUpdatedInstallerPackageButton.Click += HandlerFor(CreateUpdatedInstallerPackageAsync);
+            _uninstallRuntimeButton.Click += HandlerFor(() => UninstallAsync(removeRuntimeFiles: false, removeDatabaseObjects: false));
+            _cleanUninstallButton.Click += HandlerFor(() => UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: false));
+            _fullUninstallButton.Click += HandlerFor(() => UninstallAsync(removeRuntimeFiles: true, removeDatabaseObjects: true));
             _exitButton.Click += (_, _) => Close();
             _showAdvancedActions.CheckedChanged += (_, _) => _advancedActionsHost.Visible = _showAdvancedActions.Checked;
-            _reloadConfigButton.Click += async (_, _) => await ReloadSelectedConfigAsync("Reloaded installation profile.");
+            _reloadConfigButton.Click += HandlerFor(() => ReloadSelectedConfigAsync("Reloaded installation profile."));
+        }
+
+        /// <summary>
+        /// Wraps an asynchronous button action in the boundary every click handler needs:
+        /// no exception may leave it.
+        /// </summary>
+        /// <remarks>
+        /// R11-B1. Every one of these handlers used to be written as
+        /// <c>Click += async (_, _) =&gt; await SomethingAsync()</c>. An async lambda on a void
+        /// -returning event is an async void method, so an exception that escapes it is
+        /// raised on the UI thread with nothing to catch it -- the installer disappears
+        /// mid-install, and the operator is left with a half-upgraded machine and no
+        /// message. Most of the work already ran inside RunGuiOperationAsync, which has its
+        /// own boundary, but each handler also does setup before that call -- reading the
+        /// form values, computing warnings, showing the confirmation -- and that setup was
+        /// outside every try in the process.
+        ///
+        /// The guard is placed on the subscription rather than inside each method for the
+        /// reason R6-D7 and R8-P2 keep rediscovering: a guard the caller has to remember is
+        /// a guard half the callers will not have. Here there is no unguarded way left to
+        /// attach an async click handler.
+        /// </remarks>
+        private EventHandler HandlerFor(Func<Task> action)
+            => async (_, _) =>
+            {
+                try
+                {
+                    await action();
+                }
+                catch (Exception ex)
+                {
+                    // Async void boundary: the alternative to catching everything here is
+                    // terminating the installer process, which is strictly worse than
+                    // reporting the failure and leaving the window open.
+                    ReportUnhandledActionFailure(ex);
+                }
+            };
+
+        private void ReportUnhandledActionFailure(Exception ex)
+        {
+            ExitCode = 1;
+            SetReadyStatus("The action failed.");
+            SetActionButtonsEnabled(true);
+            _exitButton.Enabled = true;
+            MessageBox.Show(
+                this,
+                ex.Message,
+                "OpenModulePlatform installer",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         public int ExitCode { get; private set; }
@@ -5640,6 +5694,7 @@ ORDER BY ar.ArtifactId DESC;
         {
             SetActionButtonsEnabled(false);
             _exitButton.Enabled = false;
+            _operationInFlight = true;
             _logBox.Clear();
             SetBusyStatus(runningText);
 
@@ -5660,23 +5715,16 @@ ORDER BY ar.ArtifactId DESC;
                     MessageBoxButtons.OK,
                     ExitCode == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             }
-            catch (JsonException ex)
+            catch (Exception ex)
             {
                 ExitCode = 1;
-                // Action execution is the main GUI boundary; log and show the failure so the operator has both summary and details.
-                writer.WriteLine(failureText);
-                writer.WriteLine(ex.Message);
-                SetReadyStatus(failureText);
-                MessageBox.Show(
-                    ex.Message,
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-            catch (SystemException ex)
-            {
-                ExitCode = 1;
-                // Action execution is the main GUI boundary; log and show the failure so the operator has both summary and details.
+                // R11-B2. Action execution is the main GUI boundary; log and show the failure
+                // so the operator has both summary and details. This was two identical
+                // clauses for JsonException and SystemException. That pair covers nearly
+                // every type these actions raise today -- but "nearly" is what R10-S1 was:
+                // an exception no filter listed, escaping the boundary written to contain it.
+                // At the outermost boundary of a GUI action the correct filter is the widest
+                // one, because the only thing narrowing it buys is a crashed installer.
                 writer.WriteLine(failureText);
                 writer.WriteLine(ex.Message);
                 SetReadyStatus(failureText);
@@ -5688,6 +5736,7 @@ ORDER BY ar.ArtifactId DESC;
             }
             finally
             {
+                _operationInFlight = false;
                 Console.SetOut(originalOut);
                 Console.SetError(originalError);
                 SetActionButtonsEnabled(true);
@@ -5783,6 +5832,55 @@ ORDER BY ar.ArtifactId DESC;
 
         private static string ValueOrPlaceholder(string value)
             => string.IsNullOrWhiteSpace(value) ? "(not configured)" : value.Trim();
+
+        /// <summary>
+        /// Refuses to close the installer while an action is still running.
+        /// </summary>
+        /// <remarks>
+        /// R11-B3. Starting an action disables every button including Exit, so the intent
+        /// that the window stays put for the duration was already there -- but the window's
+        /// own close route was never covered. The title bar's X, Alt+F4 and the system menu
+        /// all bypass the buttons entirely, and closing the form ends Application.Run and
+        /// returns from Main while the action is still running on a thread pool thread. The
+        /// process exits mid-write: files half-copied, a service registered but not yet
+        /// configured, a SQL script applied in part. Nothing in the installer recovers from
+        /// that, because from its next start the installation simply looks finished.
+        ///
+        /// The same shape as the rest of the campaign: the guard was applied to one route
+        /// and its sibling was missed.
+        ///
+        /// It asks rather than refuses. A flat refusal would make the window unclosable for
+        /// as long as an action runs, and an action can genuinely stop making progress --
+        /// R11-B4 fixed one way that happens and cannot promise it was the last. Trapping
+        /// the operator with no way out but Task Manager trades one bad outcome for
+        /// another. A confirmation still stops the accidental click, which is the failure
+        /// actually worth preventing, and leaves the deliberate one available.
+        /// </remarks>
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (_operationInFlight && e.CloseReason is CloseReason.UserClosing or CloseReason.None)
+            {
+                var choice = MessageBox.Show(
+                    this,
+                    "An action is still running. Closing now stops the installer mid-write and can "
+                        + "leave this machine half-installed -- files partly copied, a service registered "
+                        + "but not configured, a database script applied in part."
+                        + Environment.NewLine
+                        + Environment.NewLine
+                        + "Close anyway?",
+                    "OpenModulePlatform installer",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2);
+                if (choice != DialogResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
+
+            base.OnFormClosing(e);
+        }
 
         private void SetActionButtonsEnabled(bool enabled)
         {

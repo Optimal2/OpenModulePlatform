@@ -3290,8 +3290,39 @@ IF NOT EXISTS
 BEGIN
     CREATE INDEX IX_omp_push_event_outbox_pending
         ON omp.push_event_outbox(status, scheduled_utc, lease_until_utc, push_event_id)
-        INCLUDE(event_category, target_type, target_user_id, retry_count, max_retries, lease_token, lease_owner)
+        INCLUDE(event_category, target_type, target_user_id, retry_count, max_retries, lease_token, lease_owner,
+                completed_utc, dead_lettered_utc)
         WHERE status IN (N'pending', N'processing');
+END
+GO
+
+-- R11-Q1. The drain query also filters completed_utc IS NULL AND dead_lettered_utc IS NULL,
+-- and neither column was in the index above -- so every candidate row needed a lookup back
+-- to the base table just to be discarded. SQL Server's own missing-index DMV ranked this
+-- the single highest-impact gap in the database by a factor of ten thousand: 79 401 calls,
+-- because this is the notification outbox and it drains continuously.
+--
+-- The two columns are added as INCLUDE rather than to the filter. Narrowing the filter
+-- would shrink the index further, but it would also change which rows it covers, and this
+-- index is the one the drain depends on; an INCLUDE removes the lookup without changing
+-- what is indexed. Existing installations get it through the rebuild below.
+IF EXISTS
+(
+    SELECT 1
+    FROM sys.index_columns ic
+    JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+    WHERE i.name = N'IX_omp_push_event_outbox_pending'
+      AND i.object_id = OBJECT_ID(N'omp.push_event_outbox')
+    GROUP BY i.object_id, i.index_id
+    HAVING SUM(CASE WHEN COL_NAME(ic.object_id, ic.column_id) IN (N'completed_utc', N'dead_lettered_utc') THEN 1 ELSE 0 END) < 2
+)
+BEGIN
+    CREATE INDEX IX_omp_push_event_outbox_pending
+        ON omp.push_event_outbox(status, scheduled_utc, lease_until_utc, push_event_id)
+        INCLUDE(event_category, target_type, target_user_id, retry_count, max_retries, lease_token, lease_owner,
+                completed_utc, dead_lettered_utc)
+        WHERE status IN (N'pending', N'processing')
+        WITH (DROP_EXISTING = ON);
 END
 GO
 
