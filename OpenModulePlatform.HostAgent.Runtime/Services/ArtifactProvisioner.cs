@@ -95,7 +95,30 @@ public sealed class ArtifactProvisioner
         return null;
     }
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<int, SemaphoreSlim> _artifactLocks = new();
+    /// <summary>
+    /// A per-artifact gate plus the count of callers currently holding or waiting on it.
+    /// </summary>
+    private sealed class ArtifactLock
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        /// <summary>Only ever read or written under <see cref="_artifactLocksSync"/>.</summary>
+        public int RefCount;
+    }
+
+    // The gate used to be a ConcurrentDictionary<int, SemaphoreSlim> that only ever grew:
+    // one SemaphoreSlim per distinct ArtifactId, never removed. The HostAgent is a
+    // long-running service and every release introduces new artifact ids, so the map -- and
+    // the kernel objects behind each semaphore -- accumulated for the lifetime of the
+    // process. Reported by GitHub code quality.
+    //
+    // Entries are now reference counted and removed when the last caller leaves. The
+    // counting has to be atomic with the dictionary mutation, otherwise a caller could
+    // take a reference to an entry that another thread is in the middle of removing, so a
+    // plain lock guards both. The lock is never held across the await: only the
+    // bookkeeping runs inside it.
+    private readonly Dictionary<int, ArtifactLock> _artifactLocks = [];
+    private readonly object _artifactLocksSync = new();
 
     public async Task<ArtifactProvisioningResult> EnsureAsync(
         ArtifactDescriptor artifact,
@@ -107,15 +130,63 @@ public sealed class ArtifactProvisioner
         // and the convergence cycle could otherwise both stage it and collide
         // on File.Move(overwrite:false), publishing a spurious Failed status
         // for a correct artifact (R3-D7).
-        var gate = _artifactLocks.GetOrAdd(artifact.ArtifactId, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken);
+        var entry = AcquireArtifactLock(artifact.ArtifactId);
+
+        try
+        {
+            await entry.Gate.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            // The wait was cancelled or failed, so the gate was never taken and must not
+            // be released -- but the reference taken above still has to be given back, or
+            // the entry would never be removed and the leak would simply be slower.
+            ReleaseArtifactLockReference(artifact.ArtifactId, entry);
+            throw;
+        }
+
         try
         {
             return await EnsureCoreAsync(artifact, cancellationToken);
         }
         finally
         {
-            gate.Release();
+            entry.Gate.Release();
+            ReleaseArtifactLockReference(artifact.ArtifactId, entry);
+        }
+    }
+
+    private ArtifactLock AcquireArtifactLock(int artifactId)
+    {
+        lock (_artifactLocksSync)
+        {
+            if (!_artifactLocks.TryGetValue(artifactId, out var entry))
+            {
+                entry = new ArtifactLock();
+                _artifactLocks[artifactId] = entry;
+            }
+
+            entry.RefCount++;
+            return entry;
+        }
+    }
+
+    private void ReleaseArtifactLockReference(int artifactId, ArtifactLock entry)
+    {
+        lock (_artifactLocksSync)
+        {
+            if (--entry.RefCount > 0)
+            {
+                return;
+            }
+
+            // Reaching zero under the same lock that hands out references means nobody
+            // else holds this entry and nobody can obtain it: a caller arriving now takes
+            // the lock, fails the lookup and creates a fresh one. Disposing here is
+            // therefore safe, and it is the point of the exercise -- leaving the entry
+            // behind would keep the semaphore alive for the life of the process.
+            _artifactLocks.Remove(artifactId);
+            entry.Gate.Dispose();
         }
     }
 

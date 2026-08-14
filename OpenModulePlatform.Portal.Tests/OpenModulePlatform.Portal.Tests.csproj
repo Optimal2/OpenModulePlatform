@@ -32,6 +32,7 @@
     <ProjectReference Include="..\OpenModulePlatform.Auth\OpenModulePlatform.Auth.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.HostAgent.Runtime\OpenModulePlatform.HostAgent.Runtime.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Portal\OpenModulePlatform.Portal.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.Web.ContentWebAppModule\OpenModulePlatform.Web.ContentWebAppModule.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
   </ItemGroup>
 

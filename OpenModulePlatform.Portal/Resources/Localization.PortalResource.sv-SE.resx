@@ -3225,7 +3225,6 @@
   <data name="Expired" xml:space="preserve"><value>Utgången</value></data>
   <data name="Role" xml:space="preserve"><value>Roll</value></data>
   <data name="Provisioning" xml:space="preserve"><value>Provisionering</value></data>
-  <data name="inactive" xml:space="preserve"><value>inaktiv</value></data>
   <data name="No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated." xml:space="preserve"><value>Inga appinstanser med workerkörtid hittades. Det kan betyda att inga app-workerdefinitioner finns än, eller att databasschemat inte har uppdaterats.</value></data>
   <data name="Observed" xml:space="preserve"><value>Observerad</value></data>
   <data name="PID" xml:space="preserve"><value>PID</value></data>
@@ -3269,7 +3268,6 @@
   <data name="Unknown permission." xml:space="preserve"><value>Okänd behörighet.</value></data>
   <data name="Role name must be 1-200 characters and contain only letters, digits, dash, underscore or dot." xml:space="preserve"><value>Rollnamnet måste vara 1–200 tecken och får bara innehålla bokstäver, siffror, bindestreck, understreck eller punkt.</value></data>
   <data name="Not found" xml:space="preserve"><value>Hittades inte</value></data>
-  <data name="disabled" xml:space="preserve"><value>inaktiverad</value></data>
   <data name="This view shows app instances whose app definition is mapped to the manager-driven worker runtime, together with the latest observed runtime status published by the worker manager." xml:space="preserve"><value>Den här vyn visar appinstanser vars appdefinition är kopplad till den managerstyrda workerkörtiden, tillsammans med den senaste observerade körtidsstatus som workermanagern publicerat.</value></data>
   <data name="Open app workers" xml:space="preserve"><value>Öppna app-workers</value></data>
   <data name="Open app instances" xml:space="preserve"><value>Öppna appinstanser</value></data>

@@ -12,7 +12,26 @@ namespace OpenModulePlatform.Web.ContentWebAppModule.Services;
 public sealed class ServerReportRenderer
 {
     private static readonly HtmlEncoder DefaultHtmlEncoder = HtmlEncoder.Default;
-    private static readonly JsonSerializerOptions JavaScriptJsonOptions = new(JsonSerializerDefaults.Web)
+
+    /// <summary>
+    /// Serializer settings for report data that is written inside a &lt;script&gt; block.
+    /// </summary>
+    /// <remarks>
+    /// The encoder is load-bearing, not a default that happened to be left in place. Report
+    /// rows come from a database and can contain any text, including a literal
+    /// "&lt;/script&gt;", which inside a script block would end the block and let the rest of
+    /// the value be parsed as markup.
+    ///
+    /// JavaScriptEncoder.Default escapes '&lt;' to <, so no value can produce a closing
+    /// tag. Verified by experiment rather than assumed, because the mechanism is not the one
+    /// it is often described as: the encoder does NOT escape '/', so a value like "a/b" is
+    /// emitted verbatim. It is the '&lt;' escaping alone that closes the hole.
+    ///
+    /// Replacing this with JavaScriptEncoder.UnsafeRelaxedJsonEscaping would reintroduce the
+    /// breakout. ServerReportRendererEncodingTests pins the behaviour so that swap fails a
+    /// test rather than shipping. Flagged for verification by GitHub code quality.
+    /// </remarks>
+    internal static readonly JsonSerializerOptions JavaScriptJsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Default
@@ -100,7 +119,7 @@ public sealed class ServerReportRenderer
     {
         var definition = await _definitionLoader.LoadAsync(reportKey, ct).ConfigureAwait(false);
         var result = await _queryRunner.ExecuteAsync(definition, ct).ConfigureAwait(false);
-        return RenderResult(result);
+        return RenderResult(result, _localizer);
     }
 
     private async Task<string> RenderJavaScriptCoreAsync(
@@ -113,7 +132,9 @@ public sealed class ServerReportRenderer
         return RenderJavaScriptResult(result, ResolveJavaScriptVariableName(reportKey, variableName));
     }
 
-    private static string RenderResult(ServerReportResult result)
+    private static string RenderResult(
+        ServerReportResult result,
+        IStringLocalizer<ContentWebAppModuleResource> localizer)
     {
         var html = new StringBuilder();
         html.Append("<section class=\"server-report\">");
@@ -127,14 +148,17 @@ public sealed class ServerReportRenderer
 
         foreach (var query in result.Queries)
         {
-            RenderQuery(html, query);
+            RenderQuery(html, query, localizer);
         }
 
         html.Append("</section>");
         return html.ToString();
     }
 
-    private static void RenderQuery(StringBuilder html, ServerReportQueryResult query)
+    private static void RenderQuery(
+        StringBuilder html,
+        ServerReportQueryResult query,
+        IStringLocalizer<ContentWebAppModuleResource> localizer)
     {
         html.Append("<section class=\"server-report__query\">");
 
@@ -153,9 +177,15 @@ public sealed class ServerReportRenderer
             return;
         }
 
+        // These three strings sit in the same rendered output as the error messages above,
+        // which R8-P5-4 already routed through the module resource -- but they were left
+        // as hardcoded English, so a Swedish reader got a localized error and an English
+        // empty state on the same page. Reported by GitHub code quality.
         if (query.Columns.Count == 0)
         {
-            html.Append("<div class=\"server-report__empty\">The report query returned no columns.</div></section>");
+            html.Append("<div class=\"server-report__empty\">");
+            AppendEncoded(html, localizer["The report query returned no columns."].Value);
+            html.Append("</div></section>");
             return;
         }
 
@@ -172,7 +202,9 @@ public sealed class ServerReportRenderer
         {
             html.Append("<tr><td colspan=\"");
             html.Append(query.Columns.Count);
-            html.Append("\">No rows were returned.</td></tr>");
+            html.Append("\">");
+            AppendEncoded(html, localizer["No rows were returned."].Value);
+            html.Append("</td></tr>");
         }
         else
         {
@@ -201,9 +233,11 @@ public sealed class ServerReportRenderer
         html.Append("</tbody></table></div>");
         if (query.IsTruncated)
         {
-            html.Append("<p class=\"muted server-report__truncated\">Result truncated at ");
-            html.Append(query.MaxRows);
-            html.Append(" rows.</p>");
+            // Parameterised rather than concatenated, so a translation can put the number
+            // where its own grammar needs it instead of always in the middle.
+            html.Append("<p class=\"muted server-report__truncated\">");
+            AppendEncoded(html, localizer["Result truncated at {0} rows.", query.MaxRows].Value);
+            html.Append("</p>");
         }
 
         html.Append("</section>");

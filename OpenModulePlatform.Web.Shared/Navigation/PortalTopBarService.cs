@@ -134,7 +134,7 @@ public sealed class PortalTopBarService
                 userId,
                 roleContext.ActiveRoleId,
                 permissions,
-                options?.TopBarPolling,
+                options.TopBarPolling,
                 ct);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];
@@ -351,7 +351,7 @@ public sealed class PortalTopBarService
                 userId,
                 roleContext.ActiveRoleId,
                 permissions,
-                options?.TopBarPolling,
+                options.TopBarPolling,
                 ct);
             var dropdownsOpenOnHover = true;
             IReadOnlyList<FavoriteRef> favorites = [];

@@ -1554,6 +1554,9 @@ public sealed class ArtifactZipImportService
         }
         catch (UnauthorizedAccessException)
         {
+            // Same reasoning as the IOException above: the touch is advisory. The sibling
+            // clause carried the explanation and this one was left bare, which reads like a
+            // forgotten block rather than a deliberate one (cs/empty-catch-block).
         }
     }
 
