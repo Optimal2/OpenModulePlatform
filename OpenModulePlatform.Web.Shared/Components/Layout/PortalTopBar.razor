@@ -542,9 +542,19 @@
                 @foreach (var banner in _portalTopBar.Banners)
                 {
                     <div class="portal-topbar__notification-banner portal-topbar__notification-banner--@banner.LevelName" role="status">
-                        <span class="portal-topbar__notification-banner-icon" aria-hidden="true">
-                            <img src="@SharedAssetUrl(banner.IconUrl)" alt="" />
-                        </span>
+                        @* The icon is optional, and SharedAssetUrl returns an empty string
+                           when there is nothing to point at. An <img> with src="" is not
+                           inert: browsers resolve it against the current document and issue
+                           a second request for the page itself. The two sibling icons in
+                           this file -- notification.CallerIcon and conversation.AvatarUrl --
+                           already guard on exactly this; the banner was missed. Reported by
+                           GitHub code quality. *@
+                        @if (!string.IsNullOrWhiteSpace(banner.IconUrl))
+                        {
+                            <span class="portal-topbar__notification-banner-icon" aria-hidden="true">
+                                <img src="@SharedAssetUrl(banner.IconUrl)" alt="" />
+                            </span>
+                        }
                         <span class="portal-topbar__notification-banner-copy">
                             <span class="portal-topbar__notification-banner-title">@banner.Title</span>
                             <span class="portal-topbar__notification-banner-content">@banner.Content</span>

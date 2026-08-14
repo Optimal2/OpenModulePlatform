@@ -6170,6 +6170,12 @@ ORDER BY ArtifactId;
 
     private const uint AttachParentProcess = 0xFFFFFFFF;
 
+    // Process-lifetime console bindings. See EnsureConsole: these are deliberately never
+    // disposed, because Console holds them for as long as the process runs.
+    private static StreamWriter? _attachedConsoleOut;
+    private static StreamWriter? _attachedConsoleError;
+    private static StreamReader? _attachedConsoleIn;
+
     [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool AttachConsole(uint dwProcessId);
@@ -6196,9 +6202,20 @@ ORDER BY ArtifactId;
 
         try
         {
-            Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
-            Console.SetError(new StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
-            Console.SetIn(new StreamReader(Console.OpenStandardInput()));
+            // Held in fields rather than left as locals. These readers and writers are
+            // handed to Console and must live as long as the process does -- disposing
+            // them would close the very streams they were created to rebind. CodeQL read
+            // the locals as leaked disposables (cs/local-not-disposed), which is the right
+            // question to ask; the answer is that their lifetime is the process, and
+            // saying so in a field is clearer than an annotation claiming the analyzer is
+            // wrong.
+            _attachedConsoleOut = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+            _attachedConsoleError = new StreamWriter(Console.OpenStandardError()) { AutoFlush = true };
+            _attachedConsoleIn = new StreamReader(Console.OpenStandardInput());
+
+            Console.SetOut(_attachedConsoleOut);
+            Console.SetError(_attachedConsoleError);
+            Console.SetIn(_attachedConsoleIn);
         }
         catch (IOException)
         {

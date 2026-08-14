@@ -2899,7 +2899,6 @@
   <data name="Expired" xml:space="preserve"><value>Expired</value></data>
   <data name="Role" xml:space="preserve"><value>Role</value></data>
   <data name="Provisioning" xml:space="preserve"><value>Provisioning</value></data>
-  <data name="inactive" xml:space="preserve"><value>inactive</value></data>
   <data name="No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated." xml:space="preserve"><value>No worker-runtime app instances found. This can mean that no app worker definitions exist yet or that the database schema has not been updated.</value></data>
   <data name="Observed" xml:space="preserve"><value>Observed</value></data>
   <data name="PID" xml:space="preserve"><value>PID</value></data>
@@ -2945,7 +2944,6 @@
   <data name="Role name must be 1-200 characters and contain only letters, digits, dash, underscore or dot." xml:space="preserve"><value>Role name must be 1-200 characters and contain only letters, digits, dash, underscore or dot.</value></data>
   <data name="Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-..." xml:space="preserve"><value>Use the same AD key format that Windows sign-in resolves, for example DOMAIN\\username, name:DOMAIN\\username or sid:S-1-5-21-...</value></data>
   <data name="Not found" xml:space="preserve"><value>Not found</value></data>
-  <data name="disabled" xml:space="preserve"><value>disabled</value></data>
   <data name="This view shows app instances whose app definition is mapped to the manager-driven worker runtime, together with the latest observed runtime status published by the worker manager." xml:space="preserve"><value>This view shows app instances whose app definition is mapped to the manager-driven worker runtime, together with the latest observed runtime status published by the worker manager.</value></data>
   <data name="Open app workers" xml:space="preserve"><value>Open app workers</value></data>
   <data name="Open app instances" xml:space="preserve"><value>Open app instances</value></data>

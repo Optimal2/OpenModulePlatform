@@ -37,6 +37,8 @@ public sealed class OmpReparsePointGuardTests : IDisposable
         }
         catch (IOException)
         {
+            // Temp-directory cleanup is advisory: a file still held open by the OS
+            // must not fail the test that already passed (cs/empty-catch-block).
         }
     }
 

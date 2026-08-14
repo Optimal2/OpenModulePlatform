@@ -44,7 +44,7 @@ public static class PortalTopBarModelFactory
                 .Select(c => c.Trim())
                 .Select(c => new PortalTopBarCultureOption(
                     c,
-                    c.StartsWith("sv", StringComparison.OrdinalIgnoreCase) ? "Swedish" : c.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? "English" : c,
+                    DescribeCulture(c),
                     string.Equals(c, cultureSelection.EffectiveCulture, StringComparison.OrdinalIgnoreCase)))
                 .ToArray(),
             PreferredCulture = cultureSelection.PreferredCulture,
@@ -101,4 +101,38 @@ public static class PortalTopBarModelFactory
 
     private static int PositiveOrDefault(int? value, int fallback)
         => value is > 0 ? value.Value : fallback;
+
+    /// <summary>
+    /// The name to show for a culture in the language picker.
+    /// </summary>
+    /// <remarks>
+    /// This was a hardcoded two-way map: anything starting with "sv" became "Swedish",
+    /// anything starting with "en" became "English", and every other culture fell through to
+    /// its raw code -- so adding a third language to SupportedCultures put "fr" or "de" in
+    /// the menu. Reported by GitHub code quality.
+    ///
+    /// The BCL already knows every culture's name, so it is asked instead. NativeName rather
+    /// than DisplayName on purpose: a language picker is read by someone who wants that
+    /// language, and "français" is what a French reader is looking for, not "French". The
+    /// name is title-cased using the culture's own casing rules, because languages differ on
+    /// whether they capitalise their own name and a menu of mixed casing looks like a bug.
+    ///
+    /// An unknown or malformed code falls back to the code itself, which is the previous
+    /// behaviour for that case and better than throwing inside a layout component.
+    /// </remarks>
+    private static string DescribeCulture(string culture)
+    {
+        try
+        {
+            var info = CultureInfo.GetCultureInfo(culture);
+            var nativeName = info.NativeName;
+            return string.IsNullOrWhiteSpace(nativeName)
+                ? culture
+                : info.TextInfo.ToTitleCase(nativeName);
+        }
+        catch (CultureNotFoundException)
+        {
+            return culture;
+        }
+    }
 }

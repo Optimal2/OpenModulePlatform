@@ -130,4 +130,7 @@
   <data name="The server report could not be rendered." xml:space="preserve"><value>Serverrapporten kunde inte visas.</value></data>
   <data name="HTML content file unavailable" xml:space="preserve"><value>HTML-innehållsfilen är inte tillgänglig</value></data>
   <data name="Cancel" xml:space="preserve"><value>Avbryt</value></data>
+  <data name="The report query returned no columns." xml:space="preserve"><value>Rapportfrågan returnerade inga kolumner.</value></data>
+  <data name="No rows were returned." xml:space="preserve"><value>Inga rader returnerades.</value></data>
+  <data name="Result truncated at {0} rows." xml:space="preserve"><value>Resultatet är avkortat vid {0} rader.</value></data>
 </root>

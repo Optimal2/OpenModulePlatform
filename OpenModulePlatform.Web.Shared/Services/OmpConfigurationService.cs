@@ -26,7 +26,27 @@ public sealed class OmpConfigurationService
     // in the global fallback) serving a stale value for the full cache lifetime,
     // so an updated config was not picked up. Bumping the generation makes the
     // global entry and all effective entries unreachable at once (R5-E3).
-    private static long _generation;
+    /// <summary>
+    /// The process-wide cache generation shared by every instance of the service.
+    /// </summary>
+    /// <remarks>
+    /// This was a private static field that instance methods incremented and read directly,
+    /// which CodeQL reports as a static field written by an instance method
+    /// (cs/static-field-written-by-instance). The report is about clarity, not correctness:
+    /// the counter genuinely has to be process-wide, because the IMemoryCache it invalidates
+    /// is shared and a per-instance counter would leave other instances serving stale values.
+    ///
+    /// Naming it makes that intent visible at each call site instead of hiding shared mutable
+    /// state behind what looks like an ordinary field.
+    /// </remarks>
+    private static class CacheGeneration
+    {
+        private static long _value;
+
+        public static long Current => Interlocked.Read(ref _value);
+
+        public static void Invalidate() => Interlocked.Increment(ref _value);
+    }
 
     private readonly SqlConnectionFactory _db;
     private readonly IMemoryCache _cache;
@@ -132,7 +152,7 @@ public sealed class OmpConfigurationService
         // different principals never share a value.
         var permissionKey = string.Join('|', permissionNames);
         var cacheKey = string.Create(CultureInfo.InvariantCulture,
-            $"omp-cfg-eff::{Interlocked.Read(ref _generation)}::{category.Trim()}::{setting.Trim()}::{userId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{activeRoleId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{permissionKey}");
+            $"omp-cfg-eff::{CacheGeneration.Current}::{category.Trim()}::{setting.Trim()}::{userId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{activeRoleId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{permissionKey}");
         if (_cache.TryGetValue<string?>(cacheKey, out var cachedValue))
         {
             return cachedValue;
@@ -175,12 +195,12 @@ public sealed class OmpConfigurationService
     /// Invalidates every cached configuration value so subsequent reads reload from the database.
     /// Call this after any configuration write so updated values are picked up immediately.
     /// </summary>
-    public void InvalidateAll() => Interlocked.Increment(ref _generation);
+    public void InvalidateAll() => CacheGeneration.Invalidate();
 
     private static string CreateGlobalCacheKey(string category, string setting)
         => string.Create(
             CultureInfo.InvariantCulture,
-            $"omp-config:global:{Interlocked.Read(ref _generation)}:{category.Trim().ToLowerInvariant()}:{setting.Trim().ToLowerInvariant()}");
+            $"omp-config:global:{CacheGeneration.Current}:{category.Trim().ToLowerInvariant()}:{setting.Trim().ToLowerInvariant()}");
 
     private void LogConfigReadFailure(Exception ex, string category, string setting, bool effective)
     {

@@ -300,6 +300,18 @@ public sealed class WorkerProcessHostedService : BackgroundService
         return new WorkerDrainCoordinator(drainEvent, busyEvent, _logger);
     }
 
+    /// <summary>
+    /// Opens a named event owned by the worker manager, or null when it does not exist.
+    /// </summary>
+    /// <remarks>
+    /// Named wait handles are a Windows concept, and the analyzer flagged the call as
+    /// unguarded (CA1416). Both call sites already sit behind an OperatingSystem.IsWindows()
+    /// check, but that check is in the caller and the analyzer cannot see through the call.
+    /// Stating the platform on the method is the honest fix: it records the constraint that
+    /// was only implied, and keeps the analyzer able to verify future callers instead of
+    /// having the warning suppressed.
+    /// </remarks>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private EventWaitHandle? TryOpenNamedEvent(string eventName)
     {
         try

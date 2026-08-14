@@ -20,4 +20,10 @@
     <Content Update="ContentReports\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Update="ContentPages\*.htm;ContentPages\*.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>OpenModulePlatform.Portal.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
 </Project>

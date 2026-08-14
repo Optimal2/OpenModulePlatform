@@ -64,9 +64,12 @@ public sealed class PortalWidgetRuntimeDataPackageService
             return null;
         }
 
-        var binaryReferences = documents
-            .Select(static document => CollectBinaryDataReferences(document.JsonData))
-            .Aggregate(BinaryDataReferences.Empty, static (left, right) => left.Merge(right));
+        // Collected in a single pass. This used to Aggregate over Merge, which concatenated,
+        // de-duplicated and re-sorted the entire accumulated set once per document -- O(N^2)
+        // work, and O(N^2 log N) counting the sort, for a result that only needs one pass.
+        // Reported by GitHub code quality.
+        var binaryReferences = BinaryDataReferences.Collect(
+            documents.Select(static document => CollectBinaryDataReferences(document.JsonData)));
         var binaryRows = await GetBinaryRowsAsync(conn, binaryReferences.BinaryDataIds, binaryReferences.ContentHashes, ct);
         var binaryRowsById = binaryRows.ToDictionary(static row => row.BinaryDataId);
 
@@ -508,6 +511,15 @@ WHEN NOT MATCHED THEN
                 {
                     obj[binaryDataIdPropertyName] = hashTargetId.Value;
                 }
+                else if (sourceId <= 0)
+                {
+                    // Zero or negative is the widget schema's "no binary attached" sentinel,
+                    // not a reference to binary row 0. With no hash to fall back on there is
+                    // nothing to remap, and the value already says what it should say -- so
+                    // it is left alone. It used to fall through to the throw below, which
+                    // failed the entire import over a property that was never pointing at
+                    // anything. Reported by GitHub code quality.
+                }
                 else
                 {
                     throw new InvalidOperationException($"Widget runtime data references missing binaryDataId {sourceId.ToString(CultureInfo.InvariantCulture)}.");
@@ -806,14 +818,39 @@ WHEN NOT MATCHED THEN
     {
         public static BinaryDataReferences Empty { get; } = new([], []);
 
-        public BinaryDataReferences Merge(BinaryDataReferences other)
-            => new(
-                BinaryDataIds.Concat(other.BinaryDataIds).Distinct().Order().ToArray(),
-                ContentHashes
-                    .Concat(other.ContentHashes)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(static hash => hash, StringComparer.OrdinalIgnoreCase)
-                    .ToArray());
+        /// <summary>
+        /// Flattens many per-document reference sets into one, in a single pass.
+        /// </summary>
+        /// <remarks>
+        /// Replaces a pairwise Merge folded with Aggregate. That shape re-deduplicated and
+        /// re-sorted everything gathered so far for each additional document, so the cost
+        /// grew quadratically with the number of documents while producing exactly the
+        /// same answer as accumulating into two sets and ordering once at the end.
+        /// The ordering and the case-insensitive hash comparison are preserved, because
+        /// the manifest content depends on both.
+        /// </remarks>
+        public static BinaryDataReferences Collect(IEnumerable<BinaryDataReferences> parts)
+        {
+            var ids = new HashSet<long>();
+            var hashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var part in parts)
+            {
+                foreach (var id in part.BinaryDataIds)
+                {
+                    ids.Add(id);
+                }
+
+                foreach (var hash in part.ContentHashes)
+                {
+                    hashes.Add(hash);
+                }
+            }
+
+            return new BinaryDataReferences(
+                [.. ids.Order()],
+                [.. hashes.OrderBy(static hash => hash, StringComparer.OrdinalIgnoreCase)]);
+        }
     }
 }
 
