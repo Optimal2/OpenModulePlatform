@@ -1140,6 +1140,154 @@ BEGIN
 END
 GO
 
+------------------------------------------------------------------------------
+-- Application performance telemetry.
+--
+-- Why this exists
+-- ---------------
+-- Several deferred improvements (R4-E10 being the standing example) could not be
+-- decided because nobody knew what they cost. The question "is the topbar's per-request
+-- database work worth optimising" has no answer without real traffic over real time, and
+-- an installation that only starts collecting once someone asks has already lost the
+-- baseline. These tables exist so the answer accumulates from the first day of use.
+--
+-- Shape follows omp.HostResourceSamples deliberately: pre-aggregated buckets with count,
+-- sum, min and max rather than one row per request. A row per request would make the
+-- measurement more expensive than the thing being measured, and would grow without bound
+-- on exactly the table nobody prunes.
+--
+-- Two tiers, because the two questions have different horizons:
+--   * Hourly  -- "what is slow right now", kept weeks.
+--   * Daily   -- "how did this change as usage grew", kept a year or more. Rolled up from
+--                the hourly rows before they are pruned, so the long trend survives.
+------------------------------------------------------------------------------
+IF OBJECT_ID(N'omp.PerformanceSamples', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.PerformanceSamples
+    (
+        -- Which application produced the sample. Not a foreign key: telemetry must never
+        -- fail to record because a row was removed from another table.
+        AppKey nvarchar(100) NOT NULL,
+        -- Coarse label, never a raw URL. Raw paths carry identifiers and would both leak
+        -- into an operational table and explode the key space.
+        Scope nvarchar(150) NOT NULL,
+        MetricKey nvarchar(100) NOT NULL,
+        SampleBucketUtc datetime2(3) NOT NULL,
+        SampleCount bigint NOT NULL,
+        TotalValue float NOT NULL,
+        MinValue float NOT NULL,
+        MaxValue float NOT NULL,
+        FirstSampledUtc datetime2(3) NOT NULL,
+        LastSampledUtc datetime2(3) NOT NULL,
+        CONSTRAINT PK_omp_PerformanceSamples
+            PRIMARY KEY(SampleBucketUtc, AppKey, Scope, MetricKey)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.PerformanceSamples')
+      AND name = N'IX_omp_PerformanceSamples_Metric_Bucket'
+)
+BEGIN
+    -- Reading is always "this metric over time", which the clustered key cannot serve
+    -- because it leads with the bucket.
+    CREATE INDEX IX_omp_PerformanceSamples_Metric_Bucket
+        ON omp.PerformanceSamples(MetricKey, SampleBucketUtc)
+        INCLUDE(AppKey, Scope, SampleCount, TotalValue, MinValue, MaxValue);
+END
+GO
+
+IF OBJECT_ID(N'omp.PerformanceSamplesDaily', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.PerformanceSamplesDaily
+    (
+        AppKey nvarchar(100) NOT NULL,
+        Scope nvarchar(150) NOT NULL,
+        MetricKey nvarchar(100) NOT NULL,
+        SampleDateUtc date NOT NULL,
+        SampleCount bigint NOT NULL,
+        TotalValue float NOT NULL,
+        MinValue float NOT NULL,
+        MaxValue float NOT NULL,
+        CONSTRAINT PK_omp_PerformanceSamplesDaily
+            PRIMARY KEY(SampleDateUtc, AppKey, Scope, MetricKey)
+    );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.PerformanceSamplesDaily')
+      AND name = N'IX_omp_PerformanceSamplesDaily_Metric_Date'
+)
+BEGIN
+    CREATE INDEX IX_omp_PerformanceSamplesDaily_Metric_Date
+        ON omp.PerformanceSamplesDaily(MetricKey, SampleDateUtc)
+        INCLUDE(AppKey, Scope, SampleCount, TotalValue, MinValue, MaxValue);
+END
+GO
+
+CREATE OR ALTER PROCEDURE omp.RollUpAndPrunePerformanceSamples
+    @RetainHours int,
+    @RetainDays int
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    IF @RetainHours < 1 SET @RetainHours = 1;
+    IF @RetainDays < 1 SET @RetainDays = 1;
+
+    DECLARE @hourCutoffUtc datetime2(3) = DATEADD(hour, -@RetainHours, SYSUTCDATETIME());
+    DECLARE @dayCutoffUtc date = CAST(DATEADD(day, -@RetainDays, SYSUTCDATETIME()) AS date);
+
+    BEGIN TRANSACTION;
+
+    -- Roll up everything about to be pruned, in the same transaction as the prune, so a
+    -- crash between the two can never drop the hourly rows without having folded them
+    -- into the daily trend first.
+    MERGE omp.PerformanceSamplesDaily WITH (HOLDLOCK) AS target
+    USING
+    (
+        SELECT
+            AppKey,
+            Scope,
+            MetricKey,
+            CAST(SampleBucketUtc AS date) AS SampleDateUtc,
+            SUM(SampleCount) AS SampleCount,
+            SUM(TotalValue) AS TotalValue,
+            MIN(MinValue) AS MinValue,
+            MAX(MaxValue) AS MaxValue
+        FROM omp.PerformanceSamples
+        WHERE SampleBucketUtc < @hourCutoffUtc
+        GROUP BY AppKey, Scope, MetricKey, CAST(SampleBucketUtc AS date)
+    ) AS source
+    ON target.SampleDateUtc = source.SampleDateUtc
+       AND target.AppKey = source.AppKey
+       AND target.Scope = source.Scope
+       AND target.MetricKey = source.MetricKey
+    WHEN MATCHED THEN
+        UPDATE SET
+            SampleCount = target.SampleCount + source.SampleCount,
+            TotalValue = target.TotalValue + source.TotalValue,
+            MinValue = CASE WHEN source.MinValue < target.MinValue THEN source.MinValue ELSE target.MinValue END,
+            MaxValue = CASE WHEN source.MaxValue > target.MaxValue THEN source.MaxValue ELSE target.MaxValue END
+    WHEN NOT MATCHED THEN
+        INSERT(AppKey, Scope, MetricKey, SampleDateUtc, SampleCount, TotalValue, MinValue, MaxValue)
+        VALUES(source.AppKey, source.Scope, source.MetricKey, source.SampleDateUtc,
+               source.SampleCount, source.TotalValue, source.MinValue, source.MaxValue);
+
+    DELETE FROM omp.PerformanceSamples WHERE SampleBucketUtc < @hourCutoffUtc;
+    DELETE FROM omp.PerformanceSamplesDaily WHERE SampleDateUtc < @dayCutoffUtc;
+
+    COMMIT TRANSACTION;
+END
+GO
+
 IF OBJECT_ID(N'omp.HostAgentDesiredStates', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostAgentDesiredStates

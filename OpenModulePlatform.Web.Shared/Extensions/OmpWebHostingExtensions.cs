@@ -26,6 +26,7 @@ using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.AspNetCore.SignalR;
+using OpenModulePlatform.Web.Shared.Telemetry;
 using System.Globalization;
 using System.Net;
 using SystemNetIPNetwork = System.Net.IPNetwork;
@@ -205,6 +206,22 @@ public static class OmpWebHostingExtensions
         builder.Services.AddScoped<BannerService>();
         builder.Services.AddScoped<OpenModulePlatform.Web.Shared.Navigation.PortalTopBarService>();
 
+        // Application performance telemetry. Registered for every OMP web app and enabled by
+        // default: the questions it answers -- what is slow, and how did that change as the
+        // installation was taken into use -- need data from the first day, not from the day
+        // someone thinks to ask.
+        var telemetryOptions = builder.Configuration
+            .GetSection($"{optionsSectionName}:{OmpPerformanceTelemetryOptions.SectionName}")
+            .Get<OmpPerformanceTelemetryOptions>() ?? new OmpPerformanceTelemetryOptions();
+        telemetryOptions.Validate();
+        builder.Services.AddSingleton(telemetryOptions);
+        builder.Services.AddSingleton<OmpPerformanceTelemetry>();
+
+        if (telemetryOptions.Enabled)
+        {
+            builder.Services.AddHostedService<OmpPerformanceTelemetryHostedService>();
+        }
+
         return builder;
     }
 
@@ -259,6 +276,11 @@ public static class OmpWebHostingExtensions
         // Resolve/emit the correlation id and open its logging scope as early as possible,
         // so every log line for the request (including error handling below) carries it.
         app.UseOmpRequestCorrelation();
+
+        // Time the request from just inside the correlation scope, so the measurement
+        // covers error handling too -- a page that fails slowly is the one worth knowing
+        // about. The middleware is a no-op when telemetry is disabled.
+        app.UseOmpPerformanceTelemetry(ResolveTelemetryAppKey(app));
 
         if (app.Environment.IsDevelopment())
         {
@@ -1408,4 +1430,20 @@ public static class OmpWebHostingExtensions
             request.Headers["X-Requested-With"].ToString(),
             "XMLHttpRequest",
             StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The name a web app is recorded under in the performance telemetry.
+    /// </summary>
+    /// <remarks>
+    /// The assembly name rather than the configured title: it is stable across a rename in
+    /// configuration, and a metric series whose identity changes when someone edits a
+    /// display string is a series nobody can plot across a whole autumn.
+    /// </remarks>
+    private static string ResolveTelemetryAppKey(WebApplication app)
+    {
+        var assemblyName = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name;
+        return string.IsNullOrWhiteSpace(assemblyName)
+            ? app.Environment.ApplicationName
+            : assemblyName;
+    }
 }
