@@ -82,7 +82,11 @@ public static class OmpPerformanceTelemetryMiddleware
 
         telemetry.Record(appKey, scope, $"{MetricRequestCount}.{statusClass}xx", 1);
 
-        if (durationMs >= options.MinimumDurationMsToRecord)
+        // Long-lived connections are counted but never timed. A SignalR long poll is held
+        // open on purpose and measured almost seven seconds on the very first verification
+        // run -- recorded as a duration it would dominate both the mean and the maximum and
+        // make the whole metric read as "the application is slow" when nothing is.
+        if (durationMs >= options.MinimumDurationMsToRecord && !IsLongLivedConnection(context))
         {
             telemetry.Record(appKey, scope, MetricRequestDuration, durationMs);
         }
@@ -98,6 +102,34 @@ public static class OmpPerformanceTelemetryMiddleware
         {
             telemetry.Record(appKey, scope, MetricTopBarDbCalls, calls);
         }
+    }
+
+    /// <summary>
+    /// True for connections whose duration measures how long a client stayed connected
+    /// rather than how long the server took.
+    /// </summary>
+    /// <remarks>
+    /// WebSockets and the SignalR long-poll and server-sent-event transports are all held
+    /// open deliberately. Their duration is a property of the client's session, not of any
+    /// work the server did, so it belongs in no latency figure. They are still counted, so
+    /// the traffic remains visible.
+    /// </remarks>
+    private static bool IsLongLivedConnection(HttpContext context)
+    {
+        if (context.WebSockets.IsWebSocketRequest)
+        {
+            return true;
+        }
+
+        var path = context.Request.Path.Value;
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        // The hub paths this platform mounts, plus the transport suffixes SignalR appends.
+        return path.Contains("/updates", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
