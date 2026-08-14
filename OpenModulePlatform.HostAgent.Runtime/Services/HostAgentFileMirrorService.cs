@@ -28,24 +28,46 @@ public sealed class HostAgentFileMirrorService
             return Task.CompletedTask;
         }
 
+        // One failing mirror must not take the others with it, and above all must not take
+        // down the rest of the cycle. Mirroring runs before host jobs and telemetry, so a
+        // source path on a temporarily unreachable UNC share used to stop job processing
+        // and resource collection on every single tick -- a file copy nobody was waiting
+        // for silently disabling the parts of the agent that report what is going on
+        // (R7-D10).
         foreach (var mirror in mirrors)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var sourcePath = Path.GetFullPath(mirror.SourcePath.Trim());
             var targetPath = Path.GetFullPath(mirror.TargetPath.Trim());
-            if (!Directory.Exists(sourcePath))
-            {
-                throw new DirectoryNotFoundException(
-                    $"Configured file mirror source path was not found: '{sourcePath}'.");
-            }
 
-            ArtifactDirectoryMirror.MirrorDirectory(
-                sourcePath,
-                targetPath,
-                mirror.ExcludedEntries,
-                cancellationToken,
-                mirror.DeleteStaleTargetEntries);
+            try
+            {
+                if (!Directory.Exists(sourcePath))
+                {
+                    _logger.LogWarning(
+                        "Configured file mirror source path was not found; the mirror was skipped this cycle. SourcePath={SourcePath}, TargetPath={TargetPath}",
+                        sourcePath,
+                        targetPath);
+                    continue;
+                }
+
+                ArtifactDirectoryMirror.MirrorDirectory(
+                    sourcePath,
+                    targetPath,
+                    mirror.ExcludedEntries,
+                    cancellationToken,
+                    mirror.DeleteStaleTargetEntries);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Configured file mirror failed and was skipped this cycle. SourcePath={SourcePath}, TargetPath={TargetPath}",
+                    sourcePath,
+                    targetPath);
+                continue;
+            }
 
             _logger.LogInformation(
                 "Mirrored configured files. SourcePath={SourcePath}, TargetPath={TargetPath}",

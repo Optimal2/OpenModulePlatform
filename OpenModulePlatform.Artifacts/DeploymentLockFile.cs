@@ -138,6 +138,67 @@ public static class DeploymentLockFile
         }
     }
 
+    /// <summary>
+    /// Creates the lock file only if no lock file exists, and reports whether this caller
+    /// was the one that created it.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="WriteAsync"/> ends in <c>File.Move(overwrite: true)</c>, which is the
+    /// right primitive for renewing a lock you already hold and the wrong one for taking
+    /// it: two HostAgents that both read "not locked" would both write, and the second
+    /// would silently become the owner of a deployment the first was already running
+    /// (R7-D6). <c>FileMode.CreateNew</c> makes the claim itself the atomic step, so
+    /// exactly one caller can win.
+    ///
+    /// A stale lock file must therefore be removed before claiming, which the caller does
+    /// after establishing that the existing lock has expired. Two agents racing to clear
+    /// the same stale file is harmless: both delete, one creates, the other is told it
+    /// lost.
+    /// </remarks>
+    public static async Task<bool> TryCreateExclusiveAsync(
+        string applicationRoot,
+        DeploymentLockDocument document,
+        CancellationToken ct)
+    {
+        var path = GetPath(applicationRoot);
+        var directory = Path.GetDirectoryName(path)
+            ?? throw new InvalidOperationException($"Could not resolve deployment lock directory for '{path}'.");
+        Directory.CreateDirectory(directory);
+
+        OmpReparsePointGuard.PrepareOwnedFileForWrite(path, applicationRoot, "Deployment lock file");
+
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        }
+        catch (IOException) when (File.Exists(path))
+        {
+            // Another claimant got there first. Any other IOException -- a full disk, a
+            // vanished share -- is a real failure and must not be reported as a lost race.
+            return false;
+        }
+
+        try
+        {
+            var json = JsonSerializer.Serialize(document, JsonOptions);
+            await using var writer = new StreamWriter(stream, Utf8NoBom);
+            await writer.WriteAsync(json.AsMemory(), ct);
+            await writer.FlushAsync(ct);
+        }
+        catch
+        {
+            // The claim succeeded but its contents did not land. Leaving an empty or
+            // half-written lock file would block every future deployment of this
+            // application until someone deleted it by hand.
+            await stream.DisposeAsync();
+            TryDelete(path);
+            throw;
+        }
+
+        return true;
+    }
+
     public static void TryDelete(string path)
     {
         try

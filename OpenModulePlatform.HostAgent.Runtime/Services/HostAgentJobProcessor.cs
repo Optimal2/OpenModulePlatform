@@ -471,10 +471,19 @@ public sealed class HostAgentJobProcessor
             cancellationToken);
 
         var result = new MaintenanceCleanupJobResult();
+
+        // Enumerating the machine's services costs one sc.exe per service, and every
+        // orphan-directory entry re-ran it -- ten entries meant ten full sweeps (R7-D7).
+        // Memoised for this job only: no cross-job state, and it is still not computed at
+        // all when the job contains no entry that needs it.
+        IReadOnlyList<ServiceAppServiceCandidate>? serviceAppServiceCandidates = null;
+        IReadOnlyList<ServiceAppServiceCandidate> ResolveServiceAppServiceCandidates(HostAgentSettings settings)
+            => serviceAppServiceCandidates ??= EnumerateServiceAppServices(settings);
+
         foreach (var entry in entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var entryResult = await ProcessMaintenanceCleanupEntryAsync(entry, job.HostAgentJobId, hostKey, cancellationToken);
+            var entryResult = await ProcessMaintenanceCleanupEntryAsync(entry, job.HostAgentJobId, hostKey, ResolveServiceAppServiceCandidates, cancellationToken);
             AddMaintenanceCleanupResult(result, entryResult);
         }
 
@@ -495,6 +504,7 @@ public sealed class HostAgentJobProcessor
         MaintenanceFindingCleanupEntry entry,
         long hostAgentJobId,
         string hostKey,
+        Func<HostAgentSettings, IReadOnlyList<ServiceAppServiceCandidate>> resolveServiceAppServiceCandidates,
         CancellationToken cancellationToken)
     {
         MaintenanceFindingAction? action = null;
@@ -515,7 +525,7 @@ public sealed class HostAgentJobProcessor
                 break;
             case MaintenanceTargetKinds.Directory:
                 result = string.Equals(entry.Category, OrphanServiceAppFindingCategory, StringComparison.OrdinalIgnoreCase)
-                    ? await CleanupOrphanServiceAppDirectoryFindingAsync(entry, action, hostKey, cancellationToken)
+                    ? await CleanupOrphanServiceAppDirectoryFindingAsync(entry, action, hostKey, resolveServiceAppServiceCandidates, cancellationToken)
                     : CleanupDirectoryFinding(entry, action, cancellationToken);
                 break;
             case MaintenanceTargetKinds.DatabaseRow:
@@ -1876,6 +1886,7 @@ public sealed class HostAgentJobProcessor
         MaintenanceFindingCleanupEntry entry,
         MaintenanceFindingAction? action,
         string hostKey,
+        Func<HostAgentSettings, IReadOnlyList<ServiceAppServiceCandidate>> resolveServiceAppServiceCandidates,
         CancellationToken cancellationToken)
     {
         if (!TryResolveMaintenanceDirectoryPath(
@@ -1899,7 +1910,7 @@ public sealed class HostAgentJobProcessor
             hostKey,
             MaxServiceAppDeploymentsForOrphanScan,
             cancellationToken);
-        var serviceCandidates = EnumerateServiceAppServices(settings);
+        var serviceCandidates = resolveServiceAppServiceCandidates(settings);
 
         var refusal = ValidateOrphanServiceAppDirectoryCleanup(settings, deployments, serviceCandidates, directory);
         if (refusal is not null)
@@ -2316,7 +2327,7 @@ public sealed class HostAgentJobProcessor
             .ToArray();
 
         return serviceNames
-            .Select(name => new HostAgentServiceCandidate(name, GetServiceState(name), TryGetServiceExecutablePath(name)))
+            .Select(name => new HostAgentServiceCandidate(name, GetServiceStateForInventory(name), TryGetServiceExecutablePath(name)))
             .ToArray();
     }
 
@@ -2338,24 +2349,27 @@ public sealed class HostAgentJobProcessor
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
         }
 
-        var serviceNames = result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
-            .Select(static line => line.Trim())
-            .Where(line => line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
-            .Select(line => line["SERVICE_NAME:".Length..].Trim())
+        // One sc.exe per service, not three. This single queryex already carries the state
+        // and the display name for every service on the machine; querying them again
+        // per-service cost two extra process launches each across ~320 services (R7-D7).
+        // Only BINARY_PATH_NAME still needs `sc qc`, and only for services that survive
+        // the name filter.
+        var described = ParseServiceDescriptionsFromQueryEx(result.Output);
+
+        var serviceNames = described.Keys
             .Where(name =>
                 !IsServiceNameWithKnownPrefix(name, KnownHostAgentServiceNamePrefixes)
                 && !IsServiceNameWithKnownPrefix(name, KnownWorkerManagerServiceNamePrefixes)
                 && !string.Equals(name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         return serviceNames
             .Select(name => new ServiceAppServiceCandidate(
                 name,
-                GetServiceState(name),
+                described[name].State,
                 TryGetServiceExecutablePath(name),
-                TryGetServiceDisplayName(name)))
+                described[name].DisplayName))
             .Where(candidate => !string.IsNullOrWhiteSpace(candidate.ExecutablePath))
             .Select(candidate =>
             {
@@ -2373,6 +2387,70 @@ public sealed class HostAgentJobProcessor
                 return candidate with { IsUnderServicesRoot = isUnderServicesRoot };
             })
             .ToArray();
+    }
+
+    /// <summary>
+    /// Reads service name, display name and state out of one <c>sc queryex</c> listing.
+    /// </summary>
+    /// <remarks>
+    /// The listing is a sequence of blocks: a <c>SERVICE_NAME:</c> line opens a block, an
+    /// optional <c>DISPLAY_NAME:</c> line follows, and an indented <c>STATE :</c> line
+    /// carries the state as "&lt;code&gt; &lt;NAME&gt;". Fields are attributed to the most
+    /// recently opened block, so a service missing one of them simply gets a null rather
+    /// than inheriting its neighbour's value.
+    /// </remarks>
+    internal static IReadOnlyDictionary<string, (string? State, string? DisplayName)> ParseServiceDescriptionsFromQueryEx(string output)
+    {
+        var result = new Dictionary<string, (string? State, string? DisplayName)>(StringComparer.OrdinalIgnoreCase);
+        string? currentName = null;
+
+        foreach (var rawLine in output.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            var line = rawLine.Trim();
+            if (line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
+            {
+                var name = line["SERVICE_NAME:".Length..].Trim();
+                currentName = string.IsNullOrWhiteSpace(name) ? null : name;
+                if (currentName is not null && !result.ContainsKey(currentName))
+                {
+                    result[currentName] = (null, null);
+                }
+
+                continue;
+            }
+
+            if (currentName is null)
+            {
+                continue;
+            }
+
+            if (line.StartsWith("DISPLAY_NAME:", StringComparison.OrdinalIgnoreCase))
+            {
+                var displayName = line["DISPLAY_NAME:".Length..].Trim();
+                result[currentName] = (result[currentName].State, string.IsNullOrWhiteSpace(displayName) ? null : displayName);
+                continue;
+            }
+
+            if (!line.StartsWith("STATE", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf(':');
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            var parts = line[(separatorIndex + 1)..].Trim()
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length > 0)
+            {
+                result[currentName] = (parts[^1], result[currentName].DisplayName);
+            }
+        }
+
+        return result;
     }
 
     private static string? TryGetServiceDisplayName(string serviceName)
@@ -2731,6 +2809,31 @@ public sealed class HostAgentJobProcessor
         => serviceNamePrefixes.Any(prefix =>
             string.Equals(serviceName, prefix, StringComparison.OrdinalIgnoreCase)
             || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Service state for inventory purposes: unreadable is reported as unknown, not thrown.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GetServiceState"/> throws on any sc.exe failure other than "service does
+    /// not exist", which is right where the answer drives a decision -- treating an
+    /// access-denied service as absent would make the caller try to install over it. It is
+    /// wrong while walking every service on the machine: one protected third-party service
+    /// took down the whole MaintenanceScan job on every scheduled run (R7-D8). Its two
+    /// siblings here, <see cref="TryGetServiceExecutablePath"/> and
+    /// <see cref="TryGetServiceDisplayName"/>, already return null in the same situation --
+    /// and a candidate with no readable executable path is filtered out downstream anyway.
+    /// </remarks>
+    private static string? GetServiceStateForInventory(string serviceName)
+    {
+        try
+        {
+            return GetServiceState(serviceName);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
 
     private static string? GetServiceState(string serviceName)
     {

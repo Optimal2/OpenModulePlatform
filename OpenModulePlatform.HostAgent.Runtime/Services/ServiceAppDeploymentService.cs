@@ -105,10 +105,16 @@ public sealed class ServiceAppDeploymentService
             }
         }
 
+        // Read once per cycle, and read every app instance on the host -- not just the
+        // ones inside MaxArtifactsPerCycle, and not just the ones whose name resolved
+        // above. Rename cleanup deletes a directory tree, so the set it must avoid has to
+        // be complete or the guard is decorative (R7-D4).
+        var hostRuntimeFootprints = await _repository.GetHostRuntimeFootprintsAsync(hostKey, cancellationToken);
+
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, resolvedServiceNames, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, cancellationToken);
+            await DeployAsync(settings, deployment, resolvedServiceNames, hostRuntimeFootprints, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, cancellationToken);
         }
     }
 
@@ -116,6 +122,7 @@ public sealed class ServiceAppDeploymentService
         HostAgentSettings settings,
         ServiceAppDeploymentDescriptor deployment,
         IReadOnlyDictionary<Guid, string> resolvedServiceNames,
+        IReadOnlyList<HostRuntimeFootprint> hostRuntimeFootprints,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         IReadOnlySet<string>? blockedModuleInstanceKeys,
         CancellationToken cancellationToken)
@@ -182,7 +189,9 @@ public sealed class ServiceAppDeploymentService
                 deployment,
                 executableRelativePath,
                 serviceName,
-                resolvedServiceNames);
+                targetPath,
+                resolvedServiceNames,
+                hostRuntimeFootprints);
 
             var serviceIdentity = await ResolveServiceAppIdentityAsync(
                 settings,
@@ -205,24 +214,35 @@ public sealed class ServiceAppDeploymentService
                 configuredConnectionString,
                 settings);
 
-            var lockStatus = DeploymentLockFile.ReadStatus(targetPath, DateTimeOffset.UtcNow);
-            if (lockStatus.IsLocked)
+            // Required config sections were validated for web apps only, which was an
+            // accident of where the check was added rather than a decision -- a service app
+            // shipped without its required section fails at startup with no deployment-time
+            // signal at all (R7-D11).
+            var requiredRootSections = await _repository.GetRequiredConfigRootSectionsAsync(
+                deployment.ArtifactId,
+                cancellationToken);
+            var missingRequiredSectionsWarning = RequiredConfigSectionsValidator.Validate(
+                configurationFiles,
+                requiredRootSections);
+            if (!string.IsNullOrWhiteSpace(missingRequiredSectionsWarning))
             {
-                var message = lockStatus.ToDeploymentSkippedMessage("Service app");
-                _logger.LogInformation(
-                    "Service app deployment skipped because a deployment lock is active. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, LockPath={LockPath}",
+                _logger.LogWarning(
+                    "Required config section warning for service app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
                     deployment.AppInstanceId,
                     deployment.ArtifactId,
-                    deployment.Version,
-                    lockStatus.Path);
+                    missingRequiredSectionsWarning);
 
-                await _repository.PublishAppDeploymentResultAsync(
-                    deployment,
-                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, message)),
-                    cancellationToken);
-                return;
+                deploySetWarning = string.IsNullOrWhiteSpace(deploySetWarning)
+                    ? missingRequiredSectionsWarning
+                    : deploySetWarning + Environment.NewLine + missingRequiredSectionsWarning;
             }
 
+            // Already-applied is evaluated before the deployment lock, matching the web app
+            // path. The other order published a Warning for a deployment that was in fact
+            // converged, and Warning drops the row out of the already-applied fast path
+            // (which requires Succeeded) -- so the cycle after the operator released the
+            // lock ran a full redeploy and stopped and started a healthy service for
+            // nothing. Neither branch below writes into the locked directory (R7-D9).
             if (IsAlreadyApplied(deployment, targetPath, serviceName, targetExecutablePath)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
             {
@@ -275,6 +295,24 @@ public sealed class ServiceAppDeploymentService
                                 AppDeploymentResult.Succeeded(targetPath, serviceName, applied: identityCheck.Applied),
                                 identityWarning),
                             identityCheck)),
+                    cancellationToken);
+                return;
+            }
+
+            var lockStatus = DeploymentLockFile.ReadStatus(targetPath, DateTimeOffset.UtcNow);
+            if (lockStatus.IsLocked)
+            {
+                var message = lockStatus.ToDeploymentSkippedMessage("Service app");
+                _logger.LogInformation(
+                    "Service app deployment skipped because a deployment lock is active. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, LockPath={LockPath}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    deployment.Version,
+                    lockStatus.Path);
+
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, message)),
                     cancellationToken);
                 return;
             }
@@ -345,13 +383,26 @@ public sealed class ServiceAppDeploymentService
                 }
             }
 
-            if (renameCleanup.ShouldCleanUp
+            var directoryOwnershipObjection = renameCleanup.ShouldCleanUp
+                ? DescribeRenameCleanupDirectoryObjection(renameCleanup)
+                : null;
+
+            if (directoryOwnershipObjection is not null)
+            {
+                _logger.LogWarning(
+                    "Service app runtime name changed but the old directory was left in place. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}, Reason={Reason}",
+                    deployment.AppInstanceId,
+                    renameCleanup.OldServiceName,
+                    renameCleanup.OldTargetPath,
+                    directoryOwnershipObjection);
+            }
+            else if (renameCleanup.ShouldCleanUp
                 && !string.IsNullOrWhiteSpace(renameCleanup.OldServiceName)
                 && !string.IsNullOrWhiteSpace(renameCleanup.OldTargetPath))
             {
                 try
                 {
-                    CleanUpRenamedService(renameCleanup.OldServiceName, renameCleanup.OldTargetPath, targetPath);
+                    CleanUpRenamedService(renameCleanup.OldServiceName, renameCleanup.OldTargetPath);
                     _logger.LogInformation(
                         "Cleaned up renamed service app runtime. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}, NewServiceName={NewServiceName}, NewTargetPath={NewTargetPath}",
                         deployment.AppInstanceId,
@@ -643,12 +694,68 @@ public sealed class ServiceAppDeploymentService
             && _serviceControl.GetServiceState(serviceName) is not null;
     }
 
-    private void CleanUpRenamedService(string oldServiceName, string oldTargetPath, string newTargetPath)
+    /// <summary>
+    /// Returns why the old directory must not be deleted, or <c>null</c> when it is
+    /// provably a previous deployment of this same app instance.
+    /// </summary>
+    /// <remarks>
+    /// The name-based checks upstream establish that no *other* app instance claims this
+    /// name or path. This one establishes the positive case: the directory contains the
+    /// executable this app instance deploys. A folder holding somebody else's binaries is
+    /// not our old deployment however plausibly its name resolved, and refusing to delete
+    /// it costs a stale folder and a log line -- the opposite mistake costs a live
+    /// installation (R7-D4).
+    /// </remarks>
+    private string? DescribeRenameCleanupDirectoryObjection(RenameCleanupEvaluation renameCleanup)
+    {
+        var oldTargetPath = renameCleanup.OldTargetPath;
+        if (string.IsNullOrWhiteSpace(oldTargetPath) || !Directory.Exists(oldTargetPath))
+        {
+            // Nothing to delete; the service removal below still runs.
+            return null;
+        }
+
+        string[] executables;
+        try
+        {
+            executables = Directory.GetFiles(oldTargetPath, "*.exe", SearchOption.TopDirectoryOnly);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"The old directory '{oldTargetPath}' could not be inspected ({ex.GetType().Name}), so its ownership is unproven.";
+        }
+
+        if (executables.Length == 0)
+        {
+            // An empty or content-only folder carries no evidence either way, and deleting
+            // it cannot destroy a running installation.
+            return null;
+        }
+
+        var expected = renameCleanup.ExpectedExecutableFileName;
+        if (string.IsNullOrWhiteSpace(expected))
+        {
+            return $"The old directory '{oldTargetPath}' holds executables but this deployment resolved no executable name to match them against.";
+        }
+
+        var matches = executables.Any(
+            path => string.Equals(Path.GetFileName(path), expected, StringComparison.OrdinalIgnoreCase));
+
+        return matches
+            ? null
+            : $"The old directory '{oldTargetPath}' holds executables but not '{expected}', so it is another application's directory.";
+    }
+
+    private void CleanUpRenamedService(string oldServiceName, string oldTargetPath)
     {
         _serviceControl.DeleteService(oldServiceName);
 
-        if (Directory.Exists(oldTargetPath)
-            && !string.Equals(oldTargetPath, newTargetPath, StringComparison.OrdinalIgnoreCase))
+        // Whether the old path is safe to delete is decided in one place -- rename
+        // evaluation plus the directory-ownership objection above -- and this method is
+        // only reached once both have said yes. The ordinal string comparison that used to
+        // stand here compared unnormalised paths and could not tell 'C:\a\b' from
+        // 'C:\a\.\b', so it looked like a second line of defence without being one (R7-D5).
+        if (Directory.Exists(oldTargetPath))
         {
             Directory.Delete(oldTargetPath, recursive: true);
         }

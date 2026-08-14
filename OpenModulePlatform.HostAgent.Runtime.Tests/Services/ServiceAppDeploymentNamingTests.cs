@@ -131,12 +131,128 @@ public sealed class ServiceAppDeploymentNamingTests
             deployment,
             "iKrock2.Backend.exe",
             "OMP.iKrock2.Backend",
-            resolved);
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            resolved,
+            []);
 
         Assert.True(result.ShouldCleanUp);
         Assert.Equal("backend", result.OldServiceName);
         Assert.Equal("E:\\OMP\\Services\\backend", result.OldTargetPath);
         Assert.Null(result.Reason);
+    }
+
+    /// <summary>
+    /// The name-collision guard sees app instances the deployment cycle never loaded.
+    /// </summary>
+    /// <remarks>
+    /// The old guard only consulted the names resolved during this cycle, a set capped by
+    /// MaxArtifactsPerCycle and further thinned by the pre-pass catch. An app instance
+    /// that fell outside it was invisible, and its service and folder were deletable
+    /// (R7-D4). The dictionary here is deliberately empty, exactly as it would be for an
+    /// instance that did not fit in the cycle.
+    /// </remarks>
+    [Fact]
+    public void EvaluateRenameCleanup_Skips_WhenAnotherHostFootprintUsesTheOldRuntimeName()
+    {
+        var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
+        var deployment = CreateDeployment(
+            appInstanceId: Guid.NewGuid(),
+            installationName: "OMP.iKrock2.Backend",
+            deployedRuntimeName: "backend");
+
+        var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
+            settings,
+            deployment,
+            "iKrock2.Backend.exe",
+            "OMP.iKrock2.Backend",
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            new Dictionary<Guid, string>(),
+            [new HostRuntimeFootprint(Guid.NewGuid(), "backend", @"E:\OMP\Services\backend")]);
+
+        Assert.False(result.ShouldCleanUp);
+        Assert.Contains("backend", result.Reason!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A folder another app instance lives in is never deleted, whatever it is called.
+    /// </summary>
+    /// <remarks>
+    /// The footprint below carries a different runtime name, so every name-based check
+    /// passes. Only comparing the resolved paths stops this one -- which is the whole
+    /// point of the finding: cleanup compared names and deleted directories.
+    /// </remarks>
+    [Fact]
+    public void EvaluateRenameCleanup_Skips_WhenTheOldPathIsAnotherInstancesLiveDirectory()
+    {
+        var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
+        var deployment = CreateDeployment(
+            appInstanceId: Guid.NewGuid(),
+            installationName: "OMP.iKrock2.Backend",
+            deployedRuntimeName: "backend");
+
+        var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
+            settings,
+            deployment,
+            "iKrock2.Backend.exe",
+            "OMP.iKrock2.Backend",
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            new Dictionary<Guid, string>(),
+            [new HostRuntimeFootprint(Guid.NewGuid(), "SomethingElse", @"E:\OMP\Services\backend")]);
+
+        Assert.False(result.ShouldCleanUp);
+        Assert.Contains(@"E:\OMP\Services\backend", result.Reason!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A rename that keeps the same folder deletes nothing.</summary>
+    [Fact]
+    public void EvaluateRenameCleanup_Skips_WhenOnlyTheServiceNameChanged()
+    {
+        var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
+        var deployment = CreateDeployment(
+            appInstanceId: Guid.NewGuid(),
+            installPath: @"E:\OMP\Services\shared-folder",
+            installationName: "OMP.iKrock2.Backend",
+            deployedRuntimeName: "backend");
+
+        var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
+            settings,
+            deployment,
+            "iKrock2.Backend.exe",
+            "OMP.iKrock2.Backend",
+            @"E:\OMP\Services\shared-folder",
+            new Dictionary<Guid, string>(),
+            []);
+
+        Assert.False(result.ShouldCleanUp);
+        Assert.Contains("target path", result.Reason!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The executable name is carried out of evaluation for the caller to verify.</summary>
+    /// <remarks>
+    /// <c>executableRelativePath</c> was accepted and never read. It is the only evidence
+    /// that distinguishes our own old directory from a stranger's, so evaluation must hand
+    /// it on rather than drop it.
+    /// </remarks>
+    [Fact]
+    public void EvaluateRenameCleanup_CarriesTheExpectedExecutableFileName()
+    {
+        var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
+        var deployment = CreateDeployment(
+            appInstanceId: Guid.NewGuid(),
+            installationName: "OMP.iKrock2.Backend",
+            deployedRuntimeName: "backend");
+
+        var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
+            settings,
+            deployment,
+            Path.Join("nested", "iKrock2.Backend.exe"),
+            "OMP.iKrock2.Backend",
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            new Dictionary<Guid, string>(),
+            []);
+
+        Assert.True(result.ShouldCleanUp);
+        Assert.Equal("iKrock2.Backend.exe", result.ExpectedExecutableFileName);
     }
 
     [Fact]
@@ -156,7 +272,9 @@ public sealed class ServiceAppDeploymentNamingTests
             deployment,
             "iKrock2.Backend.exe",
             "OMP.iKrock2.Backend",
-            resolved);
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            resolved,
+            []);
 
         Assert.False(result.ShouldCleanUp);
         Assert.NotNull(result.Reason);
@@ -180,7 +298,9 @@ public sealed class ServiceAppDeploymentNamingTests
             deployment,
             "iKrock2.Backend.exe",
             "OMP.iKrock2.Backend",
-            resolved);
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            resolved,
+            []);
 
         Assert.False(result.ShouldCleanUp);
         Assert.Equal("OMP.iKrock2.Backend", result.OldServiceName);
@@ -208,7 +328,9 @@ public sealed class ServiceAppDeploymentNamingTests
             deployment,
             "iKrock2.Backend.exe",
             "OMP.iKrock2.Backend",
-            resolved);
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            resolved,
+            []);
 
         Assert.False(result.ShouldCleanUp);
         Assert.Equal("backend", result.OldServiceName);
@@ -236,7 +358,9 @@ public sealed class ServiceAppDeploymentNamingTests
             deployment,
             "iKrock2.Backend.exe",
             "OMP.iKrock2.Backend",
-            resolved);
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            resolved,
+            []);
 
         Assert.False(result.ShouldCleanUp);
         Assert.Equal(hostAgentServiceName, result.OldServiceName);
@@ -262,7 +386,9 @@ public sealed class ServiceAppDeploymentNamingTests
             deployment,
             "iKrock2.Backend.exe",
             "OMP.iKrock2.Backend",
-            resolved);
+            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            resolved,
+            []);
 
         Assert.False(result.ShouldCleanUp);
         Assert.Equal("OMP.WorkerManager", result.OldServiceName);

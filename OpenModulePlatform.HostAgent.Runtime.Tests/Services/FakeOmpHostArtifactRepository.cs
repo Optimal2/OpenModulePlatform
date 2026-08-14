@@ -152,6 +152,13 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ServiceAppDeploymentDescriptor>>(DesiredServiceAppDeployments);
 
+    public List<HostRuntimeFootprint> HostRuntimeFootprints { get; set; } = [];
+
+    public Task<IReadOnlyList<HostRuntimeFootprint>> GetHostRuntimeFootprintsAsync(
+        string hostKey,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<HostRuntimeFootprint>>(HostRuntimeFootprints);
+
     public List<ArtifactConfigurationFileDescriptor> ArtifactConfigurationFiles { get; set; } = [];
 
     public Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(

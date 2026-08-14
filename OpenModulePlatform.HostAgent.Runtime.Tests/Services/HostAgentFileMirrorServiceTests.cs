@@ -88,29 +88,60 @@ public sealed class HostAgentFileMirrorServiceTests
         }
     }
 
+    /// <summary>
+    /// A missing source is skipped, and the mirrors after it still run.
+    /// </summary>
+    /// <remarks>
+    /// This used to assert that a missing source threw. Mirroring runs before host job
+    /// processing and telemetry in the convergence cycle, so throwing meant a source on a
+    /// briefly unreachable UNC share stopped jobs and resource collection on every tick
+    /// (R7-D10). The healthy mirror is deliberately ordered *after* the broken one: the
+    /// point is not just that the call returns, but that the failure does not consume the
+    /// rest of the list.
+    /// </remarks>
     [Fact]
-    public async Task MirrorConfiguredFilesAsync_MissingSource_Throws()
+    public async Task MirrorConfiguredFilesAsync_MissingSource_SkipsMirrorAndContinues()
     {
         var testRoot = Path.GetFullPath(Path.Join(
             Path.GetTempPath(),
             $"omp-content-mirror-tests-{Guid.NewGuid():N}"));
         var missingSource = Path.Join(testRoot, "missing");
-        var target = Path.Join(testRoot, "target");
-        var options = new FakeOptionsMonitor<HostAgentSettings>
+        var missingTarget = Path.Join(testRoot, "missing-target");
+
+        var healthySource = Path.Join(testRoot, "healthy");
+        var healthyTarget = Path.Join(testRoot, "healthy-target");
+        Directory.CreateDirectory(healthySource);
+        await File.WriteAllTextAsync(Path.Join(healthySource, "mirrored.txt"), "content");
+
+        try
         {
-            CurrentValue = new HostAgentSettings
+            var options = new FakeOptionsMonitor<HostAgentSettings>
             {
-                FileMirrors = [CreateMirror(missingSource, target)]
+                CurrentValue = new HostAgentSettings
+                {
+                    FileMirrors =
+                    [
+                        CreateMirror(missingSource, missingTarget),
+                        CreateMirror(healthySource, healthyTarget)
+                    ]
+                }
+            };
+            var service = new HostAgentFileMirrorService(
+                options,
+                NullLogger<HostAgentFileMirrorService>.Instance);
+
+            await service.MirrorConfiguredFilesAsync(CancellationToken.None);
+
+            Assert.False(Directory.Exists(missingTarget));
+            Assert.True(File.Exists(Path.Join(healthyTarget, "mirrored.txt")));
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
             }
-        };
-        var service = new HostAgentFileMirrorService(
-            options,
-            NullLogger<HostAgentFileMirrorService>.Instance);
-
-        var exception = await Assert.ThrowsAsync<DirectoryNotFoundException>(
-            () => service.MirrorConfiguredFilesAsync(CancellationToken.None));
-
-        Assert.Contains(missingSource, exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static HostAgentFileMirrorSettings CreateMirror(string source, string target)
