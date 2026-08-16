@@ -66,6 +66,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
         try
         {
             await CleanupOrphanedWorkerProcessesOnStartupAsync(stoppingToken);
+            // R12-D8/F10. Runs before the first reconcile so the rows a previous incarnation
+            // left behind are downgraded before anything reads them. A manager killed hard
+            // publishes no exit observation, so without this the database keeps claiming
+            // Running for workers that died with it -- and the deployment gate believes it.
+            await DowngradeStaleWorkerStatesIfEnabledAsync(hostIdentity, stoppingToken);
             await RunReconcileCycleAsync(hostIdentity, stoppingToken);
 
             using var timer = new PeriodicTimer(refreshInterval);
@@ -89,6 +94,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
         try
         {
             await TouchHostHeartbeatIfEnabledAsync(hostIdentity, cancellationToken);
+            // Also every cycle, not only at startup: a worker whose own observation writes
+            // keep failing (a lost SQL connection for that one publish, a row nobody owns
+            // any more) goes stale while its siblings keep reporting, and the app-instance
+            // summary would otherwise be dragged forward by the healthy ones (R12-D8/F10).
+            await DowngradeStaleWorkerStatesIfEnabledAsync(hostIdentity, cancellationToken);
             await ReconcileWorkersAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -677,6 +687,57 @@ public sealed class WorkerManagerHostedService : BackgroundService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "Failed to publish manager heartbeat. HostIdentity={HostIdentity}", hostIdentity);
+        }
+    }
+
+    /// <summary>
+    /// Marks worker runtime rows on this host Unknown once nothing has written them for
+    /// several refresh intervals (R12-D8/F10).
+    /// </summary>
+    /// <remarks>
+    /// The threshold is derived from the manager's own cadence rather than configured
+    /// separately: six refresh intervals, and never less than 60 s. A healthy worker is
+    /// rewritten every RefreshSeconds (15 s deployed), so six intervals is five missed
+    /// cycles -- far outside normal jitter, well inside the window where a stale Running
+    /// row can still mislead a deploy. A separate setting would be a second place for the
+    /// same number to live and drift from the loop it describes.
+    /// </remarks>
+    private async Task DowngradeStaleWorkerStatesIfEnabledAsync(
+        string hostIdentity,
+        CancellationToken cancellationToken)
+    {
+        if (!ShouldPublishRuntimeToOmp())
+        {
+            return;
+        }
+
+        var refreshSeconds = Math.Max(1, _settings.CurrentValue.RefreshSeconds);
+        var staleAfterSeconds = Math.Max(60, refreshSeconds * 6);
+
+        try
+        {
+            var downgraded = await _runtimeRepository.DowngradeStaleWorkerStatesAsync(
+                hostIdentity,
+                staleAfterSeconds,
+                cancellationToken);
+
+            if (downgraded > 0)
+            {
+                _logger.LogWarning(
+                    "Downgraded stale worker runtime states to Unknown because nothing had written them within the staleness window. HostIdentity={HostIdentity}, DowngradedCount={DowngradedCount}, StaleAfterSeconds={StaleAfterSeconds}",
+                    hostIdentity,
+                    downgraded,
+                    staleAfterSeconds);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best effort, like the heartbeat above: failing to downgrade must not take the
+            // reconcile cycle with it, and the next cycle retries.
+            _logger.LogWarning(
+                ex,
+                "Failed to downgrade stale worker runtime states. HostIdentity={HostIdentity}",
+                hostIdentity);
         }
     }
 

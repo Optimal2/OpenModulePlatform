@@ -129,10 +129,32 @@ public sealed class OmpConfigurationService
         int? activeRoleId,
         IReadOnlyCollection<string> effectivePermissions,
         CancellationToken ct)
+        => (await ReadEffectiveStringAsync(category, setting, userId, activeRoleId, effectivePermissions, ct)).Value;
+
+    /// <summary>
+    /// Reads a user-, role- and permission-scoped setting and reports whether the read
+    /// itself failed, so a caller can tell "not configured" apart from "could not be read".
+    /// </summary>
+    /// <remarks>
+    /// R12-E5. R4-E1 gave the global read this contract and left the effective read with the
+    /// old one, where a failed query and an unset setting are both null. The distinction
+    /// matters more here, not less: effective settings are the per-user and per-role ones, so
+    /// this is where a read failure is most likely to be read as "this principal has no
+    /// override" and quietly hand out whatever the fall-through default is. Nothing is cached
+    /// on failure, so the next request retries instead of repeating the verdict for the full
+    /// cache lifetime.
+    /// </remarks>
+    public async Task<OmpConfigurationRead> ReadEffectiveStringAsync(
+        string category,
+        string setting,
+        int? userId,
+        int? activeRoleId,
+        IReadOnlyCollection<string> effectivePermissions,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(setting))
         {
-            return null;
+            return new OmpConfigurationRead(null, Failed: false);
         }
 
         var permissionNames = effectivePermissions
@@ -143,7 +165,10 @@ public sealed class OmpConfigurationService
 
         if (!userId.HasValue && !activeRoleId.HasValue && permissionNames.Length == 0)
         {
-            return await GetGlobalStringAsync(category, setting, ct);
+            // No principal to scope by: this is the global read, and it already carries the
+            // failure flag. Returning its result whole is what keeps the two contracts from
+            // drifting apart a second time.
+            return await ReadGlobalStringAsync(category, setting, ct);
         }
 
         // Cache the resolved value like the global variant: branding alone asks
@@ -155,7 +180,7 @@ public sealed class OmpConfigurationService
             $"omp-cfg-eff::{CacheGeneration.Current}::{category.Trim()}::{setting.Trim()}::{userId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{activeRoleId?.ToString(CultureInfo.InvariantCulture) ?? "-"}::{permissionKey}");
         if (_cache.TryGetValue<string?>(cacheKey, out var cachedValue))
         {
-            return cachedValue;
+            return new OmpConfigurationRead(cachedValue, Failed: false);
         }
 
         try
@@ -168,15 +193,14 @@ public sealed class OmpConfigurationService
                 permissionNames,
                 ct);
             _cache.Set(cacheKey, value, CacheLifetime);
-            return value;
+            return new OmpConfigurationRead(value, Failed: false);
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
             // Do not cache a read failure (R4-E1).
             LogConfigReadFailure(ex, category, setting, effective: true);
+            return new OmpConfigurationRead(null, Failed: true);
         }
-
-        return null;
     }
 
     public void ClearGlobalString(string category, string setting)

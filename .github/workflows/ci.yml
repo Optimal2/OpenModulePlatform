@@ -54,8 +54,27 @@ jobs:
             '.coveragexml'
           )
 
-          $files = git ls-files
-          $matches = foreach ($file in $files) {
+          # R12-A21. Two problems, both of the kind that make a gate report a pass
+          # it never earned.
+          #
+          # First: 'git ls-files' was not checked. A failed call returns nothing,
+          # nothing matches, and the step prints success -- the same fail-open
+          # shape R7-G8 removed from validate-component-versions.ps1.
+          #
+          # Second: the results were collected in $matches, which is PowerShell's
+          # AUTOMATIC variable, rewritten by every -match in the same scope.
+          # Assigning to it is legal and silent. Nothing between the assignment and
+          # the test uses -match today, so the check happens to work; adding one
+          # line that does would quietly change what 'if ($matches)' asks. The same
+          # pattern was already fixed in the validator (see its comment at the
+          # ProjectReference regex) and this copy was missed.
+          $files = @(git ls-files)
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::'git ls-files' exited with $LASTEXITCODE; the forbidden-file check could not run."
+            exit 1
+          }
+
+          $forbiddenFound = foreach ($file in $files) {
             foreach ($pattern in $forbidden) {
               if ($file -like "*$pattern*") {
                 $file
@@ -64,9 +83,9 @@ jobs:
             }
           }
 
-          if ($matches) {
+          if ($forbiddenFound) {
             Write-Host 'Forbidden files were found in the repository:'
-            $matches | Sort-Object -Unique | ForEach-Object { Write-Host " - $_" }
+            $forbiddenFound | Sort-Object -Unique | ForEach-Object { Write-Host " - $_" }
             exit 1
           }
 

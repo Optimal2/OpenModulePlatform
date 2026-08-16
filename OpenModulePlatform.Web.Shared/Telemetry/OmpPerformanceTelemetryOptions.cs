@@ -52,6 +52,20 @@ public sealed class OmpPerformanceTelemetryOptions
     /// <summary>How many statements each snapshot keeps, ordered by total elapsed time.</summary>
     public int QueryCostSnapshotStatements { get; set; } = 50;
 
+    /// <summary>
+    /// How long query cost rows are kept.
+    /// </summary>
+    /// <remarks>
+    /// R12-G6. This used to reuse <see cref="RetainDays"/> -- 400 days, chosen for the daily
+    /// rollup, a table that is summarised and small. Query cost rows are raw: they carry the
+    /// statement text, they are never rolled up into anything smaller, and 400 days of them
+    /// is a large table whose only purpose is answering "was this query always slow". Sixty
+    /// days spans the interval over which an installation is taken into use, which is the
+    /// question the snapshots exist for, and keeps the table in megabytes rather than
+    /// gigabytes.
+    /// </remarks>
+    public int QueryCostRetainDays { get; set; } = 60;
+
     public void Validate()
     {
         if (QueryCostSnapshotStatements is < 1 or > 500)
@@ -72,6 +86,11 @@ public sealed class OmpPerformanceTelemetryOptions
         if (RetainDays < 1)
         {
             throw new InvalidOperationException("Telemetry:RetainDays must be at least 1.");
+        }
+
+        if (QueryCostRetainDays is < 1 or > 400)
+        {
+            throw new InvalidOperationException("Telemetry:QueryCostRetainDays must be between 1 and 400.");
         }
 
         if (MinimumDurationMsToRecord < 0)

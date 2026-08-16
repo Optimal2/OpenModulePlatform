@@ -1703,6 +1703,15 @@ public sealed class WebAppDeploymentService
     /// self-upgrade, file mirroring, job processing and telemetry for that cycle -- with no
     /// per-deployment result published. Same blast radius R6-D1 closed for service apps
     /// (R7-D2).
+    ///
+    /// COMException and ManagementException were added to the ServiceApp twin in R8-P4-4
+    /// and to HostAgentEngine's outermost copy, and this one -- the third of the three --
+    /// was left behind (R12-F1). It is the copy that needs them most: this file is the only
+    /// deployment path that loads Microsoft.Web.Administration by reflection, and IIS
+    /// configuration is COM underneath, so a locked or corrupt applicationHost.config
+    /// surfaces here as a raw COMException. TargetInvocationException unwrapping does not
+    /// help when the COM call is not the reflected one. An unmatched type here takes down
+    /// the entire HostAgent cycle.
     /// </remarks>
     private static bool IsExpectedDeploymentFailure(Exception exception)
         => exception is InvalidOperationException
@@ -1710,6 +1719,8 @@ public sealed class WebAppDeploymentService
             or UnauthorizedAccessException
             or TimeoutException
             or System.ComponentModel.Win32Exception
+            or System.Management.ManagementException
+            or System.Runtime.InteropServices.COMException
             || (exception is System.Reflection.TargetInvocationException invocation
                 && invocation.InnerException is not null
                 && IsExpectedDeploymentFailure(invocation.InnerException));
@@ -1723,7 +1734,9 @@ public sealed class WebAppDeploymentService
     /// twelve lines up received in R7-D2 -- the fix was applied to one of the pair. Recovery
     /// happens to run through appcmd today, so nothing unwrapped is reaching it, but this
     /// file holds two parallel IIS APIs and the reflection-based one wraps everything.
-    /// Leaving the pair asymmetric is how the R7-D2 blast radius comes back.
+    /// Leaving the pair asymmetric is how the R7-D2 blast radius comes back -- which is
+    /// exactly what happened again with COMException/ManagementException, added to both
+    /// ServiceApp methods and to neither of these two (R12-F1, sibling sweep).
     /// </remarks>
     private static bool IsExpectedRecoveryStartFailure(Exception exception)
         => exception is InvalidOperationException
@@ -1731,6 +1744,8 @@ public sealed class WebAppDeploymentService
             or UnauthorizedAccessException
             or TimeoutException
             or System.ComponentModel.Win32Exception
+            or System.Management.ManagementException
+            or System.Runtime.InteropServices.COMException
             || (exception is System.Reflection.TargetInvocationException invocation
                 && invocation.InnerException is not null
                 && IsExpectedRecoveryStartFailure(invocation.InnerException));

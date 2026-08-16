@@ -281,6 +281,64 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.True(Directory.Exists(newTargetPath));
     }
 
+    /// <summary>
+    /// A rename that keeps the same directory still removes the old Windows service.
+    /// </summary>
+    /// <remarks>
+    /// R12-A1, the regression this test exists to fail on. R7-D put the "old and new share
+    /// a target path" check in front of the whole cleanup branch, and DeleteService lived
+    /// inside that branch, so the ordinary rename -- change InstallationName, keep the
+    /// folder -- stopped removing the previous service. It stayed registered, auto-starting,
+    /// with its ImagePath pointing at the very binaries the new service was about to run:
+    /// two Windows services against one inbox. Asserting on DeletedServices is the point;
+    /// asserting only that the directory survives is what let the regression through.
+    /// </remarks>
+    [Fact]
+    public async Task RenameCleanup_SharedTargetPath_DeletesOldServiceAndKeepsDirectory()
+    {
+        var (service, repository, control, _, sharedPath, oldTargetPath) = CreateRenameScenario(useSharedInstallPath: true);
+        Assert.Equal(sharedPath, oldTargetPath);
+        control.SetState("backend", "RUNNING");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Single(control.DeletedServices, "backend");
+        Assert.Null(control.GetServiceState("backend"));
+        Assert.True(Directory.Exists(sharedPath));
+        Assert.True(File.Exists(Path.Join(sharedPath, "iKrock2.Backend.exe")));
+
+        var final = repository.PublishedServiceAppResults[^1].Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, final.State);
+        Assert.Equal("OMP.iKrock2.Backend", final.RuntimeName);
+    }
+
+    /// <summary>
+    /// An old directory that cannot be proved ours keeps its files and loses its service.
+    /// </summary>
+    /// <remarks>
+    /// R12-A1, second half. The directory-ownership objection (R7-D4) answers a question
+    /// about FILES. The name guards in rename evaluation have already established that no
+    /// other app instance answers to the old runtime name, so that service registration is
+    /// this instance's and stale, and keeping it costs exactly the duplicate-service failure
+    /// the objection was never about.
+    /// </remarks>
+    [Fact]
+    public async Task RenameCleanup_OldDirectoryHoldsForeignExecutable_DeletesOldServiceAndKeepsDirectory()
+    {
+        var (service, repository, control, _, _, oldTargetPath) = CreateRenameScenario(
+            oldDirectoryExecutableName: "SomebodyElse.exe");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Single(control.DeletedServices, "backend");
+        Assert.True(Directory.Exists(oldTargetPath));
+        Assert.True(File.Exists(Path.Join(oldTargetPath, "SomebodyElse.exe")));
+
+        var final = repository.PublishedServiceAppResults[^1].Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, final.State);
+        Assert.Equal("OMP.iKrock2.Backend", final.RuntimeName);
+    }
+
     [Fact]
     public async Task NonRename_NoOldRuntimeNameChange_NoCleanupAttempted()
     {
@@ -456,7 +514,9 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             ServiceName = "OMP.HostAgent"
         };
 
-    private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath, string OldTargetPath) CreateRenameScenario()
+    private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath, string OldTargetPath) CreateRenameScenario(
+        bool useSharedInstallPath = false,
+        string? oldDirectoryExecutableName = null)
     {
         var settings = new HostAgentSettings
         {
@@ -480,7 +540,9 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             NullLogger<ServiceAppDeploymentService>.Instance,
             control);
 
-        var (deployment, newTargetPath, oldTargetPath) = CreateRenameDeployment();
+        var (deployment, newTargetPath, oldTargetPath) = CreateRenameDeployment(
+            useSharedInstallPath,
+            oldDirectoryExecutableName);
         repository.DesiredServiceAppDeployments.Add(deployment);
 
         // The old service exists in the SCM and must be deleted during rename cleanup.
@@ -489,7 +551,17 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         return (service, repository, control, deployment, newTargetPath, oldTargetPath);
     }
 
-    private (ServiceAppDeploymentDescriptor Deployment, string NewTargetPath, string OldTargetPath) CreateRenameDeployment()
+    /// <param name="useSharedInstallPath">
+    /// Pins both the old and the new runtime name to one directory, which is what an
+    /// InstallationName-only rename looks like in practice (R12-A1).
+    /// </param>
+    /// <param name="oldDirectoryExecutableName">
+    /// The executable planted in the old directory. Anything other than this app's own
+    /// executable makes the directory-ownership objection fire (R7-D4).
+    /// </param>
+    private (ServiceAppDeploymentDescriptor Deployment, string NewTargetPath, string OldTargetPath) CreateRenameDeployment(
+        bool useSharedInstallPath = false,
+        string? oldDirectoryExecutableName = null)
     {
         var appInstanceId = Guid.NewGuid();
         var appInstanceKey = $"test-app-{appInstanceId:N}";
@@ -497,12 +569,15 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         var newServiceName = "OMP.iKrock2.Backend";
         var executableRelativePath = "iKrock2.Backend.exe";
         var sourcePath = Path.Join(_tempRoot, "source", appInstanceKey);
-        var newTargetPath = Path.Join(_tempRoot, newServiceName);
-        var oldTargetPath = Path.Join(_tempRoot, oldServiceName);
+        var sharedPath = Path.Join(_tempRoot, $"shared-{appInstanceId:N}");
+        var newTargetPath = useSharedInstallPath ? sharedPath : Path.Join(_tempRoot, newServiceName);
+        var oldTargetPath = useSharedInstallPath ? sharedPath : Path.Join(_tempRoot, oldServiceName);
         Directory.CreateDirectory(sourcePath);
         Directory.CreateDirectory(oldTargetPath);
         File.WriteAllText(Path.Join(sourcePath, executableRelativePath), string.Empty);
-        File.WriteAllText(Path.Join(oldTargetPath, executableRelativePath), string.Empty);
+        File.WriteAllText(
+            Path.Join(oldTargetPath, oldDirectoryExecutableName ?? executableRelativePath),
+            string.Empty);
 
         var deployment = new ServiceAppDeploymentDescriptor
         {
@@ -515,6 +590,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             ArtifactId = 42,
             Version = "1.0.0",
             SourceLocalPath = sourcePath,
+            InstallPath = useSharedInstallPath ? sharedPath : null,
             InstallationName = newServiceName,
             DeployedArtifactId = 42,
             DeploymentState = HostDeploymentStatuses.Succeeded,

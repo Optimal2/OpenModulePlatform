@@ -1068,7 +1068,7 @@ WHERE ModuleKey = @ModuleKey;";
         // Keep the same embedded SQL, hash, idempotency, and safety checks for those scripts.
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
+        await using var repairLock = await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
 
         List<PortableModuleDefinitionSqlScript> repairScripts;
         if (scriptKeysToRepair is { Count: > 0 })
@@ -5053,23 +5053,87 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
     private static string ToSqlUnicodeLiteral(string value)
         => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 
-    private static async Task AcquireModuleDefinitionSqlExecutionLockAsync(SqlConnection conn, CancellationToken ct)
+    private const string ModuleDefinitionSqlRepairLockResource = "omp.module-definition-sql-repair";
+
+    /// <summary>
+    /// Takes the exclusive repair lock and releases it when disposed.
+    /// </summary>
+    /// <remarks>
+    /// R12-G3b. The lock was taken with <c>@LockOwner = N'Session'</c> and never released --
+    /// there was no <c>sp_releaseapplock</c> anywhere in this repository. A session-scoped
+    /// application lock lives as long as the SQL SESSION, and ADO.NET connection pooling means
+    /// closing the <see cref="SqlConnection"/> does NOT end the session: it goes back to the
+    /// pool with the lock still held. The first repair in a process therefore poisoned a pooled
+    /// connection permanently, and every later repair drawn from a different pooled session
+    /// failed with "Another module definition SQL repair is already running" -- a schema repair
+    /// path that silently stops working after its first use, which is the opposite of what a
+    /// self-healing gate is for.
+    ///
+    /// Session scope is kept rather than switched to Transaction: the repair runs several
+    /// batches of DDL, and wrapping all of them in one transaction would change what a partial
+    /// failure leaves behind. The defect was the missing release, not the scope. Releasing in
+    /// a finally covers the normal and the exception path; a hard process kill is covered by
+    /// the session ending with the process.
+    /// </remarks>
+    private sealed class ModuleDefinitionSqlExecutionLock(SqlConnection conn) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                // Nothing to release on: the session is gone, and so is the lock.
+                return;
+            }
+
+            const string sql = @"
+IF APPLOCK_MODE('public', @Resource, 'Session') <> 'NoLock'
+BEGIN
+    EXEC sys.sp_releaseapplock @Resource = @Resource, @LockOwner = N'Session';
+END";
+
+            await using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
+                ModuleDefinitionSqlRepairLockResource;
+
+            // A failed release would leave the pooled session holding the lock forever, which
+            // is exactly the defect above. Destroy the connection instead of returning it to
+            // the pool: a session that ends releases its own locks.
+            try
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch (SqlException)
+            {
+                SqlConnection.ClearPool(conn);
+                throw;
+            }
+        }
+    }
+
+    private static async Task<ModuleDefinitionSqlExecutionLock> AcquireModuleDefinitionSqlExecutionLockAsync(
+        SqlConnection conn,
+        CancellationToken ct)
     {
         const string sql = @"
 DECLARE @Result int;
 EXEC @Result = sys.sp_getapplock
-    @Resource = N'omp.module-definition-sql-repair',
+    @Resource = @Resource,
     @LockMode = N'Exclusive',
     @LockOwner = N'Session',
     @LockTimeout = 0;
 SELECT @Result;";
 
         await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
+            ModuleDefinitionSqlRepairLockResource;
+
         var result = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
         if (result < 0)
         {
             throw new InvalidOperationException("Another module definition SQL repair is already running.");
         }
+
+        return new ModuleDefinitionSqlExecutionLock(conn);
     }
 
     private static async Task<long> InsertModuleDefinitionSqlExecutionAsync(

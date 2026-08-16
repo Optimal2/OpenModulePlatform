@@ -441,14 +441,41 @@ VALUES
                 "This worker runtime row is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.");
         }
 
-        var observedState = await GetWorkerRuntimeObservedStateAsync(conn, tx, appInstanceId, ct);
-        if (!observedState.HasValue)
+        var evidence = await GetWorkerRuntimeDeletionEvidenceAsync(conn, tx, appInstanceId, ct);
+        if (evidence is null)
         {
             throw new InvalidOperationException("The worker runtime row was not found.");
         }
 
-        if (observedState.Value is 1 or 2 or 3)
+        // R12-D9. This guard used to refuse only Starting/Running/Stopping and let
+        // everything else through, so UNKNOWN -- which is what both "no runtime state row
+        // exists" and "a row exists that was never observed" collapse to -- read as
+        // "safe to delete". Absence of a report is not a report of absence: the row was
+        // removed under a process that was very probably still running, and the operator
+        // got no signal at all.
+        //
+        // It also asked a table that cannot answer the question on its own.
+        // omp.AppInstanceRuntimeStates holds ONE row per app instance while the
+        // per-worker truth is written to omp.WorkerInstanceRuntimeStates (R12-D1), so a
+        // group whose last reporter stopped shows Stopped there while siblings are still
+        // Running. Both tables are consulted now, and a worker that has never been
+        // observed counts as running rather than as stopped.
+        //
+        // Fail closed: deletion requires positive evidence that nothing is running.
+        // The one case that legitimately has no evidence at all -- a manually created
+        // runtime row that was never started, so neither table has ever seen it -- is
+        // still allowed through, because "nothing has ever run under this row" IS
+        // positive evidence and refusing it would leave the operator unable to remove a
+        // row they just created by mistake.
+        if (evidence.HasAppRuntimeState && evidence.AppObservedState is not (StoppedObservedState or FailedObservedState))
         {
+            throw new InvalidOperationException("Stop the worker runtime before deleting the runtime row.");
+        }
+
+        if (evidence.UnprovenWorkerInstanceCount > 0)
+        {
+            // Same message on purpose: it is already the localized text for this refusal,
+            // and it is the correct instruction in this case too.
             throw new InvalidOperationException("Stop the worker runtime before deleting the runtime row.");
         }
 
@@ -1357,6 +1384,14 @@ DELETE FROM omp.WebAppHealthStates
 WHERE HostId = @HostId;
 
 DELETE FROM omp.HostResourceSamples
+WHERE HostId = @HostId;
+
+-- R12-A5: the daily roll-up has the same FK to omp.Hosts as the hourly table it is rolled
+-- up from, and was added without either delete path learning about it. Any host that had
+-- been up long enough for one roll-up to run -- an hour -- could not be deleted from the
+-- Portal at all: the FK failed, the transaction rolled back, and the operator saw a raw
+-- SQL error. That is the very failure the rest of this statement list exists to prevent.
+DELETE FROM omp.HostResourceSamplesDaily
 WHERE HostId = @HostId;
 
 DELETE FROM omp.HostResourceLatest
@@ -2765,7 +2800,7 @@ WHERE ModuleKey = @ModuleKey;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
+        await using var repairLock = await AcquireModuleDefinitionSqlExecutionLockAsync(conn, ct);
 
         var executed = 0;
         foreach (var script in scripts.Where(script => !IsValidationScript(script) && repairableKeys.Contains(script.Key)))
@@ -4304,7 +4339,34 @@ ORDER BY tai.InstanceTemplateAppInstanceId;";
         return value is null or DBNull ? null : Convert.ToInt32(value);
     }
 
-    private static async Task<byte?> GetWorkerRuntimeObservedStateAsync(
+    // omp.WorkerObservedStates values, mirrored here because the Portal does not
+    // reference the worker manager assembly. 0 Unknown, 1 Starting, 2 Running,
+    // 3 Stopping, 4 Stopped, 5 Failed.
+    private const byte StoppedObservedState = 4;
+    private const byte FailedObservedState = 5;
+
+    /// <summary>
+    /// Everything the manual worker-runtime delete needs in order to decide whether it
+    /// can prove that nothing is running under an app instance (R12-D9).
+    /// </summary>
+    /// <param name="HasAppRuntimeState">
+    /// False when omp.AppInstanceRuntimeStates has no row at all. Distinguished from
+    /// ObservedState 0 on purpose: "never reported" and "reported as Unknown" both used
+    /// to arrive here as the same 0 through an ISNULL, and both were treated as stopped.
+    /// </param>
+    /// <param name="AppObservedState">The app-level observation, meaningful only when
+    /// <paramref name="HasAppRuntimeState"/> is true.</param>
+    /// <param name="UnprovenWorkerInstanceCount">
+    /// Worker instances under this app instance that are NOT known to be stopped or
+    /// failed, counting those that have no observation row at all. Anything above zero
+    /// means a sibling may still be running, which the app-level row cannot show.
+    /// </param>
+    private sealed record WorkerRuntimeDeletionEvidence(
+        bool HasAppRuntimeState,
+        byte AppObservedState,
+        int UnprovenWorkerInstanceCount);
+
+    private static async Task<WorkerRuntimeDeletionEvidence?> GetWorkerRuntimeDeletionEvidenceAsync(
         SqlConnection conn,
         SqlTransaction tx,
         Guid appInstanceId,
@@ -4312,7 +4374,28 @@ ORDER BY tai.InstanceTemplateAppInstanceId;";
     {
         const string sql = @"
 SELECT TOP (1)
-       CAST(ISNULL(rs.ObservedState, CAST(0 AS tinyint)) AS tinyint)
+       CAST(CASE WHEN rs.AppInstanceId IS NULL THEN 0 ELSE 1 END AS bit),
+       CAST(ISNULL(rs.ObservedState, CAST(0 AS tinyint)) AS tinyint),
+       (
+           SELECT COUNT(*)
+           FROM omp.WorkerInstances wi
+           LEFT JOIN omp.WorkerInstanceRuntimeStates wrs
+               ON wrs.WorkerInstanceId = wi.WorkerInstanceId
+           WHERE wi.AppInstanceId = ai.AppInstanceId
+             AND (wrs.WorkerInstanceId IS NULL OR wrs.ObservedState NOT IN (4, 5))
+       )
+       +
+       (
+           SELECT COUNT(*)
+           FROM omp.WorkerInstanceRuntimeStates wrs
+           WHERE wrs.AppInstanceId = ai.AppInstanceId
+             AND wrs.ObservedState NOT IN (4, 5)
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM omp.WorkerInstances wi
+                 WHERE wi.WorkerInstanceId = wrs.WorkerInstanceId
+             )
+       )
 FROM omp.AppInstances ai
 INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
 LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId
@@ -4321,8 +4404,19 @@ WHERE ai.AppInstanceId = @AppInstanceId;";
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@AppInstanceId", appInstanceId);
 
-        var value = await cmd.ExecuteScalarAsync(ct);
-        return value is null or DBNull ? null : Convert.ToByte(value);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        // Both ObservedState columns are NOT NULL, so the NOT IN lists above are plain
+        // two-valued logic; the second subquery covers runtime-state rows whose
+        // omp.WorkerInstances parent is already gone, which the first one cannot see.
+        return new WorkerRuntimeDeletionEvidence(
+            rdr.GetBoolean(0),
+            rdr.GetByte(1),
+            rdr.GetInt32(2));
     }
 
     // -------------------------------------------------------------------------
@@ -5720,23 +5814,83 @@ WHERE RowNumber = 1;";
         return executions;
     }
 
-    private static async Task AcquireModuleDefinitionSqlExecutionLockAsync(SqlConnection conn, CancellationToken ct)
+    private const string ModuleDefinitionSqlRepairLockResource = "omp.module-definition-sql-repair";
+
+    /// <summary>
+    /// Takes the exclusive repair lock and releases it when disposed.
+    /// </summary>
+    /// <remarks>
+    /// R12-G3b. Byte-for-byte the same method existed in
+    /// <c>OmpHostArtifactRepository</c> with the same defect, and both were fixed together --
+    /// they take the SAME named lock, so one leaking it blocks the other. The lock was taken
+    /// with <c>@LockOwner = N'Session'</c> and never released: there was no
+    /// <c>sp_releaseapplock</c> anywhere in either repository. Connection pooling means closing
+    /// the <see cref="SqlConnection"/> does not end the SQL session, so the pooled connection
+    /// went back to the pool still holding the lock, and every later repair drawn from another
+    /// session failed with "Another module definition SQL repair is already running". The
+    /// schema self-heal therefore stopped working after its first use in any long-running
+    /// process -- silently, because the exception reads like healthy contention.
+    ///
+    /// Found because <c>StaleSchemaHealTests</c> failed deterministically: the Portal test ran
+    /// first, leaked the lock onto a pooled session, and the HostAgent test then could not take
+    /// it. The two are separate classes, so nothing about the failure pointed here.
+    /// </remarks>
+    private sealed class ModuleDefinitionSqlExecutionLock(SqlConnection conn) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            if (conn.State != System.Data.ConnectionState.Open)
+            {
+                return;
+            }
+
+            const string sql = @"
+IF APPLOCK_MODE('public', @Resource, 'Session') <> 'NoLock'
+BEGIN
+    EXEC sys.sp_releaseapplock @Resource = @Resource, @LockOwner = N'Session';
+END";
+
+            await using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
+                ModuleDefinitionSqlRepairLockResource;
+
+            try
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch (SqlException)
+            {
+                // Do not return a session that still holds the lock to the pool.
+                SqlConnection.ClearPool(conn);
+                throw;
+            }
+        }
+    }
+
+    private static async Task<ModuleDefinitionSqlExecutionLock> AcquireModuleDefinitionSqlExecutionLockAsync(
+        SqlConnection conn,
+        CancellationToken ct)
     {
         const string sql = @"
 DECLARE @Result int;
 EXEC @Result = sys.sp_getapplock
-    @Resource = N'omp.module-definition-sql-repair',
+    @Resource = @Resource,
     @LockMode = N'Exclusive',
     @LockOwner = N'Session',
     @LockTimeout = 0;
 SELECT @Result;";
 
         await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@Resource", System.Data.SqlDbType.NVarChar, 255).Value =
+            ModuleDefinitionSqlRepairLockResource;
+
         var result = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
         if (result < 0)
         {
             throw new InvalidOperationException("Another module definition SQL repair is already running.");
         }
+
+        return new ModuleDefinitionSqlExecutionLock(conn);
     }
 
     private static async Task<long> InsertModuleDefinitionSqlExecutionAsync(

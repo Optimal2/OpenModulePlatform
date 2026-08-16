@@ -46,10 +46,41 @@ WHEN NOT MATCHED THEN
     private readonly ILogger<OmpPerformanceTelemetryHostedService> _logger;
 
     /// <summary>The THROW number omp.CaptureQueryCostSnapshot raises when VIEW SERVER STATE is missing.</summary>
-    private const int QueryCostPermissionErrorNumber = 51001;
+    /// <remarks>
+    /// R12-A20. This used to be 51001, which sql/2-initialize-openmoduleplatform.sql already
+    /// raises for a completely unrelated condition (the default instance template could not
+    /// be resolved after seeding). One number for two conditions meant the catch below could
+    /// mistake a seeding failure for a missing permission and silence it. The setup script
+    /// now raises 51070 for this and nothing else.
+    /// </remarks>
+    private const int QueryCostPermissionErrorNumber = 51070;
 
-    private DateTime _lastMaintenanceUtc = DateTime.MinValue;
+    /// <summary>SQL Server's error number for "Could not find stored procedure".</summary>
+    /// <remarks>
+    /// R12-A10. Raised when the application runs against a database whose omp schema has not
+    /// been applied yet -- which is a normal window during a module upgrade, since HostAgent
+    /// imports the module definition into a database the applications are already connected
+    /// to. Without this the missing procedure fell through as an ordinary flush failure and
+    /// was reported as lost samples, which is not what happened.
+    /// </remarks>
+    private const int ProcedureNotFoundErrorNumber = 2812;
+
+    private const int MaintenanceIntervalHours = 1;
+
+    /// <summary>How long to wait before retrying maintenance that failed.</summary>
+    /// <remarks>
+    /// R12-E9. The clock used to be moved forward before the work, so a maintenance pass that
+    /// threw was booked as done and nothing ran for another hour. Waiting the full hour after
+    /// a failure is equally wrong in the other direction: retrying on the next 60-second flush
+    /// would put a failing roll-up in a tight loop and fill the log. Ten minutes is short
+    /// enough that a transient failure heals within the same shift and long enough that a
+    /// persistent one logs six lines an hour, not sixty.
+    /// </remarks>
+    private static readonly TimeSpan MaintenanceRetryDelay = TimeSpan.FromMinutes(10);
+
+    private DateTime _nextMaintenanceUtc = DateTime.MinValue;
     private bool _queryCostSnapshotsUnavailable;
+    private bool _missingProcedureReported;
 
     public OmpPerformanceTelemetryHostedService(
         OmpPerformanceTelemetry telemetry,
@@ -100,7 +131,19 @@ WHEN NOT MATCHED THEN
             // a fault: the interval's samples are gone either way, and logging on every
             // application stop would be noise in every log this platform produces.
         }
-        catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)
+        // Catch-all (except the cancellation handled above). R12-E1: the curated list here
+        // was SqlException, InvalidOperationException and TimeoutException. Anything else --
+        // an ObjectDisposedException from a connection torn down under shutdown, a
+        // NullReferenceException from a defect in the drain, an OverflowException on a
+        // pathological sample -- escaped ExecuteAsync, and .NET's default
+        // BackgroundServiceExceptionBehavior.StopHost then stops the entire host process.
+        // Telemetry is on by default in every OMP web application, so that one uncaught type
+        // would take down IbsPackager.Web, the Portal and every other consumer without any of
+        // their own code being involved. The two sibling background services already learned
+        // this (R3-E4 in PushEventDispatcherHostedService, R5-D1 in HostAgentHostedService);
+        // the class remark above has claimed since it was written that every failure path is
+        // swallowed after logging, and this is what makes that true.
+        catch (Exception ex)
         {
             // Measurements for this interval are lost. That is the correct trade: the
             // alternative is retaining them and growing the in-memory map without limit
@@ -149,27 +192,67 @@ WHEN NOT MATCHED THEN
 
         if (ShouldRunMaintenance())
         {
-            await RunMaintenanceAsync(conn, ct);
+            await RunMaintenanceSafelyAsync(conn, ct);
         }
     }
 
     // Roll-up and prune once an hour is plenty: the hourly retention is measured in weeks,
     // so nothing is served by running it every flush.
     private bool ShouldRunMaintenance()
-        => DateTime.UtcNow - _lastMaintenanceUtc >= TimeSpan.FromHours(1);
+        => DateTime.UtcNow >= _nextMaintenanceUtc;
+
+    /// <summary>
+    /// Runs the maintenance pass and schedules the next one from what actually happened.
+    /// </summary>
+    /// <remarks>
+    /// R12-E9. Maintenance failures used to surface through the flush handler, which reports
+    /// "this interval's samples were dropped" -- untrue here, because the samples were
+    /// already written before maintenance runs. They are reported for what they are, and the
+    /// next attempt is scheduled from the outcome rather than from the attempt.
+    /// </remarks>
+    private async Task RunMaintenanceSafelyAsync(SqlConnection conn, CancellationToken ct)
+    {
+        try
+        {
+            await RunMaintenanceAsync(conn, ct);
+            _nextMaintenanceUtc = DateTime.UtcNow.AddHours(MaintenanceIntervalHours);
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutdown. Leave the schedule alone so the next process start runs maintenance.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _nextMaintenanceUtc = DateTime.UtcNow.Add(MaintenanceRetryDelay);
+            _logger.LogWarning(
+                ex,
+                "Performance telemetry maintenance (roll-up, prune and query cost snapshot) failed. "
+                    + "The samples for this interval were written; retrying in {RetryMinutes} minutes.",
+                MaintenanceRetryDelay.TotalMinutes);
+        }
+    }
 
     private async Task RunMaintenanceAsync(SqlConnection conn, CancellationToken ct)
     {
-        _lastMaintenanceUtc = DateTime.UtcNow;
-
-        await using (var cmd = new SqlCommand("omp.RollUpAndPrunePerformanceSamples", conn)
+        try
         {
-            CommandType = CommandType.StoredProcedure
-        })
-        {
+            await using var cmd = new SqlCommand("omp.RollUpAndPrunePerformanceSamples", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
             cmd.Parameters.Add("@RetainHours", SqlDbType.Int).Value = _options.RetainHours;
             cmd.Parameters.Add("@RetainDays", SqlDbType.Int).Value = _options.RetainDays;
+            cmd.Parameters.Add("@QueryCostRetainDays", SqlDbType.Int).Value = _options.QueryCostRetainDays;
             await cmd.ExecuteNonQueryAsync(ct);
+        }
+        catch (SqlException ex) when (ex.Number == ProcedureNotFoundErrorNumber)
+        {
+            // The omp schema is older than this application. Report it once and keep trying:
+            // the module definition is applied to a running installation, so the procedure
+            // can appear without this process being restarted (R12-A10).
+            ReportMissingProcedureOnce(ex, "omp.RollUpAndPrunePerformanceSamples");
+            return;
         }
 
         if (!_options.CaptureQueryCostSnapshots || _queryCostSnapshotsUnavailable)
@@ -177,10 +260,10 @@ WHEN NOT MATCHED THEN
             return;
         }
 
-        // Hourly, from whichever app got here first. sys.dm_exec_query_stats is
-        // server-wide, so several apps capturing it would store the same rows several
-        // times; the snapshot is idempotent enough that duplicates are noise rather than
-        // error, and hourly means at most a handful per hour.
+        // Hourly, from whichever app got here first. sys.dm_exec_query_stats is server-wide,
+        // so several apps capture the same statements; the snapshot folds them onto one row
+        // per statement and day (R12-E6), so a second app running the same hour updates that
+        // row instead of adding another copy of the statement text.
         try
         {
             await using var snapshotCommand = new SqlCommand("omp.CaptureQueryCostSnapshot", conn)
@@ -188,8 +271,16 @@ WHEN NOT MATCHED THEN
                 CommandType = CommandType.StoredProcedure
             };
             snapshotCommand.Parameters.Add("@TopStatements", SqlDbType.Int).Value = _options.QueryCostSnapshotStatements;
-            snapshotCommand.Parameters.Add("@RetainDays", SqlDbType.Int).Value = _options.RetainDays;
             await snapshotCommand.ExecuteNonQueryAsync(ct);
+        }
+        catch (SqlException ex) when (ex.Number == ProcedureNotFoundErrorNumber)
+        {
+            // R12-A10. The exception filter added when the permission case was handled only
+            // matched the permission case, so an installation whose omp schema predates the
+            // snapshot procedure logged nothing recognisable and lost the roll-up's own
+            // result with it. Report once, keep trying: the schema arrives by module import
+            // while the application is running.
+            ReportMissingProcedureOnce(ex, "omp.CaptureQueryCostSnapshot");
         }
         catch (SqlException ex) when (ex.Number == QueryCostPermissionErrorNumber)
         {
@@ -207,5 +298,30 @@ WHEN NOT MATCHED THEN
                 AppDomain.CurrentDomain.FriendlyName,
                 ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Reports a missing telemetry procedure once per process.
+    /// </summary>
+    /// <remarks>
+    /// Once, because the condition resolves by itself the moment the module definition is
+    /// imported, and until then it would otherwise repeat every maintenance pass for as long
+    /// as the application runs. Naming the procedure makes the line actionable: it says which
+    /// schema version the database is missing, not merely that something failed.
+    /// </remarks>
+    private void ReportMissingProcedureOnce(SqlException exception, string procedureName)
+    {
+        if (_missingProcedureReported)
+        {
+            return;
+        }
+
+        _missingProcedureReported = true;
+        _logger.LogWarning(
+            exception,
+            "Performance telemetry cannot run maintenance: {ProcedureName} does not exist in this database. "
+                + "The omp_core module definition is older than this application; import it to create the procedure. "
+                + "Further occurrences are not logged, and maintenance keeps retrying.",
+            procedureName);
     }
 }

@@ -34,6 +34,19 @@ public sealed class HostAgentEngine
     /// the next consistent cycle knows it has something to clear (R6-D5).
     /// </summary>
     private bool _deploySetBlockPublished;
+
+    /// <summary>
+    /// True while an artifact-import failure message is the published status, so the next
+    /// clean import knows it has something to clear (R12-F4).
+    /// </summary>
+    private bool _artifactImportFailurePublished;
+
+    /// <summary>
+    /// Consecutive cycles in which the artifact import step has failed. Carried into the
+    /// log and the published status so a permanent condition is visibly permanent rather
+    /// than looking like a fresh blip every 30 seconds (R12-F4).
+    /// </summary>
+    private int _consecutiveArtifactImportFailures;
     private DateTimeOffset _lastSupersededCleanupUtc = DateTimeOffset.MinValue;
 
     public HostAgentEngine(
@@ -163,7 +176,7 @@ public sealed class HostAgentEngine
 
             await _repository.TouchHostHeartbeatAsync(hostKey, leaseRenewalCancellation.Token);
 
-            await _artifactZipImportService.ImportPendingAsync(leaseRenewalCancellation.Token);
+            await ImportPendingArtifactsIsolatedAsync(lease.HostId.Value, leaseRenewalCancellation.Token);
 
             if (settings.ProcessHostDeployments)
             {
@@ -783,6 +796,128 @@ public sealed class HostAgentEngine
             _logger.LogWarning(
                 ex,
                 "Failed to clear the deploy-set consistency block from HostAgent runtime state. HostId={HostId}",
+                hostId);
+        }
+    }
+
+    /// <summary>
+    /// Runs the artifact zip import step so that no failure inside it can end the cycle
+    /// (R12-F4).
+    /// </summary>
+    /// <remarks>
+    /// ImportPendingAsync is the first thing the cycle does after the heartbeat, and every
+    /// deployment, provisioning, self-upgrade, file-mirroring and telemetry step sits below
+    /// it. It also throws before its own per-file try/catch is reached: the reparse-point
+    /// checks on the import, processed and failed roots run at the very top, so a junction
+    /// on any of the three -- which needs no privilege to create -- ended the cycle at the
+    /// same line every 30 seconds, forever, and not one app on the host converged. Any
+    /// exception type its internal IsExpectedImportFailure does not list does the same. The
+    /// import step is not allowed to be that gate. Cancellation still propagates: that is
+    /// the lease being lost or the service stopping, and the caller handles it.
+    /// The signal is deliberately loud and repeated -- an error log every cycle with the
+    /// consecutive count, plus the reason published into the host runtime state where the
+    /// Portal shows it -- because the failure mode this replaces was silent-but-fatal and
+    /// silent-but-harmless would be no better.
+    /// </remarks>
+    private Task ImportPendingArtifactsIsolatedAsync(Guid hostId, CancellationToken cancellationToken)
+        => RunImportStepIsolatedAsync(hostId, _artifactZipImportService.ImportPendingAsync, cancellationToken);
+
+    /// <summary>
+    /// The isolation itself, taking the import call as a delegate so it can be driven with a
+    /// failing import in tests -- ArtifactZipImportService is a concrete type over a
+    /// concrete repository and cannot be substituted.
+    /// </summary>
+    internal async Task RunImportStepIsolatedAsync(
+        Guid hostId,
+        Func<CancellationToken, Task> importPendingAsync,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await importPendingAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _consecutiveArtifactImportFailures++;
+            _logger.LogError(
+                ex,
+                "HostAgent artifact import failed; the rest of the cycle continues. ConsecutiveFailures={ConsecutiveFailures}, HostId={HostId}",
+                _consecutiveArtifactImportFailures,
+                hostId);
+
+            await PublishArtifactImportFailureRuntimeStateAsync(hostId, ex, cancellationToken);
+            return;
+        }
+
+        if (_consecutiveArtifactImportFailures > 0)
+        {
+            _logger.LogInformation(
+                "HostAgent artifact import recovered after {ConsecutiveFailures} failed cycle(s). HostId={HostId}",
+                _consecutiveArtifactImportFailures,
+                hostId);
+            _consecutiveArtifactImportFailures = 0;
+        }
+
+        if (_artifactImportFailurePublished)
+        {
+            await PublishArtifactImportRecoveredRuntimeStateAsync(hostId, cancellationToken);
+        }
+    }
+
+    private async Task PublishArtifactImportFailureRuntimeStateAsync(
+        Guid hostId,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var message =
+            $"Artifact import failed on {_consecutiveArtifactImportFailures} consecutive cycle(s) and no packages are being imported; deployments continue against the artifacts already registered. " +
+            $"Reason: {exception.Message} " +
+            "Check the HostAgent import, processed and failed folders (a junction or symlink on any of them is refused by design) and the HostAgent log.";
+        try
+        {
+            await _repository.PublishHostAgentRuntimeStateAsync(
+                hostId,
+                _process,
+                _process.RuntimeMode,
+                artifactId: null,
+                AppContext.BaseDirectory,
+                isActive: true,
+                message,
+                cancellationToken);
+            _artifactImportFailurePublished = true;
+        }
+        catch (Exception ex) when (IsExpectedShutdownFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to publish the artifact import failure into HostAgent runtime state. HostId={HostId}",
+                hostId);
+        }
+    }
+
+    private async Task PublishArtifactImportRecoveredRuntimeStateAsync(Guid hostId, CancellationToken cancellationToken)
+    {
+        const string message = "Artifact import recovered; pending packages are being imported normally again.";
+        _logger.LogInformation("{ArtifactImportRecoveredMessage}", message);
+
+        try
+        {
+            await _repository.PublishHostAgentRuntimeStateAsync(
+                hostId,
+                _process,
+                _process.RuntimeMode,
+                artifactId: null,
+                AppContext.BaseDirectory,
+                isActive: true,
+                message,
+                cancellationToken);
+            _artifactImportFailurePublished = false;
+        }
+        catch (Exception ex) when (IsExpectedShutdownFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to clear the artifact import failure from HostAgent runtime state. HostId={HostId}",
                 hostId);
         }
     }
