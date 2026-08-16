@@ -292,18 +292,6 @@ public sealed class ConfigSettingsModel : OmpPortalPageModel
         return T("All users");
     }
 
-    public string ValuePreview(string? value)
-    {
-        if (value is null)
-        {
-            return T("NULL");
-        }
-
-        return value.Length <= 160
-            ? value
-            : value[..160] + "...";
-    }
-
     private async Task LoadPageDataAsync(CancellationToken ct)
     {
         Definitions = await _repo.GetDefinitionsAsync(ct);

@@ -125,7 +125,7 @@
                             }
                             @if (!string.IsNullOrWhiteSpace(row.Description))
                             {
-                                <div class="muted">@row.Description</div>
+                                <div class="list-message muted">@row.Description</div>
                             }
                         </td>
                         <td data-sort-value="@Model.ScopeKey(row)">
@@ -133,7 +133,20 @@
                             <div class="muted">@Model.ScopeTargetText(row)</div>
                         </td>
                         <td>@row.ConfigPriority</td>
-                        <td><code>@Model.ValuePreview(row.ConfigValue)</code></td>
+                        @* The FULL value goes into the DOM: the list-message
+                           truncates it to one line visually, and the click
+                           popover then shows everything - a server-side
+                           preview here would cap what the popover can show. *@
+                        <td class="config-value-cell">
+                            @if (row.ConfigValue is null)
+                            {
+                                <span class="muted">@L["NULL"]</span>
+                            }
+                            else
+                            {
+                                <span class="list-message"><code>@row.ConfigValue</code></span>
+                            }
+                        </td>
                         <td>
                             <div class="admin-icon-actions">
                                 <a class="action-link admin-icon-button admin-icon-button--edit"
