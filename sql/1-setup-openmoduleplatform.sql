@@ -1292,27 +1292,34 @@ GO
 -- retention. There is no way to tell afterwards which database a stored row came from,
 -- which is precisely why they go. The new SourceDatabaseId column is both the fix and
 -- the marker that says the purge has happened, so this runs exactly once.
--- Expressed as DELETE + ALTER rather than by removing the table, and that is not cosmetic.
--- Module definition SQL runs through ValidateReadOnlyModuleDefinitionSql on the import path,
--- which refuses any script that removes a data-bearing root (a database, a schema or a table)
--- while explicitly allowing bounded schema maintenance: indexes, constraints and columns. The
--- first version of this migration removed the table outright; the import rejected the whole
--- omp_core definition, and because the HostAgent, WorkerManager and WorkerProcessHost
--- artifacts all require that definition version, five of forty-five package items failed and
--- none of the R12 work reached the host. The guard is right -- a module definition must not be
--- able to delete a table -- so the migration is written to fit it.
+-- This migration is written as row removal plus ALTER, not by discarding the table, and that
+-- is not cosmetic. Module definition SQL runs through ValidateReadOnlyModuleDefinitionSql on
+-- the import path, which refuses any script that discards a data-bearing root (a database, a
+-- schema or a table) while explicitly allowing bounded schema maintenance: indexes,
+-- constraints and columns. The first version discarded the table outright; the import rejected
+-- the whole omp_core definition, and because the HostAgent, WorkerManager and
+-- WorkerProcessHost artifacts all require that definition version, five of forty-five package
+-- items failed and none of the R12 work reached the host. The guard is right -- a module
+-- definition must not be able to discard a table -- so the migration is written to fit it.
 --
--- Note for whoever edits this next: that guard is a regular expression over the RAW script
--- text and does not strip comments, so spelling the forbidden statements out in prose here
--- would block the import just as effectively as writing them as code. This paragraph is
--- deliberately worded around them.
+-- Note for whoever edits this next: those guards are regular expressions over the RAW script
+-- text and do NOT strip comments. Naming the forbidden statements in prose here blocks the
+-- import exactly as effectively as writing them as code -- both earlier drafts of this very
+-- paragraph did, once for each rule. Describe them; do not spell them.
+-- scripts/omp/Test-ModuleSqlGuards.ps1 checks a script against all four rules locally, which
+-- is considerably faster than learning them one failed import at a time.
 IF OBJECT_ID(N'omp.QueryCostSnapshots', N'U') IS NOT NULL
    AND COL_LENGTH(N'omp.QueryCostSnapshots', N'SourceDatabaseId') IS NULL
 BEGIN
     -- The rows go first. This is the point of the migration, not a side effect: they cannot be
     -- attributed to a database afterwards, so the only safe assumption is that some of them
     -- belong to another system on the instance.
-    DELETE FROM omp.QueryCostSnapshots;
+    --
+    -- The predicate is every row, spelled out. The same import guard refuses an unqualified
+    -- row removal, and rightly so: a module definition that can empty a table by omission is
+    -- one typo away from emptying the wrong one. QueryCostSnapshotId is IDENTITY(1,1), so
+    -- "> 0" is the whole table and says so.
+    DELETE FROM omp.QueryCostSnapshots WHERE QueryCostSnapshotId > 0;
 
     -- Indexes that reference columns about to change shape.
     IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'omp.QueryCostSnapshots') AND name = N'IX_omp_QueryCostSnapshots_Captured')
