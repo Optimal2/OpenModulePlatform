@@ -178,7 +178,11 @@ ORDER BY HostKey, Rank, ModuleInstanceKey, AppKey, AppInstanceKey;
             $rows | Group-Object Status | Sort-Object Name | ForEach-Object {
                 Write-Host ("  {0,-8} {1}" -f $_.Name, $_.Count)
             }
-            foreach ($fel in $rows | Where-Object { $_.LastError }) {
+            # LastError comes from a DataTable, so a SQL NULL arrives as
+            # [DBNull]::Value -- which PowerShell treats as TRUE. Testing the
+            # value alone printed one blank error line per app on a fully
+            # healthy host. Exclude DBNull explicitly.
+            foreach ($fel in $rows | Where-Object { $_.LastError -isnot [System.DBNull] -and $_.LastError }) {
                 Write-Host ''
                 Write-Host ("  {0} / {1}: {2}" -f $fel.AppKey, $fel.AppInstanceKey, $fel.LastError) -ForegroundColor Yellow
             }
