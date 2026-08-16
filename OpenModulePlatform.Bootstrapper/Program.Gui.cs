@@ -441,6 +441,106 @@ internal static partial class Program
         }
     }
 
+    /// <summary>
+    /// Read-only CLI entry point for the developer source status check: compares the
+    /// developer source manifests against this installer package and the INSTALLED
+    /// database (applied module definition versions and artifact versions), without
+    /// opening the GUI and without writing anything to the database, the
+    /// installation, or any package.
+    /// </summary>
+    /// <remarks>
+    /// Layer distinction, do not merge: this verb answers whether definitions and
+    /// artifacts are APPLIED in the database (installer level).
+    /// scripts/diagnostics/Get-OmpDeploymentDrift.ps1 answers whether the APPS RUN
+    /// the desired version on each host (drift level). Both are needed.
+    /// Exit codes follow the diagnostics-script convention: 0 = everything current,
+    /// 2 = updates pending, 1 = the question could not be answered.
+    /// </remarks>
+    private static async Task<int> RunCheckDeveloperSourceStatusAsync(CliOptions cli)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Console.Error.WriteLine("Developer source status check currently uses the Windows installer profile loader.");
+            return 1;
+        }
+
+        if (string.IsNullOrWhiteSpace(cli.ConfigPath))
+        {
+            WriteUsage();
+            return 1;
+        }
+
+        var configPath = Path.GetFullPath(cli.ConfigPath);
+        var config = await ReadJsonAsync<BootstrapConfig>(configPath);
+        var payloadRoot = ResolvePayloadRoot(cli, configPath);
+
+        var previousSynchronizationContext = SynchronizationContext.Current;
+        using var form = new InstallerForm(
+            [
+                new BootstrapConfigProfile(
+                    string.IsNullOrWhiteSpace(config.Profile.DisplayName)
+                        ? Path.GetFileNameWithoutExtension(configPath)
+                        : config.Profile.DisplayName,
+                    configPath,
+                    ResolveProfileMachineNames(config))
+            ],
+            config,
+            configPath,
+            payloadRoot,
+            cli,
+            initializeUi: false);
+
+        try
+        {
+            // Same reason as the sync path: no message loop exists headlessly, so
+            // async continuations must not be posted back to WinForms.
+            SynchronizationContext.SetSynchronizationContext(null);
+
+            var result = await form.CheckDeveloperSourceStatusAsync();
+            if (cli.Json)
+            {
+                WriteDeveloperSourceStatusJson(result);
+            }
+            else
+            {
+                foreach (var line in result.Lines)
+                {
+                    Console.WriteLine(line);
+                }
+            }
+
+            // AppendDatabaseStatusAsync deliberately catches SqlException and emits a
+            // SKIP line instead of throwing. Without this guard, "database
+            // unreachable" would look like "no updates" and exit 0.
+            if (!result.DatabaseChecked)
+            {
+                return 1;
+            }
+
+            return result.HasUpdates ? 2 : 0;
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousSynchronizationContext);
+        }
+    }
+
+    private static void WriteDeveloperSourceStatusJson(DeveloperSourceCheckResult result)
+    {
+        var document = new
+        {
+            Verdict = !result.DatabaseChecked
+                ? "unknown"
+                : result.HasUpdates ? "updates-pending" : "up-to-date",
+            result.DatabaseChecked,
+            result.DatabaseFailure,
+            result.HasUpdates,
+            result.Modules,
+            result.Components
+        };
+        Console.WriteLine(JsonSerializer.Serialize(document, JsonOptions));
+    }
+
     private static async Task<int> RunPackageObjectSyncForActionAsync(
         CliOptions cli,
         BootstrapConfig config,
@@ -2768,9 +2868,13 @@ internal static partial class Program
             return string.Join('/', segments);
         }
 
-        private async Task<DeveloperSourceCheckResult> CheckDeveloperSourceStatusAsync()
+        internal async Task<DeveloperSourceCheckResult> CheckDeveloperSourceStatusAsync()
         {
             var lines = new List<string>();
+            // Structured rows for --json callers, built alongside the human-readable
+            // lines so the two outputs can never drift apart.
+            var modulePackageStatus = new Dictionary<string, (string? PackageVersion, string Status)>(StringComparer.OrdinalIgnoreCase);
+            var componentPackageStatus = new Dictionary<string, (string Target, string State, string Status)>(StringComparer.OrdinalIgnoreCase);
             var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
             var primarySourceRoot = ResolveDeveloperSourceRoot(throwIfMissing: true)!;
 
@@ -2813,6 +2917,7 @@ internal static partial class Program
                 if (!File.Exists(packagePath))
                 {
                     lines.Add($"  UPDATE  {definition.ModuleKey}: package file is missing ({Path.GetFileName(definition.Path)}).");
+                    modulePackageStatus[definition.ModuleKey] = (null, "UPDATE");
                     hasPackageUpdates = true;
                     continue;
                 }
@@ -2822,21 +2927,25 @@ internal static partial class Program
                 if (versionComparison > 0)
                 {
                     lines.Add($"  UPDATE  {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
+                    modulePackageStatus[definition.ModuleKey] = (packageDocument.DefinitionVersion, "UPDATE");
                     hasPackageUpdates = true;
                 }
                 else if (versionComparison < 0)
                 {
                     lines.Add($"  DIFF    {definition.ModuleKey}: package {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
+                    modulePackageStatus[definition.ModuleKey] = (packageDocument.DefinitionVersion, "DIFF");
                     hasPackageUpdates = true;
                 }
                 else if (versionComparison == 0 && !string.Equals(sourceDocument.DefinitionSha256, packageDocument.DefinitionSha256, StringComparison.OrdinalIgnoreCase))
                 {
                     lines.Add($"  UPDATE  {definition.ModuleKey}: same version {sourceDocument.DefinitionVersion}, different content hash.");
+                    modulePackageStatus[definition.ModuleKey] = (packageDocument.DefinitionVersion, "UPDATE");
                     hasPackageUpdates = true;
                 }
                 else
                 {
                     lines.Add($"  OK      {definition.ModuleKey}: package library {packageDocument.DefinitionVersion}, source {sourceDocument.DefinitionVersion}.");
+                    modulePackageStatus[definition.ModuleKey] = (packageDocument.DefinitionVersion, "OK");
                 }
             }
 
@@ -2852,10 +2961,12 @@ internal static partial class Program
                     if (!string.IsNullOrWhiteSpace(availablePath))
                     {
                         lines.Add($"  OK      {component.ComponentKey}: package library artifact is available ({Path.GetFileName(availablePath)}).");
+                        componentPackageStatus[component.ComponentKey] = (expectedTarget, "library", "OK");
                         continue;
                     }
 
                     lines.Add($"  UPDATE  {component.ComponentKey}: package has no configured or library artifact for {component.ModuleKey}/{component.AppKey}/{component.PackageType}/{component.TargetName}.");
+                    componentPackageStatus[component.ComponentKey] = (expectedTarget, "missing", "UPDATE");
                     hasPackageUpdates = true;
                     continue;
                 }
@@ -2863,11 +2974,13 @@ internal static partial class Program
                 if (!string.Equals(NormalizePathForMatch(current.Target), NormalizePathForMatch(expectedTarget), StringComparison.OrdinalIgnoreCase))
                 {
                     lines.Add($"  UPDATE  {component.ComponentKey}: package target {current.Target}, source target {expectedTarget}.");
+                    componentPackageStatus[component.ComponentKey] = (current.Target, "configured", "UPDATE");
                     hasPackageUpdates = true;
                 }
                 else
                 {
                     lines.Add($"  OK      {component.ComponentKey}: {expectedTarget}.");
+                    componentPackageStatus[component.ComponentKey] = (expectedTarget, "configured", "OK");
                 }
             }
 
@@ -2908,16 +3021,69 @@ internal static partial class Program
             }
 
             lines.Add(string.Empty);
-            var hasInstalledUpdates = await AppendDatabaseStatusAsync(sourceDefinitions, sourceComponents, lines);
+            var databaseResult = await AppendDatabaseStatusAsync(sourceDefinitions, sourceComponents, lines);
+            var hasInstalledUpdates = databaseResult.HasUpdates;
+
+            var moduleRows = sourceDefinitions
+                .Select(definition =>
+                {
+                    modulePackageStatus.TryGetValue(definition.ModuleKey, out var packageInfo);
+                    databaseResult.InstalledModuleVersions.TryGetValue(definition.ModuleKey, out var installedVersion);
+                    databaseResult.InstalledModuleStatuses.TryGetValue(definition.ModuleKey, out var installedStatus);
+                    var effectiveInstalledStatus = databaseResult.DatabaseChecked ? installedStatus : null;
+                    return new DeveloperSourceModuleStatus(
+                        definition.ModuleKey,
+                        packageInfo.PackageVersion,
+                        definition.DefinitionVersion,
+                        databaseResult.DatabaseChecked ? installedVersion : null,
+                        packageInfo.Status,
+                        effectiveInstalledStatus,
+                        CombineDeveloperSourceStatus(packageInfo.Status, effectiveInstalledStatus));
+                })
+                .ToArray();
+            var componentRows = sourceComponents
+                .Select(component =>
+                {
+                    componentPackageStatus.TryGetValue(component.ComponentKey, out var packageInfo);
+                    databaseResult.InstalledComponentVersions.TryGetValue(component.ComponentKey, out var installedVersion);
+                    databaseResult.InstalledComponentStatuses.TryGetValue(component.ComponentKey, out var installedStatus);
+                    var effectiveInstalledStatus = databaseResult.DatabaseChecked ? installedStatus : null;
+                    return new DeveloperSourceComponentStatus(
+                        component.ComponentKey,
+                        packageInfo.Target,
+                        packageInfo.State,
+                        component.Version,
+                        databaseResult.DatabaseChecked ? installedVersion : null,
+                        packageInfo.Status,
+                        effectiveInstalledStatus,
+                        CombineDeveloperSourceStatus(packageInfo.Status, effectiveInstalledStatus));
+                })
+                .ToArray();
 
             lines.Add(string.Empty);
-            lines.Add(hasPackageUpdates
-                ? "Result: source contains package objects that are newer/different than this installer package."
-                : hasInstalledUpdates
-                    ? "Result: this installer package matches the source manifest. The installed database has pending updates for configured modules or artifacts."
-                    : "Result: this installer package matches the source manifest. Installed configured modules and artifacts are up to date.");
+            if (!databaseResult.DatabaseChecked)
+            {
+                // Never claim "up to date" when the applied-state question is unanswered.
+                lines.Add(hasPackageUpdates
+                    ? "Result: source contains package objects that are newer/different than this installer package. The installed database state could not be read."
+                    : "Result: this installer package matches the source manifest, but the installed database state could not be read.");
+            }
+            else
+            {
+                lines.Add(hasPackageUpdates
+                    ? "Result: source contains package objects that are newer/different than this installer package."
+                    : hasInstalledUpdates
+                        ? "Result: this installer package matches the source manifest. The installed database has pending updates for configured modules or artifacts."
+                        : "Result: this installer package matches the source manifest. Installed configured modules and artifacts are up to date.");
+            }
 
-            return new DeveloperSourceCheckResult(hasPackageUpdates || hasInstalledUpdates, lines);
+            return new DeveloperSourceCheckResult(
+                hasPackageUpdates || hasInstalledUpdates,
+                databaseResult.DatabaseChecked,
+                databaseResult.FailureMessage,
+                lines,
+                moduleRows,
+                componentRows);
         }
 
         internal async Task<DeveloperPackageObjectSyncResult> SyncDeveloperPackageObjectsCoreAsync(
@@ -5142,13 +5308,17 @@ internal static partial class Program
         private static string GetTextSha256Hex(string text)
             => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
-        private async Task<bool> AppendDatabaseStatusAsync(
+        private async Task<DeveloperDatabaseStatusResult> AppendDatabaseStatusAsync(
             IReadOnlyList<ManifestModuleDefinition> sourceDefinitions,
             IReadOnlyList<ManifestComponent> sourceComponents,
             List<string> lines)
         {
             lines.Add("Installed database state:");
             var hasUpdates = false;
+            var installedModuleVersions = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            var installedModuleStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var installedComponentVersions = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            var installedComponentStatuses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 await using var connection = new SqlConnection(BuildConnectionString(_config.Sql, _config.Sql.Database));
@@ -5168,6 +5338,8 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;
                         command => command.Parameters.AddWithValue("@moduleKey", definition.ModuleKey));
                     var status = CompareInstalledVersion(installedVersion, definition.DefinitionVersion);
                     hasUpdates |= IsDeveloperUpdateStatus(status);
+                    installedModuleVersions[definition.ModuleKey] = installedVersion;
+                    installedModuleStatuses[definition.ModuleKey] = status;
                     lines.Add($"  {status,-7} module {definition.ModuleKey}: installed {installedVersion ?? "(missing)"}, source {definition.DefinitionVersion}.");
                 }
 
@@ -5196,23 +5368,44 @@ ORDER BY ar.ArtifactId DESC;
                             command.Parameters.AddWithValue("@targetName", component.TargetName);
                         });
                     var status = CompareInstalledVersion(installedVersion, component.Version);
+                    installedComponentVersions[component.ComponentKey] = installedVersion;
                     if (string.IsNullOrWhiteSpace(installedVersion) && isAvailableOnly)
                     {
+                        installedComponentStatuses[component.ComponentKey] = "INFO";
                         lines.Add($"  INFO    artifact {component.ComponentKey}: not installed, source {component.Version} is available for later import.");
                     }
                     else
                     {
                         hasUpdates |= IsDeveloperUpdateStatus(status);
+                        installedComponentStatuses[component.ComponentKey] = status;
                         lines.Add($"  {status,-7} artifact {component.ComponentKey}: installed {installedVersion ?? "(missing)"}, source {component.Version}.");
                     }
                 }
             }
             catch (Exception ex) when (ex is SqlException or InvalidOperationException)
             {
+                // Deliberately reported instead of thrown so the GUI log stays
+                // readable. DatabaseChecked = false lets headless callers map this
+                // to exit code 1 instead of a silent "no updates" exit 0.
                 lines.Add($"  SKIP    database check failed: {ex.Message}");
+                return new DeveloperDatabaseStatusResult(
+                    false,
+                    false,
+                    ex.Message,
+                    installedModuleVersions,
+                    installedModuleStatuses,
+                    installedComponentVersions,
+                    installedComponentStatuses);
             }
 
-            return hasUpdates;
+            return new DeveloperDatabaseStatusResult(
+                hasUpdates,
+                true,
+                null,
+                installedModuleVersions,
+                installedModuleStatuses,
+                installedComponentVersions,
+                installedComponentStatuses);
         }
 
         private static string CompareInstalledVersion(string? installedVersion, string sourceVersion)
@@ -5233,6 +5426,21 @@ ORDER BY ar.ArtifactId DESC;
 
         private static bool IsDeveloperUpdateStatus(string status)
             => status is "UPDATE" or "DIFF";
+
+        private static string CombineDeveloperSourceStatus(string packageStatus, string? installedStatus)
+        {
+            if (packageStatus == "DIFF" || installedStatus == "DIFF")
+            {
+                return "DIFF";
+            }
+
+            if (IsDeveloperUpdateStatus(packageStatus) || IsDeveloperUpdateStatus(installedStatus ?? string.Empty))
+            {
+                return "UPDATE";
+            }
+
+            return installedStatus is null ? packageStatus : "OK";
+        }
 
         private ArtifactPayloadOptions? FindConfiguredArtifact(ManifestComponent component)
         {
@@ -7195,7 +7403,39 @@ ORDER BY ar.ArtifactId DESC;
 
     private sealed record DeveloperSourceCheckResult(
         bool HasUpdates,
-        IReadOnlyList<string> Lines);
+        bool DatabaseChecked,
+        string? DatabaseFailure,
+        IReadOnlyList<string> Lines,
+        IReadOnlyList<DeveloperSourceModuleStatus> Modules,
+        IReadOnlyList<DeveloperSourceComponentStatus> Components);
+
+    private sealed record DeveloperDatabaseStatusResult(
+        bool HasUpdates,
+        bool DatabaseChecked,
+        string? FailureMessage,
+        IReadOnlyDictionary<string, string?> InstalledModuleVersions,
+        IReadOnlyDictionary<string, string> InstalledModuleStatuses,
+        IReadOnlyDictionary<string, string?> InstalledComponentVersions,
+        IReadOnlyDictionary<string, string> InstalledComponentStatuses);
+
+    private sealed record DeveloperSourceModuleStatus(
+        string ModuleKey,
+        string? PackageVersion,
+        string SourceVersion,
+        string? InstalledVersion,
+        string PackageStatus,
+        string? InstalledStatus,
+        string Status);
+
+    private sealed record DeveloperSourceComponentStatus(
+        string ComponentKey,
+        string Target,
+        string PackageState,
+        string SourceVersion,
+        string? InstalledVersion,
+        string PackageStatus,
+        string? InstalledStatus,
+        string Status);
 
     private sealed record DeveloperPackageObjectSyncResult(
         bool HasWarnings,

@@ -63,6 +63,12 @@ internal static partial class Program
                 return await RunRefreshAndStagePackageAsync(cli);
             }
 
+            if (cli.CheckDeveloperSourceStatus)
+            {
+                EnsureConsole();
+                return await RunCheckDeveloperSourceStatusAsync(cli);
+            }
+
             var useGui = cli.Gui || (args.Length == 0 && OperatingSystem.IsWindows() && Environment.UserInteractive);
             if (!useGui)
             {
@@ -497,6 +503,7 @@ internal static partial class Program
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-installer-package --config <bootstrap.json> [--payload-root <path>] [--parent-process-id <pid>] [--restart-gui] [--log-file <path>]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --sync-package-objects --config <bootstrap.json> [--payload-root <path>] [--full-content-check]");
         Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --refresh-and-stage-package --config <bootstrap.json> [--payload-root <path>] [--full-content-check] [--skip-refresh] [--wait-for-import | --wait-for-import-seconds <n>]");
+        Console.WriteLine("  OpenModulePlatform.Bootstrapper.exe --check-developer-source-status --config <bootstrap.json> [--payload-root <path>] [--json]");
         Console.WriteLine();
         Console.WriteLine("Updating an EXISTING installation:");
         Console.WriteLine("  Use --refresh-and-stage-package. It refreshes the installer data folder from every configured");
@@ -504,6 +511,13 @@ internal static partial class Program
         Console.WriteLine("  import folder (resolved from the config). Add --wait-for-import to follow the HostAgent import.");
         Console.WriteLine("  Do NOT use --upgrade-or-complete against an existing installation; that is for new installs.");
         Console.WriteLine("  Note: --refresh-installer-package rebuilds the installer BINARIES and is a different operation.");
+        Console.WriteLine();
+        Console.WriteLine("Checking an EXISTING installation (read-only):");
+        Console.WriteLine("  Use --check-developer-source-status. It compares the developer source manifests against this");
+        Console.WriteLine("  installer package and the INSTALLED database (applied module definitions and artifact versions)");
+        Console.WriteLine("  and never writes anything. Exit codes: 0 = up to date, 2 = updates pending, 1 = the check");
+        Console.WriteLine("  could not be completed (for example the database could not be read). Add --json for structured");
+        Console.WriteLine("  output. For per-host RUNTIME drift, use scripts/diagnostics/Get-OmpDeploymentDrift.ps1 instead.");
         Console.WriteLine();
         Console.WriteLine("The bootstrapper runs initial SQL, prepares ArtifactStore, and installs the HostAgent service.");
     }
@@ -6315,6 +6329,14 @@ internal sealed class CliOptions
     // Build+stage from the existing data folder without refreshing it first.
     public bool SkipRefresh { get; private init; }
 
+    // Read-only check: compares developer source manifests against this installer
+    // package and the INSTALLED database (applied module definitions and artifact
+    // versions). Never writes to the database or the installation.
+    public bool CheckDeveloperSourceStatus { get; private init; }
+
+    // Structured JSON output for --check-developer-source-status.
+    public bool Json { get; private init; }
+
     // 0 = stage and return; >0 = also wait that many seconds for the HostAgent to
     // consume the staged package and report processed/failed.
     public int WaitForImportSeconds { get; private init; }
@@ -6377,6 +6399,12 @@ internal sealed class CliOptions
                     break;
                 case "--refresh-and-stage-package":
                     options.RefreshAndStagePackage = true;
+                    break;
+                case "--check-developer-source-status":
+                    options.CheckDeveloperSourceStatus = true;
+                    break;
+                case "--json":
+                    options.Json = true;
                     break;
                 case "--skip-refresh":
                     options.SkipRefresh = true;
@@ -6455,6 +6483,10 @@ internal sealed class CliOptions
 
         public bool RefreshAndStagePackage { get; set; }
 
+        public bool CheckDeveloperSourceStatus { get; set; }
+
+        public bool Json { get; set; }
+
         public bool SkipRefresh { get; set; }
 
         public int WaitForImportSeconds { get; set; }
@@ -6479,11 +6511,16 @@ internal sealed class CliOptions
 
         public CliOptions ToOptions()
         {
-            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects, RefreshAndStagePackage }
+            var selectedModes = new[] { UpgradeOrComplete, Uninstall, RefreshInstallerPackage, SyncPackageObjects, RefreshAndStagePackage, CheckDeveloperSourceStatus }
                 .Count(static item => item);
             if (selectedModes > 1)
             {
-                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, refresh-installer-package, sync-package-objects, or refresh-and-stage-package.");
+                throw new InvalidOperationException("Choose only one operation mode: bootstrap, upgrade/complete, uninstall, refresh-installer-package, sync-package-objects, refresh-and-stage-package, or check-developer-source-status.");
+            }
+
+            if (Json && !CheckDeveloperSourceStatus)
+            {
+                throw new InvalidOperationException("--json can only be used with --check-developer-source-status.");
             }
 
             if ((SkipRefresh || WaitForImportSeconds > 0) && !RefreshAndStagePackage)
@@ -6513,6 +6550,8 @@ internal sealed class CliOptions
                 RefreshInstallerPackage = RefreshInstallerPackage,
                 SyncPackageObjects = SyncPackageObjects,
                 RefreshAndStagePackage = RefreshAndStagePackage,
+                CheckDeveloperSourceStatus = CheckDeveloperSourceStatus,
+                Json = Json,
                 SkipRefresh = SkipRefresh,
                 WaitForImportSeconds = WaitForImportSeconds,
                 SyncPackageObjectsBeforeAction = SyncPackageObjectsBeforeAction,
