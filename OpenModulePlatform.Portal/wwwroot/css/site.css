@@ -6895,3 +6895,20 @@ tr.linkbox-editor-row--dragging {
 .section-heading-line .admin-icon-button--add {
     color: var(--link);
 }
+
+/* Config settings: unbroken long values (connection strings, paths) used to
+   stretch the table into horizontal scroll. The caps sit on the inner
+   list-message blocks (auto table layout ignores max-width on cells); the
+   overflowing text truncates to one line and the shared info popover shows
+   the full value on click. */
+#config-values-list .config-value-cell .list-message {
+    max-width: 380px;
+}
+
+#config-values-list .config-value-cell code {
+    font-size: 12px;
+}
+
+#config-values-list td:first-child .list-message {
+    max-width: 320px;
+}
