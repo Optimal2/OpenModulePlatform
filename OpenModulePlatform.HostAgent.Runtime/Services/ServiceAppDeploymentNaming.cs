@@ -90,9 +90,22 @@ internal static class ServiceAppDeploymentNaming
     }
 
     /// <summary>
-    /// Determines whether an old service/folder should be cleaned up because the
-    /// deployment's runtime name changed. Returns a reason string when cleanup is skipped.
+    /// Decides, for a deployment whose runtime name changed, whether the old Windows
+    /// service may be removed and whether the old directory may be deleted. The two are
+    /// separate answers with separate reasons.
     /// </summary>
+    /// <remarks>
+    /// R12-A1. R7-D added two path-based guards -- the old/new target path collision here
+    /// and the directory-ownership objection in the caller -- and both switched off the
+    /// whole cleanup branch, with <c>DeleteService(oldServiceName)</c> inside it. Before
+    /// R7-D the old service was removed unconditionally once the NAME guards had passed;
+    /// only the directory delete was ever in question. The regression left the previous
+    /// Windows service registered, auto-starting and pointed at the same binaries as the
+    /// new one -- two services against one inbox -- and it fired in the most ordinary
+    /// rename of all: the one where only InstallationName changed and the folder stayed
+    /// put. The name guards below therefore refuse BOTH actions (removing that service
+    /// would kill something else), while the path guards refuse only the file deletion.
+    /// </remarks>
     internal static RenameCleanupEvaluation EvaluateRenameCleanup(
         HostAgentSettings settings,
         ServiceAppDeploymentDescriptor deployment,
@@ -105,19 +118,19 @@ internal static class ServiceAppDeploymentNaming
         var oldServiceName = Clean(deployment.DeployedRuntimeName);
         if (string.IsNullOrWhiteSpace(oldServiceName))
         {
-            return RenameCleanupEvaluation.Skip(null, null, "No previously deployed runtime name is tracked.");
+            return RenameCleanupEvaluation.SkipEverything(null, null, "No previously deployed runtime name is tracked.");
         }
 
         if (string.Equals(oldServiceName, newServiceName, StringComparison.OrdinalIgnoreCase))
         {
-            return RenameCleanupEvaluation.Skip(oldServiceName, null, "The deployed runtime name matches the new service name.");
+            return RenameCleanupEvaluation.SkipEverything(oldServiceName, null, "The deployed runtime name matches the new service name.");
         }
 
         var hostAgentServiceName = Clean(settings.ServiceName);
         if (!string.IsNullOrWhiteSpace(hostAgentServiceName)
             && string.Equals(oldServiceName, hostAgentServiceName, StringComparison.OrdinalIgnoreCase))
         {
-            return RenameCleanupEvaluation.Skip(
+            return RenameCleanupEvaluation.SkipEverything(
                 oldServiceName,
                 null,
                 $"The old runtime name '{oldServiceName}' matches the HostAgent service name.");
@@ -127,7 +140,7 @@ internal static class ServiceAppDeploymentNaming
         // constant name. The default OMP WorkerManager service name is OMP.WorkerManager.
         if (string.Equals(oldServiceName, "OMP.WorkerManager", StringComparison.OrdinalIgnoreCase))
         {
-            return RenameCleanupEvaluation.Skip(
+            return RenameCleanupEvaluation.SkipEverything(
                 oldServiceName,
                 null,
                 $"The old runtime name '{oldServiceName}' matches the WorkerManager service name.");
@@ -143,7 +156,7 @@ internal static class ServiceAppDeploymentNaming
 
             if (string.Equals(pair.Value, oldServiceName, StringComparison.OrdinalIgnoreCase))
             {
-                return RenameCleanupEvaluation.Skip(
+                return RenameCleanupEvaluation.SkipEverything(
                     oldServiceName,
                     null,
                     $"Another active app instance resolves to the old runtime name '{oldServiceName}'.");
@@ -165,7 +178,7 @@ internal static class ServiceAppDeploymentNaming
             if (!string.IsNullOrWhiteSpace(footprint.RuntimeName)
                 && string.Equals(footprint.RuntimeName.Trim(), oldServiceName, StringComparison.OrdinalIgnoreCase))
             {
-                return RenameCleanupEvaluation.Skip(
+                return RenameCleanupEvaluation.SkipEverything(
                     oldServiceName,
                     null,
                     $"Another app instance on this host is deployed as runtime '{oldServiceName}'.");
@@ -179,22 +192,27 @@ internal static class ServiceAppDeploymentNaming
             InstallationName = oldServiceName
         };
         var oldTargetPath = ResolveTargetPath(settings, oldTargetPathDeployment, oldServiceName);
+        var expectedExecutableFileName = ResolveExpectedExecutableFileName(executableRelativePath);
 
-        // A rename that does not move the files has nothing to delete. This used to be
-        // checked at delete time only, which meant the log said "cleaned up" for a
-        // directory that was never touched.
+        // A rename that does not move the files has nothing to DELETE. It still has an old
+        // Windows service to remove -- in fact this is the case where leaving it registered
+        // is worst, because the stale service points straight at the directory the new one
+        // is about to run from (R12-A1).
         if (PathsMayCollide(oldTargetPath, newTargetPath))
         {
-            return RenameCleanupEvaluation.Skip(
+            return RenameCleanupEvaluation.RemoveServiceOnly(
                 oldServiceName,
                 oldTargetPath,
-                "The old and new deployments share a target path, so only the service name changed.");
+                "The old and new deployments share a target path, so only the service name changed and no files are deleted.",
+                expectedExecutableFileName);
         }
 
         // The finding this guard exists for: cleanup compared names and nothing else, so
         // an old name whose folder happens to be another instance's live directory would
         // have taken that directory with it. Comparing the resolved paths is the check
-        // that actually protects the files.
+        // that actually protects the files. It says nothing about the service: the name
+        // guards above already established that no other instance answers to
+        // oldServiceName, so that registration is ours and stale (R12-A1).
         foreach (var footprint in hostRuntimeFootprints)
         {
             if (footprint.AppInstanceId == deployment.AppInstanceId
@@ -205,14 +223,15 @@ internal static class ServiceAppDeploymentNaming
 
             if (PathsMayCollide(footprint.TargetPath, oldTargetPath))
             {
-                return RenameCleanupEvaluation.Skip(
+                return RenameCleanupEvaluation.RemoveServiceOnly(
                     oldServiceName,
                     oldTargetPath,
-                    $"Another app instance on this host is deployed under '{oldTargetPath}'.");
+                    $"Another app instance on this host is deployed under '{oldTargetPath}'.",
+                    expectedExecutableFileName);
             }
         }
 
-        return RenameCleanupEvaluation.Clean(oldServiceName, oldTargetPath, ResolveExpectedExecutableFileName(executableRelativePath));
+        return RenameCleanupEvaluation.Clean(oldServiceName, oldTargetPath, expectedExecutableFileName);
     }
 
     /// <summary>
@@ -335,19 +354,41 @@ internal static class ServiceAppDeploymentNaming
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
+/// <summary>
+/// The outcome of rename evaluation: two independent permissions, each with its own
+/// reason when it is withheld (R12-A1).
+/// </summary>
+/// <remarks>
+/// The single <c>ShouldCleanUp</c>/<c>Reason</c> pair this replaces made "do not delete
+/// these files" and "do not remove this service" the same answer, which is how a guard
+/// written to protect a directory came to leave a duplicate Windows service registered.
+/// Keeping them apart is not cosmetic: the caller must be unable to express the old
+/// coupling.
+/// </remarks>
 internal sealed record RenameCleanupEvaluation(
-    bool ShouldCleanUp,
+    bool ShouldRemoveOldService,
+    bool ShouldDeleteOldDirectory,
     string? OldServiceName,
     string? OldTargetPath,
-    string? Reason,
+    string? ServiceSkipReason,
+    string? DirectorySkipReason,
     string? ExpectedExecutableFileName = null)
 {
     public static RenameCleanupEvaluation Clean(
         string oldServiceName,
         string oldTargetPath,
         string? expectedExecutableFileName)
-        => new(true, oldServiceName, oldTargetPath, null, expectedExecutableFileName);
+        => new(true, true, oldServiceName, oldTargetPath, null, null, expectedExecutableFileName);
 
-    public static RenameCleanupEvaluation Skip(string? oldServiceName, string? oldTargetPath, string reason)
-        => new(false, oldServiceName, oldTargetPath, reason);
+    /// <summary>Nothing may be touched: the old name belongs to something still in use.</summary>
+    public static RenameCleanupEvaluation SkipEverything(string? oldServiceName, string? oldTargetPath, string reason)
+        => new(false, false, oldServiceName, oldTargetPath, reason, reason);
+
+    /// <summary>The stale service registration goes; the files stay.</summary>
+    public static RenameCleanupEvaluation RemoveServiceOnly(
+        string oldServiceName,
+        string oldTargetPath,
+        string directorySkipReason,
+        string? expectedExecutableFileName)
+        => new(true, false, oldServiceName, oldTargetPath, null, directorySkipReason, expectedExecutableFileName);
 }

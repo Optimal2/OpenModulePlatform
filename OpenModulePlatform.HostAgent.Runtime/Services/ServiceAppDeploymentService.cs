@@ -352,7 +352,7 @@ public sealed class ServiceAppDeploymentService
             // old service has been confirmed removed. This makes rename cleanup durable:
             // a swallowed failure is retried on the next cycle because DeployedRuntimeName
             // still points to the old service.
-            var runningRuntimeName = renameCleanup.ShouldCleanUp
+            var runningRuntimeName = renameCleanup.ShouldRemoveOldService
                 ? renameCleanup.OldServiceName!
                 : serviceName;
 
@@ -383,31 +383,34 @@ public sealed class ServiceAppDeploymentService
                 }
             }
 
-            var directoryOwnershipObjection = renameCleanup.ShouldCleanUp
+            // R12-A1: the old service is removed whenever rename evaluation's NAME guards
+            // allow it, and the directory objection below decides only whether the old
+            // folder is deleted along with it. R7-D had a single combined branch, so a
+            // rename that kept the same folder -- or an old folder that could not be proved
+            // ours -- skipped DeleteService too and left the previous Windows service
+            // registered and auto-starting against the same binaries. DeleteService also
+            // stops the service first, which is what releases the file handles the mirror
+            // below needs when both names share a directory.
+            var directoryOwnershipObjection = renameCleanup.ShouldDeleteOldDirectory
                 ? DescribeRenameCleanupDirectoryObjection(renameCleanup)
-                : null;
+                : renameCleanup.DirectorySkipReason;
+            var oldDirectoryToDelete = renameCleanup.ShouldDeleteOldDirectory
+                && directoryOwnershipObjection is null
+                && !string.IsNullOrWhiteSpace(renameCleanup.OldTargetPath)
+                    ? renameCleanup.OldTargetPath
+                    : null;
 
-            if (directoryOwnershipObjection is not null)
-            {
-                _logger.LogWarning(
-                    "Service app runtime name changed but the old directory was left in place. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}, Reason={Reason}",
-                    deployment.AppInstanceId,
-                    renameCleanup.OldServiceName,
-                    renameCleanup.OldTargetPath,
-                    directoryOwnershipObjection);
-            }
-            else if (renameCleanup.ShouldCleanUp
-                && !string.IsNullOrWhiteSpace(renameCleanup.OldServiceName)
-                && !string.IsNullOrWhiteSpace(renameCleanup.OldTargetPath))
+            if (renameCleanup.ShouldRemoveOldService && !string.IsNullOrWhiteSpace(renameCleanup.OldServiceName))
             {
                 try
                 {
-                    CleanUpRenamedService(renameCleanup.OldServiceName, renameCleanup.OldTargetPath);
+                    CleanUpRenamedService(renameCleanup.OldServiceName, oldDirectoryToDelete);
                     _logger.LogInformation(
-                        "Cleaned up renamed service app runtime. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}, NewServiceName={NewServiceName}, NewTargetPath={NewTargetPath}",
+                        "Cleaned up renamed service app runtime. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}, DeletedOldDirectory={DeletedOldDirectory}, NewServiceName={NewServiceName}, NewTargetPath={NewTargetPath}",
                         deployment.AppInstanceId,
                         renameCleanup.OldServiceName,
                         renameCleanup.OldTargetPath,
+                        oldDirectoryToDelete is not null,
                         serviceName,
                         targetPath);
                 }
@@ -430,15 +433,25 @@ public sealed class ServiceAppDeploymentService
                         cancellationToken);
                     return;
                 }
+
+                if (directoryOwnershipObjection is not null)
+                {
+                    _logger.LogWarning(
+                        "Service app runtime name changed; the old service was removed but the old directory was left in place. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}, Reason={Reason}",
+                        deployment.AppInstanceId,
+                        renameCleanup.OldServiceName,
+                        renameCleanup.OldTargetPath,
+                        directoryOwnershipObjection);
+                }
             }
-            else if (renameCleanup.OldServiceName is not null && !renameCleanup.ShouldCleanUp)
+            else if (renameCleanup.OldServiceName is not null)
             {
                 _logger.LogWarning(
                     "Service app runtime name changed but old service was not cleaned up. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, NewServiceName={NewServiceName}, Reason={Reason}",
                     deployment.AppInstanceId,
                     renameCleanup.OldServiceName,
                     serviceName,
-                    renameCleanup.Reason);
+                    renameCleanup.ServiceSkipReason);
             }
 
             ArtifactDirectoryMirror.MirrorDirectory(
@@ -746,18 +759,24 @@ public sealed class ServiceAppDeploymentService
             : $"The old directory '{oldTargetPath}' holds executables but not '{expected}', so it is another application's directory.";
     }
 
-    private void CleanUpRenamedService(string oldServiceName, string oldTargetPath)
+    /// <summary>
+    /// Removes the old Windows service, and deletes the old directory only when the caller
+    /// passes one -- a null <paramref name="oldTargetPathToDelete"/> means the path guards
+    /// refused the files, not the service (R12-A1).
+    /// </summary>
+    private void CleanUpRenamedService(string oldServiceName, string? oldTargetPathToDelete)
     {
         _serviceControl.DeleteService(oldServiceName);
 
         // Whether the old path is safe to delete is decided in one place -- rename
         // evaluation plus the directory-ownership objection above -- and this method is
-        // only reached once both have said yes. The ordinal string comparison that used to
-        // stand here compared unnormalised paths and could not tell 'C:\a\b' from
-        // 'C:\a\.\b', so it looked like a second line of defence without being one (R7-D5).
-        if (Directory.Exists(oldTargetPath))
+        // only reached with a non-null path once both have said yes. The ordinal string
+        // comparison that used to stand here compared unnormalised paths and could not tell
+        // 'C:\a\b' from 'C:\a\.\b', so it looked like a second line of defence without
+        // being one (R7-D5).
+        if (!string.IsNullOrWhiteSpace(oldTargetPathToDelete) && Directory.Exists(oldTargetPathToDelete))
         {
-            Directory.Delete(oldTargetPath, recursive: true);
+            Directory.Delete(oldTargetPathToDelete, recursive: true);
         }
     }
 

@@ -646,6 +646,10 @@ IF OBJECT_ID(N'omp.HostAgentRuntimeStates', N'U') IS NOT NULL DELETE FROM omp.Ho
 IF OBJECT_ID(N'omp.HostAgentDesiredStates', N'U') IS NOT NULL DELETE FROM omp.HostAgentDesiredStates WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.WebAppHealthStates', N'U') IS NOT NULL DELETE FROM omp.WebAppHealthStates WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.HostResourceSamples', N'U') IS NOT NULL DELETE FROM omp.HostResourceSamples WHERE HostId = @hostId;
+-- R12-A5: omp.HostResourceSamplesDaily carries the same FK to omp.Hosts as the hourly table
+-- above and was added without either host delete path being extended, so an orphan host that
+-- had been up for an hour could not be cleaned up at all -- the delete failed on the FK.
+IF OBJECT_ID(N'omp.HostResourceSamplesDaily', N'U') IS NOT NULL DELETE FROM omp.HostResourceSamplesDaily WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.HostResourceLatest', N'U') IS NOT NULL DELETE FROM omp.HostResourceLatest WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.HostDeploymentAssignments', N'U') IS NOT NULL DELETE FROM omp.HostDeploymentAssignments WHERE HostId = @hostId;
 IF OBJECT_ID(N'omp.HostDeployments', N'U') IS NOT NULL DELETE FROM omp.HostDeployments WHERE HostId = @hostId;

@@ -49,6 +49,12 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
     public Task<bool> RenewHostAgentLeaseAsync(Guid hostId, Guid leaseToken, int leaseSeconds, CancellationToken ct)
         => Task.FromResult(true);
 
+    /// <summary>
+    /// Status messages published into the host runtime state, newest last. Used to assert
+    /// that an isolated failure still reaches the operator (R12-F4).
+    /// </summary>
+    public List<string> PublishedRuntimeStatusMessages { get; } = [];
+
     public Task PublishHostAgentRuntimeStateAsync(
         Guid hostId,
         HostAgentProcessContext process,
@@ -59,7 +65,14 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         string? statusMessage,
         CancellationToken ct,
         bool preserveExistingStatusMessage = false)
-        => Task.CompletedTask;
+    {
+        if (statusMessage is not null)
+        {
+            PublishedRuntimeStatusMessages.Add(statusMessage);
+        }
+
+        return Task.CompletedTask;
+    }
 
     public Task MarkHostAgentQuiescedAsync(Guid hostId, string serviceName, CancellationToken ct)
         => Task.CompletedTask;

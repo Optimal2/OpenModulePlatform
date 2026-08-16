@@ -33,9 +33,27 @@ public static class OmpPerformanceTelemetryMiddleware
     public const string MetricTopBarDuration = "topbar.duration.ms";
     public const string MetricTopBarDbCalls = "topbar.db.calls";
 
+    /// <summary>
+    /// The application key this process reports under, published by the call that installs
+    /// the middleware.
+    /// </summary>
+    /// <remarks>
+    /// A process hosts one OMP web application, so this is a constant for its lifetime. It is
+    /// published here because work that happens outside the request pipeline still has to
+    /// report under the same key -- a Blazor circuit rebuilding the topbar has no HttpContext
+    /// to hand a measurement to, and deriving the key a second time somewhere else is exactly
+    /// how two truths for one value start (R12-E4).
+    /// </remarks>
+    public static string ConfiguredAppKey { get; private set; } = "unknown";
+
     public static IApplicationBuilder UseOmpPerformanceTelemetry(this IApplicationBuilder app, string appKey)
     {
         ArgumentNullException.ThrowIfNull(app);
+
+        if (!string.IsNullOrWhiteSpace(appKey))
+        {
+            ConfiguredAppKey = appKey;
+        }
 
         return app.Use(async (context, next) =>
         {
@@ -151,10 +169,22 @@ public static class OmpPerformanceTelemetryMiddleware
     /// rather than how long the server took.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// WebSockets and the SignalR long-poll and server-sent-event transports are all held
     /// open deliberately. Their duration is a property of the client's session, not of any
     /// work the server did, so it belongs in no latency figure. They are still counted, so
     /// the traffic remains visible.
+    /// </para>
+    /// <para>
+    /// R12-A11 and R12-E8, which are the two directions of the same mistake. The test was
+    /// <c>path.Contains("/updates")</c>: too wide, because any module page under a path
+    /// containing that segment -- an update list, an "/artifacts/updates" view -- silently
+    /// stopped contributing to the latency figure, and nothing said so; and at the same time
+    /// too narrow, because this platform mounts <em>two</em> hubs and only one of them has
+    /// "/updates" in its path, so every long poll on the push-event hub was timed as if it
+    /// were a slow page. The hub paths are now taken from the constants the hubs are mapped
+    /// with, so adding a hub cannot leave this behind again.
+    /// </para>
     /// </remarks>
     private static bool IsLongLivedConnection(HttpContext context)
     {
@@ -169,10 +199,22 @@ public static class OmpPerformanceTelemetryMiddleware
             return false;
         }
 
-        // The hub paths this platform mounts, plus the transport suffixes SignalR appends.
-        return path.Contains("/updates", StringComparison.OrdinalIgnoreCase)
+        return IsHubPath(path, Notifications.TopBarNotificationHub.Path)
+            || IsHubPath(path, Notifications.TopBarNotificationHub.PushEventPath)
+            // A negotiate always belongs to SignalR, including hubs a consuming application
+            // mounts on paths this assembly does not know.
             || path.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// True when the request path is a hub path or one of the transport suffixes SignalR
+    /// appends to it -- and false for a page that merely starts with the same characters.
+    /// </summary>
+    private static bool IsHubPath(string path, string hubPath)
+        => path.Equals(hubPath, StringComparison.OrdinalIgnoreCase)
+            || (path.Length > hubPath.Length
+                && path.StartsWith(hubPath, StringComparison.OrdinalIgnoreCase)
+                && path[hubPath.Length] == '/');
 
     /// <summary>
     /// Reduces a request to a coarse, bounded label.

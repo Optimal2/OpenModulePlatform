@@ -116,6 +116,42 @@ function Add-ValidationError {
 # answer a validation error instead of a silent skip, in one place, so no call
 # site can forget.
 
+# R12-A6. '2>&1' on a native command merges git's stderr into the PowerShell
+# pipeline as ErrorRecords, and this script runs with $ErrorActionPreference =
+# 'Stop' (line 25). Under Windows PowerShell 5.1 that combination TERMINATES the
+# script the moment git writes anything to stderr -- before the $LASTEXITCODE
+# check below ever runs. The helpers above were written to turn an unreadable git
+# answer into a validation error; under 5.1 they instead killed the gate outright.
+#
+# Measured on LINUS-LAPTOP against both runtimes, with an invalid ref and with a
+# path missing at the base ref: pwsh 7 reached the $LASTEXITCODE check
+# (LASTEXITCODE=128); powershell.exe 5.1 terminated with a RemoteException. The
+# pre-push hook runs 5.1 (.githooks/pre-push -> pre-push.ps1:126), so the runtime
+# that actually gates a push was the broken one.
+#
+# Restoring 'Continue' for the duration of the call keeps stderr as plain strings
+# in both runtimes. It is restored in a finally so an exception cannot leave the
+# rest of the script running with the wrong preference.
+function Invoke-GitCapture {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = @(& git @Arguments 2>&1)
+        return [pscustomobject]@{
+            ExitCode = $LASTEXITCODE
+            Lines    = $output
+            Text     = ($output -join "`n")
+        }
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 function Get-GitChangedFiles {
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
@@ -125,13 +161,13 @@ function Get-GitChangedFiles {
         [Parameter(Mandatory = $true)][string]$CheckDescription
     )
 
-    $output = [string](git -C $RepositoryRoot diff --name-only "$BaseRef...HEAD" -- $Path 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        Add-ValidationError -Errors $Errors -Message "$CheckDescription could not run: 'git diff $BaseRef...HEAD -- $Path' exited with $LASTEXITCODE. $output"
+    $result = Invoke-GitCapture -Arguments @('-C', $RepositoryRoot, 'diff', '--name-only', "$BaseRef...HEAD", '--', $Path)
+    if ($result.ExitCode -ne 0) {
+        Add-ValidationError -Errors $Errors -Message "$CheckDescription could not run: 'git diff $BaseRef...HEAD -- $Path' exited with $($result.ExitCode). $($result.Text)"
         return $null
     }
 
-    return $output
+    return $result.Text
 }
 
 function Get-GitFileTextAtRef {
@@ -143,21 +179,34 @@ function Get-GitFileTextAtRef {
         [Parameter(Mandatory = $true)][string]$CheckDescription
     )
 
-    $lines = @(git -C $RepositoryRoot show "$BaseRef`:$Path" 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        # A path that simply did not exist at the base ref is a new file, not a
-        # failure, and every caller already handles empty text as "new". Anything
-        # else is a broken read and must be reported.
-        $joined = ($lines -join "`n")
-        if ($joined -match 'exists on disk, but not in|does not exist in|path .* does not exist') {
-            return ''
+    # R12-A13. "Did this path exist at the base ref" used to be answered by
+    # matching git's error prose ('exists on disk, but not in', 'does not exist
+    # in'). That text is not a contract: it varies by git version and is
+    # translated when the user has a localised git, so on some machines a genuinely
+    # broken read would be silently reported as "new file, nothing to check" --
+    # the fail-open direction these helpers exist to remove. Ask git the question
+    # it can answer with an exit code instead.
+    $exists = Invoke-GitCapture -Arguments @('-C', $RepositoryRoot, 'cat-file', '-e', "${BaseRef}:$Path")
+    if ($exists.ExitCode -ne 0) {
+        # Distinguish "the ref itself is unreadable" from "the path is not in it".
+        # Only the second is a new file; the first must still be an error.
+        $refReadable = Invoke-GitCapture -Arguments @('-C', $RepositoryRoot, 'rev-parse', '--verify', '--quiet', "$BaseRef^{commit}")
+        if ($refReadable.ExitCode -ne 0) {
+            Add-ValidationError -Errors $Errors -Message "$CheckDescription could not run: base ref '$BaseRef' is not readable in '$RepositoryRoot'. $($refReadable.Text)"
+            return $null
         }
 
-        Add-ValidationError -Errors $Errors -Message "$CheckDescription could not run: 'git show ${BaseRef}:$Path' exited with $LASTEXITCODE. $joined"
+        # Every caller already treats empty text as "new file".
+        return ''
+    }
+
+    $result = Invoke-GitCapture -Arguments @('-C', $RepositoryRoot, 'show', "${BaseRef}:$Path")
+    if ($result.ExitCode -ne 0) {
+        Add-ValidationError -Errors $Errors -Message "$CheckDescription could not run: 'git show ${BaseRef}:$Path' exited with $($result.ExitCode). $($result.Text)"
         return $null
     }
 
-    return (Remove-Utf8Bom -Text ($lines -join "`n"))
+    return (Remove-Utf8Bom -Text ($result.Text))
 }
 
 function Add-ValidationWarning {

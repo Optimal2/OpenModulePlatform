@@ -8,9 +8,28 @@
 #                                               # poll until converged (exit 0),
 #                                               # timeout (exit 2) or error (1)
 #
-# Converged means: every enabled host has no pending/failed/warning apps, no
-# HostAgent upgrade pending, no artifact provisioning pending/failed, and no
-# worker that should run but is not running.
+# Converged means, for every enabled host that matched:
+#   * every desired app instance is classified InSync -- DesiredApps == InSync,
+#     not "no app landed in a problem bucket" (R12-F6/INV3),
+#   * the HostAgent runs its desired version, has a desired version at all, and
+#     has reported within -MaxStateAgeSeconds (R12-F3),
+#   * app deployment state was last checked within -MaxStateAgeSeconds (R12-F3),
+#   * no artifact requirement is unprovisioned, failed or unreported,
+#   * every desired worker and worker-host package is provisioned on the host and
+#     every worker instance is running a build no older than its desired artifact,
+#     with a fresh heartbeat (R12-F2, R12-F7, R12-D1).
+#
+# What this script CANNOT establish, stated here rather than left implied
+# (R12-F2): no table in omp records which artifact VERSION a running worker
+# process loaded. omp.AppInstanceRuntimeStates and omp.WorkerInstanceRuntimeStates
+# have neither ArtifactId nor Version. The worker check therefore uses the one
+# ordering fact the schema does supply -- a process that started before its
+# desired artifact existed in the catalog cannot be running it -- plus the
+# requirement that the desired artifact is actually provisioned on the host. It
+# never raises a false alarm (the catalog timestamp only moves forward when a new
+# version is imported) but it does not catch a worker that restarted after the
+# version was catalogued yet before it reached the host's artifact cache. Closing
+# that gap needs a Version/ArtifactId column on the worker runtime tables.
 [CmdletBinding()]
 param(
     [string]$Server = 'localhost',
@@ -19,7 +38,15 @@ param(
     [switch]$Json,
     [switch]$Wait,
     [int]$TimeoutSeconds = 300,
-    [int]$PollSeconds = 10
+    [int]$PollSeconds = 10,
+    # R12-F3. How old a reported state may be and still count as evidence. The
+    # HostAgent cycle is ~30 s and the WorkerManager refresh is 15 s deployed, so
+    # 300 s is roughly ten missed cycles: long enough never to trip on a slow
+    # cycle, short enough that a dead agent cannot pass a deploy gate. This is the
+    # one knob a site may genuinely need to move (a host polling on a long
+    # interval), and it lives here only -- both the HostAgent check and the worker
+    # check read this same value.
+    [int]$MaxStateAgeSeconds = 300
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,9 +71,40 @@ function Invoke-Query {
     Write-Output $table -NoEnumerate
 }
 
+# A SQL NULL arrives from a DataTable as [DBNull]::Value, which PowerShell treats
+# as truthy and [int] casts to 0. Both are wrong for an age: "never reported" must
+# read as infinitely stale, not as zero seconds old.
+function Get-NullableInt {
+    param($Value)
+    if ($null -eq $Value -or $Value -is [System.DBNull]) {
+        return $null
+    }
+    return [int]$Value
+}
+
+function Test-StateAgeIsFresh {
+    param($AgeSeconds, [int]$MaxAgeSeconds)
+    $age = Get-NullableInt $AgeSeconds
+    if ($null -eq $age) {
+        return $false
+    }
+    return $age -le $MaxAgeSeconds
+}
+
+function Format-AgeSeconds {
+    param($AgeSeconds)
+    $age = Get-NullableInt $AgeSeconds
+    if ($null -eq $age) {
+        return 'never'
+    }
+    return "$age s ago"
+}
+
 # The identity-check columns are newer than some databases; mirror the Portal's
 # dynamic column probe so the summary works on both schema generations.
 $identityProbeSql = "SELECT CASE WHEN COL_LENGTH('omp.HostAppDeploymentStates','IdentityCheckStatus') IS NULL THEN 0 ELSE 1 END"
+$lastWarningProbeSql = "SELECT CASE WHEN COL_LENGTH('omp.HostAppDeploymentStates','LastWarning') IS NULL THEN 0 ELSE 1 END"
+$workerStateProbeSql = "SELECT CASE WHEN OBJECT_ID('omp.WorkerInstanceRuntimeStates','U') IS NULL THEN 0 ELSE 1 END"
 
 function Get-DriftSnapshot {
     $conn = Open-Connection
@@ -54,7 +112,19 @@ function Get-DriftSnapshot {
         $probe = $conn.CreateCommand()
         $probe.CommandText = $identityProbeSql
         $hasIdentity = [int]$probe.ExecuteScalar() -eq 1
+        $probe.CommandText = $lastWarningProbeSql
+        $hasLastWarning = [int]$probe.ExecuteScalar() -eq 1
+        $probe.CommandText = $workerStateProbeSql
+        $hasWorkerInstanceStates = [int]$probe.ExecuteScalar() -eq 1
+
         $identityWarning = if ($hasIdentity) { "state.IdentityCheckStatus IN (N'ManualActionRequired', N'WaitingForPortalAdminApproval')" } else { '1 = 0' }
+        # R12-F5. The HostAgent writes non-blocking deployment warnings (an OmpAuth
+        # configuration set that disagrees across apps is the documented case) to
+        # LastWarning. The Portal shows them; no script read them, so an inconsistent
+        # artifact set was invisible to a scripted deploy and to the gate it exits on.
+        # It joins the Warning bucket, which the identity warning already used -- a
+        # warning that cannot fail the gate is a warning nobody acts on.
+        $lastWarningColumn = if ($hasLastWarning) { 'state.LastWarning' } else { 'CAST(NULL AS nvarchar(4000))' }
         $hostFilter = if ($HostKey) { "AND h.HostKey = N'$($HostKey.Replace("'", "''"))'" } else { '' }
 
         $summarySql = @"
@@ -99,6 +169,7 @@ ResolvedApps AS
            appInstance.AppInstanceId, appInstance.ArtifactId AS MaterializedArtifactId,
            state.ArtifactId AS RuntimeArtifactId, state.DeploymentState,
            state.LastCheckedUtc, state.LastAppliedUtc, state.LastError,
+           $lastWarningColumn AS LastWarning,
            desiredArtifactState.ProvisioningState AS DesiredProvisioningState,
            CAST(CASE WHEN $identityWarning THEN 1 ELSE 0 END AS bit) AS HasIdentityWarning
     FROM DesiredTemplateApps desired
@@ -114,23 +185,49 @@ ResolvedApps AS
     LEFT JOIN omp.HostArtifactStates desiredArtifactState
         ON desiredArtifactState.HostId = desired.HostId AND desiredArtifactState.ArtifactId = desired.DesiredArtifactId
 ),
+-- R12-F6/INV3. This used to be four independent SUM(CASE) buckets, which neither
+-- partitioned nor covered the desired set: DeploymentState = 1 (Deploying) with a
+-- matching artifact fell into no bucket at all and was counted as healthy, and
+-- $converged was derived from the ABSENCE of problems instead of from the presence
+-- of agreement. Verified against the live database by running the old CTE verbatim
+-- (21/21) and again with DeploymentState injected as 1 for one app: DesiredApps 21,
+-- InSync 20, Pending 0, Failed 0, Warnings 0 -- and "Converged: True".
+-- One CASE now assigns exactly one rank to every row, the ELSE catches whatever the
+-- named ranks do not, and convergence is DesiredApps == InSync (see below). The
+-- ladder is identical to Get-OmpAppDeploymentDetail.ps1's Classified CTE by design:
+-- the two scripts must classify the same row the same way.
+Classified AS
+(
+    SELECT HostId, LastCheckedUtc, LastAppliedUtc,
+           CASE
+               WHEN DeploymentState = 3 OR LastError IS NOT NULL OR DesiredProvisioningState = 3 THEN 0
+               WHEN DeploymentState = 4 OR HasIdentityWarning = 1 OR DesiredProvisioningState = 4
+                    OR LastWarning IS NOT NULL THEN 1
+               WHEN AppInstanceId IS NULL
+                    OR (DesiredPackageType IN (N'web-app', N'service-app') AND RuntimeArtifactId IS NULL)
+                    OR DeploymentState = 0
+                    OR ISNULL(RuntimeArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN 2
+               WHEN DeploymentState = 2 AND LastError IS NULL THEN 3
+               ELSE 4
+           END AS Rank
+    FROM ResolvedApps
+),
 Aggregated AS
 (
     SELECT HostId,
            COUNT(1) AS DesiredAppCount,
-           SUM(CASE WHEN AppInstanceId IS NOT NULL AND DeploymentState = 2
-                         AND ISNULL(RuntimeArtifactId, -1) = ISNULL(DesiredArtifactId, -1)
-                         AND LastError IS NULL AND ISNULL(DesiredProvisioningState, 2) NOT IN (3, 4)
-                         AND HasIdentityWarning = 0 THEN 1 ELSE 0 END) AS InSyncAppCount,
-           SUM(CASE WHEN AppInstanceId IS NULL
-                         OR (DesiredPackageType IN (N'web-app', N'service-app') AND RuntimeArtifactId IS NULL)
-                         OR DeploymentState = 0
-                         OR ISNULL(RuntimeArtifactId, -1) <> ISNULL(DesiredArtifactId, -1) THEN 1 ELSE 0 END) AS PendingAppCount,
-           SUM(CASE WHEN DeploymentState = 3 OR LastError IS NOT NULL OR DesiredProvisioningState = 3 THEN 1 ELSE 0 END) AS FailedAppCount,
-           SUM(CASE WHEN DeploymentState = 4 OR HasIdentityWarning = 1 OR DesiredProvisioningState = 4 THEN 1 ELSE 0 END) AS WarningAppCount,
+           SUM(CASE WHEN Rank = 3 THEN 1 ELSE 0 END) AS InSyncAppCount,
+           SUM(CASE WHEN Rank = 2 THEN 1 ELSE 0 END) AS PendingAppCount,
+           SUM(CASE WHEN Rank = 0 THEN 1 ELSE 0 END) AS FailedAppCount,
+           SUM(CASE WHEN Rank = 1 THEN 1 ELSE 0 END) AS WarningAppCount,
+           SUM(CASE WHEN Rank = 4 THEN 1 ELSE 0 END) AS UnclassifiedAppCount,
            MAX(LastCheckedUtc) AS LastCheckedUtc,
+           -- The OLDEST check is the one that decides freshness. MAX would let a
+           -- single app the agent still visits vouch for every app it has stopped
+           -- visiting -- the same masking that made a live channel hide dead ones.
+           MIN(LastCheckedUtc) AS OldestLastCheckedUtc,
            MAX(LastAppliedUtc) AS LastAppliedUtc
-    FROM ResolvedApps
+    FROM Classified
     GROUP BY HostId
 )
 SELECT h.HostKey,
@@ -139,12 +236,20 @@ SELECT h.HostKey,
        ISNULL(aggregated.PendingAppCount, 0) AS Pending,
        ISNULL(aggregated.FailedAppCount, 0) AS Failed,
        ISNULL(aggregated.WarningAppCount, 0) AS Warnings,
+       ISNULL(aggregated.UnclassifiedAppCount, 0) AS Unclassified,
        aggregated.LastCheckedUtc,
+       DATEDIFF(second, aggregated.OldestLastCheckedUtc, SYSUTCDATETIME()) AS OldestAppStateAgeSeconds,
        desiredArtifact.Version AS HostAgentDesired,
        runtimeState.Version AS HostAgentCurrent,
        runtimeState.LastSeenUtc AS HostAgentLastSeenUtc,
+       DATEDIFF(second, runtimeState.LastSeenUtc, SYSUTCDATETIME()) AS HostAgentAgeSeconds,
        CAST(CASE WHEN desiredArtifact.Version IS NOT NULL
-                      AND ISNULL(runtimeState.Version, N'') <> desiredArtifact.Version THEN 1 ELSE 0 END AS bit) AS HostAgentUpgradePending
+                      AND ISNULL(runtimeState.Version, N'') <> desiredArtifact.Version THEN 1 ELSE 0 END AS bit) AS HostAgentUpgradePending,
+       -- R12-F3. HostAgentUpgradePending is 0 when there is no desired HostAgent
+       -- artifact at all, so a host nobody had assigned an agent version to passed
+       -- the gate as healthy. "No desired version" is not agreement, it is an
+       -- unanswered question, and it gets its own column so the note can say so.
+       CAST(CASE WHEN desiredArtifact.Version IS NULL THEN 1 ELSE 0 END AS bit) AS HostAgentDesiredMissing
 FROM omp.Hosts h
 LEFT JOIN Aggregated aggregated ON aggregated.HostId = h.HostId
 LEFT JOIN omp.HostAgentDesiredStates desiredState ON desiredState.HostId = h.HostId
@@ -162,9 +267,16 @@ WHERE h.IsEnabled = 1 $hostFilter
 ORDER BY h.HostKey;
 "@
 
-        # Artifact provisioning state for every desired artifact on each host —
-        # this is what covers worker/channel-type packages that the app summary
-        # (web-app/service-app only) does not see.
+        # Artifact provisioning state for every ENABLED REQUIREMENT ROW on each host.
+        #
+        # R12-F8: the comment here used to claim this covered worker and channel-type
+        # packages. Measured, it does not: omp.HostArtifactRequirements on LINUS-LAPTOP
+        # holds 7 channel-type rows and 1 service-app row and NO worker or worker-host
+        # row at all, because a worker's artifact is provisioned on demand through the
+        # HostAgent EnsureArtifact RPC rather than declared as a requirement. So this
+        # query covers exactly what a module declared as a host requirement -- mostly
+        # channel-type packages -- and nothing else. Worker and worker-host packages are
+        # covered by the worker query below instead, which is where their truth lives.
         #
         # Driven FROM the requirements, not from the states. The query used to start at
         # omp.HostArtifactStates, which only has a row once the HostAgent has reported on
@@ -191,22 +303,186 @@ WHERE h.IsEnabled = 1 $hostFilter
 ORDER BY h.HostKey, a.PackageType, a.TargetName, a.Version;
 "@
 
+        # R12-D1. Per-instance state, not the app-instance summary. PublishObservationAsync
+        # writes omp.AppInstanceRuntimeStates keyed on AppInstanceId alone while the
+        # per-instance truth goes to omp.WorkerInstanceRuntimeStates -- measured on
+        # LINUS-LAPTOP: 7 rows in the per-instance table against 2 in the summary one, for
+        # 6 worker instances under ibs_packager_worker. Reading the summary meant one
+        # worker stuck in Failed(5) was invisible for as long as any sibling reported
+        # Running. The summary is now a real aggregation (worst state wins) as well, but
+        # the gate reads the per-instance rows because that is where the siblings are.
+        $workerRuntimeJoin = if ($hasWorkerInstanceStates) {
+            'LEFT JOIN omp.WorkerInstanceRuntimeStates wrs ON wrs.WorkerInstanceId = wi.WorkerInstanceId'
+        } else {
+            'LEFT JOIN omp.AppInstanceRuntimeStates wrs ON wrs.AppInstanceId = wi.AppInstanceId'
+        }
+
+        # R12-F2 + R12-F7 + R12-F11/D10/D11. The old worker query INNER JOINed
+        # omp.AppWorkerDefinitions, compared no artifact and no version, ignored -HostKey
+        # entirely and never checked h.IsEnabled -- and omp_workerprocesshost (worker-host)
+        # has no AppWorkerDefinitions row, so it was covered by nothing at all. Measured
+        # before the change: 16 web-app + 5 service-app instances were visible to the
+        # scripts, 2 worker + 1 worker-host were not -- 3 of 24 desired app instances that
+        # no check could see, one of them the IbsPackager worker.
+        #
+        # Placement is resolved the same way OmpWorkerRuntimeRepository resolves it:
+        # a direct HostId pin, an active HostDeploymentAssignment for the target host
+        # template, or no placement at all (which means every enabled host).
         $workerSql = @"
-SELECT i.InstanceKey, mi.ModuleInstanceKey, a.AppKey, ai.AppInstanceKey,
-       ISNULL(h.HostKey, ht.TemplateKey) AS Placement,
-       ai.DesiredState, ISNULL(rs.ObservedState, 0) AS ObservedState,
-       rs.LastSeenUtc, rs.LastExitCode, rs.StatusMessage
-FROM omp.AppInstances ai
-INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
-INNER JOIN omp.Instances i ON i.InstanceId = mi.InstanceId
-INNER JOIN omp.Apps a ON a.AppId = ai.AppId
-INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
-LEFT JOIN omp.Hosts h ON h.HostId = ai.HostId
-LEFT JOIN omp.HostTemplates ht ON ht.HostTemplateId = ai.TargetHostTemplateId
-LEFT JOIN omp.AppInstanceRuntimeStates rs ON rs.AppInstanceId = ai.AppInstanceId
-WHERE ai.IsEnabled = 1 AND ai.IsAllowed = 1 AND ai.DesiredState = 1
-  AND ISNULL(rs.ObservedState, 0) <> 2
-ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.AppInstanceKey;
+WITH EnabledHosts AS
+(
+    SELECT h.HostId, h.HostKey
+    FROM omp.Hosts h
+    WHERE h.IsEnabled = 1 $hostFilter
+),
+HostRoles AS
+(
+    SELECT eh.HostId, eh.HostKey, hda.HostTemplateId
+    FROM EnabledHosts eh
+    INNER JOIN omp.HostDeploymentAssignments hda
+        ON hda.HostId = eh.HostId AND hda.IsActive = 1
+),
+DesiredWorkerApps AS
+(
+    SELECT eh.HostId, eh.HostKey, app.AppKey, ai.AppInstanceId, ai.AppInstanceKey,
+           art.ArtifactId AS DesiredArtifactId, art.PackageType, art.Version AS DesiredVersion,
+           art.CreatedUtc AS DesiredArtifactCreatedUtc
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Apps app ON app.AppId = ai.AppId AND app.IsEnabled = 1
+    INNER JOIN omp.Artifacts art
+        ON art.ArtifactId = ai.ArtifactId AND art.IsEnabled = 1
+       AND art.PackageType IN (N'worker', N'worker-host')
+    INNER JOIN EnabledHosts eh ON eh.HostId = ai.HostId
+    WHERE ai.IsEnabled = 1 AND ai.IsAllowed = 1 AND ai.DesiredState = 1
+
+    UNION
+
+    SELECT hr.HostId, hr.HostKey, app.AppKey, ai.AppInstanceId, ai.AppInstanceKey,
+           art.ArtifactId, art.PackageType, art.Version, art.CreatedUtc
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Apps app ON app.AppId = ai.AppId AND app.IsEnabled = 1
+    INNER JOIN omp.Artifacts art
+        ON art.ArtifactId = ai.ArtifactId AND art.IsEnabled = 1
+       AND art.PackageType IN (N'worker', N'worker-host')
+    INNER JOIN HostRoles hr ON hr.HostTemplateId = ai.TargetHostTemplateId
+    WHERE ai.HostId IS NULL AND ai.IsEnabled = 1 AND ai.IsAllowed = 1 AND ai.DesiredState = 1
+
+    UNION
+
+    SELECT eh.HostId, eh.HostKey, app.AppKey, ai.AppInstanceId, ai.AppInstanceKey,
+           art.ArtifactId, art.PackageType, art.Version, art.CreatedUtc
+    FROM omp.AppInstances ai
+    INNER JOIN omp.Apps app ON app.AppId = ai.AppId AND app.IsEnabled = 1
+    INNER JOIN omp.Artifacts art
+        ON art.ArtifactId = ai.ArtifactId AND art.IsEnabled = 1
+       AND art.PackageType IN (N'worker', N'worker-host')
+    CROSS JOIN EnabledHosts eh
+    WHERE ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL
+      AND ai.IsEnabled = 1 AND ai.IsAllowed = 1 AND ai.DesiredState = 1
+),
+DesiredArtifactOnHost AS
+(
+    SELECT d.HostId, d.DesiredArtifactId,
+           has.ProvisioningState, has.LastError AS ArtifactLastError
+    FROM (SELECT DISTINCT HostId, DesiredArtifactId FROM DesiredWorkerApps) d
+    LEFT JOIN omp.HostArtifactStates has
+        ON has.HostId = d.HostId AND has.ArtifactId = d.DesiredArtifactId
+),
+WorkerInstanceRows AS
+(
+    SELECT d.HostId, d.HostKey, d.PackageType, d.AppKey, d.AppInstanceKey,
+           wi.WorkerInstanceKey, d.DesiredArtifactId, d.DesiredVersion, d.DesiredArtifactCreatedUtc,
+           wrs.ObservedState, wrs.LastSeenUtc, wrs.StartedUtc, wrs.LastExitCode, wrs.StatusMessage
+    FROM DesiredWorkerApps d
+    INNER JOIN omp.WorkerInstances wi
+        ON wi.AppInstanceId = d.AppInstanceId
+       AND wi.IsEnabled = 1 AND wi.IsAllowed = 1 AND wi.DesiredState = 1
+    $workerRuntimeJoin
+    WHERE d.PackageType = N'worker'
+),
+-- A worker-host package is not a process of its own: it is the executable every
+-- worker process on the host runs. Its running-build evidence is therefore the
+-- oldest worker start on that host.
+HostWorkerStarts AS
+(
+    SELECT HostId,
+           MIN(StartedUtc) AS OldestWorkerStartUtc,
+           COUNT(1) AS RunningWorkerCount
+    FROM WorkerInstanceRows
+    WHERE ObservedState = 2
+    GROUP BY HostId
+),
+AllRows AS
+(
+    SELECT w.HostKey, w.PackageType, w.AppKey, w.AppInstanceKey, w.WorkerInstanceKey,
+           w.DesiredVersion,
+           CAST(a.ProvisioningState AS int) AS ProvisioningState,
+           CAST(w.ObservedState AS int) AS ObservedState,
+           DATEDIFF(second, w.LastSeenUtc, SYSUTCDATETIME()) AS StateAgeSeconds,
+           w.StartedUtc, w.LastExitCode, w.StatusMessage,
+           CASE
+               WHEN a.ProvisioningState IS NULL
+                   THEN N'Desired artifact has no HostAgent provisioning report on this host.'
+               WHEN a.ProvisioningState <> 2 OR a.ArtifactLastError IS NOT NULL
+                   THEN N'Desired artifact is not provisioned on this host (state '
+                        + CAST(CAST(a.ProvisioningState AS int) AS nvarchar(10)) + N').'
+               WHEN w.ObservedState IS NULL
+                   THEN N'No runtime state has ever been reported for this worker instance.'
+               WHEN w.ObservedState <> 2
+                   THEN N'Worker is not running (observed state ' + CAST(CAST(w.ObservedState AS int) AS nvarchar(10)) + N').'
+               WHEN w.LastSeenUtc IS NULL
+                    OR DATEDIFF(second, w.LastSeenUtc, SYSUTCDATETIME()) > $MaxStateAgeSeconds
+                   THEN N'Worker state is stale; nothing has refreshed it within $MaxStateAgeSeconds s.'
+               WHEN w.StartedUtc IS NULL
+                   THEN N'Worker start time is unknown, so the running build cannot be established.'
+               WHEN w.StartedUtc < w.DesiredArtifactCreatedUtc
+                   THEN N'Worker started before its desired artifact existed, so it is running an older build.'
+               ELSE NULL
+           END AS Issue
+    FROM WorkerInstanceRows w
+    INNER JOIN DesiredArtifactOnHost a
+        ON a.HostId = w.HostId AND a.DesiredArtifactId = w.DesiredArtifactId
+
+    UNION ALL
+
+    SELECT d.HostKey, d.PackageType, d.AppKey, d.AppInstanceKey, NULL,
+           d.DesiredVersion,
+           CAST(a.ProvisioningState AS int),
+           NULL,
+           NULL,
+           s.OldestWorkerStartUtc,
+           NULL,
+           CASE WHEN ISNULL(s.RunningWorkerCount, 0) = 0
+                THEN N'no worker process running on this host'
+                ELSE CAST(s.RunningWorkerCount AS nvarchar(10)) + N' worker process(es) on this host' END,
+           CASE
+               WHEN a.ProvisioningState IS NULL
+                   THEN N'Desired artifact has no HostAgent provisioning report on this host.'
+               WHEN a.ProvisioningState <> 2 OR a.ArtifactLastError IS NOT NULL
+                   THEN N'Desired artifact is not provisioned on this host (state '
+                        + CAST(CAST(a.ProvisioningState AS int) AS nvarchar(10)) + N').'
+               WHEN ISNULL(s.RunningWorkerCount, 0) = 0
+                   THEN NULL
+               WHEN s.OldestWorkerStartUtc IS NULL
+                   THEN N'Worker start times are unknown, so the running worker host build cannot be established.'
+               WHEN s.OldestWorkerStartUtc < d.DesiredArtifactCreatedUtc
+                   THEN N'A worker process started before this worker host build existed, so it is running an older one.'
+               ELSE NULL
+           END AS Issue
+    FROM DesiredWorkerApps d
+    INNER JOIN DesiredArtifactOnHost a
+        ON a.HostId = d.HostId AND a.DesiredArtifactId = d.DesiredArtifactId
+    LEFT JOIN HostWorkerStarts s ON s.HostId = d.HostId
+    WHERE d.PackageType = N'worker-host'
+       OR NOT EXISTS (SELECT 1 FROM omp.WorkerInstances wi
+                      WHERE wi.AppInstanceId = d.AppInstanceId
+                        AND wi.IsEnabled = 1 AND wi.IsAllowed = 1 AND wi.DesiredState = 1)
+)
+SELECT HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion,
+       ProvisioningState, ObservedState, StateAgeSeconds, StartedUtc, LastExitCode,
+       StatusMessage, Issue
+FROM AllRows
+ORDER BY CASE WHEN Issue IS NULL THEN 1 ELSE 0 END, HostKey, PackageType, AppKey, WorkerInstanceKey;
 "@
 
         $summary = Invoke-Query $conn $summarySql
@@ -222,23 +498,74 @@ ORDER BY i.InstanceKey, mi.ModuleInstanceKey, ai.AppInstanceKey;
         if ($summary.Rows.Count -eq 0) {
             $notes += 'No enabled host matched the query; nothing was checked, so convergence is unknown.'
         }
+        if (-not $hasWorkerInstanceStates) {
+            $notes += 'This database predates omp.WorkerInstanceRuntimeStates; worker siblings share one state row, so a single failed worker can be masked by a healthy one.'
+        }
 
         foreach ($row in $summary.Rows) {
-            if ([int]$row.Pending -gt 0 -or [int]$row.Failed -gt 0 -or [int]$row.Warnings -gt 0 -or [bool]$row.HostAgentUpgradePending) {
+            $rowHostKey = [string]$row.HostKey
+            $desiredApps = [int]$row.DesiredApps
+            $inSyncApps = [int]$row.InSync
+
+            # R12-F6/INV3. The whole gate hangs on this one comparison. Every desired app
+            # must have reached InSync; anything else -- a named problem bucket or a state
+            # no bucket names -- is a difference, and a difference is not convergence.
+            if ($desiredApps -ne $inSyncApps) {
                 $converged = $false
+                $notes += ("{0}: {1} of {2} desired apps are in sync (pending {3}, failed {4}, warnings {5}, unclassified {6})." -f `
+                    $rowHostKey, $inSyncApps, $desiredApps, [int]$row.Pending, [int]$row.Failed, [int]$row.Warnings, [int]$row.Unclassified)
+            }
+
+            if ([bool]$row.HostAgentUpgradePending) {
+                $converged = $false
+                $notes += ("{0}: HostAgent runs {1} but {2} is desired." -f $rowHostKey, $row.HostAgentCurrent, $row.HostAgentDesired)
+            }
+
+            if ([bool]$row.HostAgentDesiredMissing) {
+                $converged = $false
+                $notes += ("{0}: no desired HostAgent artifact is assigned, so the agent version cannot be verified." -f $rowHostKey)
+            }
+
+            # R12-F3. Without this the gate answered "converged" the instant a dead
+            # HostAgent stopped importing: nothing changed, every app still matched the
+            # OLD desired artifact, and -Wait returned 0 immediately while the package sat
+            # untouched in ArtifactImports.
+            if (-not (Test-StateAgeIsFresh $row.HostAgentAgeSeconds $MaxStateAgeSeconds)) {
+                $converged = $false
+                $notes += ("{0}: HostAgent last reported {1}, older than the {2} s freshness limit -- the deployment state below may describe a host that stopped working." -f `
+                    $rowHostKey, (Format-AgeSeconds $row.HostAgentAgeSeconds), $MaxStateAgeSeconds)
+            }
+
+            if ($desiredApps -gt 0 -and -not (Test-StateAgeIsFresh $row.OldestAppStateAgeSeconds $MaxStateAgeSeconds)) {
+                $converged = $false
+                $notes += ("{0}: the oldest app deployment state was checked {1}, older than the {2} s freshness limit." -f `
+                    $rowHostKey, (Format-AgeSeconds $row.OldestAppStateAgeSeconds), $MaxStateAgeSeconds)
             }
         }
-        if ($artifacts.Rows.Count -gt 0 -or $workers.Rows.Count -gt 0) {
+
+        $workerIssueRows = @($workers | Where-Object { $_.Issue -isnot [System.DBNull] -and $_.Issue })
+        if ($artifacts.Rows.Count -gt 0 -or $workerIssueRows.Count -gt 0) {
             $converged = $false
+        }
+        foreach ($workerIssue in $workerIssueRows) {
+            $notes += ("{0}: {1} {2}/{3} -- {4}" -f `
+                $workerIssue.HostKey, $workerIssue.PackageType, $workerIssue.AppKey,
+                $(if ($workerIssue.WorkerInstanceKey -is [System.DBNull]) { '(app instance)' } else { $workerIssue.WorkerInstanceKey }),
+                $workerIssue.Issue)
         }
 
         return [pscustomobject]@{
             CheckedUtc = (Get-Date).ToUniversalTime().ToString('s') + 'Z'
             Converged  = $converged
+            MaxStateAgeSeconds = $MaxStateAgeSeconds
             Notes      = $notes
-            Hosts      = @($summary | Select-Object HostKey, DesiredApps, InSync, Pending, Failed, Warnings, HostAgentDesired, HostAgentCurrent, HostAgentUpgradePending, HostAgentLastSeenUtc)
+            Hosts      = @($summary | Select-Object HostKey, DesiredApps, InSync, Pending, Failed, Warnings, Unclassified, HostAgentDesired, HostAgentCurrent, HostAgentUpgradePending, HostAgentDesiredMissing, HostAgentLastSeenUtc, HostAgentAgeSeconds, OldestAppStateAgeSeconds)
             ArtifactIssues = @($artifacts | Select-Object HostKey, PackageType, TargetName, Version, ProvisioningState, LastError, UpdatedUtc)
-            WorkerIssues   = @($workers | Select-Object InstanceKey, ModuleInstanceKey, AppKey, AppInstanceKey, Placement, ObservedState, LastSeenUtc, LastExitCode, StatusMessage)
+            # Every desired worker and worker-host row, healthy ones included: a
+            # component nobody can see must not be able to pass for healthy by being
+            # absent from the output (R12-F2).
+            Workers    = @($workers | Select-Object HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion, ProvisioningState, ObservedState, StateAgeSeconds, StartedUtc, LastExitCode, StatusMessage, Issue)
+            WorkerIssues = @($workerIssueRows | Select-Object HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion, ProvisioningState, ObservedState, StateAgeSeconds, StatusMessage, Issue)
         }
     }
     finally {
@@ -253,19 +580,19 @@ function Write-Snapshot {
         return
     }
 
-    Write-Host ("Converged: {0}   ({1})" -f $Snapshot.Converged, $Snapshot.CheckedUtc)
+    Write-Host ("Converged: {0}   ({1}, state freshness limit {2} s)" -f $Snapshot.Converged, $Snapshot.CheckedUtc, $Snapshot.MaxStateAgeSeconds)
     foreach ($note in $Snapshot.Notes) {
         Write-Warning $note
     }
     Write-Host ''
-    $Snapshot.Hosts | Format-Table HostKey, DesiredApps, InSync, Pending, Failed, Warnings, HostAgentDesired, HostAgentCurrent, HostAgentUpgradePending -AutoSize | Out-String | Write-Host
+    $Snapshot.Hosts | Format-Table HostKey, DesiredApps, InSync, Pending, Failed, Warnings, Unclassified, HostAgentDesired, HostAgentCurrent, HostAgentUpgradePending, HostAgentAgeSeconds, OldestAppStateAgeSeconds -AutoSize | Out-String -Width 240 | Write-Host
     if ($Snapshot.ArtifactIssues.Count -gt 0) {
         Write-Host 'Artifact provisioning issues (state<>2 or error):'
-        $Snapshot.ArtifactIssues | Format-Table HostKey, PackageType, TargetName, Version, ProvisioningState, LastError -AutoSize | Out-String | Write-Host
+        $Snapshot.ArtifactIssues | Format-Table HostKey, PackageType, TargetName, Version, ProvisioningState, LastError -AutoSize | Out-String -Width 240 | Write-Host
     }
-    if ($Snapshot.WorkerIssues.Count -gt 0) {
-        Write-Host 'Workers not running (desired=run, observed<>Running):'
-        $Snapshot.WorkerIssues | Format-Table ModuleInstanceKey, AppKey, AppInstanceKey, Placement, ObservedState, LastSeenUtc, StatusMessage -AutoSize | Out-String | Write-Host
+    if ($Snapshot.Workers.Count -gt 0) {
+        Write-Host 'Workers and worker hosts (desired version vs running build):'
+        $Snapshot.Workers | Format-Table HostKey, PackageType, AppKey, WorkerInstanceKey, DesiredVersion, ObservedState, StateAgeSeconds, StartedUtc, Issue -AutoSize | Out-String -Width 240 | Write-Host
     }
 }
 
@@ -290,10 +617,13 @@ while ($true) {
     }
 
     if (-not $Json) {
-        $pending = ($snapshot.Hosts | Measure-Object -Property Pending -Sum).Sum
+        $outstanding = 0
+        foreach ($hostRow in $snapshot.Hosts) {
+            $outstanding += ([int]$hostRow.DesiredApps - [int]$hostRow.InSync)
+        }
         $artifactCount = $snapshot.ArtifactIssues.Count
         $workerCount = $snapshot.WorkerIssues.Count
-        Write-Host ("Waiting... pending apps: {0}, artifact issues: {1}, workers not running: {2}" -f $pending, $artifactCount, $workerCount)
+        Write-Host ("Waiting... apps not in sync: {0}, artifact issues: {1}, worker issues: {2}" -f $outstanding, $artifactCount, $workerCount)
     }
     Start-Sleep -Seconds $PollSeconds
 }

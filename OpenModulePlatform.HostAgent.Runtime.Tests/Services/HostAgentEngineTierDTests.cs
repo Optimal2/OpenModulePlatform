@@ -263,6 +263,84 @@ public sealed class HostAgentEngineTierDTests
         Assert.True(repository.RenewLeaseCallCount >= 2, $"Expected at least 2 renewal calls, got {repository.RenewLeaseCallCount}.");
     }
 
+    /// <summary>
+    /// A failing artifact import must not end the cycle, and must not go quiet either.
+    /// </summary>
+    /// <remarks>
+    /// R12-F4. ImportPendingAsync is called before every deployment step, and its own
+    /// top-level guards -- the reparse-point checks on the import, processed and failed
+    /// roots -- throw before its per-file try/catch is reached. A junction on any of those
+    /// three folders, which needs no privilege to create, therefore ended the cycle at the
+    /// same line every RefreshSeconds and nothing on the host ever deployed again. The
+    /// exception type below is deliberately one no import filter lists.
+    /// </remarks>
+    [Fact]
+    public async Task RunImportStepIsolatedAsync_WhenImportThrows_DoesNotPropagateAndPublishesTheReason()
+    {
+        var repository = new FakeOmpHostArtifactRepository();
+        var engine = CreateEngine(repository);
+        var hostId = Guid.NewGuid();
+
+        await engine.RunImportStepIsolatedAsync(
+            hostId,
+            _ => throw new NotSupportedException("import root is a reparse point"),
+            CancellationToken.None);
+
+        var published = Assert.Single(repository.PublishedRuntimeStatusMessages);
+        Assert.Contains("Artifact import failed", published, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("import root is a reparse point", published, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunImportStepIsolatedAsync_WhenImportRecovers_ClearsThePublishedFailure()
+    {
+        var repository = new FakeOmpHostArtifactRepository();
+        var engine = CreateEngine(repository);
+        var hostId = Guid.NewGuid();
+
+        await engine.RunImportStepIsolatedAsync(
+            hostId,
+            _ => throw new NotSupportedException("boom"),
+            CancellationToken.None);
+        await engine.RunImportStepIsolatedAsync(hostId, _ => Task.CompletedTask, CancellationToken.None);
+
+        Assert.Equal(2, repository.PublishedRuntimeStatusMessages.Count);
+        Assert.Contains("recovered", repository.PublishedRuntimeStatusMessages[^1], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RunImportStepIsolatedAsync_WhenSuccessful_PublishesNothing()
+    {
+        var repository = new FakeOmpHostArtifactRepository();
+        var engine = CreateEngine(repository);
+
+        await engine.RunImportStepIsolatedAsync(Guid.NewGuid(), _ => Task.CompletedTask, CancellationToken.None);
+
+        Assert.Empty(repository.PublishedRuntimeStatusMessages);
+    }
+
+    /// <summary>
+    /// Cancellation is the lease being lost or the service stopping, not an import failure,
+    /// and it must still reach the cycle's own handler (metod section 4.5: name what the
+    /// guard has to let through, and test that path).
+    /// </summary>
+    [Fact]
+    public async Task RunImportStepIsolatedAsync_WhenCancelled_PropagatesAndPublishesNothing()
+    {
+        var repository = new FakeOmpHostArtifactRepository();
+        var engine = CreateEngine(repository);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => engine.RunImportStepIsolatedAsync(
+                Guid.NewGuid(),
+                ct => Task.FromCanceled(ct),
+                cts.Token));
+
+        Assert.Empty(repository.PublishedRuntimeStatusMessages);
+    }
+
     private sealed class TestDbException : DbException
     {
         public TestDbException(string message)

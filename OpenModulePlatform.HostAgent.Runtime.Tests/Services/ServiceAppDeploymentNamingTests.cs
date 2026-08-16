@@ -135,10 +135,12 @@ public sealed class ServiceAppDeploymentNamingTests
             resolved,
             []);
 
-        Assert.True(result.ShouldCleanUp);
+        Assert.True(result.ShouldRemoveOldService);
+        Assert.True(result.ShouldDeleteOldDirectory);
         Assert.Equal("backend", result.OldServiceName);
         Assert.Equal("E:\\OMP\\Services\\backend", result.OldTargetPath);
-        Assert.Null(result.Reason);
+        Assert.Null(result.ServiceSkipReason);
+        Assert.Null(result.DirectorySkipReason);
     }
 
     /// <summary>
@@ -169,20 +171,25 @@ public sealed class ServiceAppDeploymentNamingTests
             new Dictionary<Guid, string>(),
             [new HostRuntimeFootprint(Guid.NewGuid(), "backend", @"E:\OMP\Services\backend")]);
 
-        Assert.False(result.ShouldCleanUp);
-        Assert.Contains("backend", result.Reason!, StringComparison.OrdinalIgnoreCase);
+        // A NAME collision withholds both permissions: that service belongs to somebody
+        // else, so removing it would take a live installation down with it (R12-A1).
+        Assert.False(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
+        Assert.Contains("backend", result.ServiceSkipReason!, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
-    /// A folder another app instance lives in is never deleted, whatever it is called.
+    /// A folder another app instance lives in is never deleted, whatever it is called --
+    /// but the stale service registration still goes.
     /// </summary>
     /// <remarks>
     /// The footprint below carries a different runtime name, so every name-based check
-    /// passes. Only comparing the resolved paths stops this one -- which is the whole
-    /// point of the finding: cleanup compared names and deleted directories.
+    /// passes. Only comparing the resolved paths stops the delete -- which is the whole
+    /// point of R7-D4: cleanup compared names and deleted directories. It is not a reason
+    /// to keep the old Windows service, and treating it as one was R12-A1.
     /// </remarks>
     [Fact]
-    public void EvaluateRenameCleanup_Skips_WhenTheOldPathIsAnotherInstancesLiveDirectory()
+    public void EvaluateRenameCleanup_KeepsDirectoryButRemovesService_WhenTheOldPathIsAnotherInstancesLiveDirectory()
     {
         var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
         var deployment = CreateDeployment(
@@ -199,13 +206,27 @@ public sealed class ServiceAppDeploymentNamingTests
             new Dictionary<Guid, string>(),
             [new HostRuntimeFootprint(Guid.NewGuid(), "SomethingElse", @"E:\OMP\Services\backend")]);
 
-        Assert.False(result.ShouldCleanUp);
-        Assert.Contains(@"E:\OMP\Services\backend", result.Reason!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
+        Assert.Null(result.ServiceSkipReason);
+        Assert.Contains(@"E:\OMP\Services\backend", result.DirectorySkipReason!, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>A rename that keeps the same folder deletes nothing.</summary>
+    /// <summary>
+    /// A rename that keeps the same folder deletes no files -- and must still remove the
+    /// old service.
+    /// </summary>
+    /// <remarks>
+    /// This is the case R12-A1 was reported against. Renaming only InstallationName leaves
+    /// old and new resolving to one directory; R7-D read that as "nothing to clean up" and
+    /// skipped DeleteService along with the directory delete, so the previous Windows
+    /// service stayed registered, auto-starting, and pointed at the very binaries the new
+    /// service was about to run -- two services against one inbox. The assertion that
+    /// matters here is ShouldRemoveOldService; the earlier version of this test asserted
+    /// the combined flag and so codified the regression.
+    /// </remarks>
     [Fact]
-    public void EvaluateRenameCleanup_Skips_WhenOnlyTheServiceNameChanged()
+    public void EvaluateRenameCleanup_RemovesServiceButKeepsDirectory_WhenOnlyTheServiceNameChanged()
     {
         var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
         var deployment = CreateDeployment(
@@ -223,8 +244,11 @@ public sealed class ServiceAppDeploymentNamingTests
             new Dictionary<Guid, string>(),
             []);
 
-        Assert.False(result.ShouldCleanUp);
-        Assert.Contains("target path", result.Reason!, StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
+        Assert.Equal("backend", result.OldServiceName);
+        Assert.Null(result.ServiceSkipReason);
+        Assert.Contains("target path", result.DirectorySkipReason!, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>The executable name is carried out of evaluation for the caller to verify.</summary>
@@ -251,7 +275,35 @@ public sealed class ServiceAppDeploymentNamingTests
             new Dictionary<Guid, string>(),
             []);
 
-        Assert.True(result.ShouldCleanUp);
+        Assert.True(result.ShouldRemoveOldService);
+        Assert.True(result.ShouldDeleteOldDirectory);
+        Assert.Equal("iKrock2.Backend.exe", result.ExpectedExecutableFileName);
+    }
+
+    /// <summary>
+    /// The executable name is carried out even when only the service may be removed, so the
+    /// caller's directory-ownership objection still has something to compare against.
+    /// </summary>
+    [Fact]
+    public void EvaluateRenameCleanup_CarriesTheExpectedExecutableFileName_WhenOnlyTheServiceMayBeRemoved()
+    {
+        var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
+        var deployment = CreateDeployment(
+            appInstanceId: Guid.NewGuid(),
+            installPath: @"E:\OMP\Services\shared-folder",
+            installationName: "OMP.iKrock2.Backend",
+            deployedRuntimeName: "backend");
+
+        var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
+            settings,
+            deployment,
+            "iKrock2.Backend.exe",
+            "OMP.iKrock2.Backend",
+            @"E:\OMP\Services\shared-folder",
+            new Dictionary<Guid, string>(),
+            []);
+
+        Assert.True(result.ShouldRemoveOldService);
         Assert.Equal("iKrock2.Backend.exe", result.ExpectedExecutableFileName);
     }
 
@@ -276,8 +328,9 @@ public sealed class ServiceAppDeploymentNamingTests
             resolved,
             []);
 
-        Assert.False(result.ShouldCleanUp);
-        Assert.NotNull(result.Reason);
+        Assert.False(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
+        Assert.NotNull(result.ServiceSkipReason);
     }
 
     [Fact]
@@ -302,9 +355,10 @@ public sealed class ServiceAppDeploymentNamingTests
             resolved,
             []);
 
-        Assert.False(result.ShouldCleanUp);
+        Assert.False(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
         Assert.Equal("OMP.iKrock2.Backend", result.OldServiceName);
-        Assert.NotNull(result.Reason);
+        Assert.NotNull(result.ServiceSkipReason);
     }
 
     [Fact]
@@ -332,10 +386,11 @@ public sealed class ServiceAppDeploymentNamingTests
             resolved,
             []);
 
-        Assert.False(result.ShouldCleanUp);
+        Assert.False(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
         Assert.Equal("backend", result.OldServiceName);
-        Assert.NotNull(result.Reason);
-        Assert.Contains("Another active app instance", result.Reason);
+        Assert.NotNull(result.ServiceSkipReason);
+        Assert.Contains("Another active app instance", result.ServiceSkipReason);
     }
 
     [Theory]
@@ -362,10 +417,11 @@ public sealed class ServiceAppDeploymentNamingTests
             resolved,
             []);
 
-        Assert.False(result.ShouldCleanUp);
+        Assert.False(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
         Assert.Equal(hostAgentServiceName, result.OldServiceName);
-        Assert.NotNull(result.Reason);
-        Assert.Contains("HostAgent service name", result.Reason);
+        Assert.NotNull(result.ServiceSkipReason);
+        Assert.Contains("HostAgent service name", result.ServiceSkipReason);
     }
 
     [Fact]
@@ -390,10 +446,11 @@ public sealed class ServiceAppDeploymentNamingTests
             resolved,
             []);
 
-        Assert.False(result.ShouldCleanUp);
+        Assert.False(result.ShouldRemoveOldService);
+        Assert.False(result.ShouldDeleteOldDirectory);
         Assert.Equal("OMP.WorkerManager", result.OldServiceName);
-        Assert.NotNull(result.Reason);
-        Assert.Contains("WorkerManager service name", result.Reason);
+        Assert.NotNull(result.ServiceSkipReason);
+        Assert.Contains("WorkerManager service name", result.ServiceSkipReason);
     }
 
     [Theory]

@@ -41,19 +41,15 @@ public sealed class PortalTopBarService
     private static readonly TimeSpan NavCacheLifetime = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Database round trips made while building the topbar for the current request.
+    /// Scope label the topbar reports under when it is built outside a request.
     /// </summary>
     /// <remarks>
-    /// The service is registered scoped, so one instance serves one request and this field
-    /// is per-request state rather than shared. It is incremented wherever a connection is
-    /// opened, which means the cached lookups only count on a miss -- exactly the number
-    /// that matters.
-    ///
-    /// This exists to answer R4-E10 with a measurement instead of an estimate: the finding
-    /// has been deferred since R4 on an assumption about what the topbar costs, and nobody
-    /// has ever had the figure from a real installation under real use.
+    /// A Blazor circuit has no route pattern and no HttpContext, so the middleware's scope
+    /// resolution cannot apply. One fixed label keeps the key space bounded and keeps the
+    /// interactive path distinguishable from server-rendered pages, which is useful in its
+    /// own right: the two do different amounts of work.
     /// </remarks>
-    private int _dbRoundTrips;
+    private const string BlazorCircuitScope = "blazor-circuit";
 
     private readonly SqlConnectionFactory _db;
     private readonly RbacService _rbac;
@@ -65,6 +61,8 @@ public sealed class PortalTopBarService
     private readonly MessageService _messages;
     private readonly BannerService _banners;
     private readonly IMemoryCache _cache;
+    private readonly Telemetry.OmpPerformanceTelemetry _telemetry;
+    private readonly Telemetry.OmpPerformanceTelemetryOptions _telemetryOptions;
     private readonly ILogger<PortalTopBarService> _log;
 
     public PortalTopBarService(
@@ -78,6 +76,8 @@ public sealed class PortalTopBarService
         MessageService messages,
         BannerService banners,
         IMemoryCache cache,
+        Telemetry.OmpPerformanceTelemetry telemetry,
+        Telemetry.OmpPerformanceTelemetryOptions telemetryOptions,
         ILogger<PortalTopBarService> log)
     {
         _db = db;
@@ -90,8 +90,28 @@ public sealed class PortalTopBarService
         _messages = messages;
         _banners = banners;
         _cache = cache;
+        _telemetry = telemetry;
+        _telemetryOptions = telemetryOptions;
         _log = log;
     }
+
+    /// <summary>
+    /// The parts of a topbar build that differ between the request-bound and the circuit-bound
+    /// caller: how the culture is resolved, how a portal entry becomes a link, and how a
+    /// platform endpoint becomes an absolute href.
+    /// </summary>
+    /// <remarks>
+    /// R12-E4. There used to be two copies of the build, ninety lines each, differing only in
+    /// these three things. They had already drifted: the instrumentation added for R4-E10 sat
+    /// in one of them, so the Blazor path was never measured at all, and any future change
+    /// would have had to be made twice by someone who knew that. Making the differences into
+    /// data leaves exactly one build.
+    /// </remarks>
+    private sealed record TopBarBuildContext(
+        Func<CultureSelectionResult> ResolveCulture,
+        Func<TopBarPortalEntryRow, IReadOnlyDictionary<Guid, TopBarAppEntry>, string?> ResolveHref,
+        Func<string, string> BuildEndpointHref,
+        HttpContext? HttpContext);
 
     public async Task<PortalTopBarModel> CreateAsync(
         WebAppOptions options,
@@ -104,40 +124,118 @@ public sealed class PortalTopBarService
         return await CreateAsync(options, context.Request, user, ct);
     }
 
-    public async Task<PortalTopBarModel> CreateAsync(
+    public Task<PortalTopBarModel> CreateAsync(
         WebAppOptions options,
         HttpRequest request,
         ClaimsPrincipal user,
         CancellationToken ct)
     {
-        // Measured, then handed to the request telemetry middleware through HttpContext.Items.
-        // Reporting through Items rather than calling the telemetry directly keeps this
-        // service unaware of the telemetry: the topbar's job is to build a model, and a
-        // measurement it cannot see is one it cannot get wrong.
+        ArgumentNullException.ThrowIfNull(request);
+
+        return MeasureAsync(
+            options,
+            user,
+            new TopBarBuildContext(
+                () => _cultureSelectionService.Resolve(options, request),
+                (row, accessibleApps) => ResolvePortalEntryHref(request, row, accessibleApps),
+                path => BuildRequestEndpointHref(request, path),
+                request.HttpContext),
+            ct);
+    }
+
+    public Task<PortalTopBarModel> CreateAsync(
+        WebAppOptions options,
+        Uri currentUri,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(currentUri);
+
+        return MeasureAsync(
+            options,
+            user,
+            new TopBarBuildContext(
+                () => _cultureSelectionService.ResolveFromCurrentCulture(options),
+                (row, accessibleApps) => ResolvePortalEntryHref(currentUri, row, accessibleApps),
+                path => BuildUriEndpointHref(currentUri, path),
+                HttpContext: null),
+            ct);
+    }
+
+    /// <summary>
+    /// Times one topbar build and counts the database round trips it caused, whichever caller
+    /// asked for it.
+    /// </summary>
+    /// <remarks>
+    /// R12-E3. The database figure used to be a field this class incremented next to each
+    /// connection it opened itself, which measured connections rather than statements and saw
+    /// none of the work done by RbacService, OmpBrandingService, OmpConfigurationService,
+    /// NotificationService, MessageService or BannerService -- most of the build. R4-E10 is
+    /// decided on this number, so it has to be the number of round trips the whole build
+    /// costs. <see cref="Telemetry.OmpDbRoundTripScope"/> collects that from the driver, for
+    /// every service involved.
+    ///
+    /// The measurement is handed to the request middleware through HttpContext.Items where
+    /// there is a request; a Blazor circuit has neither middleware nor HttpContext, so there
+    /// it is recorded directly rather than -- as before -- dropped.
+    /// </remarks>
+    private async Task<PortalTopBarModel> MeasureAsync(
+        WebAppOptions options,
+        ClaimsPrincipal user,
+        TopBarBuildContext context,
+        CancellationToken ct)
+    {
         var topBarStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        Interlocked.Exchange(ref _dbRoundTrips, 0);
+        using var dbRoundTrips = Telemetry.OmpDbRoundTripScope.Begin();
         try
         {
-            return await CreateCoreAsync(options, request, user, ct);
+            return await BuildAsync(options, user, context, ct);
         }
         finally
         {
             topBarStopwatch.Stop();
-            var items = request.HttpContext?.Items;
-            if (items is not null)
+
+            try
             {
-                items[Telemetry.OmpPerformanceTelemetryMiddleware.TopBarDurationItemKey] =
-                    topBarStopwatch.Elapsed.TotalMilliseconds;
-                items[Telemetry.OmpPerformanceTelemetryMiddleware.TopBarDbCallsItemKey] =
-                    Volatile.Read(ref _dbRoundTrips);
+                ReportMeasurement(
+                    context.HttpContext,
+                    topBarStopwatch.Elapsed.TotalMilliseconds,
+                    dbRoundTrips.RoundTrips);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // This runs in a finally. A throw here would replace whatever exception the
+                // build was already propagating with one from the measurement of it, and a
+                // failed measurement must never become a failed page.
+                _log.LogDebug(ex, "Could not report the top bar performance measurement.");
             }
         }
     }
 
-    private async Task<PortalTopBarModel> CreateCoreAsync(
+    private void ReportMeasurement(HttpContext? httpContext, double durationMs, int dbRoundTrips)
+    {
+        var items = httpContext?.Items;
+        if (items is not null)
+        {
+            items[Telemetry.OmpPerformanceTelemetryMiddleware.TopBarDurationItemKey] = durationMs;
+            items[Telemetry.OmpPerformanceTelemetryMiddleware.TopBarDbCallsItemKey] = dbRoundTrips;
+            return;
+        }
+
+        if (!_telemetryOptions.Enabled)
+        {
+            return;
+        }
+
+        var appKey = Telemetry.OmpPerformanceTelemetryMiddleware.ConfiguredAppKey;
+        _telemetry.Record(appKey, BlazorCircuitScope, Telemetry.OmpPerformanceTelemetryMiddleware.MetricTopBarDuration, durationMs);
+        _telemetry.Record(appKey, BlazorCircuitScope, Telemetry.OmpPerformanceTelemetryMiddleware.MetricTopBarDbCalls, dbRoundTrips);
+    }
+
+    private async Task<PortalTopBarModel> BuildAsync(
         WebAppOptions options,
-        HttpRequest request,
         ClaimsPrincipal user,
+        TopBarBuildContext context,
         CancellationToken ct)
     {
         var topBarOptions = options.PortalTopBar ?? new PortalTopBarOptions();
@@ -151,7 +249,7 @@ public sealed class PortalTopBarService
             branding.PlatformName,
             PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
 
-        var cultureSelection = _cultureSelectionService.Resolve(options, request);
+        var cultureSelection = context.ResolveCulture();
 
         try
         {
@@ -173,7 +271,7 @@ public sealed class PortalTopBarService
                 accessibleApps,
                 permissions,
                 GetPortalBasePath(options),
-                row => ResolvePortalEntryHref(request, row, accessibleApps));
+                row => context.ResolveHref(row, accessibleApps));
             var userId = TryGetOmpUserId(user);
             var notificationUpdateOptions = await GetNotificationUpdateOptionsAsync(
                 userId,
@@ -231,22 +329,22 @@ public sealed class PortalTopBarService
                 navigationGroups,
                 BuildFavoriteEntries(navigationEntries),
                 canUsePersistentFavorites: userId.HasValue,
-                favoriteToggleUrl: BuildRequestEndpointHref(request, ToggleFavoritePath),
+                favoriteToggleUrl: context.BuildEndpointHref(ToggleFavoritePath),
                 notifications,
                 banners,
                 canUseNotifications: userId.HasValue,
                 unreadNotificationCount,
-                notificationMarkReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkReadPath),
-                notificationMarkAllReadUrl: BuildRequestEndpointHref(request, NotificationService.MarkAllReadPath),
-                notificationRecentUrl: BuildRequestEndpointHref(request, NotificationService.RecentPath),
-                notificationPushUrl: BuildRequestEndpointHref(request, TopBarNotificationHub.Path),
+                notificationMarkReadUrl: context.BuildEndpointHref(NotificationService.MarkReadPath),
+                notificationMarkAllReadUrl: context.BuildEndpointHref(NotificationService.MarkAllReadPath),
+                notificationRecentUrl: context.BuildEndpointHref(NotificationService.RecentPath),
+                notificationPushUrl: context.BuildEndpointHref(TopBarNotificationHub.Path),
                 notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
                 canUseMessages: userId.HasValue && messagesEnabled,
                 messageConversations,
                 unreadMessageCount,
-                messageMarkAllReadUrl: BuildRequestEndpointHref(request, MessageService.MarkAllReadPath),
+                messageMarkAllReadUrl: context.BuildEndpointHref(MessageService.MarkAllReadPath),
                 messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
-                topBarSummaryUrl: BuildRequestEndpointHref(request, SummaryPath),
+                topBarSummaryUrl: context.BuildEndpointHref(SummaryPath),
                 dropdownsOpenOnHover,
                 notificationUpdateOptions,
                 options,
@@ -349,138 +447,6 @@ public sealed class PortalTopBarService
         var isFavorite = await ToggleFavoriteRowAsync(userId.Value, entry, ct);
         entry.IsFavorite = isFavorite;
         return new PortalFavoriteToggleResult(true, isFavorite, entry);
-    }
-
-    public async Task<PortalTopBarModel> CreateAsync(
-        WebAppOptions options,
-        Uri currentUri,
-        ClaimsPrincipal user,
-        CancellationToken ct)
-    {
-        var topBarOptions = options.PortalTopBar ?? new PortalTopBarOptions();
-        if (!topBarOptions.Enabled)
-        {
-            return PortalTopBarModel.Hidden;
-        }
-
-        var branding = await _brandingService.GetBrandingAsync(ct);
-        var portalLink = new PortalTopBarLink(
-            branding.PlatformName,
-            PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/"));
-
-        var cultureSelection = _cultureSelectionService.ResolveFromCurrentCulture(options);
-
-        try
-        {
-            var roleContext = await _rbac.GetUserRoleContextAsync(user, ct);
-            var permissions = roleContext.EffectivePermissions;
-            var apps = await GetEnabledWebAppsAsync(ct);
-            var accessibleApps = apps
-                .Where(app => HasAccess(app, permissions))
-                .ToDictionary(app => app.AppInstanceId);
-            var portalEntries = await GetPortalEntryRowsAsync(ct);
-            var isPortalAdmin = permissions.Contains(PortalAdminPermission);
-            var currentUserName = user.Identity?.IsAuthenticated == true
-                ? user.Identity?.Name
-                : null;
-
-            var navigationGroups = BuildPortalEntryNavigationGroups(
-                portalEntries,
-                apps,
-                accessibleApps,
-                permissions,
-                GetPortalBasePath(options),
-                row => ResolvePortalEntryHref(currentUri, row, accessibleApps));
-            var userId = TryGetOmpUserId(user);
-            var notificationUpdateOptions = await GetNotificationUpdateOptionsAsync(
-                userId,
-                roleContext.ActiveRoleId,
-                permissions,
-                options.TopBarPolling,
-                ct);
-            var dropdownsOpenOnHover = true;
-            IReadOnlyList<FavoriteRef> favorites = [];
-            IReadOnlyList<PortalTopBarNotification> notifications = [];
-            IReadOnlyList<PortalTopBarMessageConversation> messageConversations = [];
-            IReadOnlyList<PortalTopBarBanner> banners = [];
-            var unreadNotificationCount = 0;
-            var unreadMessageCount = 0;
-            var messagesEnabled = await _messages.IsEnabledAsync(ct);
-            string? currentUserProfileImageUrl = null;
-            if (user.Identity?.IsAuthenticated == true)
-            {
-                banners = await _banners.GetActiveForRolesAsync(GetBannerRoleIds(roleContext), 3, ct);
-            }
-
-            if (userId is int resolvedUserId)
-            {
-                dropdownsOpenOnHover = await GetTopbarDropdownsOpenOnHoverAsync(resolvedUserId, ct);
-                favorites = await GetFavoriteRefsAsync(resolvedUserId, ct);
-                notifications = await _notifications.GetRecentForUserAsync(resolvedUserId, 10, ct);
-                unreadNotificationCount = await _notifications.GetUnreadCountAsync(resolvedUserId, ct);
-                if (messagesEnabled)
-                {
-                    unreadMessageCount = await _messages.GetUnreadMessageCountAsync(resolvedUserId, ct);
-                    messageConversations = BuildMessageConversations(
-                        await _messages.GetConversationsForUserAsync(resolvedUserId, ct, limit: 10),
-                        topBarOptions.PortalBaseUrl);
-                }
-
-                currentUserProfileImageUrl = await GetUserProfileImageUrlAsync(
-                    resolvedUserId,
-                    topBarOptions.PortalBaseUrl,
-                    ct);
-            }
-
-            ApplyFavorites(navigationGroups, favorites);
-            var navigationEntries = FlattenNavigationGroups(navigationGroups);
-
-            return CreateModel(
-                topBarOptions,
-                portalLink,
-                branding.HeroLogoUrl,
-                cultureSelection,
-                currentUserName,
-                currentUserProfileImageUrl,
-                roleContext,
-                isPortalAdmin,
-                moduleLinks: Array.Empty<PortalTopBarLink>(),
-                navigationGroups,
-                BuildFavoriteEntries(navigationEntries),
-                canUsePersistentFavorites: userId.HasValue,
-                favoriteToggleUrl: BuildUriEndpointHref(currentUri, ToggleFavoritePath),
-                notifications,
-                banners,
-                canUseNotifications: userId.HasValue,
-                unreadNotificationCount,
-                notificationMarkReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkReadPath),
-                notificationMarkAllReadUrl: BuildUriEndpointHref(currentUri, NotificationService.MarkAllReadPath),
-                notificationRecentUrl: BuildUriEndpointHref(currentUri, NotificationService.RecentPath),
-                notificationPushUrl: BuildUriEndpointHref(currentUri, TopBarNotificationHub.Path),
-                notificationsUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/notifications"),
-                canUseMessages: userId.HasValue && messagesEnabled,
-                messageConversations,
-                unreadMessageCount,
-                messageMarkAllReadUrl: BuildUriEndpointHref(currentUri, MessageService.MarkAllReadPath),
-                messagesUrl: PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, "/messages"),
-                topBarSummaryUrl: BuildUriEndpointHref(currentUri, SummaryPath),
-                dropdownsOpenOnHover,
-                notificationUpdateOptions,
-                options,
-                GetLogoutUrl(),
-                GetLoginUrl());
-        }
-        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
-        {
-            return CreateFallbackModelAfterTopBarFailure(
-                ex,
-                topBarOptions,
-                portalLink,
-                branding.HeroLogoUrl,
-                cultureSelection,
-                user,
-                options);
-        }
     }
 
     private PortalTopBarModel CreateFallbackModelAfterTopBarFailure(
@@ -1036,7 +1002,6 @@ WHERE d.setting_category = @setting_category
   AND d.value_kind = @value_kind
   AND d.is_enabled = 1;";
 
-        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
@@ -1065,7 +1030,6 @@ FROM omp.users
 WHERE user_id = @user_id
   AND account_status = 1;";
 
-        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var cmd = new SqlCommand(sql, conn);
@@ -1358,7 +1322,6 @@ WHERE user_id = @user_id
 
     private async Task<IReadOnlyList<TopBarPortalEntryRow>> LoadPortalEntryRowsAsync(CancellationToken ct)
     {
-        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -1422,7 +1385,6 @@ END";
 
     private async Task<IReadOnlyList<FavoriteRef>> GetFavoriteRefsAsync(int userId, CancellationToken ct)
     {
-        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -1467,7 +1429,6 @@ END";
         PortalTopBarNavigationEntry entry,
         CancellationToken ct)
     {
-        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
@@ -1787,7 +1748,6 @@ END";
 
     private async Task<IReadOnlyList<TopBarAppEntry>> LoadEnabledWebAppsAsync(CancellationToken ct)
     {
-        Interlocked.Increment(ref _dbRoundTrips);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 

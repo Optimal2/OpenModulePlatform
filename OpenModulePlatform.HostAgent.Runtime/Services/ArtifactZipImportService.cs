@@ -309,6 +309,23 @@ public sealed class ArtifactZipImportService
             MoveImportFile(importPath, failedPath, ex.Message);
             _logger.LogWarning(ex, "HostAgent import failed. File={ImportPath}", importPath);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // R12-F4, per-file half. This is the boundary around ONE externally supplied
+            // file, so it takes the broadest filter (metod §4.9): an exception type
+            // IsExpectedImportFailure does not list used to escape the whole import pass,
+            // which meant every other file waiting in the folder was skipped as well and
+            // the file itself stayed in the import folder to do it again on the next cycle
+            // -- a single malformed package could hold up every import indefinitely. The
+            // file goes to failed\ with the reason, exactly as a classified failure does,
+            // and the remaining files are still imported. Cancellation is not a file
+            // failure and still propagates.
+            MoveImportFile(importPath, failedPath, ex.Message);
+            _logger.LogError(
+                ex,
+                "HostAgent import failed with an unexpected error and the file was moved to the failed archive. File={ImportPath}",
+                importPath);
+        }
         finally
         {
             TryDelete(tempImportPath);

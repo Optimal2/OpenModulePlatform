@@ -1229,27 +1229,79 @@ GO
 -- be answered months later, and so a query that became slow can be shown to have
 -- become slow rather than always having been.
 --
--- Only OMP's own statements are captured: the filter requires the plan to reference an
--- omp object. No parameter values are stored, only statement text, which is the query
--- shape rather than anyone's data.
+-- Only this database's own statements are captured, and only ever this database's. The
+-- filter compares the plan's database against DB_ID(); see the procedure below for why
+-- the previous text filter was not a filter at all (R12-A3/E2).
+--
+-- One row per statement and day, not one per capture: the DMV counters are cumulative
+-- per plan, so an hourly capture of the same statement is the same row observed again
+-- (R12-E6).
 ------------------------------------------------------------------------------
+
+-- R12-A3/E2, R12-A12, R12-E6: the pre-R12 table cannot be migrated, only discarded.
+-- Its rows were selected with WHERE st.text LIKE N'%omp%' over every database on the
+-- instance -- "omp" is a substring of Company, Component, compare, compute, complete
+-- and compression under a case-insensitive collation -- ordered by the instance's
+-- heaviest statements, which on a shared server are typically somebody else's. Measured
+-- on LINUS-LAPTOP before this change: 2 450 rows, of which 40 contained no omp object at
+-- all and had been pulled in because some other statement in the same batch mentioned
+-- one. Statement text of ad hoc SQL carries literals, so on a shared health-care
+-- instance those rows are other systems' data sitting in an OMP table with 400 days of
+-- retention. There is no way to tell afterwards which database a stored row came from,
+-- which is precisely why they go. The new SourceDatabaseId column is both the fix and
+-- the marker that says the purge has happened, so this runs exactly once.
+IF OBJECT_ID(N'omp.QueryCostSnapshots', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.QueryCostSnapshots', N'SourceDatabaseId') IS NULL
+BEGIN
+    DROP TABLE omp.QueryCostSnapshots;
+END
+GO
 
 IF OBJECT_ID(N'omp.QueryCostSnapshots', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.QueryCostSnapshots
     (
         QueryCostSnapshotId bigint IDENTITY(1,1) NOT NULL,
-        CapturedUtc datetime2(3) NOT NULL,
+        -- The day the row describes. Folding to a day is what bounds the table: at most
+        -- @TopStatements rows per day regardless of how many applications capture, and
+        -- how often.
+        SampleDateUtc date NOT NULL,
         QueryHash binary(8) NOT NULL,
+        -- Always DB_ID() of this database. Stored rather than assumed so the invariant
+        -- "nothing here comes from another database" can be read out of the data instead
+        -- of trusted, and so a future filter defect is visible rather than silent.
+        SourceDatabaseId int NOT NULL,
         StatementText nvarchar(max) NOT NULL,
         ExecutionCount bigint NOT NULL,
         TotalWorkerTimeMs decimal(19,3) NOT NULL,
         TotalElapsedTimeMs decimal(19,3) NOT NULL,
         TotalLogicalReads bigint NOT NULL,
         MaxElapsedTimeMs decimal(19,3) NOT NULL,
-        CreationTimeUtc datetime2(3) NULL,
+        -- When the plan was compiled, converted to UTC. R12-A12: this was called
+        -- CreationTimeUtc and stored sys.dm_exec_query_stats.creation_time unchanged,
+        -- which is the server's LOCAL time -- a column name that lied by two hours for
+        -- half the year, on a platform where every other time column is UTC.
+        PlanCreatedUtc datetime2(3) NULL,
+        FirstCapturedUtc datetime2(3) NOT NULL,
+        CapturedUtc datetime2(3) NOT NULL,
         CONSTRAINT PK_omp_QueryCostSnapshots PRIMARY KEY(QueryCostSnapshotId)
     );
+END
+GO
+
+IF NOT EXISTS
+(
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.QueryCostSnapshots')
+      AND name = N'UX_omp_QueryCostSnapshots_Date_Hash'
+)
+BEGIN
+    -- Unique, because it is the dedup key the capture MERGEs on. An index that merely
+    -- helped the lookup would let two applications capturing in the same hour each
+    -- insert their own copy of the same statement, which is the growth this replaces.
+    CREATE UNIQUE INDEX UX_omp_QueryCostSnapshots_Date_Hash
+        ON omp.QueryCostSnapshots(SampleDateUtc, QueryHash)
+        INCLUDE(TotalElapsedTimeMs, ExecutionCount);
 END
 GO
 
@@ -1272,7 +1324,13 @@ GO
 
 ALTER PROCEDURE omp.CaptureQueryCostSnapshot
     @TopStatements int = 50,
-    @RetainDays int = 400
+    -- Accepted and ignored. Retention moved to omp.RollUpAndPrunePerformanceSamples,
+    -- which runs whether or not snapshots are enabled (R12-E6): pruning that lives
+    -- inside the procedure an operator can switch off stops the moment they switch it
+    -- off, leaving the rows it was supposed to remove behind forever. The parameter
+    -- stays in the signature so an application binary from before this change can still
+    -- call the procedure during the window between schema import and app restart.
+    @RetainDays int = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -1280,47 +1338,111 @@ BEGIN
 
     IF @TopStatements < 1 SET @TopStatements = 1;
     IF @TopStatements > 500 SET @TopStatements = 500;
-    IF @RetainDays < 1 SET @RetainDays = 1;
 
     -- Reading sys.dm_exec_query_stats needs the server-level VIEW SERVER STATE, which the
     -- web applications' identities do not hold by default. Without this check the DMV
     -- simply yields nothing, the procedure reports success, and the table stays empty
     -- forever -- a mechanism that is switched on, believed to be working, and collecting
     -- nothing. Say so instead.
+    --
+    -- R12-A20: this raised 51001, which sql/2-initialize-openmoduleplatform.sql already
+    -- uses for "the default instance template could not be resolved". The application
+    -- catches 51001 and permanently disables snapshots for the process, so one number
+    -- for two conditions meant a seeding failure could be swallowed as a permission
+    -- problem. 51070 is this condition and nothing else.
     IF HAS_PERMS_BY_NAME(NULL, NULL, 'VIEW SERVER STATE') <> 1
     BEGIN
-        THROW 51001, 'CaptureQueryCostSnapshot requires VIEW SERVER STATE. Grant it to the identity the application connects as, or leave Telemetry:CaptureQueryCostSnapshots off.', 1;
+        THROW 51070, 'CaptureQueryCostSnapshot requires VIEW SERVER STATE. Grant it to the identity the application connects as, or leave Telemetry:CaptureQueryCostSnapshots off.', 1;
     END;
 
     DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
+    DECLARE @todayUtc date = CAST(@nowUtc AS date);
+    DECLARE @databaseId int = DB_ID();
 
-    INSERT INTO omp.QueryCostSnapshots
-        (CapturedUtc, QueryHash, StatementText, ExecutionCount,
-         TotalWorkerTimeMs, TotalElapsedTimeMs, TotalLogicalReads, MaxElapsedTimeMs, CreationTimeUtc)
-    SELECT TOP (@TopStatements)
-        @nowUtc,
-        qs.query_hash,
-        SUBSTRING(
-            st.text,
-            (qs.statement_start_offset / 2) + 1,
-            CASE WHEN qs.statement_end_offset = -1
-                 THEN DATALENGTH(st.text)
-                 ELSE (qs.statement_end_offset - qs.statement_start_offset) / 2 + 1
-            END),
-        qs.execution_count,
-        CAST(qs.total_worker_time / 1000.0 AS decimal(19,3)),
-        CAST(qs.total_elapsed_time / 1000.0 AS decimal(19,3)),
-        qs.total_logical_reads,
-        CAST(qs.max_elapsed_time / 1000.0 AS decimal(19,3)),
-        qs.creation_time
-    FROM sys.dm_exec_query_stats qs
-    CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
-    WHERE st.text LIKE N'%omp%'
-      AND st.text NOT LIKE N'%omp.QueryCostSnapshots%'
-    ORDER BY qs.total_elapsed_time DESC;
+    -- sys.dm_exec_query_stats.creation_time is the server's local time; every column in
+    -- this schema is UTC. The offset is taken at capture time, which is exact for plans
+    -- compiled since the last DST change and at most an hour out for older ones -- plan
+    -- cache lifetimes make that a theoretical case, and a bounded hour beats a column
+    -- whose meaning depends on where the server stands (R12-A12).
+    DECLARE @utcOffsetMinutes int = DATEDIFF(minute, SYSDATETIME(), SYSUTCDATETIME());
 
-    DELETE FROM omp.QueryCostSnapshots
-    WHERE CapturedUtc < DATEADD(day, -@RetainDays, @nowUtc);
+    ;WITH candidates AS
+    (
+        SELECT TOP (@TopStatements)
+            qs.query_hash AS QueryHash,
+            SUBSTRING(
+                st.text,
+                (qs.statement_start_offset / 2) + 1,
+                CASE WHEN qs.statement_end_offset = -1
+                     THEN DATALENGTH(st.text)
+                     ELSE (qs.statement_end_offset - qs.statement_start_offset) / 2 + 1
+                END) AS StatementText,
+            qs.execution_count AS ExecutionCount,
+            CAST(qs.total_worker_time / 1000.0 AS decimal(19,3)) AS TotalWorkerTimeMs,
+            CAST(qs.total_elapsed_time / 1000.0 AS decimal(19,3)) AS TotalElapsedTimeMs,
+            qs.total_logical_reads AS TotalLogicalReads,
+            CAST(qs.max_elapsed_time / 1000.0 AS decimal(19,3)) AS MaxElapsedTimeMs,
+            DATEADD(minute, @utcOffsetMinutes, qs.creation_time) AS PlanCreatedUtc
+        FROM sys.dm_exec_query_stats qs
+        CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) st
+        OUTER APPLY
+        (
+            SELECT TOP (1) CAST(pa.value AS int) AS PlanDatabaseId
+            FROM sys.dm_exec_plan_attributes(qs.plan_handle) pa
+            WHERE pa.attribute = N'dbid'
+        ) AS plan_db
+        -- R12-A3/E2. The filter was WHERE st.text LIKE N'%omp%', which captured any
+        -- statement on the instance whose batch text happened to contain those three
+        -- letters, from any database, ordered by the instance's heaviest statements.
+        -- st.dbid is populated for statements inside modules but NULL for ad hoc and
+        -- prepared plans -- measured on this platform's server: 190 of 207 cached plans
+        -- had NULL there -- so the plan's own dbid attribute carries the rest. Measured
+        -- coverage of that attribute: 132 of 131 cached plans, i.e. every one.
+        WHERE COALESCE(st.dbid, plan_db.PlanDatabaseId) = @databaseId
+          -- Never snapshot the snapshot: the capture is itself one of the heavier
+          -- statements it would otherwise find.
+          AND st.text NOT LIKE N'%QueryCostSnapshots%'
+        ORDER BY qs.total_elapsed_time DESC
+    ),
+    folded AS
+    (
+        -- The same query hash can hold several cached plans. Fold them so the MERGE
+        -- source has one row per key; without this the MERGE fails outright rather than
+        -- silently picking one, which is the right failure but not a useful one.
+        SELECT
+            QueryHash,
+            MAX(StatementText) AS StatementText,
+            SUM(ExecutionCount) AS ExecutionCount,
+            SUM(TotalWorkerTimeMs) AS TotalWorkerTimeMs,
+            SUM(TotalElapsedTimeMs) AS TotalElapsedTimeMs,
+            SUM(TotalLogicalReads) AS TotalLogicalReads,
+            MAX(MaxElapsedTimeMs) AS MaxElapsedTimeMs,
+            MIN(PlanCreatedUtc) AS PlanCreatedUtc
+        FROM candidates
+        GROUP BY QueryHash
+    )
+    MERGE omp.QueryCostSnapshots WITH (HOLDLOCK) AS target
+    USING folded AS source
+        ON target.SampleDateUtc = @todayUtc
+       AND target.QueryHash = source.QueryHash
+    WHEN MATCHED THEN
+        UPDATE SET
+            StatementText = source.StatementText,
+            ExecutionCount = source.ExecutionCount,
+            TotalWorkerTimeMs = source.TotalWorkerTimeMs,
+            TotalElapsedTimeMs = source.TotalElapsedTimeMs,
+            TotalLogicalReads = source.TotalLogicalReads,
+            MaxElapsedTimeMs = CASE WHEN source.MaxElapsedTimeMs > target.MaxElapsedTimeMs
+                                    THEN source.MaxElapsedTimeMs ELSE target.MaxElapsedTimeMs END,
+            PlanCreatedUtc = source.PlanCreatedUtc,
+            CapturedUtc = @nowUtc
+    WHEN NOT MATCHED THEN
+        INSERT(SampleDateUtc, QueryHash, SourceDatabaseId, StatementText, ExecutionCount,
+               TotalWorkerTimeMs, TotalElapsedTimeMs, TotalLogicalReads, MaxElapsedTimeMs,
+               PlanCreatedUtc, FirstCapturedUtc, CapturedUtc)
+        VALUES(@todayUtc, source.QueryHash, @databaseId, source.StatementText, source.ExecutionCount,
+               source.TotalWorkerTimeMs, source.TotalElapsedTimeMs, source.TotalLogicalReads,
+               source.MaxElapsedTimeMs, source.PlanCreatedUtc, @nowUtc, @nowUtc);
 END
 GO
 
@@ -1417,7 +1539,16 @@ GO
 
 CREATE OR ALTER PROCEDURE omp.RollUpAndPrunePerformanceSamples
     @RetainHours int,
-    @RetainDays int
+    @RetainDays int,
+    -- R12-G6. The query cost table used to inherit @RetainDays -- 400 days, chosen for
+    -- the daily rollup, which is summarised and narrow. Query cost rows are raw and carry
+    -- nvarchar(max) statement text; 400 days of them is a large table that nothing rolls
+    -- up. Defaulted so a caller from before this change still works.
+    @QueryCostRetainDays int = 60,
+    -- A ceiling that holds even if the retention is raised or the fold-per-day breaks:
+    -- 50 statements a day for 60 days is 3 000 rows, so 5 000 leaves headroom and still
+    -- bounds the table (R12-E6).
+    @QueryCostMaxRows int = 5000
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -1425,6 +1556,8 @@ BEGIN
 
     IF @RetainHours < 1 SET @RetainHours = 1;
     IF @RetainDays < 1 SET @RetainDays = 1;
+    IF @QueryCostRetainDays < 1 SET @QueryCostRetainDays = 1;
+    IF @QueryCostMaxRows < 100 SET @QueryCostMaxRows = 100;
 
     DECLARE @hourCutoffUtc datetime2(3) = DATEADD(hour, -@RetainHours, SYSUTCDATETIME());
     DECLARE @dayCutoffUtc date = CAST(DATEADD(day, -@RetainDays, SYSUTCDATETIME()) AS date);
@@ -1469,7 +1602,82 @@ BEGIN
     DELETE FROM omp.PerformanceSamplesDaily WHERE SampleDateUtc < @dayCutoffUtc;
 
     COMMIT TRANSACTION;
+
+    -- Query cost retention lives here, outside both the transaction above and the capture
+    -- procedure. Outside the transaction because it is unrelated work and has no business
+    -- holding those locks; outside the capture procedure because that one only runs while
+    -- Telemetry:CaptureQueryCostSnapshots is on, and rows already written must still be
+    -- pruned after it is switched off (R12-E6).
+    IF OBJECT_ID(N'omp.QueryCostSnapshots', N'U') IS NOT NULL
+    BEGIN
+        DELETE FROM omp.QueryCostSnapshots
+        WHERE SampleDateUtc < CAST(DATEADD(day, -@QueryCostRetainDays, SYSUTCDATETIME()) AS date);
+
+        -- Newest days first, and within a day the statements that cost most: what a
+        -- ceiling should keep is the recent and the heavy, which is what the table is
+        -- read for.
+        WITH ranked AS
+        (
+            SELECT ROW_NUMBER() OVER (ORDER BY SampleDateUtc DESC, TotalElapsedTimeMs DESC) AS RowRank
+            FROM omp.QueryCostSnapshots
+        )
+        DELETE FROM ranked
+        WHERE RowRank > @QueryCostMaxRows;
+    END
 END
+GO
+
+------------------------------------------------------------------------------
+-- Telemetry read paths.
+--
+-- R12-A14/E10. omp.HostResourceSamplesDaily and omp.QueryCostSnapshots were written by
+-- code and read by nothing at all -- no page, no script, no view. A measurement nobody
+-- reads cannot be wrong out loud: the local-time column, the foreign statement text and
+-- the missing dedup all sat in these tables for as long as they did precisely because
+-- no query ever put their contents in front of anyone. These two views are that query.
+-- They are deliberately plain SELECTs so they can be run from sqlcmd during an incident
+-- without knowing the schema.
+------------------------------------------------------------------------------
+GO
+
+CREATE OR ALTER VIEW omp.TelemetryHostResourceDaily
+AS
+SELECT
+    h.HostKey,
+    h.DisplayName AS HostDisplayName,
+    d.SampleDateUtc,
+    d.SampleKey,
+    d.SampleCount,
+    -- The table stores the sum; every reader wants the average, and computing it in two
+    -- places is how two readers end up disagreeing about what a day cost.
+    CASE WHEN d.SampleCount > 0 THEN d.TotalValue / d.SampleCount END AS AverageValue,
+    d.MinValue,
+    d.MaxValue,
+    d.FirstSampledUtc,
+    d.LastSampledUtc
+FROM omp.HostResourceSamplesDaily d
+INNER JOIN omp.Hosts h ON h.HostId = d.HostId;
+GO
+
+CREATE OR ALTER VIEW omp.TelemetryQueryCost
+AS
+SELECT
+    q.SampleDateUtc,
+    q.QueryHash,
+    DB_NAME(q.SourceDatabaseId) AS SourceDatabaseName,
+    q.ExecutionCount,
+    q.TotalElapsedTimeMs,
+    -- The figure the table exists to answer "did this get slower" with.
+    CASE WHEN q.ExecutionCount > 0 THEN q.TotalElapsedTimeMs / q.ExecutionCount END AS AverageElapsedTimeMs,
+    q.MaxElapsedTimeMs,
+    q.TotalWorkerTimeMs,
+    q.TotalLogicalReads,
+    q.PlanCreatedUtc,
+    q.FirstCapturedUtc,
+    q.CapturedUtc,
+    LEFT(q.StatementText, 400) AS StatementPreview,
+    q.StatementText
+FROM omp.QueryCostSnapshots q;
 GO
 
 IF OBJECT_ID(N'omp.HostAgentDesiredStates', N'U') IS NULL
