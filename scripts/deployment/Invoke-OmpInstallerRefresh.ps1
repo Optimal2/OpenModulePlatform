@@ -5,7 +5,7 @@
 #
 # Example:
 #   pwsh -File Invoke-OmpInstallerRefresh.ps1 `
-#     -ConfigPath 'C:\...\Universal\hosts\linus-laptop\bootstrap.json' -Apply
+#     -ConfigPath 'C:\...\Universal\hosts\linus_laptop\bootstrap.json' -Apply
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
