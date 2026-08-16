@@ -856,10 +856,52 @@ BEGIN
         LastExitUtc datetime2(3) NULL,
         LastExitCode int NULL,
         StatusMessage nvarchar(500) NULL,
+        -- R12-F2. Which artifact the running process was actually STARTED from, written
+        -- by WorkerManager at process start. Everything else in this table describes that
+        -- a process exists; without these two columns nothing anywhere recorded WHICH
+        -- build it is, so a worker running 0.3.108 against a catalogue value of 0.3.110
+        -- still produced "Converged: True". Deliberately NOT a foreign key to
+        -- omp.Artifacts: this is a historical witness of what ran, and artifact rows are
+        -- subject to retention -- a witness that blocks cleanup, or disappears with it,
+        -- is not a witness.
+        RuntimeArtifactId int NULL,
+        RuntimeArtifactVersion nvarchar(50) NULL,
+        -- The worker-host (WorkerProcessHost) build the same process was launched with.
+        -- It is a second artifact and a second version, resolved separately from the
+        -- worker's own, and it had exactly the same hole: omp_workerprocesshost is one of
+        -- the three desired app instances no check could see the running version of.
+        RuntimeHostArtifactId int NULL,
+        RuntimeHostArtifactVersion nvarchar(50) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppInstanceRuntimeStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppInstanceRuntimeStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT FK_omp_AppInstanceRuntimeStates_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId)
     );
+END
+GO
+
+-- R12-F2. See the column comment above; added idempotently for databases created
+-- before the runtime version witness existed.
+IF COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeArtifactId') IS NULL
+BEGIN
+    ALTER TABLE omp.AppInstanceRuntimeStates ADD RuntimeArtifactId int NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeArtifactVersion') IS NULL
+BEGIN
+    ALTER TABLE omp.AppInstanceRuntimeStates ADD RuntimeArtifactVersion nvarchar(50) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeHostArtifactId') IS NULL
+BEGIN
+    ALTER TABLE omp.AppInstanceRuntimeStates ADD RuntimeHostArtifactId int NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeHostArtifactVersion') IS NULL
+BEGIN
+    ALTER TABLE omp.AppInstanceRuntimeStates ADD RuntimeHostArtifactVersion nvarchar(50) NULL;
 END
 GO
 
@@ -2051,11 +2093,48 @@ BEGIN
         LastExitUtc datetime2(3) NULL,
         LastExitCode int NULL,
         StatusMessage nvarchar(500) NULL,
+        -- R12-F2. The per-instance half of the runtime version witness: which artifact
+        -- THIS worker process was started from. Written only while a process is alive;
+        -- NULL means "no live process, so no version to report", which the diagnostics
+        -- scripts render as a stated unknown rather than as health. No foreign key, for
+        -- the same reason as on omp.AppInstanceRuntimeStates.
+        RuntimeArtifactId int NULL,
+        RuntimeArtifactVersion nvarchar(50) NULL,
+        -- The WorkerProcessHost build this process was launched with; see the same pair on
+        -- omp.AppInstanceRuntimeStates.
+        RuntimeHostArtifactId int NULL,
+        RuntimeHostArtifactVersion nvarchar(50) NULL,
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WorkerInstanceRuntimeStates_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_WorkerInstanceRuntimeStates_UpdatedUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT FK_omp_WorkerInstanceRuntimeStates_WorkerInstance FOREIGN KEY(WorkerInstanceId) REFERENCES omp.WorkerInstances(WorkerInstanceId),
         CONSTRAINT FK_omp_WorkerInstanceRuntimeStates_AppInstance FOREIGN KEY(AppInstanceId) REFERENCES omp.AppInstances(AppInstanceId)
     );
+END
+GO
+
+-- R12-F2. See the column comment above; added idempotently for databases created
+-- before the runtime version witness existed.
+IF COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeArtifactId') IS NULL
+BEGIN
+    ALTER TABLE omp.WorkerInstanceRuntimeStates ADD RuntimeArtifactId int NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeArtifactVersion') IS NULL
+BEGIN
+    ALTER TABLE omp.WorkerInstanceRuntimeStates ADD RuntimeArtifactVersion nvarchar(50) NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeHostArtifactId') IS NULL
+BEGIN
+    ALTER TABLE omp.WorkerInstanceRuntimeStates ADD RuntimeHostArtifactId int NULL;
+END
+GO
+
+IF COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeHostArtifactVersion') IS NULL
+BEGIN
+    ALTER TABLE omp.WorkerInstanceRuntimeStates ADD RuntimeHostArtifactVersion nvarchar(50) NULL;
 END
 GO
 

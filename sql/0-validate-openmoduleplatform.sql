@@ -91,6 +91,19 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp', N'Apps', N'AllowMultipleActiveInstances'),
         (N'omp', N'ModuleDefinitionArtifactCompatibility', N'RelativePathTemplate'),
         (N'omp', N'AppInstances', N'TargetHostTemplateId'),
+        -- R12-F2. The runtime witness for what a worker is ACTUALLY running. Declared here
+        -- because this probe is what the module-definition heal path calls when the package
+        -- version is not newer than the installed one (R12-G3): a column that is not named
+        -- here cannot be missed by it, which is exactly how R4-B1's index stayed absent from
+        -- every database for four days while its board row said fixed.
+        (N'omp', N'AppInstanceRuntimeStates', N'RuntimeArtifactId'),
+        (N'omp', N'AppInstanceRuntimeStates', N'RuntimeArtifactVersion'),
+        (N'omp', N'AppInstanceRuntimeStates', N'RuntimeHostArtifactId'),
+        (N'omp', N'AppInstanceRuntimeStates', N'RuntimeHostArtifactVersion'),
+        (N'omp', N'WorkerInstanceRuntimeStates', N'RuntimeArtifactId'),
+        (N'omp', N'WorkerInstanceRuntimeStates', N'RuntimeArtifactVersion'),
+        (N'omp', N'WorkerInstanceRuntimeStates', N'RuntimeHostArtifactId'),
+        (N'omp', N'WorkerInstanceRuntimeStates', N'RuntimeHostArtifactVersion'),
         (N'omp', N'HostAppDeploymentStates', N'CredentialAutomationMode'),
         (N'omp', N'HostAppDeploymentStates', N'DesiredRuntimeIdentity'),
         (N'omp', N'HostAppDeploymentStates', N'ActualRuntimeIdentity'),

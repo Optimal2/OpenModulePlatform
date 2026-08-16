@@ -48,6 +48,17 @@ public sealed class HostAgentSettings
     ///
     /// The default keeps today's behaviour, so no running installation changes when it
     /// upgrades. Set it to true where every artifact row is known to carry a SHA.
+    ///
+    /// R12-F12: "known to carry a SHA" used to be unknowable. Nothing counted the artifacts
+    /// that make this unsafe to turn on -- the only signal was a per-artifact line written
+    /// while that artifact was being provisioned, so an artifact this host never provisions
+    /// was invisible and the gap could not be driven to zero. Two recurring audits now state
+    /// it: ArtifactZipImportService reports the catalog-wide count and how many of those
+    /// artifacts are still referenced by anything enabled (the number that decides whether
+    /// the flag can be flipped at all), and ArtifactProvisioner reports the artifacts this
+    /// particular host provisions without a hash (the number that decides whether it can be
+    /// flipped HERE). Read both before setting this to true; the default is unchanged
+    /// because only the operator of an installation can know that its own count is zero.
     /// </remarks>
     public bool RequireArtifactHash { get; set; }
 
@@ -591,6 +602,34 @@ public sealed class HostAgentArtifactZipImportSettings
     // archives older than this many days; 0 disables pruning (keep forever).
     public int ProcessedRetentionDays { get; set; } = 30;
 
+    /// <summary>
+    /// Upper bound on the size of EACH import archive root (processed and failed), applied
+    /// alongside <see cref="ProcessedRetentionDays" />: oldest archives are deleted first
+    /// until the root is under the cap. 0 disables the size cap.
+    /// </summary>
+    /// <remarks>
+    /// R12-F13. Age alone does not bound the archive, because volume is driven by cadence,
+    /// not by age: a universal package is ~124 MB and a refresh can be run several times a
+    /// day, so 30 days of retention is 30 days of however many refreshes were run. Measured
+    /// on LINUS-LAPTOP 2026-08-16, 16 days after the store was created: 114 archived import
+    /// files totalling 9,63 GB (processed 66 files / 7,10 GB, failed 48 files / 2,53 GB),
+    /// projecting to roughly 18 GB once the 30-day window is actually full -- and the volume
+    /// that fills is the one holding the artifact store, so the failure mode is imports
+    /// failing with disk-full errors.
+    ///
+    /// The cap is per archive root rather than shared between them, because ProcessedPath
+    /// and FailedPath are separately configurable and may sit on different volumes; a shared
+    /// budget would prune one root because the other grew, which is the wrong root to touch
+    /// and the wrong volume to protect.
+    ///
+    /// 4 GB per root holds roughly 30 universal packages -- far more rollback history than
+    /// has ever been needed -- and bounds both archives together below what the processed
+    /// archive alone reached in two weeks here. The newest archive in a root is never
+    /// pruned, by age or by size, so a cap smaller than a single package cannot empty the
+    /// archive and destroy the one file an operator looks for after a bad refresh.
+    /// </remarks>
+    public long ProcessedRetentionMaxBytes { get; set; } = 4L * 1024 * 1024 * 1024;
+
     public bool CopyConfigurationFilesFromPreviousVersion { get; set; } = true;
 
     public long MaxArtifactPackageTotalUncompressedBytes { get; set; } = 10L * 1024 * 1024 * 1024;
@@ -619,6 +658,11 @@ public sealed class HostAgentArtifactZipImportSettings
         }
 
         const long OneMegabyte = 1024L * 1024;
+        if (ProcessedRetentionMaxBytes < 0 || (ProcessedRetentionMaxBytes > 0 && ProcessedRetentionMaxBytes < OneMegabyte))
+        {
+            throw new InvalidOperationException("HostAgent:ArtifactZipImport:ProcessedRetentionMaxBytes must be 0 (no size cap) or at least 1 MB.");
+        }
+
         if (MaxArtifactPackageTotalUncompressedBytes < OneMegabyte)
         {
             throw new InvalidOperationException("HostAgent:ArtifactZipImport:MaxArtifactPackageTotalUncompressedBytes must be at least 1 MB.");

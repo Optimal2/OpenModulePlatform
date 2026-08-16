@@ -462,6 +462,13 @@ public sealed class PortableModulePackageService
                         item.SourceName,
                         ct,
                         package.ExtractionRoot);
+                    // The version comparison alone is not a statement about the database, so
+                    // the schema witness is the second condition for skipping. R12-G3: it
+                    // used to see schemas and tables only, which is why a package that added
+                    // a column or an index to an existing table could be reported green here
+                    // and never reach any database. The skip message now says which of the
+                    // two conditions was checked, so a green line cannot be misread as
+                    // "nothing needed doing" when nothing was looked at.
                     var missingObjectsByScriptKey = quickImportState is not null
                         ? await _repo.GetMissingRequiredObjectsByScriptKeyAsync(definition.DefinitionJson, ct)
                         : null;
@@ -474,7 +481,8 @@ public sealed class PortableModulePackageService
                             "module-definition",
                             item.Path,
                             "Skipped",
-                            skipMessage));
+                            skipMessage
+                                + " The declared database objects and the module validation probe report no drift."));
                         continue;
                     }
 
@@ -1180,9 +1188,11 @@ public sealed class PortableModulePackageService
             repairCount += repairResult.ExecutedCount;
         }
 
-        // For non-core modules, verify declared required objects and re-run only the
-        // idempotent scripts whose objects are missing. This heals stale schema even
-        // when the installed definition version is newer than or equal to the package.
+        // For non-core modules, verify the declared required objects (schemas, tables,
+        // columns, indexes, constraints, triggers) plus the definition's own validation
+        // probe, and re-run only the idempotent scripts whose objects are missing. This
+        // heals stale schema even when the installed definition version is newer than or
+        // equal to the package (R12-G3).
         if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
         {
             var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(

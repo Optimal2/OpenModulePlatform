@@ -38,11 +38,21 @@
 # is honest about what can be known. Measured on LINUS-LAPTOP before this was
 # added: 16 web-app + 5 service-app instances were visible here, and 2 worker + 1
 # worker-host were not -- 3 of 24 desired app instances that no check could see.
-# No table in omp records which artifact version a running worker process loaded
-# (neither omp.AppInstanceRuntimeStates nor omp.WorkerInstanceRuntimeStates has an
-# ArtifactId or Version column), so RuntimeVersion for a worker says the desired
-# version only when the process started after that version was catalogued, and
-# says 'unknown' otherwise. It never claims more than the schema can support.
+#
+# RuntimeVersion for a worker is now a real reading, not an inference: WorkerManager
+# records the artifact it started each process from, and the worker host build it
+# launched it with, in omp.WorkerInstanceRuntimeStates.RuntimeArtifactId /
+# RuntimeArtifactVersion / RuntimeHostArtifactId / RuntimeHostArtifactVersion. Where
+# that reading is missing -- an older WorkerManager, a database the migration has not
+# reached, a process nobody is observing -- RuntimeVersion says 'unknown' and the row
+# is ranked Unknown, never InSync. An unverifiable version is not an agreeing one.
+#
+# Channel-type packages are listed as well (R12-F8). They are not app instances and
+# have no runtime state; what a host is asked to run is one enabled row per channel
+# in omp.HostArtifactRequirements, and what it has is the HostAgent's provisioning
+# report for that artifact. That pair is what the channel-type rows show. A channel
+# the module never wrote a requirement row for is invisible to this script -- that
+# fact lives in the module's own database, not in omp.
 
 [CmdletBinding()]
 param(
@@ -84,6 +94,13 @@ try {
     $hasLastWarning = [int]$probe.ExecuteScalar() -eq 1
     $probe.CommandText = "SELECT CASE WHEN OBJECT_ID('omp.WorkerInstanceRuntimeStates','U') IS NULL THEN 0 ELSE 1 END"
     $hasWorkerInstanceStates = [int]$probe.ExecuteScalar() -eq 1
+    # R12-F2. Probed on the table the worker join will actually read.
+    $probe.CommandText = if ($hasWorkerInstanceStates) {
+        "SELECT CASE WHEN COL_LENGTH('omp.WorkerInstanceRuntimeStates','RuntimeArtifactId') IS NULL OR COL_LENGTH('omp.WorkerInstanceRuntimeStates','RuntimeHostArtifactId') IS NULL THEN 0 ELSE 1 END"
+    } else {
+        "SELECT CASE WHEN COL_LENGTH('omp.AppInstanceRuntimeStates','RuntimeArtifactId') IS NULL OR COL_LENGTH('omp.AppInstanceRuntimeStates','RuntimeHostArtifactId') IS NULL THEN 0 ELSE 1 END"
+    }
+    $hasWorkerVersionColumns = [int]$probe.ExecuteScalar() -eq 1
 
     $identityWarning = if ($hasIdentity) {
         "state.IdentityCheckStatus IN (N'ManualActionRequired', N'WaitingForPortalAdminApproval')"
@@ -202,6 +219,14 @@ ORDER BY HostKey, Rank, ModuleInstanceKey, AppKey, AppInstanceKey;
         'LEFT JOIN omp.AppInstanceRuntimeStates wrs ON wrs.AppInstanceId = wi.AppInstanceId'
     }
 
+    # R12-F2. Literal NULLs on a database without the witness columns, so one query
+    # text serves both schema generations and the "unknown" decision lives in one place.
+    $workerRuntimeVersionColumns = if ($hasWorkerVersionColumns) {
+        'wrs.RuntimeArtifactId, wrs.RuntimeArtifactVersion, wrs.RuntimeHostArtifactId, wrs.RuntimeHostArtifactVersion'
+    } else {
+        'CAST(NULL AS int) AS RuntimeArtifactId, CAST(NULL AS nvarchar(50)) AS RuntimeArtifactVersion, CAST(NULL AS int) AS RuntimeHostArtifactId, CAST(NULL AS nvarchar(50)) AS RuntimeHostArtifactVersion'
+    }
+
     $workerSql = @"
 WITH EnabledHosts AS
 (
@@ -272,7 +297,8 @@ WorkerInstanceRows AS
 (
     SELECT d.HostId, d.HostKey, d.ModuleInstanceKey, d.PackageType, d.AppKey, d.AppInstanceKey,
            wi.WorkerInstanceKey, d.DesiredArtifactId, d.DesiredVersion, d.DesiredArtifactCreatedUtc,
-           wrs.ObservedState, wrs.LastSeenUtc, wrs.StartedUtc, wrs.StatusMessage
+           wrs.ObservedState, wrs.LastSeenUtc, wrs.StartedUtc, wrs.StatusMessage,
+           $workerRuntimeVersionColumns
     FROM DesiredWorkerApps d
     INNER JOIN omp.WorkerInstances wi
         ON wi.AppInstanceId = d.AppInstanceId
@@ -281,13 +307,19 @@ WorkerInstanceRows AS
     WHERE d.PackageType = N'worker'
 ),
 -- A worker-host package is not a process of its own: it is the executable every
--- worker process on the host runs, so the oldest worker start on the host is the
--- only evidence there is about which worker-host build is loaded.
+-- worker process on the host runs. Each live worker now reports the worker host
+-- build it was launched with (R12-F2), so that is the evidence; the oldest worker
+-- start is only the fallback for processes that report nothing.
 HostWorkerStarts AS
 (
     SELECT HostId,
            MIN(StartedUtc) AS OldestWorkerStartUtc,
-           COUNT(1) AS RunningWorkerCount
+           COUNT(1) AS RunningWorkerCount,
+           COUNT(DISTINCT RuntimeHostArtifactId) AS DistinctHostArtifactCount,
+           SUM(CASE WHEN RuntimeHostArtifactId IS NULL THEN 1 ELSE 0 END) AS UnreportedHostArtifactCount,
+           -- Only read when DistinctHostArtifactCount = 1, where MIN is the single value.
+           MIN(RuntimeHostArtifactId) AS ReportedHostArtifactId,
+           MIN(RuntimeHostArtifactVersion) AS ReportedHostArtifactVersion
     FROM WorkerInstanceRows
     WHERE ObservedState = 2
     GROUP BY HostId
@@ -296,9 +328,10 @@ WorkerClassified AS
 (
     SELECT w.HostKey, w.ModuleInstanceKey, w.AppKey, w.AppInstanceKey, w.WorkerInstanceKey,
            w.PackageType, w.DesiredVersion,
-           CASE WHEN a.ProvisioningState = 2 AND w.ObservedState = 2
-                     AND w.StartedUtc IS NOT NULL AND w.StartedUtc >= w.DesiredArtifactCreatedUtc
-                THEN w.DesiredVersion
+           -- R12-F2. Read from the runtime witness, not inferred from the desired
+           -- version. 'unknown' is a real answer and ranks as Unknown below.
+           CASE WHEN w.ObservedState = 2 AND w.RuntimeArtifactId IS NOT NULL
+                THEN ISNULL(w.RuntimeArtifactVersion, N'?')
                 ELSE N'unknown' END AS RuntimeVersion,
            w.LastSeenUtc AS LastCheckedUtc,
            CASE
@@ -314,10 +347,15 @@ WorkerClassified AS
                WHEN w.LastSeenUtc IS NULL
                     OR DATEDIFF(second, w.LastSeenUtc, SYSUTCDATETIME()) > $MaxStateAgeSeconds
                    THEN N'Worker state is stale; nothing has refreshed it within $MaxStateAgeSeconds s.'
-               WHEN w.StartedUtc IS NULL
-                   THEN N'Worker start time is unknown, so the running build cannot be established.'
-               WHEN w.StartedUtc < w.DesiredArtifactCreatedUtc
+               WHEN w.RuntimeArtifactId IS NOT NULL AND w.RuntimeArtifactId <> w.DesiredArtifactId
+                   THEN N'Worker runs artifact version ' + ISNULL(w.RuntimeArtifactVersion, N'?')
+                        + N' but ' + ISNULL(w.DesiredVersion, N'?') + N' is desired.'
+               WHEN w.RuntimeArtifactId IS NULL AND w.StartedUtc IS NOT NULL
+                    AND w.StartedUtc < w.DesiredArtifactCreatedUtc
                    THEN N'Worker started before its desired artifact existed, so it is running an older build.'
+               WHEN w.RuntimeArtifactId IS NULL
+                   THEN N'No running artifact version was reported for this worker, so the running build cannot be verified. '
+                        + N'The WorkerManager on this host predates the runtime version witness, or the omp_core migration has not been applied.'
                ELSE NULL
            END AS LastError,
            CASE
@@ -326,8 +364,13 @@ WorkerClassified AS
                WHEN w.ObservedState IS NULL OR w.ObservedState <> 2 THEN 2
                WHEN w.LastSeenUtc IS NULL
                     OR DATEDIFF(second, w.LastSeenUtc, SYSUTCDATETIME()) > $MaxStateAgeSeconds THEN 1
-               WHEN w.StartedUtc IS NULL THEN 4
-               WHEN w.StartedUtc < w.DesiredArtifactCreatedUtc THEN 2
+               -- A version that disagrees is Pending (the deploy has not landed here yet);
+               -- a version that cannot be read at all is Unknown, which is a different
+               -- statement and must not be dressed up as either agreement or a rollout.
+               WHEN w.RuntimeArtifactId IS NOT NULL AND w.RuntimeArtifactId <> w.DesiredArtifactId THEN 2
+               WHEN w.RuntimeArtifactId IS NULL AND w.StartedUtc IS NOT NULL
+                    AND w.StartedUtc < w.DesiredArtifactCreatedUtc THEN 2
+               WHEN w.RuntimeArtifactId IS NULL THEN 4
                ELSE 3
            END AS Rank
     FROM WorkerInstanceRows w
@@ -338,10 +381,9 @@ WorkerClassified AS
 
     SELECT d.HostKey, d.ModuleInstanceKey, d.AppKey, d.AppInstanceKey, NULL,
            d.PackageType, d.DesiredVersion,
-           CASE WHEN a.ProvisioningState = 2 AND ISNULL(s.RunningWorkerCount, 0) > 0
-                     AND s.OldestWorkerStartUtc IS NOT NULL
-                     AND s.OldestWorkerStartUtc >= d.DesiredArtifactCreatedUtc
-                THEN d.DesiredVersion
+           CASE WHEN d.PackageType = N'worker-host' AND ISNULL(s.RunningWorkerCount, 0) > 0
+                     AND s.UnreportedHostArtifactCount = 0 AND s.DistinctHostArtifactCount = 1
+                THEN ISNULL(s.ReportedHostArtifactVersion, N'?')
                 WHEN a.ProvisioningState = 2 AND ISNULL(s.RunningWorkerCount, 0) = 0
                 THEN N'provisioned, not loaded'
                 ELSE N'unknown' END AS RuntimeVersion,
@@ -354,17 +396,34 @@ WorkerClassified AS
                         + CAST(CAST(a.ProvisioningState AS int) AS nvarchar(10)) + N').'
                WHEN ISNULL(s.RunningWorkerCount, 0) = 0
                    THEN NULL
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                    AND s.DistinctHostArtifactCount > 1
+                   THEN N'Worker processes on this host are running more than one worker host build.'
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                    AND s.ReportedHostArtifactId <> d.DesiredArtifactId
+                   THEN N'Worker processes run worker host build ' + ISNULL(s.ReportedHostArtifactVersion, N'?')
+                        + N' but ' + ISNULL(d.DesiredVersion, N'?') + N' is desired.'
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                   THEN NULL
                WHEN s.OldestWorkerStartUtc IS NULL
                    THEN N'Worker start times are unknown, so the running worker host build cannot be established.'
                WHEN s.OldestWorkerStartUtc < d.DesiredArtifactCreatedUtc
                    THEN N'A worker process started before this worker host build existed, so it is running an older one.'
+               WHEN d.PackageType = N'worker-host'
+                   THEN N'No running worker host build was reported by the worker processes on this host, so it cannot be verified.'
                ELSE NULL
            END AS LastError,
            CASE
                WHEN a.ProvisioningState IS NULL OR a.ProvisioningState <> 2 OR a.ArtifactLastError IS NOT NULL THEN 2
                WHEN ISNULL(s.RunningWorkerCount, 0) = 0 THEN 3
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                    AND s.DistinctHostArtifactCount > 1 THEN 2
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                    AND s.ReportedHostArtifactId <> d.DesiredArtifactId THEN 2
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0 THEN 3
                WHEN s.OldestWorkerStartUtc IS NULL THEN 4
                WHEN s.OldestWorkerStartUtc < d.DesiredArtifactCreatedUtc THEN 2
+               WHEN d.PackageType = N'worker-host' THEN 4
                ELSE 3
            END AS Rank
     FROM DesiredWorkerApps d
@@ -386,12 +445,66 @@ $(if ($PendingOnly) { 'WHERE Rank <> 3' })
 ORDER BY HostKey, Rank, ModuleInstanceKey, AppKey, WorkerInstanceKey;
 "@
 
+    # R12-F8. Host artifact requirements that are not app instances -- in practice the
+    # channel-type packages, one enabled row per configured channel. They have no runtime
+    # state to read, so RuntimeVersion here means "this exact artifact's content is
+    # verified present on the host", which is a weaker claim than a running process and is
+    # labelled as such in the output. web-app and service-app requirement rows are
+    # excluded because those same deployments are already listed above as app instances,
+    # and one deployment listed twice under two different truths is worse than not listing
+    # it at all.
+    $requirementSql = @"
+SELECT h.HostKey,
+       CAST(NULL AS nvarchar(100)) AS ModuleInstanceKey,
+       a.TargetName AS AppKey,
+       CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
+       -- The requirement key goes in the instance column because that is the column the
+       -- table view prints: seven identical-looking file-drop rows with no discriminator
+       -- is a table that hides which channel is which.
+       CAST(r.RequirementKey AS nvarchar(150)) AS WorkerInstanceKey,
+       a.PackageType,
+       a.Version AS DesiredVersion,
+       CASE WHEN has.HostId IS NOT NULL AND has.ProvisioningState = 2 AND has.LastError IS NULL
+            THEN a.Version ELSE N'unknown' END AS RuntimeVersion,
+       CASE
+           WHEN has.HostId IS NULL THEN 'Pending'
+           WHEN has.LastError IS NOT NULL OR has.ProvisioningState = 3 THEN 'Failed'
+           WHEN has.ProvisioningState = 4 THEN 'Warning'
+           WHEN has.ProvisioningState = 2 THEN 'InSync'
+           ELSE 'Pending'
+       END AS Status,
+       CASE
+           WHEN has.HostId IS NULL THEN N'No HostAgent provisioning report for this required artifact yet.'
+           WHEN has.LastError IS NOT NULL THEN has.LastError
+           WHEN has.ProvisioningState <> 2 THEN N'Required artifact is not provisioned (state '
+                + CAST(CAST(has.ProvisioningState AS int) AS nvarchar(10)) + N').'
+           ELSE NULL
+       END AS LastError,
+       has.LastCheckedUtc
+FROM omp.HostArtifactRequirements r
+INNER JOIN omp.Hosts h ON h.HostId = r.HostId
+INNER JOIN omp.Artifacts a ON a.ArtifactId = r.ArtifactId
+LEFT JOIN omp.HostArtifactStates has
+    ON has.HostId = r.HostId AND has.ArtifactId = r.ArtifactId
+WHERE h.IsEnabled = 1 $hostFilter
+  AND r.IsEnabled = 1
+  AND a.PackageType NOT IN (N'web-app', N'service-app')
+ORDER BY h.HostKey, a.PackageType, a.TargetName, r.RequirementKey;
+"@
+
     $appTable = Invoke-DetailQuery $conn $sql
     $workerTable = Invoke-DetailQuery $conn $workerSql
+    $requirementTable = Invoke-DetailQuery $conn $requirementSql
 
     $selectColumns = 'HostKey', 'ModuleInstanceKey', 'AppKey', 'AppInstanceKey', 'WorkerInstanceKey',
                      'PackageType', 'DesiredVersion', 'RuntimeVersion', 'Status', 'LastError', 'LastCheckedUtc'
-    $rows = @($appTable | Select-Object $selectColumns) + @($workerTable | Select-Object $selectColumns)
+    $requirementRows = @($requirementTable | Select-Object $selectColumns)
+    if ($PendingOnly) {
+        # The requirement query classifies in SQL rather than by rank, so -PendingOnly is
+        # applied here instead of in its WHERE clause.
+        $requirementRows = @($requirementRows | Where-Object { $_.Status -ne 'InSync' })
+    }
+    $rows = @($appTable | Select-Object $selectColumns) + @($workerTable | Select-Object $selectColumns) + $requirementRows
 
     if ($Json) {
         [pscustomobject]@{
@@ -419,7 +532,11 @@ ORDER BY HostKey, Rank, ModuleInstanceKey, AppKey, WorkerInstanceKey;
             }
             if (@($rows | Where-Object { $_.RuntimeVersion -eq 'unknown' }).Count -gt 0) {
                 Write-Host ''
-                Write-Host "  RuntimeVersion 'unknown' betyder att den körande versionen inte går att fastställa ur schemat -- worker-tillståndstabellerna saknar versionskolumn. Se skriptets huvudkommentar." -ForegroundColor Yellow
+                Write-Host "  RuntimeVersion 'unknown' betyder att den körande versionen inte gick att läsa -- se raden i LastError nedan. Den räknas aldrig som att versionen stämmer." -ForegroundColor Yellow
+            }
+            if (@($rows | Where-Object { $_.PackageType -eq 'channel-type' }).Count -gt 0) {
+                Write-Host ''
+                Write-Host "  channel-type-raderna visar vad HostAgenten har provisionerat på värden, inte vad en kanalprocess har laddat. Det är den starkaste utsagan omp kan göra om en kanaltyp." -ForegroundColor Yellow
             }
             # LastError comes from a DataTable, so a SQL NULL arrives as
             # [DBNull]::Value -- which PowerShell treats as TRUE. Testing the

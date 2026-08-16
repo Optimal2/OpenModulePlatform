@@ -201,6 +201,54 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         if (-not [string]::Equals($actualSha256, $expectedSha256, [StringComparison]::OrdinalIgnoreCase)) {
             Add-ValidationError -Errors $errors -Message "SQL script '$scriptKey' in '$relativeDefinitionPath' has sha256 '$actualSha256', expected '$expectedSha256'. Run scripts/dev/embed-module-definition-sql.ps1."
         }
+
+        # R12-G4. Every CREATE TABLE in a setup script must be declared in
+        # integrity.requiredTables, and every declared table must exist in the script.
+        #
+        # That list is what the import path's healing witness reads to decide whether a
+        # package whose version is not newer still has to be applied (R12-G3). A table
+        # missing from it is invisible to that decision. ibs_packager declared 16 of its 21
+        # tables and nothing compared the two, so five tables -- Settings included -- could
+        # never trigger a heal. The two sources are a JSON array and a SQL file; only a
+        # comparison relates them, and until now nothing performed it.
+        #
+        # Deliberately limited to tables. Columns, indexes, constraints and triggers are now
+        # declarable too, but they have no single unambiguous "declaration site" in a script
+        # that adds them through idempotent ALTER blocks, so requiring a complete list would
+        # produce false failures. Tables have exactly one CREATE TABLE each.
+        if ($scriptKey -like '*setup*') {
+            $createdTables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            foreach ($match in [regex]::Matches($sqlText, '(?im)^\s*CREATE\s+TABLE\s+(?<schema>[\w\[\]]+)\.(?<table>[\w\[\]]+)')) {
+                $schemaName = $match.Groups['schema'].Value.Trim('[', ']')
+                $tableName = $match.Groups['table'].Value.Trim('[', ']')
+                [void]$createdTables.Add("$schemaName.$tableName")
+            }
+
+            if ($createdTables.Count -gt 0) {
+                $integrity = Get-OptionalPropertyValue -Object $definition -Name 'integrity'
+                $declaredTables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+                if ($null -ne $integrity) {
+                    foreach ($declared in @(Get-OptionalPropertyValue -Object $integrity -Name 'requiredTables')) {
+                        if ($null -eq $declared) { continue }
+                        $declaredSchema = [string](Get-OptionalPropertyValue -Object $declared -Name 'schema')
+                        $declaredName = [string](Get-OptionalPropertyValue -Object $declared -Name 'name')
+                        if (-not [string]::IsNullOrWhiteSpace($declaredName)) {
+                            [void]$declaredTables.Add("$declaredSchema.$declaredName")
+                        }
+                    }
+                }
+
+                $undeclared = @($createdTables | Where-Object { -not $declaredTables.Contains($_) } | Sort-Object)
+                if ($undeclared.Count -gt 0) {
+                    Add-ValidationError -Errors $errors -Message "'$relativeDefinitionPath' creates $($undeclared.Count) table(s) that integrity.requiredTables does not declare, so the import path cannot notice they are missing: $($undeclared -join ', ')."
+                }
+
+                $phantom = @($declaredTables | Where-Object { -not $createdTables.Contains($_) } | Sort-Object)
+                if ($phantom.Count -gt 0) {
+                    Add-ValidationError -Errors $errors -Message "'$relativeDefinitionPath' declares $($phantom.Count) table(s) in integrity.requiredTables that '$scriptPathValue' never creates: $($phantom -join ', ')."
+                }
+            }
+        }
     }
 }
 

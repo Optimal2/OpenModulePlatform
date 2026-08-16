@@ -39,6 +39,34 @@ public sealed class HostAgentRpcHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        try
+        {
+            await RunRpcListenerAsync(stoppingToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The outermost boundary of a BackgroundService must be broad. Anything that
+            // leaves ExecuteAsync reaches .NET's default BackgroundServiceExceptionBehavior
+            // .StopHost, which stops the entire HostAgent Windows service -- so a fault in
+            // the RPC listener, an optional side channel, would take the convergence loop
+            // down with it and leave the machine deploying nothing at all. The listener setup
+            // below is not hypothetical: ResolveRpcPipeName runs on operator-supplied
+            // settings, CreatePipeSecurity resolves configured account names against the
+            // domain, and both sat outside every try. Same defect and same fix as R12-E1 in
+            // OmpPerformanceTelemetryHostedService, and as R3-E4 (PushEventDispatcher
+            // HostedService) and R5-D1 (HostAgentHostedService) before it: a curated list of
+            // exception types on a hosted-service boundary is a list of the failures somebody
+            // thought of. OperationCanceledException is deliberately not caught -- it is how
+            // a clean shutdown reports itself and it must keep propagating.
+            _logger.LogError(
+                ex,
+                "HostAgent RPC listener stopped after an unhandled failure. RPC is unavailable until the service restarts; the convergence loop is unaffected. ServiceName={ServiceName}",
+                _process.ServiceName);
+        }
+    }
+
+    private async Task RunRpcListenerAsync(CancellationToken stoppingToken)
+    {
         var settings = _settings.CurrentValue;
         if (!settings.EnableRpc)
         {
@@ -97,20 +125,21 @@ public sealed class HostAgentRpcHostedService : BackgroundService
             {
                 break;
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                await DelayAfterAcceptFailureAsync(ex, stoppingToken);
-            }
-            catch (ObjectDisposedException ex)
-            {
-                await DelayAfterAcceptFailureAsync(ex, stoppingToken);
-            }
-            catch (InvalidOperationException ex)
-            {
-                await DelayAfterAcceptFailureAsync(ex, stoppingToken);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
+                // One failed accept must never end the listener, so this catch is the same
+                // shape as the outer one: everything except cancellation. The curated list it
+                // replaces (IOException, ObjectDisposedException, InvalidOperationException,
+                // UnauthorizedAccessException) missed types this very loop can produce --
+                // NamedPipeServerStreamAcl.Create throws Win32Exception when the pipe name is
+                // already owned by another security descriptor and ArgumentOutOfRangeException
+                // on a malformed name, and an unmatched type here escaped ExecuteAsync and
+                // stopped the whole service (R12-E1's sibling; see R3-E4 and R5-D1).
+                //
+                // Retrying forever is deliberate even for a permanent fault: RPC is how
+                // WorkerManager asks HostAgent to materialise an artifact, so an unavailable
+                // listener that keeps trying beats one that has given up, and the five-second
+                // delay bounds the log volume it can produce.
                 await DelayAfterAcceptFailureAsync(ex, stoppingToken);
             }
             finally
