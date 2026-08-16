@@ -54,7 +54,8 @@ BEGIN
         CAST(NULL AS nvarchar(500)) AS InstallPath,
         CAST(NULL AS bit) AS IsProvisionedFromHostArtifactCache,
         CAST(NULL AS nvarchar(400)) AS PluginRelativePath,
-        CAST(NULL AS nvarchar(max)) AS ConfigurationJson;
+        CAST(NULL AS nvarchar(max)) AS ConfigurationJson,
+        CAST(NULL AS nvarchar(50)) AS ArtifactVersion;
     RETURN;
 END;
 
@@ -78,6 +79,9 @@ WorkerRows AS
         CASE WHEN @useHostArtifactCache = 1 AND has.LocalPath IS NOT NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsProvisionedFromHostArtifactCache,
         awd.PluginRelativePath,
         wi.ConfigurationJson,
+        -- R12-F2. Carried on the definition so the manager can report which artifact
+        -- version a worker was actually started from; see DesiredWorkerInstance.ArtifactVersion.
+        ar.Version AS ArtifactVersion,
         wi.SortOrder
     FROM omp.WorkerInstances wi
     INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
@@ -128,6 +132,7 @@ WorkerRows AS
         CASE WHEN @useHostArtifactCache = 1 AND has.LocalPath IS NOT NULL THEN CAST(1 AS bit) ELSE CAST(0 AS bit) END AS IsProvisionedFromHostArtifactCache,
         awd.PluginRelativePath,
         CAST(NULL AS nvarchar(max)) AS ConfigurationJson,
+        ar.Version AS ArtifactVersion,
         ai.SortOrder
     FROM omp.AppInstances ai
     INNER JOIN omp.Apps a ON a.AppId = ai.AppId
@@ -167,7 +172,8 @@ SELECT
     InstallPath,
     IsProvisionedFromHostArtifactCache,
     PluginRelativePath,
-    ConfigurationJson
+    ConfigurationJson,
+    ArtifactVersion
 FROM WorkerRows
 WHERE PluginRelativePath IS NOT NULL
   AND LTRIM(RTRIM(PluginRelativePath)) <> N''
@@ -217,6 +223,7 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
             var isProvisionedFromHostArtifactCache = rdr.GetBoolean(7);
             var pluginRelativePath = rdr.GetString(8);
             var configurationJson = rdr.IsDBNull(9) ? null : rdr.GetString(9);
+            var artifactVersion = rdr.IsDBNull(10) ? null : rdr.GetString(10).Trim();
             var pluginAssemblyPath = string.IsNullOrWhiteSpace(installPath)
                 ? string.Empty
                 : ResolvePluginAssemblyPath(installPath, pluginRelativePath, appInstanceId, workerInstanceId);
@@ -228,6 +235,7 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
                 WorkerInstanceKey = workerInstanceKey.Trim(),
                 WorkerTypeKey = workerTypeKey.Trim(),
                 ArtifactId = artifactId,
+                ArtifactVersion = artifactVersion,
                 InstallRootPath = installPath,
                 IsProvisionedFromHostArtifactCache = isProvisionedFromHostArtifactCache,
                 PluginRelativePath = pluginRelativePath.Trim(),

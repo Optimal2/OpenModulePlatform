@@ -40,6 +40,36 @@ public sealed class ManagedWorkerProcess
 
     public bool StopRequested { get; private set; }
 
+    /// <summary>
+    /// The artifact the CURRENT process was started from (R12-F2).
+    /// </summary>
+    /// <remarks>
+    /// Captured from the definition at AttachProcess rather than read from
+    /// <see cref="Definition"/> when an observation is published, because the two stop
+    /// agreeing exactly when it matters: a worker whose restart is blocked (drain that
+    /// never completes, restart-policy backoff, an unstartable replacement definition)
+    /// keeps a process from the old artifact while the manager already holds a newer
+    /// definition. Publishing the definition would then report a version nothing is
+    /// running, which is the failure the witness exists to expose, reintroduced inside
+    /// the witness itself.
+    /// </remarks>
+    public int? StartedArtifactId { get; private set; }
+
+    public string? StartedArtifactVersion { get; private set; }
+
+    /// <summary>
+    /// The WorkerProcessHost artifact the current process was launched with (R12-F2).
+    /// </summary>
+    /// <remarks>
+    /// Captured per process for the same reason as the worker's own artifact: the host
+    /// executable is re-resolved on every start, so the only build a running process can be
+    /// said to be using is the one that was resolved when it started. Null when the path came
+    /// from configuration instead of the artifact catalogue.
+    /// </remarks>
+    public int? StartedHostArtifactId { get; private set; }
+
+    public string? StartedHostArtifactVersion { get; private set; }
+
     public bool HasEquivalentConfiguration(DesiredWorkerInstance desired)
     {
         return Definition.HasEquivalentConfiguration(desired);
@@ -59,6 +89,7 @@ public sealed class ManagedWorkerProcess
         Process process,
         EventWaitHandle shutdownEvent,
         DateTimeOffset startedUtc,
+        ResolvedWorkerProcessHost? workerProcessHost = null,
         EventWaitHandle? drainEvent = null,
         EventWaitHandle? busyEvent = null)
     {
@@ -66,6 +97,12 @@ public sealed class ManagedWorkerProcess
         ShutdownEvent = shutdownEvent;
         DrainEvent = drainEvent;
         BusyEvent = busyEvent;
+        // R12-F2. Freeze the artifact identity at the moment the process exists; from here
+        // on the definition may move ahead of it without the running process changing.
+        StartedArtifactId = Definition.ArtifactId;
+        StartedArtifactVersion = Definition.ArtifactVersion;
+        StartedHostArtifactId = workerProcessHost?.ArtifactId;
+        StartedHostArtifactVersion = workerProcessHost?.Version;
         LastStartUtc = startedUtc;
         ExitObserved = false;
         StopRequested = false;

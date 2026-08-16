@@ -13,6 +13,24 @@ public sealed class DesiredWorkerInstance
 
     public int? ArtifactId { get; init; }
 
+    /// <summary>
+    /// The catalogued version of <see cref="ArtifactId"/> as it read when this definition
+    /// was resolved (R12-F2).
+    /// </summary>
+    /// <remarks>
+    /// This is what the manager publishes as the runtime version witness once a process
+    /// has actually been started from the definition. It is carried on the definition
+    /// rather than looked up at publish time on purpose: a running worker keeps the
+    /// definition it was started with until it is restarted, so the definition is the only
+    /// place the STARTED version still exists after the catalogue has moved on -- which is
+    /// exactly the case the witness exists to expose.
+    ///
+    /// Measured before choosing this source: the plugin assembly's own file version is not
+    /// the artifact version and cannot stand in for it. ibs-packager artifact 0.3.109 ships
+    /// IbsPackager.Worker.dll with FileVersion 0.3.115.0 and ProductVersion 0.3.43+sha.
+    /// </remarks>
+    public string? ArtifactVersion { get; init; }
+
     public string? InstallRootPath { get; init; }
 
     public bool IsProvisionedFromHostArtifactCache { get; init; }
@@ -34,6 +52,11 @@ public sealed class DesiredWorkerInstance
             && string.Equals(WorkerInstanceKey, other.WorkerInstanceKey, StringComparison.Ordinal)
             && string.Equals(WorkerTypeKey, other.WorkerTypeKey, StringComparison.Ordinal)
             && ArtifactId == other.ArtifactId
+            // R12-F2. A version rewritten in place under an unchanged ArtifactId is still a
+            // version change, and the running process would otherwise keep reporting the
+            // version it started with forever -- correct as a witness, but a drift the gate
+            // reports and nothing ever clears. Comparing it here makes the restart the fix.
+            && string.Equals(ArtifactVersion, other.ArtifactVersion, StringComparison.Ordinal)
             && string.Equals(InstallRootPath, other.InstallRootPath, StringComparison.Ordinal)
             && IsProvisionedFromHostArtifactCache == other.IsProvisionedFromHostArtifactCache
             && string.Equals(PluginRelativePath, other.PluginRelativePath, StringComparison.Ordinal)
@@ -56,6 +79,10 @@ public sealed class DesiredWorkerInstance
             WorkerInstanceKey = WorkerInstanceKey,
             WorkerTypeKey = WorkerTypeKey,
             ArtifactId = ArtifactId,
+            // Must be carried through: the resolved definition is compared against the
+            // running one by HasEquivalentConfiguration, so dropping it here would make
+            // every cycle look like a configuration change and restart every worker.
+            ArtifactVersion = ArtifactVersion,
             InstallRootPath = installRootPath,
             IsProvisionedFromHostArtifactCache = true,
             PluginRelativePath = PluginRelativePath,

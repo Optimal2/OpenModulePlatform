@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/OmpWorkerRuntimeRepository.cs
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
 
 namespace OpenModulePlatform.WorkerManager.WindowsService.Services;
@@ -11,11 +12,72 @@ public sealed class OmpWorkerRuntimeRepository
 {
     private const string WorkerProcessHostExecutableName = "OpenModulePlatform.WorkerProcessHost.exe";
 
-    private readonly SqlConnectionFactory _db;
+    /// <summary>
+    /// R12-F2. The runtime version witness columns are newer than the service that writes
+    /// them, and a universal package can land the WorkerManager binary before the omp_core
+    /// schema has been applied.
+    /// </summary>
+    /// <remarks>
+    /// Without this probe that window turns every publish into an "invalid column name"
+    /// failure: the runtime rows stop being refreshed, the staleness downgrade turns them
+    /// all Unknown, and the deployment gate reports a host-wide worker outage caused
+    /// entirely by the diagnostics. Degrading to the old column set instead keeps the
+    /// service publishing and costs only the version witness during that window.
+    ///
+    /// The probe is re-run while the answer is no, so the witness starts working by itself
+    /// once the migration lands -- a cached "no" would have needed a service restart, and
+    /// nobody restarts a service for a column they cannot see is missing. The missing
+    /// columns are logged, once, because a silently degraded witness is the defect this
+    /// whole finding is about.
+    /// </remarks>
+    private const string RuntimeArtifactColumnProbeSql = @"
+SELECT CASE
+           WHEN COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeArtifactId') IS NULL
+             OR COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeArtifactVersion') IS NULL
+             OR COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeHostArtifactId') IS NULL
+             OR COL_LENGTH(N'omp.WorkerInstanceRuntimeStates', N'RuntimeHostArtifactVersion') IS NULL
+             OR COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeArtifactId') IS NULL
+             OR COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeArtifactVersion') IS NULL
+             OR COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeHostArtifactId') IS NULL
+             OR COL_LENGTH(N'omp.AppInstanceRuntimeStates', N'RuntimeHostArtifactVersion') IS NULL
+           THEN 0 ELSE 1
+       END;";
 
-    public OmpWorkerRuntimeRepository(SqlConnectionFactory db)
+    private readonly SqlConnectionFactory _db;
+    private readonly ILogger<OmpWorkerRuntimeRepository> _logger;
+
+    private volatile bool _hasRuntimeArtifactColumns;
+    private volatile bool _missingRuntimeArtifactColumnsLogged;
+
+    public OmpWorkerRuntimeRepository(SqlConnectionFactory db, ILogger<OmpWorkerRuntimeRepository> logger)
     {
         _db = db;
+        _logger = logger;
+    }
+
+    private async Task<bool> HasRuntimeArtifactColumnsAsync(SqlConnection conn, CancellationToken ct)
+    {
+        if (_hasRuntimeArtifactColumns)
+        {
+            return true;
+        }
+
+        await using var cmd = new SqlCommand(RuntimeArtifactColumnProbeSql, conn);
+        var present = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 0) == 1;
+        if (present)
+        {
+            _hasRuntimeArtifactColumns = true;
+            return true;
+        }
+
+        if (!_missingRuntimeArtifactColumnsLogged)
+        {
+            _missingRuntimeArtifactColumnsLogged = true;
+            _logger.LogWarning(
+                "omp.WorkerInstanceRuntimeStates/omp.AppInstanceRuntimeStates have no RuntimeArtifactId/RuntimeArtifactVersion columns, so which artifact version each worker runs cannot be recorded. The omp_core schema migration has not been applied to this database yet; deployment diagnostics will report the running worker version as unknown until it is.");
+        }
+
+        return false;
     }
 
     public async Task TouchHostHeartbeatAsync(string hostKey, CancellationToken ct)
@@ -34,7 +96,11 @@ WHERE HostKey = @hostKey;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<string?> ResolveWorkerProcessHostPathAsync(string hostKey, CancellationToken ct)
+    /// <summary>
+    /// Resolves the provisioned WorkerProcessHost executable for this host together with the
+    /// artifact it belongs to (R12-F2).
+    /// </summary>
+    public async Task<ResolvedWorkerProcessHost?> ResolveWorkerProcessHostAsync(string hostKey, CancellationToken ct)
     {
         const string sql = @"
 DECLARE @hostId uniqueidentifier;
@@ -46,7 +112,10 @@ WHERE HostKey = @hostKey
 
 IF @hostId IS NULL
 BEGIN
-    SELECT TOP (0) CAST(NULL AS nvarchar(500)) AS LocalPath;
+    SELECT TOP (0)
+        CAST(NULL AS nvarchar(500)) AS LocalPath,
+        CAST(NULL AS int) AS ArtifactId,
+        CAST(NULL AS nvarchar(50)) AS Version;
     RETURN;
 END;
 
@@ -58,7 +127,9 @@ WITH HostRoles AS
       AND IsActive = 1
 )
 SELECT TOP (1)
-    has.LocalPath
+    has.LocalPath,
+    ar.ArtifactId,
+    ar.Version
 FROM omp.AppInstances ai
 INNER JOIN omp.Apps a ON a.AppId = ai.AppId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
@@ -101,13 +172,25 @@ ORDER BY
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@hostKey", hostKey);
 
-        var localPath = await cmd.ExecuteScalarAsync(ct) as string;
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        var localPath = rdr.IsDBNull(0) ? null : rdr.GetString(0);
         if (string.IsNullOrWhiteSpace(localPath))
         {
             return null;
         }
 
-        return Path.Join(localPath.Trim(), WorkerProcessHostExecutableName);
+        var artifactId = rdr.IsDBNull(1) ? (int?)null : rdr.GetInt32(1);
+        var version = rdr.IsDBNull(2) ? null : rdr.GetString(2).Trim();
+
+        return new ResolvedWorkerProcessHost(
+            Path.Join(localPath.Trim(), WorkerProcessHostExecutableName),
+            artifactId,
+            version);
     }
 
     /// <summary>
@@ -123,8 +206,52 @@ ORDER BY
     /// and its LastSeenUtc is the OLDEST sibling's so the row can never look fresher than
     /// its stalest member. Both callers (publish and the staleness downgrade) share this
     /// one definition; two copies of an aggregation rule is how the two states drift apart.
+    ///
+    /// R12-F2: the summary's artifact witness comes from the SAME sibling row every other
+    /// summarised column comes from -- the worst one -- so the row tells one worker
+    /// instance's whole story instead of a chimera assembled from several. Siblings that
+    /// disagree about their version are visible in the per-instance table, which is what
+    /// both diagnostics scripts read for workers.
     /// </remarks>
-    private const string AppInstanceSummarySql = @"
+    private static string BuildAppInstanceSummarySql(bool hasRuntimeArtifactColumns)
+    {
+        var declare = hasRuntimeArtifactColumns
+            ? @"
+DECLARE @aggRuntimeArtifactId int;
+DECLARE @aggRuntimeArtifactVersion nvarchar(50);
+DECLARE @aggRuntimeHostArtifactId int;
+DECLARE @aggRuntimeHostArtifactVersion nvarchar(50);"
+            : string.Empty;
+        var select = hasRuntimeArtifactColumns
+            ? @",
+        @aggRuntimeArtifactId = s.RuntimeArtifactId,
+        @aggRuntimeArtifactVersion = s.RuntimeArtifactVersion,
+        @aggRuntimeHostArtifactId = s.RuntimeHostArtifactId,
+        @aggRuntimeHostArtifactVersion = s.RuntimeHostArtifactVersion"
+            : string.Empty;
+        var set = hasRuntimeArtifactColumns
+            ? @",
+            RuntimeArtifactId = @aggRuntimeArtifactId,
+            RuntimeArtifactVersion = @aggRuntimeArtifactVersion,
+            RuntimeHostArtifactId = @aggRuntimeHostArtifactId,
+            RuntimeHostArtifactVersion = @aggRuntimeHostArtifactVersion"
+            : string.Empty;
+        var insertColumns = hasRuntimeArtifactColumns
+            ? ", RuntimeArtifactId, RuntimeArtifactVersion, RuntimeHostArtifactId, RuntimeHostArtifactVersion"
+            : string.Empty;
+        var insertValues = hasRuntimeArtifactColumns
+            ? ", @aggRuntimeArtifactId, @aggRuntimeArtifactVersion, @aggRuntimeHostArtifactId, @aggRuntimeHostArtifactVersion"
+            : string.Empty;
+
+        return AppInstanceSummarySqlTemplate
+            .Replace("/*ARTIFACT_DECLARE*/", declare, StringComparison.Ordinal)
+            .Replace("/*ARTIFACT_SELECT*/", select, StringComparison.Ordinal)
+            .Replace("/*ARTIFACT_SET*/", set, StringComparison.Ordinal)
+            .Replace("/*ARTIFACT_INSERT_COLUMNS*/", insertColumns, StringComparison.Ordinal)
+            .Replace("/*ARTIFACT_INSERT_VALUES*/", insertValues, StringComparison.Ordinal);
+    }
+
+    private const string AppInstanceSummarySqlTemplate = @"
 -- Severity order, worst first: Failed(5), Unknown(0), Stopped(4), Stopping(3),
 -- Starting(1), Running(2). See WorkerObservedStates.
 DECLARE @siblingCount int = 0;
@@ -137,7 +264,7 @@ DECLARE @aggStartedUtc datetime2(3);
 DECLARE @aggLastSeenUtc datetime2(3);
 DECLARE @aggLastExitUtc datetime2(3);
 DECLARE @aggLastExitCode int;
-DECLARE @aggStatusMessage nvarchar(500);
+DECLARE @aggStatusMessage nvarchar(500);/*ARTIFACT_DECLARE*/
 
 SELECT @siblingCount = COUNT(1),
        @nullSeenCount = SUM(CASE WHEN s.LastSeenUtc IS NULL THEN 1 ELSE 0 END),
@@ -158,7 +285,7 @@ BEGIN
         @aggStartedUtc = s.StartedUtc,
         @aggLastExitUtc = s.LastExitUtc,
         @aggLastExitCode = s.LastExitCode,
-        @aggStatusMessage = s.StatusMessage
+        @aggStatusMessage = s.StatusMessage/*ARTIFACT_SELECT*/
     FROM omp.WorkerInstanceRuntimeStates s
     INNER JOIN omp.WorkerInstances wi
         ON wi.WorkerInstanceId = s.WorkerInstanceId
@@ -203,7 +330,7 @@ BEGIN
             LastSeenUtc = @aggLastSeenUtc,
             LastExitUtc = @aggLastExitUtc,
             LastExitCode = @aggLastExitCode,
-            StatusMessage = @aggStatusMessage,
+            StatusMessage = @aggStatusMessage/*ARTIFACT_SET*/,
             UpdatedUtc = @nowUtc
         WHERE AppInstanceId = @appInstanceId;
     END
@@ -212,13 +339,13 @@ BEGIN
         INSERT INTO omp.AppInstanceRuntimeStates
         (
             AppInstanceId, RuntimeKind, WorkerTypeKey, ObservedState, ProcessId,
-            StartedUtc, LastSeenUtc, LastExitUtc, LastExitCode, StatusMessage,
+            StartedUtc, LastSeenUtc, LastExitUtc, LastExitCode, StatusMessage/*ARTIFACT_INSERT_COLUMNS*/,
             CreatedUtc, UpdatedUtc
         )
         VALUES
         (
             @appInstanceId, @aggRuntimeKind, @aggWorkerTypeKey, @aggObservedState, @aggProcessId,
-            @aggStartedUtc, @aggLastSeenUtc, @aggLastExitUtc, @aggLastExitCode, @aggStatusMessage,
+            @aggStartedUtc, @aggLastSeenUtc, @aggLastExitUtc, @aggLastExitCode, @aggStatusMessage/*ARTIFACT_INSERT_VALUES*/,
             @nowUtc, @nowUtc
         );
     END
@@ -232,7 +359,35 @@ END
     {
         ArgumentNullException.ThrowIfNull(observation);
 
-        const string sql = @"
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        // R12-F2. Probed before the statement is composed, not assumed: a WorkerManager
+        // that lands ahead of the omp_core migration must keep publishing state.
+        var hasArtifactColumns = await HasRuntimeArtifactColumnsAsync(conn, ct);
+        var mergeSetFragment = hasArtifactColumns
+            ? @",
+            RuntimeArtifactId = @runtimeArtifactId,
+            RuntimeArtifactVersion = @runtimeArtifactVersion,
+            RuntimeHostArtifactId = @runtimeHostArtifactId,
+            RuntimeHostArtifactVersion = @runtimeHostArtifactVersion"
+            : string.Empty;
+        var mergeColumnsFragment = hasArtifactColumns
+            ? @",
+            RuntimeArtifactId,
+            RuntimeArtifactVersion,
+            RuntimeHostArtifactId,
+            RuntimeHostArtifactVersion"
+            : string.Empty;
+        var mergeValuesFragment = hasArtifactColumns
+            ? @",
+            @runtimeArtifactId,
+            @runtimeArtifactVersion,
+            @runtimeHostArtifactId,
+            @runtimeHostArtifactVersion"
+            : string.Empty;
+
+        var sql = @"
 SET XACT_ABORT ON;
 SET NOCOUNT ON;
 BEGIN TRANSACTION;
@@ -282,7 +437,7 @@ BEGIN
             LastSeenUtc = @lastSeenUtc,
             LastExitUtc = @lastExitUtc,
             LastExitCode = @lastExitCode,
-            StatusMessage = @statusMessage,
+            StatusMessage = @statusMessage" + mergeSetFragment + @",
             UpdatedUtc = @nowUtc
     WHEN NOT MATCHED THEN
         INSERT
@@ -298,7 +453,7 @@ BEGIN
             LastSeenUtc,
             LastExitUtc,
             LastExitCode,
-            StatusMessage,
+            StatusMessage" + mergeColumnsFragment + @",
             CreatedUtc,
             UpdatedUtc
         )
@@ -315,13 +470,13 @@ BEGIN
             @lastSeenUtc,
             @lastExitUtc,
             @lastExitCode,
-            @statusMessage,
+            @statusMessage" + mergeValuesFragment + @",
             @nowUtc,
             @nowUtc
         );
 END
 "
-            + AppInstanceSummarySql
+            + BuildAppInstanceSummarySql(hasArtifactColumns)
             + @"
 -- Not every runtime observation belongs to a catalogued worker instance: a manually
 -- created runtime app instance, or an observation whose WorkerInstanceId falls back to
@@ -350,7 +505,7 @@ BEGIN
             LastSeenUtc = @lastSeenUtc,
             LastExitUtc = @lastExitUtc,
             LastExitCode = @lastExitCode,
-            StatusMessage = @statusMessage,
+            StatusMessage = @statusMessage" + mergeSetFragment + @",
             UpdatedUtc = @nowUtc
         WHERE AppInstanceId = @appInstanceId;
     END
@@ -359,13 +514,13 @@ BEGIN
         INSERT INTO omp.AppInstanceRuntimeStates
         (
             AppInstanceId, RuntimeKind, WorkerTypeKey, ObservedState, ProcessId,
-            StartedUtc, LastSeenUtc, LastExitUtc, LastExitCode, StatusMessage,
+            StartedUtc, LastSeenUtc, LastExitUtc, LastExitCode, StatusMessage" + mergeColumnsFragment + @",
             CreatedUtc, UpdatedUtc
         )
         VALUES
         (
             @appInstanceId, @runtimeKind, @workerTypeKey, @observedState, @processId,
-            @startedUtc, @lastSeenUtc, @lastExitUtc, @lastExitCode, @statusMessage,
+            @startedUtc, @lastSeenUtc, @lastExitUtc, @lastExitCode, @statusMessage" + mergeValuesFragment + @",
             @nowUtc, @nowUtc
         );
     END
@@ -392,9 +547,6 @@ END
 
 COMMIT TRANSACTION;";
 
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@appInstanceId", observation.AppInstanceId);
         cmd.Parameters.AddWithValue("@workerInstanceId", observation.WorkerInstanceId == Guid.Empty ? observation.AppInstanceId : observation.WorkerInstanceId);
@@ -414,6 +566,14 @@ COMMIT TRANSACTION;";
         cmd.Parameters.AddWithValue("@lastExitCode", (object?)observation.LastExitCode ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@statusMessage", ToStatusMessageValue(observation.StatusMessage));
         cmd.Parameters.AddWithValue("@touchAppInstanceHeartbeat", touchAppInstanceHeartbeat);
+        if (hasArtifactColumns)
+        {
+            cmd.Parameters.AddWithValue("@runtimeArtifactId", (object?)observation.RuntimeArtifactId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@runtimeArtifactVersion", ToNullableStringValue(observation.RuntimeArtifactVersion, 50));
+            cmd.Parameters.AddWithValue("@runtimeHostArtifactId", (object?)observation.RuntimeHostArtifactId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@runtimeHostArtifactVersion", ToNullableStringValue(observation.RuntimeHostArtifactVersion, 50));
+        }
+
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -443,7 +603,24 @@ COMMIT TRANSACTION;";
         int staleAfterSeconds,
         CancellationToken ct)
     {
-        const string sql = @"
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var hasArtifactColumns = await HasRuntimeArtifactColumnsAsync(conn, ct);
+        // R12-F2. The version claim has to die with the process it described. A row
+        // downgraded to Unknown says "nobody is reporting on this worker any more"; leaving
+        // RuntimeArtifactVersion behind would let a worker that has not existed for days go
+        // on naming the version it runs, and a reader comparing that against the desired
+        // version would find agreement -- exactly the false all-clear this finding is about.
+        var clearArtifactFragment = hasArtifactColumns
+            ? @",
+        RuntimeArtifactId = NULL,
+        RuntimeArtifactVersion = NULL,
+        RuntimeHostArtifactId = NULL,
+        RuntimeHostArtifactVersion = NULL"
+            : string.Empty;
+
+        var sql = @"
 SET NOCOUNT ON;
 
 DECLARE @nowUtc datetime2(3) = SYSUTCDATETIME();
@@ -488,7 +665,7 @@ BEGIN
 
     UPDATE s
     SET ObservedState = 0,
-        ProcessId = NULL,
+        ProcessId = NULL" + clearArtifactFragment + @",
         StatusMessage = LEFT(
             N'No WorkerManager report for more than ' + CAST(@staleAfterSeconds AS nvarchar(10))
             + N' s; state downgraded to Unknown.', 500),
@@ -498,9 +675,6 @@ BEGIN
 END
 
 SELECT DISTINCT AppInstanceId FROM @stale;";
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
 
         var affectedAppInstances = new List<Guid>();
         await using (var cmd = new SqlCommand(sql, conn))
@@ -517,7 +691,7 @@ SELECT DISTINCT AppInstanceId FROM @stale;";
 
         foreach (var appInstanceId in affectedAppInstances)
         {
-            await RecomputeAppInstanceSummaryAsync(conn, appInstanceId, ct);
+            await RecomputeAppInstanceSummaryAsync(conn, appInstanceId, hasArtifactColumns, ct);
         }
 
         return affectedAppInstances.Count;
@@ -530,9 +704,10 @@ SELECT DISTINCT AppInstanceId FROM @stale;";
     private static async Task RecomputeAppInstanceSummaryAsync(
         SqlConnection conn,
         Guid appInstanceId,
+        bool hasRuntimeArtifactColumns,
         CancellationToken ct)
     {
-        const string sql = @"
+        var sql = @"
 SET XACT_ABORT ON;
 SET NOCOUNT ON;
 BEGIN TRANSACTION;
@@ -551,7 +726,7 @@ BEGIN
     THROW 51100, N'Could not acquire the app-instance runtime state lock.', 1;
 END
 "
-            + AppInstanceSummarySql
+            + BuildAppInstanceSummarySql(hasRuntimeArtifactColumns)
             + @"
 COMMIT TRANSACTION;";
 

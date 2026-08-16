@@ -14,22 +14,26 @@
 #   * the HostAgent runs its desired version, has a desired version at all, and
 #     has reported within -MaxStateAgeSeconds (R12-F3),
 #   * app deployment state was last checked within -MaxStateAgeSeconds (R12-F3),
-#   * no artifact requirement is unprovisioned, failed or unreported,
+#   * no artifact requirement is unprovisioned, failed or unreported, and no host
+#     is required to run two different builds of the same package at once (R12-F8),
 #   * every desired worker and worker-host package is provisioned on the host and
-#     every worker instance is running a build no older than its desired artifact,
-#     with a fresh heartbeat (R12-F2, R12-F7, R12-D1).
+#     every worker instance REPORTS running the desired artifact, with a fresh
+#     heartbeat (R12-F2, R12-F7, R12-D1).
 #
-# What this script CANNOT establish, stated here rather than left implied
-# (R12-F2): no table in omp records which artifact VERSION a running worker
-# process loaded. omp.AppInstanceRuntimeStates and omp.WorkerInstanceRuntimeStates
-# have neither ArtifactId nor Version. The worker check therefore uses the one
-# ordering fact the schema does supply -- a process that started before its
-# desired artifact existed in the catalog cannot be running it -- plus the
-# requirement that the desired artifact is actually provisioned on the host. It
-# never raises a false alarm (the catalog timestamp only moves forward when a new
-# version is imported) but it does not catch a worker that restarted after the
-# version was catalogued yet before it reached the host's artifact cache. Closing
-# that gap needs a Version/ArtifactId column on the worker runtime tables.
+# How the running worker version is established (R12-F2). WorkerManager records
+# the artifact it actually started each worker process from, and the worker host
+# build it launched it with, in omp.WorkerInstanceRuntimeStates.RuntimeArtifactId /
+# RuntimeArtifactVersion / RuntimeHostArtifactId / RuntimeHostArtifactVersion. The
+# columns are written only while a process is alive and are cleared when a state
+# goes stale, so a version in them always belongs to a process someone is currently
+# observing. This script compares them against the desired artifact.
+#
+# Where that evidence is missing -- a WorkerManager older than this witness, a
+# database the migration has not reached, a manually created runtime app instance --
+# the row is reported as UNVERIFIABLE and counts against convergence. It is not
+# treated as healthy: a gate that cannot see a version must not certify one. The
+# older ordering heuristic (a process that started before its desired artifact
+# existed cannot be running it) is kept as the fallback for exactly those rows.
 [CmdletBinding()]
 param(
     [string]$Server = 'localhost',
@@ -105,6 +109,10 @@ function Format-AgeSeconds {
 $identityProbeSql = "SELECT CASE WHEN COL_LENGTH('omp.HostAppDeploymentStates','IdentityCheckStatus') IS NULL THEN 0 ELSE 1 END"
 $lastWarningProbeSql = "SELECT CASE WHEN COL_LENGTH('omp.HostAppDeploymentStates','LastWarning') IS NULL THEN 0 ELSE 1 END"
 $workerStateProbeSql = "SELECT CASE WHEN OBJECT_ID('omp.WorkerInstanceRuntimeStates','U') IS NULL THEN 0 ELSE 1 END"
+# R12-F2. Probed on whichever table the worker join actually reads, so the answer
+# describes the columns this run will select and not a table it will not touch.
+$workerVersionProbeSqlPerInstance = "SELECT CASE WHEN COL_LENGTH('omp.WorkerInstanceRuntimeStates','RuntimeArtifactId') IS NULL OR COL_LENGTH('omp.WorkerInstanceRuntimeStates','RuntimeHostArtifactId') IS NULL THEN 0 ELSE 1 END"
+$workerVersionProbeSqlSummary = "SELECT CASE WHEN COL_LENGTH('omp.AppInstanceRuntimeStates','RuntimeArtifactId') IS NULL OR COL_LENGTH('omp.AppInstanceRuntimeStates','RuntimeHostArtifactId') IS NULL THEN 0 ELSE 1 END"
 
 function Get-DriftSnapshot {
     $conn = Open-Connection
@@ -116,6 +124,8 @@ function Get-DriftSnapshot {
         $hasLastWarning = [int]$probe.ExecuteScalar() -eq 1
         $probe.CommandText = $workerStateProbeSql
         $hasWorkerInstanceStates = [int]$probe.ExecuteScalar() -eq 1
+        $probe.CommandText = if ($hasWorkerInstanceStates) { $workerVersionProbeSqlPerInstance } else { $workerVersionProbeSqlSummary }
+        $hasWorkerVersionColumns = [int]$probe.ExecuteScalar() -eq 1
 
         $identityWarning = if ($hasIdentity) { "state.IdentityCheckStatus IN (N'ManualActionRequired', N'WaitingForPortalAdminApproval')" } else { '1 = 0' }
         # R12-F5. The HostAgent writes non-blocking deployment warnings (an OmpAuth
@@ -278,6 +288,17 @@ ORDER BY h.HostKey;
         # channel-type packages -- and nothing else. Worker and worker-host packages are
         # covered by the worker query below instead, which is where their truth lives.
         #
+        # What "covered" means for a channel type, stated because the finding asked and
+        # the answer is not obvious: which channel-type BUILD a host is supposed to run
+        # is decided by the module's own channel configuration, and the module expresses
+        # that decision by writing one enabled requirement row per channel (measured:
+        # 6 rows keyed ibs_packager.channeltype:<ChannelId> plus one legacy
+        # channel-type:file-drop:<version> row, all 7 pointing at 0.3.109, with 20
+        # superseded rows disabled). This query therefore sees exactly what the module
+        # declared. What it still cannot see is a channel the module never declared a
+        # requirement for at all -- that lives in the module's own database, not in omp,
+        # and nothing here can observe it.
+        #
         # Driven FROM the requirements, not from the states. The query used to start at
         # omp.HostArtifactStates, which only has a row once the HostAgent has reported on
         # the artifact -- so a requirement the agent had not yet acknowledged produced no
@@ -303,6 +324,36 @@ WHERE h.IsEnabled = 1 $hostFilter
 ORDER BY h.HostKey, a.PackageType, a.TargetName, a.Version;
 "@
 
+        # R12-F8. Coverage the query above cannot express, because it only returns rows
+        # that are already in trouble: a host required to run TWO different builds of the
+        # same package target at the same time is silent there -- both rows can be
+        # provisioned and error-free. That is exactly what a half-applied channel rollout
+        # looks like (the module updated five channels' requirement rows and not the
+        # sixth), and it is the one channel-type version question omp can answer on its
+        # own. Every package type is included rather than only channel-type: the same
+        # split is possible wherever requirement rows are written per instance.
+        #
+        # It also doubles as the coverage report. The counts are emitted whether or not
+        # anything is wrong, so a reader can see WHICH package types this gate actually
+        # checked instead of inferring coverage from silence.
+        $requirementCoverageSql = @"
+SELECT h.HostKey, a.PackageType, a.TargetName,
+       COUNT(1) AS RequiredRows,
+       COUNT(DISTINCT a.ArtifactId) AS DistinctArtifacts,
+       MIN(a.Version) AS SampleVersion,
+       SUM(CASE WHEN has.HostId IS NOT NULL AND has.ProvisioningState = 2 AND has.LastError IS NULL THEN 1 ELSE 0 END) AS ProvisionedRows
+FROM omp.HostArtifactRequirements r
+INNER JOIN omp.Hosts h ON h.HostId = r.HostId
+INNER JOIN omp.Artifacts a ON a.ArtifactId = r.ArtifactId
+LEFT JOIN omp.HostArtifactStates has
+    ON has.HostId = r.HostId
+   AND has.ArtifactId = r.ArtifactId
+WHERE h.IsEnabled = 1 $hostFilter
+  AND r.IsEnabled = 1
+GROUP BY h.HostKey, a.PackageType, a.TargetName
+ORDER BY h.HostKey, a.PackageType, a.TargetName;
+"@
+
         # R12-D1. Per-instance state, not the app-instance summary. PublishObservationAsync
         # writes omp.AppInstanceRuntimeStates keyed on AppInstanceId alone while the
         # per-instance truth goes to omp.WorkerInstanceRuntimeStates -- measured on
@@ -315,6 +366,15 @@ ORDER BY h.HostKey, a.PackageType, a.TargetName, a.Version;
             'LEFT JOIN omp.WorkerInstanceRuntimeStates wrs ON wrs.WorkerInstanceId = wi.WorkerInstanceId'
         } else {
             'LEFT JOIN omp.AppInstanceRuntimeStates wrs ON wrs.AppInstanceId = wi.AppInstanceId'
+        }
+
+        # R12-F2. Selected as literal NULLs on a database that predates the witness, so the
+        # rest of the query is written once and the "cannot be verified" branch below is the
+        # single place that decides what a missing version means.
+        $workerRuntimeVersionColumns = if ($hasWorkerVersionColumns) {
+            'wrs.RuntimeArtifactId, wrs.RuntimeArtifactVersion, wrs.RuntimeHostArtifactId, wrs.RuntimeHostArtifactVersion'
+        } else {
+            'CAST(NULL AS int) AS RuntimeArtifactId, CAST(NULL AS nvarchar(50)) AS RuntimeArtifactVersion, CAST(NULL AS int) AS RuntimeHostArtifactId, CAST(NULL AS nvarchar(50)) AS RuntimeHostArtifactVersion'
         }
 
         # R12-F2 + R12-F7 + R12-F11/D10/D11. The old worker query INNER JOINed
@@ -392,7 +452,8 @@ WorkerInstanceRows AS
 (
     SELECT d.HostId, d.HostKey, d.PackageType, d.AppKey, d.AppInstanceKey,
            wi.WorkerInstanceKey, d.DesiredArtifactId, d.DesiredVersion, d.DesiredArtifactCreatedUtc,
-           wrs.ObservedState, wrs.LastSeenUtc, wrs.StartedUtc, wrs.LastExitCode, wrs.StatusMessage
+           wrs.ObservedState, wrs.LastSeenUtc, wrs.StartedUtc, wrs.LastExitCode, wrs.StatusMessage,
+           $workerRuntimeVersionColumns
     FROM DesiredWorkerApps d
     INNER JOIN omp.WorkerInstances wi
         ON wi.AppInstanceId = d.AppInstanceId
@@ -401,13 +462,20 @@ WorkerInstanceRows AS
     WHERE d.PackageType = N'worker'
 ),
 -- A worker-host package is not a process of its own: it is the executable every
--- worker process on the host runs. Its running-build evidence is therefore the
--- oldest worker start on that host.
+-- worker process on the host runs. R12-F2 gave it a real witness -- each running
+-- worker reports the worker host build it was launched with -- so the evidence is
+-- now what those processes report, and the oldest worker start is only the fallback
+-- for processes that report nothing.
 HostWorkerStarts AS
 (
     SELECT HostId,
            MIN(StartedUtc) AS OldestWorkerStartUtc,
-           COUNT(1) AS RunningWorkerCount
+           COUNT(1) AS RunningWorkerCount,
+           COUNT(DISTINCT RuntimeHostArtifactId) AS DistinctHostArtifactCount,
+           SUM(CASE WHEN RuntimeHostArtifactId IS NULL THEN 1 ELSE 0 END) AS UnreportedHostArtifactCount,
+           -- Only read when DistinctHostArtifactCount = 1, where MIN is the single value.
+           MIN(RuntimeHostArtifactId) AS ReportedHostArtifactId,
+           MIN(RuntimeHostArtifactVersion) AS ReportedHostArtifactVersion
     FROM WorkerInstanceRows
     WHERE ObservedState = 2
     GROUP BY HostId
@@ -416,6 +484,11 @@ AllRows AS
 (
     SELECT w.HostKey, w.PackageType, w.AppKey, w.AppInstanceKey, w.WorkerInstanceKey,
            w.DesiredVersion,
+           -- R12-F2. What the process ITSELF is reported to be running, or the stated
+           -- unknown. Never the desired version by default: that was the whole defect.
+           CASE WHEN w.ObservedState = 2 AND w.RuntimeArtifactId IS NOT NULL
+                THEN ISNULL(w.RuntimeArtifactVersion, N'?')
+                ELSE N'unknown' END AS RuntimeVersion,
            CAST(a.ProvisioningState AS int) AS ProvisioningState,
            CAST(w.ObservedState AS int) AS ObservedState,
            DATEDIFF(second, w.LastSeenUtc, SYSUTCDATETIME()) AS StateAgeSeconds,
@@ -433,10 +506,18 @@ AllRows AS
                WHEN w.LastSeenUtc IS NULL
                     OR DATEDIFF(second, w.LastSeenUtc, SYSUTCDATETIME()) > $MaxStateAgeSeconds
                    THEN N'Worker state is stale; nothing has refreshed it within $MaxStateAgeSeconds s.'
-               WHEN w.StartedUtc IS NULL
-                   THEN N'Worker start time is unknown, so the running build cannot be established.'
-               WHEN w.StartedUtc < w.DesiredArtifactCreatedUtc
+               -- R12-F2, the answer this gate previously could not give at all.
+               WHEN w.RuntimeArtifactId IS NOT NULL AND w.RuntimeArtifactId <> w.DesiredArtifactId
+                   THEN N'Worker runs artifact version ' + ISNULL(w.RuntimeArtifactVersion, N'?')
+                        + N' but ' + ISNULL(w.DesiredVersion, N'?') + N' is desired.'
+               -- No witness: fall back to the ordering evidence, which can still convict
+               -- but can never acquit, and say so when it does not convict.
+               WHEN w.RuntimeArtifactId IS NULL AND w.StartedUtc IS NOT NULL
+                    AND w.StartedUtc < w.DesiredArtifactCreatedUtc
                    THEN N'Worker started before its desired artifact existed, so it is running an older build.'
+               WHEN w.RuntimeArtifactId IS NULL
+                   THEN N'No running artifact version was reported for this worker, so the running build cannot be verified. '
+                        + N'The WorkerManager on this host predates the runtime version witness, or the omp_core migration has not been applied.'
                ELSE NULL
            END AS Issue
     FROM WorkerInstanceRows w
@@ -447,6 +528,15 @@ AllRows AS
 
     SELECT d.HostKey, d.PackageType, d.AppKey, d.AppInstanceKey, NULL,
            d.DesiredVersion,
+           -- R12-F2. For a worker-host row the running build is what the live worker
+           -- processes report they were launched with, and only when they all agree.
+           CASE WHEN d.PackageType = N'worker-host' AND ISNULL(s.RunningWorkerCount, 0) > 0
+                     AND s.UnreportedHostArtifactCount = 0 AND s.DistinctHostArtifactCount = 1
+                THEN ISNULL(s.ReportedHostArtifactVersion, N'?')
+                WHEN d.PackageType = N'worker-host' AND a.ProvisioningState = 2
+                     AND ISNULL(s.RunningWorkerCount, 0) = 0
+                THEN N'provisioned, not loaded'
+                ELSE N'unknown' END AS RuntimeVersion,
            CAST(a.ProvisioningState AS int),
            NULL,
            NULL,
@@ -461,12 +551,26 @@ AllRows AS
                WHEN a.ProvisioningState <> 2 OR a.ArtifactLastError IS NOT NULL
                    THEN N'Desired artifact is not provisioned on this host (state '
                         + CAST(CAST(a.ProvisioningState AS int) AS nvarchar(10)) + N').'
+               -- A worker host build nothing loads is provisioned and idle, not wrong.
                WHEN ISNULL(s.RunningWorkerCount, 0) = 0
                    THEN NULL
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                    AND s.DistinctHostArtifactCount > 1
+                   THEN N'Worker processes on this host are running more than one worker host build.'
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                    AND s.ReportedHostArtifactId <> d.DesiredArtifactId
+                   THEN N'Worker processes run worker host build ' + ISNULL(s.ReportedHostArtifactVersion, N'?')
+                        + N' but ' + ISNULL(d.DesiredVersion, N'?') + N' is desired.'
+               WHEN d.PackageType = N'worker-host' AND s.UnreportedHostArtifactCount = 0
+                   THEN NULL
+               -- Fallback for processes that report no worker host build at all.
                WHEN s.OldestWorkerStartUtc IS NULL
                    THEN N'Worker start times are unknown, so the running worker host build cannot be established.'
                WHEN s.OldestWorkerStartUtc < d.DesiredArtifactCreatedUtc
                    THEN N'A worker process started before this worker host build existed, so it is running an older one.'
+               WHEN d.PackageType = N'worker-host'
+                   THEN N'No running worker host build was reported by the worker processes on this host, so it cannot be verified. '
+                        + N'The WorkerManager on this host predates the runtime version witness, or the omp_core migration has not been applied.'
                ELSE NULL
            END AS Issue
     FROM DesiredWorkerApps d
@@ -479,8 +583,8 @@ AllRows AS
                         AND wi.IsEnabled = 1 AND wi.IsAllowed = 1 AND wi.DesiredState = 1)
 )
 SELECT HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion,
-       ProvisioningState, ObservedState, StateAgeSeconds, StartedUtc, LastExitCode,
-       StatusMessage, Issue
+       RuntimeVersion, ProvisioningState, ObservedState, StateAgeSeconds, StartedUtc,
+       LastExitCode, StatusMessage, Issue
 FROM AllRows
 ORDER BY CASE WHEN Issue IS NULL THEN 1 ELSE 0 END, HostKey, PackageType, AppKey, WorkerInstanceKey;
 "@
@@ -488,6 +592,7 @@ ORDER BY CASE WHEN Issue IS NULL THEN 1 ELSE 0 END, HostKey, PackageType, AppKey
         $summary = Invoke-Query $conn $summarySql
         $artifacts = Invoke-Query $conn $artifactSql
         $workers = Invoke-Query $conn $workerSql
+        $requirementCoverage = Invoke-Query $conn $requirementCoverageSql
 
         # Converged is a claim about hosts that were examined. Zero rows means no enabled
         # host matched -- a wrong -HostKey, a disabled host, an empty database -- and
@@ -500,6 +605,11 @@ ORDER BY CASE WHEN Issue IS NULL THEN 1 ELSE 0 END, HostKey, PackageType, AppKey
         }
         if (-not $hasWorkerInstanceStates) {
             $notes += 'This database predates omp.WorkerInstanceRuntimeStates; worker siblings share one state row, so a single failed worker can be masked by a healthy one.'
+        }
+        if (-not $hasWorkerVersionColumns) {
+            # Said once here as the cause, and again per worker row as the consequence.
+            # The per-row issues are what fail the gate; this note is what explains them.
+            $notes += 'This database has no RuntimeArtifactId/RuntimeArtifactVersion columns on the worker runtime state, so which build each worker actually runs cannot be read at all. Apply the omp_core schema migration (R12-F2).'
         }
 
         foreach ($row in $summary.Rows) {
@@ -544,7 +654,17 @@ ORDER BY CASE WHEN Issue IS NULL THEN 1 ELSE 0 END, HostKey, PackageType, AppKey
         }
 
         $workerIssueRows = @($workers | Where-Object { $_.Issue -isnot [System.DBNull] -and $_.Issue })
-        if ($artifacts.Rows.Count -gt 0 -or $workerIssueRows.Count -gt 0) {
+
+        # R12-F8. A target required at two different builds on the same host is a
+        # half-applied rollout, and both rows can be perfectly provisioned -- so this is
+        # the only place it can fail the gate.
+        $requirementSplitRows = @($requirementCoverage | Where-Object { [int]$_.DistinctArtifacts -gt 1 })
+        foreach ($split in $requirementSplitRows) {
+            $notes += ("{0}: {1}/{2} is required at {3} different versions by {4} enabled requirement rows; a rollout updated some rows and not others." -f `
+                $split.HostKey, $split.PackageType, $split.TargetName, [int]$split.DistinctArtifacts, [int]$split.RequiredRows)
+        }
+
+        if ($artifacts.Rows.Count -gt 0 -or $workerIssueRows.Count -gt 0 -or $requirementSplitRows.Count -gt 0) {
             $converged = $false
         }
         foreach ($workerIssue in $workerIssueRows) {
@@ -561,11 +681,15 @@ ORDER BY CASE WHEN Issue IS NULL THEN 1 ELSE 0 END, HostKey, PackageType, AppKey
             Notes      = $notes
             Hosts      = @($summary | Select-Object HostKey, DesiredApps, InSync, Pending, Failed, Warnings, Unclassified, HostAgentDesired, HostAgentCurrent, HostAgentUpgradePending, HostAgentDesiredMissing, HostAgentLastSeenUtc, HostAgentAgeSeconds, OldestAppStateAgeSeconds)
             ArtifactIssues = @($artifacts | Select-Object HostKey, PackageType, TargetName, Version, ProvisioningState, LastError, UpdatedUtc)
+            # R12-F8. Emitted whether or not anything is wrong, so the reader can see
+            # which package types were actually checked instead of inferring it from an
+            # empty issue list. This is where channel-type coverage becomes visible.
+            RequiredArtifacts = @($requirementCoverage | Select-Object HostKey, PackageType, TargetName, RequiredRows, DistinctArtifacts, SampleVersion, ProvisionedRows)
             # Every desired worker and worker-host row, healthy ones included: a
             # component nobody can see must not be able to pass for healthy by being
             # absent from the output (R12-F2).
-            Workers    = @($workers | Select-Object HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion, ProvisioningState, ObservedState, StateAgeSeconds, StartedUtc, LastExitCode, StatusMessage, Issue)
-            WorkerIssues = @($workerIssueRows | Select-Object HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion, ProvisioningState, ObservedState, StateAgeSeconds, StatusMessage, Issue)
+            Workers    = @($workers | Select-Object HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion, RuntimeVersion, ProvisioningState, ObservedState, StateAgeSeconds, StartedUtc, LastExitCode, StatusMessage, Issue)
+            WorkerIssues = @($workerIssueRows | Select-Object HostKey, PackageType, AppKey, AppInstanceKey, WorkerInstanceKey, DesiredVersion, RuntimeVersion, ProvisioningState, ObservedState, StateAgeSeconds, StatusMessage, Issue)
         }
     }
     finally {
@@ -590,9 +714,16 @@ function Write-Snapshot {
         Write-Host 'Artifact provisioning issues (state<>2 or error):'
         $Snapshot.ArtifactIssues | Format-Table HostKey, PackageType, TargetName, Version, ProvisioningState, LastError -AutoSize | Out-String -Width 240 | Write-Host
     }
+    if ($Snapshot.RequiredArtifacts.Count -gt 0) {
+        Write-Host 'Host artifact requirements (what this gate checks per package type):'
+        $Snapshot.RequiredArtifacts | Format-Table HostKey, PackageType, TargetName, RequiredRows, DistinctArtifacts, SampleVersion, ProvisionedRows -AutoSize | Out-String -Width 240 | Write-Host
+    }
     if ($Snapshot.Workers.Count -gt 0) {
-        Write-Host 'Workers and worker hosts (desired version vs running build):'
-        $Snapshot.Workers | Format-Table HostKey, PackageType, AppKey, WorkerInstanceKey, DesiredVersion, ObservedState, StateAgeSeconds, StartedUtc, Issue -AutoSize | Out-String -Width 240 | Write-Host
+        Write-Host 'Workers and worker hosts (desired version vs reported running build):'
+        $Snapshot.Workers | Format-Table HostKey, PackageType, AppKey, WorkerInstanceKey, DesiredVersion, RuntimeVersion, ObservedState, StateAgeSeconds, StartedUtc, Issue -AutoSize | Out-String -Width 240 | Write-Host
+        if (@($Snapshot.Workers | Where-Object { $_.RuntimeVersion -eq 'unknown' }).Count -gt 0) {
+            Write-Host "  RuntimeVersion 'unknown' means the running build could not be read -- see the Issue column. It is never counted as agreement." -ForegroundColor Yellow
+        }
     }
 }
 

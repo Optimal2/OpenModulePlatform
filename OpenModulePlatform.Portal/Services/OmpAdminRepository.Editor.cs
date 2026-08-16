@@ -5387,6 +5387,34 @@ WHERE AppInstanceId = @Id
         return scripts;
     }
 
+    /// <summary>
+    /// Object kinds the schema witness knows how to probe. Anything else in the
+    /// definition is reported as unverifiable instead of assumed present.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> RequiredDatabaseObjectArrayKinds =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["requiredSchemas"] = "schema",
+            ["requiredTables"] = "table",
+            ["requiredColumns"] = "column",
+            ["requiredIndexes"] = "index",
+            ["requiredConstraints"] = "constraint",
+            ["requiredTriggers"] = "trigger"
+        };
+
+    /// <summary>
+    /// Reads the <c>integrity</c> block into the object list the schema witness verifies.
+    /// R12-G3: this used to read <c>requiredSchemas</c> and <c>requiredTables</c> only, so a
+    /// migration that added a column, an index, a unique constraint or a trigger to an
+    /// existing table was invisible to the witness. Quick import then compared versions
+    /// alone and skipped the package with a green "package version X is not newer than
+    /// installed version Y", and the missing object first surfaced as a raw SqlException on
+    /// the next write. That is how R4-B1's unique index stood as fixed for four days without
+    /// existing in any database. The kinds supported here are the ones IbsPackager's
+    /// 0-validate-ibspackager.sql actually probes.
+    /// Twin implementation: OmpHostArtifactRepository.ReadRequiredDatabaseObjects (§4.1) --
+    /// Portal and HostAgent are two separate import paths and both must see the same objects.
+    /// </summary>
     private static IReadOnlyList<RequiredDatabaseObject> ReadRequiredDatabaseObjects(string definitionJson)
     {
         var root = JsonNode.Parse(definitionJson);
@@ -5399,29 +5427,88 @@ WHERE AppInstanceId = @Id
         var required = new List<RequiredDatabaseObject>();
         if (integrity["requiredSchemas"] is JsonArray schemas)
         {
-            // Malformed/null JSON entries are ignored rather than failing the whole definition.
-            required.AddRange(schemas
-                .Select(item => item?.GetValue<string>())
-                .Where(schema => !string.IsNullOrWhiteSpace(schema))
-                .Select(schema => new RequiredDatabaseObject("schema", schema!.Trim(), null, null)));
+            for (var index = 0; index < schemas.Count; index++)
+            {
+                var schema = ReadJsonText(schemas[index]);
+                required.Add(schema is null
+                    // A malformed entry used to be dropped silently, which is the same
+                    // fail-open as the old default branch: the witness answered "present"
+                    // about something it never looked at. It now forces an apply instead.
+                    ? UnverifiableRequiredObject($"integrity.requiredSchemas[{index}] is not a schema name")
+                    : new RequiredDatabaseObject("schema", schema, null, null));
+            }
         }
 
-        if (integrity["requiredTables"] is JsonArray tables)
+        foreach (var (arrayKey, kind) in RequiredDatabaseObjectArrayKinds)
         {
-            required.AddRange(tables
-                .OfType<JsonObject>()
-                .Select(item => new
-                {
-                    Schema = GetJsonString(item, "schema"),
-                    Name = GetJsonString(item, "name"),
-                    Source = NullIfWhiteSpace(GetJsonString(item, "source"))
-                })
-                .Where(item => !string.IsNullOrWhiteSpace(item.Schema) && !string.IsNullOrWhiteSpace(item.Name))
-                .Select(item => new RequiredDatabaseObject("table", item.Schema, item.Name, item.Source)));
+            if (string.Equals(arrayKey, "requiredSchemas", StringComparison.OrdinalIgnoreCase)
+                || integrity[arrayKey] is not JsonArray entries)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < entries.Count; index++)
+            {
+                required.Add(ReadRequiredDatabaseObject(kind, entries[index], $"integrity.{arrayKey}[{index}]"));
+            }
+        }
+
+        // A definition written by a newer packager can declare an object kind this build has
+        // never heard of. Ignoring it is fail-open in the direction that already cost four
+        // days; reporting it as unverifiable re-runs the idempotent scripts instead, which is
+        // recoverable. Rejecting the definition outright was the alternative and was rejected:
+        // module packages and Portal are deployed independently, so a forward-compatible
+        // declaration must not turn into a hard import failure.
+        foreach (var property in integrity)
+        {
+            if (property.Value is not JsonArray
+                || !property.Key.StartsWith("required", StringComparison.OrdinalIgnoreCase)
+                || RequiredDatabaseObjectArrayKinds.ContainsKey(property.Key))
+            {
+                continue;
+            }
+
+            required.Add(UnverifiableRequiredObject(
+                $"integrity.{property.Key} declares an object kind this platform version cannot probe"));
         }
 
         return required;
     }
+
+    private static RequiredDatabaseObject ReadRequiredDatabaseObject(string kind, JsonNode? node, string declaration)
+    {
+        if (node is not JsonObject item)
+        {
+            return UnverifiableRequiredObject($"{declaration} is not an object");
+        }
+
+        var schema = NullIfWhiteSpace(GetJsonString(item, "schema"));
+        var name = NullIfWhiteSpace(GetJsonString(item, "name"));
+        var table = NullIfWhiteSpace(GetJsonString(item, "table"));
+        var source = NullIfWhiteSpace(GetJsonString(item, "source"));
+
+        if (schema is null || name is null)
+        {
+            return UnverifiableRequiredObject($"{declaration} is missing 'schema' or 'name'");
+        }
+
+        // Only a trigger can be probed without knowing its table; every other child object
+        // needs one, and guessing would put the witness back to answering "present".
+        if (table is null && kind is not ("table" or "trigger"))
+        {
+            return UnverifiableRequiredObject($"{declaration} is missing 'table'");
+        }
+
+        return new RequiredDatabaseObject(kind, schema.Trim(), name.Trim(), source, table?.Trim());
+    }
+
+    private static RequiredDatabaseObject UnverifiableRequiredObject(string declaration)
+        => new("unverifiable", string.Empty, declaration, null);
+
+    private static string? ReadJsonText(JsonNode? node)
+        => node is JsonValue value && value.TryGetValue<string>(out var text)
+            ? NullIfWhiteSpace(text)?.Trim()
+            : null;
 
     private static bool IsValidationScript(PortableModuleDefinitionSqlScript script)
         => string.Equals(script.Phase, "validate", StringComparison.OrdinalIgnoreCase)
@@ -5654,10 +5741,12 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
         => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     /// <summary>
-    /// Reads the module definition JSON and returns any required database objects
-    /// declared in <c>integrity.requiredTables</c>/<c>integrity.requiredSchemas</c>
-    /// that are missing from the current database, grouped by the script key that
-    /// owns them.
+    /// Reads the module definition JSON and returns the required database objects that are
+    /// missing from the current database, grouped by the script key that owns them. Two
+    /// witnesses are consulted: the declared objects under <c>integrity</c> (schemas,
+    /// tables, columns, indexes, constraints and triggers) and the definition's own
+    /// read-only validation script. An empty result is what lets quick import skip a
+    /// package, so anything this method cannot verify is reported as missing (R12-G3).
     /// </summary>
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetMissingRequiredObjectsByScriptKeyAsync(
         string definitionJson,
@@ -5670,7 +5759,10 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
 
         var scripts = ReadPortableSqlScripts(definitionJson);
         var requiredObjects = ReadRequiredDatabaseObjects(definitionJson);
-        if (requiredObjects.Count == 0)
+
+        // The validation script is a witness in its own right, so an empty integrity block
+        // must no longer short-circuit the whole check (R12-G3).
+        if (requiredObjects.Count == 0 && !scripts.Any(IsValidationScript))
         {
             return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
         }
@@ -5697,11 +5789,24 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
 
         foreach (var required in requiredObjects)
         {
+            // The default branch used to answer "exists" (fail-open): an object kind the
+            // witness could not probe was reported as present, and the import was skipped.
+            // It now answers "cannot verify" and forces the owning idempotent script to run
+            // again -- re-running an idempotent repair is cheap, a silently skipped
+            // migration is not (R12-G3).
             var exists = required.Kind switch
             {
                 "schema" => await SchemaExistsAsync(conn, required.Schema, ct),
                 "table" when required.Name is not null => await TableExistsAsync(conn, required.Schema, required.Name, ct),
-                _ => true
+                "column" when required.Name is not null && required.Table is not null
+                    => await ColumnExistsAsync(conn, required.Schema, required.Table, required.Name, ct),
+                "index" when required.Name is not null && required.Table is not null
+                    => await IndexExistsAsync(conn, required.Schema, required.Table, required.Name, ct),
+                "constraint" when required.Name is not null && required.Table is not null
+                    => await ConstraintExistsAsync(conn, required.Schema, required.Table, required.Name, ct),
+                "trigger" when required.Name is not null
+                    => await TriggerExistsAsync(conn, required.Schema, required.Table, required.Name, ct),
+                _ => false
             };
             if (exists)
             {
@@ -5715,22 +5820,119 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
                 continue;
             }
 
-            var list = result.GetValueOrDefault(owningScript.Key);
-            if (list is null)
-            {
-                list = [];
-                result[owningScript.Key] = list;
-            }
+            AddMissingRequiredObject(result, owningScript.Key, DescribeRequiredObject(required));
+        }
 
-            list.Add(required.Kind == "schema"
-                ? $"schema {required.Schema}"
-                : $"table {required.Schema}.{required.Name}");
+        // Second witness: the module's own validation script. It is embedded in the same
+        // definition, it is read-only by contract, and it probes what the author actually
+        // cared about -- IbsPackager's 0-validate script checks columns, indexes,
+        // constraints and triggers, none of which the declared-object list carried before
+        // R12-G3. Consulting it here is what makes the quick-import skip gate notice a
+        // migration that only adds an index to an existing table.
+        var validationSignal = await GetValidationScriptRepairSignalAsync(conn, scripts, ct);
+        if (validationSignal is not null)
+        {
+            // The probe reports that something is missing but not which script owns it, so
+            // every idempotent repair script is re-run -- the same answer the HostAgent
+            // folder-import path already gives when validation reports unhealthy. Scripts
+            // that are not idempotent are left out on purpose: the filtered repair path
+            // throws on them, which would turn a heal into a failed import.
+            foreach (var script in repairScripts.Where(IsIdempotentScript))
+            {
+                AddMissingRequiredObject(result, script.Key, validationSignal);
+            }
         }
 
         return result.ToDictionary(
             static item => item.Key,
             static item => (IReadOnlyList<string>)item.Value,
             StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static void AddMissingRequiredObject(
+        Dictionary<string, List<string>> result,
+        string scriptKey,
+        string description)
+    {
+        var list = result.GetValueOrDefault(scriptKey);
+        if (list is null)
+        {
+            list = [];
+            result[scriptKey] = list;
+        }
+
+        list.Add(description);
+    }
+
+    private static string DescribeRequiredObject(RequiredDatabaseObject required)
+        => required.Kind switch
+        {
+            "schema" => $"schema {required.Schema}",
+            "table" => $"table {required.Schema}.{required.Name}",
+            "column" => $"column {required.Schema}.{required.Table}.{required.Name}",
+            "index" => $"index {required.Name} on {required.Schema}.{required.Table}",
+            "constraint" => $"constraint {required.Name} on {required.Schema}.{required.Table}",
+            "trigger" => $"trigger {required.Schema}.{required.Name}",
+            "unverifiable" => $"unverifiable declaration: {required.Name}",
+            _ => $"unverifiable {required.Kind} {required.Schema}.{required.Name}"
+        };
+
+    private static bool IsIdempotentScript(PortableModuleDefinitionSqlScript script)
+        => string.Equals(script.Execution, "idempotent", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Runs the definition's own read-only validation script and returns a description when
+    /// it reports (or is itself evidence of) a schema that needs repair; null when it reports
+    /// healthy or when there is nothing runnable to consult.
+    /// </summary>
+    private static async Task<string?> GetValidationScriptRepairSignalAsync(
+        SqlConnection conn,
+        IReadOnlyList<PortableModuleDefinitionSqlScript> scripts,
+        CancellationToken ct)
+    {
+        foreach (var script in scripts.Where(IsValidationScript))
+        {
+            var sqlText = ResolvePortableSqlText(script);
+            if (string.IsNullOrWhiteSpace(sqlText))
+            {
+                continue;
+            }
+
+            var suppliedSha256 = NullIfWhiteSpace(script.Sha256);
+            if (suppliedSha256 is not null
+                && !string.Equals(suppliedSha256, ComputeTextSha256(sqlText), StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (ValidateReadOnlyModuleDefinitionSql(sqlText) is not null)
+            {
+                continue;
+            }
+
+            // A probe that cannot be run at all (no embedded SQL, wrong hash, not read-only)
+            // is a defect in the definition, not a statement about the database. Re-running
+            // the repair scripts would not fix it and would do so on every single import, so
+            // those cases fall through above; Portal's SQL check view reports them as
+            // "Not executable"/"Invalid content hash"/"Blocked".
+            try
+            {
+                var validation = await ExecuteModuleDefinitionValidationSqlAsync(conn, sqlText, ct);
+                if (!validation.IsHealthy)
+                {
+                    return $"validation script '{script.Key}' reports repair is needed: "
+                        + Truncate(validation.Message ?? "no message", 300);
+                }
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+            {
+                // A probe that throws hit a missing object with its own SELECT, which is the
+                // schema drift we are looking for.
+                return $"validation script '{script.Key}' failed: " + Truncate(ex.Message, 300);
+            }
+        }
+
+        return null;
     }
 
     private static async Task<bool> SchemaExistsAsync(SqlConnection conn, string schema, CancellationToken ct)
@@ -5753,6 +5955,112 @@ WHERE s.name = @schema
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@schema", schema);
         Add(cmd, "@table", table);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static async Task<bool> ColumnExistsAsync(
+        SqlConnection conn,
+        string schema,
+        string table,
+        string column,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT 1
+FROM sys.columns c
+INNER JOIN sys.tables t ON t.object_id = c.object_id
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+WHERE s.name = @schema
+  AND t.name = @table
+  AND c.name = @column;";
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        Add(cmd, "@table", table);
+        Add(cmd, "@column", column);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static async Task<bool> IndexExistsAsync(
+        SqlConnection conn,
+        string schema,
+        string table,
+        string index,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT 1
+FROM sys.indexes i
+INNER JOIN sys.tables t ON t.object_id = i.object_id
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+WHERE s.name = @schema
+  AND t.name = @table
+  AND i.name = @index;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        Add(cmd, "@table", table);
+        Add(cmd, "@index", index);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static async Task<bool> ConstraintExistsAsync(
+        SqlConnection conn,
+        string schema,
+        string table,
+        string constraint,
+        CancellationToken ct)
+    {
+        // sys.objects covers PK/UQ/FK/CHECK/DEFAULT alike, which is what the module
+        // validation scripts probe; a UNIQUE constraint also shows up in sys.indexes, so
+        // both spellings of "unique" answer here.
+        const string sql = @"
+SELECT 1
+FROM sys.objects o
+INNER JOIN sys.tables t ON t.object_id = o.parent_object_id
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+WHERE s.name = @schema
+  AND t.name = @table
+  AND o.name = @constraint
+UNION ALL
+SELECT 1
+FROM sys.indexes i
+INNER JOIN sys.tables t2 ON t2.object_id = i.object_id
+INNER JOIN sys.schemas s2 ON s2.schema_id = t2.schema_id
+WHERE s2.name = @schema
+  AND t2.name = @table
+  AND i.name = @constraint
+  AND i.is_unique_constraint = 1;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        Add(cmd, "@table", table);
+        Add(cmd, "@constraint", constraint);
+        return await cmd.ExecuteScalarAsync(ct) is not null;
+    }
+
+    private static async Task<bool> TriggerExistsAsync(
+        SqlConnection conn,
+        string schema,
+        string? table,
+        string trigger,
+        CancellationToken ct)
+    {
+        // A trigger lives in the schema of the table it is attached to, so the schema is
+        // matched through the parent table. The table itself is optional in the declaration
+        // because module validation scripts name triggers as schema.name.
+        const string sql = @"
+SELECT 1
+FROM sys.triggers tr
+INNER JOIN sys.tables t ON t.object_id = tr.parent_id
+INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+WHERE s.name = @schema
+  AND tr.name = @trigger
+  AND (@table IS NULL OR t.name = @table);";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@schema", schema);
+        Add(cmd, "@table", table);
+        Add(cmd, "@trigger", trigger);
         return await cmd.ExecuteScalarAsync(ct) is not null;
     }
 
@@ -6299,11 +6607,14 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         string? Content,
         string? Sha256);
 
+    // Table carries the parent table for columns, indexes, constraints and triggers; it is
+    // null for schemas and tables themselves (R12-G3).
     private sealed record RequiredDatabaseObject(
         string Kind,
         string Schema,
         string? Name,
-        string? Source);
+        string? Source,
+        string? Table = null);
 
     private sealed record ModuleDefinitionValidationResult(
         bool IsHealthy,

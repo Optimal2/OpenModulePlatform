@@ -27,9 +27,16 @@ public sealed class ArtifactZipImportService
         WriteIndented = true
     };
 
+    // R12-F12. Six hours: the catalog only changes when something is imported, and an import
+    // forces an out-of-band audit anyway, so a shorter period would only repeat an unchanged
+    // number in every host's log. MinValue makes the first cycle after a restart report the
+    // baseline immediately.
+    private static readonly TimeSpan ArtifactContentHashAuditInterval = TimeSpan.FromHours(6);
+
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ILogger<ArtifactZipImportService> _logger;
+    private DateTimeOffset _nextArtifactContentHashAuditUtc = DateTimeOffset.MinValue;
 
     public ArtifactZipImportService(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -45,6 +52,12 @@ public sealed class ArtifactZipImportService
     {
         var settings = _settings.CurrentValue;
         var importSettings = settings.ArtifactZipImport;
+
+        // Deliberately ahead of the IsEnabled gate: the artifact catalog is shared by every
+        // host, and whether THIS host happens to accept import files says nothing about how
+        // many artifacts in that catalog are missing a content hash (R12-F12).
+        await AuditArtifactContentHashGapAsync(force: false, cancellationToken);
+
         if (!importSettings.IsEnabled)
         {
             return;
@@ -86,6 +99,90 @@ public sealed class ArtifactZipImportService
             cancellationToken.ThrowIfCancellationRequested();
             await ImportOneAsync(settings, importSettings, path, processedPath, failedPath, cancellationToken);
         }
+
+        if (importPaths.Count > 0)
+        {
+            // An import is the only thing that changes the catalog, so re-measure now rather
+            // than up to six hours later: an operator re-importing packages to fill missing
+            // hashes needs the number to move in the same log they are watching (R12-F12).
+            await AuditArtifactContentHashGapAsync(force: true, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Counts, on a recurring schedule, how many enabled artifacts carry no content hash and
+    /// how many of those are still wired to something that would provision them.
+    /// </summary>
+    /// <remarks>
+    /// R12-F12. HostAgent:RequireArtifactHash defaults to false and has no value in the
+    /// running configuration, and the only signal about the artifacts keeping it off was a
+    /// per-artifact line in ArtifactProvisioner written only while that artifact is being
+    /// provisioned -- so an artifact this host never provisions was completely invisible,
+    /// and the gap was a number nobody could see, let alone drive to zero. Measured on
+    /// LINUS-LAPTOP 2026-08-16: 29 of 372 enabled artifacts have no Sha256, and none of the
+    /// 29 is referenced by anything enabled, so the flag could be turned on there today.
+    /// That is exactly the conclusion this audit is meant to make reachable without a
+    /// hand-written query against the production database.
+    ///
+    /// No new flag governs it (Linus directive): the audit is a read-only COUNT run at most
+    /// once every six hours per host, which is not a cost worth a switch.
+    /// </remarks>
+    private async Task AuditArtifactContentHashGapAsync(bool force, CancellationToken cancellationToken)
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        if (!force && nowUtc < _nextArtifactContentHashAuditUtc)
+        {
+            return;
+        }
+
+        // Schedule the next audit before running this one, so a database that keeps failing
+        // the query cannot turn a reporting step into a per-cycle retry storm.
+        _nextArtifactContentHashAuditUtc = nowUtc.Add(ArtifactContentHashAuditInterval);
+
+        ArtifactContentHashGap gap;
+        try
+        {
+            gap = await _repository.GetArtifactContentHashGapAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Broadest filter on purpose (metod 4.9): this is a reporting step bolted onto
+            // the front of the import cycle, and no failure of it may cost an import. R12-F4
+            // isolates the whole import step from the cycle, but an exception escaping here
+            // would be published as "artifact import failed" -- a false alarm about a step
+            // that never ran.
+            _logger.LogWarning(ex, "HostAgent could not measure the artifact content hash gap; imports and deployments are unaffected.");
+            return;
+        }
+
+        if (gap.MissingHashCount == 0)
+        {
+            _logger.LogInformation(
+                "Artifact content hash audit: all {EnabledCount} enabled artifact(s) carry a Sha256. HostAgent:RequireArtifactHash can be enabled.",
+                gap.EnabledArtifactCount);
+            return;
+        }
+
+        var samples = gap.MissingHashSamples.Count > 0
+            ? string.Join("; ", gap.MissingHashSamples)
+            : "(none listed)";
+
+        if (gap.MissingHashStillReferencedCount == 0)
+        {
+            _logger.LogWarning(
+                "Artifact content hash audit: {MissingCount} of {EnabledCount} enabled artifact(s) carry no Sha256, so their content cannot be integrity checked. None of them is referenced by an enabled app instance, worker instance or host artifact requirement, so HostAgent:RequireArtifactHash can be enabled without refusing any provisioning; clear or disable the rows to drive the count to 0. Examples: {Examples}",
+                gap.MissingHashCount,
+                gap.EnabledArtifactCount,
+                samples);
+            return;
+        }
+
+        _logger.LogWarning(
+            "Artifact content hash audit: {MissingCount} of {EnabledCount} enabled artifact(s) carry no Sha256, and {ReferencedCount} of those are still referenced by an enabled app instance, worker instance or host artifact requirement. Enabling HostAgent:RequireArtifactHash now would refuse to provision them; re-import those artifacts to record a hash first. Examples: {Examples}",
+            gap.MissingHashCount,
+            gap.EnabledArtifactCount,
+            gap.MissingHashStillReferencedCount,
+            samples);
     }
 
     // Best-effort housekeeping run once per import cycle. Both classes of leftover
@@ -101,11 +198,16 @@ public sealed class ArtifactZipImportService
     {
         var nowUtc = DateTime.UtcNow;
 
-        if (importSettings.ProcessedRetentionDays > 0)
+        // R12-F13: age and size, not age alone. Both roots are swept even when only one of
+        // the two limits is configured, because the size cap has to be able to run on an
+        // installation that deliberately keeps archives forever (ProcessedRetentionDays = 0).
+        DateTime? retentionCutoff = importSettings.ProcessedRetentionDays > 0
+            ? nowUtc.AddDays(-importSettings.ProcessedRetentionDays)
+            : null;
+        if (retentionCutoff is not null || importSettings.ProcessedRetentionMaxBytes > 0)
         {
-            var retentionCutoff = nowUtc.AddDays(-importSettings.ProcessedRetentionDays);
-            SweepEntriesOlderThan(processedPath, retentionCutoff, includeDirectories: false);
-            SweepEntriesOlderThan(failedPath, retentionCutoff, includeDirectories: false);
+            SweepImportArchive(processedPath, "processed", retentionCutoff, importSettings);
+            SweepImportArchive(failedPath, "failed", retentionCutoff, importSettings);
         }
 
         // In-flight staging entries are seconds to minutes old, so a 24 h floor
@@ -129,6 +231,246 @@ public sealed class ArtifactZipImportService
     }
 
     /// <summary>
+    /// Prunes one import archive root by age and by total size, and says out loud what it
+    /// removed and what is left.
+    /// </summary>
+    /// <remarks>
+    /// R12-F13. The sweep used to be time-only and silent: it deleted at Debug level, which
+    /// is off in production, so an operator who found the archive smaller than expected had
+    /// no way to tell housekeeping from "the imports never happened". Anything this sweep
+    /// actually deletes is now reported at Information together with the size the archive
+    /// ended up at, so a pruned archive and an empty one cannot be confused.
+    /// </remarks>
+    private void SweepImportArchive(
+        string root,
+        string description,
+        DateTime? ageCutoffUtc,
+        HostAgentArtifactZipImportSettings importSettings)
+    {
+        if (!Directory.Exists(root) || !IsSweepableRoot(root))
+        {
+            return;
+        }
+
+        List<ImportArchiveEntry> entries;
+        try
+        {
+            entries = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly)
+                .Select(static path => new FileInfo(path))
+                .Select(static info => new ImportArchiveEntry(info.FullName, info.Length, info.LastWriteTimeUtc))
+                .ToList();
+        }
+        catch (IOException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import housekeeping could not enumerate '{Root}'.", root);
+            return;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogDebug(ex, "HostAgent import housekeeping could not enumerate '{Root}'.", root);
+            return;
+        }
+
+        var plan = PlanImportArchiveSweep(entries, ageCutoffUtc, importSettings.ProcessedRetentionMaxBytes);
+        if (plan.AgedOut.Count == 0 && plan.OverSizeCap.Count == 0)
+        {
+            return;
+        }
+
+        var deletedNames = new List<string>();
+        var agedOutDeleted = 0;
+        var overSizeCapDeleted = 0;
+        long freedBytes = 0;
+
+        foreach (var entry in plan.AgedOut)
+        {
+            if (!TryDeleteArchiveEntry(entry.Path))
+            {
+                continue;
+            }
+
+            agedOutDeleted++;
+            freedBytes += entry.LengthBytes;
+            deletedNames.Add(Path.GetFileName(entry.Path));
+        }
+
+        foreach (var entry in plan.OverSizeCap)
+        {
+            if (!TryDeleteArchiveEntry(entry.Path))
+            {
+                continue;
+            }
+
+            overSizeCapDeleted++;
+            freedBytes += entry.LengthBytes;
+            deletedNames.Add(Path.GetFileName(entry.Path));
+        }
+
+        if (deletedNames.Count == 0)
+        {
+            return;
+        }
+
+        const int NamedFileLimit = 10;
+        var namedFiles = string.Join(", ", deletedNames.Take(NamedFileLimit));
+        if (deletedNames.Count > NamedFileLimit)
+        {
+            namedFiles = $"{namedFiles} (and {deletedNames.Count - NamedFileLimit} more)";
+        }
+
+        _logger.LogInformation(
+            "HostAgent pruned the {Archive} import archive. Root={Root}, Deleted={DeletedCount} file(s) freeing {FreedMegabytes} MB (AgedOut={AgedOutCount}, OverSizeCap={OverSizeCapCount}), Remaining={RemainingCount} file(s) using {RemainingMegabytes} MB. RetentionDays={RetentionDays}, MaxMegabytes={MaxMegabytes}. DeletedFiles={DeletedFiles}",
+            description,
+            root,
+            deletedNames.Count,
+            ToMegabytes(freedBytes),
+            agedOutDeleted,
+            overSizeCapDeleted,
+            entries.Count - deletedNames.Count,
+            ToMegabytes(plan.TotalBytesBefore - freedBytes),
+            importSettings.ProcessedRetentionDays,
+            ToMegabytes(importSettings.ProcessedRetentionMaxBytes),
+            namedFiles);
+    }
+
+    private static long ToMegabytes(long bytes) => bytes / (1024 * 1024);
+
+    private bool TryDeleteArchiveEntry(string path)
+    {
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "HostAgent import housekeeping could not delete archived import file '{Path}'; it will be retried on the next cycle.", path);
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "HostAgent import housekeeping could not delete archived import file '{Path}'; it will be retried on the next cycle.", path);
+            return false;
+        }
+    }
+
+    /// <summary>One archived import file, as the sweep planner sees it.</summary>
+    internal readonly record struct ImportArchiveEntry(string Path, long LengthBytes, DateTime LastWriteTimeUtc);
+
+    /// <summary>What a sweep of one archive root would delete, and the size either side of it.</summary>
+    internal sealed record ImportArchiveSweepPlan(
+        IReadOnlyList<ImportArchiveEntry> AgedOut,
+        IReadOnlyList<ImportArchiveEntry> OverSizeCap,
+        long TotalBytesBefore,
+        long TotalBytesAfter);
+
+    /// <summary>
+    /// Decides which archived import files a sweep removes: everything past the age cutoff,
+    /// then oldest-first until the root fits under <paramref name="maxTotalBytes" />.
+    /// </summary>
+    /// <remarks>
+    /// Pure by design so the policy can be tested without a filesystem (R12-F13).
+    ///
+    /// What the sweep must LET THROUGH is as much a part of the rule as what it removes
+    /// (metod 4.5): the newest package in the root is never deleted, by age or by size. A
+    /// cap smaller than one universal package would otherwise empty the archive on the first
+    /// cycle, and the newest archive is precisely the file an operator opens after a failed
+    /// refresh. Its error sidecar is kept with it, because a retained package whose reason
+    /// was deleted is worse than either alone.
+    /// </remarks>
+    internal static ImportArchiveSweepPlan PlanImportArchiveSweep(
+        IReadOnlyList<ImportArchiveEntry> entries,
+        DateTime? ageCutoffUtc,
+        long maxTotalBytes)
+    {
+        var totalBytesBefore = entries.Sum(static entry => entry.LengthBytes);
+        if (entries.Count == 0)
+        {
+            return new ImportArchiveSweepPlan([], [], 0, 0);
+        }
+
+        // Oldest first, with a path tiebreak so two archives sharing a timestamp still
+        // produce a deterministic plan (metod 4.11: never order on a timestamp alone).
+        var ordered = entries
+            .OrderBy(static entry => entry.LastWriteTimeUtc)
+            .ThenBy(static entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var protectedPaths = BuildProtectedArchivePaths(ordered);
+        var agedOut = new List<ImportArchiveEntry>();
+        var overSizeCap = new List<ImportArchiveEntry>();
+        var doomedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var remainingBytes = totalBytesBefore;
+
+        if (ageCutoffUtc is { } cutoff)
+        {
+            foreach (var entry in ordered)
+            {
+                if (entry.LastWriteTimeUtc >= cutoff || protectedPaths.Contains(entry.Path))
+                {
+                    continue;
+                }
+
+                agedOut.Add(entry);
+                doomedPaths.Add(entry.Path);
+                remainingBytes -= entry.LengthBytes;
+            }
+        }
+
+        if (maxTotalBytes > 0)
+        {
+            foreach (var entry in ordered)
+            {
+                if (remainingBytes <= maxTotalBytes)
+                {
+                    break;
+                }
+
+                if (doomedPaths.Contains(entry.Path) || protectedPaths.Contains(entry.Path))
+                {
+                    continue;
+                }
+
+                overSizeCap.Add(entry);
+                doomedPaths.Add(entry.Path);
+                remainingBytes -= entry.LengthBytes;
+            }
+        }
+
+        return new ImportArchiveSweepPlan(agedOut, overSizeCap, totalBytesBefore, remainingBytes);
+    }
+
+    private static HashSet<string> BuildProtectedArchivePaths(IReadOnlyList<ImportArchiveEntry> orderedOldestFirst)
+    {
+        var protectedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // MoveImportFile writes the reason sidecar AFTER moving the package, so the sidecar
+        // is always the newer of the pair. Picking the newest entry blindly would therefore
+        // protect a 200-byte .error.txt and delete the package it explains.
+        var newest = orderedOldestFirst
+            .LastOrDefault(static entry => !IsArchiveErrorSidecar(entry.Path));
+        if (newest.Path is null)
+        {
+            newest = orderedOldestFirst[^1];
+        }
+
+        protectedPaths.Add(newest.Path);
+        foreach (var entry in orderedOldestFirst)
+        {
+            if (IsArchiveErrorSidecar(entry.Path)
+                && entry.Path.StartsWith(newest.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                protectedPaths.Add(entry.Path);
+            }
+        }
+
+        return protectedPaths;
+    }
+
+    private static bool IsArchiveErrorSidecar(string path)
+        => path.EndsWith(".error.txt", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Delegates to the shared guard so this service and every other writer enforce one rule.
     /// </summary>
     /// <remarks>
@@ -138,34 +480,46 @@ public sealed class ArtifactZipImportService
     private static void EnsureNotReparsePoint(string path, string description)
         => OmpReparsePointGuard.EnsureNotReparsePoint(path, description);
 
-    private void SweepEntriesOlderThan(string root, DateTime cutoffUtc, bool includeDirectories)
+    /// <summary>
+    /// False when the root must not be swept: it is a reparse point, or its link status
+    /// could not be read.
+    /// </summary>
+    /// <remarks>
+    /// EnumerateFiles traverses a junction AT THE ROOT transparently, and the sweeps then
+    /// File.Delete everything past their limits -- as SYSTEM. The processed/failed roots
+    /// default to subdirectories of the operator-writable import folder, so replacing one
+    /// with a junction to System32 turned housekeeping into arbitrary file deletion
+    /// (R7-S3). Skip a linked root entirely rather than deleting through it. Shared by both
+    /// sweeps so the size-capped archive sweep added for R12-F13 cannot be the copy that
+    /// forgets the check (metod 4.1).
+    /// </remarks>
+    private bool IsSweepableRoot(string root)
     {
-        if (!Directory.Exists(root))
-        {
-            return;
-        }
-
-        // EnumerateFiles traverses a junction AT THE ROOT transparently, and this
-        // sweep then File.Deletes everything past the cutoff -- as SYSTEM. The
-        // processed/failed roots default to subdirectories of the operator-writable
-        // import folder, so replacing one with a junction to System32 turned this
-        // housekeeping pass into arbitrary file deletion (R7-S3). Skip a linked root
-        // entirely rather than deleting through it.
         try
         {
-            if (OmpReparsePointGuard.IsReparsePoint(root))
+            if (!OmpReparsePointGuard.IsReparsePoint(root))
             {
-                _logger.LogWarning(
-                    "HostAgent import housekeeping skipped '{Root}' because it is a reparse point (junction/symlink); refusing to delete through it.",
-                    root);
-                return;
+                return true;
             }
+
+            _logger.LogWarning(
+                "HostAgent import housekeeping skipped '{Root}' because it is a reparse point (junction/symlink); refusing to delete through it.",
+                root);
+            return false;
         }
         catch (IOException)
         {
-            return;
+            return false;
         }
         catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private void SweepEntriesOlderThan(string root, DateTime cutoffUtc, bool includeDirectories)
+    {
+        if (!Directory.Exists(root) || !IsSweepableRoot(root))
         {
             return;
         }
@@ -720,10 +1074,18 @@ public sealed class ArtifactZipImportService
                 cancellationToken);
         }
 
-        // For non-core modules, verify the physical schema against integrity.requiredTables
-        // /requiredSchemas and re-run only the idempotent scripts whose declared objects
-        // are missing. This heals stale schema even when the version gate would otherwise
-        // skip or ignore the definition.
+        // For non-core modules, verify the physical schema against everything the definition
+        // declares -- schemas, tables, columns, indexes, constraints and triggers -- plus the
+        // module's own embedded validation probe, and re-run only the idempotent scripts whose
+        // declared objects are missing. This heals stale schema even when the version gate
+        // would otherwise skip or ignore the definition.
+        //
+        // R12-G3. Until 2026-08-16 the witness could see schemas and TABLES only, and answered
+        // "present" for any declaration kind it did not recognise. A migration that added a
+        // column, an index or a unique constraint to an existing table was therefore invisible
+        // to it: the import reported a green "skipped, package version is not newer", and the
+        // gap surfaced later as a raw SqlException in a worker. That is how R4-B1's unique
+        // index sat in the repository for four days, booked as fixed, while no database had it.
         if (!requiresPreApplySqlRepairs)
         {
             var missingByScript = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(

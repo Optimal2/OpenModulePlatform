@@ -19,6 +19,18 @@ public sealed class ArtifactProvisioner
         = new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan ReHashInterval = TimeSpan.FromHours(1);
 
+    // R12-F12, host-local half. The missing-hash warning below used to be written at Error
+    // on EVERY provisioning of the artifact -- once per artifact per 30-second cycle,
+    // forever -- which is loud without being informative: it never says how many artifacts
+    // are in that state, so it cannot be driven to zero, and its own repetition buries it.
+    // The tracker turns the same observations into one recurring aggregate that names the
+    // count and the ids, and the per-artifact line stays at Error only the first time an
+    // artifact is seen without a hash (or regresses to it), which is when it is news.
+    // The catalog-wide half lives in ArtifactZipImportService; this half is the number that
+    // decides whether HostAgent:RequireArtifactHash can be enabled on THIS host, because
+    // these are exactly the artifacts the flag would refuse here.
+    private readonly ArtifactContentHashGapTracker _hashGapTracker = new();
+
     public ArtifactProvisioner(
         IOptionsMonitor<HostAgentSettings> settings,
         ILogger<ArtifactProvisioner> logger)
@@ -208,6 +220,12 @@ public sealed class ArtifactProvisioner
         // Accepting is defensible: artifact identity still has to match, which is what
         // R8-P2-10 concluded. Refusing is defensible too. The default keeps the existing
         // behaviour so no running installation changes on upgrade.
+        var observation = _hashGapTracker.Observe(
+            artifact.ArtifactId,
+            hasContentHash: expectedHash is not null,
+            DateTimeOffset.UtcNow);
+        ReportHashGapAudit(observation.Audit);
+
         if (expectedHash is null)
         {
             if (settings.RequireArtifactHash)
@@ -222,9 +240,21 @@ public sealed class ArtifactProvisioner
                     $"Artifact {artifact.ArtifactId} has no Sha256 in the catalog and RequireArtifactHash is enabled.");
             }
 
-            _logger.LogError(
-                "Artifact {ArtifactId} has no Sha256 in the catalog; content integrity is NOT verified and the local/downloaded content is accepted unchecked. Set HostAgent:RequireArtifactHash to refuse instead.",
-                artifact.ArtifactId);
+            // Loud on the transition, quiet on the repeat: the recurring aggregate below is
+            // what carries the standing state, so repeating this line every cycle only made
+            // the gap harder to see, not easier (R12-F12).
+            if (observation.IsNewlyMissingContentHash)
+            {
+                _logger.LogError(
+                    "Artifact {ArtifactId} has no Sha256 in the catalog; content integrity is NOT verified and the local/downloaded content is accepted unchecked. Set HostAgent:RequireArtifactHash to refuse instead.",
+                    artifact.ArtifactId);
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "Artifact {ArtifactId} still has no Sha256 in the catalog; content is accepted unverified. See the recurring artifact content hash audit for the total.",
+                    artifact.ArtifactId);
+            }
         }
 
         if (File.Exists(localPath) || Directory.Exists(localPath))
@@ -492,5 +522,126 @@ public sealed class ArtifactProvisioner
         {
             // Best effort cleanup only.
         }
+    }
+
+    private void ReportHashGapAudit(ArtifactContentHashGapAudit? audit)
+    {
+        if (audit is null)
+        {
+            return;
+        }
+
+        if (audit.MissingContentHashArtifactIds.Count == 0)
+        {
+            _logger.LogInformation(
+                "Artifact content hash audit: all {ObservedCount} artifact(s) this host provisioned in the last {WindowHours} h carry a Sha256, so nothing here would be refused. HostAgent:RequireArtifactHash can be enabled on this host.",
+                audit.ObservedArtifactCount,
+                ArtifactContentHashGapTracker.RetentionWindow.TotalHours);
+            return;
+        }
+
+        _logger.LogWarning(
+            "Artifact content hash audit: {MissingCount} of {ObservedCount} artifact(s) this host provisioned carry no Sha256, so their content is accepted unverified and HostAgent:RequireArtifactHash cannot be enabled here until this reaches 0. ArtifactIds={ArtifactIds}",
+            audit.MissingContentHashArtifactIds.Count,
+            audit.ObservedArtifactCount,
+            string.Join(", ", audit.MissingContentHashArtifactIds));
+    }
+}
+
+/// <summary>
+/// One aggregated report of the artifacts provisioned on this host that carry no content
+/// hash.
+/// </summary>
+internal sealed record ArtifactContentHashGapAudit(
+    int ObservedArtifactCount,
+    IReadOnlyList<int> MissingContentHashArtifactIds);
+
+/// <summary>The outcome of recording one artifact observation.</summary>
+internal readonly record struct ArtifactContentHashObservation(
+    bool IsNewlyMissingContentHash,
+    ArtifactContentHashGapAudit? Audit);
+
+/// <summary>
+/// Turns the stream of per-artifact provisioning observations into a recurring aggregate:
+/// how many distinct artifacts this host provisions without a catalog content hash
+/// (R12-F12).
+/// </summary>
+/// <remarks>
+/// State is per artifact id and holds the LATEST observation, not a running tally, so the
+/// count actually falls when an operator fills a missing Sha256 in and the artifact is
+/// provisioned again. Entries not observed within <see cref="RetentionWindow" /> are
+/// evicted, so an artifact that stops being desired on this host stops holding the count
+/// above zero -- without that, "drive it to zero" would be unreachable by construction and
+/// the signal would be worthless (metod 4.2: the fix has to change what the operator can
+/// observe, not merely add a line).
+/// </remarks>
+internal sealed class ArtifactContentHashGapTracker
+{
+    /// <summary>
+    /// Matches ArtifactProvisioner.ReHashInterval: long enough that the aggregate is 24
+    /// lines a day rather than a per-cycle stream, short enough that an operator who fixes
+    /// a hash sees the number move within the hour.
+    /// </summary>
+    public static readonly TimeSpan AuditInterval = TimeSpan.FromHours(1);
+
+    /// <summary>How long an unobserved artifact keeps counting before it is evicted.</summary>
+    public static readonly TimeSpan RetentionWindow = TimeSpan.FromHours(2);
+
+    private readonly object _sync = new();
+    private readonly Dictionary<int, (bool HasContentHash, DateTimeOffset LastSeenUtc)> _observations = [];
+    private DateTimeOffset? _lastAuditUtc;
+    private int _lastReportedMissingCount = -1;
+
+    public ArtifactContentHashObservation Observe(int artifactId, bool hasContentHash, DateTimeOffset nowUtc)
+    {
+        lock (_sync)
+        {
+            var known = _observations.TryGetValue(artifactId, out var previous);
+            var isNewlyMissing = !hasContentHash && (!known || previous.HasContentHash);
+            _observations[artifactId] = (hasContentHash, nowUtc);
+
+            return new ArtifactContentHashObservation(isNewlyMissing, TryBuildAudit(nowUtc));
+        }
+    }
+
+    private ArtifactContentHashGapAudit? TryBuildAudit(DateTimeOffset nowUtc)
+    {
+        var stale = nowUtc - RetentionWindow;
+        foreach (var artifactId in _observations
+            .Where(entry => entry.Value.LastSeenUtc < stale)
+            .Select(static entry => entry.Key)
+            .ToList())
+        {
+            _observations.Remove(artifactId);
+        }
+
+        var missing = _observations
+            .Where(static entry => !entry.Value.HasContentHash)
+            .Select(static entry => entry.Key)
+            .OrderBy(static artifactId => artifactId)
+            .ToList();
+
+        // The very first observation after a restart is not an audit -- one artifact seen is
+        // not a measurement of the host -- so it only starts the clock.
+        if (_lastAuditUtc is not { } lastAuditUtc)
+        {
+            _lastAuditUtc = nowUtc;
+            _lastReportedMissingCount = missing.Count;
+            return null;
+        }
+
+        // Report on the interval so the state is standing and visible, and additionally the
+        // moment the number changes, so both a new gap and progress towards zero are
+        // confirmed immediately instead of up to an hour later.
+        var intervalElapsed = nowUtc - lastAuditUtc >= AuditInterval;
+        var countChanged = missing.Count != _lastReportedMissingCount;
+        if (!intervalElapsed && !countChanged)
+        {
+            return null;
+        }
+
+        _lastAuditUtc = nowUtc;
+        _lastReportedMissingCount = missing.Count;
+        return new ArtifactContentHashGapAudit(_observations.Count, missing);
     }
 }

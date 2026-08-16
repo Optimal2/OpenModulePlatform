@@ -484,7 +484,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
         // cycle in a tight ~15s churn (R5-F3).
         managed.RecordStartAttempt(nowUtc, restartWindow);
 
-        var workerProcessPath = await ResolveWorkerProcessPathAsync(settings, cancellationToken);
+        var workerProcessHost = await ResolveWorkerProcessHostAsync(settings, cancellationToken);
+        var workerProcessPath = workerProcessHost.Path;
         ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
         ValidateReadableStartupFile(managed.Definition.PluginAssemblyPath, "Worker plugin assembly");
 
@@ -514,6 +515,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
             process,
             startupResources.ShutdownEvent,
             nowUtc,
+            workerProcessHost,
             startupResources.DrainEvent,
             startupResources.BusyEvent);
         startupResources.ReleaseOwnership();
@@ -521,11 +523,18 @@ public sealed class WorkerManagerHostedService : BackgroundService
         await PublishStartingObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
 
         _logger.LogInformation(
-            "Started worker process. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}, ProcessId={ProcessId}, WorkerProcessPath={WorkerProcessPath}, PluginAssemblyPath={PluginAssemblyPath}",
+            // R12-F2. The artifact the process was started from belongs in the one line that
+            // records the start: it is the only place a log reader can tie a running process
+            // to a version, and it is what the runtime state row now claims in the database.
+            "Started worker process. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, WorkerTypeKey={WorkerTypeKey}, ProcessId={ProcessId}, ArtifactId={ArtifactId}, ArtifactVersion={ArtifactVersion}, HostArtifactId={HostArtifactId}, HostArtifactVersion={HostArtifactVersion}, WorkerProcessPath={WorkerProcessPath}, PluginAssemblyPath={PluginAssemblyPath}",
             managed.Definition.AppInstanceId,
             managed.Definition.WorkerInstanceId,
             managed.Definition.WorkerTypeKey,
             managed.ProcessId,
+            managed.StartedArtifactId,
+            managed.StartedArtifactVersion,
+            managed.StartedHostArtifactId,
+            managed.StartedHostArtifactVersion,
             workerProcessPath,
             managed.Definition.PluginAssemblyPath);
     }
@@ -888,6 +897,13 @@ public sealed class WorkerManagerHostedService : BackgroundService
         DateTimeOffset? lastExitUtc,
         string statusMessage)
     {
+        // R12-F2. The artifact witness is published under exactly the same condition as
+        // the process id: there has to be a live process for either to mean anything. A
+        // stopped or never-started worker reports NULL, and the diagnostics scripts print
+        // that as a stated unknown -- the alternative, reporting the definition's artifact
+        // regardless, would have every stopped worker claiming to run the desired version.
+        var isLive = managed.IsRunning();
+
         return new WorkerRuntimeObservation
         {
             AppInstanceId = managed.Definition.AppInstanceId,
@@ -896,12 +912,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
             RuntimeKind = runtimeKind,
             WorkerTypeKey = managed.Definition.WorkerTypeKey,
             ObservedState = observedState,
-            ProcessId = managed.IsRunning() ? managed.ProcessId : null,
+            ProcessId = isLive ? managed.ProcessId : null,
             StartedUtc = startedUtc,
             LastSeenUtc = lastSeenUtc,
             LastExitUtc = lastExitUtc,
             LastExitCode = managed.LastExitCode,
-            StatusMessage = statusMessage
+            StatusMessage = statusMessage,
+            RuntimeArtifactId = isLive ? managed.StartedArtifactId : null,
+            RuntimeArtifactVersion = isLive ? managed.StartedArtifactVersion : null,
+            RuntimeHostArtifactId = isLive ? managed.StartedHostArtifactId : null,
+            RuntimeHostArtifactVersion = isLive ? managed.StartedHostArtifactVersion : null
         };
     }
 
@@ -921,13 +941,23 @@ public sealed class WorkerManagerHostedService : BackgroundService
         return PathResolutionUtility.ResolvePath(path);
     }
 
-    private async Task<string> ResolveWorkerProcessPathAsync(
+    /// <summary>
+    /// Resolves the WorkerProcessHost executable, and with it the artifact that executable
+    /// came from (R12-F2).
+    /// </summary>
+    /// <remarks>
+    /// A configured WorkerManager:WorkerProcessPath names a file and nothing else, so it
+    /// yields no artifact identity. That is reported as unknown rather than guessed: the
+    /// whole point of this finding is that an unverifiable version must read as
+    /// unverifiable, not as agreement.
+    /// </remarks>
+    private async Task<ResolvedWorkerProcessHost> ResolveWorkerProcessHostAsync(
         WorkerManagerSettings settings,
         CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(settings.WorkerProcessPath))
         {
-            return ResolvePath(settings.WorkerProcessPath);
+            return new ResolvedWorkerProcessHost(ResolvePath(settings.WorkerProcessPath), null, null);
         }
 
         if (!string.Equals(settings.GetCatalogMode(), WorkerCatalogModes.OmpDatabase, StringComparison.OrdinalIgnoreCase))
@@ -937,14 +967,14 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
 
         var hostKey = settings.ResolveHostKey();
-        var workerProcessPath = await _runtimeRepository.ResolveWorkerProcessHostPathAsync(hostKey, cancellationToken);
-        if (string.IsNullOrWhiteSpace(workerProcessPath))
+        var workerProcessHost = await _runtimeRepository.ResolveWorkerProcessHostAsync(hostKey, cancellationToken);
+        if (workerProcessHost is null || string.IsNullOrWhiteSpace(workerProcessHost.Path))
         {
             throw new InvalidOperationException(
                 $"Could not resolve a provisioned OMP Worker Process Host artifact for HostKey '{hostKey}'.");
         }
 
-        return workerProcessPath;
+        return workerProcessHost;
     }
 
     /// <summary>
@@ -968,8 +998,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
         {
             ValidateReadableStartupFile(desired.PluginAssemblyPath, "Worker plugin assembly");
 
-            var workerProcessPath = await ResolveWorkerProcessPathAsync(_settings.CurrentValue, cancellationToken);
-            ValidateReadableStartupFile(workerProcessPath, "Resolved WorkerProcessHost executable");
+            var workerProcessHost = await ResolveWorkerProcessHostAsync(_settings.CurrentValue, cancellationToken);
+            ValidateReadableStartupFile(workerProcessHost.Path, "Resolved WorkerProcessHost executable");
             return (true, string.Empty);
         }
         catch (InvalidOperationException ex)
@@ -1082,7 +1112,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         string workerProcessPath;
         try
         {
-            workerProcessPath = Path.GetFullPath(await ResolveWorkerProcessPathAsync(settings, cancellationToken));
+            workerProcessPath = Path.GetFullPath((await ResolveWorkerProcessHostAsync(settings, cancellationToken)).Path);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
