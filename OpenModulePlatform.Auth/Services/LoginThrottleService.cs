@@ -103,6 +103,26 @@ public sealed class LoginThrottleService
     }
 
     /// <summary>
+    /// The single place every sign-in path records a failed attempt (R7-F16).
+    /// An infrastructure fault -- the directory service unreachable, the local
+    /// password provider disabled or missing -- is not a bad-credential
+    /// attempt, so it must never consume the lockout budget (R5-F8);
+    /// otherwise one outage would lock every user out. Callers pass the
+    /// outcome flag from the authentication result instead of re-deciding the
+    /// rule per path.
+    /// </summary>
+    public void RecordFailedAttempt(string key, string? clientAddress, bool isInfrastructureError)
+    {
+        if (isInfrastructureError)
+        {
+            return;
+        }
+
+        RecordFailure(key);
+        RecordClientFailure(clientAddress);
+    }
+
+    /// <summary>
     /// True when this client address has accumulated too many failed sign-in
     /// attempts across all usernames (spray defense, R4-F3). No-op for an empty
     /// address (e.g. a proxy that hides the client IP), which falls back to the

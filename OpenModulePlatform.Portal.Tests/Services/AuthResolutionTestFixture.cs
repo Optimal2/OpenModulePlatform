@@ -130,6 +130,104 @@ WHERE p.display_name = @display_name;",
     }
 
     /// <summary>
+    /// Enables or disables an auth provider row, creating it when missing, so
+    /// tests can drive the provider-disabled paths. EnsureProviderAsync in the
+    /// repository self-heals a missing provider to enabled, so the disabled
+    /// state must be written explicitly first.
+    /// </summary>
+    public async Task SetProviderEnabledAsync(string displayName, bool enabled)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(
+            @"
+UPDATE omp.auth_providers
+SET is_enabled = @is_enabled
+WHERE display_name = @display_name;
+
+IF @@ROWCOUNT = 0
+BEGIN
+    INSERT INTO omp.auth_providers(display_name, is_enabled)
+    VALUES(@display_name, @is_enabled);
+END",
+            conn);
+        cmd.Parameters.AddWithValue("@display_name", displayName);
+        cmd.Parameters.AddWithValue("@is_enabled", enabled);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Runs the R7-F12 canonicalization migration exactly as the core setup
+    /// script ships it: the block is extracted from
+    /// sql/1-setup-openmoduleplatform.sql between its begin/end markers, so the
+    /// test exercises the shipped SQL rather than a copy of it.
+    /// </summary>
+    public async Task RunLocalPasswordCanonicalizationMigrationAsync()
+    {
+        var batches = ReadCoreSetupMigrationBatches();
+
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        foreach (var batch in batches)
+        {
+            await using var cmd = new SqlCommand(batch, conn);
+            await cmd.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static IReadOnlyList<string> ReadCoreSetupMigrationBatches()
+    {
+        var setupSql = File.ReadAllText(
+            Path.Join(FindRepositoryRoot(), "sql", "1-setup-openmoduleplatform.sql"));
+
+        const string beginMarker = "-- R7-F12: local password user-name canonicalization (begin)";
+        const string endMarker = "-- R7-F12: local password user-name canonicalization (end)";
+
+        var startIndex = setupSql.IndexOf(beginMarker, StringComparison.Ordinal);
+        Assert.True(startIndex >= 0, "Could not find the R7-F12 migration begin marker in the core setup script.");
+        var endIndex = setupSql.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
+        Assert.True(endIndex >= 0, "Could not find the R7-F12 migration end marker in the core setup script.");
+
+        var block = setupSql[startIndex..endIndex];
+
+        // Split on GO batch separators (SqlCommand cannot execute GO).
+        var batches = new List<string>();
+        var current = new List<string>();
+        foreach (var rawLine in block.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (string.Equals(line.Trim(), "GO", StringComparison.OrdinalIgnoreCase))
+            {
+                batches.Add(string.Join('\n', current));
+                current.Clear();
+                continue;
+            }
+
+            current.Add(line);
+        }
+
+        batches.Add(string.Join('\n', current));
+        return batches.Where(batch => !string.IsNullOrWhiteSpace(batch)).ToList();
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
+    }
+
+    /// <summary>
     /// Writes the global auth/selfRegistrationEnabled value the way the omp_auth
     /// seed does, so registration tests can turn the feature on deliberately.
     /// </summary>
