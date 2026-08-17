@@ -15,6 +15,11 @@ public sealed class OmpAuthRepository
     private const int ProviderUserKeyMaxLength = 1000;
     // SQL Server allows 2100 parameters per command; 500 keeps AD group lookups comfortably below that limit.
     private const int AdGroupPrincipalQueryChunkSize = 500;
+    // R7-F15: structurally valid PBKDF2-SHA256 hash (210,000 iterations, zero
+    // salt and zero expected hash) verified in place of a missing account, so
+    // an unknown user name costs the same hashing work as a wrong password.
+    private const string UnknownUserDummyPasswordHash =
+        "PBKDF2-SHA256$210000$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
     private enum ExternalUserProvisioningMode
     {
@@ -24,14 +29,14 @@ public sealed class OmpAuthRepository
     }
 
     private readonly SqlConnectionFactory _db;
-    private readonly LocalPasswordHasher _passwordHasher;
+    private readonly IOmpLocalPasswordHasher _passwordHasher;
     private readonly WindowsPrincipalReader _windows;
     private readonly OmpConfigurationService _configuration;
     private readonly ILogger<OmpAuthRepository> _log;
 
     public OmpAuthRepository(
         SqlConnectionFactory db,
-        LocalPasswordHasher passwordHasher,
+        IOmpLocalPasswordHasher passwordHasher,
         WindowsPrincipalReader windows,
         OmpConfigurationService configuration,
         ILogger<OmpAuthRepository> log)
@@ -73,16 +78,16 @@ public sealed class OmpAuthRepository
         userKeys.Add(userName);
 
         var linkedUser = await TryResolveLinkedUserAsync(conn, provider.Value.ProviderId, userKeys, ct);
-        if (linkedUser is not null && linkedUser.Value.IsActive)
+        if (linkedUser is not null)
         {
             await MarkUserAuthUsedAsync(conn, linkedUser.Value.UserAuthId, linkedUser.Value.UserId, ct);
         }
-        else if (linkedUser is not null)
+        else if (await TryResolveDisabledLinkedUserAsync(conn, provider.Value.ProviderId, userKeys, ct) is { } disabledUser)
         {
             _log.LogWarning(
                 "Windows identity '{UserName}' matched disabled OMP user {UserId}. AD-principal fallback is blocked.",
                 userName,
-                linkedUser.Value.UserId);
+                disabledUser.UserId);
             return null;
         }
 
@@ -179,16 +184,16 @@ public sealed class OmpAuthRepository
         }
 
         var linkedUser = await TryResolveLinkedUserAsync(conn, provider.Value.ProviderId, userKeys, ct);
-        if (linkedUser is not null && linkedUser.Value.IsActive)
+        if (linkedUser is not null)
         {
             await MarkUserAuthUsedAsync(conn, linkedUser.Value.UserAuthId, linkedUser.Value.UserId, ct);
         }
-        else if (linkedUser is not null)
+        else if (await TryResolveDisabledLinkedUserAsync(conn, provider.Value.ProviderId, userKeys, ct) is { } disabledUser)
         {
             _log.LogWarning(
                 "OIDC identity with provider user key hash {ProviderUserKeyHash} matched disabled OMP user {UserId}. Principal fallback is blocked.",
                 CreateLogHash(userKeys[0]),
-                linkedUser.Value.UserId);
+                disabledUser.UserId);
             return null;
         }
 
@@ -296,8 +301,14 @@ public sealed class OmpAuthRepository
         }
 
         var storedHash = await GetLocalPasswordHashAsync(conn, normalizedUserName, ct);
-        if (string.IsNullOrWhiteSpace(storedHash) ||
-            !_passwordHasher.Verify(password, storedHash))
+
+        // R7-F15: verify against a dummy hash when the account does not exist,
+        // so an unknown user name costs the same PBKDF2 work as a wrong
+        // password and the response time cannot reveal which user names are
+        // registered.
+        var accountExists = !string.IsNullOrWhiteSpace(storedHash);
+        if (!_passwordHasher.Verify(password, accountExists ? storedHash : UnknownUserDummyPasswordHash) ||
+            !accountExists)
         {
             return (null, "The user name or password is incorrect.");
         }
@@ -310,19 +321,23 @@ public sealed class OmpAuthRepository
 
         if (linkedUser is null)
         {
+            if (await TryResolveDisabledLinkedUserAsync(
+                    conn,
+                    provider.Value.ProviderId,
+                    [normalizedUserName, "name:" + normalizedUserName],
+                    ct) is { } disabledUser)
+            {
+                _log.LogWarning(
+                    "Local password user '{UserName}' matched disabled OMP user {UserId}.",
+                    normalizedUserName,
+                    disabledUser.UserId);
+                return (null, "The linked OMP user is disabled.");
+            }
+
             _log.LogWarning(
                 "Local password user '{UserName}' authenticated but has no omp.user_auth link.",
                 normalizedUserName);
             return (null, "The local password account is not linked to an OMP user.");
-        }
-
-        if (!linkedUser.Value.IsActive)
-        {
-            _log.LogWarning(
-                "Local password user '{UserName}' matched disabled OMP user {UserId}.",
-                normalizedUserName,
-                linkedUser.Value.UserId);
-            return (null, "The linked OMP user is disabled.");
         }
 
         await MarkUserAuthUsedAsync(conn, linkedUser.Value.UserAuthId, linkedUser.Value.UserId, ct);
@@ -390,7 +405,8 @@ public sealed class OmpAuthRepository
         try
         {
             if (await LocalPasswordUserExistsAsync(conn, tx, normalizedUserName, ct) ||
-                await TryResolveLinkedUserAsync(conn, tx, provider.Value.ProviderId, [normalizedUserName, "name:" + normalizedUserName], ct) is not null)
+                (await TryResolveLinkedUserAsync(conn, tx, provider.Value.ProviderId, [normalizedUserName, "name:" + normalizedUserName], ct)) is not null ||
+                (await TryResolveDisabledLinkedUserAsync(conn, tx, provider.Value.ProviderId, [normalizedUserName, "name:" + normalizedUserName], ct)) is not null)
             {
                 await tx.RollbackAsync(ct);
                 return (null, "User name is already in use.");
@@ -475,6 +491,37 @@ WHERE display_name = @display_name;";
         int providerId,
         IReadOnlyList<string> providerUserKeys,
         CancellationToken ct)
+        => await ResolveLinkedUserByAccountStatusAsync(conn, tx, providerId, providerUserKeys, activeAccountsOnly: true, ct);
+
+    /// <summary>
+    /// Finds an enabled auth link whose OMP user is disabled. The active-only
+    /// resolution in <see cref="TryResolveLinkedUserAsync"/> never returns
+    /// these rows (R7-F11); callers use this lookup to keep blocking sign-in
+    /// and provisioning fallbacks for accounts that were deliberately
+    /// disabled.
+    /// </summary>
+    private static async Task<LinkedUserRow?> TryResolveDisabledLinkedUserAsync(
+        SqlConnection conn,
+        int providerId,
+        IReadOnlyList<string> providerUserKeys,
+        CancellationToken ct)
+        => await TryResolveDisabledLinkedUserAsync(conn, tx: null, providerId, providerUserKeys, ct);
+
+    private static async Task<LinkedUserRow?> TryResolveDisabledLinkedUserAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int providerId,
+        IReadOnlyList<string> providerUserKeys,
+        CancellationToken ct)
+        => await ResolveLinkedUserByAccountStatusAsync(conn, tx, providerId, providerUserKeys, activeAccountsOnly: false, ct);
+
+    private static async Task<LinkedUserRow?> ResolveLinkedUserByAccountStatusAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        int providerId,
+        IReadOnlyList<string> providerUserKeys,
+        bool activeAccountsOnly,
+        CancellationToken ct)
     {
         var keys = providerUserKeys
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -487,6 +534,13 @@ WHERE display_name = @display_name;";
         }
 
         var inList = string.Join(",", Enumerable.Range(0, keys.Length).Select(i => "@key" + i));
+        // R7-F11: the disabled-account guard lives in the selection, not in the
+        // sort order. Only accounts with the requested status are eligible, and
+        // user_auth_id is unique, so ORDER BY ua.user_auth_id makes the
+        // TOP (1) choice deterministic.
+        var accountStatusPredicate = activeAccountsOnly
+            ? "AND u.account_status = @active_account_status"
+            : "AND u.account_status <> @active_account_status";
         var sql = $@"
 SELECT TOP (1)
        ua.user_auth_id,
@@ -499,13 +553,14 @@ INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ua.provider_id = @provider_id
   AND ua.provider_user_key IN ({inList})
   AND ua.auth_status = N'enabled'
-ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
-         ua.user_auth_id;";
+  {accountStatusPredicate}
+ORDER BY ua.user_auth_id;";
 
         await using var cmd = tx is null
             ? new SqlCommand(sql, conn)
             : new SqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("@provider_id", providerId);
+        cmd.Parameters.AddWithValue("@active_account_status", ActiveAccountStatus);
         for (var i = 0; i < keys.Length; i++)
         {
             cmd.Parameters.AddWithValue("@key" + i, keys[i]);
@@ -628,12 +683,15 @@ ORDER BY ua.user_auth_id;";
             if (existing is not null)
             {
                 await tx.RollbackAsync(ct);
-                if (existing.Value.IsActive)
-                {
-                    await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
-                }
-
+                await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
                 return existing;
+            }
+
+            var disabledExisting = await TryResolveDisabledLinkedUserAsync(conn, tx, providerId, keys, ct);
+            if (disabledExisting is not null)
+            {
+                await tx.RollbackAsync(ct);
+                return disabledExisting;
             }
 
             var primaryUserAuthId = 0;
@@ -667,12 +725,13 @@ ORDER BY ua.user_auth_id;";
             await tx.RollbackAsync(ct);
 
             var existing = await TryResolveLinkedUserAsync(conn, providerId, keys, ct);
-            if (existing is not null && existing.Value.IsActive)
+            if (existing is not null)
             {
                 await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
+                return existing;
             }
 
-            return existing;
+            return await TryResolveDisabledLinkedUserAsync(conn, providerId, keys, ct);
         }
         catch
         {
@@ -877,12 +936,15 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             if (existing is not null)
             {
                 await tx.RollbackAsync(ct);
-                if (existing.Value.IsActive)
-                {
-                    await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
-                }
-
+                await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
                 return existing;
+            }
+
+            var disabledExisting = await TryResolveDisabledLinkedUserAsync(conn, tx, providerId, keys, ct);
+            if (disabledExisting is not null)
+            {
+                await tx.RollbackAsync(ct);
+                return disabledExisting;
             }
 
             var displayName = CreateAutoProvisionedDisplayName(userName);
@@ -907,12 +969,13 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             await tx.RollbackAsync(ct);
 
             var existing = await TryResolveLinkedUserAsync(conn, providerId, keys, ct);
-            if (existing is not null && existing.Value.IsActive)
+            if (existing is not null)
             {
                 await MarkUserAuthUsedAsync(conn, existing.Value.UserAuthId, existing.Value.UserId, ct);
+                return existing;
             }
 
-            return existing;
+            return await TryResolveDisabledLinkedUserAsync(conn, providerId, keys, ct);
         }
         catch
         {
