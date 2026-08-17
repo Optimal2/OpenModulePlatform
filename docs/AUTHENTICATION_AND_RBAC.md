@@ -505,6 +505,89 @@ Auth app.
 7. `RbacService` resolves claims and system principals against `omp.RolePrincipals`, `omp.Roles`, and `omp.RolePermissions`.
 8. Ambient baseline permissions plus the active role permissions control navigation and page access.
 
+## Operations and Upgrade Notes
+
+### Self-registration on upgraded installations
+
+`auth/selfRegistrationEnabled` is opt-in: new installations seed it to
+`false`, and every reader treats a missing, invalid, or unreadable value as
+disabled. The seed only inserts the value (`WHEN NOT MATCHED THEN INSERT`)
+and never overwrites an existing row, because an existing row may be a
+deliberate operator decision. Installations that were seeded while the
+default was `true` therefore keep running with self-registration switched on
+after an upgrade — the new default does not reach them.
+
+**Upgrade action:** if self-registration is not intended, set
+`auth/selfRegistrationEnabled` to `false` from `/admin/configsettings` (or
+directly in `omp.config_settings`).
+
+The effective state is discoverable instead of silent:
+
+- The Auth app logs a warning at startup while self-registration is enabled.
+  Installations that allow self-registration deliberately can silence the
+  warning with `OmpAuth:SelfRegistrationStartupWarning = false` in the Auth
+  app's `appsettings.json`. The default is `true`, because a silently
+  insecure default is exactly what this guard exists to catch.
+- The authenticated `/runtime-versions` endpoint on the Auth app reports the
+  effective state as `selfRegistration.enabled` (`true`, `false`, or `null`
+  when the setting could not be read), with a `warning` text.
+
+### Session verification failure mode: strict is fail-closed
+
+`auth/sessionRevocationFailureMode` defaults to `strict` (see "Session
+Revocation and Absolute Lifetime"): when the account state cannot be verified
+at all — for example while the database is unreachable — **every**
+authenticated session is rejected. In practice that is a platform-wide
+sign-out for as long as the database is down. It is the right default for
+sensitive data, but operations should decide in advance, not discover it
+during an outage: `lenient` is a deliberate degradation valve that keeps
+active sessions until the account state can be read again.
+
+### One-time sign-out when the session security stamp rolls out
+
+The release that introduced `omp:security_stamp` validation signs out every
+active session once: cookies issued before the stamp existed carry no claim
+and are rejected on the first request after the upgrade. Plan that rollout as
+a universal re-login event, not a transparent upgrade.
+
+### Client IP behind a reverse proxy (login throttle prerequisite)
+
+The login throttle keys its per-client lockout bucket on the client IP: 50
+failed attempts per client within 15 minutes lock that client out for 15
+minutes (per-account throttling is 10 failures in the same window). When the
+Auth app sits behind a reverse proxy, `WebApp:UseForwardedHeaders` (default
+`false`) must be set to `true` with `WebApp:ForwardedHeadersKnownProxies` /
+`WebApp:ForwardedHeadersKnownNetworks` restricted to the real proxy
+addresses — see `docs/HOSTING_WINDOWS_IIS.md`. Without it every request
+carries the proxy's address, the whole organization shares one lockout
+bucket, and 50 failed logins from anywhere lock everyone out, including at
+the login page.
+
+### Local password user-name canonicalization collisions (R7-F12)
+
+The canonicalization migration folds legacy `lpwd` user names to the
+canonical (trimmed, lowercased) form but deliberately leaves rows whose
+canonical form collides with another row — choosing which of two credential
+sets survives is an operator decision, not a migration decision. The
+migration prints the number of rows left unresolved; that output is visible
+when the script runs through `sqlcmd` (the automated module-SQL import path
+discards PRINT output). The leftovers can be checked at any time:
+
+```sql
+SELECT user_name
+FROM omp.auth_provider_lpwd
+WHERE user_name COLLATE Latin1_General_100_BIN2 <> LOWER(LTRIM(RTRIM(user_name)));
+
+SELECT target.provider_user_key
+FROM omp.user_auth target
+INNER JOIN omp.auth_providers ap ON ap.provider_id = target.provider_id
+WHERE ap.display_name = N'lpwd'
+  AND target.provider_user_key COLLATE Latin1_General_100_BIN2 <> LOWER(LTRIM(RTRIM(target.provider_user_key)));
+```
+
+Any returned row is a case-fold collision: decide which credential set
+survives, then remove or rename the other row by hand.
+
 ## Administration Guidance
 
 For individual platform users, prefer `OmpUser` role principals once the user exists in `omp.users`.
