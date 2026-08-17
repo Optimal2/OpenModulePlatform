@@ -163,8 +163,9 @@ public sealed class LoginModel : PageModel
         var result = await _repository.ResolveLocalPasswordAsync(UserName, Password, ct);
         if (result.User is null)
         {
-            _loginThrottle.RecordFailure(UserName);
-            _loginThrottle.RecordClientFailure(clientAddress);
+            // R7-F16: the throttle decides centrally; an infrastructure fault
+            // (provider disabled/missing) must not count toward lockout.
+            _loginThrottle.RecordFailedAttempt(UserName, clientAddress, result.IsInfrastructureError);
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The user name or password is incorrect.", ct);
             ShowLocalAccountPrompt = true;
             ShowOtherSignInOptions = true;
@@ -209,8 +210,7 @@ public sealed class LoginModel : PageModel
         var validationError = ValidateRegistrationInput();
         if (validationError is not null)
         {
-            _loginThrottle.RecordFailure(registerThrottleKey);
-            _loginThrottle.RecordClientFailure(clientAddress);
+            _loginThrottle.RecordFailedAttempt(registerThrottleKey, clientAddress, isInfrastructureError: false);
             ErrorMessage = T(validationError);
             ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
@@ -221,8 +221,7 @@ public sealed class LoginModel : PageModel
         var result = await _repository.CreateLocalPasswordUserAsync(RegisterUserName, RegisterPassword, ct);
         if (result.User is null)
         {
-            _loginThrottle.RecordFailure(registerThrottleKey);
-            _loginThrottle.RecordClientFailure(clientAddress);
+            _loginThrottle.RecordFailedAttempt(registerThrottleKey, clientAddress, result.IsInfrastructureError);
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The OMP user account could not be created.", ct);
             ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
@@ -275,12 +274,10 @@ public sealed class LoginModel : PageModel
         if (!result.Succeeded || result.Principal is null)
         {
             // A domain-controller-unreachable result is an infrastructure fault, not a
-            // bad-credential attempt, so it must not increment the lockout counter (R5-F8).
-            if (!result.IsInfrastructureError)
-            {
-                _loginThrottle.RecordFailure(throttleKey);
-                _loginThrottle.RecordClientFailure(clientAddress);
-            }
+            // bad-credential attempt, so it must not increment the lockout counter
+            // (R5-F8). The rule lives in the throttle itself (R7-F16), shared by
+            // every sign-in path.
+            _loginThrottle.RecordFailedAttempt(throttleKey, clientAddress, result.IsInfrastructureError);
 
             ErrorMessage = T(result.IsInfrastructureError
                 ? "Windows credentials could not be validated because the directory service is unavailable. Please try again shortly."

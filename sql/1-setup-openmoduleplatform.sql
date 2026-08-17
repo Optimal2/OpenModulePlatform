@@ -4410,6 +4410,58 @@ END
 GO
 
 -------------------------------------------------------------------------------
+-- R7-F12: local password user-name canonicalization (begin)
+-------------------------------------------------------------------------------
+-- The platform canonicalizes local password user names in application code
+-- (trim + invariant lowercase, LocalPasswordIdentity.NormalizeUserName) on
+-- every write and every read, and compares them pinned to a binary collation
+-- so the database collation cannot redefine matching. Rows written before
+-- that rule -- or by hand -- may hold a different casing and would be
+-- invisible to the exact canonical lookup; fold them to the canonical form
+-- here. The comparisons below are binary on purpose: under a
+-- case-insensitive collation 'Alice' = 'alice' would make the row look
+-- already canonical and self-match the collision guard. Rows whose canonical
+-- form collides with another row (only possible on case-sensitive
+-- collations, where the primary key allows both casings) are left untouched:
+-- choosing which of two credential sets survives is an operator decision,
+-- not a migration decision.
+-- Note: LOWER() folds by the database collation, which differs from the
+-- invariant-culture fold only outside ASCII; ASCII user names -- the
+-- expected case -- fold identically.
+UPDATE target
+SET user_name = LOWER(LTRIM(RTRIM(target.user_name)))
+FROM omp.auth_provider_lpwd target
+WHERE target.user_name COLLATE Latin1_General_100_BIN2 <> LOWER(LTRIM(RTRIM(target.user_name)))
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.auth_provider_lpwd existing
+      WHERE existing.user_name COLLATE Latin1_General_100_BIN2 = LOWER(LTRIM(RTRIM(target.user_name)))
+  );
+GO
+
+-- The omp.user_auth link key for the lpwd provider is the same canonical
+-- user name; fold legacy link keys the same way, with the same collision
+-- guard, so the migrated hash row and its link stay in step.
+UPDATE target
+SET provider_user_key = LOWER(LTRIM(RTRIM(target.provider_user_key)))
+FROM omp.user_auth target
+INNER JOIN omp.auth_providers ap ON ap.provider_id = target.provider_id
+WHERE ap.display_name = N'lpwd'
+  AND target.provider_user_key COLLATE Latin1_General_100_BIN2 <> LOWER(LTRIM(RTRIM(target.provider_user_key)))
+  AND NOT EXISTS
+  (
+      SELECT 1
+      FROM omp.user_auth existing
+      WHERE existing.provider_id = target.provider_id
+        AND existing.provider_user_key COLLATE Latin1_General_100_BIN2 = LOWER(LTRIM(RTRIM(target.provider_user_key)))
+  );
+GO
+-------------------------------------------------------------------------------
+-- R7-F12: local password user-name canonicalization (end)
+-------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------
 -- OMP configuration settings
 -------------------------------------------------------------------------------
 IF OBJECT_ID(N'omp.config_setting_definitions', N'U') IS NULL

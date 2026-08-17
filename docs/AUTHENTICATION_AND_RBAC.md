@@ -356,6 +356,17 @@ the matching `omp.user_auth` row in one transaction. The edit page can also
 reset the local password hash or remove the local login; removal deletes both
 the `omp.user_auth` link and the `omp.auth_provider_lpwd` row.
 
+Local password user names have one canonical form shared by every write and
+every read (R7-F12): `LocalPasswordIdentity.NormalizeUserName` (trim +
+invariant lowercase) in application code, and a comparison pinned to the
+binary collation `Latin1_General_100_BIN2` in SQL, so the database's default
+collation cannot redefine matching. The core setup script carries an
+idempotent migration (omp_core 0.3.117) that folds pre-existing
+differently-cased `omp.auth_provider_lpwd` user names and their `lpwd`
+`omp.user_auth` keys to the canonical form; rows whose canonical form would
+collide with another row are left untouched for an operator to resolve
+manually.
+
 ## User Tables
 
 The core user tables are:

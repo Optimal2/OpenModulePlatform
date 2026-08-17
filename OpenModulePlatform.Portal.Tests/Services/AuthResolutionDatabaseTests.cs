@@ -8,11 +8,139 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// active accounts instead of relying on an active-first sort order) and
 /// R7-F15 (local password sign-in must run the same hash verification for an
 /// unknown user name as for a wrong password, so the response time does not
-/// reveal which accounts exist).
+/// reveal which accounts exist). R7-F12 adds the canonical user-name rule for
+/// omp.auth_provider_lpwd (one shared normalization, comparisons pinned to a
+/// binary collation, plus the core-setup migration for legacy rows) and
+/// R7-F16 the infrastructure-error flag that keeps non-credential failures
+/// out of the lockout budget.
 /// </summary>
 public sealed class AuthResolutionDatabaseTests(AuthResolutionTestFixture fixture)
     : IClassFixture<AuthResolutionTestFixture>
 {
+    [Fact]
+    public async Task ResolveLocalPasswordAsync_WhenStoredNameIsNotCanonical_DoesNotMatch()
+    {
+        // R7-F12. A legacy row written before the shared normalization rule
+        // (or by hand) holds a different casing. The hash lookup is pinned to
+        // the canonical form with a binary collation, so the row must not
+        // match: on a case-insensitive database collation it otherwise would --
+        // possibly the wrong row, if case-variant duplicates ever coexisted.
+        // The auth link below is canonical on purpose: had the hash lookup
+        // matched, sign-in would have succeeded end to end.
+        var userId = await fixture.InsertUserAsync("f12-legacy-case", active: true);
+        await fixture.InsertLocalPasswordAsync("F12-Legacy-Case@Example.com", "valid-password-1");
+        await fixture.InsertAuthLinkAsync(userId, LocalPasswordIdentity.ProviderDisplayName, "f12-legacy-case@example.com");
+
+        var result = await fixture.CreateAuthRepository()
+            .ResolveLocalPasswordAsync("f12-legacy-case@example.com", "valid-password-1", CancellationToken.None);
+
+        Assert.Null(result.User);
+        Assert.Equal("The user name or password is incorrect.", result.Error);
+    }
+
+    [Fact]
+    public async Task CoreSetupMigration_FoldsLegacyCasing_AndRestoresSignIn()
+    {
+        // R7-F12. The idempotent migration shipped in the core setup script
+        // folds non-canonical user names -- and their lpwd auth links -- to
+        // the canonical form; afterwards sign-in with the canonical name
+        // succeeds against the exact binary-pinned lookup.
+        var userId = await fixture.InsertUserAsync("f12-migrated-user", active: true);
+        await fixture.InsertLocalPasswordAsync("F12-Migrated-User@Example.com", "valid-password-1");
+        await fixture.InsertAuthLinkAsync(userId, LocalPasswordIdentity.ProviderDisplayName, "F12-Migrated-User@Example.com");
+
+        await fixture.RunLocalPasswordCanonicalizationMigrationAsync();
+
+        var result = await fixture.CreateAuthRepository()
+            .ResolveLocalPasswordAsync("f12-migrated-user@example.com", "valid-password-1", CancellationToken.None);
+
+        Assert.Null(result.Error);
+        Assert.NotNull(result.User);
+        Assert.Equal(userId, result.User.UserId);
+    }
+
+    [Fact]
+    public async Task LocalPasswordSignIn_WriteAndReadShareTheCanonicalRule()
+    {
+        // R7-F12. Registration and sign-in must apply one and the same
+        // normalization rule: casing and surrounding whitespace in the input
+        // never become part of the stored key.
+        await fixture.SetSelfRegistrationValueAsync("true");
+
+        var created = await fixture.CreateAuthRepository()
+            .CreateLocalPasswordUserAsync("  F12-RoundTrip@Example.com ", "valid-password-1", CancellationToken.None);
+        Assert.NotNull(created.User);
+
+        var result = await fixture.CreateAuthRepository()
+            .ResolveLocalPasswordAsync("F12-ROUNDTRIP@example.COM", "valid-password-1", CancellationToken.None);
+
+        Assert.Null(result.Error);
+        Assert.NotNull(result.User);
+        Assert.Equal(created.User.UserId, result.User.UserId);
+    }
+
+    [Fact]
+    public async Task ResolveLocalPasswordAsync_WhenProviderDisabled_FlagsInfrastructureError()
+    {
+        // R7-F16. A disabled or missing local password provider is an
+        // infrastructure/configuration condition -- no credential was ever
+        // compared -- so the sign-in path must not count it toward the
+        // lockout budget that bounds password guessing (R5-F8).
+        await fixture.SetProviderEnabledAsync(LocalPasswordIdentity.ProviderDisplayName, false);
+        try
+        {
+            var result = await fixture.CreateAuthRepository()
+                .ResolveLocalPasswordAsync("f16-infra-user", "any-password-1", CancellationToken.None);
+
+            Assert.Null(result.User);
+            Assert.Equal("Local password sign-in is disabled.", result.Error);
+            Assert.True(result.IsInfrastructureError);
+        }
+        finally
+        {
+            await fixture.SetProviderEnabledAsync(LocalPasswordIdentity.ProviderDisplayName, true);
+        }
+    }
+
+    [Fact]
+    public async Task ResolveLocalPasswordAsync_WhenPasswordWrong_IsNotInfrastructureError()
+    {
+        // R7-F16. A genuine bad-credential attempt must keep counting toward
+        // the lockout budget; only infrastructure faults are exempt.
+        var userId = await fixture.InsertUserAsync("f16-wrong-password", active: true);
+        await fixture.InsertLocalPasswordAsync("f16-wrong-password", "correct-password-1");
+        await fixture.InsertAuthLinkAsync(userId, LocalPasswordIdentity.ProviderDisplayName, "f16-wrong-password");
+
+        var result = await fixture.CreateAuthRepository()
+            .ResolveLocalPasswordAsync("f16-wrong-password", "wrong-password-1", CancellationToken.None);
+
+        Assert.Null(result.User);
+        Assert.Equal("The user name or password is incorrect.", result.Error);
+        Assert.False(result.IsInfrastructureError);
+    }
+
+    [Fact]
+    public async Task CreateLocalPasswordUserAsync_WhenProviderDisabled_FlagsInfrastructureError()
+    {
+        // R7-F16. The registration path applies the same rule: a disabled
+        // provider is not a failed attempt by the caller.
+        await fixture.SetSelfRegistrationValueAsync("true");
+        await fixture.SetProviderEnabledAsync(LocalPasswordIdentity.ProviderDisplayName, false);
+        try
+        {
+            var result = await fixture.CreateAuthRepository()
+                .CreateLocalPasswordUserAsync("f16-register-user", "valid-password-1", CancellationToken.None);
+
+            Assert.Null(result.User);
+            Assert.Equal("Local password sign-in is disabled.", result.Error);
+            Assert.True(result.IsInfrastructureError);
+        }
+        finally
+        {
+            await fixture.SetProviderEnabledAsync(LocalPasswordIdentity.ProviderDisplayName, true);
+        }
+    }
+
     [Fact]
     public async Task ResolveLocalPasswordAsync_WhenUserDoesNotExist_StillRunsHashVerification()
     {

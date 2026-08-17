@@ -298,7 +298,12 @@ WHERE user_id = @user_id;";
                 return ResetLocalPasswordResult.LocalLoginMissing;
             }
 
-            var updated = await UpdateLocalPasswordHashAsync(conn, tx, providerUserKey, passwordHash, ct);
+            // R7-F12: the hash row is keyed by the canonical user name; apply
+            // the same normalization rule here so a legacy auth link written
+            // before the rule (or by hand) still finds its hash row.
+            var normalizedUserName = LocalPasswordIdentity.NormalizeUserName(providerUserKey);
+
+            var updated = await UpdateLocalPasswordHashAsync(conn, tx, normalizedUserName, passwordHash, ct);
             if (!updated)
             {
                 await tx.RollbackAsync(ct);
@@ -340,7 +345,14 @@ WHERE user_id = @user_id;";
             await DeleteAuthLinkAsync(conn, tx, userAuthId, ct);
             if (string.Equals(link.Value.ProviderDisplayName, LocalPasswordIdentity.ProviderDisplayName, StringComparison.OrdinalIgnoreCase))
             {
-                await DeleteLocalPasswordUserAsync(conn, tx, link.Value.ProviderUserKey, ct);
+                // R7-F12: the hash row is keyed by the canonical user name, so
+                // the stored link key goes through the same normalization rule
+                // before the delete.
+                await DeleteLocalPasswordUserAsync(
+                    conn,
+                    tx,
+                    LocalPasswordIdentity.NormalizeUserName(link.Value.ProviderUserKey),
+                    ct);
             }
 
             await tx.CommitAsync(ct);
@@ -1453,10 +1465,13 @@ WHERE user_id = @user_id
         string userName,
         CancellationToken ct)
     {
+        // R7-F12: callers pass the canonical (NormalizeUserName) form and the
+        // comparison is pinned to the shared binary collation, so matching is
+        // an exact ordinal comparison under any database collation.
         const string sql = @"
 SELECT COUNT(1)
 FROM omp.auth_provider_lpwd
-WHERE user_name = @user_name;";
+WHERE user_name COLLATE " + LocalPasswordIdentity.UserNameBinaryCollation + @" = @user_name;";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@user_name", userName);
@@ -1488,10 +1503,12 @@ VALUES(@user_name, @password_hash);";
         string passwordHash,
         CancellationToken ct)
     {
+        // R7-F12: pinned to the shared binary collation; the caller passes the
+        // canonical (NormalizeUserName) form.
         const string sql = @"
 UPDATE omp.auth_provider_lpwd
 SET password_hash = @password_hash
-WHERE user_name = @user_name;";
+WHERE user_name COLLATE " + LocalPasswordIdentity.UserNameBinaryCollation + @" = @user_name;";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@user_name", userName);
@@ -1554,7 +1571,8 @@ VALUES(@user_id, @provider_id, @provider_user_key, N'enabled', SYSUTCDATETIME())
         string userName,
         CancellationToken ct)
     {
-        const string sql = "DELETE FROM omp.auth_provider_lpwd WHERE user_name = @user_name;";
+        const string sql = "DELETE FROM omp.auth_provider_lpwd WHERE user_name COLLATE "
+            + LocalPasswordIdentity.UserNameBinaryCollation + " = @user_name;";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@user_name", userName);

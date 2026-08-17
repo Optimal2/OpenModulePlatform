@@ -72,12 +72,12 @@ public sealed class AuthRegistrationThrottleTests
             "public async Task<IActionResult> OnPostAlternateWindowsAsync");
 
         // The register handler must consult the same throttle service as sign-in,
-        // keyed per registration name AND per client address, and must record
-        // failures on both buckets so repeated attempts from one IP are throttled.
+        // keyed per registration name AND per client address. Since R7-F16 both
+        // buckets are written through the one central RecordFailedAttempt method,
+        // which owns the infrastructure-error exemption for every sign-in path.
         Assert.Contains("_loginThrottle.IsLockedOut(", registerHandler);
         Assert.Contains("_loginThrottle.IsClientLockedOut(clientAddress)", registerHandler);
-        Assert.Contains("_loginThrottle.RecordFailure(", registerHandler);
-        Assert.Contains("_loginThrottle.RecordClientFailure(clientAddress)", registerHandler);
+        Assert.Contains("_loginThrottle.RecordFailedAttempt(registerThrottleKey, clientAddress", registerHandler);
         Assert.Contains("_loginThrottle.RecordSuccess(", registerHandler);
     }
 

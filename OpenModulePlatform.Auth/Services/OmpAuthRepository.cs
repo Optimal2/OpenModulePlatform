@@ -280,7 +280,7 @@ public sealed class OmpAuthRepository
         };
     }
 
-    public async Task<(OmpAuthenticatedUser? User, string? Error)> ResolveLocalPasswordAsync(
+    public async Task<(OmpAuthenticatedUser? User, string? Error, bool IsInfrastructureError)> ResolveLocalPasswordAsync(
         string userName,
         string password,
         CancellationToken ct)
@@ -288,7 +288,7 @@ public sealed class OmpAuthRepository
         var normalizedUserName = NormalizeLocalUserName(userName);
         if (string.IsNullOrWhiteSpace(normalizedUserName))
         {
-            return (null, "Enter a user name.");
+            return (null, "Enter a user name.", false);
         }
 
         await using var conn = _db.Create();
@@ -297,7 +297,11 @@ public sealed class OmpAuthRepository
         var provider = await EnsureProviderAsync(conn, LocalPasswordIdentity.ProviderDisplayName, ct);
         if (provider is null)
         {
-            return (null, "Local password sign-in is disabled.");
+            // R7-F16: the provider being disabled or missing is an
+            // infrastructure/configuration condition -- no credential was ever
+            // compared -- so the caller must not count it toward the lockout
+            // budget that is meant to bound password guessing (R5-F8).
+            return (null, "Local password sign-in is disabled.", true);
         }
 
         var storedHash = await GetLocalPasswordHashAsync(conn, normalizedUserName, ct);
@@ -310,7 +314,7 @@ public sealed class OmpAuthRepository
         if (!_passwordHasher.Verify(password, accountExists ? storedHash : UnknownUserDummyPasswordHash) ||
             !accountExists)
         {
-            return (null, "The user name or password is incorrect.");
+            return (null, "The user name or password is incorrect.", false);
         }
 
         var linkedUser = await TryResolveLinkedUserAsync(
@@ -331,13 +335,13 @@ public sealed class OmpAuthRepository
                     "Local password user '{UserName}' matched disabled OMP user {UserId}.",
                     normalizedUserName,
                     disabledUser.UserId);
-                return (null, "The linked OMP user is disabled.");
+                return (null, "The linked OMP user is disabled.", false);
             }
 
             _log.LogWarning(
                 "Local password user '{UserName}' authenticated but has no omp.user_auth link.",
                 normalizedUserName);
-            return (null, "The local password account is not linked to an OMP user.");
+            return (null, "The local password account is not linked to an OMP user.", false);
         }
 
         await MarkUserAuthUsedAsync(conn, linkedUser.Value.UserAuthId, linkedUser.Value.UserId, ct);
@@ -355,10 +359,10 @@ public sealed class OmpAuthRepository
                 ("OmpUser", linkedUser.Value.UserId.ToString(CultureInfo.InvariantCulture)),
                 ("LocalUser", normalizedUserName)
             ]
-        }, null);
+        }, null, false);
     }
 
-    public async Task<(OmpAuthenticatedUser? User, string? Error)> CreateLocalPasswordUserAsync(
+    public async Task<(OmpAuthenticatedUser? User, string? Error, bool IsInfrastructureError)> CreateLocalPasswordUserAsync(
         string userName,
         string password,
         CancellationToken ct)
@@ -367,27 +371,27 @@ public sealed class OmpAuthRepository
         var normalizedUserName = NormalizeLocalUserName(userName);
         if (string.IsNullOrWhiteSpace(normalizedUserName))
         {
-            return (null, "Enter a user name.");
+            return (null, "Enter a user name.", false);
         }
 
         if (normalizedUserName.Length > 256)
         {
-            return (null, "User name must be 256 characters or fewer.");
+            return (null, "User name must be 256 characters or fewer.", false);
         }
 
         if (string.IsNullOrEmpty(password))
         {
-            return (null, "Password is required.");
+            return (null, "Password is required.", false);
         }
 
         if (password.Length < 8)
         {
-            return (null, "Password must be at least 8 characters.");
+            return (null, "Password must be at least 8 characters.", false);
         }
 
         if (!await IsSelfRegistrationEnabledAsync(ct))
         {
-            return (null, "Account registration is disabled.");
+            return (null, "Account registration is disabled.", false);
         }
 
         await using var conn = _db.Create();
@@ -396,7 +400,9 @@ public sealed class OmpAuthRepository
         var provider = await EnsureProviderAsync(conn, LocalPasswordIdentity.ProviderDisplayName, ct);
         if (provider is null)
         {
-            return (null, "Local password sign-in is disabled.");
+            // R7-F16: same rule as sign-in -- a disabled/missing provider is an
+            // infrastructure condition, not a failed attempt by the caller.
+            return (null, "Local password sign-in is disabled.", true);
         }
 
         var passwordHash = _passwordHasher.Hash(password);
@@ -409,7 +415,7 @@ public sealed class OmpAuthRepository
                 (await TryResolveDisabledLinkedUserAsync(conn, tx, provider.Value.ProviderId, [normalizedUserName, "name:" + normalizedUserName], ct)) is not null)
             {
                 await tx.RollbackAsync(ct);
-                return (null, "User name is already in use.");
+                return (null, "User name is already in use.", false);
             }
 
             var createdUser = await InsertActiveUserWithLastLoginAsync(conn, tx, displayName, ct);
@@ -431,12 +437,12 @@ public sealed class OmpAuthRepository
                     ("OmpUser", createdUser.UserId.ToString(CultureInfo.InvariantCulture)),
                     ("LocalUser", normalizedUserName)
                 ]
-            }, null);
+            }, null, false);
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
             await tx.RollbackAsync(ct);
-            return (null, "User name is already in use.");
+            return (null, "User name is already in use.", false);
         }
         catch
         {
@@ -1114,10 +1120,14 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
         string userName,
         CancellationToken ct)
     {
+        // R7-F12: the caller passes the canonical (NormalizeUserName) form and
+        // the comparison is pinned to the shared binary collation, so matching
+        // is an exact ordinal comparison no matter what collation the database
+        // was created with.
         const string sql = @"
 SELECT COUNT(1)
 FROM omp.auth_provider_lpwd
-WHERE user_name = @user_name;";
+WHERE user_name COLLATE " + LocalPasswordIdentity.UserNameBinaryCollation + @" = @user_name;";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("@user_name", userName);
@@ -1147,10 +1157,16 @@ VALUES(@user_name, @password_hash);";
         string userName,
         CancellationToken ct)
     {
+        // R7-F12: same canonical rule on both sides -- the user name was
+        // normalized with LocalPasswordIdentity.NormalizeUserName and the
+        // lookup is pinned to the shared binary collation, so a stored row
+        // that does not already hold the canonical form can never be matched
+        // by accident (including the wrong row under a case-insensitive
+        // database collation).
         const string sql = @"
 SELECT password_hash
 FROM omp.auth_provider_lpwd
-WHERE user_name = @user_name;";
+WHERE user_name COLLATE " + LocalPasswordIdentity.UserNameBinaryCollation + @" = @user_name;";
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@user_name", userName);
