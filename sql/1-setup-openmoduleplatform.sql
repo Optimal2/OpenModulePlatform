@@ -3599,6 +3599,11 @@ BEGIN
         -- the final enum mapping.
         account_status int NOT NULL CONSTRAINT DF_omp_users_account_status DEFAULT(1),
 
+        -- Session revocation stamp (R7-F10). The sign-in writes this value into
+        -- the session cookie and every request compares them; rotating the
+        -- stamp (account disabled, password changed) ends existing sessions.
+        security_stamp uniqueidentifier NOT NULL CONSTRAINT DF_omp_users_security_stamp DEFAULT NEWID(),
+
         -- Last successful login/authentication resolve for this OMP user. This
         -- is intended for support/admin troubleshooting, not online presence.
         last_login_at datetime2(3) NULL,
@@ -3624,6 +3629,18 @@ IF OBJECT_ID(N'omp.users', N'U') IS NOT NULL
 BEGIN
     ALTER TABLE omp.users
     ADD profile_image_storage_key nvarchar(260) NULL;
+END
+GO
+
+-- Session revocation stamp for existing installations (R7-F10). Every account
+-- gets its own value, which also ends all sessions that predate the column:
+-- their cookies carry no stamp and fail the next validation.
+IF OBJECT_ID(N'omp.users', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.users', N'security_stamp') IS NULL
+BEGIN
+    ALTER TABLE omp.users
+    ADD security_stamp uniqueidentifier NOT NULL
+        CONSTRAINT DF_omp_users_security_stamp DEFAULT NEWID() WITH VALUES;
 END
 GO
 

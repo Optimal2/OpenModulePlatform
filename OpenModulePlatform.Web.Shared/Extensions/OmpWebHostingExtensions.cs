@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
@@ -1027,6 +1028,20 @@ public static class OmpWebHostingExtensions
             .Bind(configuration.GetSection(OmpAuthOptions.SectionName))
             .ValidateOnStart();
 
+        // R7-F10: session revocation checkpoint. Every request carrying the
+        // shared cookie re-validates the session against omp.users (account
+        // still active, security stamp still current), so a disabled account or
+        // a changed password ends the session instead of letting the cookie
+        // live until it expires. Registered here so every application that
+        // accepts the shared cookie gets the check, including the Auth app
+        // which builds its pipeline by hand.
+        services.AddMemoryCache();
+        services.TryAddSingleton(configuration);
+        services.TryAddSingleton<SqlConnectionFactory>();
+        services.TryAddScoped<OmpConfigurationService>();
+        services.TryAddScoped<IOmpSessionRevocationStore, OmpSqlSessionRevocationStore>();
+        services.TryAddScoped<OmpSessionRevocationValidator>();
+
         var dataProtectionBuilder = services
             .AddDataProtection()
             .SetApplicationName(string.IsNullOrWhiteSpace(authOptions.ApplicationName)
@@ -1067,7 +1082,12 @@ public static class OmpWebHostingExtensions
                     : CookieSecurePolicy.Always;
                 options.LoginPath = NormalizeLocalAuthPath(authOptions.LoginPath, OmpAuthDefaults.LoginPath);
                 options.AccessDeniedPath = NormalizeLocalAuthPath(authOptions.AccessDeniedPath, OmpAuthDefaults.AccessDeniedPath);
-                options.SlidingExpiration = true;
+                // R7-F10: the session lifetime is absolute. Sign-in stamps
+                // ExpiresUtc from the configured per-provider lifetime and no
+                // request may move it. With sliding renewal enabled, any
+                // activity pushed that instant forward forever, so a disabled
+                // employee's cookie lived as long as they kept clicking.
+                options.SlidingExpiration = false;
                 options.ExpireTimeSpan = TimeSpan.FromHours(10);
 
                 options.Events = new CookieAuthenticationEvents
@@ -1082,6 +1102,12 @@ public static class OmpWebHostingExtensions
                         var safeReturnUrl = IsSafeLocalReturnUrl(returnUrl) ? returnUrl : "/";
                         context.Response.Redirect(BuildLoginRedirectUrl(loginPath, safeReturnUrl));
                         return Task.CompletedTask;
+                    },
+                    OnValidatePrincipal = context =>
+                    {
+                        var validator = context.HttpContext.RequestServices
+                            .GetRequiredService<OmpSessionRevocationValidator>();
+                        return validator.ValidateAsync(context);
                     }
                 };
             });

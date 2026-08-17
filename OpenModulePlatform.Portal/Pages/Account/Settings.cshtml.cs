@@ -609,9 +609,16 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             ClaimTypes.Name,
             ClaimTypes.Role);
 
+        // Re-signing in must not restart the session clock (R7-F10): reusing
+        // the current ticket's properties keeps the original IssuedUtc and
+        // ExpiresUtc, so a profile save cannot push the absolute session
+        // lifetime forward.
+        var authenticateResult = await HttpContext.AuthenticateAsync(OmpAuthDefaults.AuthenticationScheme);
+
         await HttpContext.SignInAsync(
             OmpAuthDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(identity));
+            new ClaimsPrincipal(identity),
+            authenticateResult.Properties ?? new AuthenticationProperties());
     }
 
     private IReadOnlyList<string> GetCurrentAdProviderUserKeys()

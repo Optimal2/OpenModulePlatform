@@ -14,7 +14,8 @@ internal readonly record struct OmpAdLinkedUserCandidate(
     int UserAuthId,
     int UserId,
     string DisplayName,
-    int AccountStatus)
+    int AccountStatus,
+    Guid SecurityStamp = default)
 {
     public bool IsActive => AccountStatus == 1;
 }

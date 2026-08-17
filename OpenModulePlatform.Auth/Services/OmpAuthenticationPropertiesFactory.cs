@@ -43,6 +43,10 @@ public sealed class OmpAuthenticationPropertiesFactory
         properties.IsPersistent = true;
         properties.IssuedUtc = issuedUtc;
         properties.ExpiresUtc = issuedUtc.AddMinutes(lifetimeMinutes);
+        // R7-F10: belt and braces for the absolute lifetime. The shared cookie
+        // options already turn sliding expiration off; this also stops any
+        // per-ticket renewal from moving ExpiresUtc past the moment set here.
+        properties.AllowRefresh = false;
 
         if (config.UsedWholeSettingFallback && !string.IsNullOrWhiteSpace(rawValue))
         {

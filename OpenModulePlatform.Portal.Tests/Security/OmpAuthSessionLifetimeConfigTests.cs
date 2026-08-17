@@ -100,4 +100,34 @@ public sealed class OmpAuthSessionLifetimeConfigTests
             OmpAuthSessionLifetimeDefaults.BuiltInDefaultMinutes,
             (properties.ExpiresUtc.Value - properties.IssuedUtc.Value).TotalMinutes);
     }
+
+    [Fact]
+    public async Task CreateAsync_Ticket_IsNotRefreshable()
+    {
+        // R7-F10: the per-ticket counterpart to SlidingExpiration = false. With
+        // AllowRefresh unset, an options-level sliding setting could reissue
+        // the ticket with a later ExpiresUtc; pinned false, nothing moves the
+        // absolute end of the session.
+        var configuration = new ConfigurationBuilder().Build();
+        var db = new SqlConnectionFactory(configuration);
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var configurationService = new OmpConfigurationService(
+            db,
+            cache,
+            NullLogger<OmpConfigurationService>.Instance);
+        var factory = new OmpAuthenticationPropertiesFactory(
+            configurationService,
+            NullLogger<OmpAuthenticationPropertiesFactory>.Instance);
+        var user = new OmpAuthenticatedUser
+        {
+            ProviderId = 2,
+            DisplayName = "Test User",
+            Provider = "Test",
+            ProviderUserKey = "test-user"
+        };
+
+        var properties = await factory.CreateAsync(user, CancellationToken.None);
+
+        Assert.Equal(false, properties.AllowRefresh);
+    }
 }
