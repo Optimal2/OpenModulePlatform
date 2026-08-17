@@ -478,18 +478,21 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             OmpAuthDefaults.SelfRegistrationEnabledSetting,
             ct);
 
-        // R10-S3. The default is deliberately "enabled", which is right for an absent
-        // value and wrong for an unreadable one: a database blip would silently turn
-        // self-registration on for an installation that had turned it off. Fail closed
-        // on a failed read; nothing is cached, so the next request retries.
+        // R7-F17. Self-registration is opt-in (R3-F2): anonymous account
+        // creation is an attack surface, so an absent value means disabled and
+        // the feature is turned on deliberately through the configuration
+        // table. A failed read fails closed for the same reason (R10-S3): a
+        // database blip must not silently turn registration on for an
+        // installation that had turned it off. Nothing is cached on failure,
+        // so the next request retries.
         if (read.Failed)
         {
             _logger.LogError(
-                "The self-registration setting could not be read; treating self-registration as disabled for this request rather than falling back to the enabled default.");
+                "The self-registration setting could not be read; treating self-registration as disabled for this request.");
             return false;
         }
 
-        return OmpAuthDefaults.ParseEnabledConfigValue(read.Value, defaultValue: true);
+        return OmpAuthDefaults.ParseEnabledConfigValue(read.Value, defaultValue: false);
     }
 
     private async Task<ExternalUserProvisioningMode> GetExternalUserProvisioningModeAsync(CancellationToken ct)

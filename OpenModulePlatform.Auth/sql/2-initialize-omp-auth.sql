@@ -352,7 +352,7 @@ BEGIN
         (
             VALUES
                 (N'auth', N'providerSessionLifetimes', N'{"0":600}'),
-                (N'auth', N'selfRegistrationEnabled', N'true'),
+                (N'auth', N'selfRegistrationEnabled', N'false'),
                 (N'auth', N'sessionRevocationCacheSeconds', N'60'),
                 (N'auth', N'sessionRevocationFailureMode', N'strict')
         ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)
