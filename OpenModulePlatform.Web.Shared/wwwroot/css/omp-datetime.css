@@ -209,7 +209,11 @@
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
+    /* Explicit color and weight: host apps commonly style bare `button`
+       with inverted text, which would otherwise bleed into the grid. */
+    color: var(--text, #172033);
     font-size: 0.82rem;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
 }
 
