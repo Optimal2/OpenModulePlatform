@@ -495,6 +495,18 @@
         });
         footer.append(clear, reset, nowButton);
         panel.appendChild(footer);
+
+        // The caret sits under the field's toggle icon so the panel reads
+        // as a speech bubble anchored to it. In wide fields the icon can
+        // sit past the panel's width, so slide the panel toward the icon
+        // first (never past the wrapper's edges) and aim the caret at the
+        // icon from wherever the panel ended up. Runs on every render
+        // because toggling the time block changes the panel's width.
+        var toggleCenter = st.toggle.offsetLeft + st.toggle.offsetWidth / 2;
+        var maxLeft = Math.max(0, st.wrapper.offsetWidth - panel.offsetWidth);
+        var left = Math.min(Math.max(toggleCenter + 20 - panel.offsetWidth, 0), maxLeft);
+        panel.style.left = left + "px";
+        panel.style.setProperty("--omp-caret-left", Math.max(toggleCenter - left, 16) + "px");
     }
 
     function openPanel(st) {
@@ -512,9 +524,6 @@
         st.toggle.setAttribute("aria-label", texts.close);
         st.wrapper.appendChild(panel);
         renderPanel(st);
-        // The caret sits under the field's toggle icon so the panel reads as
-        // a speech bubble anchored to it.
-        panel.style.setProperty("--omp-caret-left", (st.toggle.offsetLeft + st.toggle.offsetWidth / 2) + "px");
     }
 
     function enhance(input) {
