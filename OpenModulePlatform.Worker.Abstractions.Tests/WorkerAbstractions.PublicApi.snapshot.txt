@@ -1,0 +1,18 @@
+type interface OpenModulePlatform.Worker.Abstractions.Contracts.IWorkerDrainCoordinator
+    method abstract System.IDisposable TryBeginJob()
+    property System.Boolean IsDrainRequested { get; }
+type interface OpenModulePlatform.Worker.Abstractions.Contracts.IWorkerModule
+    method abstract System.Threading.Tasks.Task RunAsync(OpenModulePlatform.Worker.Abstractions.Models.WorkerExecutionContext context, System.Threading.CancellationToken cancellationToken)
+type interface OpenModulePlatform.Worker.Abstractions.Contracts.IWorkerModuleFactory
+    method abstract OpenModulePlatform.Worker.Abstractions.Contracts.IWorkerModule Create(System.IServiceProvider serviceProvider)
+    property System.String WorkerTypeKey { get; }
+type sealed class OpenModulePlatform.Worker.Abstractions.Models.WorkerExecutionContext
+    ctor()
+    property OpenModulePlatform.Worker.Abstractions.Contracts.IWorkerDrainCoordinator DrainCoordinator { get; set; }
+    property System.DateTimeOffset StartedUtc { get; set; }
+    property System.Guid AppInstanceId { get; set; }
+    property System.Guid WorkerInstanceId { get; set; }
+    property System.String ConfigurationJson { get; set; }
+    property System.String PluginAssemblyPath { get; set; }
+    property System.String WorkerInstanceKey { get; set; }
+    property System.String WorkerTypeKey { get; set; }
