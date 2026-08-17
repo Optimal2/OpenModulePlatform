@@ -171,11 +171,27 @@ app.MapGet("/session-status", (HttpContext context) =>
         : Results.Unauthorized();
 });
 
-app.MapGet("/runtime-versions", (HttpContext context) =>
+app.MapGet("/runtime-versions", async (HttpContext context, OmpConfigurationService configuration) =>
 {
     context.Response.Headers.CacheControl = "no-store";
 
-    return Results.Json(OmpRuntimeAssemblyVersionCheck.CreateReport());
+    var assemblies = OmpRuntimeAssemblyVersionCheck.CreateReport();
+
+    // R7-F17 follow-up: also report the effective self-registration state so
+    // an installation running with registration on is discoverable here, not
+    // just in the startup log.
+    var selfRegistration = OmpSelfRegistrationStatusCheck.Evaluate(
+        await configuration.ReadGlobalStringAsync(
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthDefaults.SelfRegistrationEnabledSetting,
+            context.RequestAborted));
+
+    return Results.Json(new
+    {
+        assemblies.Assemblies,
+        assemblies.HasWarnings,
+        SelfRegistration = selfRegistration
+    });
     // Require authentication so the assembly version report is not exposed to
     // anonymous callers for platform fingerprinting (R3-F3).
 }).RequireAuthorization();
@@ -205,7 +221,53 @@ app.MapPost("/logout", async (
     return Results.LocalRedirect(decision.RedirectUri);
 });
 
+// R7-F17 follow-up: the self-registration seed only inserts its value, so an
+// installation seeded while the default was 'true' keeps running with
+// registration on. Log the effective state at startup so it is visible; an
+// installation that allows self-registration deliberately can silence the
+// warning with OmpAuth:SelfRegistrationStartupWarning = false (the default is
+// true, because a silently insecure default is what R7-F17 was about).
+await LogSelfRegistrationStateAtStartupAsync(app, builder.Configuration);
+
 app.Run();
+
+static async Task LogSelfRegistrationStateAtStartupAsync(
+    WebApplication app,
+    ConfigurationManager configuration)
+{
+    if (!configuration.GetValue("OmpAuth:SelfRegistrationStartupWarning", true))
+    {
+        return;
+    }
+
+    var logger = app.Services
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger("OpenModulePlatform.Auth.Startup");
+
+    OmpSelfRegistrationStatus status;
+    try
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var configurationService = scope.ServiceProvider.GetRequiredService<OmpConfigurationService>();
+        var read = await configurationService.ReadGlobalStringAsync(
+            OmpAuthDefaults.ConfigurationCategory,
+            OmpAuthDefaults.SelfRegistrationEnabledSetting,
+            CancellationToken.None);
+        status = OmpSelfRegistrationStatusCheck.Evaluate(read);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(
+            ex,
+            "The self-registration state could not be checked at startup; readers fail closed (disabled) until the setting can be read.");
+        return;
+    }
+
+    if (status.Warning is not null)
+    {
+        logger.LogWarning("{SelfRegistrationWarning}", status.Warning);
+    }
+}
 
 static string ResolveSafeReturnUrl(HttpContext context, string? returnUrl)
 {

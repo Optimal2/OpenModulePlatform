@@ -4457,6 +4457,41 @@ WHERE ap.display_name = N'lpwd'
         AND existing.provider_user_key COLLATE Latin1_General_100_BIN2 = LOWER(LTRIM(RTRIM(target.provider_user_key)))
   );
 GO
+
+-- Report the rows the migration deliberately left behind. After the guarded
+-- updates above, a row that is still not in canonical form exists only
+-- because its canonical form collides with another row (case-sensitive
+-- collations where the primary key allowed both casings); which credential
+-- set survives is an operator decision, not a migration decision. Without
+-- this line the leftovers were invisible to the operator. Note that the
+-- automated module-SQL import path discards PRINT output, so these lines are
+-- visible when the script runs through sqlcmd; the same counts can be
+-- queried at any time with the predicates below (see
+-- docs/AUTHENTICATION_AND_RBAC.md, "Operations and Upgrade Notes").
+DECLARE @LpwdCollisionsLeft int;
+DECLARE @UserAuthCollisionsLeft int;
+
+SELECT @LpwdCollisionsLeft = COUNT(*)
+FROM omp.auth_provider_lpwd
+WHERE user_name COLLATE Latin1_General_100_BIN2 <> LOWER(LTRIM(RTRIM(user_name)));
+
+SELECT @UserAuthCollisionsLeft = COUNT(*)
+FROM omp.user_auth target
+INNER JOIN omp.auth_providers ap ON ap.provider_id = target.provider_id
+WHERE ap.display_name = N'lpwd'
+  AND target.provider_user_key COLLATE Latin1_General_100_BIN2 <> LOWER(LTRIM(RTRIM(target.provider_user_key)));
+
+PRINT N'R7-F12 user-name canonicalization: ' + CONVERT(nvarchar(20), @LpwdCollisionsLeft)
+    + N' omp.auth_provider_lpwd row(s) and ' + CONVERT(nvarchar(20), @UserAuthCollisionsLeft)
+    + N' omp.user_auth row(s) left unresolved (case-fold collisions).';
+
+IF @LpwdCollisionsLeft > 0 OR @UserAuthCollisionsLeft > 0
+BEGIN
+    PRINT N'R7-F12: ACTION REQUIRED -- colliding rows still carry their original casing and'
+        + N' are invisible to canonical sign-in. An operator must decide which credential set'
+        + N' survives and remove or rename the other row by hand.';
+END
+GO
 -------------------------------------------------------------------------------
 -- R7-F12: local password user-name canonicalization (end)
 -------------------------------------------------------------------------------

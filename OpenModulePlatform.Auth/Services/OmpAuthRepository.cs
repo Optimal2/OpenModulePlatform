@@ -15,9 +15,11 @@ public sealed class OmpAuthRepository
     private const int ProviderUserKeyMaxLength = 1000;
     // SQL Server allows 2100 parameters per command; 500 keeps AD group lookups comfortably below that limit.
     private const int AdGroupPrincipalQueryChunkSize = 500;
-    // R7-F15: structurally valid PBKDF2-SHA256 hash (210,000 iterations, zero
-    // salt and zero expected hash) verified in place of a missing account, so
-    // an unknown user name costs the same hashing work as a wrong password.
+    // R7-F15: structurally valid PBKDF2-SHA256 hash (zero salt and zero
+    // expected hash) verified in place of a missing account, so an unknown
+    // user name costs the same hashing work as a wrong password. The
+    // iteration count must track the LocalPasswordHasher.Hash default;
+    // UnknownUserDummyHashTests fails the build if the two diverge.
     private const string UnknownUserDummyPasswordHash =
         "PBKDF2-SHA256$210000$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
 
