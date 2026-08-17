@@ -190,9 +190,27 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        // R7-F13. Registration was the only credential endpoint without a
+        // throttle -- not even the per-client-IP key -- so user-name probing
+        // and spam account creation were unbounded. Reuse the sign-in throttle
+        // family: a per-name key (register: prefix, like the adfs: key for
+        // alternate Windows sign-in) plus the shared per-client-address bucket.
+        var clientAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var registerThrottleKey = $"register:{RegisterUserName}";
+        if (_loginThrottle.IsLockedOut(registerThrottleKey) || _loginThrottle.IsClientLockedOut(clientAddress))
+        {
+            ErrorMessage = T("Too many registration attempts. Please wait a few minutes and try again.");
+            ShowRegisterAccountPrompt = true;
+            ShowOtherSignInOptions = true;
+            ClearRegistrationPasswordFields();
+            return Page();
+        }
+
         var validationError = ValidateRegistrationInput();
         if (validationError is not null)
         {
+            _loginThrottle.RecordFailure(registerThrottleKey);
+            _loginThrottle.RecordClientFailure(clientAddress);
             ErrorMessage = T(validationError);
             ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
@@ -203,6 +221,8 @@ public sealed class LoginModel : PageModel
         var result = await _repository.CreateLocalPasswordUserAsync(RegisterUserName, RegisterPassword, ct);
         if (result.User is null)
         {
+            _loginThrottle.RecordFailure(registerThrottleKey);
+            _loginThrottle.RecordClientFailure(clientAddress);
             ErrorMessage = await TWithBrandingAsync(result.Error ?? "The OMP user account could not be created.", ct);
             ShowRegisterAccountPrompt = true;
             ShowOtherSignInOptions = true;
@@ -210,6 +230,7 @@ public sealed class LoginModel : PageModel
             return Page();
         }
 
+        _loginThrottle.RecordSuccess(registerThrottleKey);
         await SignInAsync(result.User, ct);
         return RedirectToSafeReturnUrl();
     }
