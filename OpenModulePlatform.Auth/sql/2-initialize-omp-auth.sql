@@ -324,7 +324,9 @@ BEGIN
     (
         VALUES
             (N'auth', N'providerSessionLifetimes', N'Global JSON object that maps auth provider ids to OMP session lifetime minutes. Provider id 0 is the fallback for providers without an override, for example {"0":600,"2":120}. Missing, empty, or invalid values use the built-in 600-minute default. Changes apply only to new sign-ins.', N'^\s*\{[\s\S]*\}\s*$', N'{"0":600}; {"0":600,"2":120}', 100, CONVERT(bit, 1)),
-            (N'auth', N'selfRegistrationEnabled', N'Controls whether users may create their own OMP account from the login page or account settings.', N'(?i)^(true|false)$', N'true; false', 110, CONVERT(bit, 1))
+            (N'auth', N'selfRegistrationEnabled', N'Controls whether users may create their own OMP account from the login page or account settings.', N'(?i)^(true|false)$', N'true; false', 110, CONVERT(bit, 1)),
+            (N'auth', N'sessionRevocationCacheSeconds', N'How many seconds a verified session account state (account status and security stamp) may be cached per user and application before it is read again. The window bounds how quickly a disabled account or changed password ends an active session. 0 checks every request; values above 300 are clamped to 300. Missing, empty, or invalid values use the built-in 60-second default.', N'^\d{1,3}$', N'60; 0; 300', 120, CONVERT(bit, 1)),
+            (N'auth', N'sessionRevocationFailureMode', N'Controls what happens to an active session when the account state cannot be verified, for example while the database is unavailable. strict rejects the session (the user signs in again once the state can be read); lenient keeps the session until the next check. Missing, empty, or invalid values use strict.', N'(?i)^(strict|lenient)$', N'strict; lenient', 130, CONVERT(bit, 1))
     ) AS source(ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
     ON target.ConfigCategory = source.ConfigCategory
        AND target.ConfigSetting = source.ConfigSetting
@@ -350,7 +352,9 @@ BEGIN
         (
             VALUES
                 (N'auth', N'providerSessionLifetimes', N'{"0":600}'),
-                (N'auth', N'selfRegistrationEnabled', N'true')
+                (N'auth', N'selfRegistrationEnabled', N'true'),
+                (N'auth', N'sessionRevocationCacheSeconds', N'60'),
+                (N'auth', N'sessionRevocationFailureMode', N'strict')
         ) AS defaults(ConfigCategory, ConfigSetting, ConfigValue)
             ON defaults.ConfigCategory = def.ConfigCategory
            AND defaults.ConfigSetting = def.ConfigSetting

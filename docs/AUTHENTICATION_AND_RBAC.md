@@ -65,6 +65,44 @@ The lifetime is stamped into the OMP cookie during sign-in. Changing the setting
 affects new sign-ins only; it does not rewrite or shorten existing sessions that
 already have an issued cookie.
 
+### Session Revocation and Absolute Lifetime
+
+The session lifetime is absolute. Sliding renewal is disabled, so activity does
+not push `ExpiresUtc` forward: when the stamped lifetime ends, the session ends
+and the user signs in again. A re-sign-in that only refreshes claims (for
+example saving account settings in the Portal) reuses the current ticket's
+properties, so it cannot restart the clock either.
+
+Every request that carries the shared cookie is re-validated against
+`omp.users` by the `OnValidatePrincipal` hook in the shared cookie setup:
+
+- the account must still exist and have `account_status = 1` (active);
+- the `omp:security_stamp` claim in the cookie must still match the account's
+  current `security_stamp`.
+
+`omp.users.security_stamp` is a per-account value that is rotated when the
+account is disabled (including the duplicate-account merge) and when its local
+password is reset. Rotation ends every live session for that account: the next
+request is rejected and the browser is sent to the login page. Cookies issued
+before the stamp existed carry no claim and are signed out once at upgrade.
+
+The verified account state is cached per user and application to keep the hook
+from adding a database round trip to every request. Two global config settings
+in the `auth` category tune the behavior:
+
+- `auth/sessionRevocationCacheSeconds` (default `60`): how long a verified
+  state may be cached before it is read again. This window bounds how quickly
+  a disable or password change reaches an active session; the trade-off is
+  revocation latency against database load (at most one read per user and
+  application per window). `0` checks every request, values above 300 are
+  clamped to 300.
+- `auth/sessionRevocationFailureMode` (default `strict`): what happens when the
+  account state cannot be verified at all, for example while the database is
+  unavailable. `strict` rejects the session (fail closed; the user signs in
+  again once the state can be read). `lenient` keeps the session until the
+  next check (fail open, for installations that prefer availability). Missing
+  or unreadable values behave as `strict`.
+
 Unauthenticated users are redirected to `/auth/login?returnUrl=<local-path>`. Return URLs must be local absolute paths such as `/`, `/Admin/Rbac`, or `/SomeModule/`. Absolute URLs, protocol-relative URLs, and backslash paths are rejected.
 
 The login page is localized for Swedish and English. Windows/AD sign-in is the

@@ -146,6 +146,7 @@ public sealed class OmpAuthRepository
             DisplayName = linkedUser?.DisplayName ?? userName,
             Provider = OmpAuthDefaults.AdProviderDisplayName,
             ProviderUserKey = userKeys[0],
+            SecurityStamp = linkedUser?.SecurityStamp,
             RolePrincipals = principals
         };
     }
@@ -269,6 +270,7 @@ public sealed class OmpAuthRepository
             DisplayName = linkedUser?.DisplayName ?? oidcClaims.DisplayName,
             Provider = providerName,
             ProviderUserKey = userKeys[0],
+            SecurityStamp = linkedUser?.SecurityStamp,
             RolePrincipals = principals
         };
     }
@@ -332,6 +334,7 @@ public sealed class OmpAuthRepository
             DisplayName = linkedUser.Value.DisplayName,
             Provider = LocalPasswordIdentity.ProviderDisplayName,
             ProviderUserKey = normalizedUserName,
+            SecurityStamp = linkedUser.Value.SecurityStamp,
             RolePrincipals =
             [
                 ("OmpUser", linkedUser.Value.UserId.ToString(CultureInfo.InvariantCulture)),
@@ -393,22 +396,23 @@ public sealed class OmpAuthRepository
                 return (null, "User name is already in use.");
             }
 
-            var userId = await InsertActiveUserWithLastLoginAsync(conn, tx, displayName, ct);
+            var createdUser = await InsertActiveUserWithLastLoginAsync(conn, tx, displayName, ct);
             await InsertLocalPasswordUserAsync(conn, tx, normalizedUserName, passwordHash, ct);
-            await InsertAuthLinkAsync(conn, tx, userId, provider.Value.ProviderId, normalizedUserName, ct);
+            await InsertAuthLinkAsync(conn, tx, createdUser.UserId, provider.Value.ProviderId, normalizedUserName, ct);
 
             await tx.CommitAsync(ct);
 
             return (new OmpAuthenticatedUser
             {
-                UserId = userId,
+                UserId = createdUser.UserId,
                 ProviderId = provider.Value.ProviderId,
                 DisplayName = displayName,
                 Provider = LocalPasswordIdentity.ProviderDisplayName,
                 ProviderUserKey = normalizedUserName,
+                SecurityStamp = createdUser.SecurityStamp,
                 RolePrincipals =
                 [
-                    ("OmpUser", userId.ToString(CultureInfo.InvariantCulture)),
+                    ("OmpUser", createdUser.UserId.ToString(CultureInfo.InvariantCulture)),
                     ("LocalUser", normalizedUserName)
                 ]
             }, null);
@@ -488,7 +492,8 @@ SELECT TOP (1)
        ua.user_auth_id,
        u.user_id,
        u.display_name,
-       u.account_status
+       u.account_status,
+       u.security_stamp
 FROM omp.user_auth ua
 INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ua.provider_id = @provider_id
@@ -512,7 +517,7 @@ ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
             return null;
         }
 
-        return new LinkedUserRow(rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetString(2), rdr.GetInt32(3));
+        return new LinkedUserRow(rdr.GetInt32(0), rdr.GetInt32(1), rdr.GetString(2), rdr.GetInt32(3), rdr.GetGuid(4));
     }
 
     private async Task<OmpAdLinkedUserResolution> TryResolveAdLinkedUserForOidcAsync(
@@ -565,7 +570,8 @@ ORDER BY CASE WHEN u.account_status = 1 THEN 0 ELSE 1 END,
 SELECT ua.user_auth_id,
        u.user_id,
        u.display_name,
-       u.account_status
+       u.account_status,
+       u.security_stamp
 FROM omp.user_auth ua
 INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ua.provider_id = @provider_id
@@ -588,7 +594,8 @@ ORDER BY ua.user_auth_id;";
                 rdr.GetInt32(0),
                 rdr.GetInt32(1),
                 rdr.GetString(2),
-                rdr.GetInt32(3)));
+                rdr.GetInt32(3),
+                rdr.GetGuid(4)));
         }
 
         return matches;
@@ -652,7 +659,8 @@ ORDER BY ua.user_auth_id;";
                 primaryUserAuthId,
                 adLinkedUser.UserId,
                 adLinkedUser.DisplayName,
-                adLinkedUser.AccountStatus);
+                adLinkedUser.AccountStatus,
+                adLinkedUser.SecurityStamp);
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
@@ -878,21 +886,21 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             }
 
             var displayName = CreateAutoProvisionedDisplayName(userName);
-            var userId = await InsertActiveUserWithLastLoginAsync(conn, tx, displayName, ct);
+            var createdUser = await InsertActiveUserWithLastLoginAsync(conn, tx, displayName, ct);
             foreach (var key in keys)
             {
-                await InsertAuthLinkAsync(conn, tx, userId, providerId, key, ct);
+                await InsertAuthLinkAsync(conn, tx, createdUser.UserId, providerId, key, ct);
             }
 
             await tx.CommitAsync(ct);
             _log.LogInformation(
                 "Auto-provisioned OMP user {UserId} for {ProviderLogLabel} '{UserName}' with {AuthLinkCount} auth link(s).",
-                userId,
+                createdUser.UserId,
                 providerLogLabel,
                 userName,
                 keys.Length);
 
-            return new LinkedUserRow(0, userId, displayName, ActiveAccountStatus);
+            return new LinkedUserRow(0, createdUser.UserId, displayName, ActiveAccountStatus, createdUser.SecurityStamp);
         }
         catch (SqlException ex) when (ex.Number is 2601 or 2627)
         {
@@ -992,7 +1000,7 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
         return Convert.ToHexString(bytes.AsSpan(0, 8));
     }
 
-    private static async Task<int> InsertActiveUserWithLastLoginAsync(
+    private static async Task<CreatedUserRow> InsertActiveUserWithLastLoginAsync(
         SqlConnection conn,
         SqlTransaction tx,
         string displayName,
@@ -1000,15 +1008,20 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
     {
         const string sql = @"
 INSERT INTO omp.users(display_name, account_status, last_login_at, created_at, updated_at)
-VALUES(@display_name, @account_status, SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME());
-
-SELECT CAST(SCOPE_IDENTITY() AS int);";
+OUTPUT inserted.user_id, inserted.security_stamp
+VALUES(@display_name, @account_status, SYSUTCDATETIME(), SYSUTCDATETIME(), SYSUTCDATETIME());";
 
         await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("@display_name", displayName);
         cmd.Parameters.AddWithValue("@account_status", ActiveAccountStatus);
 
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), CultureInfo.InvariantCulture);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            throw new InvalidOperationException("Inserting the OMP user returned no row.");
+        }
+
+        return new CreatedUserRow(rdr.GetInt32(0), rdr.GetGuid(1));
     }
 
     private static async Task<int> InsertAuthLinkAsync(
@@ -1193,7 +1206,8 @@ WHERE user_id = @user_id;";
     }
 
     private readonly record struct ProviderRow(int ProviderId, bool IsEnabled);
-    private readonly record struct LinkedUserRow(int UserAuthId, int UserId, string DisplayName, int AccountStatus)
+    private readonly record struct CreatedUserRow(int UserId, Guid SecurityStamp);
+    private readonly record struct LinkedUserRow(int UserAuthId, int UserId, string DisplayName, int AccountStatus, Guid SecurityStamp)
     {
         public bool IsActive => AccountStatus == 1;
     }

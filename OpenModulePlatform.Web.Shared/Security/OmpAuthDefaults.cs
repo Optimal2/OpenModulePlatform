@@ -26,9 +26,21 @@ public static class OmpAuthDefaults
     public const string ProviderUserKeyClaimType = "omp:provider_user_key";
     public const string PrincipalClaimType = "omp:principal";
 
+    // R7-F10. The sign-in stamps the account's current security stamp into the
+    // cookie; every request compares it against omp.users so a rotated stamp
+    // (account disabled, password changed) ends the session.
+    public const string SecurityStampClaimType = "omp:security_stamp";
+
     public const string ConfigurationCategory = "auth";
     public const string ExternalUserProvisioningModeSetting = "externalUserProvisioningMode";
     public const string SelfRegistrationEnabledSetting = "selfRegistrationEnabled";
+    // R7-F10. Session revocation tuning, stored in the omp configuration table
+    // under the auth category: how long a verified account state may be cached,
+    // and whether an unverifiable state rejects the session or lets it through.
+    public const string SessionRevocationCacheSecondsSetting = "sessionRevocationCacheSeconds";
+    public const string SessionRevocationFailureModeSetting = "sessionRevocationFailureMode";
+    public const string SessionRevocationFailureModeStrict = "strict";
+    public const string SessionRevocationFailureModeLenient = "lenient";
     public const string ExternalUserProvisioningModeManual = "Manual";
     public const string ExternalUserProvisioningModeIfRole = "IfRole";
     public const string ExternalUserProvisioningModeAutoIfRole = "AutoIfRole";

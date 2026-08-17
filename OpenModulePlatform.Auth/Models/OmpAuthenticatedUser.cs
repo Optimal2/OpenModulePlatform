@@ -13,6 +13,13 @@ public sealed class OmpAuthenticatedUser
     public string ProviderUserKey { get; init; } = "";
     public IReadOnlyList<(string PrincipalType, string Principal)> RolePrincipals { get; init; } = [];
 
+    /// <summary>
+    /// The account's security stamp at sign-in time (R7-F10). Stamped into the
+    /// cookie so the session validation hook can detect a later rotation --
+    /// account disabled or password changed -- and end the session.
+    /// </summary>
+    public Guid? SecurityStamp { get; init; }
+
     public ClaimsPrincipal ToClaimsPrincipal()
     {
         var claims = new List<Claim>
@@ -25,6 +32,11 @@ public sealed class OmpAuthenticatedUser
         if (UserId is int userId)
         {
             claims.Add(new Claim(OmpAuthDefaults.UserIdClaimType, userId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        if (SecurityStamp is Guid securityStamp)
+        {
+            claims.Add(new Claim(OmpAuthDefaults.SecurityStampClaimType, securityStamp.ToString()));
         }
 
         claims.AddRange(RolePrincipals

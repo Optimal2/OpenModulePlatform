@@ -46,4 +46,40 @@ public sealed class OmpAuthenticatedUserTests
             claim => claim.Type == OmpAuthDefaults.PrincipalClaimType &&
                      claim.Value.Contains("ignored", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void ToClaimsPrincipal_WithSecurityStamp_IssuesStampClaim()
+    {
+        var stamp = Guid.NewGuid();
+        var user = new OmpAuthenticatedUser
+        {
+            UserId = 42,
+            DisplayName = "Example User",
+            Provider = "AD",
+            ProviderUserKey = "sid:S-1-5-21",
+            SecurityStamp = stamp
+        };
+
+        var principal = user.ToClaimsPrincipal();
+
+        // R7-F10: the validation hook compares this claim against the account's
+        // current stamp; a rotated stamp (disable, password change) must not
+        // match what an old cookie carries.
+        Assert.Equal(stamp.ToString(), principal.FindFirstValue(OmpAuthDefaults.SecurityStampClaimType));
+    }
+
+    [Fact]
+    public void ToClaimsPrincipal_WithoutSecurityStamp_OmitsStampClaim()
+    {
+        var user = new OmpAuthenticatedUser
+        {
+            DisplayName = "External User",
+            Provider = "OIDC",
+            ProviderUserKey = "sub:external-1"
+        };
+
+        var principal = user.ToClaimsPrincipal();
+
+        Assert.Null(principal.FindFirstValue(OmpAuthDefaults.SecurityStampClaimType));
+    }
 }

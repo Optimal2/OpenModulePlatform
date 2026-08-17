@@ -13,6 +13,7 @@ namespace OpenModulePlatform.Portal.Services;
 public sealed class OmpUserAdminRepository
 {
     private const string AdProviderDisplayName = "AD";
+    private const int ActiveAccountStatus = 1;
     private const int DisabledAccountStatus = 2;
 
     private readonly SqlConnectionFactory _db;
@@ -304,6 +305,10 @@ WHERE user_id = @user_id;";
                 return ResetLocalPasswordResult.LocalLoginMissing;
             }
 
+            // A new password rotates the security stamp (R7-F10): sessions
+            // signed in with the old credentials end at the next request.
+            await RotateSecurityStampAsync(conn, tx, userId, ct);
+
             await tx.CommitAsync(ct);
             return ResetLocalPasswordResult.Reset;
         }
@@ -353,10 +358,14 @@ WHERE user_id = @user_id;";
 
     public async Task<bool> UpdateUserAsync(OmpUserEditData input, CancellationToken ct)
     {
+        // A non-active status rotates the security stamp (R7-F10), so the
+        // session validation hook ends any live session for the account instead
+        // of letting a signed-in cookie survive the disable.
         const string sql = @"
 UPDATE omp.users
 SET display_name = @display_name,
     account_status = @account_status,
+    security_stamp = CASE WHEN @account_status = @active_status THEN security_stamp ELSE NEWID() END,
     updated_at = SYSUTCDATETIME()
 WHERE user_id = @user_id;";
 
@@ -367,6 +376,7 @@ WHERE user_id = @user_id;";
         Add(cmd, "@user_id", input.UserId);
         Add(cmd, "@display_name", input.DisplayName);
         Add(cmd, "@account_status", input.AccountStatus);
+        Add(cmd, "@active_status", ActiveAccountStatus);
 
         return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
@@ -1184,6 +1194,7 @@ WHERE user_id = @duplicate_user_id
         const string sql = @"
 UPDATE omp.users
 SET account_status = @disabled_status,
+    security_stamp = NEWID(),
     updated_at = SYSUTCDATETIME()
 WHERE user_id = @duplicate_user_id;
 
@@ -1486,6 +1497,23 @@ WHERE user_name = @user_name;";
         Add(cmd, "@user_name", userName);
         Add(cmd, "@password_hash", passwordHash);
         return await cmd.ExecuteNonQueryAsync(ct) > 0;
+    }
+
+    private static async Task RotateSecurityStampAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int userId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+UPDATE omp.users
+SET security_stamp = NEWID(),
+    updated_at = SYSUTCDATETIME()
+WHERE user_id = @user_id;";
+
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        Add(cmd, "@user_id", userId);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task InsertAuthLinkAsync(
