@@ -11,13 +11,13 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 
 /// <summary>
 /// Provides a local SQL Server test database with the minimal OMP tables the
-/// self-registration flow touches (R7-F17): the local-password auth tables the
-/// auth repository writes, plus the omp configuration tables that carry the
-/// auth/selfRegistrationEnabled flag.
+/// linked-user resolution and local-password sign-in flows touch (R7-F11,
+/// R7-F15): omp.users, omp.auth_providers, omp.user_auth,
+/// omp.auth_provider_lpwd and the omp configuration tables.
 /// </summary>
-public sealed class SelfRegistrationTestFixture : IAsyncLifetime
+public sealed class AuthResolutionTestFixture : IAsyncLifetime
 {
-    public const string DatabaseName = "OpenModulePlatform_PortalTests_SelfRegistration";
+    public const string DatabaseName = "OpenModulePlatform_PortalTests_AuthResolution";
 
     public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 
@@ -59,27 +59,79 @@ DROP DATABASE [{DatabaseName}];",
         }
     }
 
-    public OmpAuthRepository CreateAuthRepository()
+    public OmpAuthRepository CreateAuthRepository(IOmpLocalPasswordHasher? passwordHasher = null)
     {
         var connectionFactory = CreateConnectionFactory();
-        // A fresh cache per repository: the configuration service caches global
-        // reads, and the tests flip the flag between arrangements.
         var configurationService = new OmpConfigurationService(
             connectionFactory,
             new MemoryCache(new MemoryCacheOptions()),
             NullLogger<OmpConfigurationService>.Instance);
         return new OmpAuthRepository(
             connectionFactory,
-            new OmpLocalPasswordHasher(new LocalPasswordHasher()),
+            passwordHasher ?? new OmpLocalPasswordHasher(new LocalPasswordHasher()),
             new WindowsPrincipalReader(NullLogger<WindowsPrincipalReader>.Instance),
             configurationService,
             NullLogger<OmpAuthRepository>.Instance);
     }
 
+    public async Task<int> InsertUserAsync(string displayName, bool active)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(
+            @"
+INSERT INTO omp.users(display_name, account_status)
+OUTPUT INSERTED.user_id
+VALUES(@display_name, @account_status);",
+            conn);
+        cmd.Parameters.AddWithValue("@display_name", displayName);
+        cmd.Parameters.AddWithValue("@account_status", active ? 1 : 0);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    public async Task InsertLocalPasswordAsync(string userName, string password)
+    {
+        var passwordHash = new LocalPasswordHasher().Hash(password);
+
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(
+            "INSERT INTO omp.auth_provider_lpwd(user_name, password_hash) VALUES(@user_name, @password_hash);",
+            conn);
+        cmd.Parameters.AddWithValue("@user_name", userName);
+        cmd.Parameters.AddWithValue("@password_hash", passwordHash);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task InsertAuthLinkAsync(int userId, string providerDisplayName, string providerUserKey)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(
+            @"
+IF NOT EXISTS (SELECT 1 FROM omp.auth_providers WHERE display_name = @display_name)
+BEGIN
+    INSERT INTO omp.auth_providers(display_name, is_enabled)
+    VALUES(@display_name, 1);
+END
+
+INSERT INTO omp.user_auth(user_id, provider_id, provider_user_key)
+SELECT @user_id, p.provider_id, @provider_user_key
+FROM omp.auth_providers p
+WHERE p.display_name = @display_name;",
+            conn);
+        cmd.Parameters.AddWithValue("@user_id", userId);
+        cmd.Parameters.AddWithValue("@display_name", providerDisplayName);
+        cmd.Parameters.AddWithValue("@provider_user_key", providerUserKey);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     /// <summary>
     /// Writes the global auth/selfRegistrationEnabled value the way the omp_auth
-    /// seed does. A null value removes the row entirely, simulating an
-    /// installation where the setting was never seeded.
+    /// seed does, so registration tests can turn the feature on deliberately.
     /// </summary>
     public async Task SetSelfRegistrationValueAsync(string? value)
     {
@@ -120,18 +172,6 @@ END",
         cmd.Parameters.AddWithValue("@setting", OmpAuthDefaults.SelfRegistrationEnabledSetting);
         cmd.Parameters.AddWithValue("@value", value is null ? DBNull.Value : value);
         await cmd.ExecuteNonQueryAsync();
-    }
-
-    public async Task<bool> LocalPasswordUserExistsAsync(string userName)
-    {
-        await using var conn = new SqlConnection(ConnectionString);
-        await conn.OpenAsync();
-
-        await using var cmd = new SqlCommand(
-            "SELECT COUNT(1) FROM omp.auth_provider_lpwd WHERE user_name = @user_name;",
-            conn);
-        cmd.Parameters.AddWithValue("@user_name", userName);
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync()) > 0;
     }
 
     private SqlConnectionFactory CreateConnectionFactory()

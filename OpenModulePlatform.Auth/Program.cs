@@ -64,6 +64,8 @@ builder.Services.AddScoped<RbacService>();
 builder.Services.AddScoped<OmpBrandingService>();
 builder.Services.AddSingleton(cultureSelectionService);
 builder.Services.AddSingleton<LocalPasswordHasher>();
+builder.Services.AddSingleton<OpenModulePlatform.Auth.Services.IOmpLocalPasswordHasher>(sp =>
+    new OpenModulePlatform.Auth.Services.OmpLocalPasswordHasher(sp.GetRequiredService<LocalPasswordHasher>()));
 builder.Services.AddSingleton<WindowsPrincipalReader>();
 builder.Services.AddSingleton<WindowsPasswordAuthenticator>();
 builder.Services.AddScoped<OmpAuthRepository>();
