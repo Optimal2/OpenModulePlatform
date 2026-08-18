@@ -59,6 +59,18 @@
     Rewrites the recorded treeId of every drifted sharedDependencies entry to the
     sibling repository's current state. Run this together with the consumer bump
     that Check 14 asks for.
+
+.PARAMETER Strict
+    Treats "could not be checked" conditions as errors instead of warnings: a
+    missing sibling repository, an unreadable tree id, or a baseline manifest
+    that cannot be loaded all disable the cross-repository guard, and in CI
+    that must fail the build rather than pass silently. CI (including the
+    consumer's local-ci.ps1 gate) sets this switch. A plain local run without
+    the OpenModulePlatform sibling can omit it and still validate versions.
+
+    A dirty sibling working tree stays a warning even in strict mode: the
+    verification itself succeeded there -- the warning only says the recorded
+    treeId will go stale when the uncommitted edits are committed.
 #>
 [CmdletBinding()]
 param(
@@ -76,7 +88,10 @@ param(
     [string]$OpenModulePlatformRoot = '',
 
     [Parameter(Mandatory = $false)]
-    [switch]$UpdateSharedDependencies
+    [switch]$UpdateSharedDependencies,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Strict
 )
 
 Set-StrictMode -Version Latest
@@ -107,6 +122,27 @@ function Write-Check14Result {
     }
     else {
         Write-Host $Message
+    }
+}
+
+function Write-Check14Unverifiable {
+    <#
+    .SYNOPSIS
+    Reports a condition that made the cross-repository guard impossible to run.
+    These are warnings in a plain local run (a developer without the sibling
+    checkout can still validate versions) but errors under -Strict, which CI
+    sets: a guard that could not run must fail the build, not pass silently.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message
+    )
+
+    if ($Strict) {
+        Write-Check14Result -Message $Message -IsError
+    }
+    else {
+        Write-Check14Result -Message $Message -IsWarning
     }
 }
 
@@ -197,14 +233,14 @@ if (-not [string]::IsNullOrWhiteSpace($BaseCommit)) {
     }
 
     if ($baseExitCode -ne 0) {
-        Write-Check14Result -Message "Check 14: could not read baseline manifest from '$BaseCommit'; consumer-bump enforcement is disabled for this run." -IsWarning
+        Write-Check14Unverifiable -Message "Check 14: could not read baseline manifest from '$BaseCommit'; consumer-bump enforcement is disabled for this run."
     }
     else {
         try {
             $base = ConvertFrom-JsonWithDepth -Json (Remove-Utf8Bom ($baseManifestText | Out-String))
         }
         catch {
-            Write-Check14Result -Message "Check 14: baseline omp-components.json at '$BaseCommit' is not valid JSON: $_" -IsWarning
+            Write-Check14Unverifiable -Message "Check 14: baseline omp-components.json at '$BaseCommit' is not valid JSON: $_"
             $base = $null
         }
     }
@@ -233,7 +269,7 @@ else {
         }
 
         if (-not (Test-Path -LiteralPath $siblingRoot)) {
-            Write-Check14Result -Message "Check 14: sibling repository '$siblingRoot' was not found, so '$projectPath' could not be verified. A cross-repository drift will not be caught in this run." -IsWarning
+            Write-Check14Unverifiable -Message "Check 14: sibling repository '$siblingRoot' was not found, so '$projectPath' could not be verified. A cross-repository drift will not be caught in this run."
             continue
         }
 
@@ -245,7 +281,7 @@ else {
             }
         }
         catch {
-            Write-Check14Result -Message "Check 14: could not read the tree id of '$projectPath' in '$siblingRoot': $_" -IsWarning
+            Write-Check14Unverifiable -Message "Check 14: could not read the tree id of '$projectPath' in '$siblingRoot': $_"
             continue
         }
 
