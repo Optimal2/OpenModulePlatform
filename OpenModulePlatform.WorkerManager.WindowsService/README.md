@@ -49,8 +49,11 @@ The four artifact columns are the runtime version witness (R12-F2). They are wri
 Current limitations:
 
 - does not yet perform artifact download or installation
-- does not yet include a portal UI for worker metadata or runtime state administration
 - does not yet define a cross-platform worker manager model
+
+Portal administration: `/admin/workers` combines app worker definitions with the
+live worker runtime (metadata editing via `/admin/appworkeredit`); the older
+`/admin/appworkers` and `/admin/workerruntime` routes redirect there.
 
 Important compatibility rule:
 
