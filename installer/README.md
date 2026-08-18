@@ -19,7 +19,6 @@ installer/
       sql/
       host-configs/
       config-overlays/
-      widgets/
 ```
 
 The committed `hosts/sample/bootstrap.json` is a neutral demo profile. Before

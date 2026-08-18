@@ -122,10 +122,12 @@ id re-recorded in the same change (`-UpdateSharedDependencies`), or the host
 rejects the consumer artifact at import.
 
 ```powershell
-.\scripts\omp\validate-shared-dependencies.ps1 -ConsumerRepositoryRoot '..\SomeConsumerRepo'
+# CI should pass -Strict so "could not be checked" fails instead of passing silently
+.\scripts\omp\validate-shared-dependencies.ps1 -ConsumerRepositoryRoot '..\SomeConsumerRepo' -Strict
 ```
 
-What the guard protects against:
+What `validate-component-versions.ps1` protects against (the list below describes
+that script, not the Check 14 guard above):
 
 - A component `projectPath` that is missing or does not contain a `.csproj`
   file. This catches renamed/moved projects before packaging fails.
@@ -148,7 +150,7 @@ What the guard protects against:
   environment-stable and does not rely on a committed absolute baseline. If the
   binary changed and no consumer was bumped, the check fails.
 
-If the guard fails:
+If `validate-component-versions.ps1` fails:
 
 1. Verify that `bump-version.ps1` was run for every changed component and, when
    needed, for the repository version and module definitions.

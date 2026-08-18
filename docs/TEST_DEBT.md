@@ -24,11 +24,12 @@ Both excluded areas remain runnable locally against a provisioned
 **CI flakiness from concurrent `CREATE DATABASE` — fixed 2026-08-14.** Runs failed
 intermittently with "Could not obtain exclusive lock on database 'model'" and a wall of
 `Execution Timeout Expired`, always in fixture constructors and never in a test body. The
-gate runs four test assemblies in parallel, xUnit runs collections within each in parallel,
+gate at the time ran four test assemblies in parallel (five today), xUnit runs collections within each in parallel,
 and seven fixtures each issued `CREATE DATABASE` against the same LocalDB instance —
 which copies `model` under an exclusive lock. The queue outlasted the 30-second default
 command timeout.
 
-All seven now provision through `tests/shared/OmpTestDatabaseProvisioner.cs`, which holds a
+All seven were moved to provision through `tests/shared/OmpTestDatabaseProvisioner.cs` —
+and every DB fixture added since uses it as well — which holds a
 machine-wide mutex for the creation only, allows 180 seconds for it, and retries the two
 transient error numbers. Nothing was excluded or skipped to make this pass.

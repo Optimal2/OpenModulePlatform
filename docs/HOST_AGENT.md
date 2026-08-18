@@ -760,8 +760,8 @@ a transaction whenever possible.
      D:\OMP\WebApps\portal\App_Data\omp-deployment.lock.json
      ```
   2. Open the file and check the expiry timestamp. The file uses the
-     `OpenModulePlatform.DeploymentLock.v1` schema and contains an `ExpiryUtc` value.
-  3. If `ExpiryUtc` is older than the current time, the lock is stale and safe to
+     `OpenModulePlatform.DeploymentLock.v1` schema and contains an `ExpiresUtc` value.
+  3. If `ExpiresUtc` is older than the current time, the lock is stale and safe to
      remove. Delete only that lock file; do not delete other `App_Data` contents.
 - **Verification:** On the next HostAgent cycle the app deploys successfully. The
   lock file is gone and `omp.HostAppDeploymentStates` for that host/app instance is
@@ -878,7 +878,6 @@ The named-pipe RPC response writer uses an `async Task` method and awaits `Strea
 
 - package extraction from archive files
 - HTTP/S3/Azure Blob download sources
-- artifact retention/cleanup
 - signing/certificate verification
 - remote HostAgent management API
 - service credential provisioning and rotation

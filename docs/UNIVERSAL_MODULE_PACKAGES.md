@@ -489,7 +489,7 @@ package staging. Older formats should only be kept as compatibility inputs.
 
 Runtime configuration files do not belong inside artifact payload hashes. Put
 host-specific application settings and similar files in config overlay objects or
-in the artifact package `configuration-files` section so HostAgent can materialize
+in the artifact package `configurationFiles` section so HostAgent can materialize
 them separately from the binary artifact content.
 
 The exact set of runtime configuration file names is defined canonically by
