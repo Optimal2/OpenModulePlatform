@@ -110,6 +110,21 @@ version.
 .\scripts\omp\validate-component-versions.ps1
 ```
 
+`validate-shared-dependencies.ps1` is the canonical implementation of the
+consumer-side "Check 14" cross-repository cascade guard. Consumer repositories
+(that build shared OMP projects such as `OpenModulePlatform.Web.Shared` from
+this sibling repository) declare `sharedDependencies` in their own
+`omp-components.json` and call this script from their
+`scripts/validate-component-versions.ps1`; the recorded `treeId` is git's tree
+object id for the shared project directory and acts as a lockfile. When the
+shared tree moves, every listed consumer component must be bumped and the tree
+id re-recorded in the same change (`-UpdateSharedDependencies`), or the host
+rejects the consumer artifact at import.
+
+```powershell
+.\scripts\omp\validate-shared-dependencies.ps1 -ConsumerRepositoryRoot '..\SomeConsumerRepo'
+```
+
 What the guard protects against:
 
 - A component `projectPath` that is missing or does not contain a `.csproj`
