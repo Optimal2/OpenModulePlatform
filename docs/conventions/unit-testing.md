@@ -33,7 +33,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `OmpHostArtifactRepositoryTestDatabase.cs:283-296` honors env var `OMP_TEST_CONNECTION_STRING`, defaulting to `Server=(local);Integrated Security=true`; creates/drops a unique DB per test class
   - Web-hosting integration uses `WebApplicationFactory<PortalResource>` + TestServer: `OpenModulePlatform.Portal.Tests/Integration/PortalWebApplicationFactory.cs:18`
   - No `[Trait]`, no `[Collection]`, no `Skip=` gating, no Testcontainers — DB tests simply fail on a machine without local SQL Server
-- **How tests run:** Locally via the tracked pre-push hook `.githooks/pre-push.ps1:88-89` (`dotnet test OpenModulePlatform.slnx -c Release --no-build`), documented at `README.md:198-200`. **GitHub CI does NOT run tests** — `.github/workflows/ci.yml:87-88` ends at `dotnet build`. The Pester file has no CI invocation.
+- **How tests run:** Locally via the tracked pre-push hook `.githooks/pre-push.ps1` (`dotnet test OpenModulePlatform.slnx -c Release --no-build`) and in GitHub CI: since 2026-08 `ci.yml` provisions LocalDB and runs `dotnet test` with a `--filter` whose exclusions are registered in `docs/TEST_DEBT.md` (kept in sync in the same commit). The Pester file still has no CI invocation.
 - **Extra notes:** The analyzer test project uses `CSharpAnalyzerTest<TAnalyzer, DefaultVerifier>` with inline fake source strings (`OmpWebDefaultsAnalyzerTests.cs:11-49`) — a good model for future Roslyn analyzers.
 
 ### IbsPackager
