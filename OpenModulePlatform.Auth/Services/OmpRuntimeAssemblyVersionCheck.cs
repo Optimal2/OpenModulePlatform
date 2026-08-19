@@ -13,8 +13,8 @@ internal static class OmpRuntimeAssemblyVersionCheck
     public const string NegotiateAssemblyName = "Microsoft.AspNetCore.Authentication.Negotiate";
     public const string AuthAssemblyName = "OpenModulePlatform.Auth";
 
-    // Patched band for CVE-2026-47303: any 10.0.10.x revision is acceptable.
-    public static readonly Version ExpectedNegotiateBand = new(10, 0, 10);
+    // Patched band for CVE-2026-47303: any 10.0.11.x revision is acceptable.
+    public static readonly Version ExpectedNegotiateBand = new(10, 0, 11);
 
     public static bool IsOnBand(Version? version, Version band)
     {
