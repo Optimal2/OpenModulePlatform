@@ -20,36 +20,38 @@
 }
 else
 {
-    <table class="grid">
-        <thead>
-            <tr>
-                <th>@L["Module key"]</th>
-                <th>@L["Display name"]</th>
-                <th>@L["Type"]</th>
-                <th>@L["Schema"]</th>
-                <th>@L["Enabled"]</th>
-                            <th>@L["Actions"]</th>
-            </tr>
-        </thead>
-        <tbody>
-        @foreach (var row in Model.Rows)
-        {
-            <tr>
-                <td><code>@row.ModuleKey</code></td>
-                <td>@row.DisplayName</td>
-                <td>@L[row.ModuleType]</td>
-                <td><code>@row.SchemaName</code></td>
-                <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
-                <td class="admin-action-cell">
-                    <a class="action-link admin-icon-button admin-icon-button--edit"
-                       href="~/admin/moduleedit?id=@row.ModuleId"
-                       title="@L["Edit"]"
-                       aria-label="@L["Edit"]">
-                        <span class="visually-hidden">@L["Edit"]</span>
-                    </a>
-                </td>
-            </tr>
-        }
-        </tbody>
-    </table>
+    <div class="table-scroll">
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th>@L["Module key"]</th>
+                    <th>@L["Display name"]</th>
+                    <th>@L["Type"]</th>
+                    <th>@L["Schema"]</th>
+                    <th>@L["Enabled"]</th>
+                    <th>@L["Actions"]</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var row in Model.Rows)
+            {
+                <tr>
+                    <td><code>@row.ModuleKey</code></td>
+                    <td>@row.DisplayName</td>
+                    <td>@L[row.ModuleType]</td>
+                    <td><code>@row.SchemaName</code></td>
+                    <td><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
+                    <td class="admin-action-cell">
+                        <a class="action-link admin-icon-button admin-icon-button--edit"
+                           href="~/admin/moduleedit?id=@row.ModuleId"
+                           title="@L["Edit"]"
+                           aria-label="@L["Edit"]">
+                            <span class="visually-hidden">@L["Edit"]</span>
+                        </a>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
 }
