@@ -10,7 +10,7 @@
     },
     {
       "moduleKey": "omp_auth",
-      "definitionVersion": "0.3.13",
+      "definitionVersion": "0.3.14",
       "path": "OpenModulePlatform.Auth/omp_auth.module-definition.json"
     },
     {
@@ -109,7 +109,7 @@
       "packageType": "web-app",
       "targetName": "omp-auth",
       "version": "0.3.184",
-      "minModuleDefinitionVersion": "0.3.13",
+      "minModuleDefinitionVersion": "0.3.14",
       "projectPath": "OpenModulePlatform.Auth",
       "relativePathTemplate": "omp-auth/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Auth.zip"

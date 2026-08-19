@@ -67,6 +67,24 @@ Follow these rules strictly:
 - Do not touch registry, startup settings, scheduled tasks, antivirus settings, Windows security settings, or Bitdefender settings.
 - If a command is blocked or likely to trigger antivirus heuristics, stop and propose the smallest safe manual alternative.
 
+## Version bumping
+
+The canonical version-bumping script is `scripts/omp/bump-version.ps1`. It
+updates repositoryVersion, component versions, module-definition
+versions, compatibleArtifacts.maxVersion, dashboard widget versions, and
+supports cascade-bumps from shared projects. Use it for all routine bumps:
+
+```powershell
+.\scripts\omp\bump-version.ps1 -ComponentKey omp-auth-web
+.\scripts\omp\bump-version.ps1 -AllComponents
+.\scripts\omp\bump-version.ps1 -ModuleKey omp_auth -UpdateModuleMinimums
+```
+
+`scripts/bump-component-version.ps1` is deprecated and kept only for backward
+compatibility. It bumps component versions but does not bump repositoryVersion,
+module-definition versions, or compatibleArtifacts.maxVersion, so a normal run
+leaves the repository in a half-bumped state. Do not use it for releases.
+
 ## Local paths
 
 Default local development paths:
