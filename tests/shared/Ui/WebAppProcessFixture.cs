@@ -10,8 +10,8 @@ namespace OpenModulePlatform.TestSupport.Ui;
 /// recipe: Development environment (required for the _content static assets
 /// that come from project references), anonymous access, and the OMP database
 /// on localhost unless OMP_UITESTS_DB overrides it. If the app does not
-/// answer 200 on / within the timeout the fixture reports itself unavailable
-/// and dependent tests skip with the reason.
+/// answer 200 on <see cref="ReadinessPath"/> within the timeout the fixture
+/// reports itself unavailable and dependent tests skip with the reason.
 /// </summary>
 public abstract class WebAppProcessFixture : IAsyncLifetime
 {
@@ -22,6 +22,26 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
 
     /// <summary>Web project folder name, e.g. "LogSearch.Web".</summary>
     protected abstract string WebProjectName { get; }
+
+    /// <summary>
+    /// Repo-relative directory of the web project. Defaults to
+    /// <see cref="WebProjectName"/>; override for layouts like "src\App" or
+    /// "RazorPages" where the folder is not named after the project.
+    /// </summary>
+    protected virtual string WebProjectDirectory => WebProjectName;
+
+    /// <summary>
+    /// Name of the built executable (without ".exe"). Defaults to
+    /// <see cref="WebProjectName"/>; override when the assembly name differs
+    /// from the project folder.
+    /// </summary>
+    protected virtual string AssemblyName => WebProjectName;
+
+    /// <summary>
+    /// Path probed until it answers 200 during startup. Defaults to "/";
+    /// override for apps without a root route (e.g. Auth uses "/login").
+    /// </summary>
+    protected virtual string ReadinessPath => "/";
 
     /// <summary>Extra environment variables for the app process.</summary>
     protected virtual IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
@@ -35,9 +55,9 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         RepoRoot = UiTestPaths.FindRepoRoot(SolutionFileName);
-        var projectDir = Path.Combine(RepoRoot, WebProjectName);
+        var projectDir = Path.Combine(RepoRoot, WebProjectDirectory);
         var (configuration, tfm) = UiTestPaths.BuildOutputSegments();
-        var exePath = Path.Combine(projectDir, "bin", configuration, tfm, WebProjectName + ".exe");
+        var exePath = Path.Combine(projectDir, "bin", configuration, tfm, AssemblyName + ".exe");
         if (!File.Exists(exePath))
         {
             UnavailableReason = $"app binary not found: {exePath}";
@@ -88,14 +108,14 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
 
             try
             {
-                var response = await http.GetAsync(BaseUrl + "/");
+                var response = await http.GetAsync(BaseUrl + ReadinessPath);
                 if (response.StatusCode == HttpStatusCode.OK)
                 {
                     Available = true;
                     return;
                 }
 
-                UnavailableReason = $"GET / returned {(int)response.StatusCode} (database missing or app misconfigured)";
+                UnavailableReason = $"GET {ReadinessPath} returned {(int)response.StatusCode} (database missing or app misconfigured)";
             }
             catch (HttpRequestException)
             {
