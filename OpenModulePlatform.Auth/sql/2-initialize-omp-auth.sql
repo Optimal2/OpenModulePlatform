@@ -29,7 +29,7 @@ DECLARE @AuthTemplateModuleInstanceId int;
 DECLARE @AuthAppId int;
 DECLARE @AuthAppInstanceId uniqueidentifier;
 DECLARE @AuthArtifactId int;
-DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.4';
+DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.184';
 
 SELECT TOP (1)
        @InstanceId = InstanceId,

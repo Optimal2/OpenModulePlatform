@@ -8,6 +8,26 @@ param(
     [string]$ManifestPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'omp-components.json')
 )
 
+<#
+.DEPRECATED
+This script is kept for backward compatibility only. It bumps component
+versions but does NOT bump repositoryVersion, module-definition versions,
+compatibleArtifacts.maxVersion, or widget versions. Using it for a normal
+release leaves the repository in a half-bumped state that the pre-push gate
+will reject.
+
+For all routine version bumps use the canonical script instead:
+
+  .\scripts\omp\bump-version.ps1 -ComponentKey <key>
+  .\scripts\omp\bump-version.ps1 -AllComponents
+
+Only use this script if you explicitly need a component-only bump and you
+will reconcile repositoryVersion and any module-definition side effects
+yourself afterwards.
+#>
+
+Write-Warning "scripts/bump-component-version.ps1 is deprecated. Use scripts/omp/bump-version.ps1 for canonical repository, component, module-definition, and widget version bumps."
+
 Set-StrictMode -Version Latest
 
 function Resolve-FullPath {

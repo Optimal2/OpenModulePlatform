@@ -648,6 +648,13 @@ try {
         })
     }
 
+    # Lazy-load module definition JSON documents keyed by moduleKey. This is
+    # used both for the explicit -ModuleKey/-AllModuleDefinitions bump path
+    # and for updating compatibleArtifacts.maxVersion when a component bump
+    # touches an appKey declared in the module definition.
+    $definitionJsonByKey = @{}
+    $definitionPathByKey = @{}
+
     foreach ($component in $selectedComponents) {
         $currentVersion = [string]$component.version
         $nextVersion = Get-NextVersion -CurrentVersion $currentVersion
@@ -658,6 +665,110 @@ try {
             OldVersion = $currentVersion
             NewVersion = $nextVersion
         })
+
+        # -------------------------------------------------------------------
+        # Keep compatibleArtifacts.maxVersion in sync with the bumped
+        # component. The 2026-08-18 IbsPackager import failure showed that
+        # leaving this step manual let the version matrix drift: the
+        # component was bumped but the module definition still capped the
+        # artifact version, so the host rejected the produced artifact.
+        # -------------------------------------------------------------------
+        $componentAppKey = [string](Get-JsonPropertyValue -Object $component -Name 'appKey')
+        $componentModuleKey = [string](Get-JsonPropertyValue -Object $component -Name 'moduleKey')
+        if ([string]::IsNullOrWhiteSpace($componentAppKey) -or [string]::IsNullOrWhiteSpace($componentModuleKey)) {
+            continue
+        }
+
+        $moduleDefinitionEntry = @($moduleDefinitions | Where-Object { [string](Get-JsonPropertyValue -Object $_ -Name 'moduleKey') -eq $componentModuleKey })
+        if ($moduleDefinitionEntry.Count -ne 1) {
+            continue
+        }
+
+        $relativeDefinitionPath = [string](Get-JsonPropertyValue -Object $moduleDefinitionEntry[0] -Name 'path')
+        if ([string]::IsNullOrWhiteSpace($relativeDefinitionPath)) {
+            continue
+        }
+
+        if (-not $definitionJsonByKey.ContainsKey($componentModuleKey)) {
+            $definitionPath = Resolve-FullPath -Path (Join-Path $repositoryRoot $relativeDefinitionPath)
+            $definitionPathByKey[$componentModuleKey] = $definitionPath
+            if (Test-Path -LiteralPath $definitionPath -PathType Leaf) {
+                $definitionJsonByKey[$componentModuleKey] = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            }
+            else {
+                $definitionJsonByKey[$componentModuleKey] = $null
+            }
+        }
+
+        $definitionJson = $definitionJsonByKey[$componentModuleKey]
+        if ($null -eq $definitionJson) {
+            continue
+        }
+
+        $compatibleArtifacts = Get-JsonPropertyValue -Object $definitionJson -Name 'compatibleArtifacts'
+        if ($null -eq $compatibleArtifacts) {
+            continue
+        }
+
+        foreach ($artifact in @($compatibleArtifacts)) {
+            if ($null -eq $artifact) {
+                continue
+            }
+
+            $artifactAppKey = [string](Get-JsonPropertyValue -Object $artifact -Name 'appKey')
+            if (-not [string]::Equals($artifactAppKey, $componentAppKey, [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+
+            $currentMaxVersion = [string](Get-JsonPropertyValue -Object $artifact -Name 'maxVersion')
+            $shouldUpdate = $false
+            if ([string]::IsNullOrWhiteSpace($currentMaxVersion)) {
+                $shouldUpdate = $true
+            }
+            else {
+                $parsedCurrentMaxVersion = $null
+                $parsedNextVersion = $null
+                if (-not [System.Version]::TryParse($currentMaxVersion, [ref]$parsedCurrentMaxVersion)) {
+                    throw "Module definition '$componentModuleKey' compatibleArtifacts entry for appKey '$componentAppKey' has non-numeric maxVersion '$currentMaxVersion'. Update it manually before bumping."
+                }
+
+                if (-not [System.Version]::TryParse($nextVersion, [ref]$parsedNextVersion)) {
+                    throw "Component '$($component.componentKey)' was bumped to non-numeric version '$nextVersion'. Cannot compare with compatibleArtifacts.maxVersion '$currentMaxVersion'."
+                }
+
+                if ($parsedNextVersion -gt $parsedCurrentMaxVersion) {
+                    $shouldUpdate = $true
+                }
+            }
+
+            if ($shouldUpdate) {
+                Set-JsonProperty -Object $artifact -Name 'maxVersion' -Value $nextVersion
+                [void]$updates.Add([pscustomobject]@{
+                    Item = 'module-definition-compatible-artifact'
+                    Key = "$componentModuleKey/$componentAppKey"
+                    OldVersion = if ([string]::IsNullOrWhiteSpace($currentMaxVersion)) { '(unbounded)' } else { $currentMaxVersion }
+                    NewVersion = $nextVersion
+                })
+            }
+        }
+    }
+
+    # Persist any compatibleArtifacts changes made above.
+    foreach ($entry in $definitionJsonByKey.GetEnumerator()) {
+        $moduleKey = $entry.Key
+        $definitionJson = $entry.Value
+        if ($null -eq $definitionJson) {
+            continue
+        }
+
+        $definitionPath = [string]$definitionPathByKey[$moduleKey]
+        if ([string]::IsNullOrWhiteSpace($definitionPath)) {
+            continue
+        }
+
+        if ($PSCmdlet.ShouldProcess($definitionPath, "Update compatibleArtifacts.maxVersion for module '$moduleKey'")) {
+            Save-JsonFile -Path $definitionPath -Value $definitionJson
+        }
     }
 
     $moduleVersionByKey = @{}
@@ -751,7 +862,7 @@ try {
 }
 catch {
     $exitCode = 1
-    Write-Error $_
+    Write-Error -Message ([string]$_) -ErrorAction Continue
 }
 finally {
     Wait-ForUser -Enabled:$Pause
