@@ -37,6 +37,18 @@ public sealed class OmpAuthOptions
     public bool ProtectKeysWithDpapi { get; set; } = true;
 
     /// <summary>
+    /// Scope for the DPAPI protection of the key ring. True (default) protects
+    /// to the LOCAL MACHINE so every OMP app-pool/service account on the host
+    /// can decrypt the shared keys — required when pools deliberately run as
+    /// different accounts (a pool on its own account cannot decrypt a
+    /// current-user-protected key and loops on /auth/login; measured at the customer
+    /// Test 2026-08-19). False protects to the CURRENT USER, locking the ring
+    /// to the account that created each key; use only when every OMP app pool
+    /// runs as the same account and per-account isolation is wanted.
+    /// </summary>
+    public bool DpapiProtectToLocalMachine { get; set; } = true;
+
+    /// <summary>
     /// Enforce server-side antiforgery-token validation on the shared topbar
     /// POST endpoints (favorites, notification/message mark-read). The
     /// endpoints are CSRF-protected by SameSite=Lax on the auth cookie either
