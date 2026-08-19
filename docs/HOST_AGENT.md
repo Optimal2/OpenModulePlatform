@@ -986,3 +986,16 @@ Run this on the deployed Windows server using only Notepad and folder access. Fo
 In a load-balanced IIS deployment, **every node must share the same `OmpAuth:DataProtectionKeyPath`**. A local-only folder per node means cookies issued by node A cannot be decrypted by node B. The symptom is usually a login loop or role switch that works only when the browser stays on one node.
 
 Use a UNC share or equivalent shared storage for the Data Protection key ring, grant read/write access to every relevant app pool identity, and verify the same path is configured in the runtime `appsettings.json` on every node. See the load-balancer scenario in [`HOSTING_WINDOWS_IIS.md`](HOSTING_WINDOWS_IIS.md) for additional checks such as forwarded headers, WebSockets, and sticky sessions.
+
+**DPAPI at-rest protection does NOT work across nodes.** Both current-user DPAPI (the
+R3-E8 default until the machine-scope change) and machine-scope DPAPI
+(`OmpAuth:DpapiProtectToLocalMachine`, the default after it) bind the key to ONE
+machine: a key created by node A can never be decrypted by node B, and the key file
+format holds exactly one encrypted secret — there is no multi-recipient encryption.
+A load-balanced farm that upgrades to DPAPI-protected builds will therefore loop on
+`/auth/login` whenever the balancer moves a session across nodes, starting at the
+first key created after the upgrade. Until CNG DPAPI-NG support (protection
+descriptor `SID=<domain group>`, decryptable on every domain-joined node by the
+pool accounts in the group) lands, a farm MUST set `OmpAuth:ProtectKeysWithDpapi`
+to `false` on every app and protect the shared key directory with a strict ACL
+instead — the pre-R3-E8 behavior, now stated explicitly.
