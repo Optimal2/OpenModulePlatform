@@ -1061,7 +1061,14 @@ public static class OmpWebHostingExtensions
             // directory ACL is the protection.
             if (authOptions.ProtectKeysWithDpapi && OperatingSystem.IsWindows())
             {
-                dataProtectionBuilder.ProtectKeysWithDpapi();
+                // Machine scope by default: OMP app pools may deliberately run
+                // as different accounts (e.g. a printer-proxy identity), and a
+                // current-user-protected key ring locks the shared cookie to
+                // the creating account so every other pool loops on
+                // /auth/login. Current-user scope stays available via
+                // DpapiProtectToLocalMachine=false for single-account hosts.
+                dataProtectionBuilder.ProtectKeysWithDpapi(
+                    protectToLocalMachine: authOptions.DpapiProtectToLocalMachine);
             }
         }
 
