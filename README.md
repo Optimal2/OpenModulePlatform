@@ -168,6 +168,29 @@ A normal manual installation should be possible without requiring the future Hos
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
+## Running tests
+
+The solution uses xUnit throughout. Run the full suite from the repository
+root:
+
+```
+dotnet test OpenModulePlatform.slnx --configuration Release
+```
+
+Prerequisites and behavior:
+
+- Most tests are in-memory and need nothing installed.
+- Database-backed tests need a local SQL Server (LocalDB is enough). They
+  read the connection string from the `OMP_TEST_CONNECTION_STRING`
+  environment variable, defaulting to `Server=(local);Integrated Security=true`,
+  and create/drop their own uniquely named databases.
+- Two areas are excluded from the CI gate and only run locally against a
+  provisioned database; the register of exclusions and their re-enable
+  criteria lives in [docs/TEST_DEBT.md](docs/TEST_DEBT.md). CI must keep its
+  `dotnet test --filter` in sync with that file in the same commit.
+- The tracked pre-push hook runs the same suite before every push once
+  activated via `scripts\setup-hooks.ps1` (see the Git hooks section below).
+
 ## Public repository hygiene
 
 The repository includes:
