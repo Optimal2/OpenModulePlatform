@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.454",
+  "repositoryVersion": "0.3.455",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -134,7 +134,7 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.42",
+      "version": "0.3.43",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
