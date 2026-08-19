@@ -191,6 +191,29 @@ Prerequisites and behavior:
 - The tracked pre-push hook runs the same suite before every push once
   activated via `scripts\setup-hooks.ps1` (see the Git hooks section below).
 
+### UI suite (Playwright invariant scans)
+
+`OpenModulePlatform.UiTests` boots the built Portal and Auth apps and runs
+generic broken-UI invariant scans (horizontal overflow, invisible text,
+zero-size clickable elements) over their main pages at three viewports
+(1920x1080, 1366x768, 375x812). The pre-push gate and CI exclude it
+(`Category!=Ui`) because it boots the apps and needs a browser; run it
+explicitly:
+
+```
+dotnet build OpenModulePlatform.slnx --configuration Release
+dotnet test OpenModulePlatform.slnx --configuration Release --no-build --filter "Category=Ui"
+```
+
+- The first run downloads Chromium through Playwright (one-time, ~150 MB).
+  Without it the UI tests skip with a reason.
+- The apps are started against the `OpenModulePlatform` database on
+  localhost; set the `OMP_UITESTS_DB` environment variable to point them at
+  another connection string.
+- When a prerequisite is missing (browser, app binary, database) the tests
+  skip with a reason instead of failing. A skipped UI test is not a green
+  one — read the skip reason before concluding all is well.
+
 ## Public repository hygiene
 
 The repository includes:
@@ -220,7 +243,8 @@ This sets `core.hooksPath` to the tracked `.githooks` directory.
 
 - **pre-push** — full CI-equivalent gate (heavy, run at push time):
   - `dotnet build OpenModulePlatform.slnx -c Release`
-  - `dotnet test` across all test projects
+  - `dotnet test` across all test projects except the UI suite
+    (`--filter "Category!=Ui"`, see Running tests above)
   - `scripts/omp/validate-component-versions.ps1 -BaseCommit <upstream-tracking-parent>`
   - `scripts/omp/validate-module-definitions.ps1`
 

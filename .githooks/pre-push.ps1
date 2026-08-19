@@ -85,8 +85,11 @@ Write-Host ''
 # ---------------------------------------------------------------------------
 # 2. Run tests.
 # ---------------------------------------------------------------------------
-Write-Host '--- Step 2: dotnet test (Release, no rebuild) ---'
-& dotnet test $solutionPath -c Release --no-build
+# The UI suite (Category=Ui) is excluded from the push gate: it needs a
+# one-time Chromium download and boots the built apps against a provisioned
+# database. Run it separately: dotnet test --filter "Category=Ui".
+Write-Host '--- Step 2: dotnet test (Release, no rebuild, Category!=Ui) ---'
+& dotnet test $solutionPath -c Release --no-build --filter "Category!=Ui"
 if ($LASTEXITCODE -ne 0) {
     Write-Host '--- TESTS FAILED ---' -ForegroundColor Red
     exit $LASTEXITCODE

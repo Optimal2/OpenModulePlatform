@@ -9,6 +9,7 @@
   <Project Path="OpenModulePlatform.Web.Shared.Analyzers.Tests/OpenModulePlatform.Web.Shared.Analyzers.Tests.csproj" />
   <Project Path="OpenModulePlatform.HostAgent.Runtime.Tests/OpenModulePlatform.HostAgent.Runtime.Tests.csproj" />
   <Project Path="OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj" />
+  <Project Path="OpenModulePlatform.UiTests/OpenModulePlatform.UiTests.csproj" />
   <Project Path="examples/WebAppModule/WebApp/OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
   <Project Path="OpenModulePlatform.Web.iFrameWebAppModule/OpenModulePlatform.Web.iFrameWebAppModule.csproj" />
   <Project Path="OpenModulePlatform.Web.ContentWebAppModule/OpenModulePlatform.Web.ContentWebAppModule.csproj" />

@@ -129,6 +129,15 @@ jobs:
           # (sql/2-initialize refuses to run until the bootstrap-admin placeholder
           # is replaced) and are environment-fragile on LocalDB, so they are
           # excluded here and remain runnable locally against a provisioned DB.
+          # Category=Ui (Playwright invariant scans) is likewise excluded: it
+          # needs a Chromium download and a seeded OMP database to boot the apps.
           # Exclusions are tracked in docs/TEST_DEBT.md; keep that register in
           # sync in the same commit when this filter changes.
-          dotnet test OpenModulePlatform.slnx --configuration Release --no-build --filter "FullyQualifiedName!~Portal.Tests.Integration&FullyQualifiedName!~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests"
+          dotnet test OpenModulePlatform.slnx --configuration Release --no-build --logger trx --results-directory TestResults --filter "FullyQualifiedName!~Portal.Tests.Integration&FullyQualifiedName!~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests&Category!=Ui"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
