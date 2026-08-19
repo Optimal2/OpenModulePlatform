@@ -16,26 +16,20 @@ public sealed class PortalPageInvariantTests(PlaywrightSessionFixture playwright
 {
     public static TheoryData<string, int, int> Cases()
     {
-        // TODO (scan findings 2026-08-19, pages excluded because the fixes
-        // live in the versioned omp-portal-web component and are out of scope
-        // for the test-standard rollout commit):
+        // Excluded page:
         // - "/": the dashboard canvas deliberately widens the page chrome to
         //   the widget extents (portal-dashboard.js sets
         //   --portal-page-chrome-width) so the document pans horizontally at
         //   1366x768 and 375x812. The no-horizontal-overflow invariant cannot
         //   hold for the dashboard by design; re-add if the dashboard gets a
         //   viewport-contained scroll wrapper.
-        // - "/Admin/Modules" and "/Admin/ConfigSettings": bare
-        //   <table class="grid"> without a .table-scroll wrapper overflows the
-        //   document at 375x812 (scrollWidth 1037/855 vs 375). Fix = wrap the
-        //   tables in <div class="table-scroll"> and give .table-scroll
-        //   position: relative (the pilots' table-wrapper rule), then bump
-        //   omp-portal-web and re-add the pages here.
         string[] pages =
         [
             "/Notifications",
             "/status/404",
             "/Admin/Overview",
+            "/Admin/Modules",
+            "/Admin/ConfigSettings",
         ];
         return PageInvariantCases.Expand(pages);
     }

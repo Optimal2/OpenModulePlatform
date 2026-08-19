@@ -1664,6 +1664,10 @@ button[aria-disabled=true]:hover,
 }
 
 .table-scroll {
+    /* Containing block for absolutely positioned descendants (e.g. the
+       .visually-hidden spans inside icon buttons) so they cannot escape the
+       wrapper and widen the document. */
+    position: relative;
     width: 100%;
     max-width: 100%;
     overflow-x: auto;
