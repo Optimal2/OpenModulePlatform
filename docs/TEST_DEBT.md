@@ -14,10 +14,24 @@ An exclusion that is not registered here is a bug.
 | --- | --- | --- | --- | --- | --- |
 | `Portal.Tests.Integration` | Excluded from the `dotnet test` gate in `ci.yml` | Requires a bootstrap-seeded OMP database; `sql/2-initialize-openmoduleplatform.sql` refuses to run until the bootstrap-admin placeholder is replaced, so the tests cannot self-provision on a fresh CI LocalDB. | CI provisions a seeded OMP database (bootstrap-admin placeholder replaced) before the test step, or the test fixture self-provisions its own seeded schema. | Repository maintainers | 2026-07 (tests-actually-gate-merges) |
 | `Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests` | Excluded from the `dotnet test` gate in `ci.yml` | Same bootstrap-seeded-database dependency as the Portal integration tests, and additionally fragile on SQL Server LocalDB timing in hosted CI runners. | Same as above: CI-provisioned seeded database or fixture self-provisioning, plus demonstrated stability on hosted runners. | Repository maintainers | 2026-07 (tests-actually-gate-merges) |
+| `OpenModulePlatform.UiTests` (`Category=Ui`) | Excluded from the `dotnet test` gates in `ci.yml` and `.githooks/pre-push.ps1` (`Category!=Ui`) | By design per the test standard: the Playwright invariant scans download Chromium and boot the built Portal/Auth apps against a seeded OMP database, which does not belong in the fast push gate. Runnable locally via `dotnet test --filter "Category=Ui"`; the tests skip with a reason when a prerequisite is missing. | Intentional standing exclusion, not debt in itself; reconsider only if CI gains a browser-capable job with a seeded database. | Repository maintainers | 2026-08 |
 
-Both excluded areas remain runnable locally against a provisioned
+All excluded areas remain runnable locally against a provisioned
 `OpenModulePlatform` database (see `sql/README.md` and
 `docs/CODEX_DEVELOPMENT.md` for the local validation ladder).
+
+## Deviations from the test standard
+
+**DB-backed tests fail instead of skipping without SQL Server (registered
+2026-08-19).** The test standard requires environment-dependent tests to use
+`Xunit.SkippableFact` and skip with a reason so the suite is green on a
+minimal machine. The existing database-backed xUnit tests in this repository
+predate that rule: they use plain `[Fact]`/`[Theory]` and fail (rather than
+skip) when no SQL Server is reachable. The `Xunit.SkippableFact` package is
+already referenced centrally and the UI suite follows the rule. Remediation
+criterion: migrate each DB-backed test class to `SkippableFact`/
+`SkippableTheory` with an availability probe the next time that class is
+touched — no big-bang migration.
 
 ## Resolved
 
