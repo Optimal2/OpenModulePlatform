@@ -413,7 +413,14 @@ ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @WorkerModuleInstanceId,
-        HostId = @SampleHostId,
+        -- Direct host placement and template placement are mutually exclusive
+        -- (CK_omp_AppInstances_OneHostPlacement). A re-run against a live
+        -- installation must not fail on -- or steal -- a placement the row
+        -- already has (a template-placed row carries TargetHostTemplateId, and
+        -- assigning HostId then violates the constraint and aborts the whole
+        -- definition import; observed 2026-08-20). Only assign the sample host
+        -- when the row is not placed at all.
+        HostId = CASE WHEN HostId IS NULL AND TargetHostTemplateId IS NULL THEN @SampleHostId ELSE HostId END,
         AppId = @WorkerWebAppId,
         AppInstanceKey = N'example_workerapp_webapp',
         DisplayName = N'Example WorkerApp',
@@ -516,7 +523,9 @@ ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @WorkerModuleInstanceId,
-        HostId = @SampleHostId,
+        -- Placement-preserving for the same reason as the webapp row above
+        -- (CK_omp_AppInstances_OneHostPlacement).
+        HostId = CASE WHEN HostId IS NULL AND TargetHostTemplateId IS NULL THEN @SampleHostId ELSE HostId END,
         AppId = @WorkerAppId,
         AppInstanceKey = N'example_workerapp_worker',
         DisplayName = N'Example Managed Worker',
