@@ -909,6 +909,7 @@ Every OMP web app that shares sign-in and role switching must use identical valu
 - `OmpAuth:CookieName` — default `.OpenModulePlatform.Auth`.
 - `OmpAuth:ApplicationName` — default `OpenModulePlatform`. This is the ASP.NET Core Data Protection application discriminator.
 - `OmpAuth:DataProtectionKeyPath` — must point to the same shared key ring folder for all apps, and for all IIS nodes in a load-balanced setup.
+- `OmpAuth:DpapiNgProtectionDescriptor` / `OmpAuth:ProtectKeysWithDpapi` / `OmpAuth:DpapiProtectToLocalMachine` — must match across all apps and nodes, or a key written by one app cannot be decrypted by another. See "Load-balanced deployments" below for which value fits which topology.
 
 Affected apps include the Portal, `OpenModulePlatform.Auth`, and every consumer module web app such as IbsPackager, Dokumentbibliotek, EArkivChecker, LogSearch, and VajSkrivare. See `OmpAuthOptions.cs` for the section shape and defaults.
 
@@ -979,7 +980,7 @@ Run this on the deployed Windows server using only Notepad and folder access. Fo
 | Role switch works in Portal but the consumer app shows the old role, or logs the user out. | `OmpAuth:DataProtectionKeyPath` or `OmpAuth:ApplicationName` differs between the apps. The consumer app cannot decrypt the auth cookie. | Align `DataProtectionKeyPath` and `ApplicationName` via a config overlay or HostAgent setting, then redeploy. |
 | Log messages mention a cookie name mismatch or the user is always anonymous in one app. | `OmpAuth:CookieName` differs between apps. | Set the same `CookieName` across apps via overlay or HostAgent setting. |
 | Role switch appears to work but the active role is not honored in the consumer app. | The `omp_active_role` cookie name or path differs (rare; normally consistent across apps). | Inspect the cookie in browser dev tools and align the active-role cookie configuration. |
-| Exactly ONE app loops on `/auth/login` while every other app accepts the same cookie, and its pool runs as a different account than the rest. | A key file in the shared ring is DPAPI-protected to the CURRENT USER of the account that created it (the default before the machine-scope change), so a pool on another account can read the XML but cannot decrypt the master key. Log symptom is a generic "exception was encountered while reading the key ring" warning. | Upgrade to builds where `OmpAuth:DpapiProtectToLocalMachine` defaults to machine scope, then delete the old current-user-protected key files from `DataProtectionKeyPath` during the upgrade window (all apps stopped; every user re-authenticates once). Leftover current-user key files keep producing this symptom until removed or rotated out. |
+| Exactly ONE app loops on `/auth/login` while every other app accepts the same cookie, and its pool runs as a different account than the rest. | A key file in the shared ring is DPAPI-protected to the CURRENT USER of the account that created it (the default before the machine-scope change), so a pool on another account can read the XML but cannot decrypt the master key. Log symptom is a generic "exception was encountered while reading the key ring" warning. | On a single host, upgrade to builds where `OmpAuth:DpapiProtectToLocalMachine` defaults to machine scope; on a load-balanced farm, set `OmpAuth:DpapiNgProtectionDescriptor` to `SID=<domain group SID>` instead (see "Load-balanced deployments"). Either way, delete the old current-user-protected key files from `DataProtectionKeyPath` during the upgrade window (all apps stopped; every user re-authenticates once). Leftover current-user key files keep producing this symptom until removed or rotated out. |
 
 ### Load-balanced deployments
 
@@ -987,15 +988,35 @@ In a load-balanced IIS deployment, **every node must share the same `OmpAuth:Dat
 
 Use a UNC share or equivalent shared storage for the Data Protection key ring, grant read/write access to every relevant app pool identity, and verify the same path is configured in the runtime `appsettings.json` on every node. See the load-balancer scenario in [`HOSTING_WINDOWS_IIS.md`](HOSTING_WINDOWS_IIS.md) for additional checks such as forwarded headers, WebSockets, and sticky sessions.
 
-**DPAPI at-rest protection does NOT work across nodes.** Both current-user DPAPI (the
-R3-E8 default until the machine-scope change) and machine-scope DPAPI
-(`OmpAuth:DpapiProtectToLocalMachine`, the default after it) bind the key to ONE
-machine: a key created by node A can never be decrypted by node B, and the key file
-format holds exactly one encrypted secret — there is no multi-recipient encryption.
-A load-balanced farm that upgrades to DPAPI-protected builds will therefore loop on
-`/auth/login` whenever the balancer moves a session across nodes, starting at the
-first key created after the upgrade. Until CNG DPAPI-NG support (protection
-descriptor `SID=<domain group>`, decryptable on every domain-joined node by the
-pool accounts in the group) lands, a farm MUST set `OmpAuth:ProtectKeysWithDpapi`
-to `false` on every app and protect the shared key directory with a strict ACL
-instead — the pre-R3-E8 behavior, now stated explicitly.
+**Choose the at-rest protection that matches the topology.** Legacy DPAPI —
+both current-user DPAPI (the R3-E8 default until the machine-scope change) and
+machine-scope DPAPI (`OmpAuth:DpapiProtectToLocalMachine`, the default after
+it) — binds the key to ONE machine: a key created by node A can never be
+decrypted by node B, and the key file format holds exactly one encrypted
+secret — there is no multi-recipient encryption. The supported choices are:
+
+- **Load-balanced farm (more than one node):** set
+  `OmpAuth:DpapiNgProtectionDescriptor` to `SID=<domain group SID>` on every
+  app and node, where the domain group contains every OMP app pool identity.
+  CNG DPAPI-NG is backed by Active Directory, so a key created on any node can
+  be decrypted on every other domain-joined node by the accounts in the group.
+  An invalid descriptor fails startup loudly with a clear message — the ring
+  never silently falls back to another protection scope. When a descriptor is
+  set it takes precedence over `ProtectKeysWithDpapi` and
+  `DpapiProtectToLocalMachine`.
+- **Single host, several app-pool accounts:** keep the defaults
+  (`ProtectKeysWithDpapi=true`, `DpapiProtectToLocalMachine=true`). Machine
+  scope lets every pool on that host decrypt the shared ring.
+- **Single host, single account:** machine scope is fine; current-user scope
+  (`DpapiProtectToLocalMachine=false`) adds per-account isolation if wanted.
+- **`ProtectKeysWithDpapi=false`** (and no descriptor set) disables all
+  at-rest encryption as before R3-E8; protect the shared key directory with a
+  strict ACL instead.
+
+A farm that upgrades from pre-R3-E8 builds (unencrypted keys) or from
+DPAPI-protected builds to DPAPI-NG must **delete the old key files from
+`DataProtectionKeyPath` during the upgrade window** (all apps stopped; every
+user re-authenticates once): leftover keys protected to a single node or a
+single account keep causing `/auth/login` loops until removed or rotated out.
+Creating the domain group and adding the pool accounts to it is an operator
+step done once per environment, outside the application deployment.
