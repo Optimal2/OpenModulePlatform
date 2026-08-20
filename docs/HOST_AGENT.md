@@ -1020,3 +1020,36 @@ user re-authenticates once): leftover keys protected to a single node or a
 single account keep causing `/auth/login` loops until removed or rotated out.
 Creating the domain group and adding the pool accounts to it is an operator
 step done once per environment, outside the application deployment.
+
+**Post-deploy verification for DPAPI-NG.** Startup validation checks grammar and
+that the descriptor can be created, but a syntactically valid descriptor with a
+nonexistent principal — for example a mistyped `SID=...` or a
+`CERTIFICATE=HashId:...` thumbprint that does not match any certificate in the
+target store — is accepted by `NCryptCreateProtectionDescriptor` and only fails
+later, when the first key is written. Verify during the upgrade window, before
+the old key files are rotated away, that DPAPI-NG is actually protecting live
+keys and that every node can decrypt them:
+
+1. Start the first updated app or IIS node with the descriptor configured and
+   log in (or otherwise trigger an ASP.NET Core Data Protection key creation).
+2. In the shared `DataProtectionKeyPath` folder, open the newest `.xml` key file.
+   The `<encryptedSecret>` element must contain a `<value>` whose text starts
+   with `AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA`; that prefix indicates DPAPI-NG
+   (NCRYPT_PROTECTED_KEY_BLOB) rather than plain DPAPI or unencrypted XML.
+3. From a **second** domain-joined node (or a second app pool on the same host
+   if the descriptor targets a group), read that same key file and trigger key
+   ring load — for example by issuing a request that uses the shared auth cookie
+   or by calling `IDataProtector.Protect` from a small test endpoint. The load
+   must succeed and the app must be able to decrypt the master key; any
+   `CryptographicException` or "an exception was encountered while reading the
+   key ring" warning here means the descriptor principal does not cover that
+   node/account.
+4. If the newest key file is unencrypted XML (no `<encryptedSecret>`) or uses
+   the older `DpapiXmlEncryptor` envelope, the descriptor did not take effect;
+   review `OmpAuth:DpapiNgProtectionDescriptor`, `OmpAuth:DataProtectionKeyPath`,
+   and the platform guard logs, then delete the wrongly-protected key files and
+   repeat the verification.
+
+Catching a form-valid-but-wrong principal in the upgrade window prevents a
+silent single-node protection that only surfaces weeks later as intermittent
+`/auth/login` loops.
