@@ -6,6 +6,10 @@ still part of the current OMP object/installer model.
 ## Current Scripts
 
 - `bump-component-version.ps1` updates component versions in `omp-components.json`.
+  **Deprecated** — kept only for backward compatibility; it warns on every call
+  and leaves `repositoryVersion`, module-definition versions, and
+  `compatibleArtifacts.maxVersion` behind. Use the canonical
+  `scripts/omp/bump-version.ps1` instead (see `docs/OMP_COMPONENT_MANIFEST.md`).
 - `protect-bootstrap-config-secrets.ps1` encrypts portable bootstrap JSON
   secrets before they are stored in private installer profiles.
 - `deployment/` contains HostAgent-first packaging and installer-runner tools.

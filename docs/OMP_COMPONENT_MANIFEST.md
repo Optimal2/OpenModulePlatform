@@ -51,36 +51,42 @@ own `version`, and that value is the version that belongs in
 
 ## Bumping Versions
 
-Use `scripts/bump-component-version.ps1` to update manifest versions:
-
-```powershell
-.\scripts\bump-component-version.ps1 -ComponentKey content-webapp -Part patch
-.\scripts\bump-component-version.ps1 -ComponentKey content-webapp,iframe-webapp -Version 0.4.0
-.\scripts\bump-component-version.ps1 -All -Part minor
-```
-
-OMP-compatible repositories also expose a friendlier repository-local wrapper:
+Use the canonical `scripts/omp/bump-version.ps1` to update manifest versions:
 
 ```powershell
 .\scripts\omp\bump-version.ps1 -ComponentKey content-webapp
+.\scripts\omp\bump-version.ps1 -ComponentKey content-webapp,iframe-webapp
 .\scripts\omp\bump-version.ps1 -AllComponents
 .\scripts\omp\bump-version.ps1 -ModuleKey content_webapp -UpdateModuleMinimums
 .\scripts\omp\bump-version.ps1 -WidgetFile widgets/my-module-widgets.json
 .\scripts\omp\bump-version.ps1 -AllWidgets
 ```
 
+The canonical helper keeps everything in sync in one pass: it bumps
+`repositoryVersion`, the selected component versions, referenced
+module-definition `definitionVersion` values, referenced dashboard widget
+package versions, and each affected `compatibleArtifacts.maxVersion` in the
+module definitions. The `maxVersion` sync is not optional: the 2026-08-18
+IbsPackager import failure showed that a stale cap makes the host reject the
+produced artifact at import time.
+
 For a double-click workflow, use `scripts/omp/bump-version.cmd`. It launches the
 same script in interactive mode so the operator can choose component keys and,
 when needed, module-definition keys.
 
-The older `scripts/bump-component-version.ps1` helper updates
-`omp-components.json` only. The repository-local `scripts/omp/bump-version.ps1`
-helper can also update referenced module-definition JSON files when module
-definitions are selected, and referenced dashboard widget package JSON files
-when widget files are selected. The HostAgent-first package script consumes the
-manifest directly when it prepares ArtifactStore payloads and SQL
-artifact-version overrides. Older suite scripts still have separate package
-version fields, so keep those aligned if you use the legacy installer.
+The older `scripts/bump-component-version.ps1` helper is **deprecated** and
+kept only for backward compatibility. It warns on every call, updates component
+versions in `omp-components.json` only, and leaves `repositoryVersion`,
+module-definition versions, and `compatibleArtifacts.maxVersion` behind —
+exactly the drift behind the 2026-08-18 incident class. Do not use it for
+routine bumps; use `scripts/omp/bump-version.ps1` instead. Only reach for it
+when you explicitly need a component-only bump and will reconcile the other
+version fields yourself afterwards.
+
+The HostAgent-first package script consumes the manifest directly when it
+prepares ArtifactStore payloads and SQL artifact-version overrides. Older suite
+scripts still have separate package version fields, so keep those aligned if
+you use the legacy installer.
 
 When a shared project is included in multiple publish outputs, bump every
 component whose artifact package will contain the changed binary. For example,
