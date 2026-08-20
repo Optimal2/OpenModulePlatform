@@ -387,7 +387,14 @@ ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @ServiceModuleInstanceId,
-        HostId = @SampleHostId,
+        -- Direct host placement and template placement are mutually exclusive
+        -- (CK_omp_AppInstances_OneHostPlacement). A re-run against a live
+        -- installation must not fail on -- or steal -- a placement the row
+        -- already has (a template-placed row carries TargetHostTemplateId, and
+        -- assigning HostId then violates the constraint and aborts the whole
+        -- definition import; observed 2026-08-20). Only assign the sample host
+        -- when the row is not placed at all.
+        HostId = CASE WHEN HostId IS NULL AND TargetHostTemplateId IS NULL THEN @SampleHostId ELSE HostId END,
         AppId = @ServiceWebAppId,
         AppInstanceKey = N'example_serviceapp_webapp',
         DisplayName = N'Example ServiceApp',
@@ -500,7 +507,9 @@ ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @ServiceModuleInstanceId,
-        HostId = @SampleHostId,
+        -- Placement-preserving for the same reason as the webapp row above
+        -- (CK_omp_AppInstances_OneHostPlacement).
+        HostId = CASE WHEN HostId IS NULL AND TargetHostTemplateId IS NULL THEN @SampleHostId ELSE HostId END,
         AppId = @ServiceAppId,
         AppInstanceKey = N'example_serviceapp_service',
         DisplayName = N'Example Service Worker',
@@ -509,9 +518,9 @@ BEGIN
         InstallationName = N'OMP.Service.ExampleServiceAppModule',
         ArtifactId = @ServiceArtifactId,
         ConfigId = @InitialServiceConfigId,
-        ExpectedLogin = N'DOMAIN\\ServiceAccountName',
-        ExpectedClientHostName = N'hostname.example.com',
-        ExpectedClientIp = N'192.168.1.100',
+        -- ExpectedLogin/ExpectedClientHostName/ExpectedClientIp are seeded as
+        -- descriptive placeholders on INSERT only; a re-run must not overwrite
+        -- identity values an operator has configured on a live installation.
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
