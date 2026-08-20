@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -1013,6 +1014,45 @@ public static class OmpWebHostingExtensions
         public static ActiveRoleSelection Invalid { get; } = new(false, null, null);
     }
 
+    /// <summary>
+    /// Applies at-rest encryption to the shared Data Protection key ring.
+    /// Priority order (documented in docs/HOST_AGENT.md):
+    /// 1. A set <c>OmpAuth:DpapiNgProtectionDescriptor</c> wins over everything:
+    ///    the ring is protected with CNG DPAPI-NG, which is AD-backed and
+    ///    decryptable on every domain-joined node by the descriptor principals
+    ///    (the web-farm and multi-account answer). An invalid descriptor throws
+    ///    at startup — never a silent fallback to another scope.
+    /// 2. Otherwise <c>OmpAuth:ProtectKeysWithDpapi=false</c> disables all
+    ///    at-rest encryption, as before R3-E8.
+    /// 3. Otherwise legacy DPAPI in the configured scope: machine scope by
+    ///    default, because OMP app pools may deliberately run as different
+    ///    accounts (e.g. a printer-proxy identity) and a current-user-protected
+    ///    key ring locks the shared cookie to the creating account so every
+    ///    other pool loops on /auth/login.
+    /// </summary>
+    internal static void ApplyDataProtectionKeyProtection(
+        IDataProtectionBuilder dataProtectionBuilder,
+        OmpAuthOptions authOptions)
+    {
+        if (!string.IsNullOrWhiteSpace(authOptions.DpapiNgProtectionDescriptor))
+        {
+            var descriptor = authOptions.DpapiNgProtectionDescriptor.Trim();
+            DpapiNgProtectionDescriptorValidator.ThrowIfInvalid(descriptor);
+            dataProtectionBuilder.ProtectKeysWithDpapiNG(
+                descriptor,
+                flags: DpapiNGProtectionDescriptorFlags.None);
+            return;
+        }
+
+        if (!authOptions.ProtectKeysWithDpapi)
+        {
+            return;
+        }
+
+        dataProtectionBuilder.ProtectKeysWithDpapi(
+            protectToLocalMachine: authOptions.DpapiProtectToLocalMachine);
+    }
+
     private static void ConfigureOmpAuthentication(
         IServiceCollection services,
         IConfiguration configuration,
@@ -1057,18 +1097,11 @@ public static class OmpWebHostingExtensions
 
             // Encrypt the key ring at rest by default: without this a reader of
             // the shared key directory could forge auth cookies for every OMP
-            // app (R3-E8). DPAPI is Windows-only; on other platforms the
-            // directory ACL is the protection.
-            if (authOptions.ProtectKeysWithDpapi && OperatingSystem.IsWindows())
+            // app (R3-E8). DPAPI and DPAPI-NG are Windows-only; on other
+            // platforms the directory ACL is the protection.
+            if (OperatingSystem.IsWindows())
             {
-                // Machine scope by default: OMP app pools may deliberately run
-                // as different accounts (e.g. a printer-proxy identity), and a
-                // current-user-protected key ring locks the shared cookie to
-                // the creating account so every other pool loops on
-                // /auth/login. Current-user scope stays available via
-                // DpapiProtectToLocalMachine=false for single-account hosts.
-                dataProtectionBuilder.ProtectKeysWithDpapi(
-                    protectToLocalMachine: authOptions.DpapiProtectToLocalMachine);
+                ApplyDataProtectionKeyProtection(dataProtectionBuilder, authOptions);
             }
         }
 

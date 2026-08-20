@@ -49,6 +49,20 @@ public sealed class OmpAuthOptions
     public bool DpapiProtectToLocalMachine { get; set; } = true;
 
     /// <summary>
+    /// Optional CNG DPAPI-NG protection descriptor for the Data Protection key
+    /// ring, for example "SID=&lt;domain group SID&gt;". When set (and non-empty)
+    /// it takes precedence over the DPAPI scope choice: the key ring is protected
+    /// with ProtectKeysWithDpapiNG, which is backed by Active Directory and can
+    /// be decrypted on every domain-joined node by the principals named in the
+    /// descriptor — the supported answer for load-balanced farms and for hosts
+    /// whose app pools run as different domain accounts. An invalid descriptor
+    /// fails startup loudly; there is never a silent fallback to another scope.
+    /// Empty (default) keeps the legacy DPAPI behavior governed by
+    /// <see cref="ProtectKeysWithDpapi"/> and <see cref="DpapiProtectToLocalMachine"/>.
+    /// </summary>
+    public string DpapiNgProtectionDescriptor { get; set; } = "";
+
+    /// <summary>
     /// Enforce server-side antiforgery-token validation on the shared topbar
     /// POST endpoints (favorites, notification/message mark-read). The
     /// endpoints are CSRF-protected by SameSite=Lax on the auth cookie either
