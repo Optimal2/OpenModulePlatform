@@ -40,12 +40,12 @@
     },
     {
       "moduleKey": "example_serviceapp",
-      "definitionVersion": "0.3.20",
+      "definitionVersion": "0.3.21",
       "path": "examples/ServiceAppModule/example_serviceapp.module-definition.json"
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.19",
+      "definitionVersion": "0.3.20",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
