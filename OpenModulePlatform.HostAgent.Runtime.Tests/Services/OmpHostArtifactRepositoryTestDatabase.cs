@@ -7,8 +7,27 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
 public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
 {
+    private const string DatabaseNamePattern = "OmpHostAgentTests[_]%";
+
+    /// <summary>
+    /// Captured once per test process. The stale-database sweep only drops databases
+    /// created before this timestamp (minus a safety margin), so a concurrently running
+    /// test process never loses its own databases. <c>sys.databases.create_date</c> is
+    /// server-local time and the test SQL Server is local, so a client-side
+    /// <see cref="DateTime.Now"/> timestamp compares cleanly.
+    /// </summary>
+    private static readonly DateTime ProcessStart = DateTime.Now;
+
+    /// <summary>Keeps databases created while this process was starting out of the sweep.</summary>
+    private static readonly TimeSpan SweepSafetyMargin = TimeSpan.FromMinutes(2);
+
     private readonly string _databaseName;
     private readonly string _connectionString;
+
+    static OmpHostArtifactRepositoryTestDatabase()
+    {
+        SweepStaleDatabases();
+    }
 
     public OmpHostArtifactRepositoryTestDatabase()
     {
@@ -25,7 +44,27 @@ public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
         };
         _connectionString = builder.ConnectionString;
 
-        CreateSchema();
+        try
+        {
+            CreateSchema();
+        }
+        catch
+        {
+            // The constructor is throwing, so xUnit will never call Dispose(). Drop the
+            // half-created database here or it leaks on every failing run.
+            try
+            {
+                DropDatabase(baseConnectionString, _databaseName);
+            }
+            catch (Exception dropEx)
+            {
+                Console.Error.WriteLine(
+                    $"[OmpHostAgentTests] Failed to drop test database '{_databaseName}' after a constructor failure. " +
+                    $"Drop it manually. Drop error:{Environment.NewLine}{dropEx}");
+            }
+
+            throw;
+        }
     }
 
     public string ConnectionString => _connectionString;
@@ -43,24 +82,22 @@ public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
 
     public void Dispose()
     {
+        var baseConnectionString = GetBaseConnectionString();
         try
         {
-            var builder = new SqlConnectionStringBuilder(_connectionString)
-            {
-                InitialCatalog = "master"
-            };
-            using var conn = new SqlConnection(builder.ConnectionString);
-            conn.Open();
-            using var cmd = new SqlCommand(
-                $@"
-ALTER DATABASE [{_databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-DROP DATABASE [{_databaseName}];",
-                conn);
-            cmd.ExecuteNonQuery();
+            DropDatabase(baseConnectionString, _databaseName);
         }
-        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+        catch (Exception ex)
         {
-            // Best-effort cleanup; do not fail tests because cleanup failed.
+            // A failed drop must never fail the test run, but it must never be silent
+            // either: silent drops are how stale OmpHostAgentTests_* databases pile up.
+            var filePaths = GetDatabaseFilePaths(baseConnectionString, _databaseName);
+            var files = filePaths.Count > 0
+                ? string.Join(Environment.NewLine, filePaths.Select(p => $"  {p}"))
+                : "  (database no longer visible in sys.master_files)";
+            Console.Error.WriteLine(
+                $"[OmpHostAgentTests] Failed to drop test database '{_databaseName}'. " +
+                $"Drop it manually and delete any leftover files:{Environment.NewLine}{files}{Environment.NewLine}{ex}");
         }
     }
 
@@ -482,6 +519,98 @@ CREATE TABLE omp.MaintenanceFindings
             new SqlParameter("@targetPath", targetPath),
             new SqlParameter("@runtimeName", runtimeName),
             new SqlParameter("@artifactId", artifactId));
+    }
+
+    private static void DropDatabase(string baseConnectionString, string databaseName)
+    {
+        var builder = new SqlConnectionStringBuilder(baseConnectionString)
+        {
+            InitialCatalog = "master"
+        };
+        using var conn = new SqlConnection(builder.ConnectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            $@"
+ALTER DATABASE [{databaseName.Replace("]", "]]", StringComparison.Ordinal)}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+DROP DATABASE [{databaseName.Replace("]", "]]", StringComparison.Ordinal)}];",
+            conn);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static List<string> GetDatabaseFilePaths(string baseConnectionString, string databaseName)
+    {
+        var paths = new List<string>();
+        try
+        {
+            var builder = new SqlConnectionStringBuilder(baseConnectionString)
+            {
+                InitialCatalog = "master"
+            };
+            using var conn = new SqlConnection(builder.ConnectionString);
+            conn.Open();
+            using var cmd = new SqlCommand(
+                "SELECT physical_name FROM sys.master_files WHERE database_id = DB_ID(@databaseName);",
+                conn);
+            cmd.Parameters.AddWithValue("@databaseName", databaseName);
+            using var rdr = cmd.ExecuteReader();
+            while (rdr.Read())
+            {
+                paths.Add(rdr.GetString(0));
+            }
+        }
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+        {
+            // Best effort only: the drop failure itself matters more than the file list.
+        }
+
+        return paths;
+    }
+
+    private static void SweepStaleDatabases()
+    {
+        try
+        {
+            var cutoff = ProcessStart - SweepSafetyMargin;
+            var baseConnectionString = GetBaseConnectionString();
+            var builder = new SqlConnectionStringBuilder(baseConnectionString)
+            {
+                InitialCatalog = "master"
+            };
+            var staleNames = new List<string>();
+            using (var conn = new SqlConnection(builder.ConnectionString))
+            {
+                conn.Open();
+                using var cmd = new SqlCommand(
+                    $"SELECT name FROM sys.databases WHERE name LIKE '{DatabaseNamePattern}' AND create_date < @cutoff;",
+                    conn);
+                cmd.Parameters.AddWithValue("@cutoff", cutoff);
+                using var rdr = cmd.ExecuteReader();
+                while (rdr.Read())
+                {
+                    staleNames.Add(rdr.GetString(0));
+                }
+            }
+
+            foreach (var staleName in staleNames)
+            {
+                try
+                {
+                    DropDatabase(baseConnectionString, staleName);
+                    Console.WriteLine($"[OmpHostAgentTests] Swept stale test database '{staleName}'.");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        $"[OmpHostAgentTests] Failed to sweep stale test database '{staleName}':{Environment.NewLine}{ex}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // The sweep is belt-and-braces; it must never break the test run, but it
+            // must never fail silently either.
+            Console.Error.WriteLine($"[OmpHostAgentTests] Stale-database sweep failed:{Environment.NewLine}{ex}");
+        }
     }
 
     private static string GetBaseConnectionString()
