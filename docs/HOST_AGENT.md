@@ -1033,9 +1033,15 @@ keys and that every node can decrypt them:
 1. Start the first updated app or IIS node with the descriptor configured and
    log in (or otherwise trigger an ASP.NET Core Data Protection key creation).
 2. In the shared `DataProtectionKeyPath` folder, open the newest `.xml` key file.
-   The `<encryptedSecret>` element must contain a `<value>` whose text starts
-   with `AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA`; that prefix indicates DPAPI-NG
-   (NCRYPT_PROTECTED_KEY_BLOB) rather than plain DPAPI or unencrypted XML.
+   The `<encryptedSecret>` element's `decryptorType` attribute must name
+   `DpapiNGXmlDecryptor`, and the inner `<encryptedKey>` carries the comments
+   `<!-- This key is encrypted with Windows DPAPI-NG. -->` and
+   `<!-- Rule: SID=... -->` echoing your descriptor. Do NOT judge by the base64
+   `<value>` prefix: `AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA` is the *legacy* DPAPI
+   (`CryptProtectData`) blob header — seeing it means the file is still
+   plain-DPAPI-protected (configuration drift, exactly what this check exists to
+   catch). A genuine DPAPI-NG value is an ASN.1 envelope and typically starts
+   with `MII...`.
 3. From a **second** domain-joined node (or a second app pool on the same host
    if the descriptor targets a group), read that same key file and trigger key
    ring load — for example by issuing a request that uses the shared auth cookie
@@ -1044,11 +1050,14 @@ keys and that every node can decrypt them:
    `CryptographicException` or "an exception was encountered while reading the
    key ring" warning here means the descriptor principal does not cover that
    node/account.
-4. If the newest key file is unencrypted XML (no `<encryptedSecret>`) or uses
-   the older `DpapiXmlEncryptor` envelope, the descriptor did not take effect;
-   review `OmpAuth:DpapiNgProtectionDescriptor`, `OmpAuth:DataProtectionKeyPath`,
-   and the platform guard logs, then delete the wrongly-protected key files and
-   repeat the verification.
+4. If the newest key file is unencrypted XML (no `<encryptedSecret>`), names
+   `DpapiXmlDecryptor` in `decryptorType`, or shows the legacy-DPAPI marker from
+   step 2, the descriptor did not take effect; review
+   `OmpAuth:DpapiNgProtectionDescriptor`, `OmpAuth:DataProtectionKeyPath`, and
+   the application startup log (the guard added in this feature throws at
+   startup when a set descriptor cannot take effect — its message names the
+   cause), then delete the wrongly-protected key files and repeat the
+   verification. Never delete key files that passed steps 2–3.
 
 Catching a form-valid-but-wrong principal in the upgrade window prevents a
 silent single-node protection that only surfaces weeks later as intermittent
