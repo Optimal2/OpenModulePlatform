@@ -1021,7 +1021,10 @@ public static class OmpWebHostingExtensions
     ///    the ring is protected with CNG DPAPI-NG, which is AD-backed and
     ///    decryptable on every domain-joined node by the descriptor principals
     ///    (the web-farm and multi-account answer). An invalid descriptor throws
-    ///    at startup — never a silent fallback to another scope.
+    ///    at startup — never a silent fallback to another scope. A descriptor
+    ///    that cannot take effect at all (no key path resolved, or a
+    ///    non-Windows host) also throws at startup instead of being silently
+    ///    ignored: see <see cref="ThrowIfDescriptorCannotTakeEffect"/>.
     /// 2. Otherwise <c>OmpAuth:ProtectKeysWithDpapi=false</c> disables all
     ///    at-rest encryption, as before R3-E8.
     /// 3. Otherwise legacy DPAPI in the configured scope: machine scope by
@@ -1051,6 +1054,47 @@ public static class OmpWebHostingExtensions
 
         dataProtectionBuilder.ProtectKeysWithDpapi(
             protectToLocalMachine: authOptions.DpapiProtectToLocalMachine);
+    }
+
+    /// <summary>
+    /// Fails startup loudly when <c>OmpAuth:DpapiNgProtectionDescriptor</c> is
+    /// set but cannot take effect. An explicitly set protection option that is
+    /// silently ignored would leave the ring unprotected (or protected to a
+    /// single node) while the operator believes DPAPI-NG is active — the same
+    /// class of config error as an invalid descriptor, so it throws a clear
+    /// <see cref="InvalidOperationException"/> instead of skipping.
+    /// </summary>
+    internal static void ThrowIfDescriptorCannotTakeEffect(
+        OmpAuthOptions authOptions,
+        string? dataProtectionKeyPath,
+        bool isWindows)
+    {
+        if (string.IsNullOrWhiteSpace(authOptions.DpapiNgProtectionDescriptor))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(dataProtectionKeyPath))
+        {
+            throw new InvalidOperationException(
+                "OmpAuth:DpapiNgProtectionDescriptor is set but no data-protection key path " +
+                "could be resolved: OmpAuth:DataProtectionKeyPath is empty and no " +
+                "content-root fallback applies. DPAPI-NG protects the persisted key ring at " +
+                "rest, so without a key path the descriptor cannot take effect — and an " +
+                "explicitly set protection option is never silently ignored. Set " +
+                "OmpAuth:DataProtectionKeyPath to the shared key directory, or remove the " +
+                "descriptor setting, and restart the application.");
+        }
+
+        if (!isWindows)
+        {
+            throw new InvalidOperationException(
+                "OmpAuth:DpapiNgProtectionDescriptor is set but CNG DPAPI-NG is only " +
+                "available on Windows, so the descriptor cannot take effect on this host — " +
+                "and an explicitly set protection option is never silently ignored. Run the " +
+                "application on Windows, or remove the descriptor setting, and restart the " +
+                "application.");
+        }
     }
 
     private static void ConfigureOmpAuthentication(
@@ -1091,6 +1135,15 @@ public static class OmpWebHostingExtensions
         var dataProtectionKeyPath = ResolveDataProtectionKeyPath(
             authOptions.DataProtectionKeyPath,
             contentRootPath);
+
+        // A set DPAPI-NG descriptor that cannot take effect (no key path
+        // resolved, or a non-Windows host) is a config error: fail loudly
+        // instead of silently running an unprotected or wrong-scope ring.
+        ThrowIfDescriptorCannotTakeEffect(
+            authOptions,
+            dataProtectionKeyPath,
+            OperatingSystem.IsWindows());
+
         if (!string.IsNullOrWhiteSpace(dataProtectionKeyPath))
         {
             dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyPath));
