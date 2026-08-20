@@ -182,9 +182,53 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 
             ($exitCode -eq 0 -or $exitCode -eq $null) | Should Be $true
 
+            # Discriminating assertion: the component bump itself must have run.
+            # Without this, 'maxVersion still 2.0.0' would also pass if the new
+            # sync logic never executed at all.
+            $manifestPath = Join-Path $repoRoot 'omp-components.json'
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $manifest.components[0].version | Should Be '1.0.6'
+
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
             $moduleDefinition.compatibleArtifacts[0].maxVersion | Should Be '2.0.0'
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Throws and leaves both files unmodified when maxVersion is non-numeric' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -CompatibleArtifactMaxVersion 'latest'
+
+            $manifestPath = Join-Path $repoRoot 'omp-components.json'
+            $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+            $manifestBefore = [System.IO.File]::ReadAllText($manifestPath)
+            $moduleDefinitionBefore = [System.IO.File]::ReadAllText($moduleDefinitionPath)
+
+            # bump-version.ps1 ends with 'exit 1' on failure, which would
+            # terminate the Pester host, so the failure path must run in a
+            # child process. The file-level $ErrorActionPreference = 'Stop'
+            # would turn the child's redirected stderr into a throwing
+            # ErrorRecord, so relax it locally for the capture.
+            $previousErrorActionPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $output = & powershell.exe -NoProfile -File $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+                $exitCode = $LASTEXITCODE
+            }
+            finally {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
+
+            $exitCode | Should Be 1
+            $output | Should Match 'non-numeric maxVersion'
+
+            # Atomic abort: the throw must happen before any file is written.
+            [System.IO.File]::ReadAllText($manifestPath) | Should Be $manifestBefore
+            [System.IO.File]::ReadAllText($moduleDefinitionPath) | Should Be $moduleDefinitionBefore
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
