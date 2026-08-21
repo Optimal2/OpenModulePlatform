@@ -25,6 +25,15 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
+# Pin Pester 3.4.0 explicitly: the suites use the legacy 'Should Be' dialect
+# (removed in Pester 5), and CI images also carry Pester 5 in the Windows
+# PowerShell module path, so auto-load would silently pick the newest version
+# and fail every test with CommandNotFoundException for the file-scope helper
+# functions (Pester 5 runs containers in a separate session state). 3.4.0
+# ships inbox with Windows PowerShell 5.1; if it is missing, fail loudly here
+# rather than drift to another version.
+Import-Module Pester -RequiredVersion 3.4.0 -Force
+
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $testsPath = Join-Path $repoRoot 'tests'
 
