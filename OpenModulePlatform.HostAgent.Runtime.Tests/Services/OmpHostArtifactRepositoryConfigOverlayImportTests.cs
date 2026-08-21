@@ -19,8 +19,18 @@ public sealed class OmpHostArtifactRepositoryConfigOverlayImportTests : IDisposa
     public OmpHostArtifactRepositoryConfigOverlayImportTests()
     {
         _database = new OmpHostArtifactRepositoryTestDatabase();
-        _database.CreateConfigOverlayTables();
-        _repository = new OmpHostArtifactRepository(_database.CreateFactory());
+        try
+        {
+            _database.CreateConfigOverlayTables();
+            _repository = new OmpHostArtifactRepository(_database.CreateFactory());
+        }
+        catch
+        {
+            // A throwing constructor means xUnit never calls Dispose(); dispose the
+            // fixture here or its database leaks on every failing run.
+            _database.Dispose();
+            throw;
+        }
     }
 
     public void Dispose()

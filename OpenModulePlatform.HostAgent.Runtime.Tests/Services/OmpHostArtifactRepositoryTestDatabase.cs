@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using OpenModulePlatform.HostAgent.Runtime.Services;
@@ -7,45 +8,73 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
 public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
 {
+    private const string DatabaseNamePrefix = "OmpHostAgentTests_";
     private const string DatabaseNamePattern = "OmpHostAgentTests[_]%";
 
     /// <summary>
-    /// Captured once per test process. The stale-database sweep only drops databases
-    /// created before this timestamp (minus a safety margin), so a concurrently running
-    /// test process never loses its own databases. <c>sys.databases.create_date</c> is
-    /// server-local time and the test SQL Server is local, so a client-side
-    /// <see cref="DateTime.Now"/> timestamp compares cleanly.
+    /// Databases whose owner cannot be identified -- created by code predating owner
+    /// tagging, or by a process on another machine against a shared SQL Server -- are
+    /// swept only past this age. The observed leaks were weeks old; a concurrent run is
+    /// minutes old, so 24 hours keeps a foreign live run safe while still reclaiming
+    /// real leaks. This is the only guard for unidentifiable owners, so it stays long.
     /// </summary>
-    private static readonly DateTime ProcessStart = DateTime.Now;
+    private static readonly TimeSpan UnknownOwnerMaxAge = TimeSpan.FromHours(24);
 
-    /// <summary>Keeps databases created while this process was starting out of the sweep.</summary>
-    private static readonly TimeSpan SweepSafetyMargin = TimeSpan.FromMinutes(2);
+    /// <summary>
+    /// Tolerance when matching a live process' start time against the ticks embedded in
+    /// the database name. Both values come from the same OS clock, so they normally
+    /// match exactly; the tolerance absorbs clock adjustments.
+    /// </summary>
+    private static readonly TimeSpan OwnerStartTimeTolerance = TimeSpan.FromSeconds(10);
+
+    // Owner identity stamped into every database name. ProcessStartTicks is the real
+    // process start (Process.StartTime), not type-initialization time, so the sweep's
+    // PID-reuse check compares like with like.
+    private static readonly string MachineName = Environment.MachineName;
+    private static readonly int ProcessId = Environment.ProcessId;
+    private static readonly long ProcessStartTicks = Process.GetCurrentProcess().StartTime.Ticks;
 
     private readonly string _databaseName;
     private readonly string _connectionString;
 
     static OmpHostArtifactRepositoryTestDatabase()
     {
-        SweepStaleDatabases();
+        SweepStaleDatabases(GetBaseConnectionString());
     }
 
     public OmpHostArtifactRepositoryTestDatabase()
+        : this(afterCreateHook: null)
     {
-        _databaseName = $"OmpHostAgentTests_{Guid.NewGuid():N}";
+    }
+
+    /// <summary>
+    /// Test hook: <paramref name="afterCreateHook"/> runs after CREATE DATABASE but
+    /// before the schema is created, letting cleanup tests exercise the
+    /// half-created-database path.
+    /// </summary>
+    internal OmpHostArtifactRepositoryTestDatabase(Action<string>? afterCreateHook)
+    {
+        _databaseName = BuildDatabaseName(MachineName, ProcessId, ProcessStartTicks, Guid.NewGuid());
         var baseConnectionString = GetBaseConnectionString();
-
-        OmpTestDatabaseProvisioner.CreateDatabase(
-            baseConnectionString,
-            $"CREATE DATABASE [{_databaseName}] COLLATE Latin1_General_100_CI_AS_SC_UTF8;");
-
-        var builder = new SqlConnectionStringBuilder(baseConnectionString)
-        {
-            InitialCatalog = _databaseName
-        };
-        _connectionString = builder.ConnectionString;
 
         try
         {
+            // Inside the try on purpose: a client-side timeout here can still land
+            // server-side, and the provisioner's retry then fails with 1801
+            // "database exists" -- leaving the database behind. The catch below
+            // removes half-created databases from this stage too.
+            OmpTestDatabaseProvisioner.CreateDatabase(
+                baseConnectionString,
+                $"CREATE DATABASE [{EscapeSqlName(_databaseName)}] COLLATE Latin1_General_100_CI_AS_SC_UTF8;");
+
+            var builder = new SqlConnectionStringBuilder(baseConnectionString)
+            {
+                InitialCatalog = _databaseName
+            };
+            _connectionString = builder.ConnectionString;
+
+            afterCreateHook?.Invoke(_databaseName);
+
             CreateSchema();
         }
         catch
@@ -54,12 +83,12 @@ public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
             // half-created database here or it leaks on every failing run.
             try
             {
-                DropDatabase(baseConnectionString, _databaseName);
+                DropDatabaseIfExists(baseConnectionString, _databaseName);
             }
             catch (Exception dropEx)
             {
-                Console.Error.WriteLine(
-                    $"[OmpHostAgentTests] Failed to drop test database '{_databaseName}' after a constructor failure. " +
+                RecordCleanupFailure(
+                    $"Failed to drop test database '{_databaseName}' after a constructor failure. " +
                     $"Drop it manually. Drop error:{Environment.NewLine}{dropEx}");
             }
 
@@ -91,12 +120,14 @@ public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
         {
             // A failed drop must never fail the test run, but it must never be silent
             // either: silent drops are how stale OmpHostAgentTests_* databases pile up.
-            var filePaths = GetDatabaseFilePaths(baseConnectionString, _databaseName);
-            var files = filePaths.Count > 0
-                ? string.Join(Environment.NewLine, filePaths.Select(p => $"  {p}"))
-                : "  (database no longer visible in sys.master_files)";
-            Console.Error.WriteLine(
-                $"[OmpHostAgentTests] Failed to drop test database '{_databaseName}'. " +
+            var filePaths = GetDatabaseFilePaths(baseConnectionString, _databaseName, out var fileListError);
+            var files = fileListError is not null
+                ? $"  (could not list database files: {fileListError})"
+                : filePaths.Count > 0
+                    ? string.Join(Environment.NewLine, filePaths.Select(p => $"  {p}"))
+                    : "  (no files for this database in sys.master_files)";
+            RecordCleanupFailure(
+                $"Failed to drop test database '{_databaseName}'. " +
                 $"Drop it manually and delete any leftover files:{Environment.NewLine}{files}{Environment.NewLine}{ex}");
         }
     }
@@ -521,6 +552,9 @@ CREATE TABLE omp.MaintenanceFindings
             new SqlParameter("@artifactId", artifactId));
     }
 
+    private static string EscapeSqlName(string name)
+        => name.Replace("]", "]]", StringComparison.Ordinal);
+
     private static void DropDatabase(string baseConnectionString, string databaseName)
     {
         var builder = new SqlConnectionStringBuilder(baseConnectionString)
@@ -531,15 +565,40 @@ CREATE TABLE omp.MaintenanceFindings
         conn.Open();
         using var cmd = new SqlCommand(
             $@"
-ALTER DATABASE [{databaseName.Replace("]", "]]", StringComparison.Ordinal)}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-DROP DATABASE [{databaseName.Replace("]", "]]", StringComparison.Ordinal)}];",
+ALTER DATABASE [{EscapeSqlName(databaseName)}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+DROP DATABASE [{EscapeSqlName(databaseName)}];",
             conn);
         cmd.ExecuteNonQuery();
     }
 
-    private static List<string> GetDatabaseFilePaths(string baseConnectionString, string databaseName)
+    /// <summary>
+    /// Drops only when the database exists. Used on failure paths where a client-side
+    /// error leaves it uncertain whether CREATE DATABASE landed server-side.
+    /// </summary>
+    private static void DropDatabaseIfExists(string baseConnectionString, string databaseName)
+    {
+        var builder = new SqlConnectionStringBuilder(baseConnectionString)
+        {
+            InitialCatalog = "master"
+        };
+        using var conn = new SqlConnection(builder.ConnectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            $@"
+IF DB_ID(@databaseName) IS NOT NULL
+BEGIN
+    ALTER DATABASE [{EscapeSqlName(databaseName)}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [{EscapeSqlName(databaseName)}];
+END;",
+            conn);
+        cmd.Parameters.AddWithValue("@databaseName", databaseName);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static List<string> GetDatabaseFilePaths(string baseConnectionString, string databaseName, out string? error)
     {
         var paths = new List<string>();
+        error = null;
         try
         {
             var builder = new SqlConnectionStringBuilder(baseConnectionString)
@@ -560,48 +619,184 @@ DROP DATABASE [{databaseName.Replace("]", "]]", StringComparison.Ordinal)}];",
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            // Best effort only: the drop failure itself matters more than the file list.
+            // Best effort only: the drop failure itself matters more than the file
+            // list -- but say the listing failed instead of implying the files are gone.
+            error = ex.Message;
         }
 
         return paths;
     }
 
-    private static void SweepStaleDatabases()
+    /// <summary>
+    /// Builds the database name carrying its owner identity:
+    /// <c>OmpHostAgentTests_{machineName}_{processId}_{processStartTicks}_{guid}</c>.
+    /// The sweep only drops a tagged database when the owning process is verifiably
+    /// dead, so a concurrently running test process never loses its databases.
+    /// </summary>
+    internal static string BuildDatabaseName(string machineName, int processId, long processStartTicks, Guid id)
+        => $"{DatabaseNamePrefix}{machineName}_{processId}_{processStartTicks}_{id:N}";
+
+    /// <summary>
+    /// Parses the owner identity out of a database name. Returns false for names that
+    /// predate owner tagging (<c>OmpHostAgentTests_{guid}</c>) or come from elsewhere;
+    /// those fall back to the age rule in <see cref="ShouldSweep"/>.
+    /// </summary>
+    internal static bool TryParseOwner(
+        string databaseName,
+        out string? ownerMachine,
+        out int ownerProcessId,
+        out long ownerProcessStartTicks)
+    {
+        ownerMachine = null;
+        ownerProcessId = 0;
+        ownerProcessStartTicks = 0;
+
+        if (!databaseName.StartsWith(DatabaseNamePrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // Machine names may contain '_', so parse the three trailing fields
+        // (pid, ticks, guid) and treat everything before them as the machine name.
+        var parts = databaseName.Substring(DatabaseNamePrefix.Length).Split('_');
+        if (parts.Length < 4
+            || !int.TryParse(parts[^3], out ownerProcessId)
+            || !long.TryParse(parts[^2], out ownerProcessStartTicks)
+            || parts[^1].Length != 32)
+        {
+            return false;
+        }
+
+        ownerMachine = string.Join('_', parts, 0, parts.Length - 3);
+        return true;
+    }
+
+    /// <summary>
+    /// True when a process with <paramref name="processId"/> exists and started at
+    /// (about) <paramref name="processStartTicks"/>; false when no such process exists
+    /// or the start time differs (PID reused by a newer process); null when the OS
+    /// refuses to tell us (protected process, permissions) -- the caller then falls
+    /// back to the age rule rather than guessing.
+    /// </summary>
+    private static bool? IsOwnerProcessAlive(int processId, long processStartTicks)
     {
         try
         {
-            var cutoff = ProcessStart - SweepSafetyMargin;
-            var baseConnectionString = GetBaseConnectionString();
+            using var process = Process.GetProcessById(processId);
+            return Math.Abs(process.StartTime.Ticks - processStartTicks) <= OwnerStartTimeTolerance.Ticks;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The sweep decision for one candidate database. <paramref name="createDate"/> and
+    /// <paramref name="serverNow"/> are both in the server's own clock.
+    /// </summary>
+    internal static bool ShouldSweep(
+        string databaseName,
+        DateTime createDate,
+        DateTime serverNow,
+        Func<int, long, bool?> isOwnerProcessAlive,
+        out string reason)
+    {
+        if (TryParseOwner(databaseName, out var ownerMachine, out var ownerPid, out var ownerStartTicks)
+            && string.Equals(ownerMachine, MachineName, StringComparison.OrdinalIgnoreCase))
+        {
+            var alive = isOwnerProcessAlive(ownerPid, ownerStartTicks);
+            if (alive == true)
+            {
+                // A live process on this machine owns it. Never drop it, no matter how
+                // old it is: age was the only guard before owner tagging, and it broke
+                // the moment a concurrent run outlived the margin.
+                reason = $"owned by live process {ownerPid}";
+                return false;
+            }
+
+            if (alive == false)
+            {
+                // Dead owner at any age: the creating process is gone, so the database
+                // is orphaned by definition. This is the crashed-run leak case.
+                reason = $"owner process {ownerPid} is no longer running";
+                return true;
+            }
+
+            // Liveness indeterminate: fall through to the age rule.
+        }
+
+        if (createDate < serverNow - UnknownOwnerMaxAge)
+        {
+            reason = $"owner not identifiable and older than {UnknownOwnerMaxAge.TotalHours:0} hours";
+            return true;
+        }
+
+        reason = "owner not identifiable and younger than the age limit";
+        return false;
+    }
+
+    internal static void SweepStaleDatabases(
+        string baseConnectionString,
+        Func<int, long, bool?>? isOwnerProcessAlive = null)
+    {
+        isOwnerProcessAlive ??= IsOwnerProcessAlive;
+        try
+        {
             var builder = new SqlConnectionStringBuilder(baseConnectionString)
             {
                 InitialCatalog = "master"
             };
-            var staleNames = new List<string>();
+            var candidates = new List<(string Name, DateTime CreateDate)>();
+            DateTime serverNow;
             using (var conn = new SqlConnection(builder.ConnectionString))
             {
                 conn.Open();
+
+                // create_date is server-local time. Read the server's own clock and
+                // compare in that reference frame, so a client in another timezone --
+                // or a UTC Docker SQL reached via OMP_TEST_CONNECTION_STRING -- cannot
+                // silently shrink the safety checks.
+                using (var nowCmd = new SqlCommand("SELECT GETDATE();", conn))
+                {
+                    serverNow = (DateTime)nowCmd.ExecuteScalar()!;
+                }
+
                 using var cmd = new SqlCommand(
-                    $"SELECT name FROM sys.databases WHERE name LIKE '{DatabaseNamePattern}' AND create_date < @cutoff;",
+                    $"SELECT name, create_date FROM sys.databases WHERE name LIKE '{DatabaseNamePattern}';",
                     conn);
-                cmd.Parameters.AddWithValue("@cutoff", cutoff);
                 using var rdr = cmd.ExecuteReader();
                 while (rdr.Read())
                 {
-                    staleNames.Add(rdr.GetString(0));
+                    candidates.Add((rdr.GetString(0), rdr.GetDateTime(1)));
                 }
             }
 
-            foreach (var staleName in staleNames)
+            foreach (var (name, createDate) in candidates)
             {
+                if (!ShouldSweep(name, createDate, serverNow, isOwnerProcessAlive, out var reason))
+                {
+                    continue;
+                }
+
                 try
                 {
-                    DropDatabase(baseConnectionString, staleName);
-                    Console.WriteLine($"[OmpHostAgentTests] Swept stale test database '{staleName}'.");
+                    DropDatabaseIfExists(baseConnectionString, name);
+                    Console.WriteLine($"[OmpHostAgentTests] Swept stale test database '{name}' ({reason}).");
+                }
+                catch (SqlException ex) when (IsDatabaseAlreadyGone(ex))
+                {
+                    // The owner's own Dispose won the race between listing and dropping.
+                    // The database is gone either way, which is all the sweep wanted.
+                    Console.WriteLine($"[OmpHostAgentTests] Stale test database '{name}' was already gone.");
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine(
-                        $"[OmpHostAgentTests] Failed to sweep stale test database '{staleName}':{Environment.NewLine}{ex}");
+                    RecordCleanupFailure($"Failed to sweep stale test database '{name}':{Environment.NewLine}{ex}");
                 }
             }
         }
@@ -609,11 +804,80 @@ DROP DATABASE [{databaseName.Replace("]", "]]", StringComparison.Ordinal)}];",
         {
             // The sweep is belt-and-braces; it must never break the test run, but it
             // must never fail silently either.
-            Console.Error.WriteLine($"[OmpHostAgentTests] Stale-database sweep failed:{Environment.NewLine}{ex}");
+            RecordCleanupFailure($"Stale-database sweep failed:{Environment.NewLine}{ex}");
         }
     }
 
-    private static string GetBaseConnectionString()
+    /// <summary>
+    /// True for the "database does not exist / not accessible" errors (3701, 5011) a
+    /// drop gets when the owner's own Dispose already removed the database.
+    /// </summary>
+    private static bool IsDatabaseAlreadyGone(SqlException exception)
+    {
+        foreach (SqlError error in exception.Errors)
+        {
+            if (error.Number is 3701 or 5011)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Where cleanup failures are appended. Overridable via
+    /// <c>OMP_TEST_CLEANUP_LOG</c>; CI sets it to a file under TestResults.
+    /// </summary>
+    internal static string GetCleanupLogPath()
+    {
+        var fromEnvironment = Environment.GetEnvironmentVariable("OMP_TEST_CLEANUP_LOG");
+        return string.IsNullOrWhiteSpace(fromEnvironment)
+            ? Path.Combine(Path.GetTempPath(), "OmpHostAgentTests-cleanup.log")
+            : fromEnvironment;
+    }
+
+    /// <summary>
+    /// Reports a cleanup failure through every channel available. Console.Error is
+    /// captured by xUnit and attached to whichever test happens to be running, and for
+    /// a PASSING test it only surfaces at detailed verbosity -- invisible in the CI
+    /// output we actually run. So the failure also goes to a log file that the CI step
+    /// turns into workflow warnings regardless of any test outcome.
+    /// </summary>
+    internal static void RecordCleanupFailure(string message)
+    {
+        var line = $"[OmpHostAgentTests] [{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [pid {Environment.ProcessId}] {message}";
+        Console.Error.WriteLine(line);
+
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                var path = GetCleanupLogPath();
+                var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                File.AppendAllText(path, line + Environment.NewLine);
+                return;
+            }
+            catch (Exception ex) when (attempt < 3 && ex is IOException or UnauthorizedAccessException)
+            {
+                // Parallel test assemblies can append at the same moment; retry briefly.
+                Thread.Sleep(50 * attempt);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A lost log line must never fail a test run.
+                Console.Error.WriteLine($"[OmpHostAgentTests] Could not write to the cleanup log: {ex.Message}");
+                return;
+            }
+        }
+    }
+
+    internal static string GetBaseConnectionString()
     {
         var connectionString = Environment.GetEnvironmentVariable("OMP_TEST_CONNECTION_STRING");
         if (!string.IsNullOrWhiteSpace(connectionString))

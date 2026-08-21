@@ -26,9 +26,19 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
     public OmpHostArtifactRepositoryConfigurationCarryForwardTests()
     {
         _database = new OmpHostArtifactRepositoryTestDatabase();
-        _database.CreateConfigurationFileResolutionTables();
-        _database.InsertArtifactWithApp(PreviousArtifactId, "web-app", "2.4.59", "test-module", "test-app");
-        _repository = new OmpHostArtifactRepository(_database.CreateFactory());
+        try
+        {
+            _database.CreateConfigurationFileResolutionTables();
+            _database.InsertArtifactWithApp(PreviousArtifactId, "web-app", "2.4.59", "test-module", "test-app");
+            _repository = new OmpHostArtifactRepository(_database.CreateFactory());
+        }
+        catch
+        {
+            // A throwing constructor means xUnit never calls Dispose(); dispose the
+            // fixture here or its database leaks on every failing run.
+            _database.Dispose();
+            throw;
+        }
     }
 
     public void Dispose()
