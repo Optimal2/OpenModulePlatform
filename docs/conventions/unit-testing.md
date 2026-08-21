@@ -10,7 +10,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 - **Tests exist:** Yes — 3 test projects, ~56 test files, ~270 test methods (239 `[Fact]` + 31 `[Theory]`).
   - `OpenModulePlatform.Portal.Tests` (31 files), `OpenModulePlatform.HostAgent.Runtime.Tests` (24 files), `OpenModulePlatform.Web.Shared.Analyzers.Tests` (1 file)
-  - Plus one Pester file: `tests/Validate-ComponentVersions.Tests.ps1` (script test, not a unit test)
+  - Plus two Pester files: `tests/Bump-Version.Tests.ps1` and `tests/Validate-ComponentVersions.Tests.ps1` (script tests, not unit tests)
 - **Framework:** xUnit.
   - `Directory.Packages.props:33-34` (`xunit` 2.9.3, `xunit.runner.visualstudio` 3.1.5)
   - `OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj:17-18`
@@ -33,7 +33,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `OmpHostArtifactRepositoryTestDatabase.cs:857-870` honors env var `OMP_TEST_CONNECTION_STRING`, defaulting to `Server=(local);Integrated Security=true`; creates/drops a unique DB per test class, tags each name with owner machine+PID+process-start ticks so the once-per-process sweep (`:743`) only reclaims databases whose owner process is verifiably dead (or unidentifiable and >24h old), and reports cleanup failures to a log file (`OMP_TEST_CLEANUP_LOG`) that `ci.yml` surfaces as workflow warnings (`:824`)
   - Web-hosting integration uses `WebApplicationFactory<PortalResource>` + TestServer: `OpenModulePlatform.Portal.Tests/Integration/PortalWebApplicationFactory.cs:18`
   - No `[Trait]`, no `[Collection]`, no `Skip=` gating, no Testcontainers — DB tests simply fail on a machine without local SQL Server
-- **How tests run:** Locally via the tracked pre-push hook `.githooks/pre-push.ps1` (`dotnet test OpenModulePlatform.slnx -c Release --no-build`) and in GitHub CI: since 2026-08 `ci.yml` provisions LocalDB and runs `dotnet test` with a `--filter` whose exclusions are registered in `docs/TEST_DEBT.md` (kept in sync in the same commit). The Pester file still has no CI invocation.
+- **How tests run:** Locally via the tracked pre-push hook `.githooks/pre-push.ps1` (`dotnet test OpenModulePlatform.slnx -c Release --no-build`) and in GitHub CI: since 2026-08 `ci.yml` provisions LocalDB and runs `dotnet test` with a `--filter` whose exclusions are registered in `docs/TEST_DEBT.md` (kept in sync in the same commit). The two Pester suites run via `scripts/omp/run-script-tests.ps1` — the canonical entry point, wired as a blocking step in both the pre-push hook (step 4) and `ci.yml` ("Run Pester script tests"). The suites use the Pester 3.4.0 legacy dialect (`Should Be`, removed in Pester 5), so both gates invoke the runner via `powershell.exe` to stay on Windows PowerShell 5.1 where Pester 3.4.0 ships inbox; a red suite fails the gate in both environments.
 - **Extra notes:** The analyzer test project uses `CSharpAnalyzerTest<TAnalyzer, DefaultVerifier>` with inline fake source strings (`OmpWebDefaultsAnalyzerTests.cs:11-49`) — a good model for future Roslyn analyzers.
 
 ### IbsPackager
@@ -154,7 +154,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 | Repo | Tests? | Framework | Mock lib | Test pins | Assertion style | Coverage | Integration gating | Tests run by |
 |---|---|---|---|---|---|---|---|---|
-| **OpenModulePlatform** | Yes — 3 projects, ~270 methods | xUnit 2.9.3 + runner 3.1.5 | None (hand-written fakes) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced (2 of 3 projects), never invoked | Tier C/D naming; DB tests fail without local SQL Server | Pre-push hook only; CI build-only |
+| **OpenModulePlatform** | Yes — 3 projects, ~270 methods | xUnit 2.9.3 + runner 3.1.5 | None (hand-written fakes) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced (2 of 3 projects), never invoked | Tier C/D naming; DB tests fail without local SQL Server | Pre-push hook + CI (`dotnet test`); Pester script tests blocking in both pre-push and CI |
 | **IbsPackager** | Yes — 2 projects, ~42 methods | xUnit 2.9.3 + runner 3.1.5 + SkippableFact 1.4.13 | None (stubs + NullLogger) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | `[SkippableFact]` + env connection string | Nothing automated |
 | **VajSkrivare** | Yes — 1 project, 2 tests | xUnit 2.9.3 + runner **2.8.2** | None (hand-written fake) | **Inline (no CPM)**: Test.Sdk **17.14.0**, no coverlet | Plain `Assert.*` | None | None (tests avoid DB via config) | Nothing automated |
 | **iKrock2** | Yes — 1 project, 35 methods | xUnit 2.9.3 + runner 3.1.5 | None (Options.Create) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | None (pure unit tests) | Nothing automated (stale TODO) |
