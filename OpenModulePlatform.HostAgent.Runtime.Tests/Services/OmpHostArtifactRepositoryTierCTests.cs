@@ -12,7 +12,17 @@ public sealed class OmpHostArtifactRepositoryTierCTests : IDisposable
     public OmpHostArtifactRepositoryTierCTests()
     {
         _database = new OmpHostArtifactRepositoryTestDatabase();
-        _repository = new OmpHostArtifactRepository(_database.CreateFactory());
+        try
+        {
+            _repository = new OmpHostArtifactRepository(_database.CreateFactory());
+        }
+        catch
+        {
+            // A throwing constructor means xUnit never calls Dispose(); dispose the
+            // fixture here or its database leaks on every failing run.
+            _database.Dispose();
+            throw;
+        }
     }
 
     public void Dispose()

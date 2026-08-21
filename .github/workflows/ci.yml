@@ -121,6 +121,7 @@ jobs:
         shell: pwsh
         env:
           OMP_TEST_CONNECTION_STRING: 'Server=(localdb)\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true'
+          OMP_TEST_CLEANUP_LOG: '${{ github.workspace }}/TestResults/cleanup-failures.log'
         run: |
           # Gate the deterministic, self-provisioning tests: HostAgent.Runtime,
           # Web.Shared.Analyzers, and the Portal unit tests all create their own
@@ -134,6 +135,22 @@ jobs:
           # Exclusions are tracked in docs/TEST_DEBT.md; keep that register in
           # sync in the same commit when this filter changes.
           dotnet test OpenModulePlatform.slnx --configuration Release --no-build --logger trx --results-directory TestResults --filter "FullyQualifiedName!~Portal.Tests.Integration&FullyQualifiedName!~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests&Category!=Ui"
+
+      - name: Surface test-database cleanup failures
+        if: always()
+        shell: pwsh
+        run: |
+          # Test fixtures report failed drops/sweeps to this log file because xUnit
+          # captures Console.Error per test and hides it for passing tests -- invisible
+          # in this workflow's console output. Emit each line as a workflow warning so
+          # a failed cleanup step is visible in the run summary and log instead.
+          $log = 'TestResults/cleanup-failures.log'
+          if ((Test-Path $log) -and (Get-Item $log).Length -gt 0) {
+            Get-Content $log | ForEach-Object {
+              $escaped = $_ -replace '%', '%25'
+              Write-Host "::warning::$escaped"
+            }
+          }
 
       - name: Upload test results
         if: always()
