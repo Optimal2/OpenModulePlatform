@@ -2971,17 +2971,10 @@ internal static partial class Program
                     continue;
                 }
 
-                if (!string.Equals(NormalizePathForMatch(current.Target), NormalizePathForMatch(expectedTarget), StringComparison.OrdinalIgnoreCase))
-                {
-                    lines.Add($"  UPDATE  {component.ComponentKey}: package target {current.Target}, source target {expectedTarget}.");
-                    componentPackageStatus[component.ComponentKey] = (current.Target, "configured", "UPDATE");
-                    hasPackageUpdates = true;
-                }
-                else
-                {
-                    lines.Add($"  OK      {component.ComponentKey}: {expectedTarget}.");
-                    componentPackageStatus[component.ComponentKey] = (expectedTarget, "configured", "OK");
-                }
+                var evaluation = EvaluateComponentPackageStatus(component, current);
+                lines.Add(evaluation.Line);
+                componentPackageStatus[component.ComponentKey] = (current.Target, "configured", evaluation.Status);
+                hasPackageUpdates |= IsDeveloperUpdateStatus(evaluation.Status);
             }
 
             lines.Add(string.Empty);
@@ -5408,40 +5401,6 @@ ORDER BY ar.ArtifactId DESC;
                 installedComponentStatuses);
         }
 
-        private static string CompareInstalledVersion(string? installedVersion, string sourceVersion)
-        {
-            if (string.IsNullOrWhiteSpace(installedVersion))
-            {
-                return "UPDATE";
-            }
-
-            var comparison = CompareVersionText(sourceVersion, installedVersion);
-            if (comparison == 0)
-            {
-                return "OK";
-            }
-
-            return comparison > 0 ? "UPDATE" : "DIFF";
-        }
-
-        private static bool IsDeveloperUpdateStatus(string status)
-            => status is "UPDATE" or "DIFF";
-
-        private static string CombineDeveloperSourceStatus(string packageStatus, string? installedStatus)
-        {
-            if (packageStatus == "DIFF" || installedStatus == "DIFF")
-            {
-                return "DIFF";
-            }
-
-            if (IsDeveloperUpdateStatus(packageStatus) || IsDeveloperUpdateStatus(installedStatus ?? string.Empty))
-            {
-                return "UPDATE";
-            }
-
-            return installedStatus is null ? packageStatus : "OK";
-        }
-
         private ArtifactPayloadOptions? FindConfiguredArtifact(ManifestComponent component)
         {
             var expectedPrefix = NormalizePathForMatch(component.RelativePathTemplate)
@@ -7455,7 +7414,124 @@ ORDER BY ar.ArtifactId DESC;
         string DefinitionVersion,
         string Path);
 
-    private sealed record ManifestComponent(
+    internal static string CompareInstalledVersion(string? installedVersion, string sourceVersion)
+    {
+        if (string.IsNullOrWhiteSpace(installedVersion))
+        {
+            return "UPDATE";
+        }
+
+        var comparison = CompareVersionText(sourceVersion, installedVersion);
+        if (comparison == 0)
+        {
+            return "OK";
+        }
+
+        return comparison > 0 ? "UPDATE" : "DIFF";
+    }
+
+    /// <summary>
+    /// Pure per-component package-side evaluation for --check-developer-source-status.
+    /// An UPDATE must mean a real version difference between the configured artifact
+    /// and the source manifest, never a mere path-segment mismatch. The configured
+    /// version comes from the artifact package identity in <see cref="ArtifactPayloadOptions.Source"/>,
+    /// falling back to the {version}-position segment of <see cref="ArtifactPayloadOptions.Target"/>.
+    /// Equal versions with a drifting target path yield NORMALIZED: visible to the
+    /// operator, but never an update.
+    /// </summary>
+    internal static ComponentPackageEvaluation EvaluateComponentPackageStatus(
+        ManifestComponent component,
+        ArtifactPayloadOptions current)
+    {
+        var expectedTarget = component.RelativePathTemplate.Replace("{version}", component.Version, StringComparison.OrdinalIgnoreCase);
+        var configuredVersion = ParseConfiguredArtifactIdentity(current.Source)?.Version;
+        if (string.IsNullOrWhiteSpace(configuredVersion))
+        {
+            configuredVersion = GetTemplateVersionSegment(component.RelativePathTemplate, current.Target);
+        }
+
+        var targetsMatch = string.Equals(
+            NormalizePathForMatch(current.Target),
+            NormalizePathForMatch(expectedTarget),
+            StringComparison.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(configuredVersion))
+        {
+            return new ComponentPackageEvaluation(
+                "UPDATE",
+                $"  UPDATE  {component.ComponentKey}: package target {current.Target} carries no version, source target {expectedTarget}.");
+        }
+
+        var comparison = CompareVersionText(component.Version, configuredVersion);
+        if (comparison > 0)
+        {
+            return new ComponentPackageEvaluation(
+                "UPDATE",
+                $"  UPDATE  {component.ComponentKey}: package {configuredVersion}, source {component.Version}.");
+        }
+
+        if (comparison < 0)
+        {
+            return new ComponentPackageEvaluation(
+                "DIFF",
+                $"  DIFF    {component.ComponentKey}: package {configuredVersion}, source {component.Version}.");
+        }
+
+        if (!targetsMatch)
+        {
+            return new ComponentPackageEvaluation(
+                "NORMALIZED",
+                $"  NORMALIZED {component.ComponentKey}: package target {current.Target}, source target {expectedTarget} (same version {component.Version}).");
+        }
+
+        return new ComponentPackageEvaluation(
+            "OK",
+            $"  OK      {component.ComponentKey}: {expectedTarget}.");
+    }
+
+    private static string? GetTemplateVersionSegment(string relativePathTemplate, string target)
+    {
+        var templateSegments = NormalizePathForMatch(relativePathTemplate).Split('/');
+        var targetSegments = NormalizePathForMatch(target).Split('/');
+        for (var index = 0; index < templateSegments.Length; index++)
+        {
+            if (string.Equals(templateSegments[index], "{version}", StringComparison.OrdinalIgnoreCase))
+            {
+                return index < targetSegments.Length ? targetSegments[index] : null;
+            }
+        }
+
+        return null;
+    }
+
+    internal static bool IsDeveloperUpdateStatus(string status)
+        => status is "UPDATE" or "DIFF";
+
+    internal static string CombineDeveloperSourceStatus(string packageStatus, string? installedStatus)
+    {
+        if (packageStatus == "DIFF" || installedStatus == "DIFF")
+        {
+            return "DIFF";
+        }
+
+        if (IsDeveloperUpdateStatus(packageStatus) || IsDeveloperUpdateStatus(installedStatus ?? string.Empty))
+        {
+            return "UPDATE";
+        }
+
+        // Path-only drift must stay visible in the combined row without ever
+        // being promoted to an update.
+        if (packageStatus == "NORMALIZED")
+        {
+            return "NORMALIZED";
+        }
+
+        return installedStatus is null ? packageStatus : "OK";
+    }
+
+    internal sealed record ComponentPackageEvaluation(string Status, string Line);
+
+    internal sealed record ManifestComponent(
         string SourceRoot,
         string RepositoryKey,
         string ComponentKey,
