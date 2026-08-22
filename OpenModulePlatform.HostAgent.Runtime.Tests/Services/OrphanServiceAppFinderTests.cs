@@ -677,6 +677,61 @@ public sealed class OrphanServiceAppFinderTests
         Assert.Empty(findings);
     }
 
+    [Fact]
+    public void BuildOrphanServiceAppFindings_SkipsNestedLocalArtifactCacheRoot()
+    {
+        // Regression (2026-08-19, customer test environment): when LocalArtifactCacheRoot
+        // is nested under ServicesRoot (D:\Services\ArtifactCache) the sweep flagged the
+        // entire artifact cache as an orphan service-app directory, and the cleanup action
+        // targeted it. Only a locked file handle stopped the deletion mid-operation.
+        using var root = new TempServicesRoot();
+        var cacheRoot = Path.Join(root.Path, "ArtifactCache");
+        Directory.CreateDirectory(cacheRoot);
+        Directory.CreateDirectory(Path.Join(cacheRoot, "omp_someapp", "payload"));
+        Directory.CreateDirectory(Path.Join(root.Path, "OrphanApp"));
+
+        var settings = CreateSettings(root.Path);
+        settings.LocalArtifactCacheRoot = cacheRoot;
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        var finding = Assert.Single(findings);
+        Assert.Contains("OrphanApp", finding.TargetIdentifier, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(findings, f =>
+            f.TargetIdentifier.Contains("ArtifactCache", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(findings, f =>
+            f.ActionJson.Contains("ArtifactCache", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void BuildOrphanServiceAppFindings_SkipsDirectoryContainingLocalArtifactCacheRoot()
+    {
+        // A parent directory of the cache root must also be skipped: deleting it would
+        // destroy the cache just as surely as targeting the cache root directly.
+        using var root = new TempServicesRoot();
+        var cacheRoot = Path.Join(root.Path, "Shared", "ArtifactCache");
+        Directory.CreateDirectory(cacheRoot);
+
+        var settings = CreateSettings(root.Path);
+        settings.LocalArtifactCacheRoot = cacheRoot;
+
+        var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
+            Guid.NewGuid(),
+            "TEST",
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            _ => null,
+            CancellationToken.None);
+
+        Assert.Empty(findings);
+    }
+
     private static HostAgentSettings CreateSettings(string servicesRoot)
     {
         return new HostAgentSettings
