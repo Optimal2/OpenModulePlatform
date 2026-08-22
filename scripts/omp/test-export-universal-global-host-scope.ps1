@@ -7,7 +7,7 @@ Reproduces the operator-flagged 2026-07-24 incident: an object root (and a
 repository export) that contains host-specific host-configs/ and
 config-overlays/ objects must never leak them into a GLOBAL universal package
 (a package without a target host profile), because such a package is copied to
-Universal/installer/exports for manual customer (the customer) upload and must not be
+Universal/installer/exports for manual customer upload and must not be
 able to touch any specific host's configuration on import.
 
 Asserts for both global build paths:

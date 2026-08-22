@@ -261,7 +261,7 @@ A periodic AO job or local script diffs OMP's current Web.Shared against the reg
 3. **No OpenModulePlatform source changes needed for the ADR itself.** If Mechanism A1 is accepted, the private repos add a `sharedProjects` entry; OpenModulePlatform adds the comparator script/job. Neither change alters Web.Shared source, SQL, or component versions.
 4. **Hash computation must be stable.** If `expectedWebSharedHash` is used, compute it the same way as `scripts/omp/validate-component-versions.ps1:154-185` (deterministic build, identical settings). Otherwise use `repositoryVersion` from OMP's `omp-components.json:4`, which is already bumped on every significant platform change.
 5. **Preserve AI Orchestrator build serialization.** The existing `build:omp-web-shared` exclusive lock in `jobConcurrency.ts` remains unchanged; this ADR adds version awareness, not build orchestration.
-6. **Manual verification path for customer/customer environments.** If the comparator is not runnable in a customer environment, produce a manual checklist: after deploying a new OMP web-shared artifact, verify each consumer web app was rebuilt against that OMP `repositoryVersion` and its component version was bumped if the binary changed.
+6. **Manual verification path for customer environments.** If the comparator is not runnable in a customer environment, produce a manual checklist: after deploying a new OMP web-shared artifact, verify each consumer web app was rebuilt against that OMP `repositoryVersion` and its component version was bumped if the binary changed.
 
 ## Consequences
 
