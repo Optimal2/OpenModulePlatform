@@ -48,6 +48,15 @@ the current host has the selected active host role assignment.
 6. Package-type handlers install or update IIS applications, Windows services,
    worker hosts, and worker plugins.
 
+Disabling a desired row propagates: the materialization procedure turns off the
+matching concrete `omp.ModuleInstances`/`omp.AppInstances` rows when the
+installation profile, a desired module instance, or a desired app row is
+disabled. The match follows the same key chain the Portal uses to recognize
+template-managed rows, so hand-created runtime rows whose keys do not exist in
+the installation profile are never touched. Removing a desired row does not
+remove or disable the concrete rows it once produced; re-enabling a desired row
+re-enables the concrete rows on the next materialization run.
+
 ## Implemented Baseline
 
 HostAgent runs a reconciliation cycle that can:
