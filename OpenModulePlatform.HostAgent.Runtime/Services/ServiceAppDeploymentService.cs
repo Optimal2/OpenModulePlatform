@@ -116,6 +116,19 @@ public sealed class ServiceAppDeploymentService
             cancellationToken.ThrowIfCancellationRequested();
             await DeployAsync(settings, deployment, resolvedServiceNames, hostRuntimeFootprints, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, cancellationToken);
         }
+
+        // Instances that have been switched off are absent from the desired set above, so
+        // the loop never touches them again: without this pass their Windows services stay
+        // installed -- and keep running -- forever. Remove what the platform itself
+        // recorded deploying, under the same two-layer discipline as the maintenance
+        // cleanup: a decision-time check and a re-validated guard at the deletion point.
+        await RemoveDisabledServiceAppServicesAsync(
+            hostKey,
+            settings,
+            deployments,
+            resolvedServiceNames,
+            hostRuntimeFootprints,
+            cancellationToken);
     }
 
     private async Task DeployAsync(
@@ -545,6 +558,267 @@ public sealed class ServiceAppDeploymentService
                 cancellationToken);
         }
     }
+
+    /// <summary>
+    /// Removes the Windows services of service-app instances that have been switched off
+    /// (IsEnabled = 0 or DesiredState = 0). The desired-set query excludes them, so the
+    /// deploy loop above never sees them again: the service stayed installed -- and kept
+    /// running -- indefinitely, and a manual <c>sc delete</c> was re-created by
+    /// <see cref="EnsureWindowsService"/> for as long as the instance row was enabled.
+    /// Removal only targets instances outside the desired set, so it never fights the
+    /// deploy loop; re-enabling the instance redeploys and re-creates the service.
+    /// </summary>
+    private async Task RemoveDisabledServiceAppServicesAsync(
+        string hostKey,
+        HostAgentSettings settings,
+        IReadOnlyList<ServiceAppDeploymentDescriptor> desiredDeployments,
+        IReadOnlyDictionary<Guid, string> resolvedServiceNames,
+        IReadOnlyList<HostRuntimeFootprint> hostRuntimeFootprints,
+        CancellationToken cancellationToken)
+    {
+        var disabledServices = await _repository.GetDisabledServiceAppServicesAsync(
+            hostKey,
+            settings.MaxArtifactsPerCycle,
+            cancellationToken);
+        if (disabledServices.Count == 0)
+        {
+            return;
+        }
+
+        // Names an enabled, desired deployment claims this cycle. A claimed service is
+        // managed by the deploy loop above and must never be removed here -- this is also
+        // the guard against an instance being re-enabled between the two queries.
+        var claimedServiceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var deployment in desiredDeployments)
+        {
+            if (resolvedServiceNames.TryGetValue(deployment.AppInstanceId, out var resolvedName)
+                && !string.IsNullOrWhiteSpace(resolvedName))
+            {
+                claimedServiceNames.Add(resolvedName);
+            }
+
+            var recordedName = ServiceAppDeploymentNaming.Clean(deployment.DeployedRuntimeName);
+            if (!string.IsNullOrWhiteSpace(recordedName))
+            {
+                claimedServiceNames.Add(recordedName);
+            }
+        }
+
+        foreach (var candidate in disabledServices)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                RemoveDisabledServiceAppService(settings, candidate, claimedServiceNames, hostRuntimeFootprints);
+            }
+            catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to remove the Windows service of a disabled service app instance; HostAgent will retry on the next deployment cycle. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, ServiceName={ServiceName}",
+                    candidate.AppInstanceId,
+                    candidate.AppInstanceKey,
+                    candidate.RuntimeName);
+            }
+        }
+    }
+
+    private void RemoveDisabledServiceAppService(
+        HostAgentSettings settings,
+        DisabledServiceAppServiceDescriptor candidate,
+        IReadOnlySet<string> claimedServiceNames,
+        IReadOnlyList<HostRuntimeFootprint> hostRuntimeFootprints)
+    {
+        var serviceName = candidate.RuntimeName.Trim();
+
+        // Decision layer: evaluate against this cycle's data and the live service state.
+        if (_serviceControl.GetServiceState(serviceName) is not { } state)
+        {
+            _logger.LogDebug(
+                "Disabled service app instance has no installed Windows service; nothing to remove. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, ServiceName={ServiceName}",
+                candidate.AppInstanceId,
+                candidate.AppInstanceKey,
+                serviceName);
+            return;
+        }
+
+        var refusal = ValidateDisabledServiceAppServiceRemoval(
+            settings,
+            candidate,
+            claimedServiceNames,
+            hostRuntimeFootprints,
+            state,
+            _serviceControl.GetServiceExecutablePath(serviceName),
+            out var targetPath);
+        if (refusal is not null)
+        {
+            LogDisabledServiceRemovalRefusal(candidate, serviceName, refusal);
+            return;
+        }
+
+        // Execution layer: re-read the live service immediately before deleting and run
+        // the same guard again, so a service that was re-created or changed hands between
+        // the decision and the deletion is refused here instead of removed.
+        if (_serviceControl.GetServiceState(serviceName) is not { } liveState)
+        {
+            return;
+        }
+
+        var executionRefusal = ValidateDisabledServiceAppServiceRemoval(
+            settings,
+            candidate,
+            claimedServiceNames,
+            hostRuntimeFootprints,
+            liveState,
+            _serviceControl.GetServiceExecutablePath(serviceName),
+            out _);
+        if (executionRefusal is not null)
+        {
+            LogDisabledServiceRemovalRefusal(candidate, serviceName, executionRefusal);
+            return;
+        }
+
+        // DeleteService stops a running service first, so a switched-off instance is
+        // actually turned off -- previously the service kept running, unmanaged.
+        _serviceControl.DeleteService(serviceName);
+
+        _logger.LogInformation(
+            "Removed the Windows service of a disabled service app instance. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, ServiceName={ServiceName}, TargetPath={TargetPath}, Reason={Reason}",
+            candidate.AppInstanceId,
+            candidate.AppInstanceKey,
+            serviceName,
+            targetPath,
+            DescribeDisabledReason(candidate));
+    }
+
+    /// <summary>
+    /// Two-layer guard for removing the Windows service of a switched-off service-app
+    /// instance: runs at the removal decision AND again at the deletion point with
+    /// freshly read service state. Returns <see langword="null"/> when removal is
+    /// allowed, otherwise a refusal reason. Every check fails closed.
+    /// </summary>
+    /// <remarks>
+    /// Attribution is the platform's own deployment record
+    /// (omp.HostAppDeploymentStates RuntimeName/TargetPath) -- the same record the
+    /// rename path already trusts when it deletes an old service -- hardened by
+    /// re-deriving the target path from the instance's current configuration and by
+    /// requiring the installed service's executable to live inside that directory. A
+    /// hand-installed service that happens to share the name fails the executable
+    /// check and is refused.
+    /// </remarks>
+    internal static string? ValidateDisabledServiceAppServiceRemoval(
+        HostAgentSettings settings,
+        DisabledServiceAppServiceDescriptor candidate,
+        IReadOnlySet<string> claimedServiceNames,
+        IReadOnlyList<HostRuntimeFootprint> hostRuntimeFootprints,
+        string? serviceState,
+        string? serviceExecutablePath,
+        out string? resolvedTargetPath)
+    {
+        resolvedTargetPath = null;
+
+        var serviceName = ServiceAppDeploymentNaming.Clean(candidate.RuntimeName);
+        if (serviceName is null)
+        {
+            return "The instance has no recorded runtime service name.";
+        }
+
+        if (serviceState is null)
+        {
+            return $"The Windows service '{serviceName}' is not installed.";
+        }
+
+        if (string.Equals(serviceName, settings.ServiceName, StringComparison.OrdinalIgnoreCase)
+            || HostAgentJobProcessor.IsServiceNameWithKnownPrefix(serviceName, HostAgentJobProcessor.KnownHostAgentServiceNamePrefixes)
+            || HostAgentJobProcessor.IsServiceNameWithKnownPrefix(serviceName, HostAgentJobProcessor.KnownWorkerManagerServiceNamePrefixes))
+        {
+            return $"Refusing to remove '{serviceName}': it is a HostAgent or WorkerManager service.";
+        }
+
+        if (claimedServiceNames.Contains(serviceName))
+        {
+            return $"Refusing to remove '{serviceName}': it is still claimed by an enabled desired AppInstance on this host.";
+        }
+
+        var otherClaimant = hostRuntimeFootprints.FirstOrDefault(footprint =>
+            footprint.AppInstanceId != candidate.AppInstanceId
+            && string.Equals(
+                ServiceAppDeploymentNaming.Clean(footprint.RuntimeName),
+                serviceName,
+                StringComparison.OrdinalIgnoreCase));
+        if (otherClaimant is not null)
+        {
+            return $"Refusing to remove '{serviceName}': another AppInstance ({otherClaimant.AppInstanceId:D}) also records this runtime name.";
+        }
+
+        var recordedTargetPath = ServiceAppDeploymentNaming.Clean(candidate.TargetPath);
+        if (recordedTargetPath is null)
+        {
+            return "The instance has no recorded deployment target path, so service ownership cannot be proven.";
+        }
+
+        // Re-derive the expected target path from the instance's CURRENT configuration
+        // rather than trusting the recorded value alone; a stale or tampered
+        // runtime-state row pointing at an unrelated directory is refused here.
+        string expectedTargetPath;
+        try
+        {
+            expectedTargetPath = ServiceAppDeploymentNaming.ResolveTargetPath(
+                settings,
+                new ServiceAppDeploymentDescriptor
+                {
+                    AppInstanceKey = candidate.AppInstanceKey,
+                    InstallPath = candidate.InstallPath,
+                    InstallationName = candidate.InstallationName
+                },
+                serviceName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return $"The instance's configured target path cannot be resolved: {ex.Message}";
+        }
+
+        if (!string.Equals(
+                NormalizeDirectoryPath(expectedTargetPath),
+                NormalizeDirectoryPath(recordedTargetPath),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return $"The recorded target path '{recordedTargetPath}' no longer matches the instance's configured install location '{expectedTargetPath}'.";
+        }
+
+        if (string.IsNullOrWhiteSpace(serviceExecutablePath))
+        {
+            return $"The executable identity of Windows service '{serviceName}' could not be confirmed.";
+        }
+
+        if (!DeploymentPath.IsUnderRoot(expectedTargetPath, serviceExecutablePath))
+        {
+            return $"The executable '{serviceExecutablePath}' of Windows service '{serviceName}' is not inside this instance's deployment directory '{expectedTargetPath}', so ownership is unproven.";
+        }
+
+        resolvedTargetPath = expectedTargetPath;
+        return null;
+    }
+
+    private void LogDisabledServiceRemovalRefusal(
+        DisabledServiceAppServiceDescriptor candidate,
+        string serviceName,
+        string refusal)
+        => _logger.LogWarning(
+            "Refusing to remove the Windows service of a disabled service app instance. AppInstanceId={AppInstanceId}, AppInstanceKey={AppInstanceKey}, ServiceName={ServiceName}, Reason={Reason}",
+            candidate.AppInstanceId,
+            candidate.AppInstanceKey,
+            serviceName,
+            refusal);
+
+    private static string DescribeDisabledReason(DisabledServiceAppServiceDescriptor candidate)
+        => !candidate.IsEnabled
+            ? (candidate.DesiredState == 0 ? "IsEnabled=0, DesiredState=0" : "IsEnabled=0")
+            : "DesiredState=0";
+
+    private static string NormalizeDirectoryPath(string path)
+        => Path.GetFullPath(path)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private async Task<AppDeploymentResult?> EnsureServiceRunningIfDesiredAsync(
         HostAgentSettings settings,

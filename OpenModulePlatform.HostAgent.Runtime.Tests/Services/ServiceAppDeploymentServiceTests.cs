@@ -602,6 +602,331 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         return (deployment, newTargetPath, oldTargetPath);
     }
 
+    [Fact]
+    public async Task DisabledInstance_StoppedService_IsRemoved()
+    {
+        var (service, _, control, candidate) = CreateDisabledScenario();
+        control.SetState(candidate.RuntimeName, "STOPPED");
+        control.SetExecutablePath(candidate.RuntimeName, Path.Join(candidate.TargetPath, $"{candidate.RuntimeName}.exe"));
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Contains(candidate.RuntimeName, control.DeletedServices);
+        Assert.Null(control.GetServiceState(candidate.RuntimeName));
+    }
+
+    [Fact]
+    public async Task DisabledInstance_RunningService_IsStoppedAndRemoved()
+    {
+        // A switched-off instance kept its service RUNNING forever: the deploy loop
+        // excludes disabled instances, so nothing ever stopped it. DeleteService stops
+        // the service first -- the off-switch now actually turns the app off.
+        var (service, _, control, candidate) = CreateDisabledScenario();
+        control.SetState(candidate.RuntimeName, "RUNNING");
+        control.SetExecutablePath(candidate.RuntimeName, Path.Join(candidate.TargetPath, $"{candidate.RuntimeName}.exe"));
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Contains(candidate.RuntimeName, control.DeletedServices);
+        Assert.Null(control.GetServiceState(candidate.RuntimeName));
+    }
+
+    [Fact]
+    public async Task DisabledInstance_ServiceAlreadyMissing_IsLeftAlone()
+    {
+        var (service, _, control, candidate) = CreateDisabledScenario();
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Empty(control.DeletedServices);
+    }
+
+    [Fact]
+    public async Task DisabledInstance_ExecutableOutsideRecordedTargetPath_IsKept()
+    {
+        // A service whose binary does not live inside this instance's recorded
+        // deployment directory is not provably ours -- refuse the removal.
+        var (service, _, control, candidate) = CreateDisabledScenario();
+        control.SetState(candidate.RuntimeName, "STOPPED");
+        control.SetExecutablePath(candidate.RuntimeName, Path.Join(_tempRoot, "somewhere-else", $"{candidate.RuntimeName}.exe"));
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Empty(control.DeletedServices);
+        Assert.NotNull(control.GetServiceState(candidate.RuntimeName));
+    }
+
+    [Fact]
+    public async Task DisabledInstance_UnconfirmableExecutableIdentity_IsKept()
+    {
+        var (service, _, control, candidate) = CreateDisabledScenario();
+        control.SetState(candidate.RuntimeName, "STOPPED");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Empty(control.DeletedServices);
+        Assert.NotNull(control.GetServiceState(candidate.RuntimeName));
+    }
+
+    [Fact]
+    public async Task DisabledInstance_DeleteFailure_DoesNotAbortCycle()
+    {
+        var (service, _, control, candidate) = CreateDisabledScenario();
+        control.SetState(candidate.RuntimeName, "STOPPED");
+        control.SetExecutablePath(candidate.RuntimeName, Path.Join(candidate.TargetPath, $"{candidate.RuntimeName}.exe"));
+        control.DeleteServiceSimulator = _ => new InvalidOperationException("simulated sc.exe delete failure");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.NotNull(control.GetServiceState(candidate.RuntimeName));
+    }
+
+    [Fact]
+    public void ValidateRemoval_AllowsRecordedDeploymentWithMatchingExecutable()
+    {
+        using var root = new TempRoot();
+        var candidate = CreateDisabledCandidate(root.Path, out var targetPath);
+
+        var refusal = ServiceAppDeploymentService.ValidateDisabledServiceAppServiceRemoval(
+            CreateRemovalSettings(root.Path),
+            candidate,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            [new HostRuntimeFootprint(candidate.AppInstanceId, candidate.RuntimeName, candidate.TargetPath)],
+            "STOPPED",
+            Path.Join(targetPath, $"{candidate.RuntimeName}.exe"),
+            out var resolvedTargetPath);
+
+        Assert.Null(refusal);
+        Assert.NotNull(resolvedTargetPath);
+    }
+
+    [Fact]
+    public void ValidateRemoval_RefusesNameClaimedByEnabledDeployment()
+    {
+        using var root = new TempRoot();
+        var candidate = CreateDisabledCandidate(root.Path, out var targetPath);
+
+        var refusal = ServiceAppDeploymentService.ValidateDisabledServiceAppServiceRemoval(
+            CreateRemovalSettings(root.Path),
+            candidate,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { candidate.RuntimeName },
+            [new HostRuntimeFootprint(candidate.AppInstanceId, candidate.RuntimeName, candidate.TargetPath)],
+            "STOPPED",
+            Path.Join(targetPath, $"{candidate.RuntimeName}.exe"),
+            out _);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("claimed by an enabled desired AppInstance", refusal, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRemoval_RefusesNameRecordedByAnotherInstance()
+    {
+        using var root = new TempRoot();
+        var candidate = CreateDisabledCandidate(root.Path, out var targetPath);
+        var otherInstanceId = Guid.NewGuid();
+
+        var refusal = ServiceAppDeploymentService.ValidateDisabledServiceAppServiceRemoval(
+            CreateRemovalSettings(root.Path),
+            candidate,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            [new HostRuntimeFootprint(otherInstanceId, candidate.RuntimeName, candidate.TargetPath)],
+            "STOPPED",
+            Path.Join(targetPath, $"{candidate.RuntimeName}.exe"),
+            out _);
+
+        Assert.NotNull(refusal);
+        Assert.Contains(otherInstanceId.ToString("D"), refusal, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRemoval_RefusesRecordedTargetPathMismatch()
+    {
+        // The recorded runtime-state row no longer matches the instance's current
+        // configuration -- stale or tampered rows fail closed.
+        using var root = new TempRoot();
+        var candidate = CreateDisabledCandidate(root.Path, out var targetPath);
+        var mismatched = new DisabledServiceAppServiceDescriptor
+        {
+            AppInstanceId = candidate.AppInstanceId,
+            AppInstanceKey = candidate.AppInstanceKey,
+            IsEnabled = candidate.IsEnabled,
+            DesiredState = candidate.DesiredState,
+            InstallPath = candidate.InstallPath,
+            InstallationName = candidate.InstallationName,
+            RuntimeName = candidate.RuntimeName,
+            TargetPath = Path.Join(root.Path, "tampered-location")
+        };
+
+        var refusal = ServiceAppDeploymentService.ValidateDisabledServiceAppServiceRemoval(
+            CreateRemovalSettings(root.Path),
+            mismatched,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            Array.Empty<HostRuntimeFootprint>(),
+            "STOPPED",
+            Path.Join(targetPath, $"{candidate.RuntimeName}.exe"),
+            out _);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("no longer matches", refusal, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("OMP.HostAgent")]
+    [InlineData("OMP.HostAgent.v2")]
+    [InlineData("OMP.WorkerManager")]
+    [InlineData("EMP.WorkerManager.v2")]
+    public void ValidateRemoval_RefusesHostAgentAndWorkerManagerNames(string serviceName)
+    {
+        using var root = new TempRoot();
+        var targetPath = Path.Join(root.Path, serviceName);
+        var candidate = new DisabledServiceAppServiceDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = $"test-app-{Guid.NewGuid():N}",
+            IsEnabled = false,
+            DesiredState = 0,
+            InstallPath = targetPath,
+            RuntimeName = serviceName,
+            TargetPath = targetPath
+        };
+
+        var refusal = ServiceAppDeploymentService.ValidateDisabledServiceAppServiceRemoval(
+            CreateRemovalSettings(root.Path),
+            candidate,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            Array.Empty<HostRuntimeFootprint>(),
+            "STOPPED",
+            Path.Join(targetPath, $"{serviceName}.exe"),
+            out _);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("HostAgent or WorkerManager", refusal, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateRemoval_RefusesWhenServiceNotInstalled()
+    {
+        using var root = new TempRoot();
+        var candidate = CreateDisabledCandidate(root.Path, out _);
+
+        var refusal = ServiceAppDeploymentService.ValidateDisabledServiceAppServiceRemoval(
+            CreateRemovalSettings(root.Path),
+            candidate,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            Array.Empty<HostRuntimeFootprint>(),
+            null,
+            null,
+            out _);
+
+        Assert.NotNull(refusal);
+    }
+
+    [Fact]
+    public void ValidateRemoval_AllowsRootedInstallPathOutsideServicesRoot()
+    {
+        // InstallPath may be rooted anywhere; the ownership proof is the executable
+        // inside the recorded directory, not the services root.
+        using var root = new TempRoot();
+        using var elsewhere = new TempRoot();
+        var serviceName = "RootedApp";
+        var targetPath = Path.Join(elsewhere.Path, serviceName);
+        var candidate = new DisabledServiceAppServiceDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = $"test-app-{Guid.NewGuid():N}",
+            IsEnabled = false,
+            DesiredState = 0,
+            InstallPath = targetPath,
+            RuntimeName = serviceName,
+            TargetPath = targetPath
+        };
+
+        var refusal = ServiceAppDeploymentService.ValidateDisabledServiceAppServiceRemoval(
+            CreateRemovalSettings(root.Path),
+            candidate,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            [new HostRuntimeFootprint(candidate.AppInstanceId, serviceName, targetPath)],
+            "RUNNING",
+            Path.Join(targetPath, $"{serviceName}.exe"),
+            out _);
+
+        Assert.Null(refusal);
+    }
+
+    private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, DisabledServiceAppServiceDescriptor Candidate) CreateDisabledScenario()
+    {
+        var settings = new HostAgentSettings
+        {
+            DeployServiceApps = true,
+            CentralArtifactRoot = _tempRoot,
+            LocalArtifactCacheRoot = _tempRoot,
+            ServicesRoot = _tempRoot,
+            ServiceName = "OMP.HostAgent",
+            StartServiceAfterServiceAppDeployment = true,
+            StopServiceForServiceAppDeployment = true,
+            ServiceAppStopTimeoutSeconds = 1,
+            ServiceAppStartTimeoutSeconds = 1
+        };
+        var optionsMonitor = new FakeOptionsMonitor<HostAgentSettings> { CurrentValue = settings };
+        var repository = new FakeOmpHostArtifactRepository();
+        var control = new FakeWindowsServiceControl();
+        var credentialStore = new HostAgentCredentialStoreService(optionsMonitor);
+        var service = new ServiceAppDeploymentService(
+            optionsMonitor,
+            repository,
+            credentialStore,
+            NullLogger<ServiceAppDeploymentService>.Instance,
+            control);
+
+        var candidate = CreateDisabledCandidate(_tempRoot, out _);
+        repository.DisabledServiceAppServices.Add(candidate);
+        repository.HostRuntimeFootprints.Add(
+            new HostRuntimeFootprint(candidate.AppInstanceId, candidate.RuntimeName, candidate.TargetPath));
+
+        return (service, repository, control, candidate);
+    }
+
+    private static DisabledServiceAppServiceDescriptor CreateDisabledCandidate(string root, out string targetPath)
+    {
+        var serviceName = $"LegacyApp{Guid.NewGuid():N}"[..20];
+        targetPath = Path.Join(root, serviceName);
+        return new DisabledServiceAppServiceDescriptor
+        {
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = $"test-app-{Guid.NewGuid():N}",
+            IsEnabled = false,
+            DesiredState = 0,
+            InstallPath = targetPath,
+            RuntimeName = serviceName,
+            TargetPath = targetPath
+        };
+    }
+
+    private static HostAgentSettings CreateRemovalSettings(string servicesRoot)
+        => new()
+        {
+            ServicesRoot = servicesRoot,
+            ServiceName = "OMP.HostAgent"
+        };
+
+    private sealed class TempRoot : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Join(
+            System.IO.Path.GetTempPath(),
+            $"omp-disabled-removal-test-{Guid.NewGuid():N}");
+
+        public TempRoot() => Directory.CreateDirectory(Path);
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
+
     private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateScenario(
         bool startAfterDeployment = true,
         string? contentSha256 = null,
@@ -707,6 +1032,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     private sealed class FakeWindowsServiceControl : IWindowsServiceControl
     {
         private readonly Dictionary<string, string> _states = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _executablePaths = new(StringComparer.OrdinalIgnoreCase);
 
         public List<string> StartAttempts { get; } = [];
 
@@ -719,8 +1045,14 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         public void SetState(string serviceName, string state)
             => _states[serviceName] = state;
 
+        public void SetExecutablePath(string serviceName, string executablePath)
+            => _executablePaths[serviceName] = executablePath;
+
         public string? GetServiceState(string serviceName)
             => _states.TryGetValue(serviceName, out var state) ? state : null;
+
+        public string? GetServiceExecutablePath(string serviceName)
+            => _executablePaths.TryGetValue(serviceName, out var executablePath) ? executablePath : null;
 
         public bool IsServiceRunning(string serviceName)
             => string.Equals(GetServiceState(serviceName), "RUNNING", StringComparison.OrdinalIgnoreCase);
@@ -775,6 +1107,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
 
             if (_states.Remove(serviceName))
             {
+                _executablePaths.Remove(serviceName);
                 DeletedServices.Add(serviceName);
             }
         }

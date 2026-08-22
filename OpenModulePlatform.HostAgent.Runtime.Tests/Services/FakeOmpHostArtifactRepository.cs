@@ -151,6 +151,8 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
 
     public List<ServiceAppDeploymentDescriptor> DesiredServiceAppDeployments { get; set; } = [];
 
+    public List<DisabledServiceAppServiceDescriptor> DisabledServiceAppServices { get; set; } = [];
+
     public List<ServiceAppDeploymentResult> PublishedServiceAppResults { get; } = [];
 
     public Task<IReadOnlyList<WebAppDeploymentDescriptor>> GetDesiredWebAppDeploymentsAsync(
@@ -164,6 +166,12 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         int maxDeployments,
         CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ServiceAppDeploymentDescriptor>>(DesiredServiceAppDeployments);
+
+    public Task<IReadOnlyList<DisabledServiceAppServiceDescriptor>> GetDisabledServiceAppServicesAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<DisabledServiceAppServiceDescriptor>>(DisabledServiceAppServices);
 
     public List<HostRuntimeFootprint> HostRuntimeFootprints { get; set; } = [];
 

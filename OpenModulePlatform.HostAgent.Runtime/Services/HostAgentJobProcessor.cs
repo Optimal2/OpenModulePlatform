@@ -17,13 +17,15 @@ public sealed class HostAgentJobProcessor
     private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
     // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
     // older installs without exposing any customer-specific configuration.
-    private static readonly string[] KnownHostAgentServiceNamePrefixes =
+    // Internal so ServiceAppDeploymentService applies the same never-touch guards
+    // when removing services of disabled service-app instances.
+    internal static readonly string[] KnownHostAgentServiceNamePrefixes =
     [
         "EMP.HostAgent",
         "OMP.HostAgent",
         "OpenModulePlatform.HostAgent"
     ];
-    private static readonly string[] KnownWorkerManagerServiceNamePrefixes =
+    internal static readonly string[] KnownWorkerManagerServiceNamePrefixes =
     [
         "EMP.WorkerManager",
         "OMP.WorkerManager",
@@ -2867,7 +2869,7 @@ public sealed class HostAgentJobProcessor
         return prefixes;
     }
 
-    private static bool IsServiceNameWithKnownPrefix(string serviceName, IEnumerable<string> serviceNamePrefixes)
+    internal static bool IsServiceNameWithKnownPrefix(string serviceName, IEnumerable<string> serviceNamePrefixes)
         => serviceNamePrefixes.Any(prefix =>
             string.Equals(serviceName, prefix, StringComparison.OrdinalIgnoreCase)
             || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
