@@ -753,14 +753,70 @@ BEGIN
 END
 GO
 
+-- Migration: collapse duplicate enabled config overlay documents so the
+-- filtered unique index below can be created. Databases that imported config
+-- overlays before the save paths learned to disable the previous enabled
+-- sibling first can hold several enabled rows for the same (OverlayKey,
+-- HostKey), and CREATE UNIQUE INDEX fails while they exist. The statement is
+-- idempotent: on a database that is already clean every group has exactly one
+-- enabled row ranked 1, so the UPDATE touches nothing. That matters because
+-- this script re-runs on every heal.
+--
+-- Keep-one rule: keep the row the application would pick today, so the
+-- migration does not change which overlay actually applies. When several
+-- enabled overlays supply the same configuration file, the runtime winner
+-- selection (ConfigurationFileCandidateWins in OmpHostArtifactRepository) is:
+-- highest OverlayVersion by semantic comparison, then latest UpdatedUtc, then
+-- highest row id. The same order is applied here per document. OverlayVersion
+-- is compared semantically by normalizing to four numeric dot segments so
+-- PARSENAME can split it (the same pattern the artifact retention query
+-- uses); non-numeric versions sort below every parseable version.
+-- ArtifactVersion is deliberately not used: it records which artifact version
+-- the overlay targets, not which overlay document is newer. CreatedUtc is not
+-- used either: a re-import can create an older version later than the newer
+-- one, so creation time does not identify the current overlay.
+;WITH ranked_enabled AS
+(
+    SELECT d.ConfigOverlayDocumentId,
+           ROW_NUMBER() OVER
+           (
+               PARTITION BY d.OverlayKey, d.HostKey
+               ORDER BY TRY_CAST(PARSENAME(nv.NormalizedVersion, 4) AS bigint) DESC,
+                        TRY_CAST(PARSENAME(nv.NormalizedVersion, 3) AS bigint) DESC,
+                        TRY_CAST(PARSENAME(nv.NormalizedVersion, 2) AS bigint) DESC,
+                        TRY_CAST(PARSENAME(nv.NormalizedVersion, 1) AS bigint) DESC,
+                        d.UpdatedUtc DESC,
+                        d.ConfigOverlayDocumentId DESC
+           ) AS rn
+    FROM omp.ConfigOverlayDocuments d
+    CROSS APPLY
+    (
+        SELECT CASE
+                   WHEN d.OverlayVersion LIKE N'%[^0-9.]%' THEN NULL
+                   WHEN LEN(d.OverlayVersion) - LEN(REPLACE(d.OverlayVersion, N'.', N'')) = 0 THEN d.OverlayVersion + N'.0.0.0'
+                   WHEN LEN(d.OverlayVersion) - LEN(REPLACE(d.OverlayVersion, N'.', N'')) = 1 THEN d.OverlayVersion + N'.0.0'
+                   WHEN LEN(d.OverlayVersion) - LEN(REPLACE(d.OverlayVersion, N'.', N'')) = 2 THEN d.OverlayVersion + N'.0'
+                   WHEN LEN(d.OverlayVersion) - LEN(REPLACE(d.OverlayVersion, N'.', N'')) = 3 THEN d.OverlayVersion
+                   ELSE NULL
+               END AS NormalizedVersion
+    ) nv
+    WHERE d.IsEnabled = 1
+)
+UPDATE d
+SET IsEnabled = 0,
+    UpdatedUtc = SYSUTCDATETIME()
+FROM omp.ConfigOverlayDocuments d
+INNER JOIN ranked_enabled ON ranked_enabled.ConfigOverlayDocumentId = d.ConfigOverlayDocumentId
+WHERE ranked_enabled.rn > 1;
+GO
+
 -- At most one enabled config overlay document per overlay key and host, no
 -- matter which code path (or manual SQL) wrote the rows. Application save
 -- paths already enforce keep-history semantics; this filtered unique index is
 -- the database-level backstop for that invariant. The block sits outside the
 -- create-guard above so existing databases also receive the index when the
--- module definition is re-applied. On databases that already contain
--- duplicate enabled rows this fails loudly at apply time; that is the
--- intended pre-deploy cleanup signal.
+-- module definition is re-applied; the migration above removes any duplicate
+-- enabled rows first so the index creation also succeeds on those databases.
 IF NOT EXISTS
 (
     SELECT 1
