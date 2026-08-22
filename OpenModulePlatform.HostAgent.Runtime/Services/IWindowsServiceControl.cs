@@ -9,6 +9,14 @@ public interface IWindowsServiceControl
 {
     string? GetServiceState(string serviceName);
 
+    /// <summary>
+    /// Returns the executable path the service is registered with (from
+    /// <c>sc.exe qc</c> BINARY_PATH_NAME, stripped of quotes and arguments), or
+    /// <see langword="null"/> when the service is missing or the path cannot be
+    /// determined.
+    /// </summary>
+    string? GetServiceExecutablePath(string serviceName);
+
     bool IsServiceRunning(string serviceName);
 
     void StartServiceIfStopped(string serviceName, int timeoutSeconds);

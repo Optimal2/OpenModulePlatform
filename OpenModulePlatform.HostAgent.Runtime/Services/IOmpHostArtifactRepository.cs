@@ -84,6 +84,18 @@ public interface IOmpHostArtifactRepository
         CancellationToken ct);
 
     /// <summary>
+    /// Service-app instances targeted at this host that are switched off
+    /// (IsEnabled = 0 or DesiredState = 0) but still have a recorded runtime deployment
+    /// (runtime name and target path) on this host. The deploy loop no longer manages
+    /// these instances, so without this query their Windows services stay installed --
+    /// and keep running -- forever.
+    /// </summary>
+    Task<IReadOnlyList<DisabledServiceAppServiceDescriptor>> GetDisabledServiceAppServicesAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct);
+
+    /// <summary>
     /// Every app instance's deployed runtime name and target path on this host, web and
     /// service alike, with no cycle cap applied.
     /// </summary>

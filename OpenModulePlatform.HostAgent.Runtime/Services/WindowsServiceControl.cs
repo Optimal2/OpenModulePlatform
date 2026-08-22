@@ -59,6 +59,52 @@ public sealed class WindowsServiceControl : IWindowsServiceControl
     public bool IsServiceRunning(string serviceName)
         => string.Equals(GetServiceState(serviceName), "RUNNING", StringComparison.OrdinalIgnoreCase);
 
+    public string? GetServiceExecutablePath(string serviceName)
+    {
+        var result = RunSc("qc", serviceName);
+        if (result.ExitCode != 0)
+        {
+            return null;
+        }
+
+        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var binaryPathIndex = line.IndexOf("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase);
+            if (binaryPathIndex < 0)
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf(':', binaryPathIndex);
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            return TryExtractExecutablePath(line[(separatorIndex + 1)..].Trim());
+        }
+
+        return null;
+    }
+
+    private static string? TryExtractExecutablePath(string binaryPath)
+    {
+        if (string.IsNullOrWhiteSpace(binaryPath))
+        {
+            return null;
+        }
+
+        var trimmed = binaryPath.Trim();
+        if (trimmed.StartsWith('"'))
+        {
+            var closingQuote = trimmed.IndexOf('"', 1);
+            return closingQuote > 1 ? trimmed[1..closingQuote] : null;
+        }
+
+        var executableEnd = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        return executableEnd < 0 ? null : trimmed[..(executableEnd + ".exe".Length)].Trim();
+    }
+
     public void StartServiceIfStopped(string serviceName, int timeoutSeconds)
     {
         var state = GetServiceState(serviceName);

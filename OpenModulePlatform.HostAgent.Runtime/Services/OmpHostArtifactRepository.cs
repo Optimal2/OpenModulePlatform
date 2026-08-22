@@ -3922,6 +3922,105 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
         CancellationToken ct)
         => GetDeploymentRuntimeRecoveryCandidatesAsync(hostKey, "service-app", ct);
 
+    public async Task<IReadOnlyList<DisabledServiceAppServiceDescriptor>> GetDisabledServiceAppServicesAsync(
+        string hostKey,
+        int maxDeployments,
+        CancellationToken ct)
+    {
+        // The mirror image of the desired-set query above: same host targeting, but only
+        // instances that are switched off (IsEnabled = 0 or DesiredState = 0) and still
+        // carry a recorded runtime deployment on this host. Artifact enabled/provisioning
+        // state is deliberately NOT required -- a disabled instance's artifact may be
+        // retired, and the removal decision only needs the platform's own deployment
+        // record, never the artifact payload.
+        const string sql = @"
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+IF @hostId IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS uniqueidentifier) AS AppInstanceId,
+        CAST(NULL AS nvarchar(100)) AS AppInstanceKey,
+        CAST(NULL AS bit) AS IsEnabled,
+        CAST(NULL AS tinyint) AS DesiredState,
+        CAST(NULL AS nvarchar(500)) AS InstallPath,
+        CAST(NULL AS nvarchar(150)) AS InstallationName,
+        CAST(NULL AS nvarchar(200)) AS RuntimeName,
+        CAST(NULL AS nvarchar(500)) AS TargetPath;
+    RETURN;
+END;
+
+SELECT TOP (@maxDeployments)
+    ai.AppInstanceId,
+    ai.AppInstanceKey,
+    ai.IsEnabled,
+    ai.DesiredState,
+    ai.InstallPath,
+    ai.InstallationName,
+    hds.RuntimeName,
+    hds.TargetPath
+FROM omp.AppInstances ai
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+INNER JOIN omp.HostAppDeploymentStates hds
+    ON hds.HostId = @hostId
+   AND hds.AppInstanceId = ai.AppInstanceId
+WHERE
+  (
+      ai.HostId = @hostId
+      OR
+      (
+          ai.HostId IS NULL
+          AND ai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS
+          (
+              SELECT 1
+              FROM omp.HostDeploymentAssignments hda
+              WHERE hda.HostId = @hostId
+                AND hda.HostTemplateId = ai.TargetHostTemplateId
+                AND hda.IsActive = 1
+          )
+      )
+  )
+  AND (ai.IsEnabled = 0 OR ai.DesiredState = 0)
+  AND ar.PackageType = N'service-app'
+  AND hds.RuntimeName IS NOT NULL
+  AND LTRIM(RTRIM(hds.RuntimeName)) <> N''
+  AND hds.TargetPath IS NOT NULL
+  AND LTRIM(RTRIM(hds.TargetPath)) <> N''
+ORDER BY ai.SortOrder, ai.AppInstanceKey;";
+
+        var result = new List<DisabledServiceAppServiceDescriptor>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@maxDeployments", maxDeployments);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            result.Add(new DisabledServiceAppServiceDescriptor
+            {
+                AppInstanceId = rdr.GetGuid(0),
+                AppInstanceKey = rdr.GetString(1),
+                IsEnabled = rdr.GetBoolean(2),
+                DesiredState = rdr.GetByte(3),
+                InstallPath = rdr.IsDBNull(4) ? null : rdr.GetString(4),
+                InstallationName = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+                RuntimeName = rdr.GetString(6),
+                TargetPath = rdr.GetString(7)
+            });
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<HostRuntimeFootprint>> GetHostRuntimeFootprintsAsync(
         string hostKey,
         CancellationToken ct)
