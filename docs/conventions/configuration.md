@@ -272,10 +272,11 @@ Audited repositories (all under the local workspace root):
   `SqlConnectionStringBuilder.InitialCatalog`
   (`iKrock2.Application/Services/SqlConnectionFactory.cs:23-41`); installer
   builds the production string from psd1 (`install-ikrock2.ps1:214`).
-- **Secrets:** committed files clean; **risk on disk:** gitignored
-  `scripts/deployment/<deployment-profile>.psd1:32` contains a plaintext
-  production `RunAsPassword` and `:74` sets `IncludeConfigInPackage = $true`,
-  which would bundle the psd1 (including the password) into a release zip.
+- **Secrets:** committed files clean; **risk on disk:** a gitignored local
+  deployment profile can hold a plaintext production service-account password,
+  and the same profile can set `IncludeConfigInPackage = $true`, which would
+  bundle that profile — password included — into a release zip. Keep the flag
+  false for any profile carrying credentials.
 - **Options classes:** `OmpDatabaseOptions`, `SqlServerOptions`,
   `WorkOrderOptions`, `BackendOptions`, `BackendClientOptions` — consistent
   `XxxOptions` naming, but section names do not mirror class names
@@ -353,8 +354,8 @@ Audited repositories (all under the local workspace root):
   meta tags > `import.meta.env.VITE_LOG_*`, `src/logging/systemLogger.js:115-157`);
   dual defaults layers (config file vs in-code getter defaults that must be
   aligned by hand, `public/odv.config.js:703-706`); executable-JS trust
-  boundary mitigated by SRI; customer-specific site configs committed under
-  `customer/`.
+  boundary mitigated by SRI; customer-specific site configs kept in a
+  gitignored per-customer folder.
 
 ### AgentDocMap (JavaScript/Node CLI, not an OMP module)
 
@@ -546,7 +547,7 @@ the pattern new OMP modules (examples, shared helpers) already teach.
 ### OpenDocViewer (Low–Medium)
 
 - Current: ~10 modules bypass `getRuntimeConfig()`; three logging-config
-  channels; dual defaults layers; customer site configs committed under `customer/`.
+  channels; dual defaults layers; customer site configs in a gitignored folder.
 - Migration: route all reads through the central accessor; collapse logging
   config to runtime-config only; generate `odv.config.js` defaults from the
   same source as getter defaults (or vice versa); move customer site configs
