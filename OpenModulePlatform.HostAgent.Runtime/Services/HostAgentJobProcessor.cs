@@ -1323,6 +1323,12 @@ public sealed class HostAgentJobProcessor
                     .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         }
 
+        // The local artifact cache is not a service-app deployment and must never be
+        // flagged. When it is nested below the services root (for example
+        // D:\Services\ArtifactCache) the sweep would otherwise mark the entire cache as
+        // an orphan and aim the cleanup at it (2026-08-19 incident).
+        var artifactCacheRoot = ResolveArtifactCacheRoot(settings);
+
         var expectedTargetPaths = new HashSet<string>(GetPathComparer());
         var expectedServiceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -1359,6 +1365,11 @@ public sealed class HostAgentJobProcessor
 
             if (string.Equals(fullDirectory, hostAgentInstallRoot, GetPathComparison())
                 || hostAgentProtectedDirectories.Contains(fullDirectory))
+            {
+                continue;
+            }
+
+            if (IsArtifactCachePath(artifactCacheRoot, fullDirectory))
             {
                 continue;
             }
@@ -1944,6 +1955,11 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Skipped", "Refusing to delete a directory that contains the configured HostAgent credential store.");
         }
 
+        if (IsArtifactCachePath(ResolveArtifactCacheRoot(settings), directory))
+        {
+            return CreateMaintenanceCleanupEntryResult(entry, "Skipped", $"Refusing to delete '{directory}': it is, is inside, or contains the configured local artifact cache root.");
+        }
+
         var serviceNamePrefix = ResolveServiceNamePrefixForMaintenance(settings, settings.ServiceName);
         var referencingService = EnumerateHostAgentServices(serviceNamePrefix)
             .FirstOrDefault(service =>
@@ -2201,6 +2217,20 @@ public sealed class HostAgentJobProcessor
             return $"Refusing to delete the orphan service-app directory: the path is invalid ({ex.Message}).";
         }
 
+        // Hard guard, independent of detection: the artifact cache must be undeletable
+        // through this path even when a finding (wrongly) targets it. Fail closed when
+        // the cache root is configured but cannot be resolved (2026-08-19 incident).
+        var artifactCacheRoot = ResolveArtifactCacheRoot(settings);
+        if (!string.IsNullOrWhiteSpace(settings.LocalArtifactCacheRoot) && artifactCacheRoot is null)
+        {
+            return $"Refusing to delete '{candidate}': the configured local artifact cache root is not a valid path.";
+        }
+
+        if (IsArtifactCachePath(artifactCacheRoot, candidate))
+        {
+            return $"Refusing to delete '{candidate}': it is, is inside, or contains the configured local artifact cache root.";
+        }
+
         if (!IsSameOrChildPath(servicesRoot, candidate)
             || string.Equals(servicesRoot, candidate, GetPathComparison()))
         {
@@ -2267,6 +2297,38 @@ public sealed class HostAgentJobProcessor
 
         return Path.GetFullPath(root);
     }
+
+    /// <summary>
+    /// The normalized full path of the configured local artifact cache root, or
+    /// <see langword="null"/> when it is not configured or cannot be resolved.
+    /// </summary>
+    private static string? ResolveArtifactCacheRoot(HostAgentSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.LocalArtifactCacheRoot))
+        {
+            return null;
+        }
+
+        try
+        {
+            return Path.GetFullPath(settings.LocalArtifactCacheRoot.Trim())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="candidate"/> is the artifact cache root, sits under it,
+    /// or contains it. The parent direction matters: deleting a containing directory
+    /// destroys the cache just as surely as targeting the cache root directly.
+    /// </summary>
+    private static bool IsArtifactCachePath(string? artifactCacheRoot, string candidate)
+        => !string.IsNullOrWhiteSpace(artifactCacheRoot)
+            && (IsSameOrChildPath(artifactCacheRoot, candidate)
+                || IsSameOrChildPath(candidate, artifactCacheRoot));
 
     private static string ResolveServiceNamePrefixForMaintenance(
         HostAgentSettings settings,

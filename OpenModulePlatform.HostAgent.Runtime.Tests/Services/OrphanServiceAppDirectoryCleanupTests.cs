@@ -191,6 +191,67 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
         Assert.NotNull(refusal);
     }
 
+    [Fact]
+    public void ValidateCleanup_RefusesNestedLocalArtifactCacheRoot()
+    {
+        // Hard guard, independent of detection: the remediation path must refuse the
+        // configured artifact cache root even when a (broken) detection flagged it.
+        using var root = new TempDirectory();
+        var cacheRoot = CreateSubDirectory(root.Path, "ArtifactCache");
+
+        var settings = CreateSettings(root.Path);
+        settings.LocalArtifactCacheRoot = cacheRoot;
+
+        var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            Array.Empty<ServiceAppServiceCandidate>(),
+            cacheRoot);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("artifact cache", refusal, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateCleanup_RefusesDirectoryUnderLocalArtifactCacheRoot()
+    {
+        using var root = new TempDirectory();
+        var cacheRoot = CreateSubDirectory(root.Path, "ArtifactCache");
+        var cacheSubDirectory = CreateSubDirectory(cacheRoot, "omp_someapp");
+
+        var settings = CreateSettings(root.Path);
+        settings.LocalArtifactCacheRoot = cacheRoot;
+
+        var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            Array.Empty<ServiceAppServiceCandidate>(),
+            cacheSubDirectory);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("artifact cache", refusal, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateCleanup_RefusesDirectoryContainingLocalArtifactCacheRoot()
+    {
+        using var root = new TempDirectory();
+        var parent = CreateSubDirectory(root.Path, "Shared");
+        var cacheRoot = CreateSubDirectory(parent, "ArtifactCache");
+
+        var settings = CreateSettings(root.Path);
+        settings.LocalArtifactCacheRoot = cacheRoot;
+
+        var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
+            settings,
+            Array.Empty<ServiceAppDeploymentDescriptor>(),
+            Array.Empty<ServiceAppServiceCandidate>(),
+            parent);
+
+        Assert.NotNull(refusal);
+        Assert.Contains("artifact cache", refusal, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string CreateSubDirectory(string root, string name)
     {
         var path = Path.Join(root, name);
