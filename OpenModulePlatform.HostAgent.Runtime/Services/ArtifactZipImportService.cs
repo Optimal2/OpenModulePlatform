@@ -16,6 +16,13 @@ public sealed class ArtifactZipImportService
     private const int HashBufferSize = 1024 * 128;
     private const int MaxModuleDefinitionBytes = 1024 * 1024 * 5;
 
+    // Shared message prefixes. Kept as constants so the identical-content and
+    // version-conflict wording has exactly one construction site each; package-level
+    // classification itself is structural (IsIdenticalSkip / IsVersionConflict on the
+    // item result), not string matching.
+    private const string IdenticalContentMessagePrefix = "The same artifact identity and content already exists";
+    private const string VersionConflictMessagePrefix = "The artifact content has changed under the same version";
+
     private static readonly Regex MetadataTokenPattern = new(
         "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
         RegexOptions.Compiled);
@@ -622,12 +629,14 @@ public sealed class ArtifactZipImportService
                     Path.Join(stagingPath, "universal-module-package"),
                     cancellationToken);
                 _logger.LogInformation(
-                    "Imported universal module package from HostAgent import folder. File={ImportPath}, Package={PackageKey}, Version={PackageVersion}, Imported={Imported}, Skipped={Skipped}, Failed={Failed}",
+                    "Imported universal module package from HostAgent import folder. File={ImportPath}, Package={PackageKey}, Version={PackageVersion}, Imported={Imported}, Skipped={Skipped}, SkippedIdentical={SkippedIdentical}, Conflicts={Conflicts}, Failed={Failed}",
                     importPath,
                     result.PackageKey ?? Path.GetFileName(importPath),
                     result.PackageVersion,
                     result.ImportedCount,
                     result.SkippedCount,
+                    result.SkippedIdenticalCount,
+                    result.ConflictCount,
                     result.FailedCount);
 
                 // A package whose items ALL failed used to be archived to processed\
@@ -636,6 +645,8 @@ public sealed class ArtifactZipImportService
                 // installer CLI's --wait-for-import, which then reported a successful
                 // deploy for an installation that received nothing (R7-G1). Route a
                 // package with failed items to failed\ with the reasons attached.
+                // Identical-content skips are NOT failures: a package whose items
+                // were all imported or skipped stays a success and goes to processed\.
                 if (result.FailedCount > 0)
                 {
                     var failureDetail = string.Join(
@@ -646,7 +657,8 @@ public sealed class ArtifactZipImportService
                     MoveImportFile(
                         importPath,
                         failedPath,
-                        $"{result.FailedCount} of {result.Items.Count} package item(s) failed to import.{Environment.NewLine}{failureDetail}");
+                        $"{result.FailedCount} of {result.Items.Count} package item(s) failed to import. " +
+                        $"{BuildPackageImportSummary(result)}{Environment.NewLine}{failureDetail}");
                     return;
                 }
             }
@@ -884,7 +896,10 @@ public sealed class ArtifactZipImportService
                     "artifact-package",
                     Path.GetFileName(plan.Path),
                     artifact.Status,
-                    message));
+                    message)
+                {
+                    IsIdenticalSkip = artifact.Status == "Skipped" && artifact.AdoptedExistingContent
+                });
             }
             catch (Exception ex) when (IsExpectedImportFailure(ex))
             {
@@ -892,7 +907,10 @@ public sealed class ArtifactZipImportService
                     "artifact-package",
                     Path.GetFileName(plan.Path),
                     IsArtifactCompatibilityFailure(ex) ? "Skipped" : "Failed",
-                    ex.Message));
+                    ex.Message)
+                {
+                    IsVersionConflict = ex is ArtifactVersionConflictException
+                });
             }
         }
 
@@ -931,7 +949,10 @@ public sealed class ArtifactZipImportService
                 "artifact-package",
                 item.Path,
                 result.Status,
-                result.Message);
+                result.Message)
+            {
+                IsIdenticalSkip = result.Status == "Skipped" && result.AdoptedExistingContent
+            };
         }
         catch (Exception ex) when (IsExpectedImportFailure(ex))
         {
@@ -939,7 +960,10 @@ public sealed class ArtifactZipImportService
                 "artifact-package",
                 item.Path,
                 IsArtifactCompatibilityFailure(ex) ? "Skipped" : "Failed",
-                ex.Message);
+                ex.Message)
+            {
+                IsVersionConflict = ex is ArtifactVersionConflictException
+            };
         }
     }
 
@@ -1271,10 +1295,10 @@ public sealed class ArtifactZipImportService
                         ? "Updated"
                         : "Skipped";
                     var message = updatedConfigurationFiles > 0
-                        ? $"The same artifact identity and content already exists. Updated {updatedConfigurationFiles} configuration file row(s)."
+                        ? $"{IdenticalContentMessagePrefix}. Updated {updatedConfigurationFiles} configuration file row(s)."
                         : completedMissingMetadata
                             ? "The artifact identity already existed without a stored content hash. Completed its metadata from this package."
-                            : "The same artifact identity and content already exists.";
+                            : $"{IdenticalContentMessagePrefix}.";
                     if (restoredMissingContent)
                     {
                         message = $"{message} Restored missing artifact files below the artifact store path: {existingRelativePath}.";
@@ -1294,10 +1318,16 @@ public sealed class ArtifactZipImportService
                         Message: message);
                 }
 
-                throw new InvalidOperationException(
-                    "An artifact for this app, package type, target, and version already exists: " +
-                    $"{existingIdentity.AppKey} {existingIdentity.Version} ({existingIdentity.PackageType}). " +
-                    "Use a new version number for changed artifact content.");
+                throw new ArtifactVersionConflictException(
+                    BuildVersionConflictMessage(
+                        existingIdentity.AppKey,
+                        existingIdentity.Version,
+                        existingIdentity.PackageType,
+                        existingIdentity.TargetName,
+                        existingIdentity.Sha256,
+                        contentHash),
+                    existingIdentity.Sha256,
+                    contentHash);
             }
 
             if (Directory.Exists(finalPath) || File.Exists(finalPath))
@@ -1394,12 +1424,43 @@ public sealed class ArtifactZipImportService
             if (registeredArtifactId is null)
             {
                 // A concurrent import won the race between the identity check
-                // above and the atomic register. Surface the same error the
-                // early check produces for an existing identity.
-                throw new InvalidOperationException(
-                    "An artifact for this app, package type, target, and version already exists: " +
-                    $"{app.AppKey} {metadata.Version} ({metadata.PackageType}). " +
-                    "Use a new version number for changed artifact content.");
+                // above and the atomic register. Re-read the winner's row and
+                // apply the same three-way outcome as the early check: identical
+                // content is a no-op skip, different content is a version conflict.
+                var racedIdentity = await _repository.FindImportedArtifactByIdentityAsync(
+                    app.AppId,
+                    metadata.Version,
+                    metadata.PackageType,
+                    metadata.TargetName,
+                    cancellationToken);
+                if (racedIdentity is not null
+                    && !string.IsNullOrWhiteSpace(racedIdentity.Sha256)
+                    && string.Equals(racedIdentity.Sha256, contentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ArtifactZipImportResult(
+                        racedIdentity.ArtifactId,
+                        racedIdentity.Version,
+                        racedIdentity.RelativePath ?? relativePath,
+                        CopiedConfigurationFileCount: 0,
+                        TemplateAppRowsUpdated: 0,
+                        AppInstanceRowsUpdated: 0,
+                        WorkerInstanceRowsUpdated: 0,
+                        HostAgentDesiredRowsUpdated: 0,
+                        AdoptedExistingContent: true,
+                        Status: "Skipped",
+                        Message: $"{IdenticalContentMessagePrefix}. The identical import was already completed by a concurrent import.");
+                }
+
+                throw new ArtifactVersionConflictException(
+                    BuildVersionConflictMessage(
+                        racedIdentity?.AppKey ?? app.AppKey,
+                        metadata.Version,
+                        metadata.PackageType,
+                        metadata.TargetName,
+                        racedIdentity?.Sha256,
+                        contentHash),
+                    racedIdentity?.Sha256,
+                    contentHash);
             }
 
             var artifactId = registeredArtifactId.Value;
@@ -2158,6 +2219,38 @@ public sealed class ArtifactZipImportService
     private static string AppendWarning(string current, string next)
         => string.IsNullOrWhiteSpace(current) ? next : current + " " + next;
 
+    /// <summary>
+    /// The version-conflict message. Naming the existing and incoming hashes makes
+    /// the claim verifiable: when this text appears, the content really did change
+    /// under an already-imported version, and the only correct fix is a version bump.
+    /// </summary>
+    internal static string BuildVersionConflictMessage(
+        string appKey,
+        string version,
+        string packageType,
+        string? targetName,
+        string? existingSha256,
+        string incomingSha256)
+        => $"{VersionConflictMessagePrefix}. " +
+           $"Artifact: {appKey} {version} ({packageType}, {targetName}). " +
+           $"Existing SHA-256: {(string.IsNullOrWhiteSpace(existingSha256) ? "<none stored>" : existingSha256)}. " +
+           $"Incoming SHA-256: {incomingSha256}. " +
+           "Bump the component version, rebuild the universal package, and re-import.";
+
+    /// <summary>
+    /// The package-level summary separates the three outcomes so an unchanged
+    /// rebuild (imported + identical skips) never reads as a failure, and a real
+    /// version conflict is visible as its own count.
+    /// </summary>
+    internal static string BuildPackageImportSummary(UniversalHostAgentImportResult result)
+    {
+        var otherFailures = result.FailedCount - result.ConflictCount;
+        var summary = $"{result.Items.Count} items: {result.ImportedCount} imported, " +
+                      $"{result.SkippedIdenticalCount} skipped (identical), " +
+                      $"{result.ConflictCount} conflict(s)";
+        return otherFailures > 0 ? $"{summary}, {otherFailures} other failure(s)." : $"{summary}.";
+    }
+
     private static ArtifactPackageExtractionLimits BuildArtifactExtractionLimits(
         HostAgentArtifactZipImportSettings importSettings)
         => new(
@@ -2170,7 +2263,7 @@ public sealed class ArtifactZipImportService
             importSettings.MaxUniversalPackageTotalUncompressedBytes,
             importSettings.MaxUniversalPackageEntryUncompressedBytes);
 
-    private sealed record UniversalHostAgentImportResult(
+    internal sealed record UniversalHostAgentImportResult(
         string? PackageKey,
         string? PackageVersion,
         IReadOnlyList<UniversalHostAgentImportItemResult> Items)
@@ -2180,14 +2273,27 @@ public sealed class ArtifactZipImportService
 
         public int SkippedCount => Items.Count(static item => item.Status == "Skipped");
 
+        public int SkippedIdenticalCount => Items.Count(static item => item.IsIdenticalSkip);
+
         public int FailedCount => Items.Count(static item => item.Status == "Failed");
+
+        public int ConflictCount => Items.Count(static item => item.IsVersionConflict);
     }
 
-    private sealed record UniversalHostAgentImportItemResult(
+    internal sealed record UniversalHostAgentImportItemResult(
         string Kind,
         string Path,
         string Status,
-        string? Message);
+        string? Message)
+    {
+        /// <summary>True when the item was skipped because the same identity and
+        /// content already exists -- a normal rebuild outcome, never a failure.</summary>
+        public bool IsIdenticalSkip { get; init; }
+
+        /// <summary>True when the item failed because the content changed under an
+        /// already-imported version (<see cref="ArtifactVersionConflictException"/>).</summary>
+        public bool IsVersionConflict { get; init; }
+    }
 
     private sealed record ModulePackageArtifactPlan(
         string Path,
