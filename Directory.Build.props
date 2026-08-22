@@ -10,4 +10,31 @@
     <NeutralLanguage>en</NeutralLanguage>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
+
+  <!--
+    Opt-in per-caller isolation of build intermediates and output for OMP
+    projects. Consumer repositories pass -p:OmpIsolatedBuildRoot=<folder inside
+    the consumer repo> from scripts/local-ci.ps1, so parallel builds in sibling
+    repositories never share obj/bin folders for the OMP projects they
+    reference (Web.Shared, Web.Shared.Analyzers, EventPublisher.*). That makes
+    the CS2012 "file locked by VBCSCompiler" collision physically impossible.
+    When the property is not set, the default in-tree obj/bin layout is used,
+    so OMP's own builds are unaffected.
+  -->
+  <PropertyGroup Condition="'$(OmpIsolatedBuildRoot)' != ''">
+    <BaseIntermediateOutputPath>$(OmpIsolatedBuildRoot)\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <BaseOutputPath>$(OmpIsolatedBuildRoot)\bin\$(MSBuildProjectName)\</BaseOutputPath>
+  </PropertyGroup>
+
+  <!--
+    The SDK's default Compile glob excludes $(BaseIntermediateOutputPath) and
+    $(BaseOutputPath), so once those move out of the project directory, stale
+    files in the default in-tree obj/bin (from non-isolated builds) would be
+    globbed in as sources (duplicate AssemblyInfo attributes). Exclude them.
+  -->
+  <PropertyGroup Condition="'$(OmpIsolatedBuildRoot)' != ''">
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\bin\**</DefaultItemExcludes>
+  </PropertyGroup>
 </Project>
