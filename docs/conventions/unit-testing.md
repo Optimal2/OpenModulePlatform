@@ -1,5 +1,21 @@
 # Unit-testing conventions for OMP+ODV
 
+> **Status 2026-08-22:** this document is a point-in-time audit from **2026-07-15** and parts of it
+> are superseded. On 2026-08-19 the whole family was standardized on **two-tier testing**: xUnit
+> unit tests plus xUnit + Microsoft.Playwright UI tests (`*.UiTests` projects), with shared tooling
+> in `OpenModulePlatform/tests/shared/` (`OmpTestDatabaseProvisioner.cs`,
+> `Ui/PlaywrightSessionFixture.cs`, `Ui/WebAppProcessFixture.cs`, `Ui/UiInvariantScanner.cs`,
+> `Ui/UiTestPaths.cs`). Measured 2026-08-22: **every repo now has automated tests** — LogSearch
+> (`LogSearch.Tests` + `LogSearch.UiTests`), Dokumentbibliotek
+> (`tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`), ODVGateway
+> (`tests/ODVGateway.Tests`) — OpenDocViewer's CI runs `npm test` (`.github/workflows/ci.yml:71`),
+> OpenModulePlatform has grown to 6 test projects (adding `Bootstrapper.Tests`,
+> `Worker.Abstractions.Tests`, `OpenModulePlatform.UiTests`), and VajSkrivare has adopted CPM.
+> Test-package pins have also moved (e.g. `Microsoft.NET.Test.Sdk` 18.8.1/18.9.0,
+> `Xunit.SkippableFact` 1.5.61, `Microsoft.Playwright` 1.62.0). Read sections 1, 2 and 4 as the
+> July snapshot — "Tests exist: No" rows and pin versions there are historical. Section 3's
+> conventions remain the standard, extended by the two-tier UI-test standard above.
+
 This document records the unit-testing patterns found in the OMP+ODV repositories (audit date 2026-07-15; source code only — `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded from the audit).
 
 Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare, iKrock2, ODVGateway (.NET), OpenDocViewer, AgentDocMap (JS/npm).
@@ -85,7 +101,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 ### LogSearch
 
-- **Tests exist:** **No** — 0 test projects, 0 test files, no Pester/JS tests. Explicitly acknowledged in `README.md:106-110` ("LogSearch does not currently have an automated test project").
+- **Tests exist:** **No** at audit time — 0 test projects. *(Superseded 2026-08-19: `LogSearch.Tests` + `LogSearch.UiTests` now exist — see the status note at the top.)*
 - **Framework / mock lib / assertion style:** None. `Directory.Packages.props:6-11` pins only runtime packages.
 - **Layout/naming:** 3 source projects in `LogSearch.slnx:2-4` (`LogSearch.Runtime`, `LogSearch.Service`, `LogSearch.Web`). CPM is enabled (`Directory.Packages.props:2-3`); shared TargetFramework `net10.0` via `Directory.Build.props:3`.
 - **Coverage / integration separation:** None.
@@ -109,7 +125,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 ### Dokumentbibliotek
 
-- **Tests exist:** **No** — 0 test projects, 0 test files. Single web-module project `RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj` in the old-format `OpenModulePlatform.Web.eArkivDokumentbibliotek.sln` (plus a cross-repo reference to OMP `OpenModulePlatform.Web.Shared`).
+- **Tests exist:** **No** at audit time — 0 test projects. Single web-module project `RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj` in the old-format `OpenModulePlatform.Web.eArkivDokumentbibliotek.sln` (plus a cross-repo reference to OMP `OpenModulePlatform.Web.Shared`). *(Superseded 2026-08-19: `tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests` now exist — see the status note at the top.)*
 - **Framework / mock lib / assertion style:** None. No `Directory.Packages.props` (no CPM) — only `Directory.Build.targets:1-17` wiring the OMP analyzer. Module targets `net10.0` (`RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj:3`).
 - **Coverage / integration separation:** None.
 - **How tests run:** They don't. `.github/workflows/ci.yml` is `workflow_dispatch`-only: restore (`:65`), build (`:69`), component-version validation (`:82`). `scripts/local-ci.ps1:53,75` = build + version validation. `scripts/validate-component-versions.ps1:25` has a `-SelfTest` switch — an ad-hoc script self-check, not a unit test.
@@ -117,7 +133,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 ### ODVGateway
 
-- **Tests exist:** **No** — 0 test projects, 0 test files. Single source project `src/ODVGateway/ODVGateway.csproj`; **no `.sln`/`.slnx` at all** (builds target the csproj directly, e.g. `.github/workflows/ci.yml:30`).
+- **Tests exist:** **No** at audit time — 0 test projects. Single source project `src/ODVGateway/ODVGateway.csproj`; **no `.sln`/`.slnx` at all** (builds target the csproj directly, e.g. `.github/workflows/ci.yml:30`). *(Superseded 2026-08-19: `tests/ODVGateway.Tests` now exists — see the status note at the top.)*
 - **Framework / mock lib / assertion style:** None. No `Directory.Packages.props`. Project targets `net10.0` (`src/ODVGateway/ODVGateway.csproj:3`); `Directory.Build.props:1-7` sets analysis/style props only.
 - **Coverage / integration separation:** None for unit tests.
 - **How tests run:** No unit tests, but the repo has the strongest non-unit verification of the testless repos: an end-to-end PowerShell **smoke test** that builds the app, launches the real Kestrel process with an `appsettings.Smoke.json` overlay, and checks `/health`, security headers, and sanitized error responses (`scripts/smoke-test.ps1:1-21`, checks at `:302-346`). It runs in the local gate `scripts/local-ci.ps1:8-10` (enforced by `.githooks/pre-push:33`) and in `.github/workflows/ci.yml:28-39` / `release.yml:49-66`.
@@ -134,7 +150,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 - **Assertion style:** vitest `expect` — `runtimeConfig.test.js:41` (`toEqual`), `systemLogger.test.js:15` (`toBe`), `web-headers.test.js:15` (`toMatch`).
 - **Coverage:** None found — no coverage script, package, or CI step.
 - **Integration vs unit separation:** None — all 4 files are node-environment unit tests (see header comment `runtimeConfig.test.js:5-7`). Two PowerShell helpers exist but are manual smoke tools, not automated tests: `scripts/Test-ODV-IISProxy.ps1`, `scripts/omp/test-cmd-wrappers.ps1`.
-- **How tests run:** Locally via `npm test`. **CI does NOT run tests** — `.github/workflows/ci.yml:67-74` runs lint + build only; `release.yml:97-104` likewise.
+- **How tests run:** Locally via `npm test`. At audit time CI did not run tests. *(Superseded: `.github/workflows/ci.yml:71` now runs `npm test`, verified 2026-08-22.)*
 - **Extra notes:** Tests are deliberately concentrated on pure config/normalization helpers; no component/React tests. New tests naturally belong in `src/<area>/__tests__/<module>.test.js`.
 
 ### AgentDocMap
