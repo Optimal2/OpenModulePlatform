@@ -3234,6 +3234,8 @@ BEGIN
 
     DECLARE @ModuleActions TABLE(ActionName nvarchar(10) NOT NULL);
     DECLARE @AppActions TABLE(ActionName nvarchar(10) NOT NULL);
+    DECLARE @ModuleDisableChanges int = 0;
+    DECLARE @AppDisableChanges int = 0;
     DECLARE @NullGuidSentinel uniqueidentifier = '00000000-0000-0000-0000-000000000000';
 
     IF @HostKey IS NOT NULL
@@ -3501,9 +3503,91 @@ BEGIN
             source.SortOrder)
     OUTPUT $action INTO @AppActions(ActionName);
 
+    -- Template disable propagation. Both MERGE source queries above contain only
+    -- ENABLED template rows, so disabling a template row used to make it vanish
+    -- from the source and leave the materialized runtime row enabled forever.
+    -- The statements below turn off materialized rows whose template row still
+    -- exists but is disabled, at any level of the chain (template, template
+    -- module instance, template app instance).
+    --
+    -- Scope is the same natural-key chain the Portal uses to recognize
+    -- template-managed rows before it blocks direct edits of them: a concrete
+    -- row only joins when its instance uses the template and every key matches.
+    -- Hand-created rows have keys that do not exist in the template, so they
+    -- never join and are never touched. A WHEN NOT MATCHED BY SOURCE branch was
+    -- considered and rejected: the app source is filtered by the requesting
+    -- host and host-template assignment, so such a branch would turn off rows
+    -- that belong to other hosts on every host-scoped run.
+    --
+    -- Placement filters (host, host template, host assignment activity) are
+    -- deliberately NOT part of the disable condition: a disabled template row
+    -- means off everywhere, and any in-scope materialization run heals all
+    -- placements of it in one pass.
+    UPDATE mi
+    SET IsEnabled = 0,
+        UpdatedUtc = SYSUTCDATETIME()
+    FROM omp.ModuleInstances mi
+    INNER JOIN omp.Instances i ON i.InstanceId = mi.InstanceId
+    INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
+    INNER JOIN omp.InstanceTemplateModuleInstances tmi
+        ON tmi.InstanceTemplateId = it.InstanceTemplateId
+       AND tmi.ModuleId = mi.ModuleId
+       AND tmi.ModuleInstanceKey = mi.ModuleInstanceKey
+    WHERE mi.IsEnabled = 1
+      AND (it.IsEnabled = 0 OR tmi.IsEnabled = 0)
+      AND i.IsEnabled = 1
+      AND (@InstanceKey IS NULL OR i.InstanceKey = @InstanceKey)
+      AND
+      (
+          @HostKey IS NULL
+          OR EXISTS
+          (
+              SELECT 1
+              FROM omp.Hosts h
+              WHERE h.InstanceId = i.InstanceId
+                AND h.HostKey = @HostKey
+                AND h.IsEnabled = 1
+          )
+      );
+
+    SET @ModuleDisableChanges = @@ROWCOUNT;
+
+    UPDATE ai
+    SET IsEnabled = 0,
+        UpdatedUtc = SYSUTCDATETIME()
+    FROM omp.AppInstances ai
+    INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
+    INNER JOIN omp.Instances i ON i.InstanceId = mi.InstanceId
+    INNER JOIN omp.InstanceTemplates it ON it.InstanceTemplateId = i.InstanceTemplateId
+    INNER JOIN omp.InstanceTemplateModuleInstances tmi
+        ON tmi.InstanceTemplateId = it.InstanceTemplateId
+       AND tmi.ModuleId = mi.ModuleId
+       AND tmi.ModuleInstanceKey = mi.ModuleInstanceKey
+    INNER JOIN omp.InstanceTemplateAppInstances tai
+        ON tai.InstanceTemplateModuleInstanceId = tmi.InstanceTemplateModuleInstanceId
+       AND tai.AppInstanceKey = ai.AppInstanceKey
+    WHERE ai.IsEnabled = 1
+      AND (it.IsEnabled = 0 OR tmi.IsEnabled = 0 OR tai.IsEnabled = 0)
+      AND i.IsEnabled = 1
+      AND (@InstanceKey IS NULL OR i.InstanceKey = @InstanceKey)
+      AND
+      (
+          @HostKey IS NULL
+          OR EXISTS
+          (
+              SELECT 1
+              FROM omp.Hosts h
+              WHERE h.InstanceId = i.InstanceId
+                AND h.HostKey = @HostKey
+                AND h.IsEnabled = 1
+          )
+      );
+
+    SET @AppDisableChanges = @@ROWCOUNT;
+
     SELECT
-        CAST((SELECT COUNT(1) FROM @ModuleActions) AS int) AS ModuleInstanceChanges,
-        CAST((SELECT COUNT(1) FROM @AppActions) AS int) AS AppInstanceChanges,
+        CAST((SELECT COUNT(1) FROM @ModuleActions) + @ModuleDisableChanges AS int) AS ModuleInstanceChanges,
+        CAST((SELECT COUNT(1) FROM @AppActions) + @AppDisableChanges AS int) AS AppInstanceChanges,
         @InstanceKey AS InstanceKey,
         @HostKey AS HostKey,
         @RequestedBy AS RequestedBy;
