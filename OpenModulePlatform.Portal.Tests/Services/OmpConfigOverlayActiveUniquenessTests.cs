@@ -10,7 +10,8 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// tests go red if the filtered unique index is removed from
 /// sql/1-setup-openmoduleplatform.sql.
 /// </summary>
-public sealed class OmpConfigOverlayActiveUniquenessTests : IClassFixture<ConfigOverlayActiveUniquenessTestFixture>
+[Collection(ConfigOverlayActiveUniquenessCollection.CollectionName)]
+public sealed class OmpConfigOverlayActiveUniquenessTests
 {
     private readonly ConfigOverlayActiveUniquenessTestFixture _fixture;
 

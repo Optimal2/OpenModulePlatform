@@ -50,6 +50,10 @@ public sealed class OmpHostArtifactRepositoryConfigOverlayResolutionTests : IDis
 
         // Construct the defense-in-depth scenario: two enabled rows for the same
         // (OverlayKey, HostKey), where the OLDER OverlayVersion has the NEWER UpdatedUtc.
+        // The production filtered unique index forbids this state, so drop the mirrored
+        // index first: this simulates a pre-upgrade database, where the deterministic
+        // resolution below is the only guard against ambiguous overlay selection.
+        _database.DropOverlayEnabledUniqueIndex();
         _database.SetOverlayDocumentEnabled(older.DocumentId, true);
         _database.SetOverlayDocumentEnabled(newer.DocumentId, true);
         _database.SetOverlayDocumentUpdatedUtc(newer.DocumentId, new DateTime(2026, 7, 19, 0, 0, 0, DateTimeKind.Utc));

@@ -251,6 +251,15 @@ CREATE TABLE omp.ConfigOverlayDocuments
     UpdatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
     CONSTRAINT UQ_Test_ConfigOverlayDocuments_Key_Host_Version UNIQUE(OverlayKey, HostKey, OverlayVersion)
 );");
+        // Mirrors the filtered unique index in sql/1-setup-openmoduleplatform.sql
+        // (UX_omp_ConfigOverlayDocuments_Enabled_Key_Host). Without it these tests
+        // run against a schema production does not have and cannot catch statement
+        // ordering that violates the index mid-transaction (SQL Server checks
+        // unique indexes per statement, never deferred to commit).
+        Execute(@"
+CREATE UNIQUE INDEX UX_omp_ConfigOverlayDocuments_Enabled_Key_Host
+    ON omp.ConfigOverlayDocuments(OverlayKey, HostKey)
+    WHERE IsEnabled = 1;");
         Execute(@"
 CREATE TABLE omp.ConfigOverlayConfigurationFiles
 (
@@ -312,6 +321,18 @@ ORDER BY ConfigOverlayDocumentId;",
             "UPDATE omp.ConfigOverlayDocuments SET UpdatedUtc = @updatedUtc WHERE ConfigOverlayDocumentId = @documentId;",
             new SqlParameter("@updatedUtc", updatedUtc),
             new SqlParameter("@documentId", documentId));
+    }
+
+    /// <summary>
+    /// Drops the filtered unique index mirrored from the production schema, so a test
+    /// can construct the legacy pre-index state (two enabled rows for the same
+    /// key+host) that runtime resolution must still order deterministically.
+    /// </summary>
+    public void DropOverlayEnabledUniqueIndex()
+    {
+        Execute(@"
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments') AND name = N'UX_omp_ConfigOverlayDocuments_Enabled_Key_Host')
+    DROP INDEX UX_omp_ConfigOverlayDocuments_Enabled_Key_Host ON omp.ConfigOverlayDocuments;");
     }
 
     public void CreateConfigurationFileResolutionTables()
