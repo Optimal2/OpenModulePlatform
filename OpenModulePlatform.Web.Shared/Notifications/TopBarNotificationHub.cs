@@ -62,6 +62,10 @@ public sealed class TopBarNotificationHub : Hub
         }
 
         var options = _options.Value;
+        // Legacy group memberships: the dispatcher no longer sends to
+        // per-module/per-app groups (module targets go to the authenticated
+        // group and are scoped by the payload discriminator), but older
+        // dispatchers in a mixed-version deployment may still send to them.
         await AddConfiguredGroupAsync(ModuleGroupName(options.ModuleKey));
         await AddConfiguredGroupAsync(AppGroupName(options.AppKey));
         await AddConfiguredGroupAsync(AppGroupName(options.AppInstanceKey));

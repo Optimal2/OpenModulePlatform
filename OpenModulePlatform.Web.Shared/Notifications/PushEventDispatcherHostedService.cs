@@ -140,6 +140,7 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
                     $"Push event {pushEvent.PushEventId} has no SignalR target groups for target type '{pushEvent.TargetType}'.");
             }
 
+            WarnIfModuleDiscriminatorMissing(pushEvent, envelope);
             await _hubContext.Clients
                 .Groups(groups)
                 .SendCoreAsync(
@@ -231,6 +232,12 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
         await _outbox.MarkFailedAsync(pushEvent, options, ex, ct);
     }
 
+    // Module-targeted events are delivered to the authenticated group and scoped
+    // by the payload's "module" discriminator, which module clients filter on
+    // (see wwwroot/js/omp-live-refresh.js). Per-module SignalR groups cannot
+    // work: the hub joins each connection to the module group of the host app's
+    // own configured ModuleKey only, so a group for any other module key has no
+    // members and the event would be marked dispatched without reaching anyone.
     internal static IReadOnlyList<string> ResolveTargetGroups(LeasedPushEvent pushEvent)
     {
         var target = PushEventTarget.FromJson(pushEvent.TargetType, pushEvent.TargetUserId, pushEvent.TargetJson);
@@ -250,12 +257,49 @@ internal sealed class PushEventDispatcherHostedService : BackgroundService
                 .Where(group => !string.IsNullOrWhiteSpace(group))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray(),
-            "module" => target.Values.Select(TopBarNotificationHub.ModuleGroupName)
-                .Where(group => !string.IsNullOrWhiteSpace(group))
-                .Distinct(StringComparer.Ordinal)
-                .ToArray(),
+            "module" => target.Values.Count > 0
+                ? [TopBarNotificationHub.AuthenticatedGroupName]
+                : [],
             _ => []
         };
+    }
+
+    private void WarnIfModuleDiscriminatorMissing(LeasedPushEvent pushEvent, TopBarPushEventEnvelope envelope)
+    {
+        if (!string.Equals(envelope.TargetKind, "module", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string? payloadModule = null;
+        if (envelope.Payload is { } payload
+            && payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("module", out var moduleProperty)
+            && moduleProperty.ValueKind == JsonValueKind.String)
+        {
+            payloadModule = moduleProperty.GetString();
+        }
+
+        // Clients drop module envelopes whose payload discriminator does not
+        // match their subscription, so a missing or mismatched discriminator
+        // means this event is silently ignored by every module client.
+        if (string.IsNullOrWhiteSpace(payloadModule))
+        {
+            _logger.LogWarning(
+                "Module-targeted push event {PushEventId} has no payload 'module' discriminator; module clients filter on it and will ignore the event.",
+                pushEvent.PushEventId);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(envelope.TargetValue)
+            && !string.Equals(payloadModule, envelope.TargetValue, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Module-targeted push event {PushEventId} targets module '{TargetModule}' but its payload discriminator is '{PayloadModule}'; clients filter on the payload value.",
+                pushEvent.PushEventId,
+                envelope.TargetValue,
+                payloadModule);
+        }
     }
 
     private static int? ParsePositiveInt(string value)

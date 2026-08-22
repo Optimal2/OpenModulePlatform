@@ -84,7 +84,9 @@ public sealed class PushEventDispatcherTests
     [InlineData("broadcast", """{"kind":"broadcast","ids":[]}""", "omp-broadcast")]
     [InlineData("authenticated", """{"kind":"authenticated","ids":[]}""", "omp-authenticated")]
     [InlineData("app", """{"kind":"app","ids":["omp_portal"]}""", "omp-app:omp_portal")]
-    [InlineData("module", """{"kind":"module","ids":["omp_portal"]}""", "omp-module:omp_portal")]
+    // Module targets are delivered to the authenticated group; module clients
+    // scope the event by the payload "module" discriminator instead.
+    [InlineData("module", """{"kind":"module","ids":["earkiv_checker"]}""", "omp-authenticated")]
     public void ResolveTargetGroups_MapsOutboxTargetToSignalRGroup(
         string targetType,
         string targetJson,
@@ -204,6 +206,35 @@ public sealed class PushEventDispatcherTests
         Assert.Contains("public async Task<IActionResult> OnGetMessages", pageModel);
         Assert.Contains("return Partial(MessagesPartialName, this);", pageModel);
         Assert.Contains("await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: true, ct);", pageModel);
+    }
+
+    [Fact]
+    public void OmpLiveRefreshScript_LogsWhenFallbackPollingEngages()
+    {
+        // The fallback poller may stay, but it must never silently rescue a
+        // broken push path again: engaging it has to be visible in the console.
+        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-live-refresh.js");
+        var start = script.IndexOf("function scheduleFallback(subscription)", StringComparison.Ordinal);
+        var end = script.IndexOf("// --- state propagation", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "scheduleFallback must exist before the state propagation section.");
+        var functionBody = script[start..end];
+
+        Assert.Contains("subscription.fallbackWarned", functionBody);
+        Assert.Contains("window.console.warn(", functionBody);
+        Assert.Contains("no live push transport", functionBody);
+        Assert.Contains("source: 'fallback'", functionBody);
+    }
+
+    [Fact]
+    public void OmpLiveRefreshScript_ReArmsFallbackWarningWhenPushReturns()
+    {
+        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-live-refresh.js");
+        var start = script.IndexOf("function notifyState(subscription)", StringComparison.Ordinal);
+        var end = script.IndexOf("function recomputeState()", StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, "notifyState must exist before recomputeState.");
+        var functionBody = script[start..end];
+
+        Assert.Contains("subscription.fallbackWarned = false;", functionBody);
     }
 
     private static LeasedPushEvent CreateLeasedEvent(

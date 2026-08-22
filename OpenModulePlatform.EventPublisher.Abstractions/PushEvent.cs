@@ -199,6 +199,12 @@ public sealed record PushTarget(PushTargetKind Kind, IReadOnlyList<string> Value
     public static PushTarget ForApp(string appKey)
         => new(PushTargetKind.App, [appKey]);
 
+    /// <summary>
+    /// Creates a module-scoped target. Delivery is via the authenticated
+    /// SignalR group; module clients scope the event by the payload's
+    /// <c>module</c> discriminator, so the payload should include a
+    /// <c>"module"</c> value matching <paramref name="moduleKey"/>.
+    /// </summary>
     public static PushTarget ForModule(string moduleKey)
         => new(PushTargetKind.Module, [moduleKey]);
 
