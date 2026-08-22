@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "definitionType": "platform-core",
   "moduleKey": "omp_core",
-  "definitionVersion": "0.3.125",
+  "definitionVersion": "0.3.126",
   "module": {
     "displayName": "OpenModulePlatform Core",
     "moduleType": "PlatformCore",
@@ -60,7 +60,7 @@
       "targetName": "omp-workerprocesshost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.37"
+      "maxVersion": "0.3.38"
     }
   ],
   "sqlScripts": [
