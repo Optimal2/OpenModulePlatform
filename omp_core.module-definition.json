@@ -44,7 +44,7 @@
       "targetName": "omp-hostagent",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "minVersion": "0.3.10",
-      "maxVersion": "0.3.211"
+      "maxVersion": "0.3.212"
     },
     {
       "appKey": "omp_workermanager",

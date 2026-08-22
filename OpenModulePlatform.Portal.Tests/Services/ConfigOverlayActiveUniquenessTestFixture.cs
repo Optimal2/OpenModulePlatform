@@ -1,6 +1,8 @@
-using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.TestSupport;
+using PortalSqlConnectionFactory = OpenModulePlatform.Web.Shared.Services.SqlConnectionFactory;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -8,8 +10,9 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// Provides a local SQL Server test database provisioned by executing the real
 /// core setup script (sql/1-setup-openmoduleplatform.sql) batch by batch, so
 /// tests that assert schema-level guarantees stay bound to the shipped schema
-/// file. Used to prove that omp.ConfigOverlayDocuments rejects a second
-/// enabled document for the same overlay key and host at the database level.
+/// file. Shared through <see cref="ConfigOverlayActiveUniquenessCollection"/> so
+/// every test class using it gets the same single instance: two fixture instances
+/// would provision the same database name concurrently and corrupt each other.
 /// </summary>
 public sealed class ConfigOverlayActiveUniquenessTestFixture : IAsyncLifetime
 {
@@ -20,12 +23,28 @@ public sealed class ConfigOverlayActiveUniquenessTestFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         await EnsureDatabaseExistsAsync();
-        await ApplyCoreSetupScriptAsync();
+        await CoreSetupScript.ApplyAsync(ConnectionString);
     }
 
     public async Task DisposeAsync()
     {
         await DropDatabaseAsync();
+    }
+
+    /// <summary>
+    /// Creates the portal repository against this real-schema database, so the
+    /// application save path can be exercised against the same filtered unique
+    /// index that production enforces.
+    /// </summary>
+    public OmpAdminRepository CreatePortalRepository()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:OmpDb"] = ConnectionString
+            })
+            .Build();
+        return new OmpAdminRepository(new PortalSqlConnectionFactory(configuration));
     }
 
     /// <summary>
@@ -75,6 +94,32 @@ WHERE OverlayKey = @overlayKey AND HostKey = @hostKey;",
         return Convert.ToInt32(await cmd.ExecuteScalarAsync());
     }
 
+    public async Task<IReadOnlyList<(int DocumentId, string OverlayVersion, bool IsEnabled)>> GetDocumentsAsync(
+        string overlayKey,
+        string hostKey)
+    {
+        var rows = new List<(int, string, bool)>();
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(
+            @"
+SELECT ConfigOverlayDocumentId, OverlayVersion, IsEnabled
+FROM omp.ConfigOverlayDocuments
+WHERE OverlayKey = @overlayKey AND HostKey = @hostKey
+ORDER BY ConfigOverlayDocumentId;",
+            conn);
+        cmd.Parameters.AddWithValue("@overlayKey", overlayKey);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        await using var rdr = await cmd.ExecuteReaderAsync();
+        while (await rdr.ReadAsync())
+        {
+            rows.Add((rdr.GetInt32(0), rdr.GetString(1), rdr.GetBoolean(2)));
+        }
+
+        return rows;
+    }
+
     private async Task EnsureDatabaseExistsAsync()
     {
         var builder = new SqlConnectionStringBuilder(ConnectionString)
@@ -82,43 +127,18 @@ WHERE OverlayKey = @overlayKey AND HostKey = @hostKey;",
             InitialCatalog = "master"
         };
 
+        // Drop any leftover database from a previous run whose best-effort cleanup
+        // failed: the real setup script is not fully idempotent, so applying it on
+        // top of a half-provisioned leftover fails on unguarded CREATE statements.
         await OmpTestDatabaseProvisioner.CreateDatabaseAsync(
             builder.ConnectionString,
-            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];");
-    }
-
-    private async Task ApplyCoreSetupScriptAsync()
-    {
-        var setupSql = ReadRepositoryTextFile("sql", "1-setup-openmoduleplatform.sql");
-
-        // Strip the historical local development database switch, the same way
-        // scripts/dev/embed-module-definition-sql.ps1 does, so the script runs
-        // against the fixture database instead.
-        var portableSql = Regex.Replace(
-            setupSql,
-            @"^\s*USE\s+\[OpenModulePlatform\]\s*;\s*\r?\n\s*GO\s*(?:--.*)?\s*(?:\r?\n)?",
-            string.Empty,
-            RegexOptions.IgnoreCase | RegexOptions.Multiline);
-
-        await using var conn = new SqlConnection(ConnectionString);
-        await conn.OpenAsync();
-
-        foreach (var batch in SplitBatches(portableSql))
-        {
-            await ExecuteNonQueryAsync(conn, batch);
-        }
-    }
-
-    private static async Task ExecuteNonQueryAsync(SqlConnection conn, string batch)
-    {
-        await using var cmd = new SqlCommand(batch, conn);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
-    private static IEnumerable<string> SplitBatches(string sql)
-    {
-        return Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline)
-            .Where(batch => !string.IsNullOrWhiteSpace(batch));
+            $@"
+IF DB_ID(N'{DatabaseName}') IS NOT NULL
+BEGIN
+    ALTER DATABASE [{DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [{DatabaseName}];
+END;
+CREATE DATABASE [{DatabaseName}];");
     }
 
     private async Task DropDatabaseAsync()
@@ -144,35 +164,5 @@ DROP DATABASE [{DatabaseName}];",
         {
             // Best-effort cleanup.
         }
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-    }
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-    {
-        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
-        if (rootedSegment is not null)
-        {
-            throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
-        }
-
-        var segments = new string[relativePathSegments.Length + 1];
-        segments[0] = FindRepositoryRoot();
-        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-        return File.ReadAllText(Path.Join(segments));
     }
 }

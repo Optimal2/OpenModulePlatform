@@ -733,30 +733,61 @@ WHERE OverlayKey = @overlayKey
             else if (existingId.HasValue)
             {
                 documentId = existingId.Value;
-                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, ct);
+                // Disable the enabled siblings BEFORE this row is re-enabled: SQL Server
+                // checks the filtered unique index per statement, so setting IsEnabled = 1
+                // while a sibling is still enabled fails with 2601 mid-transaction.
                 await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
+                await UpdateConfigOverlayDocumentAsync(conn, tx, documentId, input, ct);
                 await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             }
             else
             {
                 var enableImported = await ShouldEnableImportedConfigOverlayAsync(conn, tx, input, ct);
-                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, ct);
                 if (enableImported)
                 {
-                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, documentId, ct);
+                    // The new row does not exist yet, so -1 excludes nothing and disables
+                    // ALL currently enabled siblings before the enabled insert below.
+                    await DisableOtherEnabledConfigOverlayDocumentsAsync(conn, tx, input, -1, ct);
                 }
 
+                documentId = await InsertConfigOverlayDocumentAsync(conn, tx, input, enableImported, ct);
                 await ReplaceConfigOverlayConfigurationFilesAsync(conn, tx, documentId, input.ConfigurationFiles, ct);
             }
 
             await tx.CommitAsync(ct);
             return (documentId, !existingId.HasValue, existingId.HasValue && replaceExisting && !isIdentical, existingId.HasValue && isIdentical);
         }
+        catch (SqlException ex) when (IsEnabledSiblingUniqueViolation(ex))
+        {
+            await tx.RollbackAsync(ct);
+            throw new InvalidOperationException(
+                $"Another config overlay version for overlay key '{input.OverlayKey}' on host '{input.HostKey}' is still enabled. Disable it before enabling this version.",
+                ex);
+        }
         catch
         {
             await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    /// <summary>
+    /// True when the failure is the filtered unique index on enabled overlay rows
+    /// (2601/2627 naming UX_omp_ConfigOverlayDocuments_Enabled_Key_Host), as opposed
+    /// to the per-version unique constraint, which means something else entirely.
+    /// </summary>
+    private static bool IsEnabledSiblingUniqueViolation(SqlException exception)
+    {
+        foreach (SqlError error in exception.Errors)
+        {
+            if (error.Number is 2601 or 2627
+                && error.Message.Contains("UX_omp_ConfigOverlayDocuments_Enabled_Key_Host", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task<(int CreatedCount, int UpdatedCount, int SkippedCount, int PermissionRowCount)> SaveImportedDashboardWidgetsAsync(
