@@ -753,6 +753,28 @@ BEGIN
 END
 GO
 
+-- At most one enabled config overlay document per overlay key and host, no
+-- matter which code path (or manual SQL) wrote the rows. Application save
+-- paths already enforce keep-history semantics; this filtered unique index is
+-- the database-level backstop for that invariant. The block sits outside the
+-- create-guard above so existing databases also receive the index when the
+-- module definition is re-applied. On databases that already contain
+-- duplicate enabled rows this fails loudly at apply time; that is the
+-- intended pre-deploy cleanup signal.
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'omp.ConfigOverlayDocuments')
+      AND name = N'UX_omp_ConfigOverlayDocuments_Enabled_Key_Host'
+)
+BEGIN
+    CREATE UNIQUE INDEX UX_omp_ConfigOverlayDocuments_Enabled_Key_Host
+        ON omp.ConfigOverlayDocuments(OverlayKey, HostKey)
+        WHERE IsEnabled = 1;
+END
+GO
+
 IF OBJECT_ID(N'omp.Hosts', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.Hosts
