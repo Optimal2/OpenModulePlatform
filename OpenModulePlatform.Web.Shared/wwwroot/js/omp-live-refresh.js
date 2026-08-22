@@ -213,6 +213,18 @@
         subscription.fallbackTimer = window.setTimeout(() => {
             subscription.fallbackTimer = 0;
             if (!isLive()) {
+                // The fallback must never silently rescue a broken push path:
+                // log once per outage episode so a delivery failure is visible
+                // instead of being masked for years by quiet polling.
+                if (!subscription.fallbackWarned) {
+                    subscription.fallbackWarned = true;
+                    if (window.console && typeof window.console.warn === 'function') {
+                        window.console.warn(
+                            'ompLiveRefresh: no live push transport; refreshing module "' +
+                            (subscription.module || '*') +
+                            '" via fallback polling. If push delivery was expected, check the push channel.');
+                    }
+                }
                 invokeRefresh(subscription, { source: 'fallback', detail: null });
             }
             scheduleFallback(subscription);
@@ -223,6 +235,11 @@
 
     function notifyState(subscription) {
         const state = { live: isLive(), transport: currentTransport() };
+        if (state.live) {
+            // Live transport is back: allow the next outage episode to log again.
+            subscription.fallbackWarned = false;
+        }
+
         if (subscription.lastLive === state.live && subscription.lastTransport === state.transport) {
             return;
         }
@@ -473,6 +490,7 @@
             requestPush: options.requestPush === true,
             debounceTimer: 0,
             fallbackTimer: 0,
+            fallbackWarned: false,
             lastLive: null,
             lastTransport: null
         };

@@ -153,7 +153,15 @@ Cleanup never deletes `pending` or `processing` rows.
 Authenticated browser clients connected to `TopBarNotificationHub` receive
 SignalR messages. On connect, the hub joins per-user, effective-role,
 broadcast, authenticated, app, and module groups. The dispatcher maps outbox
-targets to those groups.
+targets to those groups, with one exception: `module` targets are delivered to
+the `authenticated` group instead of a per-module group. Hub module-group
+membership comes from the host app's own configured `ModuleKey`, so a
+per-module group for any other module key has no members and the event would
+be marked dispatched without reaching anyone. Module clients therefore scope
+`module` events by the payload's `module` discriminator (see
+`wwwroot/js/omp-live-refresh.js`); producers targeting a module must include a
+matching `"module"` value in the payload, and the dispatcher logs a warning
+when it is missing or mismatched.
 
 The browser treats push as a wake-up hint. The envelope contains `eventId`,
 `deduplicationKey`, `category`, `targetKind`, `targetValue`, and optional
@@ -172,7 +180,10 @@ work.
 Fallback polling remains part of the design. If push mode is disabled,
 unavailable, disconnected, or fails to start, the topbar falls back to polling
 `/topbar/summary`. Push is an optimization for faster refresh, not the only
-path to correctness.
+path to correctness. Fallback engagement is never silent: the topbar client
+and `omp-live-refresh.js` log a console warning when they fall back to
+polling, so a broken push path stays visible instead of being masked by quiet
+polling.
 
 ## Multi-Node Delivery Boundary
 
