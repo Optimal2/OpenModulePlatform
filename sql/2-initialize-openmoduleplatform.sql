@@ -20,6 +20,15 @@ Prerequisites:
 
 Portal, content, iframe, and example modules are initialized separately from
 their own module sql folders.
+
+Reseed safety: this script is also re-executed by repair/heal runs against
+installations that are already in operation. It must therefore never resurrect
+rows an operator has retired (disabled hosts, disabled artifact rows,
+deactivated assignments) and never (re)create the packaged baseline artifact
+rows once an installation has moved on to other registered artifact versions.
+The default mode below keeps every such write insert-only with respect to
+operator state; @AllowBootstrapReseed = 1 is the explicit, logged escape hatch
+for a deliberate manual reseed.
 */
 USE [OpenModulePlatform];
 GO
@@ -59,6 +68,13 @@ DECLARE @DefaultHostDisplayName nvarchar(200) = N'Sample Host';
 DECLARE @DefaultHostEnvironment nvarchar(50) = N'Development';
 DECLARE @SeedDefaultHost bit = 1;
 DECLARE @SuppressedDefaultHostId uniqueidentifier;
+-- DANGEROUS MODE, opt-in only. Default 0: the script is insert-only with
+-- respect to operator state and refuses writes it cannot prove are safe on an
+-- operational install (fail-closed). Set to 1 only for a deliberate, manual
+-- bootstrap reseed of a broken install: the legacy force-overwrite behavior is
+-- then restored and announced with a loud PRINT so the override is visible in
+-- the execution log. Never ship or embed a copy with the override enabled.
+DECLARE @AllowBootstrapReseed bit = 0;
 -- SECURITY: This sentinel placeholder is only for source-controlled bootstrap
 -- scripts. It must never be executed in production unchanged. Deployment
 -- automation should patch it from a protected environment-specific value; the
@@ -77,6 +93,13 @@ BEGIN
     -- installer profile bootstrapPortalAdminPrincipal setting.
     -- This script inserts one bootstrap principal per execution.
     THROW 51000, 'Bootstrap portal admin principal was not replaced. Set @BootstrapPortalAdminPrincipal to a valid Windows user or group (DOMAIN\Name or user@domain) before running this script, or use the HostAgent-first installer profile bootstrapPortalAdminPrincipal setting.', 1;
+END
+
+IF @AllowBootstrapReseed = 1
+BEGIN
+    PRINT N'*** WARNING: 2-initialize-openmoduleplatform is running with @AllowBootstrapReseed = 1. '
+        + N'Operator state is NOT protected: retired rows may be re-enabled and stale baseline artifact rows recreated. '
+        + N'This override is only for a deliberate manual reseed. ***';
 END
 
 -- The setup script also adds database constraint
@@ -199,7 +222,7 @@ WHEN MATCHED THEN
     UPDATE SET DisplayName = source.DisplayName,
                Description = source.Description,
                SortOrder = source.SortOrder,
-               IsEnabled = source.IsEnabled,
+               IsEnabled = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsEnabled ELSE target.IsEnabled END,
                UpdatedUtc = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
     INSERT(TemplateKey, DisplayName, Description, SortOrder, IsEnabled)
@@ -277,7 +300,9 @@ BEGIN
         DisplayName = N'Default Instance',
         Description = N'Default OMP instance seeded by the install script',
         InstanceTemplateId = @DefaultInstanceTemplateId,
-        IsEnabled = 1,
+        -- Reseed safety: a disabled default instance is an operator decision;
+        -- only an explicit reseed override may re-enable it.
+        IsEnabled = CASE WHEN @AllowBootstrapReseed = 1 THEN CONVERT(bit, 1) ELSE IsEnabled END,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE InstanceId = @DefaultInstanceId;
 END
@@ -335,27 +360,54 @@ END
 
 IF @SeedDefaultHost = 1 AND @DefaultHostId IS NULL
 BEGIN
-    SET @DefaultHostId = NEWID();
+    IF @AllowBootstrapReseed = 0
+       AND EXISTS (SELECT 1 FROM omp.Hosts WHERE InstanceId = @DefaultInstanceId)
+    BEGIN
+        -- Fail-closed: host rows exist but all are disabled. The script cannot
+        -- tell a fresh install apart from an operational install whose hosts
+        -- were retired on purpose, so it refuses to recreate the placeholder.
+        PRINT N'OMP core seed: the default instance already has host rows but none are enabled; refusing to recreate the ''' + @DefaultHostKey + N''' placeholder host. Re-enable a real host instead, or rerun with @AllowBootstrapReseed = 1 for a deliberate reseed.';
+    END
+    ELSE
+    BEGIN
+        SET @DefaultHostId = NEWID();
 
-    INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture)
-    VALUES(@DefaultHostId, @DefaultInstanceId, @DefaultHostKey, @DefaultHostDisplayName, NULL, @DefaultHostEnvironment, N'Windows', @DefaultHostArchitecture);
+        INSERT INTO omp.Hosts(HostId, InstanceId, HostKey, DisplayName, BaseUrl, Environment, OsFamily, Architecture)
+        VALUES(@DefaultHostId, @DefaultInstanceId, @DefaultHostKey, @DefaultHostDisplayName, NULL, @DefaultHostEnvironment, N'Windows', @DefaultHostArchitecture);
+    END
 END
 ELSE IF @SeedDefaultHost = 1
 BEGIN
-    UPDATE omp.Hosts
-    SET InstanceId = @DefaultInstanceId,
-        HostKey = @DefaultHostKey,
-        DisplayName = @DefaultHostDisplayName,
-        BaseUrl = NULL,
-        Environment = @DefaultHostEnvironment,
-        OsFamily = N'Windows',
-        Architecture = @DefaultHostArchitecture,
-        IsEnabled = 1,
-        UpdatedUtc = SYSUTCDATETIME()
-    WHERE HostId = @DefaultHostId;
+    -- Reseed safety: an existing placeholder host row is left untouched. In
+    -- particular the script must not re-enable it, must not reset
+    -- operator-edited fields (BaseUrl, Environment, Architecture), and must not
+    -- reactivate its template assignments below.
+    IF EXISTS (SELECT 1 FROM omp.Hosts WHERE HostId = @DefaultHostId AND IsEnabled = 0)
+    BEGIN
+        IF @AllowBootstrapReseed = 1
+        BEGIN
+            UPDATE omp.Hosts
+            SET InstanceId = @DefaultInstanceId,
+                HostKey = @DefaultHostKey,
+                DisplayName = @DefaultHostDisplayName,
+                BaseUrl = NULL,
+                Environment = @DefaultHostEnvironment,
+                OsFamily = N'Windows',
+                Architecture = @DefaultHostArchitecture,
+                IsEnabled = 1,
+                UpdatedUtc = SYSUTCDATETIME()
+            WHERE HostId = @DefaultHostId;
+        END
+        ELSE
+        BEGIN
+            PRINT N'OMP core seed: the ''' + @DefaultHostKey + N''' placeholder host is disabled; leaving it retired (operator state wins). Rerun with @AllowBootstrapReseed = 1 to force the legacy resurrection.';
+            SET @DefaultHostId = NULL;
+        END
+    END
 END
 
 IF @SeedDefaultHost = 1
+   AND @DefaultHostId IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateHosts WHERE InstanceTemplateId = @DefaultInstanceTemplateId AND HostKey = @DefaultHostKey)
 BEGIN
     INSERT INTO omp.InstanceTemplateHosts(InstanceTemplateId, HostTemplateId, HostKey, DisplayName, Environment, SortOrder)
@@ -376,7 +428,9 @@ BEGIN
     AND target.HostTemplateId = source.HostTemplateId
     WHEN MATCHED THEN
         UPDATE SET AssignedBy = source.AssignedBy,
-                   IsActive = source.IsActive
+                   -- Reseed safety: a deactivated assignment is an operator
+                   -- decision; only an explicit reseed override reactivates it.
+                   IsActive = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsActive ELSE target.IsActive END
     WHEN NOT MATCHED THEN
         INSERT(HostId, HostTemplateId, AssignedBy, IsActive)
         VALUES(source.HostId, source.HostTemplateId, source.AssignedBy, source.IsActive);
@@ -411,7 +465,7 @@ BEGIN
         ModuleType = N'PlatformCore',
         SchemaName = N'omp',
         Description = N'Core OMP schema, bootstrap data, and host-local infrastructure metadata.',
-        IsEnabled = 1,
+        IsEnabled = CASE WHEN @AllowBootstrapReseed = 1 THEN CONVERT(bit, 1) ELSE IsEnabled END,
         SortOrder = 0,
         UpdatedUtc = SYSUTCDATETIME()
     WHERE ModuleKey = N'omp_core';
@@ -455,7 +509,7 @@ WHEN MATCHED THEN
                AppType = source.AppType,
                Description = source.Description,
                SortOrder = source.SortOrder,
-               IsEnabled = source.IsEnabled,
+               IsEnabled = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsEnabled ELSE target.IsEnabled END,
                UpdatedUtc = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
     INSERT(ModuleId, AppKey, DisplayName, AppType, Description, SortOrder, IsEnabled)
@@ -470,6 +524,26 @@ SELECT @HostAgentAppId =
 FROM omp.Apps
 WHERE ModuleId = @CoreModuleId
   AND AppKey IN (N'omp_hostagent', N'omp_workermanager', N'omp_workerprocesshost');
+
+-- Reseed safety: the packaged baseline artifact rows are a cold-bootstrap
+-- bridge, nothing else. On an installation that already has other registered
+-- versions for the same target, (re)creating these rows only reintroduces
+-- stale, never-provisioned versions into the enabled artifact set -- the exact
+-- poison a heal run must not carry. Existing baseline rows are therefore left
+-- completely untouched (a retired baseline row stays retired), and the insert
+-- is skipped per target once any other registered version exists there.
+IF @AllowBootstrapReseed = 0
+   AND EXISTS
+   (
+       SELECT 1
+       FROM omp.Artifacts newer
+       WHERE newer.AppId IN (@HostAgentAppId, @WorkerManagerAppId, @WorkerProcessHostAppId)
+         AND newer.TargetName IN (N'omp-hostagent', N'omp-workermanager', N'omp-workerprocesshost')
+         AND newer.Version NOT IN (@BaselineHostAgentArtifactVersion, @BaselineWorkerManagerArtifactVersion, @BaselineWorkerProcessHostArtifactVersion)
+   )
+BEGIN
+    PRINT N'OMP core seed: newer core artifacts are already registered; skipping creation of the packaged baseline artifact rows and leaving any retired baseline rows untouched. Rerun with @AllowBootstrapReseed = 1 to force the legacy behavior.';
+END
 
 MERGE omp.Artifacts AS target
 USING
@@ -499,11 +573,24 @@ ON target.AppId = source.AppId
 AND target.Version = source.Version
 AND target.PackageType = source.PackageType
 AND target.TargetName = source.TargetName
-WHEN MATCHED THEN
+WHEN MATCHED AND @AllowBootstrapReseed = 1 THEN
+    -- Legacy resurrection, only under the explicit logged reseed override.
     UPDATE SET RelativePath = source.RelativePath,
                IsEnabled = source.IsEnabled,
                UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
+WHEN NOT MATCHED AND
+     (
+         @AllowBootstrapReseed = 1
+         OR NOT EXISTS
+         (
+             SELECT 1
+             FROM omp.Artifacts newer
+             WHERE newer.AppId = source.AppId
+               AND newer.PackageType = source.PackageType
+               AND newer.TargetName = source.TargetName
+               AND newer.Version <> source.Version
+         )
+     ) THEN
     INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
     VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
 
@@ -586,7 +673,7 @@ WHEN MATCHED THEN
                DisplayName = source.DisplayName,
                Description = source.Description,
                SortOrder = source.SortOrder,
-               IsEnabled = source.IsEnabled,
+               IsEnabled = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsEnabled ELSE target.IsEnabled END,
                UpdatedUtc = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
     INSERT(InstanceTemplateId, ModuleId, ModuleInstanceKey, DisplayName, Description, SortOrder, IsEnabled)
@@ -629,8 +716,8 @@ BEGIN
                    DesiredArtifactId = source.DesiredArtifactId,
                    DesiredState = source.DesiredState,
                    SortOrder = source.SortOrder,
-                   IsEnabled = source.IsEnabled,
-                   IsAllowed = source.IsAllowed,
+                   IsEnabled = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsEnabled ELSE target.IsEnabled END,
+                   IsAllowed = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsAllowed ELSE target.IsAllowed END,
                    UpdatedUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
         INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)

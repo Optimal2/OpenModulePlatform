@@ -16,6 +16,7 @@ Use these scripts for the neutral OMP core installation flow:
 
 2. `2-initialize-openmoduleplatform.sql`
    - Seeds the default OMP instance, host/template baseline, RBAC baseline, built-in baseline roles, and bootstrap administrator principal.
+   - Reseed-safe by default: repair/heal reruns against an operational install never re-enable rows an operator has retired, never rewrite operator-edited host fields, and never (re)create the packaged baseline artifact rows once other registered versions exist for the same artifact target. Set `@AllowBootstrapReseed = 1` in a manually edited copy only for a deliberate reseed; the override is announced with a loud `PRINT` in the execution log.
 
 3. `3-initialize-opendocviewer.sql`
    - Registers OpenDocViewer as a host-neutral OMP web app artifact target so
