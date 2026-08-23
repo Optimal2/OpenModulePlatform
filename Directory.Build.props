@@ -29,6 +29,24 @@
       content-based artifact identity.
     -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+    <!--
+      And stop the SDK from querying git at all.
+
+      Clearing the informational version was not enough: SourceLink is built into
+      the SDK since .NET 8 and needs no package, so _GenerateSourceLinkFile still
+      ran, embedded the commit in the PDB, and changed the assembly's MVID and PE
+      timestamp. Measured: a git commit with NO file changes at all produced a
+      different assembly, and resetting back to the previous commit reproduced
+      the original bytes exactly - the build is deterministic per commit, which
+      is precisely the problem when artifact identity is a content hash.
+
+      Source Link is worth having in a published build; CI can set
+      EnableSourceControlManagerQueries=true when that is wanted. Locally it costs
+      every artifact its identity on every commit, and this repository ships
+      artifacts, not NuGet packages.
+    -->
+    <EnableSourceControlManagerQueries Condition="'$(GITHUB_ACTIONS)' != 'true'">false</EnableSourceControlManagerQueries>
   </PropertyGroup>
 
   <!--
