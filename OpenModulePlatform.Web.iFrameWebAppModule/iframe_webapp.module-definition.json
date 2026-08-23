@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "iframe_webapp",
-  "definitionVersion": "0.3.18",
+  "definitionVersion": "0.3.19",
   "module": {
     "displayName": "iFrame Web App",
     "moduleType": "WebAppModule",

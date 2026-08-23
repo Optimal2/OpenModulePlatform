@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_webapp",
-  "definitionVersion": "0.3.19",
+  "definitionVersion": "0.3.20",
   "module": {
     "displayName": "Example WebApp",
     "moduleType": "WebAppModule",

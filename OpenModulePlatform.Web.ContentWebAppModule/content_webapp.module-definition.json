@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "content_webapp",
-  "definitionVersion": "0.3.27",
+  "definitionVersion": "0.3.28",
   "module": {
     "displayName": "Content Web App",
     "moduleType": "WebAppModule",

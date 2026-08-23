@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_serviceapp",
-  "definitionVersion": "0.3.24",
+  "definitionVersion": "0.3.25",
   "module": {
     "displayName": "Example ServiceApp",
     "moduleType": "HostAppModule",

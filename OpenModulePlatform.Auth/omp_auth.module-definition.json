@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_auth",
-  "definitionVersion": "0.3.22",
+  "definitionVersion": "0.3.23",
   "module": {
     "displayName": "OMP Auth",
     "moduleType": "WebAppModule",
