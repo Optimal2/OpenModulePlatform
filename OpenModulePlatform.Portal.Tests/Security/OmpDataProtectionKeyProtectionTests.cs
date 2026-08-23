@@ -55,10 +55,50 @@ public sealed class OmpDataProtectionKeyProtectionTests
     {
         var encryptor = ResolveXmlEncryptor(new OmpAuthOptions
         {
+            // Explicit: legacy DPAPI is no longer the default, so relying on it
+            // here would silently turn this into a test of the default instead.
+            ProtectKeysWithDpapi = true,
             DpapiProtectToLocalMachine = protectToLocalMachine,
         });
 
         Assert.Equal("DpapiXmlEncryptor", encryptor?.GetType().Name);
+    }
+
+    /// <summary>
+    /// Locks the 2026-08-23 operator decision: an out-of-the-box key ring is NOT
+    /// encrypted at rest.
+    /// </summary>
+    /// <remarks>
+    /// Machine-scoped DPAPI ties the ring to the host that wrote it and repeatedly
+    /// cost working installations their sign-in. Until the AD security group exists,
+    /// NTFS permissions on the key directory are the control; after that the answer is
+    /// <see cref="OmpAuthOptions.DpapiNgProtectionDescriptor"/>, not this flag.
+    /// If this test goes red because someone restored the old default, that is a
+    /// security-relevant change of behaviour for every existing installation and needs
+    /// the operator's decision — not a test edit.
+    /// </remarks>
+    [Fact]
+    public void Apply_WithDefaultOptions_LeavesKeyRingUnencrypted()
+    {
+        var encryptor = ResolveXmlEncryptor(new OmpAuthOptions());
+
+        Assert.False(new OmpAuthOptions().ProtectKeysWithDpapi);
+        Assert.Null(encryptor);
+    }
+
+    /// <summary>
+    /// The AD-backed path must still work untouched — it is how encryption comes back
+    /// once the security group is populated.
+    /// </summary>
+    [Fact]
+    public void Apply_WithDefaultOptionsPlusDescriptor_StillUsesDpapiNG()
+    {
+        var encryptor = ResolveXmlEncryptor(new OmpAuthOptions
+        {
+            DpapiNgProtectionDescriptor = "SID=S-1-5-21-1111111111-2222222222-3333333333-4444",
+        });
+
+        Assert.Equal("DpapiNGXmlEncryptor", encryptor?.GetType().Name);
     }
 
     [Fact]

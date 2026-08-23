@@ -98,9 +98,10 @@ WHERE ArtifactId = @ArtifactId;";
     /// A row is carried forward only when the previous row has a known package
     /// baseline, the operator changed it (content or IsEnabled), and the new
     /// package content is unchanged against that baseline (three-way rule).
-    /// Rows without a baseline (legacy) keep the pre-baseline behavior: the
-    /// package file wins, but a Conflict row is reported so the operator can
-    /// review the difference instead of losing edits silently.
+    /// Rows without a baseline are operator-owned content with no package to
+    /// compare against; they are carried forward when the target row is still
+    /// pristine package content, and reported as Conflict only when the target
+    /// itself already carries an operator edit that must not be overwritten.
     /// </summary>
     public const string CarryForwardOperatorEdits = @"
 DECLARE @AppId int;
@@ -161,6 +162,24 @@ SELECT sourceFile.RelativePath,
                 AND CAST(target.PackageFileContent AS varbinary(max)) = CAST(sourceFile.PackageFileContent AS varbinary(max))
                 AND (CAST(sourceFile.FileContent AS varbinary(max)) <> CAST(sourceFile.PackageFileContent AS varbinary(max))
                      OR sourceFile.IsEnabled = 0)
+               THEN N'Preserved'
+           -- A source row with NO package baseline is operator-owned as unambiguously
+           -- as content can be: it was created outside any package, or inherited from
+           -- such a row. Requiring a baseline on the SOURCE made these rows Conflict
+           -- and let the package default win, which is how a configured OmpAuth:Oidc
+           -- block disappeared from a working install (VGR Test, measured 2026-08-23):
+           -- the operator's row sat on the previous artifact while every newer version
+           -- carried the package default, and once one version held that default it
+           -- became the carry-forward source for the next -- the loss compounded and
+           -- never healed.
+           -- Carrying it forward is safe precisely because the TARGET is still exactly
+           -- what its package delivered and is enabled, so there is no newer operator
+           -- edit here to overwrite. A target that was already edited stays untouched
+           -- and is still reported as Conflict below.
+           WHEN sourceFile.PackageFileContent IS NULL
+                AND target.PackageFileContent IS NOT NULL
+                AND CAST(target.FileContent AS varbinary(max)) = CAST(target.PackageFileContent AS varbinary(max))
+                AND target.IsEnabled = 1
                THEN N'Preserved'
            ELSE N'Conflict'
        END

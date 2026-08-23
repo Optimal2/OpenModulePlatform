@@ -151,8 +151,25 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
         Assert.Equal(ChangedPackagedContent, row.FileContent);
     }
 
+    /// <summary>
+    /// A previous row with NO package baseline is carried forward when the target row is
+    /// still pristine package content.
+    /// </summary>
+    /// <remarks>
+    /// This used to report Conflict and let the package default win. Measured in a
+    /// customer test environment 2026-08-23: a configured OmpAuth:Oidc block sat on the
+    /// previous artifact while every newer version carried the package default, because
+    /// the operator's row had no baseline and could therefore never be Preserved. Worse,
+    /// once one version held that default it became the carry-forward source for the
+    /// next, so the loss compounded and never healed on its own.
+    ///
+    /// Carrying it forward cannot overwrite anything: the target is byte-for-byte what
+    /// its package delivered and is enabled. A target that already carries an operator
+    /// edit is a different case and stays Conflict -- see
+    /// <see cref="CarryForward_LegacyRowWithoutBaseline_DoesNotOverwriteAnEditedTarget"/>.
+    /// </remarks>
     [Fact]
-    public async Task CarryForward_LegacyRowWithoutBaseline_ReportsConflictInsteadOfSilentLoss()
+    public async Task CarryForward_LegacyRowWithoutBaseline_IsPreservedOverPackageDefault()
     {
         await ReplaceAsync(PreviousArtifactId, (ConfigPath, OperatorEditedContent));
         _database.ClearArtifactConfigurationFileBaseline(PreviousArtifactId, ConfigPath);
@@ -162,9 +179,69 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
         var result = await _repository.CarryForwardArtifactConfigurationFilesAsync(NewArtifactId, CancellationToken.None);
 
         var item = Assert.Single(result.Items);
-        Assert.Equal(ArtifactConfigurationCarryForwardOutcome.Conflict, item.Outcome);
+        Assert.Equal(ArtifactConfigurationCarryForwardOutcome.Preserved, item.Outcome);
         var row = Assert.Single(_database.GetArtifactConfigurationFiles(NewArtifactId));
-        Assert.Equal(PackagedContent, row.FileContent);
+        Assert.Equal(OperatorEditedContent, row.FileContent);
+    }
+
+    /// <summary>
+    /// The safety half of the rule above: a baseline-less source must NOT overwrite a
+    /// target the operator has already edited.
+    /// </summary>
+    [Fact]
+    public async Task CarryForward_LegacyRowWithoutBaseline_DoesNotOverwriteAnEditedTarget()
+    {
+        await ReplaceAsync(PreviousArtifactId, (ConfigPath, OperatorEditedContent));
+        _database.ClearArtifactConfigurationFileBaseline(PreviousArtifactId, ConfigPath);
+        InsertNewArtifact();
+        await ReplaceAsync(NewArtifactId, (ConfigPath, PackagedContent));
+        // The operator edits the NEW version after it was imported.
+        _database.SetArtifactConfigurationFileContent(NewArtifactId, ConfigPath, ChangedPackagedContent);
+
+        var result = await _repository.CarryForwardArtifactConfigurationFilesAsync(NewArtifactId, CancellationToken.None);
+
+        var row = Assert.Single(_database.GetArtifactConfigurationFiles(NewArtifactId));
+        Assert.Equal(ChangedPackagedContent, row.FileContent);
+        Assert.DoesNotContain(
+            result.Items,
+            i => i.Outcome == ArtifactConfigurationCarryForwardOutcome.Preserved);
+    }
+
+    /// <summary>
+    /// The compounding case, end to end: version A holds the operator's content, B is
+    /// imported and must inherit it, and C imported after B must still have it.
+    /// </summary>
+    /// <remarks>
+    /// This is the shape of the real failure. With the old rule B silently took the
+    /// package default and then became the source for C, so the operator's content was
+    /// unreachable from that point on -- exactly what "it disappeared again" looked like.
+    /// </remarks>
+    [Fact]
+    public async Task CarryForward_LegacyRowWithoutBaseline_SurvivesTwoConsecutiveImports()
+    {
+        const int ThirdArtifactId = 300;
+
+        // Version A: the operator's content, with no package baseline.
+        await ReplaceAsync(PreviousArtifactId, (ConfigPath, OperatorEditedContent));
+        _database.ClearArtifactConfigurationFileBaseline(PreviousArtifactId, ConfigPath);
+
+        // Version B is imported and must inherit it.
+        InsertNewArtifact();
+        await ReplaceAsync(NewArtifactId, (ConfigPath, PackagedContent));
+        await _repository.CarryForwardArtifactConfigurationFilesAsync(NewArtifactId, CancellationToken.None);
+
+        var afterB = Assert.Single(_database.GetArtifactConfigurationFiles(NewArtifactId));
+        Assert.Equal(OperatorEditedContent, afterB.FileContent);
+
+        // Version C is imported after B. B is now the newest source, so if B had taken
+        // the package default the operator's content would be unreachable from here on.
+        // That is exactly how the real installation lost its OmpAuth:Oidc block.
+        _database.InsertArtifact(ThirdArtifactId, "web-app", "2.4.62", DateTime.UtcNow.AddMinutes(10));
+        await ReplaceAsync(ThirdArtifactId, (ConfigPath, PackagedContent));
+        await _repository.CarryForwardArtifactConfigurationFilesAsync(ThirdArtifactId, CancellationToken.None);
+
+        var afterC = Assert.Single(_database.GetArtifactConfigurationFiles(ThirdArtifactId));
+        Assert.Equal(OperatorEditedContent, afterC.FileContent);
     }
 
     [Fact]

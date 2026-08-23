@@ -30,11 +30,33 @@ public sealed class OmpAuthOptions
 
     /// <summary>
     /// On Windows, encrypt the Data Protection key ring at rest with DPAPI so a
-    /// reader of the key directory cannot forge auth cookies (R3-E8). Default
-    /// on; turn off only when the key ring must be portable across machines
-    /// that cannot share a DPAPI context (then protect the directory by ACL).
+    /// reader of the key directory cannot forge auth cookies (R3-E8).
     /// </summary>
-    public bool ProtectKeysWithDpapi { get; set; } = true;
+    /// <remarks>
+    /// <para>
+    /// <b>Default off since 2026-08-23 (operator decision).</b> Machine-scoped DPAPI
+    /// ties the ring to the host that wrote it, which repeatedly cost working
+    /// installations their sign-in when app pools ran as different accounts or when a
+    /// key ring moved between nodes. Until the AD security group holding the servers
+    /// and service accounts exists, the key directory is protected by NTFS
+    /// permissions instead: grant only the app-pool identities read access and keep
+    /// the parent directory off any share.
+    /// </para>
+    /// <para>
+    /// This is a deliberate, temporary trade: an unencrypted ring means anyone who can
+    /// READ the key directory can forge auth cookies, so the file permissions are the
+    /// whole control. When the AD group is ready, set
+    /// <see cref="DpapiNgProtectionDescriptor"/> to <c>SID=&lt;group SID&gt;</c> — that
+    /// is AD-backed, works across every domain-joined node, and takes precedence over
+    /// this flag. Re-enabling <see cref="ProtectKeysWithDpapi"/> instead brings back the
+    /// single-host limitation that caused the original problem.
+    /// </para>
+    /// <para>
+    /// The value must MATCH across every OMP app and node sharing a key ring; a key
+    /// written under one setting cannot be read under another.
+    /// </para>
+    /// </remarks>
+    public bool ProtectKeysWithDpapi { get; set; } = false;
 
     /// <summary>
     /// Scope for the DPAPI protection of the key ring. True (default) protects

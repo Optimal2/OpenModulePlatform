@@ -909,7 +909,7 @@ Every OMP web app that shares sign-in and role switching must use identical valu
 - `OmpAuth:CookieName` — default `.OpenModulePlatform.Auth`.
 - `OmpAuth:ApplicationName` — default `OpenModulePlatform`. This is the ASP.NET Core Data Protection application discriminator.
 - `OmpAuth:DataProtectionKeyPath` — must point to the same shared key ring folder for all apps, and for all IIS nodes in a load-balanced setup.
-- `OmpAuth:DpapiNgProtectionDescriptor` / `OmpAuth:ProtectKeysWithDpapi` / `OmpAuth:DpapiProtectToLocalMachine` — must match across all apps and nodes, or a key written by one app cannot be decrypted by another. See "Load-balanced deployments" below for which value fits which topology.
+- `OmpAuth:DpapiNgProtectionDescriptor` / `OmpAuth:ProtectKeysWithDpapi` / `OmpAuth:DpapiProtectToLocalMachine` — must match across all apps and nodes, or a key written by one app cannot be decrypted by another. `ProtectKeysWithDpapi` defaults to `false` since 2026-08-23 — the key directory's NTFS permissions are the control until an AD group SID is configured as the DPAPI-NG descriptor. See "Load-balanced deployments" below for which value fits which topology.
 
 Affected apps include the Portal, `OpenModulePlatform.Auth`, and every consumer module web app such as IbsPackager, Dokumentbibliotek, EArkivChecker, LogSearch, and VajSkrivare. See `OmpAuthOptions.cs` for the section shape and defaults.
 
@@ -1004,14 +1004,27 @@ secret — there is no multi-recipient encryption. The supported choices are:
   never silently falls back to another protection scope. When a descriptor is
   set it takes precedence over `ProtectKeysWithDpapi` and
   `DpapiProtectToLocalMachine`.
-- **Single host, several app-pool accounts:** keep the defaults
-  (`ProtectKeysWithDpapi=true`, `DpapiProtectToLocalMachine=true`). Machine
-  scope lets every pool on that host decrypt the shared ring.
+- **Default since 2026-08-23: no at-rest encryption.**
+  `ProtectKeysWithDpapi` now defaults to **`false`**, so an out-of-the-box key
+  ring is written in clear text and the **NTFS permissions on
+  `DataProtectionKeyPath` are the whole control**. Grant read access only to the
+  app-pool identities that must share the ring, and keep the directory off any
+  file share. Anyone who can read that directory can forge auth cookies.
+  This is a deliberate, temporary trade (operator decision): machine-scoped DPAPI
+  ties the ring to the host that wrote it and repeatedly cost working
+  installations their sign-in when pools ran as different accounts or a ring
+  moved between nodes.
+- **The way back to encryption is the descriptor, not the flag.** Once the AD
+  security group holding the servers and service accounts exists, set
+  `OmpAuth:DpapiNgProtectionDescriptor` to `SID=<group SID>`. That is AD-backed,
+  works on every domain-joined node, and takes precedence over
+  `ProtectKeysWithDpapi`. Turning `ProtectKeysWithDpapi=true` back on instead
+  reintroduces the single-host limitation that caused the original problem.
+- **Single host, several app-pool accounts:** if you do enable legacy DPAPI, use
+  `ProtectKeysWithDpapi=true` together with `DpapiProtectToLocalMachine=true`.
+  Machine scope lets every pool on that host decrypt the shared ring.
 - **Single host, single account:** machine scope is fine; current-user scope
   (`DpapiProtectToLocalMachine=false`) adds per-account isolation if wanted.
-- **`ProtectKeysWithDpapi=false`** (and no descriptor set) disables all
-  at-rest encryption as before R3-E8; protect the shared key directory with a
-  strict ACL instead.
 
 A farm that upgrades from pre-R3-E8 builds (unencrypted keys) or from
 DPAPI-protected builds to DPAPI-NG must **delete the old key files from
