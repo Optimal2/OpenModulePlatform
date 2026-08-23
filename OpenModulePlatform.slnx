@@ -22,6 +22,7 @@
   <Project Path="OpenModulePlatform.Worker.Abstractions.Tests/OpenModulePlatform.Worker.Abstractions.Tests.csproj" />
   <Project Path="OpenModulePlatform.WorkerProcessHost/OpenModulePlatform.WorkerProcessHost.csproj" />
   <Project Path="OpenModulePlatform.WorkerManager.WindowsService/OpenModulePlatform.WorkerManager.WindowsService.csproj" />
+  <Project Path="OpenModulePlatform.WorkerManager.WindowsService.Tests/OpenModulePlatform.WorkerManager.WindowsService.Tests.csproj" />
   <Project Path="OpenModulePlatform.HostAgent.Runtime/OpenModulePlatform.HostAgent.Runtime.csproj" />
   <Project Path="OpenModulePlatform.HostAgent.WindowsService/OpenModulePlatform.HostAgent.WindowsService.csproj" />
   <Project Path="OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.csproj" />

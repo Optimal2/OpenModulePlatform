@@ -112,7 +112,8 @@ try {
             $projects = @(
                 'OpenModulePlatform.HostAgent.Runtime.Tests',
                 'OpenModulePlatform.Portal.Tests',
-                'OpenModulePlatform.Bootstrapper.Tests'
+                'OpenModulePlatform.Bootstrapper.Tests',
+                'OpenModulePlatform.WorkerManager.WindowsService.Tests'
             )
             foreach ($project in $projects) {
                 $path = Join-Path $repoRoot ("{0}\{0}.csproj" -f $project)

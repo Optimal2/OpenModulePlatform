@@ -143,6 +143,33 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
         var runtimeKind = GetRuntimeKindOrNull();
 
+        // Resolve the desired WorkerProcessHost once per cycle: it is a single TOP(1)
+        // row per host key, identical for every worker (R5-F5/R6-F4 apply — no per-worker
+        // fan-out). Its artifact id is compared against each running worker's frozen
+        // start witness (R12-F2) so that a host upgrade recycles workers through the
+        // ordinary drain path. Before this comparison existed the resolve only ran when
+        // a worker STARTED, so in steady state a new host build was never noticed: every
+        // healthy worker kept the old executable forever and the deployment diagnostics
+        // reported a Pending drift nothing ever cleared (measured 2026-08-23, host
+        // 0.3.42 running while 0.3.43 was desired).
+        //
+        // A failed or empty resolve means "no opinion this cycle", never "changed":
+        // the ProvisioningState=2 requirement makes the resolve flap during the very
+        // host deploy that triggers the comparison, and recycling a healthy worker over
+        // a transient bookkeeping gap is the failure mode R6-F2 exists to prevent. The
+        // eleven ordinary definition fields are still compared sharply either way.
+        ResolvedWorkerProcessHost? cycleHost = null;
+        try
+        {
+            cycleHost = await ResolveWorkerProcessHostAsync(_settings.CurrentValue, cancellationToken);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || IsRecoverableWorkerManagerFailure(ex))
+        {
+            _logger.LogWarning(
+                "Could not resolve the desired WorkerProcessHost this cycle; the host-version comparison is skipped and retried next cycle. Error={Error}",
+                ex.Message);
+        }
+
         var exitedWorkers = _managedWorkers.Values
             .Where(managed => managed.NeedsExitObservation())
             .ToList();
@@ -195,7 +222,22 @@ public sealed class WorkerManagerHostedService : BackgroundService
 
             try
             {
-                if (!managed.HasEquivalentConfiguration(desired))
+                // The host half of the restart decision compares what is actually
+                // RUNNING (the witness frozen at AttachProcess, R12-F2) against the
+                // cycle's resolved host artifact — deliberately not a definition
+                // field: the definition would drift from the process exactly when it
+                // matters. Gated on IsRunning() because a dead process has no witness,
+                // and folded into the SAME predicate as the configuration comparison
+                // so a host change inherits the whole existing chain unchanged: the
+                // startability preflight (R6-F3), drain before restart, the R7-F1
+                // resume, and the R5-F1 else-branch that cancels a pending drain when
+                // a host rollback makes the combined predicate turn false again.
+                var hostRestart = managed.IsRunning()
+                    && HostRestartCheck.RequiresHostRestart(
+                        managed.StartedHostArtifactId,
+                        cycleHost?.ArtifactId);
+
+                if (!managed.HasEquivalentConfiguration(desired) || hostRestart)
                 {
                     // Never tear down a RUNNING worker for a configuration we already
                     // know we cannot start. Two of the compared fields (InstallRootPath,
@@ -207,7 +249,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
                     // ValidateReadableStartupFile -- leaving the worker stopped and
                     // unable to start until the HostAgent state recovered (R6-F3).
                     var startability = managed.IsRunning()
-                        ? await IsStartableDefinitionAsync(desired, cancellationToken)
+                        ? await IsStartableDefinitionAsync(desired, cycleHost, cancellationToken)
                         : (IsStartable: true, Problem: string.Empty);
                     if (!startability.IsStartable)
                     {
@@ -244,6 +286,22 @@ public sealed class WorkerManagerHostedService : BackgroundService
                         // check from flagging a healthy draining worker as Stale (R5-F4).
                         await PublishRunningObservationIfEnabledAsync(managed, runtimeKind, cancellationToken);
                         continue;
+                    }
+
+                    if (hostRestart)
+                    {
+                        // The generic configuration-changed line below cannot say WHY;
+                        // for a host recycle the operator needs both builds named to
+                        // tie this restart to the Pending row in the deployment
+                        // diagnostics without reading source.
+                        _logger.LogInformation(
+                            "Worker host build changed; recycling worker onto the desired host. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, RunningHostArtifactId={RunningHostArtifactId}, RunningHostArtifactVersion={RunningHostArtifactVersion}, DesiredHostArtifactId={DesiredHostArtifactId}, DesiredHostArtifactVersion={DesiredHostArtifactVersion}",
+                            desired.AppInstanceId,
+                            desired.WorkerInstanceId,
+                            managed.StartedHostArtifactId,
+                            managed.StartedHostArtifactVersion,
+                            cycleHost?.ArtifactId,
+                            cycleHost?.Version);
                     }
 
                     _logger.LogInformation(
@@ -992,18 +1050,34 @@ public sealed class WorkerManagerHostedService : BackgroundService
     /// </remarks>
     private async Task<(bool IsStartable, string Problem)> IsStartableDefinitionAsync(
         DesiredWorkerInstance desired,
+        ResolvedWorkerProcessHost? preResolvedHost,
         CancellationToken cancellationToken)
     {
         try
         {
             ValidateReadableStartupFile(desired.PluginAssemblyPath, "Worker plugin assembly");
 
-            var workerProcessHost = await ResolveWorkerProcessHostAsync(_settings.CurrentValue, cancellationToken);
+            // The caller passes the host it already resolved this cycle so a fleet-wide
+            // host rollout does not issue one identical SQL resolve per worker. The
+            // FILE validation still runs on every call — readability is exactly the
+            // thing that can change between the resolve and this preflight (R7-F2),
+            // so only the lookup is reused, never its verdict about the file.
+            var workerProcessHost = preResolvedHost
+                ?? await ResolveWorkerProcessHostAsync(_settings.CurrentValue, cancellationToken);
             ValidateReadableStartupFile(workerProcessHost.Path, "Resolved WorkerProcessHost executable");
             return (true, string.Empty);
         }
         catch (InvalidOperationException ex)
         {
+            return (false, ex.Message);
+        }
+        catch (DbException ex)
+        {
+            // Without this, a transient database error during the preflight escaped to
+            // the per-worker catch and published a bogus Failed observation for a
+            // HEALTHY running worker. Not startable this cycle is the honest verdict:
+            // the worker is left untouched and the change is retried next cycle,
+            // which is the same R6-F3 outcome as an unreadable file.
             return (false, ex.Message);
         }
     }
