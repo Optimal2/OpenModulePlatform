@@ -97,6 +97,14 @@ static void ConfigureDefaultNLog()
 
 ConfigureDefaultNLog();
 
+// Name the directory this host actually runs from, on the host's own first log line.
+// During the 2026-08-23 worker-host incident the only way to tie a running process to
+// a host build was the MANAGER's log; the host itself never said where it was loaded
+// from. The provisioned directory is versioned, so this one line answers both
+// "which build" and "which copy".
+LogManager.GetCurrentClassLogger().Info(
+    "Worker process host starting. BaseDirectory={0}", AppContext.BaseDirectory);
+
 var builder = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
     {
