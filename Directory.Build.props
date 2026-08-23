@@ -9,6 +9,26 @@
     <Authors>OpenModulePlatform contributors</Authors>
     <NeutralLanguage>en</NeutralLanguage>
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!--
+      Keep the git commit OUT of AssemblyInformationalVersion.
+
+      The SDK appends "+<commit sha>" to InformationalVersion by default, which
+      means every project in this repository produces different assembly bytes
+      after every commit, whether or not its own sources changed. Artifact
+      identity is manifest version plus SHA-256 of the payload, so that turned
+      each commit into "artifact content changed under the same version" for
+      every component the build touched - and bumping the versions to fix it is
+      itself a commit, which invalidates them again. Measured 2026-08-23: an
+      import failed on 13 components at once whose only difference was
+      0.1.0+51931bb... versus 0.1.0+aa52071..., with no source change between.
+
+      Nothing is lost by removing it. The commit that produced an artifact is
+      recorded where it belongs - in the artifact build stamp next to the package
+      and in git - rather than inside the binary, where it silently defeats
+      content-based artifact identity.
+    -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <!--
