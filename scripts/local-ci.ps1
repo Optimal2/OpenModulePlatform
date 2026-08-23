@@ -1,0 +1,143 @@
+<#
+.SYNOPSIS
+Runs the same gate as .github/workflows/ci.yml, before pushing instead of after.
+
+.DESCRIPTION
+OpenModulePlatform had no local gate while every consumer repository did, so a
+change that breaks CI was only discovered after the push - three times on
+2026-08-23 alone, each one mailing the operator about a broken build.
+
+The failure was always the same check, and always for the same reason: the
+version validator defaults its baseline to origin/main, and once a commit is
+pushed origin/main IS that commit, so it compares the change to itself and
+passes on everything. This script resolves the baseline the way CI does - the
+commit the push will be measured against - so it can actually fail.
+
+.PARAMETER BaseCommit
+Overrides the auto-detected baseline. Rarely needed; the default matches CI.
+
+.PARAMETER SkipTests
+Skips build and tests, keeping only the fast validators. For a quick check while
+iterating - never as the gate before a push.
+#>
+[CmdletBinding()]
+param(
+    [string]$BaseCommit = '',
+    [switch]$SkipTests
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($repoRoot)) {
+    $repoRoot = (Resolve-Path (Join-Path (Get-Location) '..')).Path
+}
+Push-Location $repoRoot
+
+$failures = New-Object System.Collections.Generic.List[string]
+
+function Invoke-Step {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][scriptblock]$Body
+    )
+    Write-Host ""
+    Write-Host "--- $Name"
+    try {
+        # A step that never launches an external process leaves $LASTEXITCODE
+        # unset, and Set-StrictMode turns reading it into a failure - which
+        # reported a passing validator as broken on the first run.
+        $global:LASTEXITCODE = 0
+        & $Body
+        if ((Test-Path 'variable:global:LASTEXITCODE') -and $global:LASTEXITCODE -ne 0) {
+            throw "exit code $global:LASTEXITCODE"
+        }
+        Write-Host "PASS: $Name"
+    }
+    catch {
+        Write-Host "FAIL: $Name -- $($_.Exception.Message)"
+        $script:failures.Add($Name)
+    }
+}
+
+try {
+    # The baseline is the whole point. CI uses github.event.before on a push:
+    # what origin/main pointed at BEFORE the push. Locally that is the upstream
+    # ref while commits are still unpushed. With nothing to push, fall back to
+    # the parent of HEAD so the script still measures something real rather
+    # than comparing HEAD to itself.
+    if ([string]::IsNullOrWhiteSpace($BaseCommit)) {
+        $unpushed = (git rev-list --count '@{u}..HEAD' 2>$null)
+        if ($LASTEXITCODE -eq 0 -and $unpushed -and [int]$unpushed -gt 0) {
+            $BaseCommit = (git rev-parse '@{u}').Trim()
+            $reason = "$unpushed unpushed commit(s); baseline is upstream"
+        }
+        else {
+            $BaseCommit = (git rev-parse 'HEAD^').Trim()
+            $reason = 'nothing to push; baseline is the parent of HEAD'
+        }
+    }
+    else {
+        $reason = 'explicit -BaseCommit'
+    }
+
+    Write-Host "OpenModulePlatform Local CI"
+    Write-Host ("Baseline: {0}  ({1})" -f $BaseCommit.Substring(0, [Math]::Min(12, $BaseCommit.Length)), $reason)
+
+    Invoke-Step 'Validate module definitions' {
+        & (Join-Path $repoRoot 'scripts\omp\validate-module-definitions.ps1')
+    }
+
+    # The check that caught every broken push. A shared project changed without
+    # its consumers moving fails HERE, not in a mail 90 seconds after the push.
+    Invoke-Step 'Validate component versions' {
+        & (Join-Path $repoRoot 'scripts\omp\validate-component-versions.ps1') -BaseCommit $BaseCommit
+    }
+
+    Invoke-Step 'Analyze PowerShell scripts' {
+        & (Join-Path $repoRoot 'scripts\omp\run-script-analyzer.ps1')
+    }
+
+    Invoke-Step 'Pester script tests' {
+        & (Join-Path $repoRoot 'scripts\omp\run-script-tests.ps1')
+    }
+
+    if (-not $SkipTests) {
+        Invoke-Step 'Build solution' {
+            dotnet build (Join-Path $repoRoot 'OpenModulePlatform.slnx') --configuration Release --nologo -v q
+        }
+
+        Invoke-Step 'Tests' {
+            $projects = @(
+                'OpenModulePlatform.HostAgent.Runtime.Tests',
+                'OpenModulePlatform.Portal.Tests',
+                'OpenModulePlatform.Bootstrapper.Tests'
+            )
+            foreach ($project in $projects) {
+                $path = Join-Path $repoRoot ("{0}\{0}.csproj" -f $project)
+                if (-not (Test-Path $path)) { continue }
+                dotnet test $path --configuration Release --nologo -v q --no-build
+                if ($LASTEXITCODE -ne 0) { throw "$project failed" }
+            }
+        }
+    }
+    else {
+        Write-Host ""
+        Write-Host "SKIPPED: build and tests (-SkipTests). Not a substitute for the gate."
+    }
+
+    Write-Host ""
+    Write-Host "========================================"
+    if ($failures.Count -eq 0) {
+        Write-Host "LOCAL CI PASSED"
+        exit 0
+    }
+
+    Write-Host "LOCAL CI FAILED"
+    foreach ($failure in $failures) { Write-Host "  - $failure" }
+    exit 1
+}
+finally {
+    Pop-Location
+}
