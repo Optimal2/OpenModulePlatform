@@ -179,7 +179,7 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
         var result = await _repository.CarryForwardArtifactConfigurationFilesAsync(NewArtifactId, CancellationToken.None);
 
         var item = Assert.Single(result.Items);
-        Assert.Equal(ArtifactConfigurationCarryForwardOutcome.Preserved, item.Outcome);
+        Assert.Equal(ArtifactConfigurationCarryForwardOutcome.PreservedWithoutBaseline, item.Outcome);
         var row = Assert.Single(_database.GetArtifactConfigurationFiles(NewArtifactId));
         Assert.Equal(OperatorEditedContent, row.FileContent);
     }
@@ -204,7 +204,8 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
         Assert.Equal(ChangedPackagedContent, row.FileContent);
         Assert.DoesNotContain(
             result.Items,
-            i => i.Outcome == ArtifactConfigurationCarryForwardOutcome.Preserved);
+            i => i.Outcome is ArtifactConfigurationCarryForwardOutcome.Preserved
+                 or ArtifactConfigurationCarryForwardOutcome.PreservedWithoutBaseline);
     }
 
     /// <summary>
@@ -242,6 +243,53 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
 
         var afterC = Assert.Single(_database.GetArtifactConfigurationFiles(ThirdArtifactId));
         Assert.Equal(OperatorEditedContent, afterC.FileContent);
+    }
+
+    /// <summary>
+    /// The cost of carrying baseline-less rows forward: a deliberate package change to a
+    /// row nobody ever edited does NOT reach the new version.
+    /// </summary>
+    /// <remarks>
+    /// Raised by an independent review (glm, 2026-08-23). The PackageFileContent column
+    /// was added 2026-08-12, so every configuration row older than that carries NULL
+    /// without a human having touched it - plain old package defaults. They are
+    /// indistinguishable from operator-created rows, so this is a real trade, not a bug
+    /// to fix later: losing a customer's OmpAuth:Oidc block is worse than a package
+    /// default arriving one version late, and the latter is visible in the import report
+    /// while the former was silent.
+    ///
+    /// What this test locks is that the trade stays HONEST: the row is carried forward,
+    /// it is reported under its own outcome rather than claimed as an operator edit, and
+    /// the message tells the operator the package change did not take effect.
+    /// </remarks>
+    [Fact]
+    public async Task CarryForward_NeverEditedLegacyRow_BlocksPackageChangeButSaysSo()
+    {
+        // A legacy row: plain package content, baseline stripped the way the 2026-08-12
+        // migration left every pre-existing row.
+        await ReplaceAsync(PreviousArtifactId, (ConfigPath, PackagedContent));
+        _database.ClearArtifactConfigurationFileBaseline(PreviousArtifactId, ConfigPath);
+
+        // The new package deliberately changes the file.
+        InsertNewArtifact();
+        await ReplaceAsync(NewArtifactId, (ConfigPath, ChangedPackagedContent));
+
+        var result = await _repository.CarryForwardArtifactConfigurationFilesAsync(NewArtifactId, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(ArtifactConfigurationCarryForwardOutcome.PreservedWithoutBaseline, item.Outcome);
+
+        // The package change did not reach the new version - that is the cost.
+        var row = Assert.Single(_database.GetArtifactConfigurationFiles(NewArtifactId));
+        Assert.Equal(PackagedContent, row.FileContent);
+
+        // It must never be reported as an operator edit, and the operator must be told
+        // the package change did not take effect.
+        var message = result.BuildImportMessage();
+        Assert.NotNull(message);
+        Assert.Contains("no package baseline", message);
+        Assert.Contains("did NOT take effect", message);
+        Assert.DoesNotContain($"Preserved 1 operator-edited", message);
     }
 
     [Fact]

@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
@@ -1148,13 +1149,39 @@ public static class OmpWebHostingExtensions
         {
             dataProtectionBuilder.PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyPath));
 
-            // Encrypt the key ring at rest by default: without this a reader of
-            // the shared key directory could forge auth cookies for every OMP
-            // app (R3-E8). DPAPI and DPAPI-NG are Windows-only; on other
-            // platforms the directory ACL is the protection.
+            // At-rest encryption of the key ring is OPT-IN since 2026-08-23: a reader
+            // of the key directory can forge auth cookies for every OMP app (R3-E8),
+            // so when nothing is configured the directory permissions are the whole
+            // control. DPAPI and DPAPI-NG are Windows-only; elsewhere the ACL is the
+            // protection either way.
             if (OperatingSystem.IsWindows())
             {
                 ApplyDataProtectionKeyProtection(dataProtectionBuilder, authOptions);
+
+                // Say it out loud at startup. A security trade that is invisible in
+                // operation is one nobody remembers to close, and this one is meant to
+                // end when the AD security group exists. Logged through the options
+                // pipeline because no logger exists this early -- same shape as
+                // AddOmpForwardedHeaders above.
+                if (string.IsNullOrWhiteSpace(authOptions.DpapiNgProtectionDescriptor)
+                    && !authOptions.ProtectKeysWithDpapi)
+                {
+                    var keyPathForLog = dataProtectionKeyPath;
+                    services.AddOptions<KeyManagementOptions>()
+                        .Configure<ILoggerFactory>((_, loggerFactory) =>
+                            loggerFactory
+                                .CreateLogger("OpenModulePlatform.Web.Shared.DataProtection")
+                                .LogWarning(
+                                    "Data Protection key ring at {KeyPath} is NOT encrypted at rest. " +
+                                    "Anyone who can read that directory can forge authentication cookies " +
+                                    "for every OMP app sharing it, so its NTFS permissions are the only " +
+                                    "control: grant read access to the app-pool identities only and keep " +
+                                    "it off any file share. To encrypt again, set " +
+                                    "OmpAuth:DpapiNgProtectionDescriptor to SID=<AD group SID> - that is " +
+                                    "AD-backed and works across nodes, unlike OmpAuth:ProtectKeysWithDpapi " +
+                                    "which ties the ring to this host.",
+                                    keyPathForLog));
+                }
             }
         }
 

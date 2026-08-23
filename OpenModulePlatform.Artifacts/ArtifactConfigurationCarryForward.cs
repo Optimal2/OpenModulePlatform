@@ -10,11 +10,31 @@ public enum ArtifactConfigurationCarryForwardOutcome
     Preserved,
 
     /// <summary>
+    /// The previous row had NO package baseline, so its content was carried forward
+    /// over a target row that was still pristine package content.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="Preserved"/> because the lineage is genuinely unknown.
+    /// A missing baseline means either an operator-created row or a row that predates
+    /// the PackageFileContent column (added 2026-08-12) and was never re-imported - the
+    /// schema says as much: "NULL means unknown lineage (legacy row or operator-created
+    /// row)". Reporting these as operator edits would be a false claim.
+    ///
+    /// Carrying them forward is the deliberate choice: a real customer install lost its
+    /// configured OmpAuth:Oidc block because these rows lost to the package default, and
+    /// the loss compounded across versions. The cost is the opposite error - a deliberate
+    /// package change to a never-edited legacy row does not reach the new version. That
+    /// case is why this has its own outcome instead of hiding inside Preserved: it is
+    /// reported separately so somebody can look at it.
+    /// </remarks>
+    PreservedWithoutBaseline,
+
+    /// <summary>
     /// The effective configuration content of the previous artifact differs from
     /// the new artifact and could not be carried forward safely: either the
     /// package file changed against an operator-edited baseline, or the previous
-    /// row has no package baseline (legacy row) so operator edits cannot be told
-    /// apart from package changes. The package file wins; review manually.
+    /// row has no package baseline and the TARGET row already carries an operator
+    /// edit that must not be overwritten. The package file wins; review manually.
     /// </summary>
     Conflict,
 
@@ -58,6 +78,21 @@ public sealed record ArtifactConfigurationCarryForwardResult(
         {
             parts.Add(
                 $"Preserved {preserved.Count} operator-edited configuration file(s) from version {SourceVersion}: {string.Join(", ", preserved)}.");
+        }
+
+        // Reported apart from Preserved on purpose: these rows have no package baseline,
+        // so calling them operator edits would assert something unknown. They are the
+        // one category where a deliberate package change can fail to reach the new
+        // version, which is exactly why the operator has to see them by name.
+        var withoutBaseline = PathsWithOutcome(
+            ArtifactConfigurationCarryForwardOutcome.PreservedWithoutBaseline);
+        if (withoutBaseline.Count > 0)
+        {
+            parts.Add(
+                $"Carried forward {withoutBaseline.Count} configuration file(s) from version {SourceVersion} " +
+                "that have no package baseline, so they could not be confirmed as operator edits: " +
+                $"{string.Join(", ", withoutBaseline)}. If this package intended to change any of them, " +
+                "the change did NOT take effect - compare against the package file and re-save to adopt it.");
         }
 
         var conflicts = PathsWithOutcome(ArtifactConfigurationCarryForwardOutcome.Conflict);

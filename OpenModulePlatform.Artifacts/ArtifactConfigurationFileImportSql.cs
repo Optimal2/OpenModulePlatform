@@ -150,7 +150,7 @@ END;
 DECLARE @Report TABLE
 (
     RelativePath nvarchar(400) NOT NULL,
-    Outcome nvarchar(20) NOT NULL
+    Outcome nvarchar(40) NOT NULL
 );
 
 INSERT INTO @Report (RelativePath, Outcome)
@@ -163,9 +163,10 @@ SELECT sourceFile.RelativePath,
                 AND (CAST(sourceFile.FileContent AS varbinary(max)) <> CAST(sourceFile.PackageFileContent AS varbinary(max))
                      OR sourceFile.IsEnabled = 0)
                THEN N'Preserved'
-           -- A source row with NO package baseline is operator-owned as unambiguously
-           -- as content can be: it was created outside any package, or inherited from
-           -- such a row. Requiring a baseline on the SOURCE made these rows Conflict
+           -- A source row with NO package baseline has UNKNOWN lineage: the schema says
+           -- 'legacy row or operator-created row'. It may be operator-owned, or it may
+           -- simply predate the PackageFileContent column (added 2026-08-12) and never
+           -- have been re-imported. Requiring a baseline on the SOURCE made these rows Conflict
            -- and let the package default win, which is how a configured OmpAuth:Oidc
            -- block disappeared from a working install (VGR Test, measured 2026-08-23):
            -- the operator's row sat on the previous artifact while every newer version
@@ -176,11 +177,16 @@ SELECT sourceFile.RelativePath,
            -- what its package delivered and is enabled, so there is no newer operator
            -- edit here to overwrite. A target that was already edited stays untouched
            -- and is still reported as Conflict below.
+           -- Reported as its own outcome, never as Preserved: claiming these are operator
+           -- edits would assert lineage nobody can prove. The trade is deliberate and has
+           -- a real cost in the other direction -- a package that genuinely means to change
+           -- a never-edited legacy row will not reach the new version -- so the operator is
+           -- told by name which files this applied to.
            WHEN sourceFile.PackageFileContent IS NULL
                 AND target.PackageFileContent IS NOT NULL
                 AND CAST(target.FileContent AS varbinary(max)) = CAST(target.PackageFileContent AS varbinary(max))
                 AND target.IsEnabled = 1
-               THEN N'Preserved'
+               THEN N'PreservedWithoutBaseline'
            ELSE N'Conflict'
        END
 FROM omp.ArtifactConfigurationFiles sourceFile
@@ -227,7 +233,7 @@ INNER JOIN omp.ArtifactConfigurationFiles sourceFile
    AND sourceFile.RelativePath = target.RelativePath
 INNER JOIN @Report report
     ON report.RelativePath = target.RelativePath
-   AND report.Outcome = N'Preserved'
+   AND report.Outcome IN (N'Preserved', N'PreservedWithoutBaseline')
 WHERE target.ArtifactId = @ArtifactId;
 
 SELECT @SourceVersion AS SourceVersion,
