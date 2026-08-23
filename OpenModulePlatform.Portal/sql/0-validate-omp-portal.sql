@@ -111,10 +111,16 @@ END;
 
 IF OBJECT_ID(N'omp_portal.portal_entries', N'U') IS NOT NULL
 BEGIN
+    -- Only portal:admin-module-packages is required. This block also demanded
+    -- portal:home and portal:admin, which no setup or sync script has ever
+    -- created and which no code reads - so the probe reported the module
+    -- unhealthy on every install, the repair scripts re-ran on every import, and
+    -- they could not have fixed it because nothing defines those rows. Measured
+    -- identically in customer test and production 2026-08-23, which is what gave
+    -- it away: real schema drift does not reproduce byte-for-byte across two
+    -- independently maintained databases.
     SELECT @Missing = @Missing + CASE
-        WHEN EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:home')
-         AND EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:admin')
-         AND EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:admin-module-packages')
+        WHEN EXISTS (SELECT 1 FROM omp_portal.portal_entries WHERE entry_key = N'portal:admin-module-packages')
         THEN 0 ELSE 1 END;
 END;
 
