@@ -738,7 +738,14 @@ public sealed class ArtifactZipImportService
             .Where(static item => item.Kind == UniversalModulePackageItemKind.ArtifactPackage)
             .ToArray();
 
-        foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.ModuleDefinition))
+        // Platform core first: its setup adds the columns other modules' initialize
+        // scripts write to. Package order is zip order and put omp_auth first.
+        var moduleDefinitionItems = package.Items
+            .Where(static item => item.Kind == UniversalModulePackageItemKind.ModuleDefinition)
+            .OrderBy(static item => ModuleDefinitionApplyOrder.GetApplyRankForPath(item.Path))
+            .ThenBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        foreach (var item in moduleDefinitionItems)
         {
             try
             {

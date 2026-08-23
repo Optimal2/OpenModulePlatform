@@ -80,7 +80,10 @@ public sealed class PortableModulePackageService
                 .OrderByDescending(static file => file.Summary!.DefinitionVersion, ArtifactVersionComparer.Instance)
                 .ThenBy(static file => file.Path, StringComparer.OrdinalIgnoreCase)
                 .First())
-            .OrderBy(static file => file.Summary!.ModuleKey, StringComparer.OrdinalIgnoreCase)
+            // Platform core first: its setup adds the columns other modules' initialize
+            // scripts write to. See ModuleDefinitionApplyOrder.
+            .OrderBy(static file => ModuleDefinitionApplyOrder.GetApplyRank(file.Summary!.ModuleKey))
+            .ThenBy(static file => file.Summary!.ModuleKey, StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (definitions.Count == 0)
         {
