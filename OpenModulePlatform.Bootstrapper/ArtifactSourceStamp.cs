@@ -30,6 +30,37 @@ internal static class ArtifactSourceStamp
 
     internal static void ResetDeclineReason() => DeclineReason = null;
 
+    /// <summary>
+    /// Builds the warning shown when a component is rebuilt at a version it was already built at.
+    /// </summary>
+    /// <remarks>
+    /// The two cases are not the same finding and must not read as one. A component whose project
+    /// closure resolves is stamped against the files that actually feed it, so a mismatch is a
+    /// measured source change. A component without one -- an npm app such as OpenDocViewer, which
+    /// has no .csproj -- falls back to the repository-wide stamp: git HEAD plus uncommitted
+    /// changes. Any commit in that repository then forces a rebuild, including a commit that
+    /// cannot reach this artifact. Calling that "source changed" claims more than the check knows,
+    /// and a warning that is always on for one component teaches the reader to skip it -- on the
+    /// component where it is real too. Measured 2026-08-23: two consecutive builds warned about
+    /// opendocviewer-web 2.4.63 with no ODV change between them, while a genuine content change in
+    /// ikrock_web 0.3.36 in the same runs produced no warning at all and surfaced only at import.
+    /// </remarks>
+    internal static string BuildUnbumpedVersionWarning(string componentKey, string version, bool hasScopedStamp)
+    {
+        if (hasScopedStamp)
+        {
+            return $"  WARN    {componentKey}: source changed but version {version} is unchanged "
+                + "since the last build. If this version is already registered on the target host the import will "
+                + "reject it -- bump the component before deploying.";
+        }
+
+        return $"  WARN    {componentKey}: rebuilding version {version}, which is unchanged since the "
+            + "last build. This component has no resolvable project closure, so its build stamp covers the whole "
+            + "repository -- any commit there forces a rebuild and the source feeding this artifact may be "
+            + "unchanged. If this version is already registered on the target host with different content the "
+            + "import will reject it -- bump the component before deploying.";
+    }
+
     /// <summary>Records why per-component scoping declined, surfaced when OMP_STAMP_DIAG=1.</summary>
     private static bool DeclineScopedStamp(string reason)
     {

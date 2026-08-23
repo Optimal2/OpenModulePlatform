@@ -4376,10 +4376,14 @@ internal static partial class Program
                 }
 
                 _unbumpedVersionWarningCount++;
-                lines.Add(
-                    $"  WARN    {component.ComponentKey}: source changed but version {component.Version} is unchanged "
-                    + "since the last build. If this version is already registered on the target host the import will "
-                    + "reject it -- bump the component before deploying.");
+
+                // The two cases are separate findings; ArtifactSourceStamp owns the wording and
+                // the reasoning. A scoped stamp measures this artifact's own sources; without one
+                // the stamp is repository-wide and any commit forces a rebuild.
+                lines.Add(ArtifactSourceStamp.BuildUnbumpedVersionWarning(
+                    component.ComponentKey,
+                    component.Version,
+                    TryGetScopedSourceStateStamp(component) is not null));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             {
