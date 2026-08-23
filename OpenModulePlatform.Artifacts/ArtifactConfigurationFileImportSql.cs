@@ -137,7 +137,7 @@ IF @SourceArtifactId IS NULL
 BEGIN
     SELECT CAST(NULL AS nvarchar(50)) AS SourceVersion,
            CAST(NULL AS nvarchar(400)) AS RelativePath,
-           CAST(NULL AS nvarchar(20)) AS Outcome
+           CAST(NULL AS nvarchar(40)) AS Outcome
     WHERE 1 = 0;
     RETURN;
 END;
