@@ -32,9 +32,13 @@ public enum ArtifactConfigurationCarryForwardOutcome
     /// <summary>
     /// The effective configuration content of the previous artifact differs from
     /// the new artifact and could not be carried forward safely: either the
-    /// package file changed against an operator-edited baseline, or the previous
-    /// row has no package baseline and the TARGET row already carries an operator
-    /// edit that must not be overwritten. The package file wins; review manually.
+    /// package file changed against an operator-edited baseline. The package file
+    /// wins; review manually.
+    ///
+    /// Note: a previous row with no package baseline whose target is already
+    /// operator-edited does NOT land here. That pairing is filtered out before
+    /// classification, so the target simply keeps its own content and nothing is
+    /// reported. Safe, but silent.
     /// </summary>
     Conflict,
 

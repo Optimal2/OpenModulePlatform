@@ -360,10 +360,51 @@ package changes. When a new artifact version is registered and the packaged
 file is unchanged against the previous version's baseline, the previous
 version's operator-edited content (and enabled state) is carried forward to the
 new version automatically. When the packaged file changed over an operator
-edit, or the previous row predates the baseline column, the package file wins
-and the upload/import status names the affected files so the operator can merge
-manually. Rows created or edited only by an operator have no baseline and keep
-the previous behavior.
+edit, the package file wins and the upload/import status names the affected
+files so the operator can merge manually.
+
+A row with **no baseline** — created by an operator, or predating the
+`PackageFileContent` column added 2026-08-12 — has unknown lineage. Since
+2026-08-23 such a row is carried forward when the new version's row is still
+untouched package content, and reported under its own heading naming the files.
+That direction was chosen because a configured setting silently reverting to a
+package default is worse than a package default arriving one version late, and
+only the first was invisible. The cost is real: **if the package meant to change
+one of those files, the change does not take effect** — the import message says
+so, and re-saving the file adopts the package version. When the new version's row
+has already been edited by an operator, the previous row is ignored entirely and
+nothing is reported; the edit is kept.
+
+### Recovering configuration that was already lost
+
+The rule above only protects versions imported **from now on**. An installation
+where the loss already happened does not heal by itself, and no import will fix
+it, so this needs a deliberate step.
+
+The shape of the damage: the operator content sits on some older artifact version,
+while every newer version carries the package default. Carry-forward only looks at
+the **most recent** previous version with configuration rows — and that one holds a
+default whose baseline matches it exactly, so it counts as unedited, nothing is
+carried forward and nothing is reported. The older version holding the real content
+is unreachable.
+
+To check whether an installation is in that state, compare the configuration rows
+across the enabled versions of the same app and target: if an older version has
+content the newest one lacks, it is.
+
+Two ways out, both manual:
+
+1. **Re-apply the content to the newest version** (preferred). Open the newest
+   artifact's configuration file in Portal, paste the content from the older
+   version, and save. It then has an operator edit against its own baseline and
+   carries forward normally from there.
+2. **Disable the versions that carry the default**, so the version holding the real
+   content becomes the most recent enabled source again. Only do this when those
+   versions are genuinely not in use — disabling an artifact that an app instance
+   still references is its own outage.
+
+Check this before an upgrade rather than after: an import that succeeds while the
+configuration is already lost looks exactly like a healthy one.
 
 The upload form also has an enabled-by-default option to use the uploaded
 artifact immediately. When selected, Portal updates matching desired

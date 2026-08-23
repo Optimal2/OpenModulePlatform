@@ -182,6 +182,12 @@ SELECT sourceFile.RelativePath,
            -- a real cost in the other direction -- a package that genuinely means to change
            -- a never-edited legacy row will not reach the new version -- so the operator is
            -- told by name which files this applied to.
+           --
+           -- Note what does NOT happen here: when the TARGET already carries an operator
+           -- edit, the WHERE clause below never lets the row in, so it is not reported at
+           -- all -- not as Conflict. The target keeps its own content, which is the safe
+           -- outcome, but the pairing is silent. Do not describe that case as Conflict;
+           -- ELSE N'Conflict' is unreachable for a baseline-less source.
            WHEN sourceFile.PackageFileContent IS NULL
                 AND target.PackageFileContent IS NOT NULL
                 AND CAST(target.FileContent AS varbinary(max)) = CAST(target.PackageFileContent AS varbinary(max))
@@ -196,10 +202,10 @@ LEFT JOIN omp.ArtifactConfigurationFiles target
 WHERE sourceFile.ArtifactId = @SourceArtifactId
   AND
   (
-      -- Operator-edited previous rows the new package no longer ships. Includes
-      -- operator-CREATED rows that have no package baseline (NULL) — the most
-      -- unambiguously operator-owned content — which the baseline-only check used
-      -- to drop silently (R4-D5). Both are reported as MissingInPackage.
+      -- Operator-edited previous rows the new package no longer ships. Includes rows
+      -- with no package baseline (NULL), whose lineage is unknown -- operator-created
+      -- OR predating the PackageFileContent column -- and which the baseline-only
+      -- check used to drop silently (R4-D5). Both are reported as MissingInPackage.
       (target.ArtifactConfigurationFileId IS NULL
        AND (
            (sourceFile.PackageFileContent IS NOT NULL

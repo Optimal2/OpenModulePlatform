@@ -188,6 +188,16 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
     /// The safety half of the rule above: a baseline-less source must NOT overwrite a
     /// target the operator has already edited.
     /// </summary>
+    /// <remarks>
+    /// Also pins what the report does here, which is nothing. An independent review
+    /// (qwen, 2026-08-23) proved empirically that this pairing produces an EMPTY item
+    /// list: the WHERE clause filters it out before classification, so ELSE N'Conflict'
+    /// is unreachable for a baseline-less source. The earlier version of this test only
+    /// asserted the absence of Preserved and would have passed just as happily if the
+    /// row had been reported as Conflict - which is what three comments in the code
+    /// claimed was happening. Asserting the emptiness makes the silence deliberate and
+    /// visible: if someone later starts reporting this case, this test says so.
+    /// </remarks>
     [Fact]
     public async Task CarryForward_LegacyRowWithoutBaseline_DoesNotOverwriteAnEditedTarget()
     {
@@ -202,10 +212,11 @@ public sealed class OmpHostArtifactRepositoryConfigurationCarryForwardTests : ID
 
         var row = Assert.Single(_database.GetArtifactConfigurationFiles(NewArtifactId));
         Assert.Equal(ChangedPackagedContent, row.FileContent);
-        Assert.DoesNotContain(
-            result.Items,
-            i => i.Outcome is ArtifactConfigurationCarryForwardOutcome.Preserved
-                 or ArtifactConfigurationCarryForwardOutcome.PreservedWithoutBaseline);
+
+        // Nothing is carried forward AND nothing is reported - the pairing never
+        // reaches classification. Not Conflict, not anything.
+        Assert.Empty(result.Items);
+        Assert.Null(result.BuildImportMessage());
     }
 
     /// <summary>

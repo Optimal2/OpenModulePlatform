@@ -141,9 +141,13 @@ For a manifest envelope:
   the same app/package-type/target slot: if the previous row was
   operator-edited and the packaged file is unchanged against that row's
   baseline, the operator content follows the new version automatically. If the
-  packaged file changed over an operator edit, or the previous row predates the
-  baseline column, the package file wins and the import result carries a
-  warning naming the affected file so the operator can merge manually.
+  packaged file changed over an operator edit, the package file wins and the
+  import result carries a warning naming the affected file so the operator can
+  merge manually. A row with no baseline (operator-created, or predating the
+  `PackageFileContent` column added 2026-08-12) is carried forward instead when
+  the new version's row is untouched package content, and reported separately —
+  which means a package change to such a file does NOT take effect; see
+  ADMIN_CONFIGURATION.md for why that direction was chosen.
   Operator-edited files that the new package no longer ships are also reported
 - if metadata for the same artifact identity and payload hash already exists
   but the artifact store payload folder is missing, Portal and HostAgent import
