@@ -1206,10 +1206,31 @@ public sealed class PortableModulePackageService
                     scriptKeys,
                     ct);
                 repairCount += repairResult.ExecutedCount;
-                var missingObjects = missingByScript.SelectMany(static item => item.Value).ToList();
-                warnings.Add(
-                    $"Schema drift healed: re-executed {repairResult.ExecutedCount} script(s) for module '{definition.ModuleKey}'. "
-                    + $"Missing objects: {string.Join(", ", missingObjects)}.");
+                var missingBefore = missingByScript.SelectMany(static item => item.Value).ToList();
+
+                // Measure again. Saying "healed" without re-checking is how R4-B1's unique
+                // index sat booked as fixed for four days while no database had it - the
+                // comment on the sibling path in ArtifactZipImportService says exactly that,
+                // and then neither path re-checked. A repair that silently failed produced a
+                // message identical to one that worked.
+                var missingAfter = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
+                    definition.DefinitionJson,
+                    ct);
+
+                if (missingAfter.Count == 0)
+                {
+                    warnings.Add(
+                        $"Schema drift healed: re-executed {repairResult.ExecutedCount} script(s) for module '{definition.ModuleKey}'. "
+                        + $"Objects that were missing and are now present: {string.Join(", ", missingBefore)}.");
+                }
+                else
+                {
+                    var stillMissing = missingAfter.SelectMany(static item => item.Value).ToList();
+                    warnings.Add(
+                        $"Schema repair INCOMPLETE for module '{definition.ModuleKey}': re-executed {repairResult.ExecutedCount} script(s), "
+                        + $"but {stillMissing.Count} required object(s) are STILL missing: {string.Join(", ", stillMissing)}. "
+                        + "The import is recorded, but this module's storage is not in the state its definition declares.");
+                }
             }
         }
 

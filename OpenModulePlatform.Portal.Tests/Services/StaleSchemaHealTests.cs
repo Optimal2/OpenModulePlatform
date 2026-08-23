@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -398,6 +399,138 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
 
             return item;
         }
+    }
+
+    /// <summary>
+    /// A repair that does not actually repair must not be reported as a heal.
+    /// </summary>
+    /// <remarks>
+    /// Both import paths ran the repair scripts and then logged "Schema drift healed"
+    /// with the list of objects that had been missing BEFORE the repair, without ever
+    /// looking again. A repair that silently failed produced a message identical to one
+    /// that worked. The comment sitting directly above that code in
+    /// ArtifactZipImportService describes the exact failure it was allowing: R4-B1's
+    /// unique index sat booked as fixed for four days while no database had it.
+    ///
+    /// Observed in a customer test environment 2026-08-23: an omp_portal import reported
+    /// "Schema drift healed" and "0 failed" while its own validation probe said storage
+    /// was missing a required object. Nothing in the output could tell an operator
+    /// whether the repair worked.
+    ///
+    /// Here the setup script deliberately does NOT create the index the validation probe
+    /// requires, so the repair cannot succeed. The import must say so.
+    /// </remarks>
+    [Fact]
+    public async Task HostAgent_Witness_ReportsIncompleteWhenRepairDoesNotHeal()
+    {
+        await ResetWitnessSchemaAsync(WitnessHostAgentSchemaName);
+        await _fixture.CleanModuleDefinitionDocumentsAsync();
+        await ExecuteAsync(
+            $"EXEC(N'CREATE SCHEMA [{WitnessHostAgentSchemaName}]');",
+            $"CREATE TABLE [{WitnessHostAgentSchemaName}].[Items](Id int NOT NULL PRIMARY KEY, Name nvarchar(50) NOT NULL);");
+        var repo = _fixture.CreateHostAgentRepository();
+
+        // Same shape as the healing witness, except the setup script creates only the
+        // table. The validation probe still demands the index, so the repair runs and
+        // changes nothing.
+        var definitionJson = BuildUnhealableWitnessDefinitionJson(
+            WitnessHostAgentSchemaName,
+            "witness_unhealable_module");
+
+        var missingBefore = await repo.GetMissingRequiredObjectsByScriptKeyAsync(definitionJson, CancellationToken.None);
+        Assert.NotEmpty(missingBefore);
+
+        await _fixture.InsertModuleDefinitionDocumentAsync(
+            "witness_unhealable_module",
+            "2.0.0",
+            definitionJson,
+            isApplied: true);
+
+        var logger = new CapturingLogger<ArtifactZipImportService>();
+        var service = new ArtifactZipImportService(
+            new StaticOptionsMonitor<HostAgentSettings>(new HostAgentSettings()),
+            repo,
+            logger);
+        var importMethod = typeof(ArtifactZipImportService).GetMethod(
+            "ImportModuleDefinitionAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+            null,
+            [typeof(ModuleDefinitionImportDocument), typeof(CancellationToken)],
+            null)!;
+        var document = new ModuleDefinitionImportDocument(
+            "witness_unhealable_module",
+            "1.0.0",
+            1,
+            definitionJson,
+            ComputeSha256(definitionJson),
+            "test",
+            [],
+            []);
+
+        var task = (Task)importMethod.Invoke(service, [document, CancellationToken.None])!;
+        await task;
+
+        // The object is still missing, so nothing may claim it healed.
+        var missingAfter = await repo.GetMissingRequiredObjectsByScriptKeyAsync(definitionJson, CancellationToken.None);
+        Assert.NotEmpty(missingAfter);
+
+        var messages = logger.Messages;
+        Assert.DoesNotContain(messages, m => m.Contains("Schema drift healed", StringComparison.Ordinal));
+        Assert.Contains(messages, m => m.Contains("Schema repair INCOMPLETE", StringComparison.Ordinal));
+        Assert.Contains(messages, m => m.Contains("STILL missing", StringComparison.Ordinal));
+    }
+
+    /// <summary>Like the probe witness, but the setup script cannot satisfy the probe.</summary>
+    private static string BuildUnhealableWitnessDefinitionJson(string schemaName, string moduleKey)
+    {
+        var setupSql = $"IF SCHEMA_ID(N'{schemaName}') IS NULL EXEC(N'CREATE SCHEMA [{schemaName}]'); "
+            + $"IF OBJECT_ID(N'{schemaName}.Items', N'U') IS NULL CREATE TABLE [{schemaName}].[Items](Id int NOT NULL PRIMARY KEY, Name nvarchar(50) NOT NULL);";
+
+        var validateSql = "SET NOCOUNT ON; SELECT CAST(CASE WHEN EXISTS("
+            + "SELECT 1 FROM sys.indexes i INNER JOIN sys.tables t ON t.object_id = i.object_id "
+            + "INNER JOIN sys.schemas s ON s.schema_id = t.schema_id "
+            + $"WHERE s.name = N'{schemaName}' AND t.name = N'Items' AND i.name = N'UX_Items_Never_Created'"
+            + ") THEN 1 ELSE 0 END AS bit) AS IsHealthy, N'witness probe (unsatisfiable)' AS Message;";
+
+        var definition = BuildWitnessDefinitionRoot(moduleKey, "setup-witness-unhealable", setupSql);
+        ((JsonArray)definition["sqlScripts"]!).Add(new JsonObject
+        {
+            ["key"] = "validate-witness-unhealable",
+            ["phase"] = "validate",
+            ["order"] = 0,
+            ["execution"] = "validate",
+            ["inlineSql"] = validateSql
+        });
+
+        var integrity = (JsonObject)definition["integrity"]!;
+        integrity["requiredSchemas"] = new JsonArray(schemaName);
+        integrity["requiredTables"] = new JsonArray(new JsonObject
+        {
+            ["schema"] = schemaName,
+            ["name"] = "Items",
+            ["source"] = "setup-witness-unhealable"
+        });
+        return definition.ToJsonString();
+    }
+
+    /// <summary>Captures formatted log messages so a test can assert on what was reported.</summary>
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        private readonly List<string> _messages = [];
+
+        public IReadOnlyList<string> Messages => _messages;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => _messages.Add(formatter(state, exception));
     }
 
     private static string BuildWitnessProbeDefinitionJson(string schemaName, string moduleKey)

@@ -1125,11 +1125,30 @@ public sealed class ArtifactZipImportService
                 repairs += healedCount;
                 healedScripts.AddRange(missingByScript.Keys);
 
-                _logger.LogWarning(
-                    "Schema drift healed for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s). Missing objects: {MissingObjects}.",
-                    definition.ModuleKey,
-                    healedCount,
-                    string.Join(", ", missingByScript.SelectMany(static item => item.Value)));
+                // Measure again before claiming it healed. The comment above describes
+                // exactly this failure - an object booked as fixed while no database had
+                // it - and the code then reported success without checking.
+                var missingAfter = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(
+                    definition.DefinitionJson,
+                    cancellationToken);
+
+                if (missingAfter.Count == 0)
+                {
+                    _logger.LogWarning(
+                        "Schema drift healed for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s). Objects that were missing and are now present: {MissingObjects}.",
+                        definition.ModuleKey,
+                        healedCount,
+                        string.Join(", ", missingByScript.SelectMany(static item => item.Value)));
+                }
+                else
+                {
+                    _logger.LogError(
+                        "Schema repair INCOMPLETE for module '{ModuleKey}' during import. Re-executed {HealedCount} script(s), but {StillMissingCount} required object(s) are STILL missing: {StillMissing}. The import is recorded, but this module's storage is not in the state its definition declares.",
+                        definition.ModuleKey,
+                        healedCount,
+                        missingAfter.SelectMany(static item => item.Value).Count(),
+                        string.Join(", ", missingAfter.SelectMany(static item => item.Value)));
+                }
             }
         }
 
