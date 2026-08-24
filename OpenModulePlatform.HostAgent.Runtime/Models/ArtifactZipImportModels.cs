@@ -30,6 +30,7 @@ public sealed record ArtifactZipImportResult(
 
 public sealed record ArtifactZipImportDuplicateInfo(
     int ArtifactId,
+    int AppId,
     string AppKey,
     string Version,
     string PackageType,

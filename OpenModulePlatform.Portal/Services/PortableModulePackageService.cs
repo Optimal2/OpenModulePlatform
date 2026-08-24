@@ -1573,7 +1573,14 @@ public sealed class PortableModulePackageService
                 if (existingIdentity is null)
                 {
                     var duplicate = await _repo.FindArtifactBySha256Async(contentHash, ct);
-                    if (duplicate is not null)
+                    // Same component + identical content is a legitimate empty-diff version bump
+                    // (deterministic builds + lockstep bumps) and must import as a new version, or
+                    // the module deploy-set splits across versions. Only identical content under a
+                    // DIFFERENT component is skipped (a repackaging mistake). Mirrors the HostAgent
+                    // import gate.
+                    if (duplicate is not null
+                        && (duplicate.AppId != app.AppId
+                            || !string.Equals(duplicate.PackageType, identity.PackageType, StringComparison.OrdinalIgnoreCase)))
                     {
                         return new PortableModulePackageArtifactImportResult(
                             identity.FileName,

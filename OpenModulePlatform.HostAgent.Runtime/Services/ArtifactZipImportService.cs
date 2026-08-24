@@ -1378,6 +1378,7 @@ public sealed class ArtifactZipImportService
                 adoptedExistingContent = true;
             }
 
+            string? emptyDiffDuplicateNote = null;
             if (!adoptedExistingContent)
             {
                 var duplicate = await _repository.FindImportedArtifactBySha256Async(contentHash, cancellationToken);
@@ -1393,13 +1394,16 @@ public sealed class ArtifactZipImportService
                     // Identical content under a DIFFERENT component is still a repackaging mistake
                     // and remains an error.
                     var sameComponent =
-                        string.Equals(duplicate.AppKey, app.AppKey, StringComparison.OrdinalIgnoreCase) &&
+                        duplicate.AppId == app.AppId &&
                         string.Equals(duplicate.PackageType, metadata.PackageType, StringComparison.OrdinalIgnoreCase);
                     if (!sameComponent)
                     {
                         throw new InvalidOperationException(
                             $"An artifact with identical extracted content already exists: {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType}).");
                     }
+
+                    emptyDiffDuplicateNote =
+                        $"Content is identical to already-imported {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType}); accepted as an empty-diff version bump.";
                 }
 
                 // R7-S2 guarded the staging root and left the destination in the same method
@@ -1558,7 +1562,11 @@ public sealed class ArtifactZipImportService
                 application.WorkerInstanceRowsUpdated,
                 hostAgentDesiredRows,
                 adoptedExistingContent,
-                Message: configurationCarryForwardMessage);
+                Message: configurationCarryForwardMessage is null
+                    ? emptyDiffDuplicateNote
+                    : emptyDiffDuplicateNote is null
+                        ? configurationCarryForwardMessage
+                        : configurationCarryForwardMessage + " " + emptyDiffDuplicateNote);
         }
         catch
         {

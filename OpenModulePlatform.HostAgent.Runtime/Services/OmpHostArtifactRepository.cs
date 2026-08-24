@@ -1304,6 +1304,7 @@ ORDER BY a.AppId;";
         const string sql = @"
 SELECT TOP (1)
        ar.ArtifactId,
+       ar.AppId,
        a.AppKey,
        ar.Version,
        ar.PackageType,
@@ -1328,12 +1329,13 @@ ORDER BY ar.ArtifactId;";
 
         return new ArtifactZipImportDuplicateInfo(
             rdr.GetInt32(0),
-            rdr.GetString(1),
+            rdr.GetInt32(1),
             rdr.GetString(2),
             rdr.GetString(3),
-            rdr.IsDBNull(4) ? null : rdr.GetString(4),
+            rdr.GetString(4),
             rdr.IsDBNull(5) ? null : rdr.GetString(5),
-            rdr.IsDBNull(6) ? null : rdr.GetString(6));
+            rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            rdr.IsDBNull(7) ? null : rdr.GetString(7));
     }
 
     public async Task<ArtifactZipImportDuplicateInfo?> FindImportedArtifactByIdentityAsync(
@@ -1376,6 +1378,7 @@ ORDER BY ar.ArtifactId;";
 
         return new ArtifactZipImportDuplicateInfo(
             rdr.GetInt32(0),
+            appId,
             rdr.GetString(1),
             rdr.GetString(2),
             rdr.GetString(3),

@@ -218,7 +218,12 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             else
             {
                 var duplicate = await _repo.FindArtifactBySha256Async(contentHash, ct);
-                if (duplicate is not null)
+                // Same component + identical content is a legitimate empty-diff version bump and
+                // may be uploaded as a new version; only identical content under a DIFFERENT
+                // component is rejected (a repackaging mistake). Mirrors the HostAgent import gate.
+                if (duplicate is not null
+                    && (duplicate.AppId != Input.AppId
+                        || !string.Equals(duplicate.PackageType, packageType, StringComparison.OrdinalIgnoreCase)))
                 {
                     ModelState.AddModelError(
                         string.Empty,
