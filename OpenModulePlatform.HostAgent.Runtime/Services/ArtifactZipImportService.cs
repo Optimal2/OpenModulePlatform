@@ -1383,8 +1383,23 @@ public sealed class ArtifactZipImportService
                 var duplicate = await _repository.FindImportedArtifactBySha256Async(contentHash, cancellationToken);
                 if (duplicate is not null)
                 {
-                    throw new InvalidOperationException(
-                        $"An artifact with identical extracted content already exists: {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType}).");
+                    // Deterministic builds plus lockstep consumer bumps legitimately produce a NEW
+                    // version of the SAME component whose extracted content is byte-identical to an
+                    // already-imported version (an empty-diff bump: the version moved, the output did
+                    // not). Rejecting those splits module deploy-sets — the parts of a module with
+                    // real changes import under the new version while the empty-diff parts stay on
+                    // the old one, and every artifact in a set must share one version. Importing the
+                    // new version normally keeps the inventory in phase with the source manifests.
+                    // Identical content under a DIFFERENT component is still a repackaging mistake
+                    // and remains an error.
+                    var sameComponent =
+                        string.Equals(duplicate.AppKey, app.AppKey, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(duplicate.PackageType, metadata.PackageType, StringComparison.OrdinalIgnoreCase);
+                    if (!sameComponent)
+                    {
+                        throw new InvalidOperationException(
+                            $"An artifact with identical extracted content already exists: {duplicate.AppKey} {duplicate.Version} ({duplicate.PackageType}).");
+                    }
                 }
 
                 // R7-S2 guarded the staging root and left the destination in the same method
