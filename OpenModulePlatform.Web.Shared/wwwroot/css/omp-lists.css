@@ -581,39 +581,37 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
 /* Column groups: pre-rendered detail columns stay hidden until their
    summary column's expand button opens them; the summary stays visible so
    the expanded view loses nothing. */
-/* Hidden detail columns collapse to zero width instead of display:none so
-   the reveal can ANIMATE: the column slides out of its group. Padding and
-   borders zero in the closed state (they snap back on open - only width
-   and opacity glide, which is what the eye follows). */
+/* Hidden detail columns are display:none - table layout ignores max-width
+   on cells, so a zero-width scheme leaves an empty band instead of removing
+   the column (measured). The reveal animates the CONTENT instead: when the
+   column appears its cells slide in from the parent's direction with a
+   fade, which reads as the child emerging from its group. */
 [data-column-detail] {
-    overflow: hidden;
-    transition: max-width 180ms ease, opacity 140ms ease, padding 120ms ease;
-}
-
-/* The zeroing lives on the CLOSED state only, so the open state inherits the
-   host's own cell padding and borders untouched. */
-[data-column-detail]:not(.list-column-detail--open) {
-    max-width: 0;
-    width: 0;
-    padding-left: 0;
-    padding-right: 0;
-    border-left-width: 0;
-    border-right-width: 0;
-    opacity: 0;
-    white-space: nowrap;
+    display: none;
 }
 
 [data-column-detail].list-column-detail--open {
-    max-width: 260px;
-    opacity: 1;
+    display: table-cell;
     /* A quiet tint marks the revealed detail columns as belonging to their
        expanded group, header and body cells alike. */
     background: var(--surface-muted, #f8fafc);
+    animation: list-column-detail-in 160ms ease;
+}
+
+@keyframes list-column-detail-in {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    [data-column-detail] {
-        transition: none;
+    [data-column-detail].list-column-detail--open {
+        animation: none;
     }
 }
 
