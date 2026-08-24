@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.130",
+      "definitionVersion": "0.3.131",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
