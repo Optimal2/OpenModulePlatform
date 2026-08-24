@@ -587,6 +587,24 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
 
 [data-column-detail].list-column-detail--open {
     display: table-cell;
+    /* A quiet tint marks the revealed detail columns as belonging to their
+       expanded group, header and body cells alike. */
+    background: var(--surface-muted, #f8fafc);
+}
+
+/* The sort button is block + full width by default, which would push the
+   expand button onto its own line; inside a group header the two sit side
+   by side instead. */
+.sortable-list th[data-column-group] {
+    white-space: nowrap;
+    padding-right: 8px;
+}
+
+.sortable-list th[data-column-group] .sortable-list__button {
+    display: inline-flex;
+    align-items: center;
+    width: auto;
+    vertical-align: middle;
 }
 
 .list-column-expand {
