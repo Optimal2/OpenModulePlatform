@@ -622,6 +622,11 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    /* Above the column resize handle (z-index 3), which is absolutely
+       positioned over the header's right edge and would otherwise steal
+       clicks in a narrow column. */
+    position: relative;
+    z-index: 4;
     width: 18px;
     height: 18px;
     min-height: 18px;
@@ -652,25 +657,28 @@ table[data-list-fit] {
     max-width: 100%;
 }
 
-table[data-list-fit] > thead th,
 table[data-list-fit] > tbody > tr > td {
     white-space: normal;
     overflow-wrap: anywhere;
     text-overflow: clip;
 }
 
+/* Headers wrap between words only - mid-word breaks would let a header
+   column collapse under its shortest fragment, which once squeezed the
+   group header until the resize handle sat on top of the expand button. */
+table[data-list-fit] > thead th,
 table[data-list-fit] .sortable-list__button {
     white-space: normal;
-    overflow-wrap: anywhere;
     text-overflow: clip;
 }
 
 /* Numeric cells read badly when digits wrap mid-number; keep them intact
-   (they are short, so they set a harmless min width). */
+   (they are short, so they set a harmless min width). Group headers keep
+   the label and expand button on one line. */
 table[data-list-fit] > tbody > tr > td[data-list-fit-nowrap],
-table[data-list-fit] > thead th[data-column-group] {
+table[data-list-fit] > thead th[data-column-group],
+table[data-list-fit] > thead th[data-column-group] .sortable-list__button {
     white-space: nowrap;
-    overflow-wrap: normal;
 }
 
 .list-column-expand.is-open::before {
