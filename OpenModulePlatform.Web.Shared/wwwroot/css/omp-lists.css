@@ -583,9 +583,8 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
    the expanded view loses nothing. */
 /* Hidden detail columns are display:none - table layout ignores max-width
    on cells, so a zero-width scheme leaves an empty band instead of removing
-   the column (measured). The reveal animates the CONTENT instead: when the
-   column appears its cells slide in from the parent's direction with a
-   fade, which reads as the child emerging from its group. */
+   the column (measured). The reveal is instant: table columns cannot
+   width-animate without per-cell inner wrappers in every host page. */
 [data-column-detail] {
     display: none;
 }
@@ -595,24 +594,6 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
     /* A quiet tint marks the revealed detail columns as belonging to their
        expanded group, header and body cells alike. */
     background: var(--surface-muted, #f8fafc);
-    animation: list-column-detail-in 160ms ease;
-}
-
-@keyframes list-column-detail-in {
-    from {
-        opacity: 0;
-        transform: translateX(-8px);
-    }
-    to {
-        opacity: 1;
-        transform: none;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    [data-column-detail].list-column-detail--open {
-        animation: none;
-    }
 }
 
 /* The detail column's own title reads darker than a plain header so the
@@ -658,6 +639,38 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
 
 .list-column-expand::before {
     content: "+";
+}
+
+/* Fit-width lists (opt in with data-list-fit on the table): the table never
+   grows past its container, so no horizontal scrollbar appears. Instead of
+   the default clip-with-ellipsis, headers and cells wrap - the browser
+   redistributes column widths so everything stays reachable. overflow-wrap
+   breaks tokens without natural break points (channel keys, paths) as a
+   last resort. */
+table[data-list-fit] {
+    width: 100%;
+    max-width: 100%;
+}
+
+table[data-list-fit] > thead th,
+table[data-list-fit] > tbody > tr > td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+}
+
+table[data-list-fit] .sortable-list__button {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+}
+
+/* Numeric cells read badly when digits wrap mid-number; keep them intact
+   (they are short, so they set a harmless min width). */
+table[data-list-fit] > tbody > tr > td[data-list-fit-nowrap],
+table[data-list-fit] > thead th[data-column-group] {
+    white-space: nowrap;
+    overflow-wrap: normal;
 }
 
 .list-column-expand.is-open::before {
