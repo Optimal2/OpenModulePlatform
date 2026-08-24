@@ -887,6 +887,56 @@
         }
     });
 
+    // Column groups: a summary column can reveal pre-rendered detail columns.
+    // The server always renders every cell; expansion only toggles a
+    // visibility class, so filter column indexes, sorting and host-swap
+    // refreshes all see one stable DOM. Markup: the summary <th> carries a
+    // <button data-column-expand="key"> and detail cells (<th> and <td>)
+    // carry data-column-detail="key". Expanded groups persist per table id
+    // in sessionStorage.
+    function initColumnGroups(root) {
+        root.querySelectorAll('table').forEach((table) => {
+            if (!table.querySelector('[data-column-expand]')) {
+                return;
+            }
+            if (table.dataset.columnGroupsInitialized === 'true') {
+                return;
+            }
+            table.dataset.columnGroupsInitialized = 'true';
+
+            const storageKey = table.id ? `omp-list-columns:${table.id}` : null;
+            const readOpen = () => {
+                if (!storageKey) { return []; }
+                try { return JSON.parse(sessionStorage.getItem(storageKey) || '[]'); } catch { return []; }
+            };
+            const writeOpen = (keys) => {
+                if (!storageKey) { return; }
+                try { sessionStorage.setItem(storageKey, JSON.stringify(keys)); } catch { /* private mode */ }
+            };
+            const apply = (key, open) => {
+                table.querySelectorAll(`[data-column-detail="${CSS.escape(key)}"]`)
+                    .forEach((cell) => cell.classList.toggle('list-column-detail--open', open));
+                const button = table.querySelector(`[data-column-expand="${CSS.escape(key)}"]`);
+                button?.setAttribute('aria-expanded', open ? 'true' : 'false');
+                button?.classList.toggle('is-open', open);
+            };
+
+            let open = readOpen();
+            open.forEach((key) => apply(key, true));
+
+            table.querySelectorAll('[data-column-expand]').forEach((button) => {
+                button.setAttribute('aria-expanded', open.includes(button.dataset.columnExpand) ? 'true' : 'false');
+                button.addEventListener('click', () => {
+                    const key = button.dataset.columnExpand;
+                    const isOpen = !open.includes(key);
+                    open = isOpen ? [...open, key] : open.filter((other) => other !== key);
+                    writeOpen(open);
+                    apply(key, isOpen);
+                });
+            });
+        });
+    }
+
     function initAll() {
         initSortableLists(document);
         initListFilters(document);
@@ -895,6 +945,7 @@
         initColumnResize(document);
         initInfoBadges(document);
         initListMessages(document);
+        initColumnGroups(document);
         listControllers.forEach((controller) => {
             refreshListController(controller);
             if (controller.viewport && controller.viewport.offsetHeight > 0) {

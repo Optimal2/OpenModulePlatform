@@ -577,3 +577,46 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
     background: transparent;
     border-radius: 0;
 }
+
+/* Column groups: pre-rendered detail columns stay hidden until their
+   summary column's expand button opens them; the summary stays visible so
+   the expanded view loses nothing. */
+[data-column-detail] {
+    display: none;
+}
+
+[data-column-detail].list-column-detail--open {
+    display: table-cell;
+}
+
+.list-column-expand {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    margin-left: 6px;
+    padding: 0;
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 4px;
+    background: var(--surface, #fff);
+    color: var(--link, #0b57d0);
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.list-column-expand::before {
+    content: "+";
+}
+
+.list-column-expand.is-open::before {
+    content: "\2212";
+}
+
+.list-column-expand:hover {
+    background: var(--accent, #e8f0fe);
+    border-color: var(--border-strong, #c4cede);
+}
