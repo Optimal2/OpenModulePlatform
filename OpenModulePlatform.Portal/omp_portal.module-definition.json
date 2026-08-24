@@ -43,7 +43,7 @@
       "targetName": "omp-portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "minVersion": "0.3.26",
-      "maxVersion": "0.3.584"
+      "maxVersion": "0.3.585"
     }
   ],
   "artifactConfigurationFiles": [

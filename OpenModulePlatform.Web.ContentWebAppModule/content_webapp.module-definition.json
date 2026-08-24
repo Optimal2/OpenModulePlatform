@@ -27,7 +27,7 @@
       "targetName": "content-webapp",
       "relativePathTemplate": "content-webapp/web/{version}",
       "minVersion": "0.3.12",
-      "maxVersion": "0.3.200"
+      "maxVersion": "0.3.201"
     }
   ],
   "sqlScripts": [
