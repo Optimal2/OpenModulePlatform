@@ -785,7 +785,20 @@
                 markListMessageTruncation();
             };
 
-            const storedWidths = readStoredWidths();
+            // Tables with expandable column groups never persist widths: a
+            // stored percent array bakes in detail columns that may be hidden
+            // on the next visit, and the fixed layout then reserves blank
+            // space for them (collapsed) or squeezes them to zero (expanded).
+            // Resizing still works within the current visit; a group toggle
+            // resets it (see initColumnGroups).
+            const hasColumnGroups = !!table.querySelector('[data-column-expand]');
+            if (hasColumnGroups) {
+                storeWidths(null);
+            }
+
+            table.ompListsResetColumnWidths = resetWidths;
+
+            const storedWidths = hasColumnGroups ? null : readStoredWidths();
             if (storedWidths) {
                 applyPercents(storedWidths);
             }
@@ -862,7 +875,7 @@
                     document.body.classList.remove('list-column-resizing');
                     startWidths = null;
                     const percents = toPercents(currentPixelWidths());
-                    if (percents) {
+                    if (percents && !hasColumnGroups) {
                         storeWidths(percents);
                     }
 
@@ -932,6 +945,10 @@
                     open = isOpen ? [...open, key] : open.filter((other) => other !== key);
                     writeOpen(open);
                     apply(key, isOpen);
+                    // The column set just changed, so any manually resized
+                    // widths (fixed layout + per-column percents) describe the
+                    // wrong set of columns; return to the natural layout.
+                    table.ompListsResetColumnWidths?.();
                 });
             });
         });
