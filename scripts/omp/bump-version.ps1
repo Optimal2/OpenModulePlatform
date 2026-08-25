@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Bumps OMP repository, component, module-definition, and widget versions.
 
@@ -650,6 +650,9 @@ try {
 
     # Lazy-load module definition JSON documents keyed by moduleKey. This is
     # used both for the explicit -ModuleKey/-AllModuleDefinitions bump path
+    # Module definitions whose compatibleArtifacts were rewritten by a component bump; their
+    # own definitionVersion has to follow, see the note further down.
+    $touchedModuleKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     # and for updating compatibleArtifacts.maxVersion when a component bump
     # touches an appKey declared in the module definition.
     $definitionJsonByKey = @{}
@@ -743,6 +746,7 @@ try {
 
             if ($shouldUpdate) {
                 Set-JsonProperty -Object $artifact -Name 'maxVersion' -Value $nextVersion
+                [void]$touchedModuleKeys.Add($componentModuleKey)
                 [void]$updates.Add([pscustomobject]@{
                     Item = 'module-definition-compatible-artifact'
                     Key = "$componentModuleKey/$componentAppKey"
@@ -750,6 +754,27 @@ try {
                     NewVersion = $nextVersion
                 })
             }
+        }
+    }
+
+    # A component bump rewrites compatibleArtifacts.maxVersion in the module definition, which
+    # CHANGES the definition -- and HostAgent rejects a re-imported definition that carries the
+    # same definitionVersion with different content. The bump therefore has to carry the
+    # definition's own version with it, or local-ci and the pre-push gate refuse the result and
+    # the user has to discover a second command that nothing mentions
+    # (`-ModuleKey <module> -SkipRepositoryVersion`). Measured twice on 2026-08-23, both times
+    # mid-incident, and repeatedly since.
+    #
+    # Rather than duplicating the bump logic, the touched definitions are added to the normal
+    # selection below, so they go through exactly the same code path as an explicit -ModuleKey.
+    foreach ($moduleKey in $touchedModuleKeys) {
+        if ($selectedModuleDefinitions | Where-Object { $_.moduleKey -eq $moduleKey }) {
+            continue
+        }
+
+        $match = @($moduleDefinitions | Where-Object { $_.moduleKey -eq $moduleKey })
+        if ($match.Count -eq 1) {
+            $selectedModuleDefinitions = @($selectedModuleDefinitions) + $match[0]
         }
     }
 
