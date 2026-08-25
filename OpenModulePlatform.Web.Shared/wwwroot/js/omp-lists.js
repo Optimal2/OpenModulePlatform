@@ -759,10 +759,25 @@
 
             // Column widths are managed as percentages of the table width so the
             // table itself never grows or shrinks; neighbours trade space instead.
+            // Hidden cells (collapsed detail columns) produce no boxes, and in
+            // fixed layout the visible cells then consume columns strictly in
+            // order - so the visible percents go to the leading cols and the
+            // rest zero out, or the last real column would map to a phantom
+            // col and a blank band would appear at the right edge (measured).
             const applyPercents = (percents) => {
                 const cols = ensureCols();
+                const cells = Array.from(headerRow.cells);
+                const visible = [];
+                cells.forEach((cell, index) => {
+                    if (getComputedStyle(cell).display !== 'none') {
+                        visible.push(index);
+                    }
+                });
+                const visibleTotal = visible.reduce((sum, index) => sum + percents[index], 0);
                 cols.forEach((col, index) => {
-                    col.style.width = `${percents[index]}%`;
+                    col.style.width = index < visible.length && visibleTotal > 0
+                        ? `${(percents[visible[index]] / visibleTotal) * 100}%`
+                        : '0%';
                 });
                 table.style.tableLayout = 'fixed';
                 table.style.width = '100%';
