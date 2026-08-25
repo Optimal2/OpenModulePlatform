@@ -1014,6 +1014,9 @@
                 return;
             }
             table.dataset.columnBandsInitialized = 'true';
+            // The class buys the header row a top strip where the band line
+            // and the label chip live, above the column titles.
+            table.classList.add('list-has-column-bands');
 
             const headerCells = () => Array.from(table.tHead?.rows[0]?.cells || []);
 

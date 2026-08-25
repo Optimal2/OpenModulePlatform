@@ -718,12 +718,28 @@ table[data-list-fit] > thead th[data-column-group] .sortable-list__button {
    style. The label chip fades in while a member column is hovered. */
 .sortable-list th[data-column-band] {
     position: relative;
+    /* The label chip may be wider than a narrow start column; let it
+       extend over the neighbours instead of truncating (transient and
+       pointer-events: none, so nothing underneath is blocked). */
+    overflow: visible;
+}
+
+/* Banded tables reserve a top strip inside the header row itself: the
+   line and the hover label live above the column titles without needing
+   outside spacing toward the row count or search field, and nothing gets
+   clipped by the scrolling wrapper. */
+.sortable-list.list-has-column-bands th[data-sort-type] {
+    padding-top: 20px;
+}
+
+table.list-has-column-bands > thead th:not([data-sort-type]) {
+    padding-top: 30px;
 }
 
 .sortable-list th[data-column-band]::before {
     content: "";
     position: absolute;
-    top: 2px;
+    top: 9px;
     left: 0;
     right: 0;
     height: 3px;
@@ -746,7 +762,7 @@ table[data-list-fit] > thead th[data-column-group] .sortable-list__button {
 
 .list-column-band-label {
     position: absolute;
-    top: 0;
+    top: 2px;
     left: 8px;
     /* Above the resize handle (3) and the expand button (4). */
     z-index: 5;
