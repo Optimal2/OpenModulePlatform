@@ -68,14 +68,25 @@ try {
     # the parent of HEAD so the script still measures something real rather
     # than comparing HEAD to itself.
     if ([string]::IsNullOrWhiteSpace($BaseCommit)) {
-        $unpushed = (git rev-list --count '@{u}..HEAD' 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $unpushed -and [int]$unpushed -gt 0) {
-            $BaseCommit = (git rev-parse '@{u}').Trim()
+        # Resolve the upstream WITHOUT the '@{u}' revision syntax: on a branch
+        # with no upstream (every first push of a new branch) git dies with
+        # "fatal: no upstream configured" on stderr - even under
+        # "rev-parse --verify --quiet" - and Windows PowerShell 5.1 with
+        # ErrorActionPreference=Stop promotes redirected native stderr into a
+        # terminating error, so the gate aborted here instead of reaching its
+        # own fallback. for-each-ref reports a missing upstream as empty output
+        # and exit code 0, never via stderr.
+        $currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
+        $upstreamRef = (git for-each-ref --format='%(upstream:short)' "refs/heads/$currentBranch" | Out-String).Trim()
+        $hasUpstream = -not [string]::IsNullOrWhiteSpace($upstreamRef)
+        $unpushed = if ($hasUpstream) { (git rev-list --count "$upstreamRef..HEAD") } else { '' }
+        if ($hasUpstream -and $unpushed -and [int]$unpushed -gt 0) {
+            $BaseCommit = (git rev-parse $upstreamRef).Trim()
             $reason = "$unpushed unpushed commit(s); baseline is upstream"
         }
         else {
             $BaseCommit = (git rev-parse 'HEAD^').Trim()
-            $reason = 'nothing to push; baseline is the parent of HEAD'
+            $reason = if ($hasUpstream) { 'nothing to push; baseline is the parent of HEAD' } else { 'no upstream configured; baseline is the parent of HEAD' }
         }
     }
     else {
