@@ -747,6 +747,7 @@ public sealed class ArtifactZipImportService
             .ToList();
         foreach (var item in moduleDefinitionItems)
         {
+            ModuleDefinitionImportContext definitionContext;
             try
             {
                 var definition = await ReadModuleDefinitionAsync(
@@ -754,30 +755,49 @@ public sealed class ArtifactZipImportService
                     item.SourceName,
                     cancellationToken,
                     package.ExtractionRoot);
-                var definitionResult = await ImportModuleDefinitionAsync(definition, cancellationToken);
-                var matchingArtifactItems = artifactItems
-                    .Where(artifactItem => TryParseFilenameMetadata(Path.GetFileName(artifactItem.ExtractedPath)) is { } metadata
-                        && metadata.ModuleKey.Equals(definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                var artifactResults = await ImportUniversalModuleArtifactsAsync(
-                    settings,
-                    importSettings,
-                    definition,
-                    matchingArtifactItems,
-                    extractionRoot,
-                    cancellationToken);
+                definitionContext = await SaveAndApplyModuleDefinitionAsync(definition, cancellationToken);
+            }
+            catch (Exception ex) when (IsExpectedImportFailure(ex))
+            {
+                itemResults.Add(new UniversalHostAgentImportItemResult(
+                    "module-definition",
+                    item.Path,
+                    "Failed",
+                    ex.Message));
+                continue;
+            }
 
-                foreach (var artifactItem in matchingArtifactItems)
-                {
-                    processedArtifactPaths.Add(artifactItem.ExtractedPath);
-                }
+            var matchingArtifactItems = artifactItems
+                .Where(artifactItem => TryParseFilenameMetadata(Path.GetFileName(artifactItem.ExtractedPath)) is { } metadata
+                    && metadata.ModuleKey.Equals(definitionContext.Definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            var artifactResults = await ImportUniversalModuleArtifactsAsync(
+                settings,
+                importSettings,
+                definitionContext.Definition,
+                matchingArtifactItems,
+                extractionRoot,
+                cancellationToken);
 
+            foreach (var artifactItem in matchingArtifactItems)
+            {
+                processedArtifactPaths.Add(artifactItem.ExtractedPath);
+            }
+
+            // The module's own SQL runs AFTER this package's artifact rows are
+            // registered. Seed scripts discover "the latest artifact version" from
+            // omp.Artifacts (IbsPackager's @Version probe), and script execution is
+            // version-gated, so a seed that ran before the registration recorded the
+            // PREVIOUS import's version and never re-ran to correct it (measured on
+            // linus_hemma 2026-08-25: ChannelTypeVersions one import behind).
+            try
+            {
+                var definitionResult = await ExecuteModuleDefinitionSqlAsync(definitionContext, cancellationToken);
                 itemResults.Add(new UniversalHostAgentImportItemResult(
                     "module-definition",
                     item.Path,
                     definitionResult.Applied ? "Applied" : "Stored",
                     $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}."));
-                itemResults.AddRange(artifactResults);
             }
             catch (Exception ex) when (IsExpectedImportFailure(ex))
             {
@@ -787,6 +807,8 @@ public sealed class ArtifactZipImportService
                     "Failed",
                     ex.Message));
             }
+
+            itemResults.AddRange(artifactResults);
         }
 
         foreach (var item in artifactItems.Where(item => !processedArtifactPaths.Contains(item.ExtractedPath)))
@@ -1081,6 +1103,33 @@ public sealed class ArtifactZipImportService
         ModuleDefinitionImportDocument definition,
         CancellationToken cancellationToken)
     {
+        var context = await SaveAndApplyModuleDefinitionAsync(definition, cancellationToken);
+        return await ExecuteModuleDefinitionSqlAsync(context, cancellationToken);
+    }
+
+    /// <summary>
+    /// What <see cref="SaveAndApplyModuleDefinitionAsync"/> did, carried to
+    /// <see cref="ExecuteModuleDefinitionSqlAsync"/> so the SQL phase can run after the
+    /// package's artifact rows are registered.
+    /// </summary>
+    private sealed record ModuleDefinitionImportContext(
+        ModuleDefinitionImportDocument Definition,
+        int ModuleDefinitionDocumentId,
+        bool Applied,
+        bool RequiresPreApplySqlRepairs,
+        int PreApplySqlRepairCount);
+
+    /// <summary>
+    /// First half of a module-definition import: stores the document (with its
+    /// compatibility slots) and applies module/app structure, so this package's artifact
+    /// items can resolve their app and compatibility slot. For platform core the embedded
+    /// SQL also runs here, because the core schema is what artifact registration itself
+    /// writes to.
+    /// </summary>
+    private async Task<ModuleDefinitionImportContext> SaveAndApplyModuleDefinitionAsync(
+        ModuleDefinitionImportDocument definition,
+        CancellationToken cancellationToken)
+    {
         var saveResult = await _repository.SaveImportedModuleDefinitionAsync(
             definition,
             replaceExisting: false,
@@ -1092,18 +1141,46 @@ public sealed class ArtifactZipImportService
             && ArtifactVersionComparer.Compare(appliedVersion, definition.DefinitionVersion) > 0;
 
         var requiresPreApplySqlRepairs = RequiresPreApplySqlRepairs(definition);
-        var repairs = 0;
-        var healedScripts = new List<string>();
+        var preApplySqlRepairs = 0;
 
         // Platform-core schema repairs must run even when the installed definition
         // version is newer than the package version, so old installations can bridge
         // schema gaps such as newly introduced columns.
         if (requiresPreApplySqlRepairs)
         {
-            repairs = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
+            preApplySqlRepairs = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
                 saveResult.ModuleDefinitionDocumentId,
                 cancellationToken);
         }
+
+        var applied = false;
+        if (!installedVersionIsStrictlyNewer)
+        {
+            applied = await _repository.ApplyImportedModuleDefinitionAsync(
+                saveResult.ModuleDefinitionDocumentId,
+                cancellationToken);
+        }
+
+        return new ModuleDefinitionImportContext(
+            definition,
+            saveResult.ModuleDefinitionDocumentId,
+            applied,
+            requiresPreApplySqlRepairs,
+            preApplySqlRepairs);
+    }
+
+    /// <summary>
+    /// Second half of a module-definition import: the definition's own SQL. Runs after the
+    /// package's artifact rows are registered, so seed scripts that read omp.Artifacts see
+    /// the versions this package carries rather than the previous import's.
+    /// </summary>
+    private async Task<ModuleDefinitionImportResult> ExecuteModuleDefinitionSqlAsync(
+        ModuleDefinitionImportContext context,
+        CancellationToken cancellationToken)
+    {
+        var definition = context.Definition;
+        var repairs = context.PreApplySqlRepairCount;
+        var healedScripts = new List<string>();
 
         // For non-core modules, verify the physical schema against everything the definition
         // declares -- schemas, tables, columns, indexes, constraints and triggers -- plus the
@@ -1117,7 +1194,7 @@ public sealed class ArtifactZipImportService
         // to it: the import reported a green "skipped, package version is not newer", and the
         // gap surfaced later as a raw SqlException in a worker. That is how R4-B1's unique
         // index sat in the repository for four days, booked as fixed, while no database had it.
-        if (!requiresPreApplySqlRepairs)
+        if (!context.RequiresPreApplySqlRepairs)
         {
             var missingByScript = await _repository.GetMissingRequiredObjectsByScriptKeyAsync(
                 definition.DefinitionJson,
@@ -1126,7 +1203,7 @@ public sealed class ArtifactZipImportService
             {
                 var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
                 var healedCount = await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
-                    saveResult.ModuleDefinitionDocumentId,
+                    context.ModuleDefinitionDocumentId,
                     scriptKeys,
                     cancellationToken);
                 repairs += healedCount;
@@ -1159,37 +1236,20 @@ public sealed class ArtifactZipImportService
             }
         }
 
-        if (installedVersionIsStrictlyNewer)
-        {
-            return new ModuleDefinitionImportResult(
-                definition.ModuleKey,
-                definition.DefinitionVersion,
-                saveResult.ModuleDefinitionDocumentId,
-                Applied: false,
-                repairs)
-            {
-                HealedScripts = healedScripts
-            };
-        }
-
-        var applied = await _repository.ApplyImportedModuleDefinitionAsync(
-            saveResult.ModuleDefinitionDocumentId,
-            cancellationToken);
-
         // The missing-object repair above already executed the required scripts, so skip
         // the broad post-apply repair pass for this non-core module to avoid duplicating work.
-        if (applied && !requiresPreApplySqlRepairs && healedScripts.Count == 0)
+        if (context.Applied && !context.RequiresPreApplySqlRepairs && healedScripts.Count == 0)
         {
             repairs += await _repository.ExecuteImportedModuleDefinitionSqlRepairsAsync(
-                saveResult.ModuleDefinitionDocumentId,
+                context.ModuleDefinitionDocumentId,
                 cancellationToken);
         }
 
         return new ModuleDefinitionImportResult(
             definition.ModuleKey,
             definition.DefinitionVersion,
-            saveResult.ModuleDefinitionDocumentId,
-            applied,
+            context.ModuleDefinitionDocumentId,
+            context.Applied,
             repairs)
         {
             HealedScripts = healedScripts

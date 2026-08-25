@@ -1191,6 +1191,70 @@ public sealed class PortableModulePackageService
             repairCount += repairResult.ExecutedCount;
         }
 
+        if (options.ApplyModuleDefinition && !keepNewerAppliedDefinition)
+        {
+            var applyResult = await _repo.ApplyModuleDefinitionDocumentAsync(
+                saveResult.ModuleDefinitionDocumentId,
+                options.AllowTemporaryIncompatibleArtifacts,
+                ct);
+            applied = applyResult.Applied;
+        }
+
+        // Non-core SQL runs AFTER the artifact loop below, so seed scripts that read
+        // omp.Artifacts (IbsPackager's @Version probe) see the versions this package
+        // carries; the artifact loop only needs the applied definition structure.
+
+        var plans = CreateArtifactImportPlans(definition, artifactPaths);
+        var activationKeys = SelectLatestActivationKeys(plans);
+        var artifactResults = new List<PortableModulePackageArtifactImportResult>();
+        foreach (var plan in plans)
+        {
+            if (plan.Identity is null || !string.IsNullOrWhiteSpace(plan.SkipMessage))
+            {
+                artifactResults.Add(new PortableModulePackageArtifactImportResult(
+                    Path.GetFileName(plan.Path),
+                    "Skipped",
+                    plan.SkipMessage ?? "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
+                    null));
+                continue;
+            }
+
+            if (quickImportState?.TryGetArtifactSkipMessage(plan.Identity, out var quickSkipMessage) == true)
+            {
+                artifactResults.Add(new PortableModulePackageArtifactImportResult(
+                    Path.GetFileName(plan.Path),
+                    "Skipped",
+                    quickSkipMessage,
+                    null));
+                continue;
+            }
+
+            var activateArtifact = options.UseArtifactsImmediately
+                && activationKeys.Contains(BuildArtifactActivationKey(plan.Identity));
+            var artifactOptions = options with { UseArtifactsImmediately = activateArtifact };
+            var result = await ImportArtifactPackageAsync(plan.Identity, plan.Path, artifactOptions, ct);
+            if (options.UseArtifactsImmediately
+                && !activateArtifact
+                && result.Status is "Imported" or "Replaced" or "Skipped")
+            {
+                result = result with
+                {
+                    Message = AppendWarning(
+                        result.Message ?? string.Empty,
+                        "The artifact was kept as a historical package and was not selected because a newer compatible artifact for the same app slot exists in this module package.")
+                };
+            }
+
+            artifactResults.Add(result);
+        }
+
+        // The definition's own SQL runs after this package's artifact rows are registered.
+        // Seed scripts discover "the latest artifact version" from omp.Artifacts, and script
+        // execution is version-gated, so a seed that ran before the registration recorded
+        // the PREVIOUS import's version and never re-ran to correct it (measured on
+        // linus_hemma 2026-08-25: ChannelTypeVersions one import behind). The HostAgent
+        // folder import orders the same way in ArtifactZipImportService.
+
         // For non-core modules, verify the declared required objects (schemas, tables,
         // columns, indexes, constraints, triggers) plus the definition's own validation
         // probe, and re-run only the idempotent scripts whose objects are missing. This
@@ -1237,15 +1301,6 @@ public sealed class PortableModulePackageService
             }
         }
 
-        if (options.ApplyModuleDefinition && !keepNewerAppliedDefinition)
-        {
-            var applyResult = await _repo.ApplyModuleDefinitionDocumentAsync(
-                saveResult.ModuleDefinitionDocumentId,
-                options.AllowTemporaryIncompatibleArtifacts,
-                ct);
-            applied = applyResult.Applied;
-        }
-
         // Non-platform-core modules keep the existing post-apply repair behavior,
         // but only when the missing-object heal above did not already run.
         if (applied && options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition) && warnings.Count == 0)
@@ -1254,50 +1309,6 @@ public sealed class PortableModulePackageService
                 saveResult.ModuleDefinitionDocumentId,
                 ct);
             repairCount += repairResult.ExecutedCount;
-        }
-
-        var plans = CreateArtifactImportPlans(definition, artifactPaths);
-        var activationKeys = SelectLatestActivationKeys(plans);
-        var artifactResults = new List<PortableModulePackageArtifactImportResult>();
-        foreach (var plan in plans)
-        {
-            if (plan.Identity is null || !string.IsNullOrWhiteSpace(plan.SkipMessage))
-            {
-                artifactResults.Add(new PortableModulePackageArtifactImportResult(
-                    Path.GetFileName(plan.Path),
-                    "Skipped",
-                    plan.SkipMessage ?? "The artifact package filename does not follow the standard module__app__packageType__target__version.zip format.",
-                    null));
-                continue;
-            }
-
-            if (quickImportState?.TryGetArtifactSkipMessage(plan.Identity, out var quickSkipMessage) == true)
-            {
-                artifactResults.Add(new PortableModulePackageArtifactImportResult(
-                    Path.GetFileName(plan.Path),
-                    "Skipped",
-                    quickSkipMessage,
-                    null));
-                continue;
-            }
-
-            var activateArtifact = options.UseArtifactsImmediately
-                && activationKeys.Contains(BuildArtifactActivationKey(plan.Identity));
-            var artifactOptions = options with { UseArtifactsImmediately = activateArtifact };
-            var result = await ImportArtifactPackageAsync(plan.Identity, plan.Path, artifactOptions, ct);
-            if (options.UseArtifactsImmediately
-                && !activateArtifact
-                && result.Status is "Imported" or "Replaced" or "Skipped")
-            {
-                result = result with
-                {
-                    Message = AppendWarning(
-                        result.Message ?? string.Empty,
-                        "The artifact was kept as a historical package and was not selected because a newer compatible artifact for the same app slot exists in this module package.")
-                };
-            }
-
-            artifactResults.Add(result);
         }
 
         return new PortableModulePackageImportResult(
