@@ -21,7 +21,16 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+# Resolve the work tree being pushed, not the directory holding the hook file:
+# with git worktrees the hook always loads from the main checkout's .githooks
+# (core.hooksPath is absolute), so $PSScriptRoot pointed a worktree push at the
+# MAIN checkout's tree and local-ci.ps1 -- the gate then measured content that
+# was not being pushed. Git runs pre-push with the pushing work tree as cwd.
+$repoRoot = (git rev-parse --show-toplevel).Trim().Replace('/', '\')
+if ([string]::IsNullOrWhiteSpace($repoRoot)) {
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+}
+
 $localCi = Join-Path $repoRoot 'scripts\local-ci.ps1'
 
 if (-not (Test-Path $localCi)) {
