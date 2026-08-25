@@ -736,6 +736,24 @@ table.list-has-column-bands > thead th:not([data-sort-type]) {
     padding-top: 30px;
 }
 
+/* Columns outside every band carry a quiet neutral rail in the same
+   position, so the strip reads as one continuous track with colored
+   group segments instead of empty patches. */
+table.list-has-column-bands > thead th:not([data-column-band]) {
+    position: relative;
+}
+
+table.list-has-column-bands > thead th:not([data-column-band])::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--border-strong, #c4cede);
+    pointer-events: none;
+}
+
 .sortable-list th[data-column-band]::before {
     content: "";
     position: absolute;
