@@ -596,6 +596,12 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
     background: var(--surface-muted, #f8fafc);
 }
 
+/* On a hovered row the tinted detail cells follow the row hover colour;
+   the tint would otherwise sit on top and split the row into two shades. */
+.omp-grid tbody tr:hover > td[data-column-detail].list-column-detail--open {
+    background: color-mix(in srgb, var(--surface-muted) 50%, var(--surface));
+}
+
 /* The detail column's own title reads darker than a plain header so the
    child stands out inside its tinted group. */
 .sortable-list th[data-column-detail] .sortable-list__button {
@@ -643,7 +649,12 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
 }
 
 .list-column-expand::before {
-    content: "+";
+    content: "";
+    width: 12px;
+    height: 12px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/double-arrow-right.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/double-arrow-right.svg") center / contain no-repeat;
 }
 
 /* Fit-width lists (opt in with data-list-fit on the table): the table never
@@ -696,7 +707,8 @@ table[data-list-fit] > thead th[data-column-group] .sortable-list__button {
 }
 
 .list-column-expand.is-open::before {
-    content: "\2212";
+    -webkit-mask-image: url("/_content/OpenModulePlatform.Web.Shared/icons/double-arrow-left.svg");
+    mask-image: url("/_content/OpenModulePlatform.Web.Shared/icons/double-arrow-left.svg");
 }
 
 .list-column-expand:hover {
