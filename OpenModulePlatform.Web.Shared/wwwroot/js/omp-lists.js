@@ -1003,8 +1003,8 @@
     // Column bands: a thin colored line above header columns that belong
     // together conceptually (declared with data-column-band on the th).
     // Purely presentational and fixed by the page - the user cannot change
-    // it. The band label (data-column-band-label on any member) fades in
-    // while a member column is hovered. Colors come from
+    // it. The band label (data-column-band-label on any member) is always
+    // visible in the band's start column. Colors come from
     // data-column-band-color or a fixed palette by order of appearance.
     const COLUMN_BAND_PALETTE = ['#4c8dd6', '#58a668', '#d6a54c', '#9273d1', '#4ca8a3'];
 
@@ -1082,15 +1082,6 @@
 
             refresh();
             table.ompListsRefreshColumnBands = refresh;
-
-            table.tHead?.addEventListener('mouseover', (event) => {
-                const cell = event.target.closest?.('th[data-column-band]');
-                headerCells().forEach((other) => other.classList.toggle('list-column-band-hot',
-                    !!cell && !!other.dataset.columnBand && other.dataset.columnBand === cell.dataset.columnBand));
-            });
-            table.tHead?.addEventListener('mouseleave', () => {
-                headerCells().forEach((other) => other.classList.remove('list-column-band-hot'));
-            });
         });
     }
 
