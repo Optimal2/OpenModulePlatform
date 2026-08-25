@@ -992,7 +992,101 @@
                         releaseColumns();
                     }
                     syncOpenState(open.length > 0);
+                    // Revealed or hidden detail columns may sit inside a
+                    // column band; the band edges must follow.
+                    table.ompListsRefreshColumnBands?.();
                 });
+            });
+        });
+    }
+
+    // Column bands: a thin colored line above header columns that belong
+    // together conceptually (declared with data-column-band on the th).
+    // Purely presentational and fixed by the page - the user cannot change
+    // it. The band label (data-column-band-label on any member) fades in
+    // while a member column is hovered. Colors come from
+    // data-column-band-color or a fixed palette by order of appearance.
+    const COLUMN_BAND_PALETTE = ['#4c8dd6', '#58a668', '#d6a54c', '#9273d1', '#4ca8a3'];
+
+    function initColumnBands(root) {
+        root.querySelectorAll('table').forEach((table) => {
+            if (!table.querySelector('[data-column-band]') || table.dataset.columnBandsInitialized === 'true') {
+                return;
+            }
+            table.dataset.columnBandsInitialized = 'true';
+
+            const headerCells = () => Array.from(table.tHead?.rows[0]?.cells || []);
+
+            const bandColors = new Map();
+            const bandLabels = new Map();
+            headerCells().forEach((cell) => {
+                const band = cell.dataset.columnBand;
+                if (!band) {
+                    return;
+                }
+                if (!bandColors.has(band)) {
+                    bandColors.set(band, cell.dataset.columnBandColor
+                        || COLUMN_BAND_PALETTE[bandColors.size % COLUMN_BAND_PALETTE.length]);
+                }
+                if (!bandLabels.has(band) && cell.dataset.columnBandLabel) {
+                    bandLabels.set(band, cell.dataset.columnBandLabel);
+                }
+                cell.style.setProperty('--column-band-color', bandColors.get(band));
+            });
+
+            const refresh = () => {
+                const cells = headerCells();
+                cells.forEach((cell) => cell.classList.remove('list-column-band-start', 'list-column-band-end'));
+                const visible = cells.filter((cell) => getComputedStyle(cell).display !== 'none');
+                let runBand = null;
+                let runLast = null;
+                const starts = new Map();
+                visible.forEach((cell) => {
+                    const band = cell.dataset.columnBand || null;
+                    if (band !== runBand) {
+                        runLast?.classList.add('list-column-band-end');
+                        runBand = band;
+                        runLast = null;
+                        if (band) {
+                            cell.classList.add('list-column-band-start');
+                            starts.set(band, cell);
+                        }
+                    }
+                    if (band) {
+                        runLast = cell;
+                    }
+                });
+                runLast?.classList.add('list-column-band-end');
+                // The label chip lives in the band's current start cell.
+                starts.forEach((startCell, band) => {
+                    const label = bandLabels.get(band);
+                    if (!label) {
+                        return;
+                    }
+                    let chip = table.querySelector(`.list-column-band-label[data-column-band-for="${CSS.escape(band)}"]`);
+                    if (!chip) {
+                        chip = document.createElement('span');
+                        chip.className = 'list-column-band-label';
+                        chip.setAttribute('data-column-band-for', band);
+                        chip.setAttribute('aria-hidden', 'true');
+                        chip.textContent = label;
+                    }
+                    if (chip.parentElement !== startCell) {
+                        startCell.appendChild(chip);
+                    }
+                });
+            };
+
+            refresh();
+            table.ompListsRefreshColumnBands = refresh;
+
+            table.tHead?.addEventListener('mouseover', (event) => {
+                const cell = event.target.closest?.('th[data-column-band]');
+                headerCells().forEach((other) => other.classList.toggle('list-column-band-hot',
+                    !!cell && !!other.dataset.columnBand && other.dataset.columnBand === cell.dataset.columnBand));
+            });
+            table.tHead?.addEventListener('mouseleave', () => {
+                headerCells().forEach((other) => other.classList.remove('list-column-band-hot'));
             });
         });
     }
@@ -1006,6 +1100,7 @@
         initInfoBadges(document);
         initListMessages(document);
         initColumnGroups(document);
+        initColumnBands(document);
         listControllers.forEach((controller) => {
             refreshListController(controller);
             if (controller.viewport && controller.viewport.offsetHeight > 0) {

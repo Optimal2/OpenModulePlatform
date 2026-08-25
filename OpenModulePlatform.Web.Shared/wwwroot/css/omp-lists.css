@@ -711,6 +711,68 @@ table[data-list-fit] > thead th[data-column-group] .sortable-list__button {
     mask-image: url("/_content/OpenModulePlatform.Web.Shared/icons/double-arrow-left.svg");
 }
 
+/* Column bands: a thin colored line above header columns that belong
+   together conceptually (data-column-band on the th, fixed by the page).
+   Contiguous same-band columns read as one line; the script marks the
+   first and last visible member so the ends can round off, Edge-tab-group
+   style. The label chip fades in while a member column is hovered. */
+.sortable-list th[data-column-band] {
+    position: relative;
+}
+
+.sortable-list th[data-column-band]::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--column-band-color, #9aa7b8);
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+.sortable-list th[data-column-band].list-column-band-start::before {
+    left: 4px;
+    border-top-left-radius: 999px;
+    border-bottom-left-radius: 999px;
+}
+
+.sortable-list th[data-column-band].list-column-band-end::before {
+    right: 4px;
+    border-top-right-radius: 999px;
+    border-bottom-right-radius: 999px;
+}
+
+.list-column-band-label {
+    position: absolute;
+    top: 0;
+    left: 8px;
+    /* Above the resize handle (3) and the expand button (4). */
+    z-index: 5;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--column-band-color, #9aa7b8);
+    color: #fff;
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    pointer-events: none;
+}
+
+.sortable-list th[data-column-band].list-column-band-hot .list-column-band-label {
+    opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .list-column-band-label {
+        transition: none;
+    }
+}
+
 .list-column-expand:hover {
     background: var(--accent, #e8f0fe);
     border-color: var(--border-strong, #c4cede);
