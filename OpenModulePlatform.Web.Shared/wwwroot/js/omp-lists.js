@@ -934,21 +934,64 @@
                 button?.classList.toggle('is-open', open);
             };
 
+            // Expanding must not reshuffle the columns that are already on
+            // screen: before revealing detail columns, the visible columns'
+            // current widths are frozen in the colgroup, and the open table
+            // is released from the fit-width cap so the new columns extend
+            // it to the right (scrolling inside the wrapper) instead of
+            // squeezing their neighbours.
+            const groupCols = () => {
+                const headerCells = Array.from(table.tHead?.rows[0]?.cells || []);
+                let colgroup = table.querySelector(':scope > colgroup');
+                if (!colgroup) {
+                    colgroup = document.createElement('colgroup');
+                    headerCells.forEach(() => colgroup.appendChild(document.createElement('col')));
+                    table.insertBefore(colgroup, table.firstChild);
+                }
+                return { headerCells, cols: Array.from(colgroup.children) };
+            };
+            const freezeVisibleColumns = () => {
+                const { headerCells, cols } = groupCols();
+                const widths = headerCells.map((cell) => cell.getBoundingClientRect().width);
+                headerCells.forEach((cell, index) => {
+                    if (!cols[index]) { return; }
+                    const hidden = cell.hasAttribute('data-column-detail')
+                        && !cell.classList.contains('list-column-detail--open');
+                    cols[index].style.width = hidden ? '' : `${widths[index]}px`;
+                });
+            };
+            const releaseColumns = () => {
+                groupCols().cols.forEach((col) => col.style.removeProperty('width'));
+            };
+            const syncOpenState = (anyOpen) => {
+                table.classList.toggle('list-column-group-open', anyOpen);
+            };
+
             let open = readOpen();
             open.forEach((key) => apply(key, true));
+            // Restored-open tables render at natural widths (no freeze: there
+            // is no previous on-screen state to keep stable).
+            syncOpenState(open.length > 0);
 
             table.querySelectorAll('[data-column-expand]').forEach((button) => {
                 button.setAttribute('aria-expanded', open.includes(button.dataset.columnExpand) ? 'true' : 'false');
                 button.addEventListener('click', () => {
                     const key = button.dataset.columnExpand;
                     const isOpen = !open.includes(key);
+                    const wasOpen = open.length > 0;
                     open = isOpen ? [...open, key] : open.filter((other) => other !== key);
                     writeOpen(open);
-                    apply(key, isOpen);
-                    // The column set just changed, so any manually resized
-                    // widths (fixed layout + per-column percents) describe the
-                    // wrong set of columns; return to the natural layout.
+                    // Any manually resized widths (fixed layout + per-column
+                    // percents) describe the wrong column set now.
                     table.ompListsResetColumnWidths?.();
+                    if (isOpen && !wasOpen) {
+                        freezeVisibleColumns();
+                    }
+                    apply(key, isOpen);
+                    if (open.length === 0) {
+                        releaseColumns();
+                    }
+                    syncOpenState(open.length > 0);
                 });
             });
         });

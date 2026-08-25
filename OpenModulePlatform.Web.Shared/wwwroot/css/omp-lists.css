@@ -657,6 +657,20 @@ table[data-list-fit] {
     max-width: 100%;
 }
 
+/* While a column group is open the fit cap lifts: the summary columns are
+   frozen at the widths they had when the group opened (colgroup, set by
+   the script), and the revealed detail columns extend the table to the
+   right - scrolling inside the wrapper - instead of squeezing the columns
+   that were already on screen. */
+table[data-list-fit].list-column-group-open {
+    /* width: auto would shrink-to-fit the wrapper and squeeze the frozen
+       columns anyway; max-content lets the table exceed the wrapper and
+       scroll inside it. */
+    width: max-content;
+    min-width: 100%;
+    max-width: none;
+}
+
 table[data-list-fit] > tbody > tr > td {
     white-space: normal;
     overflow-wrap: anywhere;
