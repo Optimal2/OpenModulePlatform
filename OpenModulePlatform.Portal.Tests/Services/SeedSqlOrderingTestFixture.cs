@@ -39,20 +39,27 @@ public sealed class SeedSqlOrderingTestFixture : IAsyncLifetime
             InitialCatalog = "master"
         };
 
-        await using var conn = new SqlConnection(builder.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new SqlCommand(
-            $@"
-ALTER DATABASE [{DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-DROP DATABASE [{DatabaseName}];",
-            conn);
+        // The whole cleanup is best-effort, INCLUDING opening the connection: a failed
+        // open (unreachable instance, rejected encryption) must not surface as an xUnit
+        // class-cleanup failure after the tests themselves already reported their result.
         try
         {
+            await using var conn = new SqlConnection(builder.ConnectionString);
+            await conn.OpenAsync();
+            await using var cmd = new SqlCommand(
+                $@"
+ALTER DATABASE [{DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+DROP DATABASE [{DatabaseName}];",
+                conn);
             await cmd.ExecuteNonQueryAsync();
         }
         catch (SqlException)
         {
             // Best-effort cleanup.
+        }
+        catch (InvalidOperationException)
+        {
+            // Best-effort cleanup (connection could not be opened).
         }
     }
 

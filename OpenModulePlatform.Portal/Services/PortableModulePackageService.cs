@@ -498,7 +498,8 @@ public sealed class PortableModulePackageService
                         matchingArtifactItems.Select(static artifactItem => artifactItem.ExtractedPath).ToArray(),
                         options,
                         quickImportState,
-                        ct);
+                        ct,
+                        throwOnDefinitionSqlFailure: false);
 
                     foreach (var artifactItem in matchingArtifactItems)
                     {
@@ -511,11 +512,23 @@ public sealed class PortableModulePackageService
                         moduleResultMessage = AppendWarning(moduleResultMessage, warning);
                     }
 
-                    results.Add(new UniversalPackageImportItemResult(
-                        "module-definition",
-                        item.Path,
-                        importResult.Applied ? "Applied" : "Stored",
-                        moduleResultMessage));
+                    // A SQL failure after the artifacts imported marks the module-definition
+                    // item Failed WITHOUT throwing, so the artifact results below stay the
+                    // import that actually performed them instead of a second pass through
+                    // the standalone artifact loop.
+                    results.Add(importResult.DefinitionSqlError is null
+                        ? new UniversalPackageImportItemResult(
+                            "module-definition",
+                            item.Path,
+                            importResult.Applied ? "Applied" : "Stored",
+                            moduleResultMessage)
+                        : new UniversalPackageImportItemResult(
+                            "module-definition",
+                            item.Path,
+                            "Failed",
+                            AppendWarning(
+                                moduleResultMessage,
+                                $"Definition SQL failed after artifact import: {importResult.DefinitionSqlError}")));
 
                     foreach (var artifactResult in importResult.Artifacts)
                     {
@@ -1165,7 +1178,8 @@ public sealed class PortableModulePackageService
         IReadOnlyList<string> artifactPaths,
         PortableModulePackageImportOptions options,
         QuickImportState? quickImportState,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool throwOnDefinitionSqlFailure = true)
     {
         var saveResult = await _repo.SaveModuleDefinitionDocumentAsync(
             definition,
@@ -1254,61 +1268,89 @@ public sealed class PortableModulePackageService
         // the PREVIOUS import's version and never re-ran to correct it (measured on
         // linus_hemma 2026-08-25: ChannelTypeVersions one import behind). The HostAgent
         // folder import orders the same way in ArtifactZipImportService.
-
-        // For non-core modules, verify the declared required objects (schemas, tables,
-        // columns, indexes, constraints, triggers) plus the definition's own validation
-        // probe, and re-run only the idempotent scripts whose objects are missing. This
-        // heals stale schema even when the installed definition version is newer than or
-        // equal to the package (R12-G3).
-        if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
+        //
+        // The same version gate is why a FAILED artifact item defers the SQL entirely:
+        // running it now would record a Succeeded execution over the pre-failure artifact
+        // state, and re-importing the repaired artifact under the unchanged definition
+        // would never re-run it. Deferring records no execution, so the next clean import
+        // runs the scripts.
+        var failedArtifactCount = artifactResults.Count(static item => item.Status == "Failed");
+        string? definitionSqlError = null;
+        if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition) && failedArtifactCount > 0)
         {
-            var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
-                definition.DefinitionJson,
-                ct);
-            if (missingByScript.Count > 0)
+            warnings.Add(
+                $"Definition SQL deferred: {failedArtifactCount} artifact package(s) failed to import; "
+                + "the SQL scripts run on the next import once every artifact imports cleanly.");
+        }
+        else
+        {
+            // The filter leaves the exception untouched for the legacy single-module import
+            // paths (throwOnDefinitionSqlFailure stays true there). The universal package
+            // loop passes false: it must receive the artifact results this method already
+            // produced, or its standalone fall-through would import the same artifacts a
+            // second time and report the fresh import as an identical skip.
+            try
             {
-                var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
-                    saveResult.ModuleDefinitionDocumentId,
-                    scriptKeys,
-                    ct);
-                repairCount += repairResult.ExecutedCount;
-                var missingBefore = missingByScript.SelectMany(static item => item.Value).ToList();
-
-                // Measure again. Saying "healed" without re-checking is how R4-B1's unique
-                // index sat booked as fixed for four days while no database had it - the
-                // comment on the sibling path in ArtifactZipImportService says exactly that,
-                // and then neither path re-checked. A repair that silently failed produced a
-                // message identical to one that worked.
-                var missingAfter = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
-                    definition.DefinitionJson,
-                    ct);
-
-                if (missingAfter.Count == 0)
+                // For non-core modules, verify the declared required objects (schemas, tables,
+                // columns, indexes, constraints, triggers) plus the definition's own validation
+                // probe, and re-run only the idempotent scripts whose objects are missing. This
+                // heals stale schema even when the installed definition version is newer than or
+                // equal to the package (R12-G3).
+                if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition))
                 {
-                    warnings.Add(
-                        $"Schema drift healed: re-executed {repairResult.ExecutedCount} script(s) for module '{definition.ModuleKey}'. "
-                        + $"Objects that were missing and are now present: {string.Join(", ", missingBefore)}.");
+                    var missingByScript = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
+                        definition.DefinitionJson,
+                        ct);
+                    if (missingByScript.Count > 0)
+                    {
+                        var scriptKeys = missingByScript.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                            saveResult.ModuleDefinitionDocumentId,
+                            scriptKeys,
+                            ct);
+                        repairCount += repairResult.ExecutedCount;
+                        var missingBefore = missingByScript.SelectMany(static item => item.Value).ToList();
+
+                        // Measure again. Saying "healed" without re-checking is how R4-B1's unique
+                        // index sat booked as fixed for four days while no database had it - the
+                        // comment on the sibling path in ArtifactZipImportService says exactly that,
+                        // and then neither path re-checked. A repair that silently failed produced a
+                        // message identical to one that worked.
+                        var missingAfter = await _repo.GetMissingRequiredObjectsByScriptKeyAsync(
+                            definition.DefinitionJson,
+                            ct);
+
+                        if (missingAfter.Count == 0)
+                        {
+                            warnings.Add(
+                                $"Schema drift healed: re-executed {repairResult.ExecutedCount} script(s) for module '{definition.ModuleKey}'. "
+                                + $"Objects that were missing and are now present: {string.Join(", ", missingBefore)}.");
+                        }
+                        else
+                        {
+                            var stillMissing = missingAfter.SelectMany(static item => item.Value).ToList();
+                            warnings.Add(
+                                $"Schema repair INCOMPLETE for module '{definition.ModuleKey}': re-executed {repairResult.ExecutedCount} script(s), "
+                                + $"but {stillMissing.Count} required object(s) are STILL missing: {string.Join(", ", stillMissing)}. "
+                                + "The import is recorded, but this module's storage is not in the state its definition declares.");
+                        }
+                    }
                 }
-                else
+
+                // Non-platform-core modules keep the existing post-apply repair behavior,
+                // but only when the missing-object heal above did not already run.
+                if (applied && options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition) && warnings.Count == 0)
                 {
-                    var stillMissing = missingAfter.SelectMany(static item => item.Value).ToList();
-                    warnings.Add(
-                        $"Schema repair INCOMPLETE for module '{definition.ModuleKey}': re-executed {repairResult.ExecutedCount} script(s), "
-                        + $"but {stillMissing.Count} required object(s) are STILL missing: {string.Join(", ", stillMissing)}. "
-                        + "The import is recorded, but this module's storage is not in the state its definition declares.");
+                    var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
+                        saveResult.ModuleDefinitionDocumentId,
+                        ct);
+                    repairCount += repairResult.ExecutedCount;
                 }
             }
-        }
-
-        // Non-platform-core modules keep the existing post-apply repair behavior,
-        // but only when the missing-object heal above did not already run.
-        if (applied && options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition) && warnings.Count == 0)
-        {
-            var repairResult = await _repo.ExecuteModuleDefinitionSqlRepairsAsync(
-                saveResult.ModuleDefinitionDocumentId,
-                ct);
-            repairCount += repairResult.ExecutedCount;
+            catch (Exception ex) when (!throwOnDefinitionSqlFailure && IsExpectedUniversalImportFailure(ex))
+            {
+                definitionSqlError = ex.Message;
+            }
         }
 
         return new PortableModulePackageImportResult(
@@ -1319,7 +1361,8 @@ public sealed class PortableModulePackageService
             repairCount,
             artifactResults)
         {
-            Warnings = warnings
+            Warnings = warnings,
+            DefinitionSqlError = definitionSqlError
         };
     }
 
@@ -1346,7 +1389,7 @@ public sealed class PortableModulePackageService
             return new PortableModulePackageArtifactImportResult(
                 identity.FileName,
                 "Failed",
-                $"The module/app '{identity.ModuleKey}/{identity.AppKey}' is not registered. Apply the module definition and execute SQL repairs first.",
+                $"The module/app '{identity.ModuleKey}/{identity.AppKey}' is not registered. Apply the module definition first.",
                 null);
         }
 
@@ -2856,6 +2899,13 @@ public sealed record PortableModulePackageImportResult(
     public int ImportedArtifactCount => Artifacts.Count(item => item.Status is "Imported" or "Replaced" or "Updated");
 
     public int FailedArtifactCount => Artifacts.Count(item => item.Status == "Failed");
+
+    /// <summary>
+    /// Set when the definition's SQL phase failed after the artifacts were imported and
+    /// the caller asked for the failure to be reported instead of thrown, so the artifact
+    /// results above stay attached to the import that actually performed them.
+    /// </summary>
+    public string? DefinitionSqlError { get; init; }
 
     /// <summary>
     /// Human-readable warnings about schema drift or other recoverable issues encountered during import.

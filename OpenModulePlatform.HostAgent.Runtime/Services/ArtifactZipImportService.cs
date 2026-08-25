@@ -790,22 +790,41 @@ public sealed class ArtifactZipImportService
             // version-gated, so a seed that ran before the registration recorded the
             // PREVIOUS import's version and never re-ran to correct it (measured on
             // linus_hemma 2026-08-25: ChannelTypeVersions one import behind).
-            try
+            //
+            // The same version gate is why a FAILED artifact item defers the SQL
+            // entirely: running it now would record a Succeeded execution over the
+            // pre-failure artifact state, and re-importing the repaired artifact under
+            // the unchanged definition would never re-run it. Deferring records no
+            // execution, so the next clean import runs the scripts.
+            var failedArtifactCount = artifactResults.Count(static result => result.Status == "Failed");
+            if (failedArtifactCount > 0 && !definitionContext.RequiresPreApplySqlRepairs)
             {
-                var definitionResult = await ExecuteModuleDefinitionSqlAsync(definitionContext, cancellationToken);
                 itemResults.Add(new UniversalHostAgentImportItemResult(
                     "module-definition",
                     item.Path,
-                    definitionResult.Applied ? "Applied" : "Stored",
-                    $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}."));
+                    definitionContext.Applied ? "Applied" : "Stored",
+                    $"Module {definitionContext.Definition.ModuleKey} {definitionContext.Definition.DefinitionVersion}; artifacts: {artifactResults.Count}. " +
+                    $"Definition SQL deferred: {failedArtifactCount} artifact package(s) failed to import; the SQL scripts run on the next import once every artifact imports cleanly."));
             }
-            catch (Exception ex) when (IsExpectedImportFailure(ex))
+            else
             {
-                itemResults.Add(new UniversalHostAgentImportItemResult(
-                    "module-definition",
-                    item.Path,
-                    "Failed",
-                    ex.Message));
+                try
+                {
+                    var definitionResult = await ExecuteModuleDefinitionSqlAsync(definitionContext, cancellationToken);
+                    itemResults.Add(new UniversalHostAgentImportItemResult(
+                        "module-definition",
+                        item.Path,
+                        definitionResult.Applied ? "Applied" : "Stored",
+                        $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}."));
+                }
+                catch (Exception ex) when (IsExpectedImportFailure(ex))
+                {
+                    itemResults.Add(new UniversalHostAgentImportItemResult(
+                        "module-definition",
+                        item.Path,
+                        "Failed",
+                        ex.Message));
+                }
             }
 
             itemResults.AddRange(artifactResults);

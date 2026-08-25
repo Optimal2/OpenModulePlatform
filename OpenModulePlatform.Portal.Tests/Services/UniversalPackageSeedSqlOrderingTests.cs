@@ -36,6 +36,7 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
 {
     private const string PreviousArtifactVersion = "0.3.134";
     private const string PackageArtifactVersion = "0.3.135";
+    private const string FixedArtifactVersion = "0.3.136";
     private const string AppKey = "worker";
     private const string PackageType = "channel-type";
     private const string TargetName = "filedrop";
@@ -62,21 +63,7 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
             var packagePath = BuildUniversalPackageZip(workRoot, moduleKey, schemaName);
             File.Copy(packagePath, Path.Join(importRoot, Path.GetFileName(packagePath)));
 
-            var settings = new HostAgentSettings
-            {
-                CentralArtifactRoot = storeRoot,
-                ArtifactZipImport = new HostAgentArtifactZipImportSettings
-                {
-                    IsEnabled = true,
-                    ImportPath = importRoot
-                }
-            };
-            var service = new ArtifactZipImportService(
-                new StaticOptionsMonitor<HostAgentSettings>(settings),
-                _fixture.CreateHostAgentRepository(),
-                NullLogger<ArtifactZipImportService>.Instance);
-
-            await service.ImportPendingAsync(CancellationToken.None);
+            await RunHostAgentImportAsync(importRoot, storeRoot);
 
             Assert.True(
                 Directory.GetFiles(Path.Join(importRoot, "failed")).Length == 0,
@@ -110,36 +97,9 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
         {
             var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
             var packagePath = BuildUniversalPackageZip(workRoot, moduleKey, schemaName);
+            var service = CreatePortalService(storeRoot);
 
-            var portalFactory = _fixture.CreatePortalConnectionFactory();
-            var service = new PortableModulePackageService(
-                _fixture.CreatePortalRepository(),
-                Microsoft.Extensions.Options.Options.Create(new ArtifactUploadOptions
-                {
-                    ArtifactStoreRoot = storeRoot
-                }),
-                new PortalDashboardWidgetPackageService(portalFactory),
-                new PortalWidgetRuntimeDataPackageService(portalFactory),
-                NullLogger<PortableModulePackageService>.Instance);
-
-            UniversalPackageImportResult result;
-            await using (var stream = File.OpenRead(packagePath))
-            {
-                var upload = new FormFile(stream, 0, stream.Length, "packageFile", Path.GetFileName(packagePath));
-                result = await service.ImportUniversalPackageUploadAsync(
-                    upload,
-                    new PortableModulePackageImportOptions(
-                        ApplyModuleDefinition: true,
-                        ExecuteSqlRepairs: true,
-                        AllowTemporaryIncompatibleArtifacts: false,
-                        ReplaceExistingModuleDefinition: false,
-                        ReplaceExistingArtifacts: false,
-                        ReplaceExistingDashboardWidgets: false,
-                        CopyConfigurationFilesFromPreviousVersion: true,
-                        UseArtifactsImmediately: true),
-                    replaceExistingConfigObjects: false,
-                    CancellationToken.None);
-            }
+            var result = await ImportPortalPackageAsync(service, packagePath);
 
             var failed = result.Items.Where(static item => item.Status == "Failed").ToList();
             Assert.True(
@@ -163,11 +123,190 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
     }
 
     /// <summary>
+    /// The residual incident path: the package's artifact FAILS to register (here: a
+    /// version conflict), yet the definition's seed SQL used to run anyway and record a
+    /// Succeeded execution. Because execution is version-gated, repairing the artifact
+    /// and re-importing the unchanged definition never re-ran the seed -- the stale
+    /// version was permanent. The SQL must be deferred while any artifact item failed,
+    /// so the next clean import (no succeeded execution recorded) runs it.
+    /// </summary>
+    [Fact]
+    public async Task HostAgentImport_WhenAnArtifactFails_SeedSqlIsDeferredUntilACleanImport()
+    {
+        const string moduleKey = "seedorderdeferha";
+        const string schemaName = "omp_seedorderdeferha";
+        var (_, appId) = await ArrangePreviousImportStateAsync(moduleKey, schemaName);
+        await _fixture.InsertArtifactAsync(
+            appId,
+            PackageArtifactVersion,
+            PackageType,
+            TargetName,
+            $"{moduleKey}/{PackageType}/{PackageArtifactVersion}",
+            new string('b', 64));
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var importRoot = Directory.CreateDirectory(Path.Join(workRoot, "import")).FullName;
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+
+            var conflictedPackage = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, PackageArtifactVersion, includeValidationProbe: true);
+            File.Copy(conflictedPackage, Path.Join(importRoot, Path.GetFileName(conflictedPackage)));
+            await RunHostAgentImportAsync(importRoot, storeRoot);
+
+            Assert.NotEmpty(Directory.GetFiles(Path.Join(importRoot, "failed")));
+            var seededAfterConflict = await _fixture.GetSeededVersionsAsync(schemaName);
+            Assert.DoesNotContain(PackageArtifactVersion, seededAfterConflict);
+
+            var fixedPackage = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, FixedArtifactVersion, includeValidationProbe: true);
+            File.Copy(fixedPackage, Path.Join(importRoot, Path.GetFileName(fixedPackage)));
+            await RunHostAgentImportAsync(importRoot, storeRoot);
+
+            var seeded = await _fixture.GetSeededVersionsAsync(schemaName);
+            Assert.Contains(FixedArtifactVersion, seeded);
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
+    /// Same residual incident path as the HostAgent variant, through the Portal. The
+    /// definition carries no validation probe: Portal's script gate deliberately treats a
+    /// healthy probe as proof that no execution is needed, so for probe-carrying
+    /// definitions the seed never runs through Portal at all; the deferral matters for
+    /// the "no successful execution recorded" gate that probe-less definitions use.
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenAnArtifactFails_SeedSqlIsDeferredUntilACleanImport()
+    {
+        const string moduleKey = "seedorderdeferpo";
+        const string schemaName = "omp_seedorderdeferpo";
+        var (_, appId) = await ArrangePreviousImportStateAsync(moduleKey, schemaName);
+        await _fixture.InsertArtifactAsync(
+            appId,
+            PackageArtifactVersion,
+            PackageType,
+            TargetName,
+            $"{moduleKey}/{PackageType}/{PackageArtifactVersion}",
+            new string('b', 64));
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var service = CreatePortalService(storeRoot);
+
+            var conflictedPackage = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, PackageArtifactVersion);
+            var conflictedResult = await ImportPortalPackageAsync(service, conflictedPackage);
+
+            Assert.Contains(
+                conflictedResult.Items,
+                static item => item.Kind == "artifact-package" && item.Status == "Failed");
+            var seededAfterConflict = await _fixture.GetSeededVersionsAsync(schemaName);
+            Assert.DoesNotContain(PackageArtifactVersion, seededAfterConflict);
+
+            var fixedPackage = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, FixedArtifactVersion);
+            var fixedResult = await ImportPortalPackageAsync(service, fixedPackage);
+
+            var failed = fixedResult.Items.Where(static item => item.Status == "Failed").ToList();
+            Assert.True(
+                failed.Count == 0,
+                "Import items failed: " + string.Join("; ", failed.Select(static item => $"{item.Kind} {item.Path}: {item.Message}")));
+            var seeded = await _fixture.GetSeededVersionsAsync(schemaName);
+            Assert.Contains(FixedArtifactVersion, seeded);
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
+    /// When the definition's SQL fails AFTER the artifacts imported, the artifacts must
+    /// keep their real import result and must not be imported a second time through the
+    /// standalone artifact fall-through (which would rewrite configuration rows and
+    /// report the fresh import as an identical skip).
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenDefinitionSqlFails_ArtifactsAreImportedExactlyOnce()
+    {
+        const string moduleKey = "seedordersqlpo";
+        const string schemaName = "omp_seedordersqlpo";
+        const string brokenSeedSql = "SET NOCOUNT ON; THROW 51000, N'seed intentionally broken for the ordering test', 1;";
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var service = CreatePortalService(storeRoot);
+            var packagePath = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, PackageArtifactVersion, includeValidationProbe: false, seedSqlOverride: brokenSeedSql);
+
+            var result = await ImportPortalPackageAsync(service, packagePath);
+
+            Assert.Contains(
+                result.Items,
+                static item => item.Kind == "module-definition"
+                    && item.Status == "Failed"
+                    && item.Message is not null
+                    && item.Message.Contains("seed intentionally broken", StringComparison.OrdinalIgnoreCase));
+            var artifactItem = Assert.Single(result.Items.Where(static item => item.Kind == "artifact-package"));
+            Assert.True(
+                artifactItem.Status is "Imported" or "Replaced",
+                $"The artifact must keep its original import result; got '{artifactItem.Status}': {artifactItem.Message}");
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>HostAgent sibling of the SQL-failure case: the package routes to failed\
+    /// with the SQL error, and the artifact registration made before the failure stays
+    /// recorded.</summary>
+    [Fact]
+    public async Task HostAgentImport_WhenDefinitionSqlFails_ArtifactRegistrationSurvives()
+    {
+        const string moduleKey = "seedordersqlha";
+        const string schemaName = "omp_seedordersqlha";
+        const string brokenSeedSql = "SET NOCOUNT ON; THROW 51000, N'seed intentionally broken for the ordering test', 1;";
+        var moduleId = await _fixture.InsertModuleAsync(moduleKey, schemaName);
+        var appId = await _fixture.InsertAppAsync(moduleId, AppKey);
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var importRoot = Directory.CreateDirectory(Path.Join(workRoot, "import")).FullName;
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var packagePath = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, PackageArtifactVersion, includeValidationProbe: false, seedSqlOverride: brokenSeedSql);
+            File.Copy(packagePath, Path.Join(importRoot, Path.GetFileName(packagePath)));
+
+            await RunHostAgentImportAsync(importRoot, storeRoot);
+
+            Assert.Contains("seed intentionally broken", ReadFailedImportReasons(importRoot), StringComparison.OrdinalIgnoreCase);
+            Assert.True(
+                await _fixture.ArtifactExistsAsync(appId, PackageArtifactVersion, PackageType, TargetName),
+                $"The artifact {PackageArtifactVersion} registered before the SQL failure must stay recorded.");
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
     /// The state a previous import leaves behind: module and app rows, the
     /// previous artifact version in omp.Artifacts, and the module's version
     /// table seeded with that previous version.
     /// </summary>
-    private async Task ArrangePreviousImportStateAsync(string moduleKey, string schemaName)
+    private async Task<(int ModuleId, int AppId)> ArrangePreviousImportStateAsync(string moduleKey, string schemaName)
     {
         var moduleId = await _fixture.InsertModuleAsync(moduleKey, schemaName);
         var appId = await _fixture.InsertAppAsync(moduleId, AppKey);
@@ -182,6 +321,60 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
             $"IF SCHEMA_ID(N'{schemaName}') IS NULL EXEC(N'CREATE SCHEMA [{schemaName}]');",
             $"IF OBJECT_ID(N'{schemaName}.SeededVersions', N'U') IS NULL CREATE TABLE [{schemaName}].[SeededVersions] ([Version] nvarchar(50) NOT NULL PRIMARY KEY);",
             $"IF NOT EXISTS (SELECT 1 FROM [{schemaName}].[SeededVersions] WHERE [Version] = N'{PreviousArtifactVersion}') INSERT INTO [{schemaName}].[SeededVersions] ([Version]) VALUES (N'{PreviousArtifactVersion}');");
+        return (moduleId, appId);
+    }
+
+    private async Task RunHostAgentImportAsync(string importRoot, string storeRoot)
+    {
+        var settings = new HostAgentSettings
+        {
+            CentralArtifactRoot = storeRoot,
+            ArtifactZipImport = new HostAgentArtifactZipImportSettings
+            {
+                IsEnabled = true,
+                ImportPath = importRoot
+            }
+        };
+        var service = new ArtifactZipImportService(
+            new StaticOptionsMonitor<HostAgentSettings>(settings),
+            _fixture.CreateHostAgentRepository(),
+            NullLogger<ArtifactZipImportService>.Instance);
+        await service.ImportPendingAsync(CancellationToken.None);
+    }
+
+    private PortableModulePackageService CreatePortalService(string storeRoot)
+    {
+        var portalFactory = _fixture.CreatePortalConnectionFactory();
+        return new PortableModulePackageService(
+            _fixture.CreatePortalRepository(),
+            Microsoft.Extensions.Options.Options.Create(new ArtifactUploadOptions
+            {
+                ArtifactStoreRoot = storeRoot
+            }),
+            new PortalDashboardWidgetPackageService(portalFactory),
+            new PortalWidgetRuntimeDataPackageService(portalFactory),
+            NullLogger<PortableModulePackageService>.Instance);
+    }
+
+    private static async Task<UniversalPackageImportResult> ImportPortalPackageAsync(
+        PortableModulePackageService service,
+        string packagePath)
+    {
+        await using var stream = File.OpenRead(packagePath);
+        var upload = new FormFile(stream, 0, stream.Length, "packageFile", Path.GetFileName(packagePath));
+        return await service.ImportUniversalPackageUploadAsync(
+            upload,
+            new PortableModulePackageImportOptions(
+                ApplyModuleDefinition: true,
+                ExecuteSqlRepairs: true,
+                AllowTemporaryIncompatibleArtifacts: false,
+                ReplaceExistingModuleDefinition: false,
+                ReplaceExistingArtifacts: false,
+                ReplaceExistingDashboardWidgets: false,
+                CopyConfigurationFilesFromPreviousVersion: true,
+                UseArtifactsImmediately: true),
+            replaceExistingConfigObjects: false,
+            CancellationToken.None);
     }
 
     private async Task<int> GetAppIdAsync(string moduleKey)
@@ -198,9 +391,15 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
     /// 2-initialize-ibspackager.sql @Version discovery, and whose artifact
     /// carries a newer version than the database currently holds.
     /// </summary>
-    private static string BuildUniversalPackageZip(string workRoot, string moduleKey, string schemaName)
+    private static string BuildUniversalPackageZip(
+        string workRoot,
+        string moduleKey,
+        string schemaName,
+        string artifactVersion = PackageArtifactVersion,
+        bool includeValidationProbe = false,
+        string? seedSqlOverride = null)
     {
-        var packagePath = Path.Join(workRoot, $"omp-universal__{moduleKey}__test.zip");
+        var packagePath = Path.Join(workRoot, $"omp-universal__{moduleKey}__{artifactVersion}.zip");
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
         WriteTextEntry(
             archive,
@@ -209,19 +408,23 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
         WriteTextEntry(
             archive,
             $"module-definitions/{moduleKey}.module-definition.json",
-            BuildDefinitionJson(moduleKey, schemaName));
+            BuildDefinitionJson(moduleKey, schemaName, includeValidationProbe, seedSqlOverride));
         WriteArtifactZipEntry(
             archive,
-            $"artifacts/{moduleKey}__{AppKey}__{PackageType}__{TargetName}__{PackageArtifactVersion}.zip",
-            $"{moduleKey} plugin payload {PackageArtifactVersion}");
+            $"artifacts/{moduleKey}__{AppKey}__{PackageType}__{TargetName}__{artifactVersion}.zip",
+            $"{moduleKey} plugin payload {artifactVersion}");
         return packagePath;
     }
 
     private const string UniversalModulePackageReaderManifestName = "omp-universal-package.json";
 
-    private static string BuildDefinitionJson(string moduleKey, string schemaName)
+    private static string BuildDefinitionJson(
+        string moduleKey,
+        string schemaName,
+        bool includeValidationProbe,
+        string? seedSqlOverride)
     {
-        var seedSql =
+        var seedSql = seedSqlOverride ?? (
             "DECLARE @Version nvarchar(50); " +
             "SELECT TOP (1) @Version = a.[Version] " +
             "FROM omp.Artifacts a " +
@@ -232,7 +435,46 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
             $"IF SCHEMA_ID(N'{schemaName}') IS NULL EXEC(N'CREATE SCHEMA [{schemaName}]'); " +
             $"IF OBJECT_ID(N'{schemaName}.SeededVersions', N'U') IS NULL CREATE TABLE [{schemaName}].[SeededVersions] ([Version] nvarchar(50) NOT NULL PRIMARY KEY); " +
             $"IF @Version IS NOT NULL AND NOT EXISTS (SELECT 1 FROM [{schemaName}].[SeededVersions] WHERE [Version] = @Version) " +
-            $"INSERT INTO [{schemaName}].[SeededVersions] ([Version]) VALUES (@Version);";
+            $"INSERT INTO [{schemaName}].[SeededVersions] ([Version]) VALUES (@Version);");
+
+        var sqlScripts = new JsonArray(new JsonObject
+        {
+            ["key"] = "initialize-seed-order",
+            ["phase"] = "setup",
+            ["order"] = 10,
+            ["execution"] = "idempotent",
+            ["inlineSql"] = seedSql
+        });
+        if (includeValidationProbe)
+        {
+            // Shaped like IbsPackager's 0-validate script: a healthy probe makes the
+            // repair decision fall to "has every script a succeeded execution?", which
+            // is the version gate that made the incident's seed lag permanent.
+            var validateSql =
+                "SET NOCOUNT ON; SELECT CAST(CASE WHEN OBJECT_ID(N'" + schemaName + ".SeededVersions', N'U') IS NOT NULL " +
+                "THEN 1 ELSE 0 END AS bit) AS IsHealthy, N'seed order probe' AS Message;";
+            sqlScripts.Add(new JsonObject
+            {
+                ["key"] = "validate-seed-order",
+                ["phase"] = "validate",
+                ["order"] = 0,
+                ["execution"] = "validation",
+                ["inlineSql"] = validateSql
+            });
+        }
+
+        var integrity = seedSqlOverride is null
+            ? new JsonObject
+            {
+                ["requiredSchemas"] = new JsonArray(schemaName),
+                ["requiredTables"] = new JsonArray(new JsonObject
+                {
+                    ["schema"] = schemaName,
+                    ["name"] = "SeededVersions",
+                    ["source"] = "initialize-seed-order"
+                })
+            }
+            : new JsonObject();
 
         var definition = new JsonObject
         {
@@ -257,24 +499,8 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
                 ["packageType"] = PackageType,
                 ["targetName"] = TargetName
             }),
-            ["sqlScripts"] = new JsonArray(new JsonObject
-            {
-                ["key"] = "initialize-seed-order",
-                ["phase"] = "setup",
-                ["order"] = 10,
-                ["execution"] = "idempotent",
-                ["inlineSql"] = seedSql
-            }),
-            ["integrity"] = new JsonObject
-            {
-                ["requiredSchemas"] = new JsonArray(schemaName),
-                ["requiredTables"] = new JsonArray(new JsonObject
-                {
-                    ["schema"] = schemaName,
-                    ["name"] = "SeededVersions",
-                    ["source"] = "initialize-seed-order"
-                })
-            }
+            ["sqlScripts"] = sqlScripts,
+            ["integrity"] = integrity
         };
         return definition.ToJsonString();
     }
