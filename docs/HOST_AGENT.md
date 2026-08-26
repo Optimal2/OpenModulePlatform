@@ -909,7 +909,7 @@ Every OMP web app that shares sign-in and role switching must use identical valu
 - `OmpAuth:CookieName` — default `.OpenModulePlatform.Auth`.
 - `OmpAuth:ApplicationName` — default `OpenModulePlatform`. This is the ASP.NET Core Data Protection application discriminator.
 - `OmpAuth:DataProtectionKeyPath` — must point to the same shared key ring folder for all apps, and for all IIS nodes in a load-balanced setup.
-- `OmpAuth:DpapiNgProtectionDescriptor` / `OmpAuth:ProtectKeysWithDpapi` / `OmpAuth:DpapiProtectToLocalMachine` — keep these the same across all apps and nodes that share a ring. `ProtectKeysWithDpapi` defaults to `false` since 2026-08-23; the key directory's NTFS permissions are the control until an AD group SID is configured as the DPAPI-NG descriptor.
+- `OmpAuth:DpapiNgProtectionDescriptor` / `OmpAuth:DataProtectionCertificateThumbprint` / `OmpAuth:DataProtectionRetiredCertificateThumbprints` / `OmpAuth:ProtectKeysWithDpapi` / `OmpAuth:DpapiProtectToLocalMachine` — keep these the same across all apps and nodes that share a ring. `ProtectKeysWithDpapi` defaults to `false` since 2026-08-23; the key directory's NTFS permissions are the control until one of the two encryption-at-rest modes (AD-backed DPAPI-NG descriptor, or an X.509 certificate that needs no AD) is configured.
   Changing the setting does not strand existing keys, because each key records its own `decryptorType` in the key XML and is decrypted through that rather than through whatever is configured now. What a mismatch actually breaks is a key that cannot be decrypted **in the context where it is read** — a machine-scoped DPAPI key on another node, or a user-scoped key under a different app-pool account.
   Turning protection **off** therefore leaves a *mixed* ring: existing keys stay encrypted and host-bound, new ones are clear text. That matters, because the host-bound keys keep causing `/auth/login` loops if the ring moves or a pool changes account — the very incident class this default change is meant to end. To leave it behind completely, stop all apps, delete the old key files from `DataProtectionKeyPath`, and start again; every user re-authenticates once. `ProtectKeysWithDpapi` defaults to `false` since 2026-08-23 — the key directory's NTFS permissions are the control until an AD group SID is configured as the DPAPI-NG descriptor. See "Load-balanced deployments" below for which value fits which topology.
 
@@ -997,15 +997,35 @@ it) — binds the key to ONE machine: a key created by node A can never be
 decrypted by node B, and the key file format holds exactly one encrypted
 secret — there is no multi-recipient encryption. The supported choices are:
 
-- **Load-balanced farm (more than one node):** set
-  `OmpAuth:DpapiNgProtectionDescriptor` to `SID=<domain group SID>` on every
-  app and node, where the domain group contains every OMP app pool identity.
-  CNG DPAPI-NG is backed by Active Directory, so a key created on any node can
-  be decrypted on every other domain-joined node by the accounts in the group.
-  An invalid descriptor fails startup loudly with a clear message — the ring
-  never silently falls back to another protection scope. When a descriptor is
-  set it takes precedence over `ProtectKeysWithDpapi` and
-  `DpapiProtectToLocalMachine`.
+- **Load-balanced farm (more than one node), two supported modes — pick ONE:**
+  - **With Active Directory:** set
+    `OmpAuth:DpapiNgProtectionDescriptor` to `SID=<domain group SID>` on every
+    app and node, where the domain group contains every OMP app pool identity.
+    CNG DPAPI-NG is backed by Active Directory, so a key created on any node can
+    be decrypted on every other domain-joined node by the accounts in the group.
+    An invalid descriptor fails startup loudly with a clear message — the ring
+    never silently falls back to another protection scope.
+  - **Without Active Directory (or when the AD group cannot be created):** set
+    `OmpAuth:DataProtectionCertificateThumbprint` to the thumbprint of an X.509
+    certificate installed in **LocalMachine\My** on every node, with each app
+    pool identity granted read access to the certificate's private key (in
+    `certlm.msc`: right-click the certificate → All Tasks → Manage Private
+    Keys). This is Microsoft's primary key-encryption-at-rest path
+    (`ProtectKeysWithCertificate`) and works across nodes without any domain
+    dependency — the shared key folder carries the ring, the certificate
+    carries the trust. A missing certificate, a missing/inaccessible private
+    key, or an expired/not-yet-valid certificate fails startup loudly with the
+    thumbprint named in the message; there is never a silent fallback. For
+    certificate rotation, list the outgoing certificate's thumbprint in
+    `OmpAuth:DataProtectionRetiredCertificateThumbprints` so existing key files
+    stay readable (`UnprotectKeysWithAnyCertificate`); expired retired
+    certificates are accepted on purpose, and a retired entry is removed only
+    when no key file is still encrypted to it.
+  - **Priority order:** a set descriptor wins over a set certificate
+    thumbprint, which wins over `ProtectKeysWithDpapi`. Setting BOTH the
+    descriptor and a certificate thumbprint is a startup error — the platform
+    refuses to guess which at-rest mode was intended. A retired-thumbprints
+    list without an active certificate thumbprint is likewise a startup error.
 - **Default since 2026-08-23: no at-rest encryption.**
   `ProtectKeysWithDpapi` now defaults to **`false`**, so an out-of-the-box key
   ring is written in clear text and the **NTFS permissions on
@@ -1016,10 +1036,10 @@ secret — there is no multi-recipient encryption. The supported choices are:
   ties the ring to the host that wrote it and repeatedly cost working
   installations their sign-in when pools ran as different accounts or a ring
   moved between nodes.
-- **The way back to encryption is the descriptor, not the flag.** Once the AD
-  security group holding the servers and service accounts exists, set
-  `OmpAuth:DpapiNgProtectionDescriptor` to `SID=<group SID>`. That is AD-backed,
-  works on every domain-joined node, and takes precedence over
+- **The way back to encryption is a farm-wide mode, not the flag.** Set
+  `OmpAuth:DpapiNgProtectionDescriptor` to `SID=<group SID>` when an AD group
+  exists, or `OmpAuth:DataProtectionCertificateThumbprint` when it does not.
+  Both work on every node that shares the ring and take precedence over
   `ProtectKeysWithDpapi`. Turning `ProtectKeysWithDpapi=true` back on instead
   reintroduces the single-host limitation that caused the original problem.
 - **Single host, several app-pool accounts:** if you do enable legacy DPAPI, use
@@ -1077,3 +1097,76 @@ keys and that every node can decrypt them:
 Catching a form-valid-but-wrong principal in the upgrade window prevents a
 silent single-node protection that only surfaces weeks later as intermittent
 `/auth/login` loops.
+
+**Post-deploy verification for X.509 certificate mode.** The startup guard
+already proves the certificate exists in LocalMachine\My, holds a private key
+accessible to the pool account, and is inside its validity period — a
+misconfigured thumbprint never reaches production traffic. What remains to
+verify after the first login is that live key files really are
+certificate-encrypted and that every node can decrypt them:
+
+1. Start the first updated app or IIS node with
+   `OmpAuth:DataProtectionCertificateThumbprint` configured and log in (or
+   otherwise trigger an ASP.NET Core Data Protection key creation).
+2. In the shared `DataProtectionKeyPath` folder, open the newest `.xml` key
+   file. The element form below was verified empirically on .NET 10
+   (2026-08-26, by persisting a real key through the certificate path in a
+   test) — do NOT assume a certificate-specific decryptor name:
+   - The `<encryptedSecret>` element's `decryptorType` attribute names
+     **`EncryptedXmlDecryptor`**
+     (`Microsoft.AspNetCore.DataProtection.XmlEncryption.EncryptedXmlDecryptor, ...`),
+     not `CertificateXmlDecryptor`. The certificate path uses the XML
+     Encryption standard format.
+   - Inside it, an `<EncryptedData>` block (namespace
+     `http://www.w3.org/2001/04/xmlenc#`) whose `<EncryptedKey>` uses
+     `<EncryptionMethod Algorithm="http://www.w3.org/2001/04/xmlenc#rsa-1_5"/>`
+     and embeds the encrypting certificate as `<X509Data><X509Certificate>…`.
+     The embedded base64 certificate can be compared with the deployed
+     certificate (`certutil -dump` or re-export the public part) to confirm
+     WHICH certificate protects the ring.
+   - Red flags: no `<encryptedSecret>` at all (ring still unencrypted),
+     `DpapiXmlDecryptor` or `DpapiNGXmlDecryptor` in `decryptorType`, or a
+     `<value>` starting with the legacy-DPAPI blob header
+     `AQAAANCMnd8BFdERjHoAwE/Cl+sBAAAA` — all mean the certificate mode did
+     not take effect on that key file.
+3. From a **second** node, read that same key file and trigger key ring load
+   (a request using the shared auth cookie is enough). Any
+   `CryptographicException` or "an exception was encountered while reading the
+   key ring" warning means the certificate is missing on that node or its
+   private key is not readable by that pool account.
+4. During a **rotation**, the newest key file embeds the NEW certificate while
+   older files keep the old one; both must decrypt as long as the old
+   thumbprint remains in
+   `OmpAuth:DataProtectionRetiredCertificateThumbprints`. Verify one old and
+   one new key file per node before removing a retired thumbprint.
+
+### Which apps must share the key ring — and how one app leaves it
+
+Sharing the ring is **by design** for the SSO family and harmful nowhere else,
+because the shared auth cookie is the whole point of the family:
+
+- **Must share the ring (SSO family):** the Portal, `OpenModulePlatform.Auth`,
+  and every module web app that accepts the shared cookie (Content/iFrame web
+  app modules, the example modules, and consumer apps such as IbsPackager,
+  Dokumentbibliotek, EArkivChecker, LogSearch, VajSkrivare). These all run with
+  the same `CookieName`, `ApplicationName`, and `DataProtectionKeyPath` —
+  isolation between them would break cross-app sign-in and role switching.
+- **May NOT need the shared ring:** an app that never reads the OMP auth
+  cookie — for example a standalone service web app with its own sign-in, or a
+  worker dashboard without SSO. Today HostAgent assigns ONE shared key folder
+  per host (`HostAgent:WebAppDataProtectionKeyPath`, fallback
+  `<runtimeRoot>\DataProtectionKeys`, see
+  `WebAppDeploymentService.ResolveWebAppDataProtectionKeyPath`), and every
+  deployed web app inherits it through the generated `appsettings.json`
+  (`ArtifactConfigurationFileWriter.cs`).
+- **How a non-SSO app gets its own ring (no code change made here — this is
+  the documented path, any change is a separate decision):** give the app a
+  config overlay that sets a DIFFERENT `OmpAuth:DataProtectionKeyPath` (and,
+  for full Data Protection isolation, a different `OmpAuth:ApplicationName`)
+  for that app only. The overlay wins over the HostAgent-generated value, so
+  the app reads and writes its own key folder with its own protection mode.
+  Note the operational consequence: that app can no longer decrypt the shared
+  auth cookie — which is exactly the intent for an app outside the SSO family.
+  A first-class per-app HostAgent setting (for example a
+  `DataProtectionKeyPath` override on the deployment descriptor) does not
+  exist today and would be a separate feature decision.

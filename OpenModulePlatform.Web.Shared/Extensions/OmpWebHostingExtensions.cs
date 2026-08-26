@@ -32,6 +32,7 @@ using Microsoft.AspNetCore.SignalR;
 using OpenModulePlatform.Web.Shared.Telemetry;
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 using SystemNetIPNetwork = System.Net.IPNetwork;
 
 namespace OpenModulePlatform.Web.Shared.Extensions;
@@ -1021,14 +1022,26 @@ public static class OmpWebHostingExtensions
     /// 1. A set <c>OmpAuth:DpapiNgProtectionDescriptor</c> wins over everything:
     ///    the ring is protected with CNG DPAPI-NG, which is AD-backed and
     ///    decryptable on every domain-joined node by the descriptor principals
-    ///    (the web-farm and multi-account answer). An invalid descriptor throws
-    ///    at startup — never a silent fallback to another scope. A descriptor
-    ///    that cannot take effect at all (no key path resolved, or a
-    ///    non-Windows host) also throws at startup instead of being silently
-    ///    ignored: see <see cref="ThrowIfDescriptorCannotTakeEffect"/>.
-    /// 2. Otherwise <c>OmpAuth:ProtectKeysWithDpapi=false</c> disables all
+    ///    (the web-farm and multi-account answer when Active Directory exists).
+    ///    An invalid descriptor throws at startup — never a silent fallback to
+    ///    another scope. A descriptor that cannot take effect at all (no key
+    ///    path resolved, or a non-Windows host) also throws at startup instead
+    ///    of being silently ignored: see <see cref="ThrowIfDescriptorCannotTakeEffect"/>.
+    /// 2. Otherwise a set <c>OmpAuth:DataProtectionCertificateThumbprint</c>
+    ///    protects the ring with that X.509 certificate (ProtectKeysWithCertificate):
+    ///    the web-farm answer WITHOUT Active Directory — the same certificate,
+    ///    with its private key, is installed in LocalMachine\My on every node.
+    ///    A missing certificate, a missing private key, or an expired/not-yet-valid
+    ///    certificate throws at startup; retired certificates listed in
+    ///    <c>OmpAuth:DataProtectionRetiredCertificateThumbprints</c> keep older
+    ///    key files decryptable through UnprotectKeysWithAnyCertificate during a
+    ///    certificate rotation.
+    ///    Setting BOTH a descriptor and a certificate thumbprint is a startup
+    ///    error (see <see cref="ThrowIfKeyProtectionModesConflict"/>): the
+    ///    platform refuses to guess which at-rest mode the operator meant.
+    /// 3. Otherwise <c>OmpAuth:ProtectKeysWithDpapi=false</c> disables all
     ///    at-rest encryption, as before R3-E8.
-    /// 3. Otherwise legacy DPAPI in the configured scope: machine scope by
+    /// 4. Otherwise legacy DPAPI in the configured scope: machine scope by
     ///    default, because OMP app pools may deliberately run as different
     ///    accounts (e.g. a printer-proxy identity) and a current-user-protected
     ///    key ring locks the shared cookie to the creating account so every
@@ -1036,8 +1049,11 @@ public static class OmpWebHostingExtensions
     /// </summary>
     internal static void ApplyDataProtectionKeyProtection(
         IDataProtectionBuilder dataProtectionBuilder,
-        OmpAuthOptions authOptions)
+        OmpAuthOptions authOptions,
+        Func<string, X509Certificate2?>? certificateResolver = null)
     {
+        ThrowIfKeyProtectionModesConflict(authOptions);
+
         if (!string.IsNullOrWhiteSpace(authOptions.DpapiNgProtectionDescriptor))
         {
             var descriptor = authOptions.DpapiNgProtectionDescriptor.Trim();
@@ -1048,6 +1064,36 @@ public static class OmpWebHostingExtensions
             return;
         }
 
+        if (!string.IsNullOrWhiteSpace(authOptions.DataProtectionCertificateThumbprint))
+        {
+            var certificate = LoadKeyProtectionCertificate(
+                authOptions.DataProtectionCertificateThumbprint,
+                certificateResolver,
+                isRetiredCertificate: false);
+            dataProtectionBuilder.ProtectKeysWithCertificate(certificate);
+
+            var retiredCertificates = new List<X509Certificate2>();
+            foreach (var retiredThumbprint in authOptions.DataProtectionRetiredCertificateThumbprints)
+            {
+                if (string.IsNullOrWhiteSpace(retiredThumbprint))
+                {
+                    continue;
+                }
+
+                retiredCertificates.Add(LoadKeyProtectionCertificate(
+                    retiredThumbprint,
+                    certificateResolver,
+                    isRetiredCertificate: true));
+            }
+
+            if (retiredCertificates.Count > 0)
+            {
+                dataProtectionBuilder.UnprotectKeysWithAnyCertificate(retiredCertificates.ToArray());
+            }
+
+            return;
+        }
+
         if (!authOptions.ProtectKeysWithDpapi)
         {
             return;
@@ -1055,6 +1101,210 @@ public static class OmpWebHostingExtensions
 
         dataProtectionBuilder.ProtectKeysWithDpapi(
             protectToLocalMachine: authOptions.DpapiProtectToLocalMachine);
+    }
+
+    /// <summary>
+    /// Fails startup loudly when both supported encryption-at-rest modes are
+    /// configured at once. DPAPI-NG and X.509 certificate protection solve the
+    /// same problem in different trust models (AD-backed vs certificate-backed);
+    /// applying whichever happens to come first would encrypt new keys to a
+    /// mode the operator may not have intended, so the platform refuses to
+    /// guess: the operator picks one.
+    /// </summary>
+    internal static void ThrowIfKeyProtectionModesConflict(OmpAuthOptions authOptions)
+    {
+        if (!string.IsNullOrWhiteSpace(authOptions.DpapiNgProtectionDescriptor)
+            && !string.IsNullOrWhiteSpace(authOptions.DataProtectionCertificateThumbprint))
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DpapiNgProtectionDescriptor)} and " +
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)} are both set. " +
+                "They are two different encryption-at-rest modes for the Data Protection key ring " +
+                "(AD-backed DPAPI-NG vs an X.509 certificate), and the platform does not guess which " +
+                "one was intended. Remove one of the settings and restart the application.");
+        }
+
+        if (string.IsNullOrWhiteSpace(authOptions.DataProtectionCertificateThumbprint)
+            && authOptions.DataProtectionRetiredCertificateThumbprints.Any(t => !string.IsNullOrWhiteSpace(t)))
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionRetiredCertificateThumbprints)} is set " +
+                $"but OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)} is empty. " +
+                "Retired certificates only keep older key files readable while certificate " +
+                "protection is active; without an active certificate thumbprint the list would be " +
+                "silently ignored — and an explicitly set protection option is never silently " +
+                "ignored. Set the active thumbprint, or remove the retired list, and restart the " +
+                "application.");
+        }
+    }
+
+    /// <summary>
+    /// Fails startup loudly when <c>OmpAuth:DataProtectionCertificateThumbprint</c>
+    /// is set but cannot take effect — same fail-loud philosophy as
+    /// <see cref="ThrowIfDescriptorCannotTakeEffect"/>: an explicitly set
+    /// protection option is never silently ignored.
+    /// </summary>
+    internal static void ThrowIfCertificateProtectionCannotTakeEffect(
+        OmpAuthOptions authOptions,
+        string? dataProtectionKeyPath,
+        bool isWindows)
+    {
+        if (string.IsNullOrWhiteSpace(authOptions.DataProtectionCertificateThumbprint))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(dataProtectionKeyPath))
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)} is set but " +
+                "no data-protection key path could be resolved: OmpAuth:DataProtectionKeyPath is " +
+                "empty and no content-root fallback applies. Certificate protection encrypts the " +
+                "persisted key ring at rest, so without a key path the certificate cannot take " +
+                "effect — and an explicitly set protection option is never silently ignored. Set " +
+                "OmpAuth:DataProtectionKeyPath to the shared key directory, or remove the " +
+                "certificate setting, and restart the application.");
+        }
+
+        if (!isWindows)
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)} is set but " +
+                "this platform only applies key-ring encryption at rest on Windows, so the " +
+                "certificate cannot take effect on this host — and an explicitly set protection " +
+                "option is never silently ignored. Run the application on Windows, or remove the " +
+                "certificate setting, and restart the application.");
+        }
+    }
+
+    /// <summary>
+    /// Resolves a key-protection certificate by thumbprint from the
+    /// LocalMachine\My store and validates that it can actually protect the key
+    /// ring: it must exist, hold a private key, and (for the active
+    /// certificate) be within its validity period. Every failure throws with a
+    /// message naming the thumbprint — a silently skipped certificate would
+    /// leave the ring unprotected, or old keys unreadable, while the operator
+    /// believes certificate protection is active.
+    /// </summary>
+    /// <remarks>
+    /// Retired certificates (decrypt-only during rotation) are exempt from the
+    /// validity-period check: a rotation often happens BECAUSE the old
+    /// certificate expired, and decrypting with its private key stays
+    /// cryptographically valid after expiry.
+    /// </remarks>
+    internal static X509Certificate2 LoadKeyProtectionCertificate(
+        string thumbprint,
+        Func<string, X509Certificate2?>? certificateResolver,
+        bool isRetiredCertificate)
+    {
+        var normalizedThumbprint = NormalizeCertificateThumbprint(thumbprint);
+        var role = isRetiredCertificate ? "retired " : "";
+
+        X509Certificate2? certificate;
+        try
+        {
+            certificate = certificateResolver is not null
+                ? certificateResolver(normalizedThumbprint)
+                : FindInLocalMachineMyStore(normalizedThumbprint);
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: the {role}" +
+                $"certificate with thumbprint {normalizedThumbprint} could not be loaded from " +
+                $"LocalMachine\\My: {ex.Message} The key ring does NOT silently fall back to " +
+                "another protection scope: install the certificate (with its private key) or fix " +
+                "the thumbprint, and restart the application.", ex);
+        }
+
+        if (certificate is null)
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: no {role}" +
+                $"certificate with thumbprint {normalizedThumbprint} exists in LocalMachine\\My. " +
+                "Install the certificate (with its private key) into the local machine's Personal " +
+                "store on every node, or fix the thumbprint, and restart the application. The key " +
+                "ring does NOT silently fall back to another protection scope.");
+        }
+
+        ThrowIfCertificateCannotProtectKeys(certificate, normalizedThumbprint, isRetiredCertificate);
+        return certificate;
+    }
+
+    /// <summary>
+    /// Validates a resolved certificate for key-ring protection. Public keys
+    /// alone cannot decrypt (and a private key is required for both encrypt and
+    /// decrypt of the ring in practice), so a missing private key, or an
+    /// active certificate outside its validity period, is a startup error.
+    /// </summary>
+    internal static void ThrowIfCertificateCannotProtectKeys(
+        X509Certificate2 certificate,
+        string normalizedThumbprint,
+        bool isRetiredCertificate)
+    {
+        var role = isRetiredCertificate ? "retired " : "";
+
+        if (!certificate.HasPrivateKey)
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: the {role}" +
+                $"certificate with thumbprint {normalizedThumbprint} was found in " +
+                "LocalMachine\\My but has NO private key accessible to this process. Grant the " +
+                "app-pool identity read access to the certificate's private key (Manage private " +
+                "keys in certlm.msc), or install the PFX with the private key, and restart the " +
+                "application. The key ring does NOT silently fall back to another protection scope.");
+        }
+
+        if (isRetiredCertificate)
+        {
+            // Expiry is accepted for retired certificates by design: see the
+            // remarks on LoadKeyProtectionCertificate.
+            return;
+        }
+
+        var now = DateTime.Now; // NotBefore/NotAfter are returned in local time.
+        if (now < certificate.NotBefore)
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: the " +
+                $"certificate with thumbprint {normalizedThumbprint} is not valid yet " +
+                $"(NotBefore {certificate.NotBefore:u}). Install the correct certificate or fix " +
+                "the thumbprint, and restart the application. The key ring does NOT silently " +
+                "fall back to another protection scope.");
+        }
+
+        if (now > certificate.NotAfter)
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: the " +
+                $"certificate with thumbprint {normalizedThumbprint} EXPIRED at " +
+                $"{certificate.NotAfter:u}. A ring that silently kept encrypting to an expired " +
+                "certificate would surface later as an audit/compliance finding, so startup fails " +
+                "loudly instead. Issue and install the successor certificate, point " +
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)} at it, and " +
+                $"move this thumbprint to OmpAuth:{nameof(OmpAuthOptions.DataProtectionRetiredCertificateThumbprints)} " +
+                "until no key file is still encrypted to it. Then restart the application.");
+        }
+    }
+
+    private static string NormalizeCertificateThumbprint(string thumbprint)
+    {
+        // Thumbprints are often pasted from certmgr/certlm with spaces and in
+        // mixed case; normalize before the store lookup.
+        return string.Concat(thumbprint.Where(c => !char.IsWhiteSpace(c))).ToUpperInvariant();
+    }
+
+    private static X509Certificate2? FindInLocalMachineMyStore(string normalizedThumbprint)
+    {
+        using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+        store.Open(OpenFlags.ReadOnly | OpenFlags.OpenExistingOnly);
+        // validOnly: false — expiry is checked separately with a clearer message.
+        var matches = store.Certificates.Find(
+            X509FindType.FindByThumbprint,
+            normalizedThumbprint,
+            validOnly: false);
+
+        return matches.Count == 0 ? null : matches[0];
     }
 
     /// <summary>
@@ -1137,10 +1387,16 @@ public static class OmpWebHostingExtensions
             authOptions.DataProtectionKeyPath,
             contentRootPath);
 
-        // A set DPAPI-NG descriptor that cannot take effect (no key path
-        // resolved, or a non-Windows host) is a config error: fail loudly
-        // instead of silently running an unprotected or wrong-scope ring.
+        // Explicitly set protection options that cannot take effect (no key
+        // path resolved, a non-Windows host, or two conflicting modes) are
+        // config errors: fail loudly instead of silently running an
+        // unprotected or wrong-scope ring.
+        ThrowIfKeyProtectionModesConflict(authOptions);
         ThrowIfDescriptorCannotTakeEffect(
+            authOptions,
+            dataProtectionKeyPath,
+            OperatingSystem.IsWindows());
+        ThrowIfCertificateProtectionCannotTakeEffect(
             authOptions,
             dataProtectionKeyPath,
             OperatingSystem.IsWindows());
@@ -1164,6 +1420,7 @@ public static class OmpWebHostingExtensions
                 // pipeline because no logger exists this early -- same shape as
                 // AddOmpForwardedHeaders above.
                 if (string.IsNullOrWhiteSpace(authOptions.DpapiNgProtectionDescriptor)
+                    && string.IsNullOrWhiteSpace(authOptions.DataProtectionCertificateThumbprint)
                     && !authOptions.ProtectKeysWithDpapi)
                 {
                     var keyPathForLog = dataProtectionKeyPath;
@@ -1177,9 +1434,11 @@ public static class OmpWebHostingExtensions
                                     "for every OMP app sharing it, so its NTFS permissions are the only " +
                                     "control: grant read access to the app-pool identities only and keep " +
                                     "it off any file share. To encrypt again, set " +
-                                    "OmpAuth:DpapiNgProtectionDescriptor to SID=<AD group SID> - that is " +
-                                    "AD-backed and works across nodes, unlike OmpAuth:ProtectKeysWithDpapi " +
-                                    "which ties the ring to this host.",
+                                    "OmpAuth:DpapiNgProtectionDescriptor to SID=<AD group SID> (AD-backed, " +
+                                    "works across domain-joined nodes) or " +
+                                    "OmpAuth:DataProtectionCertificateThumbprint to an X.509 certificate " +
+                                    "installed in LocalMachine\\My on every node (no AD required) - not " +
+                                    "OmpAuth:ProtectKeysWithDpapi, which ties the ring to this host.",
                                     keyPathForLog));
                 }
             }

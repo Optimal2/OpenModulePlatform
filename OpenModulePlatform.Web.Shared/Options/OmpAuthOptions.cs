@@ -85,6 +85,39 @@ public sealed class OmpAuthOptions
     public string DpapiNgProtectionDescriptor { get; set; } = "";
 
     /// <summary>
+    /// Optional thumbprint of the X.509 certificate that encrypts the Data
+    /// Protection key ring at rest (ProtectKeysWithCertificate). This is the
+    /// web-farm answer that does NOT require Active Directory: install the same
+    /// certificate (with its private key) in LocalMachine\My on every node and
+    /// grant each app-pool identity read access to the private key, and every
+    /// node can decrypt the shared ring. When set it takes precedence over
+    /// <see cref="ProtectKeysWithDpapi"/>; setting it together with
+    /// <see cref="DpapiNgProtectionDescriptor"/> is a startup error — pick one
+    /// encryption-at-rest mode. A missing certificate, a missing private key,
+    /// or an expired/not-yet-valid certificate fails startup loudly; there is
+    /// never a silent fallback to another scope. Empty (default) keeps the
+    /// behavior governed by <see cref="DpapiNgProtectionDescriptor"/> and
+    /// <see cref="ProtectKeysWithDpapi"/>.
+    /// </summary>
+    public string DataProtectionCertificateThumbprint { get; set; } = "";
+
+    /// <summary>
+    /// Optional list of thumbprints of retired key-protection certificates,
+    /// applied through UnprotectKeysWithAnyCertificate so key files encrypted
+    /// to a previous certificate stay readable while a certificate rotation is
+    /// in progress. Only meaningful together with
+    /// <see cref="DataProtectionCertificateThumbprint"/>. Each retired
+    /// certificate must still be present in LocalMachine\My with its private
+    /// key — an entry that cannot be resolved fails startup loudly, because a
+    /// silently dropped retired certificate would strand the keys encrypted to
+    /// it. Expired retired certificates are accepted on purpose: rotation often
+    /// happens BECAUSE the old certificate expired, and decryption with its
+    /// private key remains valid. Remove an entry only when no key file in the
+    /// ring is still encrypted to that certificate.
+    /// </summary>
+    public List<string> DataProtectionRetiredCertificateThumbprints { get; set; } = new();
+
+    /// <summary>
     /// Enforce server-side antiforgery-token validation on the shared topbar
     /// POST endpoints (favorites, notification/message mark-read). The
     /// endpoints are CSRF-protected by SameSite=Lax on the auth cookie either
