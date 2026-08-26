@@ -389,6 +389,39 @@ public sealed class OmpDataProtectionKeyProtectionTests
     }
 
     [Fact]
+    public void Guard_WhenThumbprintMalformed_ThrowsInsteadOfFallingBack()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => OmpWebHostingExtensions.LoadKeyProtectionCertificate(
+                "not-a-thumbprint",
+                ResolverFor(),
+                isRetiredCertificate: false));
+        Assert.Contains("40 hexadecimal", ex.Message);
+    }
+
+    [Fact]
+    public void Guard_WhenCertificateIsNotRsa_ThrowsInsteadOfFailingAtFirstKeyWrite()
+    {
+        // The framework encrypts the ring with RSA key transport; an EC
+        // certificate would only fail when the first key is written.
+        using var ecdsa = ECDsa.Create();
+        var request = new CertificateRequest(
+            "CN=OMP-Test-DP-EC",
+            ecdsa,
+            HashAlgorithmName.SHA256);
+        using var ecCertificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddYears(1));
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => OmpWebHostingExtensions.ThrowIfCertificateCannotProtectKeys(
+                ecCertificate,
+                ecCertificate.Thumbprint!,
+                isRetiredCertificate: false));
+        Assert.Contains("RSA", ex.Message);
+    }
+
+    [Fact]
     public void Guard_WhenCertificateExpired_ThrowsInsteadOfFallingBack()
     {
         using var expired = CreateSelfSignedCertificate(

@@ -1200,6 +1200,16 @@ public static class OmpWebHostingExtensions
         var normalizedThumbprint = NormalizeCertificateThumbprint(thumbprint);
         var role = isRetiredCertificate ? "retired " : "";
 
+        if (normalizedThumbprint.Length != 40 || !normalizedThumbprint.All(Uri.IsHexDigit))
+        {
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: " +
+                $"\"{thumbprint}\" is not a valid SHA-1 certificate thumbprint (40 hexadecimal " +
+                $"characters after whitespace removal) for the {role}certificate lookup. Fix the " +
+                "thumbprint and restart the application. The key ring does NOT silently fall back " +
+                "to another protection scope.");
+        }
+
         X509Certificate2? certificate;
         try
         {
@@ -1253,6 +1263,21 @@ public static class OmpWebHostingExtensions
                 "app-pool identity read access to the certificate's private key (Manage private " +
                 "keys in certlm.msc), or install the PFX with the private key, and restart the " +
                 "application. The key ring does NOT silently fall back to another protection scope.");
+        }
+
+        if (certificate.GetRSAPrivateKey() is null)
+        {
+            // The framework's certificate encryptor uses RSA key transport
+            // (rsa-1_5 in the persisted key XML), so an EC/DSA certificate
+            // would not fail until the first key write. Fail at startup
+            // instead, with the actual requirement named.
+            throw new InvalidOperationException(
+                $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: the {role}" +
+                $"certificate with thumbprint {normalizedThumbprint} does not hold an RSA private " +
+                "key. ASP.NET Core Data Protection encrypts the key ring with RSA key transport, " +
+                "so the certificate must be RSA. Issue an RSA certificate, update the thumbprint, " +
+                "and restart the application. The key ring does NOT silently fall back to another " +
+                "protection scope.");
         }
 
         if (isRetiredCertificate)
