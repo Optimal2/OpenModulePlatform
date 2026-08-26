@@ -132,22 +132,22 @@ function New-TemporaryTestRepository {
     $originalLocation = Get-Location
     try {
         Set-Location -LiteralPath $RootPath
-        & git init --quiet
+        & git -C $RootPath init --quiet
         if ($LASTEXITCODE -ne 0) { throw 'git init failed.' }
 
-        & git config core.autocrlf false
+        & git -C $RootPath config core.autocrlf false
         if ($LASTEXITCODE -ne 0) { throw 'git config core.autocrlf failed.' }
 
-        & git config user.email 'test@example.com'
+        & git -C $RootPath config user.email 'test@example.com'
         if ($LASTEXITCODE -ne 0) { throw 'git config user.email failed.' }
 
-        & git config user.name 'Test User'
+        & git -C $RootPath config user.name 'Test User'
         if ($LASTEXITCODE -ne 0) { throw 'git config user.name failed.' }
 
-        & git add -A
+        & git -C $RootPath add -A
         if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
 
-        & git commit -m 'Initial commit' --quiet
+        & git -C $RootPath commit -m 'Initial commit' --quiet
         if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
     }
     finally {
@@ -225,7 +225,7 @@ Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion 
         try {
             $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0' -SqlContent 'SELECT 1;'
             Set-Location -LiteralPath $repoRoot
-            $baseCommit = (& git rev-parse HEAD).Trim()
+            $baseCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
 
             # Change SQL, bump module definition version, and keep minVersion in sync.
             [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestModule/sql/init.sql'), 'SELECT 2;', [System.Text.Encoding]::UTF8)
@@ -241,9 +241,9 @@ Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion 
             $manifest.components[0].minModuleDefinitionVersion = '2.0.0'
             [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
 
-            & git add -A
+            & git -C $repoRoot add -A
             if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
-            & git commit -m 'Bump definitionVersion and minModuleDefinitionVersion' --quiet
+            & git -C $repoRoot commit -m 'Bump definitionVersion and minModuleDefinitionVersion' --quiet
             if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
 
             $exitCode = Invoke-Validator -ValidatorPath $validatorPath -BaseCommit $baseCommit
@@ -262,7 +262,7 @@ Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion 
         try {
             $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0' -SqlContent 'SELECT 1;'
             Set-Location -LiteralPath $repoRoot
-            $baseCommit = (& git rev-parse HEAD).Trim()
+            $baseCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
 
             # Change SQL and bump module definition version, but leave minVersion behind.
             [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestModule/sql/init.sql'), 'SELECT 2;', [System.Text.Encoding]::UTF8)
@@ -278,9 +278,9 @@ Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion 
             # minModuleDefinitionVersion intentionally remains 1.0.0.
             [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
 
-            & git add -A
+            & git -C $repoRoot add -A
             if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
-            & git commit -m 'Bump definitionVersion without minModuleDefinitionVersion' --quiet
+            & git -C $repoRoot commit -m 'Bump definitionVersion without minModuleDefinitionVersion' --quiet
             if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
 
             $exitCode = Invoke-Validator -ValidatorPath $validatorPath -BaseCommit $baseCommit
