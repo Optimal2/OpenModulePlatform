@@ -393,10 +393,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase))
         {
-            var linkedOmpUserId = candidate.PreserveLiteral
-                ? null
-                : await _repo.GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(principal, ct);
-            return DecideAdUserNormalization(principal, linkedOmpUserId, candidate.PreserveLiteral);
+            var linkedUsers = candidate.PreserveLiteral
+                ? AdLinkedActiveOmpUserResolution.None
+                : await _repo.GetLinkedActiveOmpUsersForAdUserPrincipalAsync(principal, ct);
+            return DecideAdUserNormalization(principal, linkedUsers, candidate.PreserveLiteral);
         }
 
         if (!string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
@@ -424,19 +424,36 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     }
 
     /// <summary>
-    /// Decides how an entered AD user principal is stored. An AD user with an
-    /// active OMP-user link is stored as the OMP user by default, because the
+    /// Decides how an entered AD user principal is stored. An AD user with exactly
+    /// one actively linked OMP user is stored as the OMP user by default, because the
     /// OMP user id stays stable when the AD account is renamed. The rewrite is
     /// reported back to the operator via <see cref="NormalizedPrincipalResult.RewrittenFrom"/>,
     /// and the operator can decline it with the preserve-literal option
     /// (campaign ad-principalformen-hela-vagen-adfs-till-rbac, DEL 2).
+    /// When the principal resolves to more than one active OMP user the rewrite
+    /// abstains and the ambiguity is reported instead — fail-closed, with the same
+    /// wording as the bulk move's AmbiguousLinkedUsers reason, so no role is ever
+    /// assigned on a guess (follow-up phase 2, finding 1).
     /// </summary>
     internal static NormalizedPrincipalResult DecideAdUserNormalization(
         string principal,
-        int? linkedOmpUserId,
+        AdLinkedActiveOmpUserResolution linkedUsers,
         bool preserveLiteralAdPrincipal)
     {
-        if (preserveLiteralAdPrincipal || linkedOmpUserId is not int linkedUserId)
+        if (preserveLiteralAdPrincipal)
+        {
+            return new NormalizedPrincipalResult("ADUser", principal);
+        }
+
+        if (linkedUsers.ActiveUserCount > 1)
+        {
+            return new NormalizedPrincipalResult(
+                null,
+                null,
+                "The principal resolves to more than one active OMP user, so nothing was added. Resolve the duplicate AD links first.");
+        }
+
+        if (linkedUsers.UniqueUserId is not int linkedUserId)
         {
             return new NormalizedPrincipalResult("ADUser", principal);
         }

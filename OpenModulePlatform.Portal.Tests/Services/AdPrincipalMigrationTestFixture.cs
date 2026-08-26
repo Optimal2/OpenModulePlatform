@@ -61,6 +61,9 @@ DROP DATABASE [{DatabaseName}];",
     public AdRolePrincipalMigrationRepository CreateRepository()
         => new(CreateConnectionFactory());
 
+    public RbacAdminRepository CreateRbacAdminRepository()
+        => new(CreateConnectionFactory());
+
     public async Task<int> InsertUserAsync(string displayName, bool active)
     {
         await using var conn = new SqlConnection(ConnectionString);
@@ -205,10 +208,31 @@ CREATE TABLE omp.user_auth
     user_id int NOT NULL,
     provider_id int NOT NULL,
     provider_user_key nvarchar(1000) NOT NULL,
+    provider_user_hash AS CONVERT(binary(32), HASHBYTES('SHA2_256', CONVERT(varbinary(max), provider_user_key))) PERSISTED,
     last_used_at datetime2(3) NULL,
     auth_status nvarchar(20) NOT NULL CONSTRAINT DF_omp_user_auth_auth_status DEFAULT(N'enabled'),
-    created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_user_auth_created_at DEFAULT SYSUTCDATETIME()
+    created_at datetime2(3) NOT NULL CONSTRAINT DF_omp_user_auth_created_at DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_omp_user_auth_provider_key UNIQUE(provider_id, provider_user_hash)
 );
+
+-- Upgrade blocks mirror sql/1-setup-openmoduleplatform.sql so a fixture database
+-- created before the constraint existed is brought up to the production shape:
+-- uniqueness is on the SHA-256 hash of the raw key (case-sensitive), while
+-- equality lookups are collation-based (case-insensitive). This is exactly the
+-- gap that allows two active AD links differing only in letter case.
+IF COL_LENGTH(N'omp.user_auth', N'provider_user_hash') IS NULL
+ALTER TABLE omp.user_auth
+    ADD provider_user_hash AS CONVERT(binary(32), HASHBYTES('SHA2_256', CONVERT(varbinary(max), provider_user_key))) PERSISTED;
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.key_constraints
+    WHERE name = N'UQ_omp_user_auth_provider_key'
+      AND parent_object_id = OBJECT_ID(N'omp.user_auth')
+)
+ALTER TABLE omp.user_auth
+    ADD CONSTRAINT UQ_omp_user_auth_provider_key UNIQUE(provider_id, provider_user_hash);
 
 IF OBJECT_ID(N'omp.Roles', N'U') IS NULL
 CREATE TABLE omp.Roles

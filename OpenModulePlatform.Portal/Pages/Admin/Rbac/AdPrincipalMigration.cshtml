@@ -16,6 +16,7 @@
 <section class="card section-card bottom-gap">
     <h3>@L["How this move works"]</h3>
     <p class="muted">@L["The move creates OMP-user role assignments for AD-based principals that resolve to exactly one active OMP user. The source AD rows are retained on purpose: deleting them is only safe once every sign-in path is proven to yield an OMP-user linkage, which is not yet the case for every path. AD group rows are never touched."]</p>
+    <p class="muted">@L["After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins."]</p>
 </section>
 
 @if (Model.Report is not null)
@@ -97,6 +98,7 @@
             Model.AlreadyPresentCount,
             Model.SkipCount)
     </p>
+    <p class="muted">@L["After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins."]</p>
 
     @if (Model.Rows.Count == 0)
     {

@@ -84,6 +84,69 @@ public sealed class OmpOidcSignInDiagnosticsTests
     }
 
     [Fact]
+    public void LogFailedSignIn_DiagnosticsDisabled_LogsNothing()
+    {
+        var logger = new ListLogger();
+        var principal = CreatePrincipal(
+            new Claim("sub", "subject-1"),
+            new Claim("unique_name", @"CONTOSO\anna"));
+
+        OmpOidcSignInDiagnostics.LogFailedSignIn(logger, principal, new OmpOidcDiagnosticsOptions());
+
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public void LogFailedSignIn_Enabled_LogsClaimTypesAndCountsButNotValues()
+    {
+        // Follow-up phase 2, finding 4: a sign-in that fails completely (no
+        // provider user key, or a matched but disabled user) is exactly the
+        // case incident diagnostics must distinguish, so the failure branch
+        // logs the same claim types with value counts as a successful sign-in.
+        var logger = new ListLogger();
+        var principal = CreatePrincipal(
+            new Claim("groups", "S-1-5-21-11-22-33-2001"),
+            new Claim("groups", "S-1-5-21-11-22-33-2002"),
+            new Claim("unique_name", @"CONTOSO\anna"));
+
+        OmpOidcSignInDiagnostics.LogFailedSignIn(
+            logger, principal, new OmpOidcDiagnosticsOptions { Enabled = true });
+
+        Assert.NotEmpty(logger.Entries);
+        var text = string.Join("\n", logger.Entries.Select(entry => entry.Message));
+        Assert.Contains("unique_name", text);
+        Assert.Contains("groups", text);
+        Assert.DoesNotContain(@"CONTOSO\anna", text);
+        Assert.DoesNotContain("S-1-5-21-11-22-33-2001", text);
+    }
+
+    [Fact]
+    public void LogFailedSignIn_IncludeClaimValues_LogsValues()
+    {
+        var logger = new ListLogger();
+        var principal = CreatePrincipal(new Claim("unique_name", @"CONTOSO\anna"));
+
+        OmpOidcSignInDiagnostics.LogFailedSignIn(
+            logger,
+            principal,
+            new OmpOidcDiagnosticsOptions { Enabled = true, IncludeClaimValues = true });
+
+        var text = string.Join("\n", logger.Entries.Select(entry => entry.Message));
+        Assert.Contains(@"CONTOSO\anna", text);
+    }
+
+    [Fact]
+    public void LogFailedSignIn_NullPrincipal_LogsNothing()
+    {
+        var logger = new ListLogger();
+
+        OmpOidcSignInDiagnostics.LogFailedSignIn(
+            logger, null, new OmpOidcDiagnosticsOptions { Enabled = true });
+
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
     public void ConfiguredClaimReporter_MissingMapping_WarnsOncePerClaimType()
     {
         var logger = new ListLogger();

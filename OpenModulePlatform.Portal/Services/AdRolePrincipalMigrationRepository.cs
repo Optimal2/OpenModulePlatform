@@ -108,12 +108,40 @@ WHERE NOT EXISTS
     }
 
     /// <summary>
+    /// SQL Server error 1205: the transaction was chosen as the deadlock victim.
+    /// </summary>
+    private const int DeadlockVictimErrorNumber = 1205;
+
+    /// <summary>
     /// Re-runs the matching query inside a serializable transaction, plans again, and
     /// inserts one OmpUser assignment per Move decision (WHERE NOT EXISTS, so a second
     /// run creates zero rows). Source rows are retained. Commits once; rolls back on
     /// failure.
     /// </summary>
+    /// <remarks>
+    /// Two operators executing concurrently take shared serializable range locks on
+    /// the same rows and then need exclusive locks for their INSERT statements, which
+    /// is the classic deadlock shape; SQL Server then kills one side with error 1205.
+    /// No data can be corrupted — the loser rolls back and a re-run is a no-op via
+    /// WHERE NOT EXISTS plus the primary key — so the execute retries exactly once
+    /// instead of crashing the page for one operator. An app-level lock (the
+    /// PortalDeploymentLockService pattern) was considered but rejected: it adds
+    /// cross-request state to serialize a rare, transient and safely retryable
+    /// conflict, and a stale app lock would block the view entirely.
+    /// </remarks>
     public async Task<AdRolePrincipalMigrationReport> ExecuteAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await ExecuteCoreAsync(ct);
+        }
+        catch (SqlException ex) when (ex.Number == DeadlockVictimErrorNumber)
+        {
+            return await ExecuteCoreAsync(ct);
+        }
+    }
+
+    private async Task<AdRolePrincipalMigrationReport> ExecuteCoreAsync(CancellationToken ct)
     {
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -177,7 +205,10 @@ WHERE NOT EXISTS
         }
         catch
         {
-            await tx.RollbackAsync(ct);
+            // The token that caused the failure may already be cancelled, which
+            // would abort the rollback itself before it runs; always roll back
+            // with CancellationToken.None.
+            await tx.RollbackAsync(CancellationToken.None);
             throw;
         }
     }

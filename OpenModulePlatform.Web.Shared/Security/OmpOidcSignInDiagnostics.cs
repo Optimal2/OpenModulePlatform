@@ -40,14 +40,9 @@ public static class OmpOidcSignInDiagnostics
             return;
         }
 
-        var claimTypeSummary = incomingPrincipal.Claims
-            .GroupBy(claim => claim.Type, StringComparer.Ordinal)
-            .OrderBy(group => group.Key, StringComparer.Ordinal)
-            .Select(group => $"{group.Key} ({group.Count()})");
-
         logger.LogInformation(
             "OIDC sign-in diagnostics: incoming claim types with value counts: {ClaimTypes}.",
-            string.Join(", ", claimTypeSummary));
+            BuildClaimTypeSummary(incomingPrincipal));
 
         logger.LogInformation(
             "OIDC sign-in diagnostics: resolved role principals: {Principals}.",
@@ -58,6 +53,54 @@ public static class OmpOidcSignInDiagnostics
             return;
         }
 
+        LogClaimValues(logger, incomingPrincipal);
+    }
+
+    /// <summary>
+    /// Logs the incoming claim types with value counts for a sign-in that FAILED
+    /// in <c>OnTokenValidated</c> — no configured provider user key, or a matched
+    /// but disabled user. Those failures are exactly the cases incident
+    /// diagnostics was built to tell apart (campaign
+    /// ad-principalformen-hela-vagen-adfs-till-rbac, follow-up phase 2, finding 4),
+    /// so they get the same claim-type summary as a successful sign-in. Raw claim
+    /// values are only logged when <c>IncludeClaimValues</c> is set.
+    /// </summary>
+    public static void LogFailedSignIn(
+        ILogger logger,
+        ClaimsPrincipal? incomingPrincipal,
+        OmpOidcDiagnosticsOptions diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(diagnostics);
+
+        if (!diagnostics.Enabled || incomingPrincipal is null)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "OIDC sign-in diagnostics (failed sign-in): incoming claim types with value counts: {ClaimTypes}.",
+            BuildClaimTypeSummary(incomingPrincipal));
+
+        if (!diagnostics.IncludeClaimValues)
+        {
+            return;
+        }
+
+        LogClaimValues(logger, incomingPrincipal);
+    }
+
+    private static string BuildClaimTypeSummary(ClaimsPrincipal incomingPrincipal)
+    {
+        var claimTypeSummary = incomingPrincipal.Claims
+            .GroupBy(claim => claim.Type, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => $"{group.Key} ({group.Count()})");
+        return string.Join(", ", claimTypeSummary);
+    }
+
+    private static void LogClaimValues(ILogger logger, ClaimsPrincipal incomingPrincipal)
+    {
         foreach (var group in incomingPrincipal.Claims
                      .GroupBy(claim => claim.Type, StringComparer.Ordinal)
                      .OrderBy(group => group.Key, StringComparer.Ordinal))

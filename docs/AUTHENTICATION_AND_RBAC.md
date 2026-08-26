@@ -190,12 +190,15 @@ are not saved, "the provider sent nothing", "wrong claim type configured" and
 "right claim, wrong form" are otherwise indistinguishable in the logs. Setting
 `Diagnostics:Enabled` to `true` makes each validated OIDC sign-in log the
 incoming claim types, the value count per type, and the resulting role
-principals. Raw claim values are only logged when `Diagnostics:IncludeClaimValues`
+principals. A sign-in that fails after validation (no configured provider user
+key, or a matched but disabled user) logs the same incoming claim types and
+counts, because those failures are exactly the cases the diagnostics exist to
+tell apart. Raw claim values are only logged when `Diagnostics:IncludeClaimValues`
 is also `true`, because values can contain personal data. Independently of
 diagnostics, a configured AD-mapping claim type (`SamAccountNameClaimType`,
 `DomainClaimType`, `UserSidClaimType` and the group claim-type lists) that was
-absent from a validated sign-in is logged as a warning once per claim type per
-process.
+absent from a validated or failed sign-in is logged as a warning once per claim
+type per process.
 
 OMP Auth uses the server-side confidential authorization-code flow. The
 identity provider sends the browser back to the Auth application, the Auth

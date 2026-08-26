@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
+using System.Security.Claims;
 
 namespace OpenModulePlatform.Auth.Services;
 
@@ -94,6 +95,8 @@ public static class OmpOidcAuthenticationExtensions
                         {
                             logger.LogWarning(
                                 "OIDC sign-in failed because the configured user id claim was not present.");
+                            ReportFailedSignInDiagnostics(
+                                context.HttpContext, logger, incomingPrincipal, currentOptions);
                             RedirectToLogin(context.HttpContext, "oidc");
                             context.HandleResponse();
                             return;
@@ -109,6 +112,8 @@ public static class OmpOidcAuthenticationExtensions
                             logger.LogWarning(
                                 "OIDC sign-in for provider user key hash {ProviderUserKeyHash} could not be resolved.",
                                 CreateLogHash(resolvedClaims.ProviderUserKey));
+                            ReportFailedSignInDiagnostics(
+                                context.HttpContext, logger, incomingPrincipal, currentOptions);
                             RedirectToLogin(context.HttpContext, "oidc");
                             context.HandleResponse();
                             return;
@@ -287,6 +292,32 @@ public static class OmpOidcAuthenticationExtensions
     private static void RedirectToLogin(HttpContext context, string error)
     {
         context.Response.Redirect(QueryHelpers.AddQueryString(OmpAuthDefaults.LoginPath, "error", error));
+    }
+
+    /// <summary>
+    /// Runs the incident diagnostics for a sign-in that failed inside
+    /// OnTokenValidated (campaign ad-principalformen-hela-vagen-adfs-till-rbac,
+    /// follow-up phase 2, finding 4): the warn-once report for configured claim
+    /// types the provider did not send, plus the opt-in claim-type summary, so a
+    /// completely failed sign-in leaves the same diagnostic trail as a
+    /// successful one.
+    /// </summary>
+    private static void ReportFailedSignInDiagnostics(
+        HttpContext httpContext,
+        ILogger logger,
+        ClaimsPrincipal? incomingPrincipal,
+        OmpOidcOptions currentOptions)
+    {
+        if (incomingPrincipal is not null)
+        {
+            var claimReporter = httpContext.RequestServices
+                .GetRequiredService<OmpOidcConfiguredClaimReporter>();
+            claimReporter.ReportMissingConfiguredClaimTypes(
+                logger, incomingPrincipal, currentOptions.ClaimTypes);
+        }
+
+        OmpOidcSignInDiagnostics.LogFailedSignIn(
+            logger, incomingPrincipal, currentOptions.Diagnostics);
     }
 
     private static string CreateLogHash(string value)

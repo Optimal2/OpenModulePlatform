@@ -10,8 +10,8 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// All principals, domains and SIDs below are invented test data, never real
 /// customer data.
 /// </summary>
+[Collection(AdPrincipalMigrationCollection.CollectionName)]
 public sealed class AdRolePrincipalMigrationRepositoryTierCTests(AdPrincipalMigrationTestFixture fixture)
-    : IClassFixture<AdPrincipalMigrationTestFixture>
 {
     [Fact]
     public async Task Preview_MatchesExecuteOutcome()
@@ -101,12 +101,32 @@ public sealed class AdRolePrincipalMigrationRepositoryTierCTests(AdPrincipalMigr
     }
 
     [Fact]
+    public async Task Fixture_EnforcesProductionProviderKeyUniqueness()
+    {
+        // The fixture must not be looser than production: an identical
+        // (provider_id, provider_user_key) pair is rejected by
+        // UQ_omp_user_auth_provider_key, so a linked-user ambiguity can only
+        // arise through letter case, exactly as in production.
+        var userId = await fixture.InsertUserAsync("TierC Unique User", active: true);
+        await fixture.InsertAuthLinkAsync(userId, "AD", @"CONTOSO\tc-unique");
+
+        var ex = await Assert.ThrowsAsync<Microsoft.Data.SqlClient.SqlException>(
+            () => fixture.InsertAuthLinkAsync(userId, "AD", @"CONTOSO\tc-unique"));
+        Assert.Contains(ex.Number, new[] { 2601, 2627 });
+    }
+
+    [Fact]
     public async Task Execute_ReportsRowsWithoutLinkAsSkipped_AndAmbiguousAsSkipped()
     {
+        // Production uniqueness is on (provider_id, provider_user_hash), a SHA-256
+        // over the raw key, so an ambiguity arises through letter case: two active
+        // AD links whose keys differ only in case both match the role principal
+        // under the case-insensitive collation. The fixture now enforces the
+        // production constraint, so the ambiguous pair is modeled exactly that way.
         var sharedUserA = await fixture.InsertUserAsync("TierC Ambiguous A", active: true);
         var sharedUserB = await fixture.InsertUserAsync("TierC Ambiguous B", active: true);
         await fixture.InsertAuthLinkAsync(sharedUserA, "AD", @"CONTOSO\tc-ambig");
-        await fixture.InsertAuthLinkAsync(sharedUserB, "AD", @"CONTOSO\tc-ambig");
+        await fixture.InsertAuthLinkAsync(sharedUserB, "AD", @"CONTOSO\TC-AMBIG");
         var inactiveUser = await fixture.InsertUserAsync("TierC Inactive User", active: false);
         await fixture.InsertAuthLinkAsync(inactiveUser, "AD", @"CONTOSO\tc-inactive");
         var disabledLinkUser = await fixture.InsertUserAsync("TierC Disabled Link User", active: true);

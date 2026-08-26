@@ -143,6 +143,26 @@ public sealed class OmpOidcPrincipalFormTests
     }
 
     [Fact]
+    public void Resolve_UniqueNameClaimInUpnForm_BuildsUpnPrincipalCandidates()
+    {
+        // A real ADFS variant: unique_name arrives in UPN form instead of the
+        // DOMAIN\name form. The resolver must surface it as a user-principal
+        // candidate and the AD-link lookup must see the upn: alias.
+        var principal = CreatePrincipal(
+            new Claim("sub", "pairwise-subject-1"),
+            new Claim("unique_name", "anna@contoso.example"));
+
+        var resolved = OmpOidcClaimResolver.Resolve(principal, BrokenSamAccountNameOptions());
+
+        Assert.NotNull(resolved);
+        Assert.Contains("anna@contoso.example", resolved.UserPrincipalCandidates);
+        Assert.Contains("upn:anna@contoso.example", resolved.ProviderUserKeyCandidates);
+
+        var adLookupKeys = OmpAdfsAdAccountLinker.BuildAdProviderLookupKeys(resolved);
+        Assert.Contains("upn:anna@contoso.example", adLookupKeys);
+    }
+
+    [Fact]
     public void BrokenSamAccountNameMapping_RolePrincipalsStillContainDomainName()
     {
         // The 2026-08-20 incident configuration: SamAccountNameClaimType pointed

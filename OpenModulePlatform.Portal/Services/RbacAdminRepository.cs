@@ -462,21 +462,31 @@ WHERE user_id = @userId
     }
 
     public async Task<bool> IsAdUserPrincipalLinkedToOmpUserAsync(string principal, CancellationToken ct)
-        => (await GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(principal, ct)) is not null;
+        => (await GetLinkedActiveOmpUsersForAdUserPrincipalAsync(principal, ct)).ActiveUserCount > 0;
 
-    public async Task<int?> GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(string principal, CancellationToken ct)
+    /// <summary>
+    /// Resolves an AD user principal to the distinct active OMP users holding an
+    /// enabled AD auth link for it. Production uniqueness on omp.user_auth is
+    /// (provider_id, provider_user_hash) — a SHA-256 over the RAW key, hence
+    /// case-sensitive — while this lookup is collation-based and case-insensitive,
+    /// so links such as CONTOSO\anna and CONTOSO\ANNA on two different users both
+    /// match. Callers must treat <see cref="AdLinkedActiveOmpUserResolution.ActiveUserCount"/>
+    /// greater than one as ambiguous and abstain, the same fail-closed behavior
+    /// the sign-in path (OmpAdfsAdAccountLinker.Resolve -> AmbiguousActive) and
+    /// the bulk move (AmbiguousLinkedUsers) already have.
+    /// </summary>
+    public async Task<AdLinkedActiveOmpUserResolution> GetLinkedActiveOmpUsersForAdUserPrincipalAsync(string principal, CancellationToken ct)
     {
         const string sql = @"
-SELECT TOP (1)
-       u.user_id
+SELECT COUNT(DISTINCT u.user_id) AS active_user_count,
+       MIN(u.user_id) AS first_active_user_id
 FROM omp.user_auth ua
 INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
 INNER JOIN omp.users u ON u.user_id = ua.user_id
 WHERE ap.display_name = N'AD'
   AND ua.provider_user_key = @principal
   AND ua.auth_status = N'enabled'
-  AND u.account_status = 1
-ORDER BY u.user_id;";
+  AND u.account_status = 1;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -484,10 +494,17 @@ ORDER BY u.user_id;";
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@principal", principal);
 
-        var result = await cmd.ExecuteScalarAsync(ct);
-        return result is null || result is DBNull
-            ? null
-            : Convert.ToInt32(result, CultureInfo.InvariantCulture);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            return AdLinkedActiveOmpUserResolution.None;
+        }
+
+        var activeUserCount = rdr.GetInt32(0);
+        int? uniqueUserId = activeUserCount == 1 && !rdr.IsDBNull(1)
+            ? rdr.GetInt32(1)
+            : null;
+        return new AdLinkedActiveOmpUserResolution(activeUserCount, uniqueUserId);
     }
 
     /// <summary>
@@ -966,6 +983,17 @@ public sealed class RolePrincipalRow
 }
 
 public sealed record PrincipalSuggestion(string Value, string Label);
+
+/// <summary>
+/// The result of resolving an AD user principal to actively linked OMP users.
+/// <see cref="UniqueUserId"/> is only set when exactly one active user resolved;
+/// an <see cref="ActiveUserCount"/> greater than one is an ambiguity and callers
+/// must abstain rather than pick a user.
+/// </summary>
+public sealed record AdLinkedActiveOmpUserResolution(int ActiveUserCount, int? UniqueUserId)
+{
+    public static readonly AdLinkedActiveOmpUserResolution None = new(0, null);
+}
 
 /// <summary>
 /// Mutable edit model for a role.

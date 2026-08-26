@@ -3321,4 +3321,6 @@
   <data name="Skipped: this principal type is not moved." xml:space="preserve"><value>Överhoppad: den här principaltypen flyttas inte.</value></data>
   <data name="Skipped." xml:space="preserve"><value>Överhoppad.</value></data>
   <data name="Move AD principals" xml:space="preserve"><value>Flytta AD-principaler</value></data>
+  <data name="The principal resolves to more than one active OMP user, so nothing was added. Resolve the duplicate AD links first." xml:space="preserve"><value>Principalen matchar mer än en aktiv OMP-användare, så inget lades till. Åtgärda de dubbletterade AD-länkarna först.</value></data>
+  <data name="After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins." xml:space="preserve"><value>Efter flytten följer rollen OMP-användaren: den gäller även användarens andra aktiverade inloggningsvägar, till exempel lokalt lösenord eller en annan OIDC-provider, inte bara AD-/ADFS-inloggningar.</value></data>
 </root>
