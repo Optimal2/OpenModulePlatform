@@ -611,17 +611,61 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
 
 /* The sort button is block + full width by default, which would push the
    expand button onto its own line; inside a group header the two sit side
-   by side instead. */
+   by side instead. Reading order is label, expand button, sort arrow: the
+   arrow leaves the button and sits at the column edge with the rest of
+   the column mechanics, so the expand button never borders the resize
+   grip. */
 .sortable-list th[data-column-group] {
+    position: relative;
     white-space: nowrap;
-    padding-right: 8px;
+    padding-right: 26px;
 }
 
 .sortable-list th[data-column-group] .sortable-list__button {
     display: inline-flex;
     align-items: center;
     width: auto;
+    padding-right: 10px;
     vertical-align: middle;
+}
+
+.sortable-list th[data-column-group] .sortable-list__button::after {
+    content: none;
+}
+
+.sortable-list th[data-column-group]::after {
+    content: "\2195";
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    opacity: 0.75;
+    pointer-events: none;
+}
+
+.sortable-list th[data-column-group][aria-sort="ascending"]::after {
+    content: "\2191";
+    color: var(--link);
+    opacity: 1;
+}
+
+.sortable-list th[data-column-group][aria-sort="descending"]::after {
+    content: "\2193";
+    color: var(--link);
+    opacity: 1;
+}
+
+.sortable-list th[data-column-group]:has(.sortable-list__button:hover)::after,
+.sortable-list th[data-column-group]:has(.sortable-list__button:focus-visible)::after {
+    color: var(--link-hover);
+}
+
+/* With the band strip in place the content box starts below the strip, so
+   the arrow centers against the label text rather than the whole cell. */
+.sortable-list.list-has-column-bands th[data-column-group]::after {
+    top: calc(50% + 10px);
 }
 
 .list-column-expand {
