@@ -369,6 +369,13 @@
                         <div class="field-help">
                             @ompBranding.ApplyPlatformName(L["Enter one AD user per line. Linked AD accounts are assigned as their OMP user automatically."].Value)
                         </div>
+                        <label class="checkbox-row">
+                            <input type="checkbox" name="preserveAdPrincipal" value="true" />
+                            <span>@L["Save exactly as entered (literal AD user)"]</span>
+                        </label>
+                        <div class="field-help">
+                            @ompBranding.ApplyPlatformName(L["By default a linked AD account is saved as its OMP user, because the OMP user id stays stable if the AD account is renamed. Tick the box to store the literal DOMAIN\\name principal instead. The saved form is always reported in the result message."].Value)
+                        </div>
                     </div>
 
                     <div class="form-field actions">

@@ -3291,4 +3291,34 @@
   <data name="Regenerate" xml:space="preserve"><value>Återskapa</value></data>
   <data name="Switch role" xml:space="preserve"><value>Byt roll</value></data>
   <data name="Enter one AD group SID or DOMAIN\Group per line. Local group names are resolved to a SID when possible." xml:space="preserve"><value>Ange ett AD-grupp-SID eller DOMÄN\Grupp per rad. Lokala gruppnamn slås upp till ett SID när det går.</value></data>
+  <data name="Save exactly as entered (literal AD user)" xml:space="preserve"><value>Spara exakt som angivet (bokstavlig AD-användare)</value></data>
+  <data name="By default a linked AD account is saved as its OMP user, because the OMP user id stays stable if the AD account is renamed. Tick the box to store the literal DOMAIN\name principal instead. The saved form is always reported in the result message." xml:space="preserve"><value>Som standard sparas ett länkat AD-konto som dess OMP-användare, eftersom OMP-användar-id:t är stabilt även om AD-kontot byter namn. Kryssa i rutan för att i stället spara den bokstavliga DOMÄN\namn-principalen. Den sparade formen redovisas alltid i resultatmeddelandet.</value></data>
+  <data name="Rewrote {0} AD user principal(s) to the linked OMP user (the OMP user id stays stable if the AD account is renamed): {1}" xml:space="preserve"><value>Skrev om {0} AD-användarprincipaler till den länkade OMP-användaren (OMP-användar-id:t är stabilt även om AD-kontot byter namn): {1}</value></data>
+  <data name="Move AD role principals to OMP users" xml:space="preserve"><value>Flytta AD-rollprincipaler till OMP-användare</value></data>
+  <data name="Bulk-move AD-based role principal rows to the OMP users they resolve to." xml:space="preserve"><value>Massflytta AD-baserade rollprincipalrader till de OMP-användare de matchar.</value></data>
+  <data name="How this move works" xml:space="preserve"><value>Så fungerar flytten</value></data>
+  <data name="The move creates OMP-user role assignments for AD-based principals that resolve to exactly one active OMP user. The source AD rows are retained on purpose: deleting them is only safe once every sign-in path is proven to yield an OMP-user linkage, which is not yet the case for every path. AD group rows are never touched." xml:space="preserve"><value>Flytten skapar OMP-användarrolltilldelningar för AD-baserade principaler som matchar exakt en aktiv OMP-användare. AD-källraderna behålls avsiktligt: att ta bort dem är först säkert när varje inloggningsväg bevisligen ger en OMP-användarkoppling, vilket ännu inte gäller för alla vägar. AD-grupprader berörs aldrig.</value></data>
+  <data name="Execution report" xml:space="preserve"><value>Körningsrapport</value></data>
+  <data name="Bulk move result" xml:space="preserve"><value>Resultat av massflytten</value></data>
+  <data name="Created {0} assignment(s), {1} already present, {2} skipped." xml:space="preserve"><value>Skapade {0} tilldelningar, {1} fanns redan, {2} hoppades över.</value></data>
+  <data name="Created assignments" xml:space="preserve"><value>Skapade tilldelningar</value></data>
+  <data name="Target OMP user" xml:space="preserve"><value>Mål-OMP-användare</value></data>
+  <data name="Skipped rows" xml:space="preserve"><value>Överhoppade rader</value></data>
+  <data name="Planned decisions" xml:space="preserve"><value>Planerade beslut</value></data>
+  <data name="Planned moves: {0} · Already present: {1} · Skipped: {2}" xml:space="preserve"><value>Planerade flyttar: {0} · Finns redan: {1} · Överhoppade: {2}</value></data>
+  <data name="No AD-based role principal rows were found." xml:space="preserve"><value>Inga AD-baserade rollprincipalrader hittades.</value></data>
+  <data name="Outcome" xml:space="preserve"><value>Utfall</value></data>
+  <data name="Risk: this user currently only signs in via a path that may not yield an OMP-user linkage. Informational only — the source AD row is retained." xml:space="preserve"><value>Risk: den här användaren loggar för närvarande bara in via en väg som kanske inte ger en OMP-användarkoppling. Endast informativt — AD-källraden behålls.</value></data>
+  <data name="I understand that OMP-user assignments will be created and that the source AD rows are retained." xml:space="preserve"><value>Jag förstår att OMP-användartilldelningar skapas och att AD-källraderna behålls.</value></data>
+  <data name="Run bulk move" xml:space="preserve"><value>Kör massflytt</value></data>
+  <data name="Tick the confirmation box to run the bulk move." xml:space="preserve"><value>Kryssa i bekräftelserutan för att köra massflytten.</value></data>
+  <data name="Bulk move completed: {0} assignment(s) created, {1} already present, {2} skipped. Source AD rows were retained." xml:space="preserve"><value>Massflytten är klar: {0} tilldelningar skapades, {1} fanns redan, {2} hoppades över. AD-källraderna behölls.</value></data>
+  <data name="Move to OMP user {0} (id: {1})" xml:space="preserve"><value>Flytta till OMP-användare {0} (id: {1})</value></data>
+  <data name="Already assigned to OMP user {0} (id: {1}); nothing to insert." xml:space="preserve"><value>Redan tilldelad OMP-användare {0} (id: {1}); inget att infoga.</value></data>
+  <data name="Skipped: no enabled AD link matches this principal." xml:space="preserve"><value>Överhoppad: ingen aktiverad AD-länk matchar den här principalen.</value></data>
+  <data name="Skipped: the principal resolves to more than one active OMP user." xml:space="preserve"><value>Överhoppad: principalen matchar mer än en aktiv OMP-användare.</value></data>
+  <data name="Skipped: the linked OMP user is inactive." xml:space="preserve"><value>Överhoppad: den länkade OMP-användaren är inaktiv.</value></data>
+  <data name="Skipped: this principal type is not moved." xml:space="preserve"><value>Överhoppad: den här principaltypen flyttas inte.</value></data>
+  <data name="Skipped." xml:space="preserve"><value>Överhoppad.</value></data>
+  <data name="Move AD principals" xml:space="preserve"><value>Flytta AD-principaler</value></data>
 </root>

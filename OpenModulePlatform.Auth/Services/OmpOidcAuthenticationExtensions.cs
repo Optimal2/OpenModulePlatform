@@ -39,6 +39,8 @@ public static class OmpOidcAuthenticationExtensions
             };
         }
 
+        services.AddSingleton<OmpOidcConfiguredClaimReporter>();
+
         services.AddAuthentication()
             .AddOpenIdConnect(OmpAuthDefaults.OidcAuthenticationScheme, options =>
             {
@@ -80,9 +82,14 @@ public static class OmpOidcAuthenticationExtensions
                         var monitor = context.HttpContext.RequestServices
                             .GetRequiredService<IOptionsMonitor<OmpAuthOptions>>();
                         var currentOptions = monitor.CurrentValue.Oidc;
-                        var resolvedClaims = context.Principal is null
+                        // One translator per sign-in: translations are cached on the
+                        // instance, so a sign-in makes at most one directory lookup
+                        // per distinct claim value.
+                        var sidTranslator = new WindowsOmpSidAccountTranslator(logger);
+                        var incomingPrincipal = context.Principal;
+                        var resolvedClaims = incomingPrincipal is null
                             ? null
-                            : OmpOidcClaimResolver.Resolve(context.Principal, currentOptions);
+                            : OmpOidcClaimResolver.Resolve(incomingPrincipal, currentOptions, sidTranslator);
                         if (resolvedClaims is null)
                         {
                             logger.LogWarning(
@@ -105,6 +112,23 @@ public static class OmpOidcAuthenticationExtensions
                             RedirectToLogin(context.HttpContext, "oidc");
                             context.HandleResponse();
                             return;
+                        }
+
+                        if (incomingPrincipal is not null)
+                        {
+                            var claimReporter = context.HttpContext.RequestServices
+                                .GetRequiredService<OmpOidcConfiguredClaimReporter>();
+                            claimReporter.ReportMissingConfiguredClaimTypes(
+                                logger, incomingPrincipal, currentOptions.ClaimTypes);
+
+                            OmpOidcSignInDiagnostics.LogSignIn(
+                                logger,
+                                incomingPrincipal,
+                                resolvedClaims,
+                                user.RolePrincipals
+                                    .Select(principal => principal.PrincipalType + "|" + principal.Principal)
+                                    .ToList(),
+                                currentOptions.Diagnostics);
                         }
 
                         context.Principal = user.ToClaimsPrincipal();

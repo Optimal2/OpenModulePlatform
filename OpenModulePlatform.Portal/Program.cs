@@ -43,6 +43,7 @@ builder.Services.AddScoped<PortalWidgetRuntimeDataPackageService>();
 builder.Services.AddScoped<PortalUserSettingsService>();
 builder.Services.AddScoped<UserProfileImageService>();
 builder.Services.AddScoped<RbacAdminRepository>();
+builder.Services.AddScoped<AdRolePrincipalMigrationRepository>();
 builder.Services.AddScoped<PortableModulePackageService>();
 builder.Services.AddSingleton<PortalDeploymentLockService>();
 builder.Services.AddScoped<ConfigOverlayObjectService>();
@@ -68,6 +69,7 @@ builder.Services.Configure<RazorPagesOptions>(options =>
     options.Conventions.AddPageRoute("/Admin/Rbac/Role", "/admin/security/role");
     options.Conventions.AddPageRoute("/Admin/Rbac/Permissions", "/admin/security/permissions");
     options.Conventions.AddPageRoute("/Admin/Rbac/PermissionEdit", "/admin/security/permissionedit");
+    options.Conventions.AddPageRoute("/Admin/Rbac/AdPrincipalMigration", "/admin/security/ad-principal-migration");
 });
 
 var app = builder.Build();

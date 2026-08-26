@@ -169,6 +169,33 @@ Supported settings include:
 - `ClaimTypes:GroupClaimTypes`
 - `ClaimTypes:GroupSidClaimTypes`
 - `ClaimTypes:GroupNameClaimTypes`
+- `TranslateSidClaimsToAccountNames` (default `true`)
+- `Diagnostics:Enabled` (default `false`)
+- `Diagnostics:IncludeClaimValues` (default `false`)
+
+The `DOMAIN\name` principal form is deliberately built from more than one
+source, so a single misconfigured claim mapping cannot strip every AD-linked
+role. The resolver reads `unique_name` and `windowsaccountname` (both the short
+claim names and the full WS URIs) as user-principal candidates, and — when
+`TranslateSidClaimsToAccountNames` is enabled — translates SID claims to their
+account names on the domain-joined auth server, mirroring what the Windows
+sign-in path already does in the opposite direction. Group claims are enriched
+in both directions (SID to name and name to SID) so a role row matches
+regardless of which form the provider sends. Translation is fail-safe: a failed
+lookup is logged and skipped, never fails the sign-in, and results are cached
+per sign-in so each distinct value costs at most one directory lookup.
+
+Because the sign-in replaces the provider principal with OMP's own and tokens
+are not saved, "the provider sent nothing", "wrong claim type configured" and
+"right claim, wrong form" are otherwise indistinguishable in the logs. Setting
+`Diagnostics:Enabled` to `true` makes each validated OIDC sign-in log the
+incoming claim types, the value count per type, and the resulting role
+principals. Raw claim values are only logged when `Diagnostics:IncludeClaimValues`
+is also `true`, because values can contain personal data. Independently of
+diagnostics, a configured AD-mapping claim type (`SamAccountNameClaimType`,
+`DomainClaimType`, `UserSidClaimType` and the group claim-type lists) that was
+absent from a validated sign-in is logged as a warning once per claim type per
+process.
 
 OMP Auth uses the server-side confidential authorization-code flow. The
 identity provider sends the browser back to the Auth application, the Auth

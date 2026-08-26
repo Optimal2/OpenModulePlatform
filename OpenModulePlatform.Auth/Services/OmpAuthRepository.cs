@@ -1023,7 +1023,7 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             .ToList();
     }
 
-    private static List<(string PrincipalType, string Principal)> BuildOidcRolePrincipals(
+    internal static List<(string PrincipalType, string Principal)> BuildOidcRolePrincipals(
         OmpOidcResolvedClaims oidcClaims)
     {
         var principals = new List<(string PrincipalType, string Principal)>();

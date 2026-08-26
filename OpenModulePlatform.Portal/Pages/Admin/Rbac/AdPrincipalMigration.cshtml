@@ -1,0 +1,152 @@
+@page
+@using OpenModulePlatform.Portal.Services
+@model OpenModulePlatform.Portal.Pages.Admin.Rbac.AdPrincipalMigrationModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["Security and access"]</div>
+        <h2>@L["Move AD role principals to OMP users"]</h2>
+        <p class="lede">@L["Bulk-move AD-based role principal rows to the OMP users they resolve to."]</p>
+    </div>
+    <div class="toolbar">
+        <a class="action-link" href="~/admin/security/roles">@L["Open roles"]</a>
+    </div>
+</section>
+
+<section class="card section-card bottom-gap">
+    <h3>@L["How this move works"]</h3>
+    <p class="muted">@L["The move creates OMP-user role assignments for AD-based principals that resolve to exactly one active OMP user. The source AD rows are retained on purpose: deleting them is only safe once every sign-in path is proven to yield an OMP-user linkage, which is not yet the case for every path. AD group rows are never touched."]</p>
+</section>
+
+@if (Model.Report is not null)
+{
+    <section class="card section-card bottom-gap">
+        <div class="eyebrow">@L["Execution report"]</div>
+        <h3>@L["Bulk move result"]</h3>
+        <p class="muted">
+            @string.Format(
+                System.Globalization.CultureInfo.CurrentCulture,
+                L["Created {0} assignment(s), {1} already present, {2} skipped."].Value,
+                Model.Report.Created.Count,
+                Model.Report.AlreadyPresentCount,
+                Model.Report.Skipped.Count)
+        </p>
+
+        @if (Model.Report.Created.Count > 0)
+        {
+            <h4>@L["Created assignments"]</h4>
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th scope="col">@L["Role"]</th>
+                        <th scope="col">@L["Principal type"]</th>
+                        <th scope="col">@L["Principal"]</th>
+                        <th scope="col">@L["Target OMP user"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Report.Created)
+                    {
+                        <tr>
+                            <td>@row.RoleName</td>
+                            <td>@row.SourcePrincipalType</td>
+                            <td>@row.SourcePrincipal</td>
+                            <td>@row.TargetDisplayName (id: @row.TargetUserId)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (Model.Report.Skipped.Count > 0)
+        {
+            <h4>@L["Skipped rows"]</h4>
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th scope="col">@L["Role"]</th>
+                        <th scope="col">@L["Principal type"]</th>
+                        <th scope="col">@L["Principal"]</th>
+                        <th scope="col">@L["Reason"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Model.Report.Skipped)
+                    {
+                        <tr>
+                            <td>@row.RoleName</td>
+                            <td>@row.PrincipalType</td>
+                            <td>@row.Principal</td>
+                            <td>@Model.SkipReasonText(row.Reason)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+
+<section class="card section-card bottom-gap">
+    <div class="eyebrow">@L["Preview"]</div>
+    <h3>@L["Planned decisions"]</h3>
+    <p class="muted">
+        @string.Format(
+            System.Globalization.CultureInfo.CurrentCulture,
+            L["Planned moves: {0} · Already present: {1} · Skipped: {2}"].Value,
+            Model.MoveCount,
+            Model.AlreadyPresentCount,
+            Model.SkipCount)
+    </p>
+
+    @if (Model.Rows.Count == 0)
+    {
+        <div class="empty-state">@L["No AD-based role principal rows were found."]</div>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th scope="col">@L["Role"]</th>
+                    <th scope="col">@L["Principal type"]</th>
+                    <th scope="col">@L["Principal"]</th>
+                    <th scope="col">@L["Outcome"]</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.Rows)
+                {
+                    <tr>
+                        <td>@row.RoleName</td>
+                        <td>@row.PrincipalType</td>
+                        <td>@row.Principal</td>
+                        <td>
+                            @Model.OutcomeText(row)
+                            @if (row.RiskNote)
+                            {
+                                <div class="muted small-text top-gap">
+                                    @L["Risk: this user currently only signs in via a path that may not yield an OMP-user linkage. Informational only — the source AD row is retained."]
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (Model.MoveCount > 0)
+        {
+            <form method="post" asp-page-handler="Execute" class="form-grid top-gap">
+                <label class="checkbox-row">
+                    <input asp-for="ConfirmExecute" type="checkbox" />
+                    <span>@L["I understand that OMP-user assignments will be created and that the source AD rows are retained."]</span>
+                </label>
+                <span asp-validation-for="ConfirmExecute" class="field-validation-error"></span>
+
+                <div class="toolbar">
+                    <button type="submit" class="btn-danger-subtle">@L["Run bulk move"]</button>
+                </div>
+            </form>
+        }
+    }
+</section>

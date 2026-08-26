@@ -69,6 +69,23 @@ public static class OmpOidcClaimResolver
         "accountname"
     ];
 
+    // ADFS commonly emits the account name as unique_name (short name or the
+    // full WS URI) or windowsaccountname. Reading them as user-principal
+    // candidates makes the DOMAIN\name form independent of the
+    // SamAccountNameClaimType/DomainClaimType mapping: a single misconfigured
+    // claim type must not strip every AD-linked role (2026-08-20 incident).
+    private static readonly string[] UniqueNameFallbackClaimTypes =
+    [
+        "unique_name",
+        ClaimTypes.Name
+    ];
+
+    private static readonly string[] WindowsAccountNameFallbackClaimTypes =
+    [
+        "windowsaccountname",
+        ClaimTypes.WindowsAccountName
+    ];
+
     private static readonly string[] DomainFallbackClaimTypes =
     [
         "domain",
@@ -78,7 +95,8 @@ public static class OmpOidcClaimResolver
 
     public static OmpOidcResolvedClaims? Resolve(
         ClaimsPrincipal principal,
-        OmpOidcOptions options)
+        OmpOidcOptions options,
+        IOmpSidAccountTranslator? sidTranslator = null)
     {
         ArgumentNullException.ThrowIfNull(principal);
         ArgumentNullException.ThrowIfNull(options);
@@ -111,7 +129,8 @@ public static class OmpOidcClaimResolver
             options.ClaimTypes.DisplayNameClaimType,
             ["name", ClaimTypes.Name]) ?? userName;
 
-        var userPrincipalCandidates = BuildUserPrincipalCandidates(principal, options, userName);
+        var userPrincipalCandidates = BuildUserPrincipalCandidates(
+            principal, options, userName, sidTranslator);
 
         return new OmpOidcResolvedClaims
         {
@@ -127,7 +146,7 @@ public static class OmpOidcClaimResolver
             UserName = userName.Trim(),
             DisplayName = displayName.Trim(),
             UserPrincipalCandidates = userPrincipalCandidates,
-            Groups = FindAllValues(principal, ResolveGroupClaimTypes(options.ClaimTypes))
+            Groups = ResolveGroups(principal, options, sidTranslator)
         };
     }
 
@@ -172,7 +191,8 @@ public static class OmpOidcClaimResolver
     private static IReadOnlyList<string> BuildUserPrincipalCandidates(
         ClaimsPrincipal principal,
         OmpOidcOptions options,
-        string userName)
+        string userName,
+        IOmpSidAccountTranslator? sidTranslator)
     {
         var candidates = new List<string>();
 
@@ -194,8 +214,13 @@ public static class OmpOidcClaimResolver
         AddFirstClaimValue(
             candidates,
             principal,
-            ClaimTypes.WindowsAccountName,
-            ["windowsaccountname"]);
+            null,
+            UniqueNameFallbackClaimTypes);
+        AddFirstClaimValue(
+            candidates,
+            principal,
+            null,
+            WindowsAccountNameFallbackClaimTypes);
 
         var domain = FindFirstValue(
             principal,
@@ -209,6 +234,22 @@ public static class OmpOidcClaimResolver
             !string.IsNullOrWhiteSpace(samAccountName))
         {
             candidates.Add(domain.Trim() + "\\" + samAccountName.Trim());
+        }
+
+        if (options.TranslateSidClaimsToAccountNames && sidTranslator is not null)
+        {
+            // Mirror of the Windows sign-in path, which stores both the SID and
+            // the translated DOMAIN\name form for every account. A role row
+            // stored in either form must match regardless of which form the
+            // provider sends.
+            foreach (var sid in candidates.Where(IsSid).ToList())
+            {
+                var accountName = sidTranslator.TryTranslateSidToAccountName(sid);
+                if (!string.IsNullOrWhiteSpace(accountName))
+                {
+                    candidates.Add(accountName);
+                }
+            }
         }
 
         candidates.Add(userName);
@@ -226,6 +267,49 @@ public static class OmpOidcClaimResolver
         {
             values.Add(value);
         }
+    }
+
+    private static IReadOnlyList<string> ResolveGroups(
+        ClaimsPrincipal principal,
+        OmpOidcOptions options,
+        IOmpSidAccountTranslator? sidTranslator)
+    {
+        var groups = FindAllValues(principal, ResolveGroupClaimTypes(options.ClaimTypes));
+        if (!options.TranslateSidClaimsToAccountNames || sidTranslator is null)
+        {
+            return groups;
+        }
+
+        // Enrich in both directions so a role row matches whether the provider
+        // sends the group as a SID or as DOMAIN\Group.
+        var enriched = new List<string>(groups);
+        foreach (var group in groups)
+        {
+            if (IsSid(group))
+            {
+                var accountName = sidTranslator.TryTranslateSidToAccountName(group);
+                if (!string.IsNullOrWhiteSpace(accountName))
+                {
+                    enriched.Add(accountName);
+                }
+            }
+            else if (IsDomainQualifiedName(group))
+            {
+                var sid = sidTranslator.TryTranslateAccountNameToSid(group);
+                if (!string.IsNullOrWhiteSpace(sid))
+                {
+                    enriched.Add(sid);
+                }
+            }
+        }
+
+        return NormalizeDistinct(enriched);
+    }
+
+    private static bool IsDomainQualifiedName(string value)
+    {
+        var slashIndex = value.IndexOf('\\', StringComparison.Ordinal);
+        return slashIndex > 0 && slashIndex < value.Length - 1;
     }
 
     private static IReadOnlyList<string> ResolveGroupClaimTypes(

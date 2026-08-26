@@ -433,7 +433,7 @@ ORDER BY r.Name, r.RoleId;";
         return result;
     }
 
-    private static IEnumerable<string> GetWindowsAccountDomains(ClaimsPrincipal user)
+    internal static IEnumerable<string> GetWindowsAccountDomains(ClaimsPrincipal user)
     {
         foreach (var claim in user.FindAll(OmpAuthDefaults.PrincipalClaimType))
         {

@@ -196,6 +196,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         string principalType,
         string? principal,
         int[]? selectedOmpUserIds,
+        bool preserveAdPrincipal,
         CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -209,7 +210,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return RedirectToSecurityRoles();
         }
 
-        var candidates = BuildPrincipalCandidates(principalType, principal, selectedOmpUserIds);
+        var candidates = BuildPrincipalCandidates(principalType, principal, selectedOmpUserIds, preserveAdPrincipal);
         if (candidates.Count == 0)
         {
             await LoadDetailsAsync(ct);
@@ -374,10 +375,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task<NormalizedPrincipalResult> NormalizePrincipalAsync(
-        string principalType,
-        string principal,
+        PrincipalCandidate candidate,
         CancellationToken ct)
     {
+        var principalType = candidate.PrincipalType;
+        var principal = candidate.Principal;
+
         if (!IsSupportedPrincipalType(principalType))
         {
             return new NormalizedPrincipalResult(null, null, "Select a supported principal type.");
@@ -390,15 +393,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
         if (string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase))
         {
-            var linkedOmpUserId = await _repo.GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(principal, ct);
-            if (linkedOmpUserId is int linkedUserId)
-            {
-                return new NormalizedPrincipalResult(
-                    "OmpUser",
-                    linkedUserId.ToString(CultureInfo.InvariantCulture));
-            }
-
-            return new NormalizedPrincipalResult("ADUser", principal);
+            var linkedOmpUserId = candidate.PreserveLiteral
+                ? null
+                : await _repo.GetLinkedActiveOmpUserIdForAdUserPrincipalAsync(principal, ct);
+            return DecideAdUserNormalization(principal, linkedOmpUserId, candidate.PreserveLiteral);
         }
 
         if (!string.Equals(principalType, "OmpUser", StringComparison.OrdinalIgnoreCase))
@@ -425,10 +423,35 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         return new NormalizedPrincipalResult("OmpUser", userId.ToString(CultureInfo.InvariantCulture));
     }
 
+    /// <summary>
+    /// Decides how an entered AD user principal is stored. An AD user with an
+    /// active OMP-user link is stored as the OMP user by default, because the
+    /// OMP user id stays stable when the AD account is renamed. The rewrite is
+    /// reported back to the operator via <see cref="NormalizedPrincipalResult.RewrittenFrom"/>,
+    /// and the operator can decline it with the preserve-literal option
+    /// (campaign ad-principalformen-hela-vagen-adfs-till-rbac, DEL 2).
+    /// </summary>
+    internal static NormalizedPrincipalResult DecideAdUserNormalization(
+        string principal,
+        int? linkedOmpUserId,
+        bool preserveLiteralAdPrincipal)
+    {
+        if (preserveLiteralAdPrincipal || linkedOmpUserId is not int linkedUserId)
+        {
+            return new NormalizedPrincipalResult("ADUser", principal);
+        }
+
+        return new NormalizedPrincipalResult(
+            "OmpUser",
+            linkedUserId.ToString(CultureInfo.InvariantCulture),
+            RewrittenFrom: principal);
+    }
+
     private static IReadOnlyList<PrincipalCandidate> BuildPrincipalCandidates(
         string principalType,
         string? principal,
-        int[]? selectedOmpUserIds)
+        int[]? selectedOmpUserIds,
+        bool preserveAdPrincipal)
     {
         principalType = Clean(principalType) ?? string.Empty;
         var candidates = new List<PrincipalCandidate>();
@@ -443,9 +466,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             return candidates;
         }
 
+        var preserveLiteral = preserveAdPrincipal &&
+            string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase);
         foreach (var row in SplitPrincipalLines(principal))
         {
-            candidates.Add(new PrincipalCandidate(principalType, row));
+            candidates.Add(new PrincipalCandidate(principalType, row, preserveLiteral));
         }
 
         return candidates;
@@ -463,7 +488,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             NormalizedPrincipalResult normalized;
             try
             {
-                normalized = await NormalizePrincipalAsync(candidate.PrincipalType, candidate.Principal, ct);
+                normalized = await NormalizePrincipalAsync(candidate, ct);
             }
             catch (SqlException ex)
             {
@@ -492,6 +517,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             {
                 result.Skipped++;
                 continue;
+            }
+
+            if (normalized.RewrittenFrom is not null)
+            {
+                result.Rewrites.Add((normalized.RewrittenFrom, normalized.Principal));
             }
 
             try
@@ -533,6 +563,24 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             string.Format(CultureInfo.CurrentCulture, T("Added {0} principal(s)."), result.Added),
             string.Format(CultureInfo.CurrentCulture, T("Skipped {0} duplicate or already assigned principal(s)."), result.Skipped)
         };
+
+        if (result.Rewrites.Count > 0)
+        {
+            var rewritePreview = string.Join(
+                "; ",
+                result.Rewrites.Take(5).Select(
+                    rewrite => $"{rewrite.FromPrincipal} → OMP user {rewrite.ToPrincipal}"));
+            if (result.Rewrites.Count > 5)
+            {
+                rewritePreview += "; ...";
+            }
+
+            parts.Add(string.Format(
+                CultureInfo.CurrentCulture,
+                T("Rewrote {0} AD user principal(s) to the linked OMP user (the OMP user id stays stable if the AD account is renamed): {1}"),
+                result.Rewrites.Count,
+                rewritePreview));
+        }
 
         if (result.Failures.Count > 0)
         {
@@ -688,15 +736,21 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         public bool Disabled { get; set; }
     }
 
-    private sealed record PrincipalCandidate(string PrincipalType, string Principal);
+    private sealed record PrincipalCandidate(string PrincipalType, string Principal, bool PreserveLiteral = false);
 
-    private sealed record NormalizedPrincipalResult(string? PrincipalType, string? Principal, string? ErrorMessage = null);
+    internal sealed record NormalizedPrincipalResult(
+        string? PrincipalType,
+        string? Principal,
+        string? ErrorMessage = null,
+        string? RewrittenFrom = null);
 
     private sealed class PrincipalBatchResult
     {
         public int Added { get; set; }
 
         public int Skipped { get; set; }
+
+        public List<(string FromPrincipal, string ToPrincipal)> Rewrites { get; } = [];
 
         public List<string> Failures { get; } = [];
 
