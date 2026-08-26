@@ -23,7 +23,11 @@ public sealed partial class OmpHostArtifactRepository
     /// stable name to be keyed by -- reading the ids back is both cheaper and better attributed
     /// than matching on process name, which could only ever produce one anonymous lump.
     ///
-    /// ObservedState 1..3 are the running states; anything else has no live process to sample.
+    /// ObservedState 1..3 and 6 are the running states (Starting, Running, Stopping,
+    /// Draining); anything else has no live process to sample. Draining (R7-F7) keeps
+    /// its process -- and its in-flight job's resource usage -- until the restart, so
+    /// excluding it would blind the collector exactly while the worker finishes its
+    /// heaviest work.
     /// </remarks>
     public async Task<IReadOnlyList<(string WorkerInstanceKey, int ProcessId)>> GetLocalWorkerProcessTargetsAsync(
         CancellationToken ct)
@@ -44,7 +48,7 @@ LEFT JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
 -- one the collector can actually make.
 WHERE rs.ProcessId IS NOT NULL
   AND rs.ProcessId > 0
-  AND rs.ObservedState IN (1, 2, 3);";
+  AND rs.ObservedState IN (1, 2, 3, 6);";
 
         var targets = new List<(string WorkerInstanceKey, int ProcessId)>();
 

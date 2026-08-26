@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_workerapp",
-  "definitionVersion": "0.3.47",
+  "definitionVersion": "0.3.48",
   "module": {
     "displayName": "Example WorkerApp",
     "moduleType": "HostAppModule",
@@ -35,7 +35,7 @@
       "targetName": "example-workerapp-web",
       "relativePathTemplate": "example-workerapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.181"
+      "maxVersion": "0.3.182"
     },
     {
       "appKey": "example_workerapp_worker",

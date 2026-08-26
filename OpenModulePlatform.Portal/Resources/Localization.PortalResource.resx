@@ -2904,6 +2904,7 @@
   <data name="PID" xml:space="preserve"><value>PID</value></data>
   <data name="Starting" xml:space="preserve"><value>Starting</value></data>
   <data name="Stopping" xml:space="preserve"><value>Stopping</value></data>
+  <data name="Draining" xml:space="preserve"><value>Draining</value></data>
   <data name="Should run" xml:space="preserve"><value>Should run</value></data>
   <data name="Should stop" xml:space="preserve"><value>Should stop</value></data>
   <data name="Unmanaged" xml:space="preserve"><value>Unmanaged</value></data>

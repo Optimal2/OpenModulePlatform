@@ -135,12 +135,21 @@ public sealed class HostAgentRpcClient
         {
             using var searcher = new ManagementObjectSearcher(
                 $"SELECT Name FROM Win32_Service WHERE ProcessId = {Environment.ProcessId}");
-            foreach (var serviceName in searcher.Get()
-                         .OfType<ManagementObject>()
-                         .Select(ReadWindowsServiceName)
-                         .Where(static serviceName => !string.IsNullOrWhiteSpace(serviceName)))
+            // R7-F5. Both the result collection and every ManagementObject in it hold
+            // unmanaged WMI resources and are IDisposable. The old LINQ chain leaked all
+            // of them to the finalizer on every call; enumerate explicitly and dispose
+            // each object, the same pattern the orphan scan already uses.
+            using var services = searcher.Get();
+            foreach (ManagementObject service in services)
             {
-                return serviceName!.Trim();
+                using (service)
+                {
+                    var serviceName = ReadWindowsServiceName(service);
+                    if (!string.IsNullOrWhiteSpace(serviceName))
+                    {
+                        return serviceName.Trim();
+                    }
+                }
             }
         }
         catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or COMException)

@@ -39,6 +39,7 @@ public sealed class WorkerRuntimeModel : OmpPortalPageModel
             3 => T("Stopping"),
             4 => T("Stopped"),
             5 => T("Failed"),
+            6 => T("Draining"),
             _ => T("Unknown")
         };
 

@@ -6,7 +6,31 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ## [Unreleased]
 
+### Added
+
+- WorkerManager now publishes a `Draining` (6) observed state while a worker is
+  finishing its in-flight job ahead of a configuration- or host-driven restart,
+  instead of continuing to claim `Running`. The Portal worker pages and the
+  example worker app label the new state, the app-instance summary ranks it
+  deliberately (between Stopping and Starting), and the staleness downgrade
+  covers it so a manager that dies mid-drain no longer pins `Draining` forever.
+  HostAgent resource telemetry samples the live process of a draining worker too
+  (observed states 1, 2, 3 and 6), since the process and its in-flight job's
+  resource usage exist until the restart.
+
 ### Fixed
+
+- WorkerManager robustness (review findings R7-F4–F7): the runtime-observation
+  upsert now guards both foreign keys of `omp.WorkerInstanceRuntimeStates` (and
+  the `omp.AppInstanceRuntimeStates` fallback write) instead of only the one the
+  MERGE matches on, so an observation arriving after its app instance was
+  deleted is dropped instead of faulting the publish; the HostAgent RPC caller
+  identity WMI lookup disposes its result collection and every enumerated
+  `ManagementObject`; and a broken OMP database worker catalog row (duplicate
+  id, incompatible package type, unresolvable plugin path, unreadable value) is
+  skipped per row instead of failing reconciliation for every worker on the
+  host. The drain lifecycle (begin/cancel/timeout) is now covered by unit tests
+  against the three historical drain defects (R5-F1, R6-F6/W6, R7-F1).
 
 - Operator-edited artifact configuration files (`omp.ArtifactConfigurationFiles`)
   are no longer lost silently when a new artifact version is imported with

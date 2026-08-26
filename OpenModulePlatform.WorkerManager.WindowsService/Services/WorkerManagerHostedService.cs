@@ -374,8 +374,7 @@ public sealed class WorkerManagerHostedService : BackgroundService
         // detector). W6 ends the drain instead, so there is nothing left to remind about
         // and the reminder bookkeeping is gone with it.
         var drainTimeout = TimeSpan.FromSeconds(Math.Max(1, _settings.CurrentValue.DrainTimeoutSeconds));
-        if (managed.DrainStartedUtc.HasValue
-            && nowUtc - managed.DrainStartedUtc.Value >= drainTimeout)
+        if (managed.IsDrainTimedOut(nowUtc, drainTimeout))
         {
             // W6. The timeout used to only log -- forever, every reminder interval, while
             // the worker admitted no jobs and the channel silently stopped delivering. A
@@ -392,8 +391,8 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 desired.AppInstanceId,
                 desired.WorkerInstanceId,
                 _settings.CurrentValue.DrainTimeoutSeconds,
-                managed.DrainStartedUtc.Value,
-                nowUtc - managed.DrainStartedUtc.Value);
+                managed.DrainStartedUtc,
+                nowUtc - managed.DrainStartedUtc.GetValueOrDefault());
 
             return Task.FromResult(true);
         }
@@ -840,14 +839,18 @@ public sealed class WorkerManagerHostedService : BackgroundService
             return;
         }
 
+        // R7-F7. A worker draining for a pending restart heartbeats as Draining, not
+        // Running: same liveness cadence, but the Portal and the deployment
+        // diagnostics can finally see that the worker is parked mid-drain instead of
+        // admitting work.
         var observation = CreateObservation(
             managed,
             runtimeKind,
-            WorkerObservedStates.Running,
+            managed.GetRunningObservationState(),
             managed.LastStartUtc,
             DateTimeOffset.UtcNow,
             null,
-            "worker process running");
+            managed.IsDraining ? "worker process draining" : "worker process running");
 
         await TryPublishObservationAsync(observation, touchAppInstanceHeartbeat: true, cancellationToken);
     }

@@ -1,4 +1,5 @@
 // File: OpenModulePlatform.WorkerManager.WindowsService/Services/OmpDatabaseWorkerInstanceCatalog.cs
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -194,55 +195,41 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
         await using var rdr = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await rdr.ReadAsync(cancellationToken))
         {
-            var appInstanceId = rdr.GetGuid(0);
-            var workerInstanceId = rdr.GetGuid(1);
-            if (!seen.Add(workerInstanceId))
+            // R7-F6. One broken catalog row costs THAT row, never the host's whole
+            // reconciliation: before this, a single row that ResolvePluginAssemblyPath
+            // rejected (or a duplicate id, or a NULL the query did not promise) escaped
+            // GetDesiredWorkersAsync and failed EVERY worker on the host, retried and
+            // refailed every cycle for as long as the row stayed broken.
+            WorkerCatalogRow row;
+            try
             {
-                throw new InvalidOperationException(
-                    $"OMP database worker catalog returned duplicate WorkerInstanceId '{workerInstanceId}'.");
+                row = ReadRow(rdr);
             }
-
-            var workerInstanceKey = rdr.GetString(2);
-            var workerTypeKey = rdr.GetString(3);
-            var artifactId = rdr.IsDBNull(4) ? (int?)null : rdr.GetInt32(4);
-            var packageType = rdr.IsDBNull(5) ? null : rdr.GetString(5);
-            if (!IsArtifactPackageTypeCompatibleWithRuntimeKind(runtimeKind, packageType))
+            catch (Exception ex) when (ex is InvalidCastException or InvalidOperationException)
             {
                 _logger.LogError(
-                    "Skipping desired worker with incompatible artifact package type. HostKey={HostKey}, RuntimeKind={RuntimeKind}, AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}, PackageType={PackageType}",
-                    hostKey,
-                    runtimeKind,
-                    appInstanceId,
-                    workerInstanceId,
-                    artifactId,
-                    packageType);
+                    ex,
+                    "Skipping an unreadable worker catalog row; reconciliation continues for the remaining rows. HostKey={HostKey}",
+                    hostKey);
                 continue;
             }
 
-            var installPath = rdr.IsDBNull(6) ? null : rdr.GetString(6);
-            var isProvisionedFromHostArtifactCache = rdr.GetBoolean(7);
-            var pluginRelativePath = rdr.GetString(8);
-            var configurationJson = rdr.IsDBNull(9) ? null : rdr.GetString(9);
-            var artifactVersion = rdr.IsDBNull(10) ? null : rdr.GetString(10).Trim();
-            var pluginAssemblyPath = string.IsNullOrWhiteSpace(installPath)
-                ? string.Empty
-                : ResolvePluginAssemblyPath(installPath, pluginRelativePath, appInstanceId, workerInstanceId);
-
-            desired.Add(new DesiredWorkerInstance
+            if (TryCreateDesiredWorker(row, runtimeKind, seen, out var instance, out var problem))
             {
-                AppInstanceId = appInstanceId,
-                WorkerInstanceId = workerInstanceId,
-                WorkerInstanceKey = workerInstanceKey.Trim(),
-                WorkerTypeKey = workerTypeKey.Trim(),
-                ArtifactId = artifactId,
-                ArtifactVersion = artifactVersion,
-                InstallRootPath = installPath,
-                IsProvisionedFromHostArtifactCache = isProvisionedFromHostArtifactCache,
-                PluginRelativePath = pluginRelativePath.Trim(),
-                PluginAssemblyPath = pluginAssemblyPath,
-                ConfigurationJson = configurationJson,
-                ShutdownEventName = BuildShutdownEventName(workerInstanceId)
-            });
+                desired.Add(instance);
+            }
+            else
+            {
+                _logger.LogError(
+                    "Skipping a broken worker catalog row; reconciliation continues for the remaining rows. HostKey={HostKey}, RuntimeKind={RuntimeKind}, AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ArtifactId={ArtifactId}, PackageType={PackageType}, Problem={Problem}",
+                    hostKey,
+                    runtimeKind,
+                    row.AppInstanceId,
+                    row.WorkerInstanceId,
+                    row.ArtifactId,
+                    row.PackageType,
+                    problem);
+            }
         }
 
         _logger.LogDebug(
@@ -253,6 +240,88 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
             useHostArtifactCache);
 
         return desired;
+    }
+
+    private static WorkerCatalogRow ReadRow(SqlDataReader rdr)
+    {
+        return new WorkerCatalogRow
+        {
+            AppInstanceId = rdr.GetGuid(0),
+            WorkerInstanceId = rdr.GetGuid(1),
+            WorkerInstanceKey = rdr.GetString(2),
+            WorkerTypeKey = rdr.GetString(3),
+            ArtifactId = rdr.IsDBNull(4) ? null : rdr.GetInt32(4),
+            PackageType = rdr.IsDBNull(5) ? null : rdr.GetString(5),
+            InstallPath = rdr.IsDBNull(6) ? null : rdr.GetString(6),
+            IsProvisionedFromHostArtifactCache = rdr.GetBoolean(7),
+            PluginRelativePath = rdr.GetString(8),
+            ConfigurationJson = rdr.IsDBNull(9) ? null : rdr.GetString(9),
+            ArtifactVersion = rdr.IsDBNull(10) ? null : rdr.GetString(10).Trim()
+        };
+    }
+
+    /// <summary>
+    /// Validates one catalog row and maps it to a desired worker definition (R7-F6).
+    /// A broken row -- duplicate id, an artifact package type incompatible with the
+    /// runtime kind, an unresolvable plugin path -- is reported through
+    /// <paramref name="problem"/> and skipped; the method never throws for row-level
+    /// data problems, because that exception is what used to fail reconciliation for
+    /// every other worker on the host.
+    /// </summary>
+    public static bool TryCreateDesiredWorker(
+        WorkerCatalogRow row,
+        string runtimeKind,
+        ISet<Guid> seenWorkerInstanceIds,
+        [NotNullWhen(true)] out DesiredWorkerInstance? worker,
+        out string? problem)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(seenWorkerInstanceIds);
+
+        worker = null;
+        problem = null;
+
+        if (!seenWorkerInstanceIds.Add(row.WorkerInstanceId))
+        {
+            problem = $"OMP database worker catalog returned duplicate WorkerInstanceId '{row.WorkerInstanceId}'.";
+            return false;
+        }
+
+        if (!IsArtifactPackageTypeCompatibleWithRuntimeKind(runtimeKind, row.PackageType))
+        {
+            problem = $"Artifact package type '{row.PackageType}' is incompatible with runtime kind '{runtimeKind}'.";
+            return false;
+        }
+
+        string pluginAssemblyPath;
+        try
+        {
+            pluginAssemblyPath = string.IsNullOrWhiteSpace(row.InstallPath)
+                ? string.Empty
+                : ResolvePluginAssemblyPath(row.InstallPath, row.PluginRelativePath, row.AppInstanceId, row.WorkerInstanceId);
+        }
+        catch (InvalidOperationException ex)
+        {
+            problem = ex.Message;
+            return false;
+        }
+
+        worker = new DesiredWorkerInstance
+        {
+            AppInstanceId = row.AppInstanceId,
+            WorkerInstanceId = row.WorkerInstanceId,
+            WorkerInstanceKey = row.WorkerInstanceKey.Trim(),
+            WorkerTypeKey = row.WorkerTypeKey.Trim(),
+            ArtifactId = row.ArtifactId,
+            ArtifactVersion = row.ArtifactVersion,
+            InstallRootPath = row.InstallPath,
+            IsProvisionedFromHostArtifactCache = row.IsProvisionedFromHostArtifactCache,
+            PluginRelativePath = row.PluginRelativePath.Trim(),
+            PluginAssemblyPath = pluginAssemblyPath,
+            ConfigurationJson = row.ConfigurationJson,
+            ShutdownEventName = BuildShutdownEventName(row.WorkerInstanceId)
+        };
+        return true;
     }
 
     private static string ResolvePluginAssemblyPath(

@@ -253,7 +253,7 @@ DECLARE @aggRuntimeHostArtifactVersion nvarchar(50);"
 
     private const string AppInstanceSummarySqlTemplate = @"
 -- Severity order, worst first: Failed(5), Unknown(0), Stopped(4), Stopping(3),
--- Starting(1), Running(2). See WorkerObservedStates.
+-- Draining(6), Starting(1), Running(2). See WorkerObservedStates.
 DECLARE @siblingCount int = 0;
 DECLARE @nullSeenCount int = 0;
 DECLARE @aggRuntimeKind nvarchar(100);
@@ -296,9 +296,10 @@ BEGIN
                  WHEN 0 THEN 1
                  WHEN 4 THEN 2
                  WHEN 3 THEN 3
-                 WHEN 1 THEN 4
-                 WHEN 2 THEN 5
-                 ELSE 6
+                 WHEN 6 THEN 4
+                 WHEN 1 THEN 5
+                 WHEN 2 THEN 6
+                 ELSE 7
              END,
              -- Tie-break on the stalest report, then on the id, so the same set of
              -- siblings always produces the same summary regardless of write order.
@@ -420,7 +421,13 @@ SELECT @hostId = HostId
 FROM omp.AppInstances
 WHERE AppInstanceId = @appInstanceId;
 
-IF EXISTS (SELECT 1 FROM omp.WorkerInstances WHERE WorkerInstanceId = @workerInstanceId)
+-- R7-F4. BOTH foreign keys of omp.WorkerInstanceRuntimeStates are guarded, not just
+-- the one the MERGE matches on: the row also writes AppInstanceId, and an observation
+-- arriving after its app instance was deleted used to die on FK_..._AppInstance and
+-- take the whole publish (and the caller's reconcile step) with it. A row whose
+-- parent is gone is dropped, not written.
+IF EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @appInstanceId)
+   AND EXISTS (SELECT 1 FROM omp.WorkerInstances WHERE WorkerInstanceId = @workerInstanceId)
 BEGIN
     MERGE omp.WorkerInstanceRuntimeStates WITH (HOLDLOCK) AS target
     USING (SELECT @workerInstanceId AS WorkerInstanceId) AS source
@@ -484,7 +491,10 @@ END
 -- nothing to aggregate. Writing the observation straight to the summary keeps those
 -- callers working exactly as before -- an aggregation that silently drops the only
 -- report it had would be a worse bug than the one being fixed.
-IF NOT EXISTS
+-- R7-F4 applies here too: omp.AppInstanceRuntimeStates.AppInstanceId is itself an FK,
+-- so this fallback write is guarded on the parent row the same way.
+IF EXISTS (SELECT 1 FROM omp.AppInstances WHERE AppInstanceId = @appInstanceId)
+   AND NOT EXISTS
 (
     SELECT 1
     FROM omp.WorkerInstanceRuntimeStates s
@@ -640,9 +650,11 @@ BEGIN
     FROM omp.WorkerInstanceRuntimeStates s
     INNER JOIN omp.WorkerInstances wi ON wi.WorkerInstanceId = s.WorkerInstanceId
     INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
-    -- Starting(1) and Running(2) are the only claims a dead writer can leave behind that
-    -- read as healthy. Stopped, Failed and Unknown already describe themselves correctly.
-    WHERE s.ObservedState IN (1, 2)
+    -- Starting(1), Running(2) and Draining(6) are the only claims a dead writer can
+    -- leave behind that read as alive. Stopped, Failed and Unknown already describe
+    -- themselves correctly. Draining heartbeats exactly like Running, so it must die
+    -- like Running when the writer dies mid-drain (R7-F7).
+    WHERE s.ObservedState IN (1, 2, 6)
       AND DATEDIFF(second, COALESCE(s.LastSeenUtc, s.UpdatedUtc), @nowUtc) > @staleAfterSeconds
       AND
       (

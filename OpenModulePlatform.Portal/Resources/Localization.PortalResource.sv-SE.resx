@@ -3230,6 +3230,7 @@
   <data name="PID" xml:space="preserve"><value>PID</value></data>
   <data name="Starting" xml:space="preserve"><value>Startar</value></data>
   <data name="Stopping" xml:space="preserve"><value>Stoppar</value></data>
+  <data name="Draining" xml:space="preserve"><value>Dränerar</value></data>
   <data name="Should run" xml:space="preserve"><value>Ska köra</value></data>
   <data name="Should stop" xml:space="preserve"><value>Ska stoppa</value></data>
   <data name="Unmanaged" xml:space="preserve"><value>Ohanterad</value></data>

@@ -163,6 +163,33 @@ public sealed class ManagedWorkerProcess
 
     public bool SupportsDrain => DrainEvent is not null;
 
+    /// <summary>
+    /// True while a drain is in progress for the current process: the drain event is
+    /// set and the worker is finishing its in-flight job without admitting new work.
+    /// </summary>
+    public bool IsDraining => DrainStartedUtc.HasValue;
+
+    /// <summary>
+    /// The observed state a still-running worker should publish (R7-F7): Draining
+    /// while a drain is in progress, Running otherwise. A draining worker keeps
+    /// heartbeating on the same cadence either way -- only the claim changes.
+    /// </summary>
+    public byte GetRunningObservationState()
+        => IsDraining ? WorkerObservedStates.Draining : WorkerObservedStates.Running;
+
+    /// <summary>
+    /// True when a drain began, the worker still reports busy, and the configured
+    /// deadline has passed. The restart then proceeds and the in-flight job returns
+    /// to pending when its lease expires (W6) -- a bounded, self-healing outcome,
+    /// unlike a drain that never ends.
+    /// </summary>
+    public bool IsDrainTimedOut(DateTimeOffset nowUtc, TimeSpan drainTimeout)
+    {
+        return DrainStartedUtc.HasValue
+            && IsBusy()
+            && nowUtc - DrainStartedUtc.Value >= drainTimeout;
+    }
+
     public void RecordStartAttempt(DateTimeOffset nowUtc, TimeSpan restartWindow)
     {
         _restartAttempts.Enqueue(nowUtc);

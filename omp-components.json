@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.544",
+  "repositoryVersion": "0.3.546",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.145",
+      "definitionVersion": "0.3.147",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.144",
+      "definitionVersion": "0.3.145",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -45,7 +45,7 @@
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.47",
+      "definitionVersion": "0.3.48",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
@@ -94,7 +94,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.594",
+      "version": "0.3.595",
       "minModuleDefinitionVersion": "0.3.130",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -121,7 +121,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.222",
+      "version": "0.3.223",
       "minModuleDefinitionVersion": "0.3.144",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
@@ -134,7 +134,7 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.49",
+      "version": "0.3.50",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
@@ -244,7 +244,7 @@
       "appKey": "example_workerapp_webapp",
       "packageType": "web-app",
       "targetName": "example-workerapp-web",
-      "version": "0.3.181",
+      "version": "0.3.182",
       "projectPath": "examples/WorkerAppModule/WebApp",
       "relativePathTemplate": "example-workerapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWorkerAppModule.zip",
