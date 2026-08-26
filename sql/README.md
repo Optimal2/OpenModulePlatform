@@ -40,7 +40,14 @@ are used by the shared RBAC runtime as ambient baseline roles.
 
 ## Module-owned SQL
 
-Each module owns its own setup and initialization scripts. The expected pattern is:
+Each module owns its own setup and initialization scripts. The expected pattern
+mirrors the root flow above, numbered prefix included:
+
+0. `0-validate-<module>.sql`
+   - Verifies that the module-owned schema, tables, and required columns exist.
+     Every first-party module and every example module ships one; the only
+     module without it is `OpenModulePlatform.Auth`, which creates no schema of
+     its own (see below).
 
 1. `1-setup-<module>.sql`
    - Creates only the module-owned schema and tables.
@@ -48,17 +55,47 @@ Each module owns its own setup and initialization scripts. The expected pattern 
 2. `2-initialize-<module>.sql`
    - Registers module/app definitions and seeds optional local/default data for that module.
 
+Higher-numbered scripts are additive migrations applied in numeric order after
+`2-initialize-*`. The Portal module is the one that currently has them:
+`3-sync-omp-portal-entries.sql`, `4-ensure-topbar-hover-user-setting.sql`,
+`5-ensure-dashboard-widgets.sql`.
+
 First-party modules in the repository root and examples under `examples` follow
-the same pattern under each module's own `Sql` folder. The Portal module keeps
-its SQL in `OpenModulePlatform.Portal/sql`.
+the same pattern under each module's own SQL folder. The folder name is not
+uniform: `OpenModulePlatform.Portal/sql` and `OpenModulePlatform.Auth/sql` are
+lowercase, while `OpenModulePlatform.Web.ContentWebAppModule/Sql`,
+`OpenModulePlatform.Web.iFrameWebAppModule/Sql` and the four `examples/*/Sql`
+folders are capitalized. Match the folder that already exists rather than
+assuming one casing.
+
+`OpenModulePlatform.Auth` is the exception to the pattern. It is platform
+infrastructure rather than a user-facing module, so it owns no schema and has
+only `2-initialize-omp-auth.sql`, which seeds the `/auth` web-app registration
+rows into the core `omp` schema. It requires the root `1-setup-*` and
+`2-initialize-*` scripts to have run first, and it is wired into installs
+through `OpenModulePlatform.Auth/omp_auth.module-definition.json` and the
+HostAgent-first packager (`scripts/deployment/package-hostagent-first.ps1`).
 
 ## Schema names
 
-- `omp` is the core OpenModulePlatform schema.
+- `omp` is the core OpenModulePlatform schema. `OpenModulePlatform.Auth` also
+  seeds into it rather than owning a schema.
 - `omp_portal` is the OMP Portal module schema.
 - `omp_content` is the first-party content module schema.
 - `omp_iframe` is the first-party iframe module schema.
-- `omp_example_*` schemas belong to optional example modules.
+- `omp_example_*` schemas belong to optional example modules — currently
+  `omp_example_serviceapp`, `omp_example_webapp`, `omp_example_webapp_blazor`
+  and `omp_example_workerapp`.
+
+Modules outside this repository own their schemas in their own repositories and
+follow the same numbered pattern there (verified 2026-08-27):
+`omp_ibs_packager` (IbsPackager), `omp_ikrock` (iKrock2), `omp_log_search`
+(LogSearch), `omp_earkiv_checker` (EArkivChecker) and
+`omp_earkiv_dokumentbibliotek` (Dokumentbibliotek). VajSkrivare is the second
+exception alongside `OpenModulePlatform.Auth`: it owns no schema and its only
+OMP script, `Sql/01_initialize_vajskrivare_metadata.sql`, seeds permissions into
+`omp` — note that it also uses a different file-naming convention (`01_…`) than
+the numbered pattern above.
 
 ## Core configuration settings
 

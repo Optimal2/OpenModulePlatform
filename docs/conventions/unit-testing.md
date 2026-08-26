@@ -1,6 +1,6 @@
 # Unit-testing conventions for OMP+ODV
 
-> **Status 2026-08-22:** this document is a point-in-time audit from **2026-07-15** and parts of it
+> **Status 2026-08-27:** this document is a point-in-time audit from **2026-07-15** and parts of it
 > are superseded. On 2026-08-19 the whole family was standardized on **two-tier testing**: xUnit
 > unit tests plus xUnit + Microsoft.Playwright UI tests (`*.UiTests` projects), with shared tooling
 > in `OpenModulePlatform/tests/shared/` (`OmpTestDatabaseProvisioner.cs`,
@@ -9,8 +9,10 @@
 > (`LogSearch.Tests` + `LogSearch.UiTests`), Dokumentbibliotek
 > (`tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`), ODVGateway
 > (`tests/ODVGateway.Tests`) — OpenDocViewer's CI runs `npm test` (`.github/workflows/ci.yml:71`),
-> OpenModulePlatform has grown to 6 test projects (adding `Bootstrapper.Tests`,
-> `Worker.Abstractions.Tests`, `OpenModulePlatform.UiTests`), and VajSkrivare has adopted CPM.
+> OpenModulePlatform has grown to **7** test projects (adding `Bootstrapper.Tests`,
+> `Worker.Abstractions.Tests`, `OpenModulePlatform.UiTests`, `WorkerManager.WindowsService.Tests`;
+> re-counted 2026-08-27), and VajSkrivare has adopted CPM — so **ODVGateway is now the only .NET
+> repo in the family without a `Directory.Packages.props`**.
 > Test-package pins have also moved (e.g. `Microsoft.NET.Test.Sdk` 18.8.1/18.9.0,
 > `Xunit.SkippableFact` 1.5.61, `Microsoft.Playwright` 1.62.0). Read sections 1, 2 and 4 as the
 > July snapshot — "Tests exist: No" rows and pin versions there are historical. Section 3's
@@ -21,6 +23,8 @@ This document records the unit-testing patterns found in the OMP+ODV repositorie
 Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare, iKrock2, ODVGateway (.NET), OpenDocViewer, AgentDocMap (JS/npm).
 
 ## 1. Per-repo unit-test map
+
+> **Point-in-time snapshot (2026-07-15) — read with the status banner at the top of this file.** Rows saying "Tests exist: No", package versions, and CPM claims in this section are historical; the family was standardized on two-tier testing 2026-08-19. Individually superseded claims are struck through inline.
 
 ### OpenModulePlatform
 
@@ -78,7 +82,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `tests/Skrivarkoppling.Web.Tests/Skrivarkoppling.Web.Tests.csproj:14-15`
 - **Layout/naming:** Top-level `tests/` folder mirroring `src/` (divergent from the sibling-root convention); project named `<SourceProject>.Tests`; included in `Skrivarkoppling.sln:10` under a `tests` solution folder (`Skrivarkoppling.sln:8,51`).
 - **Mock library:** None — hand-written fake `FakeZebraConfigService : IZebraConfigService` (`tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs:38,76-121`).
-- **Package pins:** No CPM (no `Directory.Packages.props`); inline versions in the test csproj: `Microsoft.NET.Test.Sdk` 17.14.0 (`:13`), `xunit` 2.9.3 (`:14`), `xunit.runner.visualstudio` 2.8.2 (`:15`), `Microsoft.AspNetCore.Mvc.Testing` 10.0.0 (`:12`). TargetFramework `net10.0` (`:4`). No coverlet.
+- **Package pins:** ~~No CPM (no `Directory.Packages.props`); inline versions in the test csproj: `Microsoft.NET.Test.Sdk` 17.14.0 (`:13`), `xunit` 2.9.3 (`:14`), `xunit.runner.visualstudio` 2.8.2 (`:15`), `Microsoft.AspNetCore.Mvc.Testing` 10.0.0 (`:12`).~~ **SUPERSEDED — VajSkrivare uses CPM.** Verified 2026-08-27 against `Directory.Packages.props` at repo root (`ManagePackageVersionsCentrally=true`, `:3`): `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` 3.1.5, `Microsoft.AspNetCore.Mvc.Testing` 10.0.11, `Xunit.SkippableFact` 1.5.61, `Microsoft.Playwright` 1.62.0; `tests/Skrivarkoppling.Web.Tests/Skrivarkoppling.Web.Tests.csproj` now carries version-less `PackageReference` entries. TargetFramework `net10.0` (`:4`). Still no coverlet, and still no `global.json` (the only repo in the family without an SDK pin).
 - **Assertion style:** Plain xUnit `Assert.*` (`ApiAnonymityTests.cs:53-58,71-73`). No FluentAssertions.
 - **Coverage:** None — no coverlet reference, no `.runsettings`, no CI coverage.
 - **Integration vs unit separation:** None formal. The only tests are integration-style HTTP tests using `WebApplicationFactory<Program>` + `IClassFixture` with in-memory config overrides and `ZebraConfig:Enabled=false` (`ApiAnonymityTests.cs:12-41`, `:32`), so no SQL Server dependency.
@@ -168,11 +172,13 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 ## 2. Comparison matrix
 
+> **Point-in-time snapshot (2026-07-15) — read with the status banner at the top of this file.** Rows saying "Tests exist: No", package versions, and CPM claims in this section are historical; the family was standardized on two-tier testing 2026-08-19. Individually superseded claims are struck through inline.
+
 | Repo | Tests? | Framework | Mock lib | Test pins | Assertion style | Coverage | Integration gating | Tests run by |
 |---|---|---|---|---|---|---|---|---|
 | **OpenModulePlatform** | Yes — 3 projects, ~270 methods | xUnit 2.9.3 + runner 3.1.5 | None (hand-written fakes) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced (2 of 3 projects), never invoked | Tier C/D naming; DB tests fail without local SQL Server | Pre-push hook + CI (`dotnet test`); Pester script tests blocking in both pre-push and CI |
 | **IbsPackager** | Yes — 2 projects, ~42 methods | xUnit 2.9.3 + runner 3.1.5 + SkippableFact 1.4.13 | None (stubs + NullLogger) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | `[SkippableFact]` + env connection string | Nothing automated |
-| **VajSkrivare** | Yes — 1 project, 2 tests | xUnit 2.9.3 + runner **2.8.2** | None (hand-written fake) | **Inline (no CPM)**: Test.Sdk **17.14.0**, no coverlet | Plain `Assert.*` | None | None (tests avoid DB via config) | Nothing automated |
+| **VajSkrivare** | Yes — 1 project, 2 tests _(2026-08-27: 2 projects, `+ Skrivarkoppling.Web.UiTests`)_ | xUnit 2.9.3 + runner ~~2.8.2~~ **3.1.5** | None (hand-written fake) | ~~**Inline (no CPM)**: Test.Sdk **17.14.0**~~ → **CPM**: Test.Sdk **18.9.0**, no coverlet | Plain `Assert.*` | None | None (tests avoid DB via config) | Nothing automated |
 | **iKrock2** | Yes — 1 project, 35 methods | xUnit 2.9.3 + runner 3.1.5 | None (Options.Create) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | None (pure unit tests) | Nothing automated (stale TODO) |
 | **LogSearch** | **No** | — | — | — | — | — | — | — |
 | **EArkivChecker** | Yes — 1 project, 44 methods | xUnit 2.9.3 + runner 3.1.5 + SkippableFact 1.4.13 | None (hand-written fakes) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | Tier C/D naming + `[SkippableFact]` + env connection string | `dotnet test` in local-ci/pre-push; CI build-only |
@@ -183,10 +189,10 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 ### Key divergences
 
-- **Testless repos:** 3 of 8 .NET repos have zero automated tests — **LogSearch**, **Dokumentbibliotek**, **ODVGateway**. ODVGateway at least has an end-to-end smoke script; the other two rely on manual verification.
+- ~~**Testless repos:** 3 of 8 .NET repos have zero automated tests — **LogSearch**, **Dokumentbibliotek**, **ODVGateway**.~~ **SUPERSEDED — there are no testless repos left.** Verified 2026-08-27: `LogSearch.Tests` + `LogSearch.UiTests`, `Dokumentbibliotek/tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`, and `ODVGateway/tests/ODVGateway.Tests` all exist. ODVGateway additionally keeps its end-to-end smoke script.
 - **Framework is consistent where tests exist:** xUnit in every .NET repo; vitest in OpenDocViewer; node:test in AgentDocMap. No NUnit/MSTest/jest/mocha anywhere.
 - **No mock framework anywhere:** every repo uses hand-written fakes/stubs. This is a deliberate-looking, ecosystem-wide pattern.
-- **Pin drift in VajSkrivare:** the only repo without CPM pins the older `Microsoft.NET.Test.Sdk` 17.14.0 and `xunit.runner.visualstudio` 2.8.2 (vs 18.7.0 / 3.1.5 everywhere else) and has no coverlet reference.
+- ~~**Pin drift in VajSkrivare:** the only repo without CPM pins the older `Microsoft.NET.Test.Sdk` 17.14.0 and `xunit.runner.visualstudio` 2.8.2 (vs 18.7.0 / 3.1.5 everywhere else)~~ **SUPERSEDED — VajSkrivare adopted CPM and is now on Test.Sdk 18.9.0 / runner 3.1.5** (verified 2026-08-27, `Directory.Packages.props`). It still has no coverlet reference, and it remains the only repo without a `global.json` SDK pin. CPM is now present in 7 of 8 .NET repos; **ODVGateway** is the only one left without a `Directory.Packages.props`.
 - **Coverage is decorative:** `coverlet.collector` is referenced in OMP (2 of 3 test projects), IbsPackager, iKrock2, and EArkivChecker, but no `.runsettings`, script, or CI step ever collects coverage.
 - **CI gap:** only **AgentDocMap** runs tests in GitHub CI. OMP runs tests in the local pre-push hook; all other repos' CI/local-ci gates are build-only.
 - **DB-test gating split:** IbsPackager and EArkivChecker skip cleanly without SQL Server (`[SkippableFact]` + env var); OMP's Tier C tests hard-fail without local SQL Server. No `[Trait]`/`[Collection]`/Testcontainers anywhere.
@@ -221,6 +227,8 @@ This is already the de-facto standard: OMP, IbsPackager, and iKrock2 use identic
 
 ## 4. Migration notes per diverging/testless repo
 
+> **Point-in-time snapshot (2026-07-15) — read with the status banner at the top of this file.** Rows saying "Tests exist: No", package versions, and CPM claims in this section are historical; the family was standardized on two-tier testing 2026-08-19. Individually superseded claims are struck through inline.
+
 ### LogSearch (testless)
 
 - **Current state:** No automated tests; manual SQL Server verification checklist in `README.md:112-124`. CPM and `net10.0` already in place.
@@ -247,8 +255,8 @@ This is already the de-facto standard: OMP, IbsPackager, and iKrock2 use identic
 
 ### VajSkrivare (diverging pins/layout)
 
-- **Current state:** xUnit but pinned inline (no CPM) at older versions (Test.Sdk 17.14.0, runner 2.8.2), no coverlet, top-level `tests/` layout, only 2 tests.
-- **Migration:** Introduce `Directory.Packages.props` and move test pins to the standard versions (18.7.0 / 3.1.5 / coverlet.collector 10.0.1). Keep the `tests/` folder (renaming is low-value churn) but grow the suite — `WebApplicationFactory` + config overrides with no DB is a good pattern to extend. Add `dotnet test` to `scripts/local-ci.ps1`.
+- **Current state (updated 2026-08-27):** xUnit on **CPM** (`Directory.Packages.props`, Test.Sdk 18.9.0 / runner 3.1.5), no coverlet, no `global.json`, top-level `tests/` layout, `Skrivarkoppling.Web.Tests` (2 tests) + `Skrivarkoppling.Web.UiTests`. ~~pinned inline (no CPM) at older versions (Test.Sdk 17.14.0, runner 2.8.2)~~ — that July finding is superseded.
+- **Migration (remaining):** ~~Introduce `Directory.Packages.props` and move test pins to the standard versions~~ **— done.** Remaining: add `coverlet.collector` 10.0.1, add a `global.json` SDK pin (VajSkrivare is the family's only repo without one, so it floats to the build host's SDK). Keep the `tests/` folder (renaming is low-value churn) but grow the suite — `WebApplicationFactory` + config overrides with no DB is a good pattern to extend. Add `dotnet test` to `scripts/local-ci.ps1`.
 - **Priority:** **Low–Medium** — aligned in spirit, drifted in pins and coverage.
 
 ### iKrock2 (mostly aligned)

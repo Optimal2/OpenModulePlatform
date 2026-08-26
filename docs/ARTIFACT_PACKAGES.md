@@ -162,6 +162,42 @@ Configuration paths and source paths must be relative. Rooted paths, `..`
 segments, invalid path characters, and duplicate relative configuration paths
 are rejected.
 
+### Identical content under a new version (empty-diff bumps)
+
+There is a content-dedup gate on import, and what it refuses is narrower than it
+looks. It rejects **identical content under a DIFFERENT component**, which is a
+repackaging mistake. It does **not** reject identical content under a new
+version of the **same** component.
+
+That distinction is deliberate. Deterministic builds combined with lockstep
+consumer bumps legitimately produce a new version of the same component whose
+extracted content is byte-identical to a version already imported. When the gate
+refused those, module deploy-sets split: the parts of a module with real changes
+imported under the new version while the empty-diff parts stayed behind on the
+old one — observed on 2026-08-24 with an `example_serviceapp` web/service pair
+landing on two different versions.
+
+The rule is the same on all three import paths, and they were aligned
+deliberately after the first fix only covered one of them:
+
+- HostAgent import (`HostAgent.Runtime/Services/ArtifactZipImportService.cs`)
+- Portal portable module package import
+  (`Portal/Services/PortableModulePackageService.cs`) — this one used to
+  silently **Skip** an empty-diff bump, which split the deploy-set it was in the
+  middle of importing
+- Portal manual artifact upload (`Portal/Pages/Admin/ArtifactUpload.cshtml.cs`)
+  — this one used to reject it outright
+
+Two details matter when reading the code or a result message:
+
+- The same-component check compares **`AppId`**, not the `AppKey` string.
+  `AppKey` uniqueness across modules is not guaranteed, so the string comparison
+  could match two different apps.
+- An accepted empty-diff bump is **not silent**. The HostAgent import result
+  carries an explicit note saying the content was identical to an
+  already-imported version and was accepted as an empty-diff version bump, so an
+  operator can tell it apart from a real rebuild.
+
 ## Migration Plan
 
 1. Keep accepting legacy zip files so existing build outputs and artifact

@@ -627,6 +627,52 @@ administrators can move direct `ADUser` role assignments for linked AD keys to
 the OMP user from `/admin/users/edit/{userId}`. This migration does not move
 `ADGroup` assignments.
 
+### Bulk AD-to-OMP principal move
+
+For moving many rows at once there is a separate admin view at
+`/admin/security/ad-principal-migration`
+(`OpenModulePlatform.Portal/Pages/Admin/Rbac/AdPrincipalMigration.cshtml`,
+linked from the roles list as "Move AD principals"). It lists every
+`ADUser`/`User` role row, shows a **preview** of what each row would resolve to,
+and executes only after an explicit confirmation. The move runs in a
+serializable transaction and is idempotent (`WHERE NOT EXISTS`), so re-running it
+is safe; a concurrent run that deadlocks (SQL error 1205) is retried exactly
+once rather than failing the page.
+
+Two properties are deliberate and worth knowing before you use it:
+
+- **Source rows are retained.** The move inserts the `OmpUser` assignment; it
+  does not delete the `ADUser` row it came from. Cleaning those up is a separate
+  decision.
+- **`ADGroup` rows are never touched**, by the bulk move or by the per-user
+  migration.
+
+A row that cannot be moved is skipped with a stated reason rather than guessed
+at. The reasons are `NoEnabledAdLink` ("no enabled AD link matches this
+principal"), `AmbiguousLinkedUsers` ("the principal resolves to more than one
+active OMP user"), `LinkedUserInactive`, and `UnsupportedPrincipalType`. The
+preview also flags rows whose target OMP user has no non-AD sign-in link — after
+the move that user's access still depends on the AD path.
+
+### Ambiguous AD links fail closed
+
+`AmbiguousLinkedUsers` is not a corner case, and the reason is the storage
+model. Uniqueness on `omp.user_auth` is `(provider_id, provider_user_hash)`,
+and the hash is a SHA-256 over the raw key — which makes it **case-sensitive**.
+Two active AD links that differ only in letter case are therefore two distinct
+rows, and they can point at two different OMP users.
+
+Both the bulk move and the single-role editor (`Pages/Admin/Rbac/Role.cshtml`)
+count *distinct active linked users* and abstain when more than one resolves,
+reporting the ambiguity in the same wording. No role is ever assigned on a
+guess. The role editor additionally offers a **preserve-literal** checkbox, so
+an administrator who genuinely wants to store the exact `DOMAIN\name` principal
+can suppress the `ADUser -> OmpUser` rewrite; when the rewrite does happen, the
+result message names it and states the reason.
+
+To find case-fold collisions before they surprise you, use the
+`provider_user_key` collation query earlier in this document.
+
 For customer or enterprise AD groups, prefer `ADGroup` role principals. This keeps group membership in AD and avoids synchronizing large groups into OMP.
 
 For access that should apply broadly across applications, prefer the built-in

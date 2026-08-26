@@ -1,5 +1,20 @@
 # Configuration conventions for OMP+ODV
 
+> **Status 2026-08-27 - read this first.** Sections 1, 2 and 4 are a
+> point-in-time audit from **2026-07-16** (`b0b5d887`, refreshed for
+> EArkivChecker in `93076552`). Two things about it have gone stale:
+>
+> 1. **The `file.cs:NN` line anchors are no longer reliable.** They were correct
+>    on 2026-07-16 and a great many of them have since drifted - spot-checked
+>    2026-08-27, `OmpWebHostingExtensions.cs:63-65`, `:858-859` and
+>    `Bootstrapper/Program.cs:4172` all now point at unrelated lines. Resolve
+>    every reference by the **symbol or file name**, not by the line number.
+> 2. **Startup-validation coverage has moved a long way.** The July finding that
+>    validation was "the widest gap" is largely closed; see the corrected rows in
+>    section 2 and the struck-through migration items in section 4.
+>
+> Section 3's recommended standard still stands.
+
 This document records the configuration patterns found in the ten OMP+ODV
 repositories (source code only; `bin/`, `obj/`, `artifacts/`, `node_modules/`,
 `dist/`, `release/` and other build output were excluded from the audit).
@@ -37,8 +52,17 @@ Audited repositories (all under the local workspace root):
 - **Validation:** only `WebAppOptions` is validated, via
   `IValidateOptions<WebAppOptions>`
   (`OpenModulePlatform.Web.Shared/Options/WebAppOptionsValidator.cs:9`,
-  registered `OmpWebHostingExtensions.cs:61`). `HostAgentSettings`,
-  `WorkerManagerSettings` and `OmpAuthOptions` have no validation.
+  registered in `OmpWebHostingExtensions.cs`). ~~`HostAgentSettings`,
+  `WorkerManagerSettings` and `OmpAuthOptions` have no validation.~~
+  **Superseded - verified 2026-08-27:** all three are validated now, and a
+  fourth was added. `OmpAuthOptionsValidator.cs` and `WebAppOptionsValidator.cs`
+  in `OpenModulePlatform.Web.Shared/Options/`,
+  `HostAgent.Runtime/Models/HostAgentSettingsValidator.cs`,
+  `WorkerManager.WindowsService/Models/WorkerManagerSettingsValidator.cs` and
+  `WorkerProcessHost/Models/WorkerProcessSettingsValidator.cs`, each wired with
+  `.ValidateOnStart()` in its host's `Program.cs`. `HostAgent.WindowsService`
+  additionally runs the validation explicitly for `--run-once`, which never
+  calls `IHost.StartAsync` and would otherwise skip it.
 - **Connection strings:** `ConnectionStrings:OmpDb` in each appsettings
   (`OpenModulePlatform.Portal/appsettings.json:34-36`); empty string in
   committed service appsettings
@@ -379,23 +403,30 @@ Audited repositories (all under the local workspace root):
 
 | Repo | Config sources | Options pattern | Startup validation | Connection strings | Secrets | Overlay role |
 |---|---|---|---|---|---|---|
-| OpenModulePlatform | appsettings + Dev, bootstrap.json, psd1, overlays | `XxxOptions` (web) / `XxxSettings` (services), `IOptions<T>`/`IOptionsMonitor<T>` | Only `WebAppOptions` (`IValidateOptions` + `ValidateOnStart`) | `OmpDb` via per-project `SqlConnectionFactory`; bootstrap token replacement | None committed; `enc:aesgcm:v1:` + DPAPI store | Platform (produces/applies overlays) |
-| IbsPackager | appsettings + Dev, psd1 installer, generated Production.json, CLI args, DB channel JSON | Mixed: `IOptions<T>` (web) + manual binding (worker) | None | `OmpDb` via `SqlConnectionFactory`; installer-built | None committed; gitignored local psd1 | Produces overlays; consumes none |
+| OpenModulePlatform | appsettings + Dev, bootstrap.json, psd1, overlays | `XxxOptions` (web) / `XxxSettings` (services), `IOptions<T>`/`IOptionsMonitor<T>` | ~~Only `WebAppOptions`~~ -> **`WebAppOptions`, `OmpAuthOptions`, `HostAgentSettings`, `WorkerManagerSettings`, `WorkerProcessSettings`** (`IValidateOptions` + `ValidateOnStart`, 2026-08-27) | `OmpDb` via per-project `SqlConnectionFactory`; bootstrap token replacement | None committed; `enc:aesgcm:v1:` + DPAPI store | Platform (produces/applies overlays) |
+| IbsPackager | appsettings + Dev, psd1 installer, generated Production.json, CLI args, DB channel JSON | Mixed: `IOptions<T>` (web) + manual binding (worker) | ~~None~~ -> **Yes** - `ValidateOnStart` in `IbsPackager.Web/Program.cs` (2026-08-27) | `OmpDb` via `SqlConnectionFactory`; installer-built | None committed; gitignored local psd1 | Produces overlays; consumes none |
 | LogSearch | appsettings + Dev, generated overlay appsettings | `XxxOptions` + `IOptions<T>`, uniform | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` + 3-tier source-DB indirection with credential guardrails | None committed; policy-enforced | Exemplary producer of generated appsettings overlays |
 | EArkivChecker | appsettings + Dev + Local.json | `XxxOptions` + `IOptions<T>` | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` via factory taking the resolved string | None committed | Consumer (overlays not committed) |
-| Dokumentbibliotek | root-linked appsettings + Dev + Local.json | `XxxOptions`; mixed `IOptions<T>`/`IOptionsMonitor<T>` | None | `OmpDb` shared factory + legacy direct read | None committed | Consumer; contract documented in module definition |
+| Dokumentbibliotek | root-linked appsettings + Dev + Local.json | `XxxOptions`; mixed `IOptions<T>`/`IOptionsMonitor<T>` | ~~None~~ -> **Yes** - `IValidateOptions` + `ValidateOnStart` in `RazorPages/Program.cs` (2026-08-27) | `OmpDb` shared factory + legacy direct read | None committed | Consumer; contract documented in module definition |
 | VajSkrivare | appsettings template + Dev; HostAgent-generated production file | `XxxOptions` + `SectionName` consts + `IOptions<T>` | Yes — `Validate(...)` + `ValidateOnStart` | Named indirection (`ConnectionStringName`) | None committed | Full overlay replacement of appsettings.json |
-| iKrock2 | appsettings + Dev, psd1, generated Production.json | `XxxOptions` + `IOptions<T>` | None | `OmpDb` → options; per-catalog composition | Plaintext password in gitignored prod psd1 that `IncludeConfigInPackage=$true` may bundle | None at runtime (installer-written config) |
+| iKrock2 | appsettings + Dev, psd1, generated Production.json | `XxxOptions` + `IOptions<T>` | ~~None~~ -> **Yes** - four `ValidateOnStart` registrations in `iKrock2.Application/DependencyInjection/IKrock2ApplicationServiceCollectionExtensions.cs` (2026-08-27) | `OmpDb` → options; per-catalog composition | Plaintext password in gitignored prod psd1 that `IncludeConfigInPackage=$true` may bundle | None at runtime (installer-written config) |
 | ODVGateway | appsettings + Dev + generated Smoke | Single root `XxxOptions` + nested; startup snapshot + `IOptionsMonitor<T>` | Manual (trusted roots only) | None (no DB) | None committed | Site-local appsettings via overlays |
 | OpenDocViewer | executable JS config + site config merge, dotenv (log servers), vite env, URL params | Central accessor + typed getters (JS analog) | Normalizing getters with clamps | None (endpoint URLs instead) | Placeholder token only; real token via service env | Receives `odv.site.config.js` as artifact config file |
 | AgentDocMap | CLI args only | Plain options object (JS) | Manual CLI validation | None | None | None |
 
 Key divergences:
 
-1. **Validation coverage is the widest gap.** Only OMP Web.Shared
+1. ~~**Validation coverage is the widest gap.** Only OMP Web.Shared
    (`WebAppOptions`), LogSearch, EArkivChecker and VajSkrivare validate
    options at startup. IbsPackager, Dokumentbibliotek, iKrock2 and ODVGateway
-   fail late (first use / first connection) instead of at startup.
+   fail late (first use / first connection) instead of at startup.~~
+   **Largely closed - re-measured 2026-08-27.** IbsPackager, Dokumentbibliotek
+   and iKrock2 have all adopted `ValidateOnStart`, and OMP extended coverage
+   from one options class to five. **ODVGateway is the only .NET repo left
+   without `ValidateOnStart`**, and it validates trusted roots manually by
+   design (it has no database). Note that adopting `ValidateOnStart` is not the
+   same as validating *every* options class in a repo - this measures presence
+   of the gate, not its breadth.
 2. **Connection-string style is consistent in shape** (`ConnectionStrings:OmpDb`
    + factory) **but delivery differs:** HostAgent overlay-generated appsettings
    (LogSearch, VajSkrivare, Dokumentbibliotek, EArkivChecker) vs
@@ -466,21 +497,24 @@ the pattern new OMP modules (examples, shared helpers) already teach.
 
 ### OpenModulePlatform (Medium)
 
-- Current: only `WebAppOptions` validated; `"Portal"` section used everywhere
+- Current: ~~only `WebAppOptions` validated;~~ `"Portal"` section used everywhere
   although `DefaultSectionName = "WebApp"`; dual runtime-settings layer
   (`omp.config_settings`).
-- Migration: extend `ValidateOnStart` coverage to `OmpAuthOptions`,
-  `HostAgentSettings` and `WorkerManagerSettings`; document the
+- Migration: ~~extend `ValidateOnStart` coverage to `OmpAuthOptions`,
+  `HostAgentSettings` and `WorkerManagerSettings`;~~ **done (2026-08-27), and
+  `WorkerProcessSettings` was added as well.** Remaining: document the
   `"Portal"` section name as the de-facto standard (or align the default);
   document when `omp.config_settings` should be preferred over appsettings.
 - Priority: Medium.
 
 ### IbsPackager (Medium)
 
-- Current: no options validation; worker uses manual section binding; runtime
+- Current: ~~no options validation;~~ `IbsPackager.Web/Program.cs` validates on
+  start (2026-08-27); the worker still uses manual section binding; runtime
   config only from installer-generated Production.json.
-- Migration: convert worker binding to `AddOptions<T>().Bind(...).ValidateOnStart()`;
-  add validation for `OpenDocViewerOptions`/`HostAgentRpcOptions`; long-term,
+- Migration: convert the **worker** binding to
+  `AddOptions<T>().Bind(...).ValidateOnStart()` - still outstanding, the web host
+  is the part that landed; long-term,
   move module appsettings delivery to HostAgent overlays like LogSearch.
 - Priority: Medium.
 
@@ -508,9 +542,10 @@ the pattern new OMP modules (examples, shared helpers) already teach.
 
 ### Dokumentbibliotek (Medium)
 
-- Current: no validation; `WebImageRootPrefix` read via raw `IConfiguration`
+- Current: ~~no validation;~~ `RazorPages/Program.cs` validates on start
+  (2026-08-27); `WebImageRootPrefix` read via raw `IConfiguration`
   and absent from the options class; mixed `IOptions`/`IOptionsMonitor`.
-- Migration: add `ValidateOnStart()` for `DokumentBibliotekOptions`; move all
+- Migration: ~~add `ValidateOnStart()` for `DokumentBibliotekOptions`;~~ done. Move all
   `DokumentBibliotek:*` keys onto the options class; standardize on
   `IOptionsMonitor` for singletons or `IOptions` elsewhere.
 - Priority: Medium.
@@ -526,12 +561,13 @@ the pattern new OMP modules (examples, shared helpers) already teach.
 ### iKrock2 (High)
 
 - Current: stale backend HTTP client config; hardcoded customer URLs and test
-  data in C#; deep `Configuration["key"]` read; no validation; password-bearing
+  data in C#; deep `Configuration["key"]` read; ~~no validation~~ (four
+  `ValidateOnStart` registrations landed, verified 2026-08-27); password-bearing
   prod psd1 combined with `IncludeConfigInPackage = $true`.
 - Migration: remove the dead `BackendClientOptions`/health-check config; move
   MLL links/credentials and patient data into config sections bound to options
-  and supplied by overlays (customer values out of C#); add
-  `ValidateOnStart()`; delete the dead DI overload; ensure secret-bearing
+  and supplied by overlays (customer values out of C#); ~~add
+  `ValidateOnStart()`~~ (done); delete the dead DI overload; ensure secret-bearing
   psd1 files are excluded from packages.
 - Priority: High (customer data in source + packaging password risk).
 

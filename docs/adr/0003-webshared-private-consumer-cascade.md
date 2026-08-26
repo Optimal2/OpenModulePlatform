@@ -2,7 +2,40 @@
 
 ## Status
 
-Proposed (2026-07-14)
+**Accepted and implemented.** Proposed 2026-07-14; the gap it describes was closed
+before 2026-08-27 (verified against the code on that date).
+
+The implementation follows this ADR's recommended direction — Mechanism A1,
+declared per consumer, in each consumer's own `omp-components.json` — but four
+things came out differently from the proposal, and the differences matter:
+
+| Proposed here | What actually shipped |
+|---|---|
+| JSON key `sharedProjects` with `external: true` | key **`sharedDependencies`** — a separate array from OMP's own in-repo `sharedProjects` |
+| Declared `expectedRepositoryVersion` / `expectedWebSharedHash` | declared **`treeId`** — git's tree object id for the shared project directory, which changes exactly when the directory's contents change and never otherwise. No deterministic rebuild is needed to compute it, which removes migration consideration 4 below entirely. |
+| Start as **WARN**, consider FORCE later (decision flag (a)) | shipped as **FORCE**: Check 14 is a hard error and blocks the consumer's push. `-Strict` additionally turns "the guard could not run" into an error rather than a warning. |
+| Scope: `OpenModulePlatform.Web.Shared` in five private repos (decision flag (c)) | **six** consumer repos — `IbsPackager`, `LogSearch`, `EArkivChecker`, `Dokumentbibliotek`, `VajSkrivare` **and `iKrock2`** (not listed in this ADR) — and **four** shared projects, not one: `Web.Shared`, `EventPublisher.Abstractions`, `EventPublisher.Sql` and `Worker.Abstractions` (IbsPackager only, for `ibs-packager-worker`). |
+
+The rule lives in exactly one place:
+`scripts/omp/validate-shared-dependencies.ps1` in this repository. Consumer
+validators call it as **Check 14** rather than embedding a copy; IbsPackager did
+keep an inline copy for a while and it drifted from the canonical implementation,
+which is the failure mode the canonical script's header now warns about. To
+re-record after a legitimate cascade, run the consumer's
+`scripts/validate-component-versions.ps1 -UpdateSharedDependencies` **in the same
+change as the consumer component bump**.
+
+What forced the move from WARN to FORCE: a missed bump does not fail the build.
+The artifact is only rejected at import time, on the host, at the end of a full
+refresh-and-stage run — which happened on three consecutive deploys on 2026-08-13.
+
+**Everything below this line is the original 2026-07-14 analysis, kept as the
+historical record.** Its "Problem", "Current state" and "Gap confirmation"
+sections describe a state that no longer exists — in particular the claims that no
+private repo declares its Web.Shared dependency, that the ported validators
+disclaim cross-repo cascade, and that nothing fails when a consumer lags. All
+three are now false. Read them as the reasoning that led to the decision, not as
+a description of the system.
 
 ## Context
 
@@ -20,11 +53,15 @@ Each repository is intentionally independent: it owns its own `omp-components.js
 
 ## Problem
 
+> **Superseded — historical (2026-07-14).** See Status above for what shipped.
+
 A change to `OpenModulePlatform.Web.Shared` in the OpenModulePlatform repository can break or silently alter behavior in the five private consumer web apps. Today there is **no central awareness** that a Web.Shared change in OMP should cascade to those consumers. Each repo's local validators only enforce lockstep inside that repo; none of them compare their declared state against the upstream OMP Web.Shared version or hash.
 
 This is a design/documentation gap, not a bug in any single repo. The independence of the consumer repos is intentional and must be preserved, but the absence of cross-repo cascade awareness leaves the operator-dependent on manual tracking and build discipline.
 
 ## Current state
+
+> **Superseded — historical (2026-07-14).** See Status above for what shipped.
 
 ### OMP already handles in-repo Web.Shared cascade
 
@@ -128,6 +165,8 @@ const ompSharedBuildRepoNames = new Set([
 The same file uses `build:omp-web-shared` as an exclusive lock for implementation-mode jobs (`jobResourceLocks`, `usesOmpSharedBuild`, `jobConcurrency.ts:92-94`). This prevents two jobs from building `OpenModulePlatform.Web.Shared` concurrently on the same workstation, but it does **not** verify that each consumer repo has bumped its version after a Web.Shared change.
 
 ## Gap confirmation
+
+> **Superseded — historical (2026-07-14).** See Status above for what shipped.
 
 **What IS checked today:**
 
