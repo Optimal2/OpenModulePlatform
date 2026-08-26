@@ -324,7 +324,14 @@ ELSE
 BEGIN
     UPDATE omp.AppInstances
     SET ModuleInstanceId = @WebBlazorModuleInstanceId,
-        HostId = @SampleHostId,
+        -- Direct host placement and template placement are mutually exclusive
+        -- (CK_omp_AppInstances_OneHostPlacement). A re-run against a live
+        -- installation must not fail on -- or steal -- a placement the row
+        -- already has (a template-placed row carries TargetHostTemplateId, and
+        -- assigning HostId then violates the constraint and aborts the whole
+        -- definition import; observed 2026-08-20). Only assign the sample host
+        -- when the row is not placed at all.
+        HostId = CASE WHEN HostId IS NULL AND TargetHostTemplateId IS NULL THEN @SampleHostId ELSE HostId END,
         AppId = @WebBlazorAppId,
         AppInstanceKey = N'example_webapp_blazor_webapp',
         DisplayName = N'Example WebApp Blazor Module',

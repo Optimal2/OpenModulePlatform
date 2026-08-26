@@ -30,12 +30,12 @@
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.47",
+      "definitionVersion": "0.3.48",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp_blazor",
-      "definitionVersion": "0.3.47",
+      "definitionVersion": "0.3.48",
       "path": "examples/WebAppBlazorModule/example_webapp_blazor.module-definition.json"
     },
     {
@@ -196,7 +196,7 @@
       "projectPath": "examples/WebAppModule/WebApp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.24"
+      "minModuleDefinitionVersion": "0.3.48"
     },
     {
       "componentKey": "example-webapp-blazor",
@@ -209,7 +209,7 @@
       "projectPath": "examples/WebAppBlazorModule/WebApp",
       "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip",
-      "minModuleDefinitionVersion": "0.3.24"
+      "minModuleDefinitionVersion": "0.3.48"
     },
     {
       "componentKey": "example-serviceapp-web",
