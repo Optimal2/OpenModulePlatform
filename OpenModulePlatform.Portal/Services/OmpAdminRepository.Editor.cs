@@ -2647,9 +2647,7 @@ WHERE ModuleKey = @ModuleKey;";
             rows.Add(validationRow);
         }
 
-        var hasValidationScripts = rows.Count > 0;
         var validationCanDriveRepair = validationNeedsRepair && !validationBlocked;
-        var validationReportsHealthy = hasValidationScripts && !validationNeedsRepair && !validationBlocked;
         foreach (var script in orderedScripts.Where(static item => !IsValidationScript(item)))
         {
             var sqlText = ResolvePortableSqlText(script);
@@ -2705,16 +2703,21 @@ WHERE ModuleKey = @ModuleKey;";
                 message = latest?.ErrorMessage ?? "The last execution failed.";
                 needsExecution = true;
             }
-            else if (!validationReportsHealthy && !hasSuccessfulExecution)
+            else if (!hasSuccessfulExecution)
             {
+                // A healthy validation probe only proves the objects it was written to
+                // check. It says nothing about whether THIS script content (document +
+                // key + SHA-256) ever ran -- a new definition version always starts
+                // with zero execution rows, so reading "probe healthy" as "nothing to
+                // run" applied the document while its setup/seed data changes never
+                // reached the database (the ibs_packager incident: five versions
+                // applied, zero executions, import reported green). HostAgent and the
+                // bootstrapper run the scripts in exactly this state
+                // (OmpHostArtifactRepository.AnyModuleDefinitionScriptWithoutSucceededExecutionAsync);
+                // Portal must apply the same rule.
                 status = "Not recorded";
                 message = "No successful execution has been recorded for this script content.";
                 needsExecution = true;
-            }
-            else if (validationReportsHealthy && !hasSuccessfulExecution)
-            {
-                status = "OK";
-                message = "Module-specific validation reports healthy state; a separate repair execution record is not required.";
             }
             else
             {

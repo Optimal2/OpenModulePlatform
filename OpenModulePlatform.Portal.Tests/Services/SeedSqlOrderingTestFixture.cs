@@ -129,6 +129,19 @@ WHERE AppId = @p0 AND Version = @p1 AND PackageType = @p2 AND TargetName = @p3;"
         return Convert.ToInt32(result) > 0;
     }
 
+    public async Task<int> CountSucceededDefinitionSqlExecutionsAsync(string moduleKey, string definitionVersion)
+    {
+        var result = await ExecuteScalarAsync(
+            @"
+SELECT COUNT(1)
+FROM omp.ModuleDefinitionSqlExecutions e
+INNER JOIN omp.ModuleDefinitionDocuments d ON d.ModuleDefinitionDocumentId = e.ModuleDefinitionDocumentId
+WHERE d.ModuleKey = @p0 AND d.DefinitionVersion = @p1 AND e.ExecutionStatus = N'Succeeded';",
+            moduleKey,
+            definitionVersion);
+        return Convert.ToInt32(result);
+    }
+
     public async Task<IReadOnlyList<string>> GetSeededVersionsAsync(string schemaName)
     {
         var versions = new List<string>();

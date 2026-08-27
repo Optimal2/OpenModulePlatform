@@ -123,6 +123,191 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
     }
 
     /// <summary>
+    /// Campaign importvagen-kor-inte-seed-skripten: the incident shape, end to end.
+    /// A NEW definition version (new document, new script content hash for that
+    /// document) is imported through the Portal universal package path while the
+    /// module's validation probe reports HEALTHY -- the probe only checks that the
+    /// seed table exists, which the previous import's state already satisfies.
+    /// The Portal script gate used to read "probe healthy" as "nothing needs to
+    /// run", so the definition was Applied with ZERO rows in
+    /// omp.ModuleDefinitionSqlExecutions and the seed never recorded the new
+    /// artifact version (measured in the customer environments over five
+    /// ibs_packager versions). HostAgent and the bootstrapper run the scripts in
+    /// exactly this state
+    /// (OmpHostArtifactRepository.AnyModuleDefinitionScriptWithoutSucceededExecutionAsync);
+    /// Portal must too.
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenProbeIsHealthyAndDefinitionVersionIsNew_SqlScriptsStillRun()
+    {
+        const string moduleKey = "seedorderprobepo";
+        const string schemaName = "omp_seedorderprobepo";
+        const string definitionVersion = "1.0.1";
+        await ArrangePreviousImportStateAsync(moduleKey, schemaName);
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var packagePath = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, PackageArtifactVersion, includeValidationProbe: true);
+            var service = CreatePortalService(storeRoot);
+
+            var result = await ImportPortalPackageAsync(service, packagePath);
+
+            var definitionItem = Assert.Single(
+                result.Items,
+                static item => item.Kind == "module-definition");
+            Assert.Equal("Applied", definitionItem.Status);
+            Assert.Equal(
+                1,
+                await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+            Assert.Contains(
+                "Definition SQL scripts executed: 1.",
+                definitionItem.Message,
+                StringComparison.Ordinal);
+            var seeded = await _fixture.GetSeededVersionsAsync(schemaName);
+            Assert.Contains(PackageArtifactVersion, seeded);
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
+    /// The other half of the version gate: an unchanged definition re-imported after a
+    /// successful run must NOT re-execute its scripts (executions are recorded per
+    /// document + script + content hash), and the outcome line must say the skip is
+    /// backed by an execution record -- not left silent.
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenScriptsAlreadyHaveSucceededRecords_ReimportDoesNotReExecute()
+    {
+        const string moduleKey = "seedorderreimport";
+        const string schemaName = "omp_seedorderreimport";
+        const string definitionVersion = "1.0.1";
+        await ArrangePreviousImportStateAsync(moduleKey, schemaName);
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var packagePath = BuildUniversalPackageZip(workRoot, moduleKey, schemaName);
+            var service = CreatePortalService(storeRoot);
+
+            await ImportPortalPackageAsync(service, packagePath);
+            Assert.Equal(
+                1,
+                await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+
+            var second = await ImportPortalPackageAsync(service, packagePath);
+
+            var definitionItem = Assert.Single(
+                second.Items,
+                static item => item.Kind == "module-definition");
+            Assert.Equal("Applied", definitionItem.Status);
+            Assert.Contains(
+                "every declared script already has a successful execution record",
+                definitionItem.Message,
+                StringComparison.Ordinal);
+            Assert.Equal(
+                1,
+                await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
+    /// Silence is not an acceptable outcome: when the definition declares SQL scripts
+    /// but the import options disable the SQL phase, the result line must SAY the
+    /// scripts did not run and why -- not render the same bare "Applied" as a run.
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenSqlRepairsDisabled_MessageSaysScriptsWereNotExecuted()
+    {
+        const string moduleKey = "seedorderdisabled";
+        const string schemaName = "omp_seedorderdisabled";
+        const string definitionVersion = "1.0.1";
+        await ArrangePreviousImportStateAsync(moduleKey, schemaName);
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var packagePath = BuildUniversalPackageZip(workRoot, moduleKey, schemaName);
+            var service = CreatePortalService(storeRoot);
+
+            var result = await ImportPortalPackageAsync(service, packagePath, executeSqlRepairs: false);
+
+            var definitionItem = Assert.Single(
+                result.Items,
+                static item => item.Kind == "module-definition");
+            Assert.Equal("Applied", definitionItem.Status);
+            Assert.Contains(
+                "none executed: SQL repairs were disabled for this import.",
+                definitionItem.Message,
+                StringComparison.Ordinal);
+            Assert.Equal(
+                0,
+                await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
+    /// The remaining zero-execution shape: the definition is applied and the SQL phase
+    /// is enabled, but the declared script can never run through Portal (execution mode
+    /// "once" is Blocked by the script gate). The result line must list the script and
+    /// its state instead of rendering a silent "Applied".
+    /// </summary>
+    [Fact]
+    public async Task PortalImport_WhenDeclaredScriptIsBlocked_MessageListsTheScriptState()
+    {
+        const string moduleKey = "seedorderblocked";
+        const string schemaName = "omp_seedorderblocked";
+        const string definitionVersion = "1.0.1";
+        await ArrangePreviousImportStateAsync(moduleKey, schemaName);
+
+        var workRoot = CreateWorkRoot();
+        try
+        {
+            var storeRoot = Directory.CreateDirectory(Path.Join(workRoot, "store")).FullName;
+            var packagePath = BuildUniversalPackageZip(
+                workRoot, moduleKey, schemaName, seedExecution: "once");
+            var service = CreatePortalService(storeRoot);
+
+            var result = await ImportPortalPackageAsync(service, packagePath);
+
+            var definitionItem = Assert.Single(
+                result.Items,
+                static item => item.Kind == "module-definition");
+            Assert.Equal("Applied", definitionItem.Status);
+            Assert.Contains(
+                "NONE were executed",
+                definitionItem.Message,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "initialize-seed-order: Blocked",
+                definitionItem.Message,
+                StringComparison.Ordinal);
+            Assert.Equal(
+                0,
+                await _fixture.CountSucceededDefinitionSqlExecutionsAsync(moduleKey, definitionVersion));
+        }
+        finally
+        {
+            TryDeleteDirectory(workRoot);
+        }
+    }
+
+    /// <summary>
     /// The residual incident path: the package's artifact FAILS to register (here: a
     /// version conflict), yet the definition's seed SQL used to run anyway and record a
     /// Succeeded execution. Because execution is version-gated, repairing the artifact
@@ -175,10 +360,8 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
 
     /// <summary>
     /// Same residual incident path as the HostAgent variant, through the Portal. The
-    /// definition carries no validation probe: Portal's script gate deliberately treats a
-    /// healthy probe as proof that no execution is needed, so for probe-carrying
-    /// definitions the seed never runs through Portal at all; the deferral matters for
-    /// the "no successful execution recorded" gate that probe-less definitions use.
+    /// definition carries no validation probe; the probe-carrying shape is covered by
+    /// PortalImport_WhenProbeIsHealthyAndDefinitionVersionIsNew_SqlScriptsStillRun.
     /// </summary>
     [Fact]
     public async Task PortalImport_WhenAnArtifactFails_SeedSqlIsDeferredUntilACleanImport()
@@ -358,7 +541,8 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
 
     private static async Task<UniversalPackageImportResult> ImportPortalPackageAsync(
         PortableModulePackageService service,
-        string packagePath)
+        string packagePath,
+        bool executeSqlRepairs = true)
     {
         await using var stream = File.OpenRead(packagePath);
         var upload = new FormFile(stream, 0, stream.Length, "packageFile", Path.GetFileName(packagePath));
@@ -366,7 +550,7 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
             upload,
             new PortableModulePackageImportOptions(
                 ApplyModuleDefinition: true,
-                ExecuteSqlRepairs: true,
+                ExecuteSqlRepairs: executeSqlRepairs,
                 AllowTemporaryIncompatibleArtifacts: false,
                 ReplaceExistingModuleDefinition: false,
                 ReplaceExistingArtifacts: false,
@@ -397,7 +581,8 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
         string schemaName,
         string artifactVersion = PackageArtifactVersion,
         bool includeValidationProbe = false,
-        string? seedSqlOverride = null)
+        string? seedSqlOverride = null,
+        string seedExecution = "idempotent")
     {
         var packagePath = Path.Join(workRoot, $"omp-universal__{moduleKey}__{artifactVersion}.zip");
         using var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create);
@@ -408,7 +593,7 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
         WriteTextEntry(
             archive,
             $"module-definitions/{moduleKey}.module-definition.json",
-            BuildDefinitionJson(moduleKey, schemaName, includeValidationProbe, seedSqlOverride));
+            BuildDefinitionJson(moduleKey, schemaName, includeValidationProbe, seedSqlOverride, seedExecution));
         WriteArtifactZipEntry(
             archive,
             $"artifacts/{moduleKey}__{AppKey}__{PackageType}__{TargetName}__{artifactVersion}.zip",
@@ -422,7 +607,8 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
         string moduleKey,
         string schemaName,
         bool includeValidationProbe,
-        string? seedSqlOverride)
+        string? seedSqlOverride,
+        string seedExecution = "idempotent")
     {
         var seedSql = seedSqlOverride ?? (
             "DECLARE @Version nvarchar(50); " +
@@ -442,7 +628,7 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
             ["key"] = "initialize-seed-order",
             ["phase"] = "setup",
             ["order"] = 10,
-            ["execution"] = "idempotent",
+            ["execution"] = seedExecution,
             ["inlineSql"] = seedSql
         });
         if (includeValidationProbe)

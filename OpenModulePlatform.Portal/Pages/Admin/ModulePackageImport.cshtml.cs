@@ -25,7 +25,11 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     private const string UniversalImportResultCacheKeyPrefix = "ModulePackageImport:UniversalImportResult:";
     private static readonly TimeSpan UniversalImportResultCacheDuration = TimeSpan.FromMinutes(20);
     private static readonly Regex ModuleImportMessagePattern = new(
-        @"^Module\s+(.+?)\s+([^;\s]+);\s+artifacts imported or replaced:\s+(\d+);\s+failed artifacts:\s+(\d+)\.$",
+        // The suffix group is anchored to the known service-built sentence stems (the
+        // definition-SQL outcome and the SQL-phase warnings). A future message whose tail
+        // starts differently falls through to the whole-message P() lookup, which is the
+        // same English fallback those messages had before the suffix existed.
+        @"^Module\s+(.+?)\s+([^;\s]+);\s+artifacts imported or replaced:\s+(\d+);\s+failed artifacts:\s+(\d+)\.(?<suffix>(?: (?:Definition SQL|Schema drift healed|Schema repair INCOMPLETE).*)?)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex HostConfigurationMessagePattern = new(
         @"^Host\s+(.+?)\s+([^;\s]+)\.$",
@@ -140,13 +144,16 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         var moduleMatch = ModuleImportMessagePattern.Match(message);
         if (moduleMatch.Success)
         {
+            // The base sentence localizes; the optional suffix carries the definition-SQL
+            // outcome and warning sentences, which are service-built and have no resx entry.
             return string.Format(
                 System.Globalization.CultureInfo.CurrentCulture,
                 P("Module {0} {1}; artifacts imported or replaced: {2}; failed artifacts: {3}."),
                 moduleMatch.Groups[1].Value,
                 moduleMatch.Groups[2].Value,
                 moduleMatch.Groups[3].Value,
-                moduleMatch.Groups[4].Value);
+                moduleMatch.Groups[4].Value)
+                + moduleMatch.Groups["suffix"].Value;
         }
 
         var hostMatch = HostConfigurationMessagePattern.Match(message);

@@ -507,6 +507,14 @@ public sealed class PortableModulePackageService
                     }
 
                     var moduleResultMessage = $"Module {importResult.ModuleKey} {importResult.DefinitionVersion}; artifacts imported or replaced: {importResult.ImportedArtifactCount}; failed artifacts: {importResult.FailedArtifactCount}.";
+                    // The SQL outcome sentence must always follow the base line: an import
+                    // whose scripts did not run used to render the exact same green "Applied"
+                    // text as one whose scripts did.
+                    if (!string.IsNullOrWhiteSpace(importResult.DefinitionSqlOutcome))
+                    {
+                        moduleResultMessage = AppendWarning(moduleResultMessage, importResult.DefinitionSqlOutcome);
+                    }
+
                     foreach (var warning in importResult.Warnings)
                     {
                         moduleResultMessage = AppendWarning(moduleResultMessage, warning);
@@ -1276,8 +1284,10 @@ public sealed class PortableModulePackageService
         // runs the scripts.
         var failedArtifactCount = artifactResults.Count(static item => item.Status == "Failed");
         string? definitionSqlError = null;
+        var definitionSqlDeferred = false;
         if (options.ExecuteSqlRepairs && !RequiresPreApplySqlRepairs(definition) && failedArtifactCount > 0)
         {
+            definitionSqlDeferred = true;
             warnings.Add(
                 $"Definition SQL deferred: {failedArtifactCount} artifact package(s) failed to import; "
                 + "the SQL scripts run on the next import once every artifact imports cleanly.");
@@ -1362,8 +1372,143 @@ public sealed class PortableModulePackageService
             artifactResults)
         {
             Warnings = warnings,
-            DefinitionSqlError = definitionSqlError
+            DefinitionSqlError = definitionSqlError,
+            DefinitionSqlOutcome = await BuildDefinitionSqlOutcomeAsync(
+                definition,
+                saveResult.ModuleDefinitionDocumentId,
+                options,
+                applied,
+                keepNewerAppliedDefinition,
+                repairCount,
+                definitionSqlDeferred,
+                definitionSqlError,
+                ct)
         };
+    }
+
+    /// <summary>
+    /// Builds the one sentence that tells apart "the definition's SQL scripts ran",
+    /// "they were deliberately skipped, and here is why" and "the definition declares
+    /// scripts but none ran and nothing explains it". Until this existed, all three
+    /// rendered as the same green "Applied" line -- that silence is how five module
+    /// versions shipped without their seed scripts ever running.
+    /// </summary>
+    private async Task<string?> BuildDefinitionSqlOutcomeAsync(
+        ModuleDefinitionDocumentEditData definition,
+        int moduleDefinitionDocumentId,
+        PortableModulePackageImportOptions options,
+        bool applied,
+        bool keepNewerAppliedDefinition,
+        int repairCount,
+        bool definitionSqlDeferred,
+        string? definitionSqlError,
+        CancellationToken ct)
+    {
+        var declaredScriptCount = CountDeclaredExecutableSqlScripts(definition.DefinitionJson);
+        if (declaredScriptCount == 0 || definitionSqlError is not null)
+        {
+            // No scripts to report on, or the SQL phase failed and the failure text
+            // already carries the outcome.
+            return null;
+        }
+
+        if (repairCount > 0)
+        {
+            return $"Definition SQL scripts executed: {repairCount}.";
+        }
+
+        if (!options.ExecuteSqlRepairs)
+        {
+            return $"Definition SQL scripts declared: {declaredScriptCount}; none executed: SQL repairs were disabled for this import.";
+        }
+
+        if (definitionSqlDeferred)
+        {
+            // The deferral warning already states the reason and when the scripts run.
+            return null;
+        }
+
+        if (!applied)
+        {
+            return keepNewerAppliedDefinition
+                ? $"Definition SQL scripts declared: {declaredScriptCount}; none executed: a newer definition version is already applied, and its scripts belong to that version."
+                : $"Definition SQL scripts declared: {declaredScriptCount}; none executed: the definition was stored but not applied.";
+        }
+
+        // Applied, repairs enabled, nothing deferred, zero executions. The legitimate
+        // case is a re-import whose scripts already have a successful execution record
+        // for this exact content. Everything else must be spelled out -- and split by
+        // whether the gate says the script can run at all: a script that CAN run but
+        // did not means the import is incomplete, while a script the gate blocks (or
+        // one without embedded SQL) can never run through Portal, which is an expected
+        // state the operator still needs to see.
+        var checks = await _repo.GetModuleDefinitionSqlChecksAsync(moduleDefinitionDocumentId, ct);
+        var withoutRecord = checks
+            .Where(static check => !check.IsValidation && !check.HasSuccessfulExecution)
+            .ToList();
+        if (withoutRecord.Count == 0)
+        {
+            return "Definition SQL scripts: none executed; every declared script already has a successful execution record for this content.";
+        }
+
+        var states = string.Join(
+            ", ",
+            withoutRecord.Select(static check => $"{check.Key}: {check.Status}"));
+        return withoutRecord.Any(static check => check.NeedsExecution)
+            ? $"Definition SQL scripts declared: {declaredScriptCount}; NONE were executed. "
+                + $"Script states without a successful execution record: {states}. "
+                + "Treat this import as incomplete until the runnable scripts have run."
+            : $"Definition SQL scripts declared: {declaredScriptCount}; NONE were executed: "
+                + $"no declared script can run through Portal ({states}).";
+    }
+
+    /// <summary>
+    /// Counts the definition's executable SQL scripts (everything except validation
+    /// probes, which are never run as repairs). Mirrors IsValidationScript in
+    /// OmpAdminRepository.
+    /// </summary>
+    private static int CountDeclaredExecutableSqlScripts(string? definitionJson)
+    {
+        if (string.IsNullOrWhiteSpace(definitionJson))
+        {
+            return 0;
+        }
+
+        try
+        {
+            if (JsonNode.Parse(definitionJson) is not JsonObject root
+                || root["sqlScripts"] is not JsonArray scripts)
+            {
+                return 0;
+            }
+
+            var count = 0;
+            foreach (var item in scripts)
+            {
+                if (item is not JsonObject script)
+                {
+                    continue;
+                }
+
+                var phase = script["phase"]?.GetValue<string>();
+                var execution = script["execution"]?.GetValue<string>();
+                if (string.Equals(phase, "validate", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(phase, "validation", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(execution, "validate", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(execution, "validation", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                count++;
+            }
+
+            return count;
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
     }
 
     private static bool RequiresPreApplySqlRepairs(ModuleDefinitionDocumentEditData definition)
@@ -2906,6 +3051,13 @@ public sealed record PortableModulePackageImportResult(
     /// results above stay attached to the import that actually performed them.
     /// </summary>
     public string? DefinitionSqlError { get; init; }
+
+    /// <summary>
+    /// One sentence that states what happened to the definition's declared SQL scripts:
+    /// how many executed, or the reason none did. Null only when the definition declares
+    /// no executable scripts or the SQL failure text already carries the outcome.
+    /// </summary>
+    public string? DefinitionSqlOutcome { get; init; }
 
     /// <summary>
     /// Human-readable warnings about schema drift or other recoverable issues encountered during import.

@@ -815,7 +815,7 @@ public sealed class ArtifactZipImportService
                         "module-definition",
                         item.Path,
                         definitionResult.Applied ? "Applied" : "Stored",
-                        $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}."));
+                        $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}; definition SQL scripts executed: {definitionResult.SqlRepairCount}."));
                 }
                 catch (Exception ex) when (IsExpectedImportFailure(ex))
                 {
