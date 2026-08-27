@@ -4,8 +4,7 @@
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["System"]</div>
-        <h2>@L["Dashboard widgets"]</h2>
-        <p class="lede">@L["Manage registered Portal dashboard widget definitions and availability."]</p>
+        <h2>@L["Dashboard widgets"] <span class="info-badge" tabindex="0" role="img" title="@L["Manage registered Portal dashboard widget definitions and availability."]" aria-label="@L["Manage registered Portal dashboard widget definitions and availability."]">i</span></h2>
     </div>
 </section>
 
@@ -14,11 +13,7 @@
 @if (Model.EditDescriptionRow is not null)
 {
     <section class="card top-gap">
-        <h3>@L["Edit description"]</h3>
-        <p class="muted">
-            @Model.EditDescriptionRow.Title
-            <code>@Model.EditDescriptionRow.WidgetKey</code>
-        </p>
+        <h3>@L["Edit description"] <span class="info-badge" tabindex="0" role="img" title="@Model.EditDescriptionRow.Title (@Model.EditDescriptionRow.WidgetKey)" aria-label="@Model.EditDescriptionRow.Title (@Model.EditDescriptionRow.WidgetKey)">i</span></h3>
         <form method="post" asp-page-handler="UpdateDescription" class="form-grid">
             <input type="hidden" name="widgetId" value="@Model.EditDescriptionRow.WidgetId" />
             <div class="form-field">
