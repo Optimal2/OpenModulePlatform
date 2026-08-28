@@ -234,7 +234,9 @@
     // rather than the visible page. Values come from data-sort-value when
     // present, otherwise the cell text (parsed like the number sorter).
     function updateListSummaries(table, rows) {
-        table.querySelectorAll(':scope > tfoot [data-list-sum]').forEach((cell) => {
+        const cells = Array.from(table.querySelectorAll(':scope > tfoot [data-list-sum]'));
+        const sums = new Map();
+        cells.forEach((cell) => {
             const index = cell.cellIndex;
             let sum = 0;
             rows.forEach((row) => {
@@ -248,7 +250,20 @@
                     sum += parsed;
                 }
             });
-            cell.textContent = String(Math.round(sum * 100) / 100);
+            sums.set(index, Math.round(sum * 100) / 100);
+        });
+        cells.forEach((cell) => {
+            const sum = sums.get(cell.cellIndex);
+            // data-list-sum-share-of="<cellIndex>" appends the sum's share of
+            // another summed column, e.g. "11 (73,3 %)".
+            const shareOf = cell.getAttribute('data-list-sum-share-of');
+            const base = shareOf === null ? null : sums.get(Number.parseInt(shareOf, 10));
+            if (base) {
+                const share = (100 * sum / base).toLocaleString(undefined, { maximumFractionDigits: 1 });
+                cell.textContent = `${sum} (${share} %)`;
+            } else {
+                cell.textContent = String(sum);
+            }
         });
     }
 
