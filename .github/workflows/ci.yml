@@ -6,13 +6,43 @@ on:
       - main
       - master
   pull_request:
+  # Weekly full run: adds the scheduled matrix legs (e.g. the runtime floor)
+  # that per-push runs explicitly omit. The derivation script logs every
+  # omitted combination, so a reduced run never reads as full coverage.
+  schedule:
+    - cron: '23 4 * * 1'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  version-matrix:
+    # The .NET versions CI claims to support are derived from the repository's
+    # own version files (global.json SDK pin + committed target frameworks),
+    # never from a hand-written list here - a separate list would drift away
+    # from the truth and then prove the wrong thing. The derivation script is
+    # also the unsupported-version gate: it fails the run before any build
+    # starts when the version files contradict each other.
+    runs-on: windows-latest
+
+    outputs:
+      legs: ${{ steps.derive.outputs.legs }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Derive version matrix from repository version files
+        id: derive
+        shell: pwsh
+        run: |
+          $includeScheduled = @('schedule', 'workflow_dispatch') -contains '${{ github.event_name }}'
+          .\scripts\omp\get-ci-version-matrix.ps1 -IncludeScheduled:$includeScheduled
+
+  gates:
+    # Repository hygiene and validator gates. These do not depend on the .NET
+    # version, so they run once, not per matrix leg.
     runs-on: windows-latest
 
     steps:
@@ -35,11 +65,6 @@ jobs:
           } else {
             echo "sha=origin/main" >> $env:GITHUB_OUTPUT
           }
-
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
 
       - name: Validate repository hygiene
         shell: pwsh
@@ -89,9 +114,6 @@ jobs:
             exit 1
           }
 
-      - name: Show .NET SDK info
-        run: dotnet --info
-
       - name: Validate module definitions
         shell: pwsh
         run: .\scripts\omp\validate-module-definitions.ps1
@@ -107,6 +129,59 @@ jobs:
       - name: Run Pester script tests
         shell: pwsh
         run: powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\scripts\omp\run-script-tests.ps1
+
+  build-test:
+    # One leg per supported .NET configuration, derived by the version-matrix
+    # job. fail-fast is off: a leg that fails must not hide how the other
+    # supported versions behaved.
+    needs: version-matrix
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.version-matrix.outputs.legs) }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET SDK (${{ matrix.name }})
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ matrix.sdk }}
+
+      - name: Install floor runtime (${{ matrix.runtimeFloor }})
+        # Scheduled legs pin the test hosts to the oldest runtime patch of the
+        # supported major. Installing that SDK band brings its bundled runtime
+        # along; global.json keeps dotnet itself on the pinned SDK.
+        if: ${{ matrix.runtimeFloor != '' }}
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ matrix.runtimeFloor }}
+
+      - name: Show leg purpose and .NET SDK info
+        shell: pwsh
+        run: |
+          Write-Host "Leg '${{ matrix.name }}': ${{ matrix.purpose }}"
+          Write-Host "Cadence: ${{ matrix.cadence }} (scheduled legs run on the weekly schedule and workflow_dispatch only)"
+          dotnet --info
+          dotnet --list-runtimes
+
+      - name: Assert installed SDK is on the supported major
+        # Second layer of the unsupported-version gate (the first is the
+        # derivation script): whatever global.json and setup-dotnet resolved,
+        # the SDK that will actually build must be on the major the target
+        # frameworks claim. A matrix pointed at an unsupported version dies
+        # here with a readable message instead of a NuGet restore error.
+        shell: pwsh
+        run: |
+          $sdk = dotnet --version
+          if ($LASTEXITCODE -ne 0) { throw "dotnet --version failed; global.json rejected the installed SDK set for leg '${{ matrix.name }}'." }
+          Write-Host "Resolved SDK: $sdk (expected major: ${{ matrix.expectedMajor }})"
+          if (-not $sdk.StartsWith('${{ matrix.expectedMajor }}.')) {
+            throw "Installed SDK $sdk is not on the supported .NET major ${{ matrix.expectedMajor }}; this leg claims a version the repository does not support."
+          }
 
       - name: Restore solution
         run: dotnet restore OpenModulePlatform.slnx
@@ -138,6 +213,15 @@ jobs:
           # needs a Chromium download and a seeded OMP database to boot the apps.
           # Exclusions are tracked in docs/TEST_DEBT.md; keep that register in
           # sync in the same commit when this filter changes.
+          if ('${{ matrix.runtimeFloor }}' -ne '') {
+            # Runtime-floor leg: the test hosts' runtimeconfig requests the
+            # oldest patch of the supported major; Disable forbids rolling
+            # forward to whatever newer runtime the image happens to carry, so
+            # the suite provably runs on the floor the platform claims to
+            # support.
+            $env:DOTNET_ROLL_FORWARD = 'Disable'
+            Write-Host "runtime-floor leg: DOTNET_ROLL_FORWARD=Disable, test hosts load exactly runtime ${{ matrix.runtimeFloor }}"
+          }
           dotnet test OpenModulePlatform.slnx --configuration Release --no-build --logger trx --results-directory TestResults --filter "FullyQualifiedName!~Portal.Tests.Integration&FullyQualifiedName!~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests&Category!=Ui"
 
       - name: Surface test-database cleanup failures
@@ -160,5 +244,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.name }}
           path: TestResults
