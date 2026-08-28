@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- TEMPORARY SABOTAGE - do not merge. This orphan project (not part of
+       OpenModulePlatform.slnx) claims net9.0 while global.json pins the
+       10.0.200 SDK band and every real project targets net10.0. The CI
+       version-matrix derivation must fail on this contradiction before any
+       build starts; a green run would prove the gate toothless. Removed
+       immediately after the red run is observed. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+</Project>
