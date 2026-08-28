@@ -38,6 +38,53 @@ if (-not (Test-Path $localCi)) {
     exit 1
 }
 
+# Gate cache: local-ci.ps1 stamps every green gate run (never -SkipTests,
+# never a dirty tree) with the key (HEAD tree, resolved baseline). If the
+# single ref being pushed carries a valid stamp, the identical rerun is
+# skipped. The baseline leg mirrors local-ci's baseline resolution through
+# stdin: the remote sha is what origin/main pointed at before the push (what
+# local-ci resolved as upstream), and an all-zero remote sha (brand-new ref)
+# maps to local-ci's no-upstream fallback of HEAD^. Every case where the two
+# resolutions could disagree - a run stamped with an explicit -BaseCommit
+# override, a push to a ref that is not the branch upstream, any failing git
+# command - deliberately fails OPEN to a miss and runs the full gate; a wrong
+# hit is worse than a rerun, so do not "tighten" this. Anything unexpected -
+# no stdin, several refs, deletes, the OMP_GATE_NOCACHE=1 escape hatch -
+# falls open the same way. Keep the key computation in sync with
+# scripts/local-ci.ps1.
+$cacheHit = $false
+try {
+    if ($env:OMP_GATE_NOCACHE -ne '1') {
+        $stdinLines = @([Console]::In.ReadToEnd() -split "`n" | Where-Object { $_.Trim() })
+        if ($stdinLines.Count -eq 1) {
+            $parts = $stdinLines[0].Trim() -split '\s+'
+            if ($parts.Count -eq 4 -and $parts[1] -notmatch '^0+$') {
+                $localSha = $parts[1]
+                $baselineSha = $parts[3]
+                if ($baselineSha -match '^0+$') {
+                    $baselineSha = (git -C $repoRoot rev-parse "$localSha^" 2>$null)
+                }
+                $treeSha = (git -C $repoRoot rev-parse "$localSha^{tree}" 2>$null)
+                $gitCommonDir = (git -C $repoRoot rev-parse --git-common-dir 2>$null)
+                if ($treeSha -and $baselineSha -and $gitCommonDir) {
+                    if (-not [System.IO.Path]::IsPathRooted($gitCommonDir)) {
+                        $gitCommonDir = Join-Path $repoRoot $gitCommonDir
+                    }
+                    $stamp = Join-Path (Join-Path $gitCommonDir 'local-ci-pass') "$treeSha-$baselineSha"
+                    if (Test-Path $stamp) { $cacheHit = $true }
+                }
+            }
+        }
+    }
+}
+catch { $cacheHit = $false }
+
+if ($cacheHit) {
+    Write-Host 'GATE CACHE HIT: this exact tree already passed local-ci against the same baseline - skipping the rerun.' -ForegroundColor Green
+    Write-Host 'Force a full run with OMP_GATE_NOCACHE=1.' -ForegroundColor DarkGray
+    exit 0
+}
+
 & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $localCi
 $code = $LASTEXITCODE
 

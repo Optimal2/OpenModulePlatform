@@ -143,6 +143,37 @@ try {
     Write-Host "========================================"
     if ($failures.Count -eq 0) {
         Write-Host "LOCAL CI PASSED"
+
+        # Known limitation (deliberate, do not "fix"): the consumer stamp keys
+        # carry a neighbour-HEAD leg with a documented caveat (a stamp can
+        # survive the neighbour's tree going dirty, losing the validator's
+        # shared-project warning). OMP IS the neighbour, so that leg drops out
+        # of this key and the caveat cannot occur here.
+        # Gate cache: stamp this green run so the pre-push hook can skip an
+        # identical rerun. Key: (HEAD tree, resolved baseline). Never for
+        # -SkipTests ("never as the gate"), never from a dirty tree. The script
+        # has no -Configuration parameter - build/test hardcode Release - so no
+        # configuration guard is possible or needed. Best-effort.
+        try {
+            $treeClean = -not (git -C $repoRoot status --porcelain 2>$null)
+            if (-not $SkipTests -and $treeClean -and -not [string]::IsNullOrWhiteSpace($BaseCommit)) {
+                $treeSha = (git -C $repoRoot rev-parse 'HEAD^{tree}' 2>$null)
+                $gitCommonDir = (git -C $repoRoot rev-parse --git-common-dir 2>$null)
+                if ($treeSha -and $gitCommonDir) {
+                    if (-not [System.IO.Path]::IsPathRooted($gitCommonDir)) {
+                        $gitCommonDir = Join-Path $repoRoot $gitCommonDir
+                    }
+                    $stampDir = Join-Path $gitCommonDir 'local-ci-pass'
+                    if (-not (Test-Path $stampDir)) { $null = New-Item -ItemType Directory -Path $stampDir }
+                    $stampName = "$treeSha-$BaseCommit"
+                    Set-Content -Path (Join-Path $stampDir $stampName) -Value (Get-Date -Format o)
+                    Get-ChildItem $stampDir | Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 | Remove-Item -Force -ErrorAction SilentlyContinue
+                    Write-Host "Gate cache: stamped green run ($($stampName.Substring(0, 12))...)." -ForegroundColor DarkGray
+                }
+            }
+        }
+        catch { <# best-effort; a failed stamp only costs a rerun #> }
+
         exit 0
     }
 
