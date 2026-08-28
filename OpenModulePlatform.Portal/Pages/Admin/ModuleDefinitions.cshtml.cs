@@ -217,7 +217,7 @@ public sealed class ModuleDefinitionsModel : OmpPortalPageModel
             .ToList();
     }
 
-    private string BuildImportStatus(PortableModulePackageImportResult result)
+    internal string BuildImportStatus(PortableModulePackageImportResult result)
     {
         var message = string.Format(
             T("Imported module definition {0} {1}."),
@@ -228,7 +228,16 @@ public sealed class ModuleDefinitionsModel : OmpPortalPageModel
             ? T("The definition was applied.")
             : T("The definition was stored but not applied."));
 
-        if (result.SqlRepairCount > 0)
+        // The DefinitionSqlOutcome sentence (built by PortableModulePackageService for
+        // every import) tells apart executed / deliberately skipped with reason /
+        // declared but zero executed. Rendering it here closes the same silence the
+        // universal package import already closed: until now this line said "Executed N"
+        // only when N > 0 and said nothing at all when no script ran.
+        if (!string.IsNullOrWhiteSpace(result.DefinitionSqlOutcome))
+        {
+            message += " " + result.DefinitionSqlOutcome;
+        }
+        else if (result.SqlRepairCount > 0)
         {
             message += " " + string.Format(
                 T("Executed {0} SQL repair script(s)."),
