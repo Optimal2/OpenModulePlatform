@@ -16,6 +16,18 @@ things came out differently from the proposal, and the differences matter:
 | Start as **WARN**, consider FORCE later (decision flag (a)) | shipped as **FORCE**: Check 14 is a hard error and blocks the consumer's push. `-Strict` additionally turns "the guard could not run" into an error rather than a warning. |
 | Scope: `OpenModulePlatform.Web.Shared` in five private repos (decision flag (c)) | **six** consumer repos — `IbsPackager`, `LogSearch`, `EArkivChecker`, `Dokumentbibliotek`, `VajSkrivare` **and `iKrock2`** (not listed in this ADR) — and **four** shared projects, not one: `Web.Shared`, `EventPublisher.Abstractions`, `EventPublisher.Sql` and `Worker.Abstractions` (IbsPackager only, for `ibs-packager-worker`). |
 
+**One more thing changed after this ADR was written, and it is not in the table because
+nobody proposed it here: the `build:omp-web-shared` job lock no longer exists.** The
+sections below (see "Gap confirmation" and migration consideration 5) describe it as a
+standing constraint — "the existing exclusive lock … remains unchanged". That was true when
+this ADR was written and is false now. AI Orchestrator commit `c70f6c3` removed the lock on
+2026-08-22, and `AI-Orchestrator/src/gui/jobConcurrency.ts:119` now states "There is
+intentionally NO `build:omp-web-shared` lock". Concurrent consumer builds are made safe by
+output isolation instead of by serialization: the consumer's `local-ci.ps1` passes
+`-p:OmpIsolatedBuildRoot=<repo-local folder>`, which `Directory.Build.props:62-74` in this
+repository uses to redirect `BaseIntermediateOutputPath`/`BaseOutputPath` per consumer. Read
+the lock references below as history. (Verified 2026-08-28.)
+
 The rule lives in exactly one place:
 `scripts/omp/validate-shared-dependencies.ps1` in this repository. Consumer
 validators call it as **Check 14** rather than embedding a copy; IbsPackager did
