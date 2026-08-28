@@ -139,17 +139,7 @@ jobs:
 
     strategy:
       fail-fast: false
-      # TEMPORARY SABOTAGE - do not merge. Points the matrix at .NET 9, which
-      # this repository does not support (target frameworks are net10.0 and
-      # global.json pins the 10.0.200 SDK band). The run MUST fail.
-      matrix:
-        include:
-          - name: sabotage-net9
-            sdk: '9.0.x'
-            runtimeFloor: ''
-            expectedMajor: '10'
-            cadence: push
-            purpose: 'SABOTAGE: unsupported .NET major, the gate must fail this leg'
+      matrix: ${{ fromJSON(needs.version-matrix.outputs.legs) }}
 
     steps:
       - name: Check out repository
@@ -169,6 +159,23 @@ jobs:
         with:
           dotnet-version: ${{ matrix.runtimeFloor }}
 
+      - name: Pin SDK resolution to exactly ${{ matrix.sdk }}
+        # Measured 2026-08-28 on windows-latest: the hosted image carries newer
+        # SDK bands in C:\Program Files\dotnet (and sets DOTNET_ROOT there), so
+        # a leg that asks setup-dotnet for 10.0.200 still resolves and builds on
+        # the image's 10.0.400 under rollForward latestFeature - a 'pinned' leg
+        # that proves nothing. For exact-pin legs the workspace global.json is
+        # narrowed to rollForward=disable, which makes the muxer pick exactly
+        # the SDK this leg installed. The pushed file is untouched; this edits
+        # only the runner's checkout.
+        if: ${{ matrix.pinExact == 'true' }}
+        shell: pwsh
+        run: |
+          $gj = Get-Content global.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $gj.sdk.rollForward = 'disable'
+          ($gj | ConvertTo-Json -Depth 4) | Set-Content global.json -Encoding UTF8
+          Write-Host "Leg '${{ matrix.name }}' narrowed global.json rollForward to 'disable'; expecting exactly SDK ${{ matrix.sdk }}."
+
       - name: Show leg purpose and .NET SDK info
         shell: pwsh
         run: |
@@ -183,13 +190,18 @@ jobs:
         # the SDK that will actually build must be on the major the target
         # frameworks claim. A matrix pointed at an unsupported version dies
         # here with a readable message instead of a NuGet restore error.
+        # Exact-pin legs additionally require the resolved SDK to BE the pinned
+        # version, so a silent roll-forward can never pass as a pinned build.
         shell: pwsh
         run: |
           $sdk = dotnet --version
           if ($LASTEXITCODE -ne 0) { throw "dotnet --version failed; global.json rejected the installed SDK set for leg '${{ matrix.name }}'." }
-          Write-Host "Resolved SDK: $sdk (expected major: ${{ matrix.expectedMajor }})"
+          Write-Host "Resolved SDK: $sdk (expected major: ${{ matrix.expectedMajor }}, pinExact: ${{ matrix.pinExact }})"
           if (-not $sdk.StartsWith('${{ matrix.expectedMajor }}.')) {
             throw "Installed SDK $sdk is not on the supported .NET major ${{ matrix.expectedMajor }}; this leg claims a version the repository does not support."
+          }
+          if ('${{ matrix.pinExact }}' -eq 'true' -and $sdk -ne '${{ matrix.sdk }}') {
+            throw "Leg '${{ matrix.name }}' must build on exactly SDK ${{ matrix.sdk }} but resolved $sdk; the pin did not hold."
           }
 
       - name: Restore solution

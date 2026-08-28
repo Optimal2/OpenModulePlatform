@@ -159,8 +159,9 @@ $legs.Add(@{
     sdk           = $sdkVersion
     runtimeFloor  = ''
     expectedMajor = $sdkMajor
+    pinExact      = 'true'
     cadence       = 'push'
-    purpose       = "exact SDK pin from global.json ($sdkVersion)"
+    purpose       = "exact SDK pin from global.json ($sdkVersion); proves the repository still builds on the oldest SDK band the rollForward policy accepts. CI narrows the workspace global.json to rollForward=disable for this leg, because hosted images carry newer SDK bands that latestFeature would otherwise silently roll forward to."
 })
 
 if ($allowLatestBand) {
@@ -169,6 +170,7 @@ if ($allowLatestBand) {
         sdk           = "$sdkMajor.0.x"
         runtimeFloor  = ''
         expectedMajor = $sdkMajor
+        pinExact      = 'false'
         cadence       = 'push'
         purpose       = "newest SDK band the rollForward policy ($rollForward) accepts; this is what hosted images and dev machines drift to"
     })
@@ -180,6 +182,7 @@ $scheduledLegs.Add(@{
     sdk           = $sdkVersion
     runtimeFloor  = $runtimeFloor
     expectedMajor = $sdkMajor
+    pinExact      = 'true'
     cadence       = 'scheduled'
     purpose       = "pinned SDK build, but tests run with DOTNET_ROLL_FORWARD=Disable so the test hosts load exactly runtime $runtimeFloor - the oldest runtime patch the net$sdkMajor.0 target claims to run on"
 })

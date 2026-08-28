@@ -158,13 +158,16 @@ Describe 'get-ci-version-matrix: derivation from repository version files' {
             $pinned = @($result.Matrix.include | Where-Object { $_.name -eq 'sdk-pinned' })[0]
             $pinned.sdk | Should Be '10.0.200'
             $pinned.cadence | Should Be 'push'
+            $pinned.pinExact | Should Be 'true'
 
             $latest = @($result.Matrix.include | Where-Object { $_.name -eq 'sdk-latest-band' })[0]
             $latest.sdk | Should Be '10.0.x'
+            $latest.pinExact | Should Be 'false'
 
             $floor = @($result.Matrix.include | Where-Object { $_.name -eq 'runtime-floor' })[0]
             $floor.runtimeFloor | Should Be '10.0.0'
             $floor.cadence | Should Be 'scheduled'
+            $floor.pinExact | Should Be 'true'
         }
         finally {
             Remove-TemporaryMatrixRepository -RootPath $repoRoot
