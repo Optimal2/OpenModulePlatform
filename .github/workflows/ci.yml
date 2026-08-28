@@ -139,8 +139,7 @@ jobs:
 
     strategy:
       fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.version-matrix.outputs.legs) }}
+      matrix: ${{ fromJSON(needs.version-matrix.outputs.legs) }}
 
     steps:
       - name: Check out repository
