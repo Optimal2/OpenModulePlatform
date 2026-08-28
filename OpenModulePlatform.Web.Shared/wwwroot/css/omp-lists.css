@@ -285,11 +285,18 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    /* Sized by the script to exactly one popover text line; explicit
+       mins and box-sizing so host app global button rules cannot inflate
+       it. */
+    width: 20px;
+    height: 20px;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+    line-height: 1;
     padding: 0;
     border: 1px solid var(--border, #d7deea);
-    border-radius: 10px;
+    border-radius: 6px;
     background: var(--surface, #fff);
     color: var(--text-muted, #5b6b82);
     box-shadow: var(--shadow);
@@ -304,8 +311,8 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
 
 .info-popover__copy::before {
     content: "";
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
     background: currentColor;
     -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg") center / contain no-repeat;
     mask: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg") center / contain no-repeat;

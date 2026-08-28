@@ -668,14 +668,19 @@
         popover.style.left = `${popoverLeft}px`;
 
         popover.parentNode.appendChild(copy);
+        // The button is exactly one text line tall and lines up with the
+        // popover's first text row.
+        const popoverStyle = window.getComputedStyle(popover);
+        const lineHeight = Math.round(Number.parseFloat(window.getComputedStyle(body).lineHeight) || 20);
+        copy.style.width = `${lineHeight}px`;
+        copy.style.height = `${lineHeight}px`;
         const gap = 6;
-        const copyWidth = copy.offsetWidth || 28;
         // Left of the popover with a small gap; flips to the right side when
         // the popover already hugs the left screen edge.
-        const copyLeft = popoverLeft - gap - copyWidth >= 8
-            ? popoverLeft - gap - copyWidth
+        const copyLeft = popoverLeft - gap - lineHeight >= 8
+            ? popoverLeft - gap - lineHeight
             : popoverLeft + popover.offsetWidth + gap;
-        copy.style.top = popover.style.top;
+        copy.style.top = `${rect.bottom + 6 + (Number.parseFloat(popoverStyle.paddingTop) || 0)}px`;
         copy.style.left = `${copyLeft}px`;
 
         badge.classList.add('is-open');
