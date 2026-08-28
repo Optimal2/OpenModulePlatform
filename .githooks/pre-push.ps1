@@ -23,9 +23,10 @@ $ErrorActionPreference = 'Stop'
 
 # Resolve the work tree being pushed, not the directory holding the hook file:
 # with git worktrees the hook always loads from the main checkout's .githooks
-# (core.hooksPath is absolute), so $PSScriptRoot pointed a worktree push at the
-# MAIN checkout's tree and local-ci.ps1 -- the gate then measured content that
-# was not being pushed. Git runs pre-push with the pushing work tree as cwd.
+# (core.hooksPath is the relative .githooks, resolved against the main
+# checkout), so $PSScriptRoot pointed a worktree push at the MAIN checkout's
+# tree and local-ci.ps1 -- the gate then measured content that was not being
+# pushed. Git runs pre-push with the pushing work tree as cwd.
 $repoRoot = (git rev-parse --show-toplevel).Trim().Replace('/', '\')
 if ([string]::IsNullOrWhiteSpace($repoRoot)) {
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -45,10 +46,11 @@ if (-not (Test-Path $localCi)) {
 # stdin: the remote sha is what origin/main pointed at before the push (what
 # local-ci resolved as upstream), and an all-zero remote sha (brand-new ref)
 # maps to local-ci's no-upstream fallback of HEAD^. Every case where the two
-# resolutions could disagree - a run stamped with an explicit -BaseCommit
-# override, a push to a ref that is not the branch upstream, any failing git
-# command - deliberately fails OPEN to a miss and runs the full gate; a wrong
-# hit is worse than a rerun, so do not "tighten" this. Anything unexpected -
+# resolutions could disagree - a run with an explicit -BaseCommit override
+# (local-ci.ps1 never stamps those), a push to a ref that is not the branch
+# upstream, any failing git command - deliberately fails OPEN to a miss and
+# runs the full gate; a wrong hit is worse than a rerun, so do not "tighten"
+# this. Anything unexpected -
 # no stdin, several refs, deletes, the OMP_GATE_NOCACHE=1 escape hatch -
 # falls open the same way. Keep the key computation in sync with
 # scripts/local-ci.ps1.

@@ -67,7 +67,8 @@ try {
     # ref while commits are still unpushed. With nothing to push, fall back to
     # the parent of HEAD so the script still measures something real rather
     # than comparing HEAD to itself.
-    if ([string]::IsNullOrWhiteSpace($BaseCommit)) {
+    $explicitBaseCommit = -not [string]::IsNullOrWhiteSpace($BaseCommit)
+    if (-not $explicitBaseCommit) {
         # Resolve the upstream WITHOUT the '@{u}' revision syntax: on a branch
         # with no upstream (every first push of a new branch) git dies with
         # "fatal: no upstream configured" on stderr - even under
@@ -151,12 +152,16 @@ try {
         # of this key and the caveat cannot occur here.
         # Gate cache: stamp this green run so the pre-push hook can skip an
         # identical rerun. Key: (HEAD tree, resolved baseline). Never for
-        # -SkipTests ("never as the gate"), never from a dirty tree. The script
-        # has no -Configuration parameter - build/test hardcode Release - so no
+        # -SkipTests ("never as the gate"), never from a dirty tree, and never
+        # for an explicit -BaseCommit override: the hook can only reproduce the
+        # auto-resolved baseline leg from the push's stdin, so an explicitly
+        # overridden run must fail OPEN to a cache miss there (a wrong hit is
+        # worse than a rerun - do not "tighten" this). The script has no
+        # -Configuration parameter - build/test hardcode Release - so no
         # configuration guard is possible or needed. Best-effort.
         try {
             $treeClean = -not (git -C $repoRoot status --porcelain 2>$null)
-            if (-not $SkipTests -and $treeClean -and -not [string]::IsNullOrWhiteSpace($BaseCommit)) {
+            if (-not $SkipTests -and $treeClean -and -not $explicitBaseCommit -and -not [string]::IsNullOrWhiteSpace($BaseCommit)) {
                 $treeSha = (git -C $repoRoot rev-parse 'HEAD^{tree}' 2>$null)
                 $gitCommonDir = (git -C $repoRoot rev-parse --git-common-dir 2>$null)
                 if ($treeSha -and $gitCommonDir) {
