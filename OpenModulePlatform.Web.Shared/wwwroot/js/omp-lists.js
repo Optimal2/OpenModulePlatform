@@ -608,11 +608,14 @@
 
     let activeInfoPopover = null;
     let activeInfoBadge = null;
+    let activeInfoCopy = null;
 
     function closeInfoPopover() {
         activeInfoPopover?.remove();
+        activeInfoCopy?.remove();
         activeInfoBadge?.classList.remove('is-open');
         activeInfoPopover = null;
+        activeInfoCopy = null;
         activeInfoBadge = null;
     }
 
@@ -625,12 +628,16 @@
         // clicks (the document listener) or the opener itself close it.
         popover.addEventListener('click', (event) => event.stopPropagation());
 
+        // The copy button floats in its own little box beside the popover
+        // (left, with a small gap), so it sits in the same spot no matter
+        // how long the text is. A click on it is not an outside click.
         const copy = document.createElement('button');
         copy.type = 'button';
         copy.className = 'info-popover__copy';
         copy.title = 'Copy';
         copy.setAttribute('aria-label', 'Copy');
-        copy.addEventListener('click', () => {
+        copy.addEventListener('click', (event) => {
+            event.stopPropagation();
             const done = () => {
                 copy.classList.add('is-copied');
                 window.setTimeout(() => copy.classList.remove('is-copied'), 1200);
@@ -645,7 +652,6 @@
                 try { document.execCommand('copy'); done(); } finally { scratch.remove(); }
             }
         });
-        popover.appendChild(copy);
 
         const body = document.createElement('div');
         body.className = 'info-popover__body';
@@ -658,10 +664,23 @@
         const rect = badge.getBoundingClientRect();
         const maxLeft = window.innerWidth - popover.offsetWidth - 8;
         popover.style.top = `${rect.bottom + 6}px`;
-        popover.style.left = `${Math.max(8, Math.min(rect.left, maxLeft))}px`;
+        const popoverLeft = Math.max(8, Math.min(rect.left, maxLeft));
+        popover.style.left = `${popoverLeft}px`;
+
+        popover.parentNode.appendChild(copy);
+        const gap = 6;
+        const copyWidth = copy.offsetWidth || 28;
+        // Left of the popover with a small gap; flips to the right side when
+        // the popover already hugs the left screen edge.
+        const copyLeft = popoverLeft - gap - copyWidth >= 8
+            ? popoverLeft - gap - copyWidth
+            : popoverLeft + popover.offsetWidth + gap;
+        copy.style.top = popover.style.top;
+        copy.style.left = `${copyLeft}px`;
 
         badge.classList.add('is-open');
         activeInfoPopover = popover;
+        activeInfoCopy = copy;
         activeInfoBadge = badge;
     }
 

@@ -259,9 +259,9 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
 .info-popover {
     position: fixed;
     max-width: min(420px, calc(100vw - 16px));
-    /* The body scrolls; the popover itself stays put so the copy button
-       keeps its corner while long content scrolls beneath it. */
-    padding: 10px 34px 10px 12px;
+    /* The body scrolls inside; the copy button floats in its own box
+       beside the popover. */
+    padding: 10px 12px;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--surface);
@@ -281,20 +281,20 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
 }
 
 .info-popover__copy {
-    position: absolute;
-    top: 6px;
-    right: 6px;
+    position: fixed;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     border: 1px solid var(--border, #d7deea);
-    border-radius: 5px;
+    border-radius: 10px;
     background: var(--surface, #fff);
     color: var(--text-muted, #5b6b82);
+    box-shadow: var(--shadow);
     cursor: pointer;
+    z-index: 100;
 }
 
 .info-popover__copy:hover {
