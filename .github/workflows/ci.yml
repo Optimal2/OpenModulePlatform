@@ -139,7 +139,17 @@ jobs:
 
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.version-matrix.outputs.legs) }}
+      # TEMPORARY SABOTAGE - do not merge. Points the matrix at .NET 9, which
+      # this repository does not support (target frameworks are net10.0 and
+      # global.json pins the 10.0.200 SDK band). The run MUST fail.
+      matrix:
+        include:
+          - name: sabotage-net9
+            sdk: '9.0.x'
+            runtimeFloor: ''
+            expectedMajor: '10'
+            cadence: push
+            purpose: 'SABOTAGE: unsupported .NET major, the gate must fail this leg'
 
     steps:
       - name: Check out repository
