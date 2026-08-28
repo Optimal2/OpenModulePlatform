@@ -285,18 +285,17 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    /* Sized by the script to exactly one popover text line; explicit
-       mins and box-sizing so host app global button rules cannot inflate
-       it. */
-    width: 20px;
-    height: 20px;
+    /* Height set by the script to match a one-line popover's outer
+       height; width follows the icon + padding. Explicit mins and
+       box-sizing so host app global button rules cannot inflate it. */
+    height: 42px;
     min-width: 0;
     min-height: 0;
     box-sizing: border-box;
     line-height: 1;
-    padding: 0;
+    padding: 0 10px;
     border: 1px solid var(--border, #d7deea);
-    border-radius: 6px;
+    border-radius: 10px;
     background: var(--surface, #fff);
     color: var(--text-muted, #5b6b82);
     box-shadow: var(--shadow);
