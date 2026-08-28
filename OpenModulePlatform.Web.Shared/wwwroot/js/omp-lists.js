@@ -227,6 +227,42 @@
         return controller;
     }
 
+    // Summary rows: a tfoot row marked data-list-summary stays at the bottom
+    // (tfoot is untouched by tbody sorting) and its data-list-sum cells show
+    // the column sum over the rows passed in - all rows matching the current
+    // search/filter, across pages, so the total describes the filtered set
+    // rather than the visible page. Values come from data-sort-value when
+    // present, otherwise the cell text (parsed like the number sorter).
+    function updateListSummaries(table, rows) {
+        table.querySelectorAll(':scope > tfoot [data-list-sum]').forEach((cell) => {
+            const index = cell.cellIndex;
+            let sum = 0;
+            rows.forEach((row) => {
+                const source = row.cells[index];
+                if (!source) {
+                    return;
+                }
+                const raw = (source.getAttribute('data-sort-value') || source.textContent || '').trim();
+                const parsed = Number.parseFloat(raw.replace(/\s+/g, '').replace(/,/g, '.'));
+                if (Number.isFinite(parsed)) {
+                    sum += parsed;
+                }
+            });
+            cell.textContent = String(Math.round(sum * 100) / 100);
+        });
+    }
+
+    function initListSummaries(root) {
+        root.querySelectorAll('table').forEach((table) => {
+            if (!table.querySelector(':scope > tfoot [data-list-sum]') || listControllers.has(table)) {
+                return;
+            }
+            // Tables without a controller (no search/filter/paging) sum once
+            // over everything; controller tables resum on every refresh.
+            updateListSummaries(table, getListRowGroups(table.tBodies[0]).map((group) => group[0]));
+        });
+    }
+
     function refreshListController(controller) {
         const groups = new Map();
         controller.filterInputs.filter((input) => input.checked).forEach((input) => {
@@ -244,6 +280,7 @@
         const limit = controller.pageSize > 0 ? controller.visibleLimit : Number.POSITIVE_INFINITY;
         let matchingCount = 0;
         let shownCount = 0;
+        const matchingRows = [];
 
         // Deep search extends the term to the nested lists inside follow rows:
         // a group whose own row misses still matches when a nested tbody row
@@ -281,6 +318,9 @@
                 show = matchingCount < limit;
                 matchingCount += 1;
             }
+            if (pinned || matches) {
+                matchingRows.push(row);
+            }
 
             rowGroup.forEach((groupRow) => {
                 groupRow.hidden = !show;
@@ -300,6 +340,8 @@
                 }
             });
         });
+
+        updateListSummaries(controller.table, matchingRows);
 
         const activeFilterCount = Array.from(groups.values()).reduce((sum, groupInputs) => sum + groupInputs.length, 0);
         if (controller.filterElement) {
@@ -1172,6 +1214,7 @@
         initListMessages(document);
         initColumnGroups(document);
         initColumnBands(document);
+        initListSummaries(document);
         listControllers.forEach((controller) => {
             refreshListController(controller);
             if (controller.viewport && controller.viewport.offsetHeight > 0) {

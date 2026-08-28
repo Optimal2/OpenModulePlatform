@@ -759,6 +759,20 @@ table.list-locally-searched > tbody > tr.list-deep-hit mark.list-deep-mark {
     mask: url("/_content/OpenModulePlatform.Web.Shared/icons/double-arrow-right.svg") center / contain no-repeat;
 }
 
+/* Summary rows: visually set apart from the data rows, always at the
+   bottom (tfoot), summing the filtered set above. */
+tr[data-list-summary] > td {
+    background: var(--surface-muted, #f8fafc);
+    border-top: 2px solid var(--border-strong, #c4cede);
+    font-weight: 600;
+}
+
+/* In fit mode a message follows its cell instead of any page-level pixel
+   cap, so ellipses appear only when space actually runs out. */
+table[data-list-fit] .list-message {
+    max-width: 100%;
+}
+
 /* Fit-width lists (opt in with data-list-fit on the table): the table never
    grows past its container, so no horizontal scrollbar appears. Instead of
    the default clip-with-ellipsis, headers and cells wrap - the browser
