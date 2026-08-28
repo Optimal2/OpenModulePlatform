@@ -259,11 +259,9 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
 .info-popover {
     position: fixed;
     max-width: min(420px, calc(100vw - 16px));
-    max-height: min(60vh, 420px);
-    overflow-y: auto;
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
-    padding: 10px 12px;
+    /* The body scrolls; the popover itself stays put so the copy button
+       keeps its corner while long content scrolls beneath it. */
+    padding: 10px 34px 10px 12px;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--surface);
@@ -273,6 +271,53 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     line-height: 1.4;
     box-shadow: var(--shadow);
     z-index: 100;
+}
+
+.info-popover__body {
+    max-height: min(60vh, 420px);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.info-popover__copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 5px;
+    background: var(--surface, #fff);
+    color: var(--text-muted, #5b6b82);
+    cursor: pointer;
+}
+
+.info-popover__copy:hover {
+    color: var(--link, #0b57d0);
+    border-color: var(--border-strong, #c4cede);
+}
+
+.info-popover__copy::before {
+    content: "";
+    width: 13px;
+    height: 13px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg") center / contain no-repeat;
+}
+
+.info-popover__copy.is-copied::before {
+    -webkit-mask-image: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+    mask-image: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+}
+
+.info-popover__copy.is-copied {
+    color: var(--ok, #1b7f4d);
 }
 
 .list-message {
@@ -294,12 +339,19 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     color: var(--text-muted);
 }
 
-.list-message--truncated {
+.list-message {
     cursor: pointer;
 }
 
-.list-message--truncated:hover,
-.list-message--truncated:focus-visible,
+/* While the user manages column widths manually (fixed layout), page-level
+   pixel caps on messages yield to the cell: widening the column reveals
+   more of the text. */
+table.list-columns-resized .list-message {
+    max-width: 100%;
+}
+
+.list-message:hover,
+.list-message:focus-visible,
 .list-message.is-open {
     color: var(--link-hover);
     text-decoration: underline dotted;

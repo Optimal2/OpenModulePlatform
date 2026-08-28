@@ -1,7 +1,11 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_portal",
+<<<<<<< HEAD
   "definitionVersion": "0.3.153",
+=======
+  "definitionVersion": "0.3.152",
+>>>>>>> ae78baa4 (omp-lists messages: width-following, always-clickable, sturdier popover)
   "module": {
     "displayName": "OpenModulePlatform Portal",
     "moduleType": "Portal",
@@ -43,7 +47,11 @@
       "targetName": "omp-portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "minVersion": "0.3.26",
+<<<<<<< HEAD
       "maxVersion": "0.3.603"
+=======
+      "maxVersion": "0.3.602"
+>>>>>>> ae78baa4 (omp-lists messages: width-following, always-clickable, sturdier popover)
     }
   ],
   "artifactConfigurationFiles": [

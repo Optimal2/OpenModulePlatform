@@ -621,7 +621,36 @@
 
         const popover = document.createElement('div');
         popover.className = 'info-popover';
-        popover.textContent = text;
+        // A click inside the popover is not a click outside it: only outside
+        // clicks (the document listener) or the opener itself close it.
+        popover.addEventListener('click', (event) => event.stopPropagation());
+
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'info-popover__copy';
+        copy.title = 'Copy';
+        copy.setAttribute('aria-label', 'Copy');
+        copy.addEventListener('click', () => {
+            const done = () => {
+                copy.classList.add('is-copied');
+                window.setTimeout(() => copy.classList.remove('is-copied'), 1200);
+            };
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text).then(done, () => { /* keep quiet */ });
+            } else {
+                const scratch = document.createElement('textarea');
+                scratch.value = text;
+                document.body.appendChild(scratch);
+                scratch.select();
+                try { document.execCommand('copy'); done(); } finally { scratch.remove(); }
+            }
+        });
+        popover.appendChild(copy);
+
+        const body = document.createElement('div');
+        body.className = 'info-popover__body';
+        body.textContent = text;
+        popover.appendChild(body);
         // Inside a modal <dialog> the popover must live in the dialog's
         // top layer - a body-appended element would render beneath it.
         (badge.closest('dialog') || document.body).appendChild(popover);
@@ -679,12 +708,12 @@
             }
 
             message.dataset.listMessageInitialized = 'true';
+            // Localized by the page via data-list-message-hint on any
+            // ancestor; the English text is the neutral fallback.
+            message.title = message.closest('[data-list-message-hint]')?.getAttribute('data-list-message-hint')
+                || 'Click to show the full message';
             message.addEventListener('click', (event) => {
                 const isOwnPopover = activeInfoBadge === message;
-                if (!isOwnPopover && message.scrollWidth <= message.clientWidth) {
-                    return;
-                }
-
                 event.stopPropagation();
                 if (isOwnPopover) {
                     closeInfoPopover();
@@ -781,6 +810,9 @@
                 });
                 table.style.tableLayout = 'fixed';
                 table.style.width = '100%';
+                // Lets page-level px caps on .list-message yield to the cell
+                // width while the user is managing widths manually.
+                table.classList.add('list-columns-resized');
             };
 
             const currentPixelWidths = () => Array.from(headerRow.cells).map((cell) => cell.getBoundingClientRect().width);
@@ -796,6 +828,7 @@
                 });
                 table.style.removeProperty('table-layout');
                 table.style.removeProperty('width');
+                table.classList.remove('list-columns-resized');
                 storeWidths(null);
                 markListMessageTruncation();
             };
