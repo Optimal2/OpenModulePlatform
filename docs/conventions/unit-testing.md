@@ -32,7 +32,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `OpenModulePlatform.Portal.Tests` (31 files), `OpenModulePlatform.HostAgent.Runtime.Tests` (24 files), `OpenModulePlatform.Web.Shared.Analyzers.Tests` (1 file)
   - Plus two Pester files: `tests/Bump-Version.Tests.ps1` and `tests/Validate-ComponentVersions.Tests.ps1` (script tests, not unit tests)
 - **Framework:** xUnit.
-  - `Directory.Packages.props:33-34` (`xunit` 2.9.3, `xunit.runner.visualstudio` 3.1.5)
+  - `Directory.Packages.props` (`xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0)
   - `OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj:17-18`
   - Analyzer tests additionally use the Roslyn harness `Microsoft.CodeAnalysis.CSharp.Testing`: `OpenModulePlatform.Web.Shared.Analyzers.Tests/OmpWebDefaultsAnalyzerTests.cs:3-5,41-49`
 - **Layout/naming:** Sibling `<ProjectUnderTest>.Tests/<ProjectUnderTest>.Tests.csproj` beside each source project at repo root (e.g. `OpenModulePlatform.Portal.Tests/`); subfolders mirror source structure (`Services/`, `Models/`, `Security/`, `Configuration/`, `Integration/`). All 3 projects are in `OpenModulePlatform.slnx:8-10`. Method naming `Method_WhenCondition_ExpectedResult` (e.g. `OpenModulePlatform.HostAgent.Runtime.Tests/Services/OmpHostArtifactRepositoryTierCTests.cs:24`). Global `<Using Include="Xunit" />` in csproj (`OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj:39`).
@@ -41,7 +41,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `OpenModulePlatform.HostAgent.Runtime.Tests/Services/FakeOptionsMonitor.cs:5`
   - `OpenModulePlatform.HostAgent.Runtime.Tests/Services/ManualTimeProvider.cs`
   - `OpenModulePlatform.Portal.Tests/Integration/TestAuthHandler.cs`
-- **Package pins (CPM, `Directory.Packages.props:3`):** `Microsoft.NET.Test.Sdk` 18.9.0 (`:13`), `xunit` 2.9.3 (`:52`), `xunit.runner.visualstudio` 3.1.5 (`:53`), `coverlet.collector` 10.0.1 (`:7`), `Microsoft.AspNetCore.Mvc.Testing` 10.0.11 (`:10`), `Microsoft.CodeAnalysis.CSharp.Analyzer.Testing` 1.1.4 (`:44`). TargetFramework `net10.0` in all three test csproj files (line 4 of each).
+- **Package pins (CPM, `Directory.Packages.props:3`):** `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0, `coverlet.collector` 10.0.1, `Microsoft.AspNetCore.Mvc.Testing` 10.0.11, `Microsoft.CodeAnalysis.CSharp.Analyzer.Testing` 1.1.4, and `Microsoft.CodeAnalysis.CSharp.Workspaces` 5.9.0. Test projects target `net10.0`.
 - **Assertion style:** Plain xUnit `Assert.*`. No FluentAssertions.
   - `OpenModulePlatform.Portal.Tests/Services/PushEventTests.cs:19-27,50` (`Assert.Equal`, `Assert.Throws`)
   - `OpenModulePlatform.HostAgent.Runtime.Tests/Services/HostAgentEngineTierDTests.cs:76-80` (`Assert.Single`, `Assert.True`, `Assert.Contains`)
@@ -176,7 +176,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 | Repo | Tests? | Framework | Mock lib | Test pins | Assertion style | Coverage | Integration gating | Tests run by |
 |---|---|---|---|---|---|---|---|---|
-| **OpenModulePlatform** | Yes — 3 projects, ~270 methods | xUnit 2.9.3 + runner 3.1.5 | None (hand-written fakes) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced (2 of 3 projects), never invoked | Tier C/D naming; DB tests fail without local SQL Server | Pre-push hook + CI (`dotnet test`); Pester script tests blocking in both pre-push and CI |
+| **OpenModulePlatform** | Yes — 3 projects, ~270 methods | xUnit 2.9.3 + runner 4.0.0 | None (hand-written fakes) | CPM: Test.Sdk 18.9.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced (2 of 3 projects), never invoked | Tier C/D naming; DB tests fail without local SQL Server | Pre-push hook + CI (`dotnet test`); Pester script tests blocking in both pre-push and CI |
 | **IbsPackager** | Yes — 2 projects, ~42 methods | xUnit 2.9.3 + runner 3.1.5 + SkippableFact 1.4.13 | None (stubs + NullLogger) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | `[SkippableFact]` + env connection string | Nothing automated |
 | **VajSkrivare** | Yes — 1 project, 2 tests _(2026-08-27: 2 projects, `+ Skrivarkoppling.Web.UiTests`)_ | xUnit 2.9.3 + runner ~~2.8.2~~ **3.1.5** | None (hand-written fake) | ~~**Inline (no CPM)**: Test.Sdk **17.14.0**~~ → **CPM**: Test.Sdk **18.9.0**, no coverlet | Plain `Assert.*` | None | None (tests avoid DB via config) | Nothing automated |
 | **iKrock2** | Yes — 1 project, 35 methods | xUnit 2.9.3 + runner 3.1.5 | None (Options.Create) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | None (pure unit tests) | Nothing automated (stale TODO) |

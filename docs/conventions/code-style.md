@@ -26,7 +26,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — present (`:1`). `root = true` (`:1`), `charset = utf-8` (`:4`), `end_of_line = lf` (`:5`), `insert_final_newline = true` (`:6`), `trim_trailing_whitespace = true` (`:7`), `indent_style = space` / `indent_size = 4` (`:8-9`), JSON/YAML/YML use 2 spaces (`:14-15`), SQL 4 spaces (`:17-18`).
 - **`Directory.Build.props`** — present, but only contains version/company metadata (`:3-12`). Does **not** set `Nullable`, `TreatWarningsAsErrors`, `LangVersion`, or `AnalysisLevel`.
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.200` with `rollForward: latestFeature` (`:3-4`).
+- **`global.json`** — pins SDK `10.0.400` with `rollForward: latestFeature` (`:3-4`).
 - **`.csproj`** — all projects target `net10.0` and set `Nullable`/`ImplicitUsings` to `enable` (e.g. `OpenModulePlatform.Portal.csproj:3-5`). Exception: `OpenModulePlatform.Web.Shared.Analyzers.csproj` targets `netstandard2.0` (`:4`), pins `LangVersion` to `9.0` (`:5`), and disables implicit usings (`:7`). Analyzer project uses `Microsoft.CodeAnalysis.Analyzers` (`:15`) and `EnforceExtendedAnalyzerRules` (`:9`). No repo-wide `TreatWarningsAsErrors` or `AnalysisLevel`.
 
 ### IbsPackager
@@ -105,7 +105,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 
 | Repository | `.editorconfig` | CPM | `Nullable` | `ImplicitUsings` | `TreatWarningsAsErrors` | `LangVersion` | `AnalysisLevel` | `EnforceCodeStyleInBuild` | Analyzers | `global.json` | JS lint | JS format | TS config |
 |------------|-----------------|-----|------------|------------------|--------------------------|---------------|-----------------|---------------------------|-----------|---------------|---------|-----------|-----------|
-| OpenModulePlatform | yes (LF) | yes | enable | enable | — | default* | — | — | analyzer project only | 10.0.200 | — | — | — |
+| OpenModulePlatform | yes (LF) | yes | enable | enable | — | default* | — | — | analyzer project only | 10.0.400 | — | — | — |
 | IbsPackager | no | yes | enable | enable | — | default | — | — | none | 10.0.200 | — | — | — |
 | LogSearch | no | yes | enable | enable | false | default | — | — | none | preview | — | — | — |
 | EArkivChecker | no | yes | enable | enable | false | default | — | — | none | preview | — | — | — |
