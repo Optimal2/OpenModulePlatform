@@ -2145,6 +2145,9 @@
                 script.onload = () => resolve();
                 script.onerror = () => reject(new Error('webamp bundle failed to load'));
                 document.head.appendChild(script);
+            }).catch((error) => {
+                webampLoaderPromise = null;   // a later widget may retry the load
+                throw error;
             });
         }
         return webampLoaderPromise;
@@ -2218,12 +2221,32 @@
 
         player.classList.add('dashboard-music-player--webamp');
         player.__ompWebamp = webamp;
-        setStatus('');
 
-        const refreshServerPlaylist = async () => {
+        const scaleWebampMount = () => {
+            const width = player.clientWidth;
+            const scale = width > 0 ? Math.min(1, width / 275) : 1;
+            mount.style.transformOrigin = 'top left';
+            mount.style.transform = scale < 1 ? `scale(${scale})` : '';
+            mount.style.height = `${Math.round(116 * scale)}px`;
+            mount.style.margin = scale < 1 ? '0' : '';
+        };
+        scaleWebampMount();
+        if (typeof ResizeObserver === 'function') {
+            const observer = new ResizeObserver(scaleWebampMount);
+            observer.observe(player);
+            player.__ompWebampResizeObserver = observer;
+        }
+
+        setStatus(state.tracks.length === 0 ? (player.dataset.noTracksLabel || '') : '');
+
+        const refreshServerPlaylist = async (preferredIndex = 0) => {
             state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl);
-            state.index = 0;
             webamp.setTracksToPlay(toWebampTracks(state.tracks));
+            const clamped = Math.min(Math.max(0, preferredIndex), Math.max(0, state.tracks.length - 1));
+            state.index = clamped;
+            if (state.tracks.length > 0 && typeof webamp.setCurrentTrack === 'function') {
+                webamp.setCurrentTrack(clamped);
+            }
             setStatus(state.tracks.length === 0 ? (player.dataset.noTracksLabel || '') : '');
         };
         const setTrack = (index) => {
@@ -4745,6 +4768,10 @@
 
     function removeDashboardWidgetElement(widget) {
         closeDashboardWidgetPopupForWidget(widget);
+        widget.querySelectorAll('[data-dashboard-music-player]').forEach((player) => {
+            try { player.__ompWebampResizeObserver?.disconnect(); } catch { /* best effort */ }
+            try { player.__ompWebamp?.dispose?.(); } catch { /* webamp's own dispose is best effort */ }
+        });
         revokeDashboardMusicPlayerObjectUrls(widget);
         revokeBlankWidgetObjectUrls(widget);
         widget.remove();
