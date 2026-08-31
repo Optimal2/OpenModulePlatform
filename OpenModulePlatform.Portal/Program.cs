@@ -53,6 +53,9 @@ builder.Services.AddScoped<PortalHealthService>();
 builder.Services.AddOptions<ArtifactUploadOptions>()
     .Bind(builder.Configuration.GetSection(ArtifactUploadOptions.SectionName))
     .ValidateOnStart();
+
+builder.Services.AddOptions<MusicPlayerWidgetOptions>()
+    .Bind(builder.Configuration.GetSection(MusicPlayerWidgetOptions.SectionName));
 builder.Services.Configure<IISServerOptions>(options =>
 {
     options.MaxRequestBodySize = maxUploadBytes;

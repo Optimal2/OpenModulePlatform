@@ -2,11 +2,21 @@
 @using OpenModulePlatform.Portal.Options
 @inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
 @inject Microsoft.Extensions.Options.IOptions<ArtifactUploadOptions> UploadOptions
+@inject Microsoft.Extensions.Options.IOptions<MusicPlayerWidgetOptions> MusicPlayerOptions
 @{
     var isPortalAdmin = ViewData["IsPortalAdmin"] is bool value && value;
     var maxUploadBytes = UploadOptions.Value.MaxUploadBytes > 0
         ? UploadOptions.Value.MaxUploadBytes
         : ArtifactUploadOptions.DefaultMaxUploadBytes;
+    var musicMode = string.Equals(MusicPlayerOptions.Value.Mode,
+        MusicPlayerWidgetOptions.ModeClassic, StringComparison.OrdinalIgnoreCase)
+        ? MusicPlayerWidgetOptions.ModeClassic
+        : MusicPlayerWidgetOptions.ModeWebamp;
+    var webampSkins = System.Text.Json.JsonSerializer.Serialize(new[]
+    {
+        new { url = Url.Content("~/lib/webamp/skins/omp-matrix.wsz"), name = "OMP Matrix" },
+        new { url = Url.Content("~/lib/webamp/skins/omp-ljus.wsz"), name = "OMP Ljus" },
+    });
 }
 
 <div class="dashboard-music-player"
@@ -24,8 +34,12 @@
      data-select-mp3-label="@L["Select an MP3 file."]"
      data-select-zip-label="@L["Select a ZIP package."]"
      data-local-artist-label="@L["Local file"]"
-     data-max-upload-bytes="@maxUploadBytes">
+     data-max-upload-bytes="@maxUploadBytes"
+     data-music-mode="@musicMode"
+     data-webamp-src="@Url.Content("~/lib/webamp/webamp.bundle.min.js")"
+     data-webamp-skins="@webampSkins">
     <audio preload="metadata" data-music-audio></audio>
+    <div class="dashboard-music-player__webamp" data-music-webamp hidden></div>
     <div class="dashboard-music-player__track">
         <div class="dashboard-music-player__cover" aria-hidden="true">
             <span></span>

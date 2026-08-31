@@ -4533,6 +4533,26 @@ button.dashboard-role-list__item:focus-visible {
     gap: 6px;
 }
 
+.dashboard-music-player__webamp {
+    position: relative;
+    width: 275px;
+    height: 116px;
+    margin: 0 auto;
+}
+
+/* Webamp mode: the vendored player owns playback, so the classic rows hide.
+   The admin (music library) button stays — uploads still go through it. */
+.dashboard-music-player--webamp .dashboard-music-player__track,
+.dashboard-music-player--webamp .dashboard-music-player__progress,
+.dashboard-music-player--webamp .dashboard-music-player__controls > :not([data-music-admin-open]) {
+    display: none;
+}
+
+.dashboard-music-player--webamp .dashboard-music-player__controls {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .dashboard-music-player__button {
     display: inline-flex;
     align-items: center;

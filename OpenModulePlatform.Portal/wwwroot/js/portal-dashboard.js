@@ -1872,6 +1872,11 @@
     }
 
     async function initDashboardMusicPlayer(player) {
+        if (player.dataset.musicMode === 'webamp'
+                && await initDashboardWebampPlayer(player)) {
+            return;
+        }
+
         const audio = player.querySelector('[data-music-audio]');
         const title = player.querySelector('[data-music-title]');
         const artist = player.querySelector('[data-music-artist]');
@@ -2121,6 +2126,115 @@
         if (!adminOpen) {
             player.classList.add('dashboard-music-player--no-admin');
         }
+    }
+
+    // ---- Webamp mode for the dashboard music player -------------------------
+    // The bundle is vendored under wwwroot/lib/webamp (see PROVENANCE.md there).
+    // Loaded lazily exactly once, and only when a player runs in webamp mode, so
+    // classic mode never pays the download.
+    let webampLoaderPromise = null;
+    function ensureWebampLoaded(src) {
+        if (window.Webamp) {
+            return Promise.resolve();
+        }
+        if (!webampLoaderPromise) {
+            webampLoaderPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.async = true;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('webamp bundle failed to load'));
+                document.head.appendChild(script);
+            });
+        }
+        return webampLoaderPromise;
+    }
+
+    function toWebampTracks(tracks) {
+        return tracks.map((track) => ({
+            url: track.src,
+            metaData: { artist: track.artist || '', title: track.title || '' }
+        }));
+    }
+
+    // Returns true when webamp took over the player; false lets the caller fall
+    // back to the classic audio-element player (missing bundle, unsupported
+    // browser, render failure — the widget must keep playing music regardless).
+    async function initDashboardWebampPlayer(player) {
+        const mount = player.querySelector('[data-music-webamp]');
+        const bundleSrc = player.dataset.webampSrc || '';
+        if (!mount || !bundleSrc) {
+            return false;
+        }
+
+        try {
+            await ensureWebampLoaded(bundleSrc);
+        } catch {
+            return false;
+        }
+
+        const Webamp = window.Webamp;
+        if (!Webamp || (typeof Webamp.browserIsSupported === 'function' && !Webamp.browserIsSupported())) {
+            return false;
+        }
+
+        let skins = [];
+        try {
+            skins = JSON.parse(player.dataset.webampSkins || '[]');
+        } catch {
+            skins = [];
+        }
+        skins = skins.filter((skin) => skin && skin.url && skin.name);
+
+        const status = player.querySelector('[data-music-status]');
+        const setStatus = (message) => {
+            if (status) {
+                status.textContent = message || '';
+            }
+        };
+
+        const state = { tracks: [], index: 0 };
+        state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl);
+
+        let webamp;
+        try {
+            webamp = new Webamp({
+                initialSkin: skins.length ? { url: skins[0].url } : undefined,
+                availableSkins: skins,
+                initialTracks: toWebampTracks(state.tracks),
+                windowLayout: {
+                    main: { position: { top: 0, left: 0 } },
+                    equalizer: { closed: true, position: { top: 0, left: 0 } },
+                    playlist: { closed: true, position: { top: 0, left: 0 } }
+                },
+                zIndex: 30
+            });
+            mount.hidden = false;
+            await webamp.renderInto(mount);
+        } catch {
+            mount.hidden = true;
+            return false;
+        }
+
+        player.classList.add('dashboard-music-player--webamp');
+        player.__ompWebamp = webamp;
+        setStatus('');
+
+        const refreshServerPlaylist = async () => {
+            state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl);
+            state.index = 0;
+            webamp.setTracksToPlay(toWebampTracks(state.tracks));
+            setStatus(state.tracks.length === 0 ? (player.dataset.noTracksLabel || '') : '');
+        };
+        const setTrack = (index) => {
+            state.index = index;
+            if (typeof webamp.setCurrentTrack === 'function') {
+                webamp.setCurrentTrack(index);
+            }
+        };
+
+        bindMusicPlayerAdmin(player, state, setTrack, refreshServerPlaylist, setStatus);
+        return true;
     }
 
     async function playAudio(audio, player) {
