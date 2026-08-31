@@ -1924,6 +1924,7 @@ internal static partial class Program
             }
 
             var importRoot = ResolveHostAgentArtifactImportPath();
+            var persistConfigTargets = false;
 
             // ---- Step 1: refresh the installer data folder from all source repos ----
             if (skipRefresh)
@@ -1941,7 +1942,8 @@ internal static partial class Program
 
                 if (sync.ConfigUpdated)
                 {
-                    Report("> Configuration targets were updated in memory for this run. Package-object sync does not rewrite tracked host config files.");
+                    persistConfigTargets = true;
+                    Report("> Configuration targets were updated in memory; they are written back to the host profile config after a successful stage.");
                 }
 
                 if (sync.HasWarnings)
@@ -2014,6 +2016,24 @@ internal static partial class Program
                 if (!imported)
                 {
                     return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, importTarget, importEnabled, false);
+                }
+            }
+
+            // ---- Persist the normalized artifact targets into the host profile config ----
+            // Only after the whole chain succeeded (build + stage + import when awaited):
+            // the tracked config should describe versions that actually shipped. A write
+            // failure must be LOUD but must not turn a completed import into a failure —
+            // the source-status view simply keeps reporting the rows until the next run.
+            if (persistConfigTargets)
+            {
+                try
+                {
+                    await WriteSyncedArtifactTargetsIntoConfigAsync(_configPath, _config);
+                    Report($"> Updated host profile config with synced artifact targets: {_configPath}");
+                }
+                catch (Exception ex)
+                {
+                    Report($"> WARN: could not persist artifact targets to {_configPath} ({ex.Message}) — the developer source-status view will keep reporting these rows.");
                 }
             }
 

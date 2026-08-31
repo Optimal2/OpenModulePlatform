@@ -604,6 +604,27 @@ internal static partial class Program
         return root.ToJsonString(JsonOptions);
     }
 
+    private static async Task WriteSyncedArtifactTargetsIntoConfigAsync(string configPath, BootstrapConfig config)
+    {
+        // Persist ONLY the artifacts array into the original JSON document, so every
+        // hand-maintained property survives (same merge approach as
+        // WriteGeneratedPayloadMetadataIntoJsonFileAsync below). Rationale: the
+        // --refresh-and-stage-package fast path normalized artifact targets in memory
+        // only, while --check-developer-source-status re-reads the tracked config —
+        // so the same UPDATE rows survived every successful build+import until the
+        // heavyweight --refresh-installer-package happened to rewrite the file
+        // (operator-verified 2026-08-31: 17 stale rows across two green runs).
+        var originalNode = JsonNode.Parse(
+                await File.ReadAllTextAsync(configPath),
+                documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true })
+            as JsonObject
+            ?? throw new InvalidOperationException($"Host profile config is not a JSON object: {configPath}");
+
+        originalNode["artifacts"] = JsonSerializer.SerializeToNode(config.Artifacts, JsonOptions);
+        var json = originalNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, Encoding.UTF8);
+    }
+
     private static async Task WriteGeneratedPayloadMetadataIntoJsonFileAsync(string configPath, BootstrapConfig generatedConfig)
     {
         // Same field set as ApplyGeneratedPayloadMetadata, but merged into the
