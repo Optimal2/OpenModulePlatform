@@ -4537,7 +4537,16 @@ button.dashboard-role-list__item:focus-visible {
     position: relative;
     flex: 1 1 auto;
     width: 100%;
-    min-height: 120px;
+    /* Fits the default stack (main 116 + equalizer 116 + playlist ~145) so a
+       fresh widget shows all three windows without spilling out of the card. */
+    min-height: 380px;
+}
+
+/* Kept in the layout while webamp renders - it measures its parent, and a
+   display:none parent measures 0x0 - but invisible so the bundle default skin
+   never flashes. */
+.dashboard-music-player__webamp--loading {
+    visibility: hidden;
 }
 
 /* Webamp mode: the vendored player owns playback, so the classic rows hide.

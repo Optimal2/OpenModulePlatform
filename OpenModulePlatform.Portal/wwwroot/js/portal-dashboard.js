@@ -2160,6 +2160,112 @@
         }));
     }
 
+    // Window layout persistence. webamp only reads `windowLayout` at construction,
+    // and its renderInto() ALWAYS dispatches centerWindowsInContainer, so the
+    // group's absolute position inside the widget cannot be pinned - webamp
+    // re-centers the whole stack on every mount. What we can (and do) persist is
+    // everything else: which windows are open, shade mode, the playlist size and
+    // the windows' arrangement relative to each other, which is what a user
+    // actually arranges.
+    // so we snapshot the live layout into localStorage and feed it back on init.
+    // NOTE: a window OMITTED from windowLayout is closed by webamp, so every
+    // window is always written out (see its setWindowLayout action creator).
+    const WEBAMP_LAYOUT_PREFIX = 'omp.webamp.layout.';
+
+    function webampLayoutKey(player) {
+        const widget = player.closest('[data-dashboard-widget]');
+        const id = widget?.dataset?.userActiveWidgetId || widget?.dataset?.widgetKey || '';
+        return `${WEBAMP_LAYOUT_PREFIX}${id || 'default'}`;
+    }
+
+    function defaultWebampLayout() {
+        // Stacked like a real Winamp: main on top, equalizer under it, playlist last.
+        return {
+            main: { position: { top: 0, left: 0 }, closed: false, shadeMode: false },
+            equalizer: { position: { top: 116, left: 0 }, closed: false, shadeMode: false },
+            playlist: {
+                position: { top: 232, left: 0 }, closed: false, shadeMode: false,
+                size: { extraWidth: 0, extraHeight: 0 }
+            }
+        };
+    }
+
+    function isFiniteNumber(value) {
+        return typeof value === 'number' && Number.isFinite(value);
+    }
+
+    // Only shapes we can hand straight back to webamp are accepted; anything
+    // partial or corrupt falls back to the default layout rather than throwing.
+    function sanitizeWebampLayout(raw) {
+        if (!raw || typeof raw !== 'object') {
+            return null;
+        }
+
+        const clean = {};
+        for (const id of ['main', 'equalizer', 'playlist']) {
+            const w = raw[id];
+            if (!w || typeof w !== 'object' || !w.position
+                    || !isFiniteNumber(w.position.top) || !isFiniteNumber(w.position.left)) {
+                return null;
+            }
+
+            clean[id] = {
+                position: { top: w.position.top, left: w.position.left },
+                closed: w.closed === true,
+                shadeMode: w.shadeMode === true
+            };
+            if (id === 'playlist' && w.size
+                    && isFiniteNumber(w.size.extraWidth) && isFiniteNumber(w.size.extraHeight)) {
+                clean.playlist.size = { extraWidth: w.size.extraWidth, extraHeight: w.size.extraHeight };
+            }
+        }
+
+        return clean;
+    }
+
+    function readWebampLayout(player) {
+        try {
+            const stored = window.localStorage.getItem(webampLayoutKey(player));
+            return sanitizeWebampLayout(JSON.parse(stored || 'null'));
+        } catch {
+            return null;   // private mode, blocked storage, corrupt value
+        }
+    }
+
+    // `webamp.store` is public in the shipped types but marked "TODO: make
+    // private", so every read is defensive: if a future bundle hides it we
+    // simply stop persisting instead of breaking the player.
+    function captureWebampLayout(webamp) {
+        try {
+            const windows = webamp?.store?.getState?.()?.windows?.genWindows;
+            if (!windows) {
+                return null;
+            }
+
+            const layout = {};
+            for (const id of ['main', 'equalizer', 'playlist']) {
+                const w = windows[id];
+                if (!w || !w.position) {
+                    return null;
+                }
+
+                layout[id] = {
+                    position: { top: w.position.y, left: w.position.x },
+                    closed: w.open === false,
+                    shadeMode: w.shade === true
+                };
+                if (id === 'playlist' && Array.isArray(w.size)) {
+                    // state keeps [extraWidth, extraHeight]; the option wants an object
+                    layout.playlist.size = { extraWidth: w.size[0], extraHeight: w.size[1] };
+                }
+            }
+
+            return layout;
+        } catch {
+            return null;
+        }
+    }
+
     // Returns true when webamp took over the player; false lets the caller fall
     // back to the classic audio-element player (missing bundle, unsupported
     // browser, render failure — the widget must keep playing music regardless).
@@ -2196,6 +2302,7 @@
             }
         };
 
+        const widget = player.closest('[data-dashboard-widget]');
         const state = { tracks: [], index: 0 };
         state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl);
 
@@ -2205,33 +2312,41 @@
                 initialSkin: skins.length ? { url: skins[0].url } : undefined,
                 availableSkins: skins,
                 initialTracks: toWebampTracks(state.tracks),
-                windowLayout: {
-                    main: { position: { top: 0, left: 0 } },
-                    equalizer: { closed: true, position: { top: 116, left: 0 } },
-                    playlist: { closed: true, position: { top: 232, left: 0 } }
-                },
+                windowLayout: readWebampLayout(player) || defaultWebampLayout(),
                 zIndex: 30
             });
+            // webamp measures its parent at mount time to place and snap the
+            // windows, so the mount must already have its FINAL size before
+            // renderInto: both the webamp layout classes (which give the mount
+            // its real box) and the reveal happen first. A display:none parent
+            // measures 0x0 and the classic grid measures too small - either one
+            // makes webamp shove the whole window stack inward.
+            player.classList.add('dashboard-music-player--webamp');
+            widget?.classList.add('dashboard-widget--webamp');
+            mount.hidden = false;
+            mount.classList.add('dashboard-music-player__webamp--loading');
             await webamp.renderInto(mount);
-            // The bundle's baked-in default skin must never be visible: the
-            // mount stays hidden until OUR skin has actually loaded. If the
-            // skin cannot load within the guard, the classic player takes over.
             const skinLoaded = await Promise.race([
                 webamp.skinIsLoaded().then(() => true),
                 new Promise((resolve) => setTimeout(() => resolve(false), 8000))
             ]);
             if (!skinLoaded) {
                 try { webamp.dispose?.(); } catch { /* best effort */ }
+                mount.hidden = true;
+                mount.classList.remove('dashboard-music-player__webamp--loading');
+                player.classList.remove('dashboard-music-player--webamp');
+                widget?.classList.remove('dashboard-widget--webamp');
                 return false;
             }
-            mount.hidden = false;
+            mount.classList.remove('dashboard-music-player__webamp--loading');
         } catch {
             mount.hidden = true;
+            mount.classList.remove('dashboard-music-player__webamp--loading');
+            player.classList.remove('dashboard-music-player--webamp');
+            widget?.classList.remove('dashboard-widget--webamp');
             return false;
         }
 
-        player.classList.add('dashboard-music-player--webamp');
-        player.closest('[data-dashboard-widget]')?.classList.add('dashboard-widget--webamp');
         player.__ompWebamp = webamp;
 
         // Governance: the vendored bundle links to webamp.org from its About
@@ -2298,6 +2413,40 @@
         }
 
         setStatus(state.tracks.length === 0 ? (player.dataset.noTracksLabel || '') : '');
+
+        // Persist the layout whenever it changes. The store also ticks on every
+        // playback frame, so writes are debounced AND compared - localStorage is
+        // only touched when the layout itself actually differs.
+        if (typeof webamp.__onStateChange === 'function') {
+            const layoutStorageKey = webampLayoutKey(player);
+            let lastSerialized = JSON.stringify(captureWebampLayout(webamp));
+            let saveTimer = null;
+            const unsubscribe = webamp.__onStateChange(() => {
+                if (saveTimer !== null) {
+                    return;
+                }
+
+                saveTimer = setTimeout(() => {
+                    saveTimer = null;
+                    const serialized = JSON.stringify(captureWebampLayout(webamp));
+                    if (!serialized || serialized === 'null' || serialized === lastSerialized) {
+                        return;
+                    }
+
+                    lastSerialized = serialized;
+                    try {
+                        window.localStorage.setItem(layoutStorageKey, serialized);
+                    } catch { /* storage blocked or full - layout just stops persisting */ }
+                }, 400);
+            });
+            player.__ompWebampLayoutUnsubscribe = () => {
+                if (saveTimer !== null) {
+                    clearTimeout(saveTimer);
+                    saveTimer = null;
+                }
+                try { unsubscribe(); } catch { /* best effort */ }
+            };
+        }
 
         const refreshServerPlaylist = async (preferredIndex = 0) => {
             state.tracks = await loadMusicPlaylist(player.dataset.playlistUrl);
@@ -4832,6 +4981,7 @@
             try { player.__ompWebampResizeObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampLinkObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampBodyObserver?.disconnect(); } catch { /* best effort */ }
+            try { player.__ompWebampLayoutUnsubscribe?.(); } catch { /* best effort */ }
             try { player.__ompWebamp?.dispose?.(); } catch { /* webamp's own dispose is best effort */ }
         });
         revokeDashboardMusicPlayerObjectUrls(widget);
