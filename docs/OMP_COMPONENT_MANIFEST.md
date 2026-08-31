@@ -41,6 +41,16 @@ own `version`, and that value is the version that belongs in
   from a newer module definition. Leave it empty for normal code-only artifact
   releases so the artifact can be imported and selected without bumping the
   module definition.
+- `minWorkerHostVersion` is optional and valid only for `worker` or
+  `worker-plugin` components. Generated packages write it to both the artifact
+  envelope and immutable `omp-worker-plugin.json` payload metadata as a
+  requirement on the canonical `omp-workerprocesshost` component. HostAgent
+  rejects the package when the selected worker host is older, and
+  WorkerProcessHost repeats the check before loading the plugin so a later host
+  downgrade cannot turn the mismatch into a runtime `MissingMethodException`.
+  The error names the required and running versions. Bump this value whenever
+  the plugin starts using a newer `OpenModulePlatform.Worker.Abstractions`
+  contract than its previous worker-host floor provides.
 - `widgetFiles` optionally lists dashboard widget package JSON files owned by
   the repository. Prefer object entries with `path`, optional `moduleKey`,
   and `widgetVersion`. When `destinationName` is omitted, the standard builders

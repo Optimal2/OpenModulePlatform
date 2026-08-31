@@ -563,7 +563,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
             throw new InvalidOperationException("Missing connection string: ConnectionStrings:OmpDb");
         }
 
-        var process = CreateWorkerProcess(workerProcessPath, managed.Definition, ompConnectionString);
+        var process = CreateWorkerProcess(
+            workerProcessPath,
+            managed.Definition,
+            workerProcessHost,
+            ompConnectionString);
         startupResources.AttachProcess(process);
 
         StartWorkerProcess(process, managed.Definition.WorkerInstanceId, workerProcessPath);
@@ -1130,9 +1134,10 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
     }
 
-    private static Process CreateWorkerProcess(
+    internal static Process CreateWorkerProcess(
         string workerProcessPath,
         DesiredWorkerInstance desired,
+        ResolvedWorkerProcessHost workerProcessHost,
         string ompConnectionString)
     {
         var startInfo = new ProcessStartInfo
@@ -1152,6 +1157,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerInstanceKey={desired.WorkerInstanceKey}");
         startInfo.ArgumentList.Add($"--WorkerProcess:WorkerTypeKey={desired.WorkerTypeKey}");
         startInfo.ArgumentList.Add($"--WorkerProcess:PluginAssemblyPath={desired.PluginAssemblyPath}");
+        if (!string.IsNullOrWhiteSpace(desired.InstallRootPath))
+        {
+            startInfo.ArgumentList.Add($"--WorkerProcess:PluginArtifactRootPath={desired.InstallRootPath}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(workerProcessHost.Version))
+        {
+            startInfo.ArgumentList.Add("--WorkerProcess:WorkerHostComponentKey=omp-workerprocesshost");
+            startInfo.ArgumentList.Add($"--WorkerProcess:WorkerHostArtifactVersion={workerProcessHost.Version}");
+        }
         startInfo.ArgumentList.Add($"--WorkerProcess:ShutdownEventName={desired.ShutdownEventName}");
         var workerConfigurationJson = desired.ConfigurationJson;
         if (!string.IsNullOrWhiteSpace(workerConfigurationJson))

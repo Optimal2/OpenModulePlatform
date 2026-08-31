@@ -6755,6 +6755,78 @@ VALUES(@widget_id, @permission_id, @role_id);";
             string.IsNullOrWhiteSpace(widget.WidgetVersion) ? "0.0.0" : widget.WidgetVersion;
     }
 
+    public async Task<string?> GetSelectedWorkerHostVersionAsync(
+        string hostKey,
+        string componentKey,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(
+                componentKey,
+                OpenModulePlatform.Worker.Abstractions.Models.WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Worker plugin requires unsupported worker host component '{componentKey}'. " +
+                $"The supported component is '{OpenModulePlatform.Worker.Abstractions.Models.WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey}'.");
+        }
+
+        const string sql = """
+DECLARE @hostId uniqueidentifier;
+
+SELECT @hostId = HostId
+FROM omp.Hosts
+WHERE HostKey = @hostKey
+  AND IsEnabled = 1;
+
+WITH HostRoles AS
+(
+    SELECT HostTemplateId
+    FROM omp.HostDeploymentAssignments
+    WHERE HostId = @hostId
+      AND IsActive = 1
+)
+SELECT TOP (1) ar.Version
+FROM omp.AppInstances ai
+INNER JOIN omp.Apps a ON a.AppId = ai.AppId
+INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+WHERE @hostId IS NOT NULL
+  AND
+  (
+      ai.HostId = @hostId
+      OR (ai.HostId IS NULL AND ai.TargetHostTemplateId IS NULL)
+      OR
+      (
+          ai.HostId IS NULL
+          AND ai.TargetHostTemplateId IS NOT NULL
+          AND EXISTS (SELECT 1 FROM HostRoles hr WHERE hr.HostTemplateId = ai.TargetHostTemplateId)
+      )
+  )
+  AND a.AppKey = N'omp_workerprocesshost'
+  AND a.IsEnabled = 1
+  AND ai.IsEnabled = 1
+  AND ai.IsAllowed = 1
+  AND ai.DesiredState = 1
+  AND ar.IsEnabled = 1
+  AND ar.PackageType = N'worker-host'
+  AND ar.TargetName = N'omp-workerprocesshost'
+ORDER BY
+    CASE
+        WHEN ai.HostId = @hostId THEN 0
+        WHEN ai.TargetHostTemplateId IS NOT NULL THEN 1
+        ELSE 2
+    END,
+    ai.SortOrder,
+    ai.AppInstanceKey;
+""";
+
+        await using var connection = _db.Create();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@hostKey", SqlDbType.NVarChar, 100).Value = hostKey;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is null or DBNull ? null : Convert.ToString(result, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     private static void AddDistinct(List<int> values, int value)
     {
         if (!values.Contains(value))

@@ -576,6 +576,22 @@ foreach ($component in @($manifest.components)) {
     }
 
     # -----------------------------------------------------------------------
+    # Check 4b: Worker plugin host-contract requirement.
+    # -----------------------------------------------------------------------
+    $minWorkerHostVersion = [string](Get-OptionalPropertyValue -Object $component -Name 'minWorkerHostVersion')
+    if (-not [string]::IsNullOrWhiteSpace($minWorkerHostVersion)) {
+        $packageType = [string](Get-OptionalPropertyValue -Object $component -Name 'packageType')
+        if (-not [string]::Equals($packageType, 'worker', [StringComparison]::OrdinalIgnoreCase) `
+                -and -not [string]::Equals($packageType, 'worker-plugin', [StringComparison]::OrdinalIgnoreCase)) {
+            Add-ValidationError -Errors $errors -Message "Component '$componentKey' declares minWorkerHostVersion but packageType '$packageType' is not a worker plugin. Remove the declaration or set packageType to 'worker'/'worker-plugin'."
+        }
+
+        if (-not (Test-SemverLikeVersion -Value $minWorkerHostVersion)) {
+            Add-ValidationError -Errors $errors -Message "Component '$componentKey' minWorkerHostVersion '$minWorkerHostVersion' does not match the expected major.minor or major.minor.patch format."
+        }
+    }
+
+    # -----------------------------------------------------------------------
     # Check 5: Component-to-module mapping integrity.
     # -----------------------------------------------------------------------
     $moduleKey = [string](Get-OptionalPropertyValue -Object $component -Name 'moduleKey')

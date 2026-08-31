@@ -17,6 +17,12 @@ public sealed class WorkerProcessSettings
 
     public string PluginAssemblyPath { get; set; } = string.Empty;
 
+    public string? PluginArtifactRootPath { get; set; }
+
+    public string? WorkerHostComponentKey { get; set; }
+
+    public string? WorkerHostArtifactVersion { get; set; }
+
     public string? ConfigurationJson { get; set; }
 
     public string ShutdownEventName { get; set; } = string.Empty;
@@ -59,6 +65,12 @@ public sealed class WorkerProcessSettings
         if (string.IsNullOrWhiteSpace(PluginAssemblyPath))
         {
             throw new InvalidOperationException("WorkerProcess:PluginAssemblyPath must be configured.");
+        }
+
+        if (string.IsNullOrWhiteSpace(WorkerHostComponentKey) != string.IsNullOrWhiteSpace(WorkerHostArtifactVersion))
+        {
+            throw new InvalidOperationException(
+                "WorkerProcess:WorkerHostComponentKey and WorkerProcess:WorkerHostArtifactVersion must be configured together.");
         }
 
         if (MaxPrivateMemoryMegabytes < 0)

@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.561",
+  "repositoryVersion": "0.3.562",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.149",
+      "definitionVersion": "0.3.150",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.160",
+      "definitionVersion": "0.3.161",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -45,7 +45,7 @@
     },
     {
       "moduleKey": "example_workerapp",
-      "definitionVersion": "0.3.59",
+      "definitionVersion": "0.3.60",
       "path": "examples/WorkerAppModule/example_workerapp.module-definition.json"
     }
   ],
@@ -76,7 +76,12 @@
     {
       "projectPath": "OpenModulePlatform.Worker.Abstractions/OpenModulePlatform.Worker.Abstractions.csproj",
       "description": "Worker host contracts consumed by module workers",
-      "consumers": [],
+      "consumers": [
+        "omp-portal-web",
+        "omp-hostagent-service",
+        "omp-workerprocesshost",
+        "example-workerapp-worker"
+      ],
       "externalConsumers": [
         {
           "repositoryKey": "ibspackager",
@@ -94,7 +99,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.610",
+      "version": "0.3.611",
       "minModuleDefinitionVersion": "0.3.130",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -121,7 +126,7 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.225",
+      "version": "0.3.226",
       "minModuleDefinitionVersion": "0.3.144",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
@@ -134,7 +139,7 @@
       "appKey": "omp_workermanager",
       "packageType": "service-app",
       "targetName": "omp-workermanager",
-      "version": "0.3.51",
+      "version": "0.3.52",
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
@@ -147,7 +152,7 @@
       "appKey": "omp_workerprocesshost",
       "packageType": "worker-host",
       "targetName": "omp-workerprocesshost",
-      "version": "0.3.45",
+      "version": "0.3.46",
       "projectPath": "OpenModulePlatform.WorkerProcessHost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerProcessHost.zip",
@@ -257,10 +262,11 @@
       "appKey": "example_workerapp_worker",
       "packageType": "worker",
       "targetName": "example-workerapp",
-      "version": "0.3.72",
+      "version": "0.3.73",
       "projectPath": "examples/WorkerAppModule/WorkerApp",
       "relativePathTemplate": "example-workerapp/worker/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Worker.ExampleWorkerAppModule.zip",
+      "minWorkerHostVersion": "0.3.46",
       "minModuleDefinitionVersion": "0.3.28"
     }
   ]

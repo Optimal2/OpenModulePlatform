@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using OpenModulePlatform.Worker.Abstractions.Models;
 
 namespace OpenModulePlatform.Artifacts;
 
@@ -69,6 +70,7 @@ public sealed class ArtifactPackageExtractor
             stagingPath,
             [],
             MinModuleDefinitionVersion: null,
+            WorkerHostRequirement: null,
             UsesManifestEnvelope: false);
     }
 
@@ -105,6 +107,7 @@ public sealed class ArtifactPackageExtractor
             artifactContentPath,
             ReadConfigurationFiles(archive, manifest),
             ReadMinModuleDefinitionVersion(manifest),
+            ReadWorkerHostRequirement(manifest),
             UsesManifestEnvelope: true);
     }
 
@@ -115,6 +118,28 @@ public sealed class ArtifactPackageExtractor
             ?? manifest["minModuleDefinitionVersion"]?.GetValue<string>()
             ?? manifest["requiredModuleDefinitionVersion"]?.GetValue<string>();
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static WorkerHostCompatibilityRequirement? ReadWorkerHostRequirement(JsonObject manifest)
+    {
+        if (manifest["workerHost"] is not JsonObject workerHost)
+        {
+            return null;
+        }
+
+        var componentKey = workerHost["componentKey"]?.GetValue<string>()?.Trim();
+        var minVersion = workerHost["minVersion"]?.GetValue<string>()?.Trim();
+        if (string.IsNullOrWhiteSpace(componentKey) || string.IsNullOrWhiteSpace(minVersion))
+        {
+            throw new InvalidOperationException(
+                "Artifact package manifest workerHost requires non-empty componentKey and minVersion values.");
+        }
+
+        return new WorkerHostCompatibilityRequirement
+        {
+            ComponentKey = componentKey,
+            MinVersion = minVersion
+        };
     }
 
     private int ExtractNestedPayloadZip(

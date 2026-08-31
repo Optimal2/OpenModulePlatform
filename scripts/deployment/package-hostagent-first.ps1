@@ -603,7 +603,8 @@ function New-ArtifactPackage {
         [Parameter(Mandatory = $true)][string]$Destination,
         [Parameter(Mandatory = $true)][string]$BuildRoot,
         [object[]]$ConfigurationFiles = @(),
-        [string]$MinModuleDefinitionVersion = ''
+        [string]$MinModuleDefinitionVersion = '',
+        [string]$MinWorkerHostVersion = ''
     )
 
     $stagingRoot = Join-Path $BuildRoot ('artifact-package-' + [Guid]::NewGuid().ToString('N'))
@@ -611,6 +612,38 @@ function New-ArtifactPackage {
 
     try {
         Copy-RequiredFile -Source $PayloadZip -Destination $payloadDestination
+
+        if (-not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
+            $archive = [System.IO.Compression.ZipFile]::Open($payloadDestination, [System.IO.Compression.ZipArchiveMode]::Update)
+            try {
+                $entryName = 'omp-worker-plugin.json'
+                $existing = $archive.Entries | Where-Object {
+                    [string]::Equals($_.FullName.Replace('\', '/'), $entryName, [StringComparison]::OrdinalIgnoreCase)
+                } | Select-Object -First 1
+                if ($null -ne $existing) {
+                    throw "Artifact payload already contains reserved compatibility metadata '$entryName'."
+                }
+
+                $compatibilityDocument = [ordered]@{
+                    formatVersion = 1
+                    workerHost = [ordered]@{
+                        componentKey = 'omp-workerprocesshost'
+                        minVersion = $MinWorkerHostVersion.Trim()
+                    }
+                } | ConvertTo-Json -Depth 4
+                $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+                $stream = $entry.Open()
+                try {
+                    $writer = [System.IO.StreamWriter]::new($stream, [System.Text.UTF8Encoding]::new($false))
+                    try { $writer.Write($compatibilityDocument) }
+                    finally { $writer.Dispose() }
+                }
+                finally { $stream.Dispose() }
+            }
+            finally {
+                $archive.Dispose()
+            }
+        }
 
         $manifestConfigurationFiles = @()
         foreach ($configurationFile in $ConfigurationFiles) {
@@ -650,6 +683,12 @@ function New-ArtifactPackage {
         if (-not [string]::IsNullOrWhiteSpace($MinModuleDefinitionVersion)) {
             $manifest.moduleDefinition = [ordered]@{
                 minVersion = $MinModuleDefinitionVersion.Trim()
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
+            $manifest.workerHost = [ordered]@{
+                componentKey = 'omp-workerprocesshost'
+                minVersion = $MinWorkerHostVersion.Trim()
             }
         }
 
@@ -1251,12 +1290,14 @@ foreach ($component in $components) {
         }
 
         $minModuleDefinitionVersion = Get-ManifestPropertyValue -Object $component -Name 'minModuleDefinitionVersion'
+        $minWorkerHostVersion = Get-ManifestPropertyValue -Object $component -Name 'minWorkerHostVersion'
         New-ArtifactPackage `
             -PayloadZip $artifactPayloadZip `
             -Destination $destination `
             -BuildRoot $buildRoot `
             -ConfigurationFiles $configurationFiles `
-            -MinModuleDefinitionVersion $minModuleDefinitionVersion
+            -MinModuleDefinitionVersion $minModuleDefinitionVersion `
+            -MinWorkerHostVersion $minWorkerHostVersion
         Assert-OmpArtifactPackageHasNoRuntimeConfiguration `
             -ZipPath $destination `
             -Description "Artifact package for $componentKey"

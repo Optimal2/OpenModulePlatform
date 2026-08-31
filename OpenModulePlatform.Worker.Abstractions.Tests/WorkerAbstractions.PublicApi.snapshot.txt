@@ -16,3 +16,13 @@ type sealed class OpenModulePlatform.Worker.Abstractions.Models.WorkerExecutionC
     property System.String PluginAssemblyPath { get; set; }
     property System.String WorkerInstanceKey { get; set; }
     property System.String WorkerTypeKey { get; set; }
+type sealed class OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement
+    ctor()
+    property System.String ComponentKey { get; set; }
+    property System.String MinVersion { get; set; }
+type sealed class OpenModulePlatform.Worker.Abstractions.Models.WorkerPluginCompatibilityManifest
+    ctor()
+    field static const System.String DefaultWorkerHostComponentKey
+    field static const System.String FileName
+    property OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement WorkerHost { get; set; }
+    property System.Int32 FormatVersion { get; set; }

@@ -21,6 +21,9 @@ artifact configuration rows, or config overlays instead.
 Use -MinModuleDefinitionVersion only when this artifact requires SQL, OMP
 metadata, or another module contract from a newer module definition. Leave it
 empty for ordinary code-only artifact releases.
+
+Use -MinWorkerHostVersion for worker plugins compiled against a worker-host
+contract that older omp-workerprocesshost artifacts do not implement.
 #>
 [CmdletBinding()]
 param(
@@ -32,7 +35,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PayloadPath,
     [Parameter(Mandatory = $true)][string]$OutputPath,
     [string[]]$ConfigurationFile = @(),
-    [string]$MinModuleDefinitionVersion
+    [string]$MinModuleDefinitionVersion,
+    [string]$MinWorkerHostVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -144,6 +148,50 @@ function Assert-ZipPayloadDoesNotContainRuntimeConfiguration {
     }
 }
 
+function Add-WorkerPluginCompatibilityManifest {
+    param(
+        [Parameter(Mandatory = $true)][string]$PayloadZip,
+        [Parameter(Mandatory = $true)][string]$MinVersion
+    )
+
+    $entryName = 'omp-worker-plugin.json'
+    $archive = [System.IO.Compression.ZipFile]::Open($PayloadZip, [System.IO.Compression.ZipArchiveMode]::Update)
+    try {
+        $existing = $archive.Entries | Where-Object {
+            [string]::Equals($_.FullName.Replace('\', '/'), $entryName, [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
+        if ($null -ne $existing) {
+            throw "Artifact payload already contains reserved compatibility metadata '$entryName'."
+        }
+
+        $document = [ordered]@{
+            formatVersion = 1
+            workerHost = [ordered]@{
+                componentKey = 'omp-workerprocesshost'
+                minVersion = $MinVersion.Trim()
+            }
+        } | ConvertTo-Json -Depth 4
+
+        $entry = $archive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+        $stream = $entry.Open()
+        try {
+            $writer = [System.IO.StreamWriter]::new($stream, [System.Text.UTF8Encoding]::new($false))
+            try {
+                $writer.Write($document)
+            }
+            finally {
+                $writer.Dispose()
+            }
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
 function Compress-PayloadDirectory {
     param(
         [string]$SourceDirectory,
@@ -211,6 +259,10 @@ try {
         throw "PayloadPath must be a directory or a .zip file: $payloadFullPath"
     }
 
+    if (-not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
+        Add-WorkerPluginCompatibilityManifest -PayloadZip $payloadZip -MinVersion $MinWorkerHostVersion
+    }
+
     $payloadDestination = Join-Path $packageRoot 'payload\artifact.zip'
     New-Item -ItemType Directory -Path (Split-Path -Parent $payloadDestination) -Force | Out-Null
     Copy-Item -LiteralPath $payloadZip -Destination $payloadDestination -Force
@@ -244,6 +296,12 @@ try {
     if (-not [string]::IsNullOrWhiteSpace($MinModuleDefinitionVersion)) {
         $manifest.moduleDefinition = [ordered]@{
             minVersion = $MinModuleDefinitionVersion.Trim()
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
+        $manifest.workerHost = [ordered]@{
+            componentKey = 'omp-workerprocesshost'
+            minVersion = $MinWorkerHostVersion.Trim()
         }
     }
 

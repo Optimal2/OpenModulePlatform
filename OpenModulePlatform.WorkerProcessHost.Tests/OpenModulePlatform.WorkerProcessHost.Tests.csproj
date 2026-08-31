@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -21,17 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\OpenModulePlatform.HostAgent.Runtime\OpenModulePlatform.HostAgent.Runtime.csproj" />
-    <ProjectReference Include="..\OpenModulePlatform.Worker.Abstractions\OpenModulePlatform.Worker.Abstractions.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.WorkerProcessHost\OpenModulePlatform.WorkerProcessHost.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.WorkerProcessHost.TestPlugin\OpenModulePlatform.WorkerProcessHost.TestPlugin.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- One shared copy: seven fixtures provisioned databases independently and a fix
-         applied to one of them would have left the other six. -->
-    <Compile Include="..\tests\shared\OmpTestDatabaseProvisioner.cs" Link="TestSupport\OmpTestDatabaseProvisioner.cs" />
-  </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
-
 </Project>

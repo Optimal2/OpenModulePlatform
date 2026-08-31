@@ -922,6 +922,10 @@ try {
         if (-not [string]::IsNullOrWhiteSpace($minModuleDefinitionVersion)) {
             $artifactPackageArgs.MinModuleDefinitionVersion = $minModuleDefinitionVersion.Trim()
         }
+        $minWorkerHostVersion = [string](Get-JsonPropertyValue -Object $component -Name 'minWorkerHostVersion')
+        if (-not [string]::IsNullOrWhiteSpace($minWorkerHostVersion)) {
+            $artifactPackageArgs.MinWorkerHostVersion = $minWorkerHostVersion.Trim()
+        }
 
         & $newArtifactPackageScript @artifactPackageArgs
         if ($LASTEXITCODE -ne 0) {

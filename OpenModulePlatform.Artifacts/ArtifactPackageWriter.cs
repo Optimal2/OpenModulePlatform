@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenModulePlatform.Worker.Abstractions.Models;
 
 namespace OpenModulePlatform.Artifacts;
 
@@ -23,7 +24,8 @@ public sealed class ArtifactPackageWriter
         string payloadDirectoryPath,
         string destinationZipPath,
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
-        string? minModuleDefinitionVersion = null)
+        string? minModuleDefinitionVersion = null,
+        string? minWorkerHostVersion = null)
     {
         if (!Directory.Exists(payloadDirectoryPath))
         {
@@ -40,7 +42,12 @@ public sealed class ArtifactPackageWriter
         {
             Directory.CreateDirectory(Path.GetDirectoryName(tempPayloadZipPath)!);
             CreatePayloadZip(payloadDirectoryPath, tempPayloadZipPath);
-            CreateFromPayloadZip(tempPayloadZipPath, destinationZipPath, configurationFiles, minModuleDefinitionVersion);
+            CreateFromPayloadZip(
+                tempPayloadZipPath,
+                destinationZipPath,
+                configurationFiles,
+                minModuleDefinitionVersion,
+                minWorkerHostVersion);
         }
         finally
         {
@@ -52,47 +59,148 @@ public sealed class ArtifactPackageWriter
         string payloadZipPath,
         string destinationZipPath,
         IReadOnlyList<ArtifactPackageConfigurationFile> configurationFiles,
-        string? minModuleDefinitionVersion = null)
+        string? minModuleDefinitionVersion = null,
+        string? minWorkerHostVersion = null)
     {
         if (!File.Exists(payloadZipPath))
         {
             throw new FileNotFoundException("Artifact payload zip was not found.", payloadZipPath);
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationZipPath))!);
-        TryDelete(destinationZipPath);
+        var embeddedMinWorkerHostVersion = ReadEmbeddedMinWorkerHostVersion(payloadZipPath);
+        var normalizedMinWorkerHostVersion = string.IsNullOrWhiteSpace(minWorkerHostVersion)
+            ? embeddedMinWorkerHostVersion
+            : minWorkerHostVersion.Trim();
+        var payloadToPackage = payloadZipPath;
+        string? compatibilityPayloadPath = null;
 
-        var normalizedConfigurationFiles = NormalizeConfigurationFiles(configurationFiles);
-        using var package = ZipFile.Open(destinationZipPath, ZipArchiveMode.Create);
-
-        package.CreateEntryFromFile(payloadZipPath, PayloadEntryName, CompressionLevel.NoCompression);
-        var manifest = new
+        if (!string.IsNullOrWhiteSpace(minWorkerHostVersion) && embeddedMinWorkerHostVersion is not null)
         {
-            formatVersion = 1,
-            payload = new
-            {
-                type = "zip",
-                path = PayloadEntryName
-            },
-            moduleDefinition = string.IsNullOrWhiteSpace(minModuleDefinitionVersion)
-                ? null
-                : new { minVersion = minModuleDefinitionVersion.Trim() },
-            configurationFiles = normalizedConfigurationFiles.Select(file => new
-            {
-                file.RelativePath,
-                source = file.SourcePath
-            })
-        };
-
-        WriteTextEntry(
-            package,
-            ArtifactPackageExtractor.ManifestEntryName,
-            JsonSerializer.Serialize(manifest, JsonOptions));
-
-        foreach (var file in normalizedConfigurationFiles)
-        {
-            WriteTextEntry(package, file.SourcePath, file.FileContent);
+            throw new InvalidOperationException(
+                $"Artifact payload already contains reserved compatibility metadata '{WorkerPluginCompatibilityManifest.FileName}'.");
         }
+
+        if (!string.IsNullOrWhiteSpace(minWorkerHostVersion))
+        {
+            compatibilityPayloadPath = Path.Join(
+                Path.GetTempPath(),
+                "OpenModulePlatform",
+                "ArtifactPackages",
+                $"{Guid.NewGuid():N}.worker-compatible.payload.zip");
+            Directory.CreateDirectory(Path.GetDirectoryName(compatibilityPayloadPath)!);
+            File.Copy(payloadZipPath, compatibilityPayloadPath, overwrite: true);
+            AddWorkerPluginCompatibilityManifest(compatibilityPayloadPath, normalizedMinWorkerHostVersion!);
+            payloadToPackage = compatibilityPayloadPath;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationZipPath))!);
+            TryDelete(destinationZipPath);
+
+            var normalizedConfigurationFiles = NormalizeConfigurationFiles(configurationFiles);
+            using var package = ZipFile.Open(destinationZipPath, ZipArchiveMode.Create);
+
+            package.CreateEntryFromFile(payloadToPackage, PayloadEntryName, CompressionLevel.NoCompression);
+            var manifest = new
+            {
+                formatVersion = 1,
+                payload = new
+                {
+                    type = "zip",
+                    path = PayloadEntryName
+                },
+                moduleDefinition = string.IsNullOrWhiteSpace(minModuleDefinitionVersion)
+                    ? null
+                    : new { minVersion = minModuleDefinitionVersion.Trim() },
+                workerHost = normalizedMinWorkerHostVersion is null
+                    ? null
+                    : new
+                    {
+                        componentKey = WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey,
+                        minVersion = normalizedMinWorkerHostVersion
+                    },
+                configurationFiles = normalizedConfigurationFiles.Select(file => new
+                {
+                    file.RelativePath,
+                    source = file.SourcePath
+                })
+            };
+
+            WriteTextEntry(
+                package,
+                ArtifactPackageExtractor.ManifestEntryName,
+                JsonSerializer.Serialize(manifest, JsonOptions));
+
+            foreach (var file in normalizedConfigurationFiles)
+            {
+                WriteTextEntry(package, file.SourcePath, file.FileContent);
+            }
+        }
+        finally
+        {
+            if (compatibilityPayloadPath is not null)
+            {
+                TryDelete(compatibilityPayloadPath);
+            }
+        }
+    }
+
+    private static void AddWorkerPluginCompatibilityManifest(string payloadZipPath, string minWorkerHostVersion)
+    {
+        using var payload = ZipFile.Open(payloadZipPath, ZipArchiveMode.Update);
+        if (payload.Entries.Any(entry => string.Equals(
+                entry.FullName.Replace('\\', '/'),
+                WorkerPluginCompatibilityManifest.FileName,
+                StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                $"Artifact payload already contains reserved compatibility metadata '{WorkerPluginCompatibilityManifest.FileName}'.");
+        }
+
+        var manifest = new WorkerPluginCompatibilityManifest
+        {
+            FormatVersion = 1,
+            WorkerHost = new WorkerHostCompatibilityRequirement
+            {
+                ComponentKey = WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey,
+                MinVersion = minWorkerHostVersion
+            }
+        };
+        WriteTextEntry(
+            payload,
+            WorkerPluginCompatibilityManifest.FileName,
+            JsonSerializer.Serialize(manifest, JsonOptions));
+    }
+
+    private static string? ReadEmbeddedMinWorkerHostVersion(string payloadZipPath)
+    {
+        using var payload = ZipFile.OpenRead(payloadZipPath);
+        var entry = payload.Entries.FirstOrDefault(candidate => string.Equals(
+            candidate.FullName.Replace('\\', '/'),
+            WorkerPluginCompatibilityManifest.FileName,
+            StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+        {
+            return null;
+        }
+
+        using var stream = entry.Open();
+        var manifest = JsonSerializer.Deserialize<WorkerPluginCompatibilityManifest>(stream)
+            ?? throw new InvalidOperationException(
+                $"Artifact payload compatibility metadata '{WorkerPluginCompatibilityManifest.FileName}' is empty.");
+        if (manifest.FormatVersion != 1 || manifest.WorkerHost is null
+            || !string.Equals(
+                manifest.WorkerHost.ComponentKey,
+                WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey,
+                StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(manifest.WorkerHost.MinVersion))
+        {
+            throw new InvalidOperationException(
+                $"Artifact payload compatibility metadata '{WorkerPluginCompatibilityManifest.FileName}' is invalid.");
+        }
+
+        return manifest.WorkerHost.MinVersion.Trim();
     }
 
     private static void CreatePayloadZip(string payloadDirectoryPath, string destinationZipPath)

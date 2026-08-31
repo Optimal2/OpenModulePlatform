@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_workerapp",
-  "definitionVersion": "0.3.59",
+  "definitionVersion": "0.3.60",
   "module": {
     "displayName": "Example WorkerApp",
     "moduleType": "HostAppModule",
@@ -43,7 +43,7 @@
       "targetName": "example-workerapp",
       "relativePathTemplate": "example-workerapp/worker/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.72"
+      "maxVersion": "0.3.73"
     }
   ],
   "sqlScripts": [

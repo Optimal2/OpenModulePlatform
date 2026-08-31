@@ -94,7 +94,12 @@ public sealed class WorkerProcessHostedService : BackgroundService
 
         try
         {
-            var factory = _loader.LoadFactory(_settings.PluginAssemblyPath, _settings.WorkerTypeKey);
+            var factory = _loader.LoadFactory(
+                _settings.PluginAssemblyPath,
+                _settings.WorkerTypeKey,
+                _settings.PluginArtifactRootPath,
+                _settings.WorkerHostComponentKey,
+                _settings.WorkerHostArtifactVersion);
             using var scope = _scopeFactory.CreateScope();
 
             var module = factory.Create(scope.ServiceProvider)

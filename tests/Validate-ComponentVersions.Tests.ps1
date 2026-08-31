@@ -218,6 +218,31 @@ Describe 'Check 6: minModuleDefinitionVersion sanity' {
     }
 }
 
+Describe 'Check 4b: minWorkerHostVersion schema' {
+    It 'Passes for a worker plugin with a semantic worker-host floor' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+        $manifestPath = Join-Path $repoRoot 'omp-components.json'
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $manifest.components[0] | Add-Member -NotePropertyName packageType -NotePropertyValue 'worker'
+        $manifest.components[0] | Add-Member -NotePropertyName minWorkerHostVersion -NotePropertyValue '0.3.21'
+        [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
+
+        (Invoke-Validator -ValidatorPath $validatorPath) | Should Be 0
+    }
+
+    It 'Fails when a non-worker component declares minWorkerHostVersion' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+        $manifestPath = Join-Path $repoRoot 'omp-components.json'
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $manifest.components[0] | Add-Member -NotePropertyName minWorkerHostVersion -NotePropertyValue '0.3.21'
+        [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
+
+        (Invoke-Validator -ValidatorPath $validatorPath) | Should Not Be 0
+    }
+}
+
 Describe 'Check 8b: minModuleDefinitionVersion lockstep after definitionVersion bump' {
     It 'Passes when minModuleDefinitionVersion is bumped with definitionVersion' {
         $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))

@@ -125,6 +125,8 @@ try {
                 'OpenModulePlatform.HostAgent.Runtime.Tests',
                 'OpenModulePlatform.Portal.Tests',
                 'OpenModulePlatform.Bootstrapper.Tests',
+                'OpenModulePlatform.Worker.Abstractions.Tests',
+                'OpenModulePlatform.WorkerProcessHost.Tests',
                 'OpenModulePlatform.WorkerManager.WindowsService.Tests'
             )
             foreach ($project in $projects) {

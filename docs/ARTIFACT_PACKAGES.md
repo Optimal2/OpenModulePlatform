@@ -90,6 +90,10 @@ Manifest example:
   "moduleDefinition": {
     "minVersion": "1.2.3"
   },
+  "workerHost": {
+    "componentKey": "omp-workerprocesshost",
+    "minVersion": "0.3.21"
+  },
   "configurationFiles": [
     {
       "relativePath": "odv.site.config.js",
@@ -112,6 +116,18 @@ artifact releases that are compatible with the currently applied module
 definition. Set it only when this artifact requires SQL, OMP metadata, or
 another module contract from a newer module definition. Portal and HostAgent
 validate the requirement before registering the artifact.
+
+`workerHost` is optional and reserved for `worker`/`worker-plugin` packages.
+Repository builders derive it from the component's `minWorkerHostVersion` and
+also write the same requirement as `omp-worker-plugin.json` inside the immutable
+payload. HostAgent checks the selected `omp-workerprocesshost` version at import;
+WorkerProcessHost checks again before loading the plugin, which also protects a
+previously imported plugin after a host downgrade.
+
+The HostAgent check applies to packages imported through a host's zip/folder
+import flow. Portal registers artifacts centrally for potentially different
+target hosts, so it cannot apply one host-version verdict at upload time; those
+artifacts are enforced by each WorkerProcessHost when the plugin starts.
 
 ## Runtime Behavior
 

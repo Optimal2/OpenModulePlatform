@@ -1,6 +1,9 @@
 // File: OpenModulePlatform.WorkerProcessHost/Plugins/WorkerModuleLoader.cs
 using System.Reflection;
+using System.Text.Json;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Worker.Abstractions.Contracts;
+using OpenModulePlatform.Worker.Abstractions.Models;
 
 namespace OpenModulePlatform.WorkerProcessHost.Plugins;
 
@@ -9,6 +12,21 @@ namespace OpenModulePlatform.WorkerProcessHost.Plugins;
 /// </summary>
 public sealed class WorkerModuleLoader
 {
+    public IWorkerModuleFactory LoadFactory(
+        string pluginAssemblyPath,
+        string workerTypeKey,
+        string? pluginArtifactRootPath,
+        string? workerHostComponentKey,
+        string? workerHostVersion)
+    {
+        ValidateWorkerHostCompatibility(
+            pluginAssemblyPath,
+            pluginArtifactRootPath,
+            workerHostComponentKey,
+            workerHostVersion);
+        return LoadFactory(pluginAssemblyPath, workerTypeKey);
+    }
+
     public IWorkerModuleFactory LoadFactory(string pluginAssemblyPath, string workerTypeKey)
     {
         if (string.IsNullOrWhiteSpace(pluginAssemblyPath))
@@ -109,5 +127,64 @@ public sealed class WorkerModuleLoader
         }
 
         return factory;
+    }
+
+    private static void ValidateWorkerHostCompatibility(
+        string pluginAssemblyPath,
+        string? pluginArtifactRootPath,
+        string? workerHostComponentKey,
+        string? workerHostVersion)
+    {
+        if (string.IsNullOrWhiteSpace(pluginArtifactRootPath))
+        {
+            return;
+        }
+
+        var manifestPath = Path.Join(
+            Path.GetFullPath(pluginArtifactRootPath),
+            WorkerPluginCompatibilityManifest.FileName);
+        if (!File.Exists(manifestPath))
+        {
+            return;
+        }
+
+        WorkerPluginCompatibilityManifest manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<WorkerPluginCompatibilityManifest>(File.ReadAllText(manifestPath))
+                ?? throw new InvalidOperationException("Compatibility metadata is empty.");
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException(
+                $"Worker plugin compatibility metadata could not be read: '{manifestPath}'.",
+                ex);
+        }
+
+        if (manifest.FormatVersion != 1 || manifest.WorkerHost is null
+            || string.IsNullOrWhiteSpace(manifest.WorkerHost.ComponentKey)
+            || string.IsNullOrWhiteSpace(manifest.WorkerHost.MinVersion))
+        {
+            throw new InvalidOperationException(
+                $"Worker plugin compatibility metadata is invalid: '{manifestPath}'.");
+        }
+
+        var requiredComponentKey = manifest.WorkerHost.ComponentKey.Trim();
+        var requiredVersion = manifest.WorkerHost.MinVersion.Trim();
+        var currentComponentKey = workerHostComponentKey?.Trim();
+        var currentVersion = workerHostVersion?.Trim();
+
+        if (!string.Equals(requiredComponentKey, currentComponentKey, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(currentVersion)
+            || ArtifactVersionComparer.Compare(currentVersion, requiredVersion) < 0)
+        {
+            var action = string.IsNullOrWhiteSpace(currentVersion)
+                ? $"Select a versioned '{requiredComponentKey}' artifact instead of an unverifiable manual worker-host path."
+                : $"Upgrade '{requiredComponentKey}' to {requiredVersion} or later before starting this worker plugin.";
+            throw new InvalidOperationException(
+                $"Worker plugin '{Path.GetFileName(pluginAssemblyPath)}' requires component '{requiredComponentKey}' version {requiredVersion} or later, " +
+                $"but the running worker host component is '{currentComponentKey ?? "<unknown>"}' version {currentVersion ?? "<unknown>"}. " +
+                action);
+        }
     }
 }

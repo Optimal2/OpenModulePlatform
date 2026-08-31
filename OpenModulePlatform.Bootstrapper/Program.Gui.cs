@@ -4499,6 +4499,7 @@ internal static partial class Program
                     component.RelativePathTemplate,
                     component.ProjectPath,
                     component.MinModuleDefinitionVersion,
+                    component.MinWorkerHostVersion,
                     packageName,
                     sourceStateStamp);
                 return GetTextSha256Hex(stampText);
@@ -4994,7 +4995,8 @@ internal static partial class Program
                     publishRoot,
                     destination,
                     [],
-                    component.MinModuleDefinitionVersion);
+                    component.MinModuleDefinitionVersion,
+                    component.MinWorkerHostVersion);
                 WriteArtifactBuildStamp(component, packageName, destination);
 
                 lines.Add($"  BUILD   {component.ComponentKey}: created {destination}.");
@@ -5585,7 +5587,8 @@ ORDER BY ar.ArtifactId DESC;
                     GetJsonStringProperty(item, "relativePathTemplate"),
                     GetJsonStringProperty(item, "projectPath"),
                     GetJsonStringProperty(item, "packageFileTemplate"),
-                    GetJsonStringProperty(item, "minModuleDefinitionVersion")))
+                    GetJsonStringProperty(item, "minModuleDefinitionVersion"),
+                    GetJsonStringProperty(item, "minWorkerHostVersion")))
                 .Where(static item => item.HasCompleteArtifactIdentity)
                 .ToArray();
         }
@@ -7567,7 +7570,8 @@ ORDER BY ar.ArtifactId DESC;
         string RelativePathTemplate,
         string ProjectPath,
         string PackageFileTemplate,
-        string MinModuleDefinitionVersion)
+        string MinModuleDefinitionVersion,
+        string MinWorkerHostVersion)
     {
         public bool HasCompleteArtifactIdentity
             => !string.IsNullOrWhiteSpace(ComponentKey)

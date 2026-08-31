@@ -19,7 +19,8 @@ public sealed class DeveloperSourceStatusComparisonTests
             RelativePathTemplate: relativePathTemplate,
             ProjectPath: "OpenModulePlatform.Portal/OpenModulePlatform.Portal.csproj",
             PackageFileTemplate: "{componentKey}-{version}.zip",
-            MinModuleDefinitionVersion: "0.1.0");
+            MinModuleDefinitionVersion: "0.1.0",
+            MinWorkerHostVersion: string.Empty);
 
     [Fact]
     public void StaleVersionSegmentInTarget_WhenZipCarriesSourceVersion_IsNotAnUpdate()

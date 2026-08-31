@@ -1325,6 +1325,11 @@ public sealed class ArtifactZipImportService
                     BuildArtifactExtractionLimits(importSettings))
                 .Extract(packagePath, stagingPath);
             ValidateModuleDefinitionRequirement(package, compatibility);
+            await ValidateWorkerHostRequirementAsync(
+                package,
+                metadata.PackageType,
+                settings.ResolveHostKey(),
+                cancellationToken);
             var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
 
             var existingIdentity = await _repository.FindImportedArtifactByIdentityAsync(
@@ -1983,6 +1988,49 @@ public sealed class ArtifactZipImportService
                 $"Artifact package requires module definition '{compatibility.ModuleKey}' version {package.MinModuleDefinitionVersion} or later. " +
                 $"The currently applied definition is {compatibility.DefinitionVersion}.");
         }
+    }
+
+    private async Task ValidateWorkerHostRequirementAsync(
+        ArtifactPackageExtractionResult package,
+        string packageType,
+        string hostKey,
+        CancellationToken cancellationToken)
+    {
+        if (package.WorkerHostRequirement is null)
+        {
+            return;
+        }
+
+        if (!packageType.Equals("worker", StringComparison.OrdinalIgnoreCase)
+            && !packageType.Equals("worker-plugin", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Artifact package type '{packageType}' cannot declare a worker-host requirement.");
+        }
+
+        var currentVersion = await _repository.GetSelectedWorkerHostVersionAsync(
+            hostKey,
+            package.WorkerHostRequirement.ComponentKey,
+            cancellationToken);
+        ValidateWorkerHostRequirement(package.WorkerHostRequirement, currentVersion);
+    }
+
+    internal static void ValidateWorkerHostRequirement(
+        OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement requirement,
+        string? currentVersion)
+    {
+        var requiredVersion = requirement.MinVersion.Trim();
+        var installedVersion = currentVersion?.Trim();
+        if (!string.IsNullOrWhiteSpace(installedVersion)
+            && ArtifactVersionComparer.Compare(installedVersion, requiredVersion) >= 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Worker plugin artifact requires component '{requirement.ComponentKey}' version {requiredVersion} or later, " +
+            $"but the currently selected worker host version is {installedVersion ?? "<not selected>"}. " +
+            $"Import and select '{requirement.ComponentKey}' version {requiredVersion} or later before importing this worker plugin.");
     }
 
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
