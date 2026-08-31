@@ -23,7 +23,13 @@
 
 ## Beslut om grundskinnet (operatör, 2026-08-31 — reviderat samma kväll)
 
-SLUTLÄGE: widgeten renderar WINOMP — vårt eget genererade skin i klassiskt
+SLUTLÄGE (rev 3, samma kväll): widgeten renderar operatörens WINOMP-bearbetning
+av grundskinnet — WINAMP-texterna och logotypen ersatta i Paint.NET
+(källfiler: DEV-repot, Skins/base-winomp/). Varumärkesdelarna är därmed borta;
+grafiken är en bearbetning av Nullsofts original enligt resonemanget nedan.
+Mellanläget rev 2 (helgenererat skin) är urkopplat men återskapbart.
+
+Rev 2-läget: widgeten renderar WINOMP — vårt eget genererade skin i klassiskt
 visuellt språk (varje pixel ritad av scripts/skins/generate-omp-skins.py) — som
 default. Nullsofts inbakade grundskin renderas aldrig. Det tidigare
 mellanbeslutet nedan behålls som historik.

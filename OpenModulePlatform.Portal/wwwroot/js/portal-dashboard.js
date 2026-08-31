@@ -2229,13 +2229,26 @@
         // appears (menus render lazily). The bundle itself stays bit-identical
         // to the npm artifact - see PROVENANCE.md.
         const aboutUrl = player.dataset.webampAboutUrl || '';
+        const aboutLabel = player.dataset.webampAboutLabel || '';
         if (aboutUrl) {
             const rewriteExternalLinks = (root) => {
+                // href styrs alltid om; etiketten byts bara pa lankar som HAR
+                // synlig text (kontextmenyn) - bitmapmenyns sprite-lank lamnas -
+                // och bara nar den avviker, sa observern konvergerar aven nar
+                // React ritar om menyn (ingen mutationsstorm).
                 root.querySelectorAll('a[href*="webamp.org"]').forEach((anchor) => {
                     anchor.href = aboutUrl;
                     anchor.target = '_blank';
                     anchor.rel = 'noopener noreferrer';
                 });
+                if (aboutLabel) {
+                    root.querySelectorAll(`a[href="${aboutUrl}"]`).forEach((anchor) => {
+                        const text = anchor.textContent.trim();
+                        if (text && text !== aboutLabel) {
+                            anchor.textContent = aboutLabel;
+                        }
+                    });
+                }
             };
             rewriteExternalLinks(mount);
             const linkObserver = new MutationObserver(() => rewriteExternalLinks(mount));

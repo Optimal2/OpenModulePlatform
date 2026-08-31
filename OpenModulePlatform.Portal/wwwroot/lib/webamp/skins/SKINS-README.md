@@ -1,16 +1,16 @@
-# OMP-skins för dashboardspelaren
+# WINOMP — dashboardspelarens skin
 
-`omp-matrix.wsz` och `omp-ljus.wsz` är **egenproducerade** Winamp-classic-skins:
-varje pixel ritas av `scripts/skins/generate-omp-skins.py` ur ett färgtema.
-Inga sprites, fonter eller bilddata är hämtade från något befintligt skin —
-5x6-pixelfonten och 7-segmentssiffrorna är egna original.
+`winomp.wsz` är det enda skinnet och default. Det är operatörens bearbetning av
+webamps klassiska grundskin (base-2.91): all WINAMP-text och logotypen är
+ersatta (WINOMP), utseendet justerat. Källfilerna för redigering ligger i det
+privata DEV-repot under `Skins/base-winomp/` — redigera där, paketera om
+(zip av skin-filerna, ändelse .wsz) och ersätt denna fil.
 
-Geometrin (arknamn, sprite-positioner, mått) i `sprite-geometri.json` är
-exporterad ur webamps källkod (MIT) och beskriver bara VAR saker ritas,
-aldrig HUR de ser ut.
+Rättighetsläget: bearbetningen bygger på grundskinnets grafik (Nullsofts
+original — se PROVENANCE.md i katalogen ovanför för hela resonemanget och
+beslutshistoriken). Varumärkestext och märke är borttagna, vilket är den
+praktiskt viktigaste delen. Beslut: operatören 2026-08-31.
 
-Upphovsrätt: Optimal2. Skinsen får användas och distribueras fritt inom
-OMP-installationer och erbjuds som alternativa skins i widgeten.
-
-Regenerera/lägg till tema: redigera temalistan i generate-omp-skins.py och kör
-`python generate-omp-skins.py` — utdata hamnar i wwwroot/lib/webamp/skins/.
+De helt egenproducerade alternativskinsen (generator:
+`scripts/skins/generate-omp-skins.py`) är urkopplade men kan återskapas när
+som helst om hållningen behöver ändras till fullt rättighetsrena pixlar.
