@@ -1,8 +1,11 @@
 // Shared UI test support. Link this file into a repo's UI test project the
 // same way OmpTestDatabaseProvisioner.cs is linked:
 //   <Compile Include="$(OpenModulePlatformRoot)\tests\shared\Ui\*.cs" Link="TestSupport\Ui\%(Filename)%(Extension)" />
-// The consuming project needs the Microsoft.Playwright, xunit and
-// Xunit.SkippableFact packages.
+// The consuming project needs Microsoft.NET.Test.Sdk 18.9.0,
+// Microsoft.Playwright 1.62.0, xunit 2.9.3,
+// xunit.runner.visualstudio 4.0.0, and Xunit.SkippableFact 1.5.85.
+// Runner 4.0.0 supports the xUnit.net v2 core used by these fixtures; do not
+// migrate the shared fixture APIs to xunit.v3 solely for the runner upgrade.
 
 namespace OpenModulePlatform.TestSupport.Ui;
 

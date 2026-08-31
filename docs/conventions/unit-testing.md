@@ -20,6 +20,29 @@
 
 This document records the unit-testing patterns found in the OMP+ODV repositories (audit date 2026-07-15; source code only — `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded from the audit).
 
+## Runner/core compatibility baseline (2026-08-31)
+
+The supported baseline is a runner-only upgrade:
+
+- `Microsoft.NET.Test.Sdk` 18.9.0
+- `xunit` 2.9.3 (the latest and final v2 core release)
+- `xunit.runner.visualstudio` 4.0.0
+- `Xunit.SkippableFact` 1.5.85
+- `Microsoft.Playwright` 1.62.0 for `*.UiTests` projects
+
+The adapter's own package documentation states that version 4.0.0 runs .NET
+projects built with xUnit.net v2 and v3, and its `net8.0` asset has no dependency
+on an xUnit core package. The v2-to-v3 migration guide separately requires
+renaming `xunit` to `xunit.v3`, changing test projects to executables, and
+adopting v3 APIs. Those changes are not prerequisites for runner 4.0.0 and are
+therefore outside this upgrade. Repositories that link `tests/shared/Ui/*.cs`
+should apply the exact package pins above; no shared fixture API changes are
+required.
+
+Primary references: [Visual Studio adapter package](https://www.nuget.org/packages/xunit.runner.visualstudio/4.0.0),
+[xUnit.net runner package guidance](https://xunit.net/docs/nuget-packages-v3), and
+[the v2-to-v3 migration guide](https://xunit.net/docs/getting-started/v3/migration).
+
 Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare, iKrock2, ODVGateway (.NET), OpenDocViewer, AgentDocMap (JS/npm).
 
 ## 1. Per-repo unit-test map

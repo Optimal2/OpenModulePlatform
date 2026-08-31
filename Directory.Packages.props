@@ -47,6 +47,14 @@
     <PackageVersion Include="System.Management" Version="10.0.11" />
     <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
     <PackageVersion Include="System.Security.Permissions" Version="10.0.11" />
+    <!--
+      Runner/core compatibility baseline (verified 2026-08-31):
+      xunit.runner.visualstudio 4.0.0 explicitly supports .NET test projects
+      built with xUnit.net v2 and v3. The adapter major does not require a
+      migration from the xunit v2 core package to xunit.v3. Keep the latest
+      v2 core (2.9.3) until a separate, deliberate v3 migration is approved.
+      Repositories linking tests/shared/Ui/*.cs should use these exact pins.
+    -->
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.85" />
