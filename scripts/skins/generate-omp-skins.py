@@ -105,11 +105,22 @@ def hexf(c):
 
 
 class Tema:
-    def __init__(self, namn, titel, bg, panel, kant, accent, accent2, text, dim, tryckt):
+    def __init__(self, namn, titel, bg, panel, kant, accent, accent2, text, dim, tryckt,
+                 ljus=None, mork=None, display=None):
         self.namn, self.titel = namn, titel
         self.bg, self.panel, self.kant = bg, panel, kant
         self.accent, self.accent2, self.text, self.dim, self.tryckt = accent, accent2, text, dim, tryckt
+        # 3D-bevel: ljus kant uppe/vanster, mork nere/hoger (klassisk 90-talsrelief)
+        self.ljus = ljus or tuple(min(255, c + 70) for c in panel)
+        self.mork = mork or tuple(max(0, c - 60) for c in panel)
+        self.display = display or bg
 
+
+WINOMP = Tema("winomp", "WINOMP",
+              bg=(24, 24, 30), panel=(52, 52, 62), kant=(14, 14, 18),
+              accent=(220, 168, 74), accent2=(150, 108, 40), text=(216, 216, 224),
+              dim=(120, 120, 134), tryckt=(34, 34, 42),
+              ljus=(96, 96, 110), mork=(20, 20, 26), display=(10, 14, 10))
 
 MATRIX = Tema("omp-matrix", "OMP MATRIX",
               bg=(4, 12, 6), panel=(10, 24, 12), kant=(0, 60, 24),
@@ -134,9 +145,13 @@ def rita_text(d, x, y, s, farg):
 
 def panelplatta(d, x, y, w, h, t, nedtryckt=False, aktiv=False):
     fyll = t.tryckt if nedtryckt else (t.kant if aktiv else t.panel)
-    d.rectangle([x, y, x + w - 1, y + h - 1], fill=fyll, outline=t.kant)
-    if not nedtryckt:
-        d.line([x + 1, y + 1, x + w - 2, y + 1], fill=t.dim)
+    d.rectangle([x, y, x + w - 1, y + h - 1], fill=fyll)
+    ovre = t.mork if nedtryckt else t.ljus     # relief: inverteras nar knappen trycks
+    nedre = t.ljus if nedtryckt else t.mork
+    d.line([x, y, x + w - 2, y], fill=ovre)
+    d.line([x, y, x, y + h - 2], fill=ovre)
+    d.line([x + 1, y + h - 1, x + w - 1, y + h - 1], fill=nedre)
+    d.line([x + w - 1, y + 1, x + w - 1, y + h - 1], fill=nedre)
 
 
 def symbol(d, namn, x, y, w, h, t, nedtryckt):
@@ -214,8 +229,12 @@ def bygg_ark(arknamn, poster, t, font_lookup):
         d.rectangle([0, 0, W - 1, H - 1], fill=t.bg, outline=t.kant)
         for yy in range(0, H, 4):
             d.line([1, yy, W - 2, yy], fill=blanda(t.bg, t.panel, 0.55))
-        d.rectangle([23, 42, 23 + 76, 42 + 16], outline=t.kant)   # vis-omrade
-        d.rectangle([110, 22, 264, 40], outline=t.kant)           # infotext-omrade
+        for (x0, y0, x1, y1) in ((23, 42, 99, 58), (110, 22, 264, 40)):   # vis + infotext
+            d.rectangle([x0, y0, x1, y1], fill=t.display)
+            d.line([x0, y0, x1, y0], fill=t.mork)
+            d.line([x0, y0, x0, y1], fill=t.mork)
+            d.line([x0, y1, x1, y1], fill=t.ljus)
+            d.line([x1, y0, x1, y1], fill=t.ljus)
         return img
 
     if arknamn == "TEXT":
@@ -235,7 +254,7 @@ def bygg_ark(arknamn, poster, t, font_lookup):
         for p in poster:
             m = re.search(r"DIGIT_(\d)", p["name"])
             if m:
-                digit(d, p["x"], p["y"], p["w"], p["h"], int(m.group(1)), t.accent, t.bg)
+                digit(d, p["x"], p["y"], p["w"], p["h"], int(m.group(1)), (120, 255, 140), t.display)
             elif "MINUS" in p["name"]:
                 d.line([p["x"] + 1, p["y"] + p["h"] // 2, p["x"] + p["w"] - 2, p["y"] + p["h"] // 2],
                        fill=t.accent, width=2)
@@ -345,7 +364,7 @@ def bygg_skin(t, ark, font_lookup):
 def main():
     ark, font_lookup = las_geometri()
     print("ark i geometrin:", sorted(ark))
-    for t in (MATRIX, LJUS):
+    for t in (WINOMP, MATRIX, LJUS):
         p = bygg_skin(t, ark, font_lookup)
         print("skrev", p, os.path.getsize(p), "byte")
 

@@ -21,6 +21,24 @@
 - Källkodsgranskning på djupet: se katalognoten `inspiration/webamp.md` i
   DEV-vaulten (fil:rad-referenser för embed-API, skinmotor, ljudgraf, egress).
 
+## Beslut om grundskinnet (operatör, 2026-08-31 — reviderat samma kväll)
+
+SLUTLÄGE: widgeten renderar WINOMP — vårt eget genererade skin i klassiskt
+visuellt språk (varje pixel ritad av scripts/skins/generate-omp-skins.py) — som
+default. Nullsofts inbakade grundskin renderas aldrig. Det tidigare
+mellanbeslutet nedan behålls som historik.
+
+## Tidigare mellanbeslut (ersatt)
+
+Widgeten renderar webamps INBYGGDA klassiska grundskin som standardutseende
+(inget initialSkin sätts). Ställningstagandet: grafiken är Nullsofts original;
+MIT-licensen täcker webamps kod, inte skinnet. Webamp-projektet har distribuerat
+det öppet sedan 2018 med uttrycklig friskrivning i sin README, utan åtgärd från
+rättighetshavarna, och skinnet ligger oavsett inbakat i bundeln — beslutet gäller
+endast om det RENDERAS. Praktisk risk bedömd som mycket låg; formellt olicensierad
+grafik. De egenproducerade OMP-skinsen finns kvar under skins/ som fullt
+rättighetsrena alternativ om hållningen behöver ändras.
+
 ## Kända förbehåll
 
 - Bundeln bär webamps inbakade default-skin (Nullsofts klassiska grundskin som

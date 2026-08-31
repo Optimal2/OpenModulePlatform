@@ -12,10 +12,13 @@
         MusicPlayerWidgetOptions.ModeClassic, StringComparison.OrdinalIgnoreCase)
         ? MusicPlayerWidgetOptions.ModeClassic
         : MusicPlayerWidgetOptions.ModeWebamp;
+    // Operator decision 2026-08-31 (rev 2): WINOMP — our own generated skin in
+    // the classic visual language (every pixel ours, scripts/skins/) — is the
+    // default look. webamp's baked-in base skin is never rendered; the rights
+    // posture is documented in wwwroot/lib/webamp/PROVENANCE.md.
     var webampSkins = System.Text.Json.JsonSerializer.Serialize(new[]
     {
-        new { url = Url.Content("~/lib/webamp/skins/omp-matrix.wsz"), name = "OMP Matrix" },
-        new { url = Url.Content("~/lib/webamp/skins/omp-ljus.wsz"), name = "OMP Ljus" },
+        new { url = Url.Content("~/lib/webamp/skins/winomp.wsz"), name = "WINOMP" },
     });
 }
 

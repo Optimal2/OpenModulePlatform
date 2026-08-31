@@ -2207,8 +2207,8 @@
                 initialTracks: toWebampTracks(state.tracks),
                 windowLayout: {
                     main: { position: { top: 0, left: 0 } },
-                    equalizer: { closed: true, position: { top: 0, left: 0 } },
-                    playlist: { closed: true, position: { top: 0, left: 0 } }
+                    equalizer: { closed: true, position: { top: 116, left: 0 } },
+                    playlist: { closed: true, position: { top: 232, left: 0 } }
                 },
                 zIndex: 30
             });
@@ -2220,6 +2220,7 @@
         }
 
         player.classList.add('dashboard-music-player--webamp');
+        player.closest('[data-dashboard-widget]')?.classList.add('dashboard-widget--webamp');
         player.__ompWebamp = webamp;
 
         const scaleWebampMount = () => {
@@ -2227,8 +2228,6 @@
             const scale = width > 0 ? Math.min(1, width / 275) : 1;
             mount.style.transformOrigin = 'top left';
             mount.style.transform = scale < 1 ? `scale(${scale})` : '';
-            mount.style.height = `${Math.round(116 * scale)}px`;
-            mount.style.margin = scale < 1 ? '0' : '';
         };
         scaleWebampMount();
         if (typeof ResizeObserver === 'function') {

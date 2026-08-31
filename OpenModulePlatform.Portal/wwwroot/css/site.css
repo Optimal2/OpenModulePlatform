@@ -4535,13 +4535,21 @@ button.dashboard-role-list__item:focus-visible {
 
 .dashboard-music-player__webamp {
     position: relative;
-    width: 275px;
-    height: 116px;
-    margin: 0 auto;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 120px;
 }
 
 /* Webamp mode: the vendored player owns playback, so the classic rows hide.
-   The admin (music library) button stays — uploads still go through it. */
+   The admin (music library) button stays — uploads still go through it.
+   The mount fills the widget body so webamp's own windows (main, EQ,
+   playlist) can be dragged around inside the widget surface. */
+.dashboard-music-player--webamp {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
 .dashboard-music-player--webamp .dashboard-music-player__track,
 .dashboard-music-player--webamp .dashboard-music-player__progress,
 .dashboard-music-player--webamp .dashboard-music-player__controls > :not([data-music-admin-open]) {
@@ -4551,6 +4559,33 @@ button.dashboard-role-list__item:focus-visible {
 .dashboard-music-player--webamp .dashboard-music-player__controls {
     display: flex;
     justify-content: flex-end;
+}
+
+/* Floating-Winamp look: outside edit mode the widget card disappears around
+   the webamp player; the chrome comes back in edit mode so the widget stays
+   movable/resizable/removable like any other. */
+.portal-dashboard:not(.is-editing) .dashboard-widget--webamp {
+    overflow: visible;
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+.portal-dashboard:not(.is-editing) .dashboard-widget--webamp .dashboard-widget__body {
+    overflow: visible;
+}
+
+/* Honest cursors: the main window cannot be moved inside the widget embedding,
+   so its title bar shows the default cursor; the EQ and playlist windows ARE
+   movable and advertise it. Skin-provided cursors are overridden on purpose. */
+.dashboard-music-player__webamp #main-window #title-bar,
+.dashboard-music-player__webamp #main-window #title-bar * {
+    cursor: default !important;
+}
+
+.dashboard-music-player__webamp #equalizer-window .draggable,
+.dashboard-music-player__webamp #playlist-window .draggable {
+    cursor: move !important;
 }
 
 .dashboard-music-player__button {
