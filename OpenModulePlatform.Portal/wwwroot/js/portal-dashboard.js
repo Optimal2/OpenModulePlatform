@@ -2223,6 +2223,26 @@
         player.closest('[data-dashboard-widget]')?.classList.add('dashboard-widget--webamp');
         player.__ompWebamp = webamp;
 
+        // Governance: the vendored bundle links to webamp.org from its About
+        // menu. We do not ship links to pages we cannot answer for, so every
+        // webamp.org anchor is rewritten to our repository the moment it
+        // appears (menus render lazily). The bundle itself stays bit-identical
+        // to the npm artifact - see PROVENANCE.md.
+        const aboutUrl = player.dataset.webampAboutUrl || '';
+        if (aboutUrl) {
+            const rewriteExternalLinks = (root) => {
+                root.querySelectorAll('a[href*="webamp.org"]').forEach((anchor) => {
+                    anchor.href = aboutUrl;
+                    anchor.target = '_blank';
+                    anchor.rel = 'noopener noreferrer';
+                });
+            };
+            rewriteExternalLinks(mount);
+            const linkObserver = new MutationObserver(() => rewriteExternalLinks(mount));
+            linkObserver.observe(mount, { childList: true, subtree: true });
+            player.__ompWebampLinkObserver = linkObserver;
+        }
+
         const scaleWebampMount = () => {
             const width = player.clientWidth;
             const scale = width > 0 ? Math.min(1, width / 275) : 1;
@@ -4769,6 +4789,7 @@
         closeDashboardWidgetPopupForWidget(widget);
         widget.querySelectorAll('[data-dashboard-music-player]').forEach((player) => {
             try { player.__ompWebampResizeObserver?.disconnect(); } catch { /* best effort */ }
+            try { player.__ompWebampLinkObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebamp?.dispose?.(); } catch { /* webamp's own dispose is best effort */ }
         });
         revokeDashboardMusicPlayerObjectUrls(widget);
