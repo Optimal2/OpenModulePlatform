@@ -34,6 +34,13 @@ visuellt språk (varje pixel ritad av scripts/skins/generate-omp-skins.py) — s
 default. Nullsofts inbakade grundskin renderas aldrig. Det tidigare
 mellanbeslutet nedan behålls som historik.
 
+REV 4 (2026-08-31, sent): det inbakade grundskinnet är gjort OÅTKOMLIGT i
+widgeten — spelaren visas först när WINOMP-skinnet bekräftat laddats (ingen
+blink av originalet vid sidladdning; laddningsfel faller till klassiska
+spelaren i stället för till originalskinnet), och menyvalet "<Base Skin>"
+saneras bort ur skinmenyn. Originalets bytes ligger kvar i bundelfilen (den
+är bit-identisk med npm-artefakten) men kan inte renderas i widgeten.
+
 ## Tidigare mellanbeslut (ersatt)
 
 Widgeten renderar webamps INBYGGDA klassiska grundskin som standardutseende

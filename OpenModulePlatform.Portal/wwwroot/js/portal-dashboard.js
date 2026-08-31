@@ -2212,8 +2212,19 @@
                 },
                 zIndex: 30
             });
-            mount.hidden = false;
             await webamp.renderInto(mount);
+            // The bundle's baked-in default skin must never be visible: the
+            // mount stays hidden until OUR skin has actually loaded. If the
+            // skin cannot load within the guard, the classic player takes over.
+            const skinLoaded = await Promise.race([
+                webamp.skinIsLoaded().then(() => true),
+                new Promise((resolve) => setTimeout(() => resolve(false), 8000))
+            ]);
+            if (!skinLoaded) {
+                try { webamp.dispose?.(); } catch { /* best effort */ }
+                return false;
+            }
+            mount.hidden = false;
         } catch {
             mount.hidden = true;
             return false;
@@ -2249,6 +2260,14 @@
                         }
                     });
                 }
+                // The baked-in default skin stays unreachable: drop the
+                // "<Base Skin>" entry from the skins menu (exact leaf match,
+                // so the Skins submenu itself is never touched).
+                root.querySelectorAll('li').forEach((item) => {
+                    if (item.textContent.trim() === '<Base Skin>') {
+                        item.remove();
+                    }
+                });
             };
             rewriteExternalLinks(mount);
             const linkObserver = new MutationObserver(() => rewriteExternalLinks(mount));
