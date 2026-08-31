@@ -38,8 +38,7 @@
         <section class="page-header">
             <div>
                 <div class="eyebrow">@L["Security and access"]</div>
-                <h2>@(Model.IsCreate ? L["Create role"] : L["Edit role"])</h2>
-                <p class="lede">@L["Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable."]</p>
+                <h2>@(Model.IsCreate ? L["Create role"] : L["Edit role"]) <span class="info-badge" tabindex="0" role="img" title="@L["Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable."]" aria-label="@L["Roles are the main RBAC editing surface. Add permissions and principals here so access remains grouped and auditable."]">i</span></h2>
             </div>
         </section>
     </div>
@@ -227,10 +226,7 @@
     <div class="section-grid section-grid--wide bottom-gap">
         <section id="@PermissionsSectionId" class="card section-card section-navigator-target">
             <div class="eyebrow">@L["Role administration"]</div>
-            <h3>@L["Assigned permissions"]</h3>
-            <p class="muted">
-                @L["These permissions are granted whenever the role is resolved for a user or service identity."]
-            </p>
+            <h3>@L["Assigned permissions"] <span class="info-badge" tabindex="0" role="img" title="@L["These permissions are granted whenever the role is resolved for a user or service identity."]" aria-label="@L["These permissions are granted whenever the role is resolved for a user or service identity."]">i</span></h3>
 
             @if (Model.Permissions.Count == 0)
             {
@@ -283,8 +279,7 @@
 
         <section id="@PrincipalsSectionId" class="card section-card section-navigator-target">
             <div class="eyebrow">@L["Principals"]</div>
-            <h3>@L["Assigned principals"]</h3>
-            <p class="muted">@ompBranding.ApplyPlatformName(L["Bind OMP users, AD users or AD groups to the role."].Value)</p>
+            <h3>@L["Assigned principals"] <span class="info-badge" tabindex="0" role="img" title="@ompBranding.ApplyPlatformName(L["Bind OMP users, AD users or AD groups to the role."].Value)" aria-label="@ompBranding.ApplyPlatformName(L["Bind OMP users, AD users or AD groups to the role."].Value)">i</span></h3>
 
             @if (Model.Principals.Count == 0)
             {

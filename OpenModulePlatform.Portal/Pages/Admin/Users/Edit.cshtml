@@ -41,8 +41,7 @@
         <section class="page-header">
             <div>
                 <div class="eyebrow">@L["Security and access"]</div>
-                <h2>@L["Edit user"]</h2>
-                <p class="lede">@ompBranding.ApplyPlatformName(L["Update the OMP user record and link AD identities that Windows sign-in can resolve."].Value)</p>
+                <h2>@L["Edit user"] <span class="info-badge" tabindex="0" role="img" title="@ompBranding.ApplyPlatformName(L["Update the OMP user record and link AD identities that Windows sign-in can resolve."].Value)" aria-label="@ompBranding.ApplyPlatformName(L["Update the OMP user record and link AD identities that Windows sign-in can resolve."].Value)">i</span></h2>
             </div>
         </section>
     </div>
@@ -113,8 +112,7 @@
 
     <section id="@RolesSectionId" class="card section-card bottom-gap section-navigator-target">
         <div class="eyebrow">@L["Security and access"]</div>
-        <h3>@L["Roles"]</h3>
-        <p class="muted">@ompBranding.ApplyPlatformName(L["Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here."].Value)</p>
+        <h3>@L["Roles"] <span class="info-badge" tabindex="0" role="img" title="@ompBranding.ApplyPlatformName(L["Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here."].Value)" aria-label="@ompBranding.ApplyPlatformName(L["Roles assigned directly to this OMP user or to one of its linked AD accounts are shown here."].Value)">i</span></h3>
 
         @if (Model.UserRow.Roles.Count == 0)
         {
@@ -150,8 +148,7 @@
 
     <section id="@PortalSettingsSectionId" class="card section-card bottom-gap section-navigator-target">
         <div class="eyebrow">@ompBranding.PortalName</div>
-        <h3>@ompBranding.ApplyTerms(L["Portal settings"].Value)</h3>
-        <p class="muted">@ompBranding.ApplyTerms(L["Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user."].Value)</p>
+        <h3>@ompBranding.ApplyTerms(L["Portal settings"].Value) <span class="info-badge" tabindex="0" role="img" title="@ompBranding.ApplyTerms(L["Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user."].Value)" aria-label="@ompBranding.ApplyTerms(L["Portal setting definitions are installed by the Portal. This page stores only values that override defaults for this user."].Value)">i</span></h3>
 
         @{
             var selectedPortalSetting = Model.SelectedPortalSettingDefinition;
@@ -259,8 +256,7 @@
 
     <section id="@AuthLinksSectionId" class="card section-card bottom-gap section-navigator-target">
         <div class="eyebrow">@L["Authentication"]</div>
-        <h3>@L["Auth links"]</h3>
-        <p class="muted">@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added."].Value)</p>
+        <h3>@L["Auth links"] <span class="info-badge" tabindex="0" role="img" title="@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added."].Value)" aria-label="@ompBranding.ApplyPlatformName(L["These provider identities are linked to this OMP user. Removing all links prevents sign-in until another link is added."].Value)">i</span></h3>
 
         @if (Model.UserRow.AuthLinks.Count == 0)
         {
