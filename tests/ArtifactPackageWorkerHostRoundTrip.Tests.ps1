@@ -8,7 +8,12 @@ function Get-PackageManifest {
 
     $archive = [System.IO.Compression.ZipFile]::OpenRead($PackagePath)
     try {
-        $entry = $archive.GetEntry('omp-artifact-package.json')
+        $entry = $archive.Entries | Where-Object {
+            [string]::Equals(
+                $_.FullName.Replace('\', '/'),
+                'omp-artifact-package.json',
+                [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
         if ($null -eq $entry) {
             throw "Package manifest is missing from '$PackagePath'."
         }
@@ -34,7 +39,12 @@ function Export-PackagePayload {
 
     $archive = [System.IO.Compression.ZipFile]::OpenRead($PackagePath)
     try {
-        $entry = $archive.GetEntry('payload/artifact.zip')
+        $entry = $archive.Entries | Where-Object {
+            [string]::Equals(
+                $_.FullName.Replace('\', '/'),
+                'payload/artifact.zip',
+                [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
         if ($null -eq $entry) {
             throw "Nested artifact payload is missing from '$PackagePath'."
         }
