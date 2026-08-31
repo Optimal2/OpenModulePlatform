@@ -622,7 +622,11 @@ internal static partial class Program
 
         originalNode["artifacts"] = JsonSerializer.SerializeToNode(config.Artifacts, JsonOptions);
         var json = originalNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, Encoding.UTF8);
+        // UTF8Encoding(false): plain Encoding.UTF8 EMITS a BOM, which the original
+        // hand-maintained configs do not carry - the first rewrite silently added
+        // EF BB BF (measured 2026-08-31 on linus_hemma/bootstrap.json). BOM-free
+        // matches how the files are authored; System.Text.Json reads both.
+        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
     }
 
     private static async Task WriteGeneratedPayloadMetadataIntoJsonFileAsync(string configPath, BootstrapConfig generatedConfig)
@@ -654,7 +658,11 @@ internal static partial class Program
         }
 
         var json = originalNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, Encoding.UTF8);
+        // UTF8Encoding(false): plain Encoding.UTF8 EMITS a BOM, which the original
+        // hand-maintained configs do not carry - the first rewrite silently added
+        // EF BB BF (measured 2026-08-31 on linus_hemma/bootstrap.json). BOM-free
+        // matches how the files are authored; System.Text.Json reads both.
+        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
     }
 
     private static void ApplyGeneratedPayloadMetadata(BootstrapConfig profileConfig, BootstrapConfig generatedConfig)

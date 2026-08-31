@@ -6711,6 +6711,15 @@ internal sealed class ArtifactPayloadOptions
     public bool RemoveRuntimeConfigurationFiles { get; set; } = true;
 
     public bool IsExample { get; set; }
+
+    // Preserve properties this model does not know about across a typed
+    // round-trip, same rationale as BootstrapConfig.ExtensionData (R3-G2):
+    // the artifacts array is serialized back into host profile configs by
+    // WriteSyncedArtifactTargetsIntoConfigAsync / the payload-metadata merge,
+    // and without this a hand-added per-artifact property would vanish
+    // silently on the next refresh-and-stage run.
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public Dictionary<string, System.Text.Json.JsonElement> ExtensionData { get; set; } = [];
 }
 
 internal sealed class HostAgentInstallOptions
