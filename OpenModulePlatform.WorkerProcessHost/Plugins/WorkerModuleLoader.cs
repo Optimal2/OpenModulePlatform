@@ -1,6 +1,8 @@
 // File: OpenModulePlatform.WorkerProcessHost/Plugins/WorkerModuleLoader.cs
 using System.Reflection;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Worker.Abstractions.Contracts;
 using OpenModulePlatform.Worker.Abstractions.Models;
@@ -12,6 +14,13 @@ namespace OpenModulePlatform.WorkerProcessHost.Plugins;
 /// </summary>
 public sealed class WorkerModuleLoader
 {
+    private readonly ILogger<WorkerModuleLoader> _logger;
+
+    public WorkerModuleLoader(ILogger<WorkerModuleLoader>? logger = null)
+    {
+        _logger = logger ?? NullLogger<WorkerModuleLoader>.Instance;
+    }
+
     public IWorkerModuleFactory LoadFactory(
         string pluginAssemblyPath,
         string workerTypeKey,
@@ -129,21 +138,31 @@ public sealed class WorkerModuleLoader
         return factory;
     }
 
-    private static void ValidateWorkerHostCompatibility(
+    private void ValidateWorkerHostCompatibility(
         string pluginAssemblyPath,
         string? pluginArtifactRootPath,
         string? workerHostComponentKey,
         string? workerHostVersion)
     {
+        string? manifestPath;
         if (string.IsNullOrWhiteSpace(pluginArtifactRootPath))
         {
-            return;
+            // Managers older than the compatibility contract do not send the artifact-root
+            // or host-version arguments. Preserve marker-free legacy plugins, but walk from
+            // the assembly directory to its ancestors so nested plugin layouts cannot hide a
+            // payload-root marker from the fail-closed version check.
+            manifestPath = FindCompatibilityManifestInAssemblyAncestors(pluginAssemblyPath);
+            _logger.LogWarning(
+                "WorkerProcess:PluginArtifactRootPath was not supplied. Compatibility metadata is searched from the plugin assembly directory through its ancestors; upgrade WorkerManager to pass the complete worker-host identity.");
+        }
+        else
+        {
+            manifestPath = Path.Join(
+                Path.GetFullPath(pluginArtifactRootPath),
+                WorkerPluginCompatibilityManifest.FileName);
         }
 
-        var manifestPath = Path.Join(
-            Path.GetFullPath(pluginArtifactRootPath),
-            WorkerPluginCompatibilityManifest.FileName);
-        if (!File.Exists(manifestPath))
+        if (manifestPath is null || !File.Exists(manifestPath))
         {
             return;
         }
@@ -186,5 +205,22 @@ public sealed class WorkerModuleLoader
                 $"but the running worker host component is '{currentComponentKey ?? "<unknown>"}' version {currentVersion ?? "<unknown>"}. " +
                 action);
         }
+    }
+
+    private static string? FindCompatibilityManifestInAssemblyAncestors(string pluginAssemblyPath)
+    {
+        var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(pluginAssemblyPath))
+            ?? throw new InvalidOperationException(
+                $"Worker plugin assembly has no directory: '{pluginAssemblyPath}'.");
+        for (var directory = new DirectoryInfo(assemblyDirectory); directory is not null; directory = directory.Parent)
+        {
+            var candidate = Path.Join(directory.FullName, WorkerPluginCompatibilityManifest.FileName);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 }

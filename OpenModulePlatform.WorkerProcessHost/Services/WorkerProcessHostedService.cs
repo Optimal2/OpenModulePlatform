@@ -73,6 +73,13 @@ public sealed class WorkerProcessHostedService : BackgroundService
         {
             Environment.ExitCode = 1;
 
+            // The default NLog console target writes to stdout. WorkerManager redirects
+            // stderr specifically so a caught startup failure must cross that boundary
+            // explicitly; otherwise the manager sees only ExitCode=1 again.
+            Console.Error.WriteLine(
+                $"Worker process failed to start or execute. AppInstanceId={_settings.AppInstanceId:D}, " +
+                $"WorkerTypeKey={_settings.WorkerTypeKey}, PluginAssemblyPath={_settings.PluginAssemblyPath}, Error={ex}");
+
             _logger.LogCritical(
                 ex,
                 "Worker process failed to start or execute. AppInstanceId={AppInstanceId}, WorkerTypeKey={WorkerTypeKey}, PluginAssemblyPath={PluginAssemblyPath}",

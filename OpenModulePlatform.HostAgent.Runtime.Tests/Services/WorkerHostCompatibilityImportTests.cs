@@ -14,12 +14,12 @@ public sealed class WorkerHostCompatibilityImportTests : IDisposable
         Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void ValidateWorkerHostRequirement_RejectsOlderSelectedHostWithBothVersions()
+    public void ValidateWorkerHostRequirement_RejectsOlderSelectedAndProvisionedHostWithAllVersions()
     {
         var requirement = Requirement("0.3.46");
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            ArtifactZipImportService.ValidateWorkerHostRequirement(requirement, "0.3.45"));
+            ArtifactZipImportService.ValidateWorkerHostRequirement(requirement, "0.3.45", "0.3.45"));
 
         Assert.Contains("omp-workerprocesshost", exception.Message, StringComparison.Ordinal);
         Assert.Contains("0.3.46", exception.Message, StringComparison.Ordinal);
@@ -29,8 +29,32 @@ public sealed class WorkerHostCompatibilityImportTests : IDisposable
     [Fact]
     public void ValidateWorkerHostRequirement_AllowsEqualOrNewerSelectedHost()
     {
-        ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.46");
-        ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.47");
+        ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.46", "0.3.46");
+        ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.47", "0.3.47");
+    }
+
+    [Fact]
+    public void ValidateWorkerHostRequirement_RejectsSelectedHostThatHasNotBeenProvisioned()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.47", null));
+
+        Assert.Contains("0.3.47", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("<not provisioned>", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ValidateWorkerHostRequirement_RejectsWhenEitherSelectedOrProvisionedVersionIsTooOld()
+    {
+        var selectedAhead = Assert.Throws<InvalidOperationException>(() =>
+            ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.47", "0.3.45"));
+        var provisionedAhead = Assert.Throws<InvalidOperationException>(() =>
+            ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.45", "0.3.47"));
+
+        Assert.Contains("0.3.47", selectedAhead.Message, StringComparison.Ordinal);
+        Assert.Contains("0.3.45", selectedAhead.Message, StringComparison.Ordinal);
+        Assert.Contains("0.3.45", provisionedAhead.Message, StringComparison.Ordinal);
+        Assert.Contains("0.3.47", provisionedAhead.Message, StringComparison.Ordinal);
     }
 
     [Fact]

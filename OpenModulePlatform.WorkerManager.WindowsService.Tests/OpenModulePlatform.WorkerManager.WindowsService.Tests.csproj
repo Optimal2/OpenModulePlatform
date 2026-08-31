@@ -22,6 +22,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.WorkerManager.WindowsService\OpenModulePlatform.WorkerManager.WindowsService.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.WorkerProcessHost\OpenModulePlatform.WorkerProcessHost.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.WorkerProcessHost.TestPlugin\OpenModulePlatform.WorkerProcessHost.TestPlugin.csproj" />
   </ItemGroup>
 
   <ItemGroup>

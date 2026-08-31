@@ -80,14 +80,77 @@ public sealed class WorkerModuleLoaderCompatibilityTests : IDisposable
         Assert.Equal("compatibility-test-worker", factory.WorkerTypeKey);
     }
 
-    private string StagePlugin(string minimumWorkerHostVersion)
+    [Fact]
+    public void LoadFactory_RejectsManifestWhenOlderManagerOmitsCompatibilityArguments()
+    {
+        var pluginPath = StagePlugin("0.3.46", stageAssemblyInArtifactRoot: true);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new WorkerModuleLoader().LoadFactory(
+                pluginPath,
+                "newer-contract-test-worker",
+                pluginArtifactRootPath: null,
+                workerHostComponentKey: null,
+                workerHostVersion: null));
+
+        Assert.Contains("0.3.46", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("<unknown>", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadFactory_AllowsLegacyPluginWithoutManifestOrCompatibilityArguments()
+    {
+        Directory.CreateDirectory(_artifactRoot);
+        var pluginPath = typeof(CompatibilityTestWorkerFactory).Assembly.Location;
+
+        var factory = new WorkerModuleLoader().LoadFactory(
+            pluginPath,
+            "compatibility-test-worker",
+            pluginArtifactRootPath: null,
+            workerHostComponentKey: null,
+            workerHostVersion: null);
+
+        Assert.Equal("compatibility-test-worker", factory.WorkerTypeKey);
+    }
+
+    [Fact]
+    public void LoadFactory_OlderManagerCannotHidePayloadMarkerBehindNestedAssemblyPath()
+    {
+        Directory.CreateDirectory(_artifactRoot);
+        WriteManifest("0.3.46");
+        var nestedRoot = Path.Join(_artifactRoot, "plugins", "current");
+        Directory.CreateDirectory(nestedRoot);
+        var sourceAssembly = typeof(CompatibilityTestWorkerFactory).Assembly.Location;
+        var pluginPath = Path.Join(nestedRoot, Path.GetFileName(sourceAssembly));
+        File.Copy(sourceAssembly, pluginPath, overwrite: true);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new WorkerModuleLoader().LoadFactory(
+                pluginPath,
+                "newer-contract-test-worker",
+                pluginArtifactRootPath: null,
+                workerHostComponentKey: null,
+                workerHostVersion: null));
+
+        Assert.Contains("0.3.46", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("<unknown>", exception.Message, StringComparison.Ordinal);
+    }
+
+    private string StagePlugin(string minimumWorkerHostVersion, bool stageAssemblyInArtifactRoot = false)
     {
         Directory.CreateDirectory(_artifactRoot);
         var sourceAssembly = typeof(CompatibilityTestWorkerFactory).Assembly.Location;
 
         WriteManifest(minimumWorkerHostVersion);
 
-        return sourceAssembly;
+        if (!stageAssemblyInArtifactRoot)
+        {
+            return sourceAssembly;
+        }
+
+        var stagedAssembly = Path.Join(_artifactRoot, Path.GetFileName(sourceAssembly));
+        File.Copy(sourceAssembly, stagedAssembly, overwrite: true);
+        return stagedAssembly;
     }
 
     private void WriteManifest(string minimumWorkerHostVersion)

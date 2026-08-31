@@ -18,6 +18,9 @@ Implemented as a Windows Service manager that:
 - cleans orphaned `WorkerProcessHost` processes at startup; by default it kills
   the full orphan process tree, configurable with
   `WorkerManager:CleanupOrphansKillProcessTree`
+- asynchronously captures a bounded tail of each child process's standard error
+  and includes it in the manager exit log and failed runtime observation, so a
+  startup rejection is not reduced to an unexplained exit code
 - publishes host heartbeat and observed runtime state back to OMP in database-backed mode
 
 ### OpenModulePlatform.WorkerProcessHost

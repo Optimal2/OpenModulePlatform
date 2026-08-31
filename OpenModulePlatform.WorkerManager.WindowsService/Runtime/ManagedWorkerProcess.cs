@@ -9,7 +9,13 @@ namespace OpenModulePlatform.WorkerManager.WindowsService.Runtime;
 /// </summary>
 public sealed class ManagedWorkerProcess
 {
+    private const int MaxCapturedStandardErrorCharacters = 4096;
+    private static readonly TimeSpan StandardErrorDrainTimeout = TimeSpan.FromSeconds(2);
+
     private readonly Queue<DateTimeOffset> _restartAttempts = new();
+    private readonly object _standardErrorSync = new();
+    private string? _lastStandardError;
+    private TaskCompletionSource<bool> _standardErrorClosed = CreateStandardErrorClosedSource(completed: true);
 
     public ManagedWorkerProcess(DesiredWorkerInstance definition)
     {
@@ -39,6 +45,8 @@ public sealed class ManagedWorkerProcess
     public bool ExitObserved { get; private set; }
 
     public bool StopRequested { get; private set; }
+
+    public bool StandardErrorDrainTimedOut { get; private set; }
 
     /// <summary>
     /// The artifact the CURRENT process was started from (R12-F2).
@@ -196,6 +204,52 @@ public sealed class ManagedWorkerProcess
         TrimRestartAttempts(nowUtc, restartWindow);
     }
 
+    public void ResetStandardError()
+    {
+        lock (_standardErrorSync)
+        {
+            _lastStandardError = null;
+            _standardErrorClosed = CreateStandardErrorClosedSource(completed: false);
+            StandardErrorDrainTimedOut = false;
+        }
+    }
+
+    public void RecordStandardError(string? line)
+    {
+        if (line is null)
+        {
+            lock (_standardErrorSync)
+            {
+                _standardErrorClosed.TrySetResult(true);
+            }
+            return;
+        }
+
+        var normalized = line.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        lock (_standardErrorSync)
+        {
+            var combined = string.IsNullOrWhiteSpace(_lastStandardError)
+                ? normalized
+                : $"{_lastStandardError}{Environment.NewLine}{normalized}";
+            _lastStandardError = combined.Length <= MaxCapturedStandardErrorCharacters
+                ? combined
+                : combined[^MaxCapturedStandardErrorCharacters..];
+        }
+    }
+
+    public string? GetLastStandardError()
+    {
+        lock (_standardErrorSync)
+        {
+            return _lastStandardError;
+        }
+    }
+
 
     public DateTimeOffset? GetNextEligibleStartUtc(DateTimeOffset nowUtc, TimeSpan restartWindow, int maxRestartsPerWindow)
     {
@@ -224,6 +278,15 @@ public sealed class ManagedWorkerProcess
 
         LastExitUtc = DateTimeOffset.UtcNow;
         LastExitCode = process.ExitCode;
+        Task standardErrorClosed;
+        lock (_standardErrorSync)
+        {
+            standardErrorClosed = _standardErrorClosed.Task;
+        }
+        // ErrorDataReceived sends a final null item at EOF. Wait briefly for that signal so
+        // the final exception reaches the exit log, but never block the supervision loop
+        // indefinitely if a descendant inherited and kept the pipe handle open.
+        StandardErrorDrainTimedOut = !standardErrorClosed.Wait(StandardErrorDrainTimeout);
         ExitObserved = true;
         process.Dispose();
         Process = null;
@@ -327,5 +390,15 @@ public sealed class ManagedWorkerProcess
         {
             _restartAttempts.Dequeue();
         }
+    }
+
+    private static TaskCompletionSource<bool> CreateStandardErrorClosedSource(bool completed)
+    {
+        var source = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (completed)
+        {
+            source.SetResult(true);
+        }
+        return source;
     }
 }

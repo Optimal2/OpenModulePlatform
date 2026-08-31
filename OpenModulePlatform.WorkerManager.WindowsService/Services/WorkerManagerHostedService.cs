@@ -182,11 +182,13 @@ public sealed class WorkerManagerHostedService : BackgroundService
             }
 
             _logger.LogWarning(
-                "Worker process exited. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ExitCode={ExitCode}, StopRequested={StopRequested}",
+                "Worker process exited. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, ExitCode={ExitCode}, StopRequested={StopRequested}, StandardErrorDrainTimedOut={StandardErrorDrainTimedOut}, StandardError={StandardError}",
                 managed.Definition.AppInstanceId,
                 managed.Definition.WorkerInstanceId,
                 managed.LastExitCode,
-                managed.StopRequested);
+                managed.StopRequested,
+                managed.StandardErrorDrainTimedOut,
+                managed.GetLastStandardError() ?? "<none>");
 
             await PublishExitObservationIfEnabledAsync(managed, runtimeKind, "worker process exited", cancellationToken);
         }
@@ -570,7 +572,12 @@ public sealed class WorkerManagerHostedService : BackgroundService
             ompConnectionString);
         startupResources.AttachProcess(process);
 
-        StartWorkerProcess(process, managed.Definition.WorkerInstanceId, workerProcessPath);
+        managed.ResetStandardError();
+        StartWorkerProcess(
+            process,
+            managed.Definition.WorkerInstanceId,
+            workerProcessPath,
+            managed.RecordStandardError);
 
         managed.AttachProcess(
             process,
@@ -996,9 +1003,15 @@ public sealed class WorkerManagerHostedService : BackgroundService
             ? "worker process exited"
             : reason.Trim();
 
-        return managed.LastExitCode.GetValueOrDefault() == 0
-            ? normalizedReason
-            : $"{normalizedReason}; exit code {managed.LastExitCode}";
+        if (managed.LastExitCode.GetValueOrDefault() == 0)
+        {
+            return normalizedReason;
+        }
+
+        var standardError = managed.GetLastStandardError();
+        return string.IsNullOrWhiteSpace(standardError)
+            ? $"{normalizedReason}; exit code {managed.LastExitCode}"
+            : $"{normalizedReason}; exit code {managed.LastExitCode}; stderr: {standardError}";
     }
 
     private static string ResolvePath(string path)
@@ -1113,14 +1126,28 @@ public sealed class WorkerManagerHostedService : BackgroundService
         }
     }
 
-    private static void StartWorkerProcess(Process process, Guid workerInstanceId, string workerProcessPath)
+    internal static void StartWorkerProcess(
+        Process process,
+        Guid workerInstanceId,
+        string workerProcessPath,
+        Action<string?>? onStandardError = null)
     {
+        if (process.StartInfo.RedirectStandardError && onStandardError is not null)
+        {
+            process.ErrorDataReceived += (_, args) => onStandardError(args.Data);
+        }
+
         try
         {
             if (!process.Start())
             {
                 throw new InvalidOperationException(
                     $"Failed to start worker process for WorkerInstanceId '{workerInstanceId}'.");
+            }
+
+            if (process.StartInfo.RedirectStandardError && onStandardError is not null)
+            {
+                process.BeginErrorReadLine();
             }
         }
         catch (Exception ex) when (ex is DirectoryNotFoundException
@@ -1146,10 +1173,11 @@ public sealed class WorkerManagerHostedService : BackgroundService
             WorkingDirectory = Path.GetDirectoryName(workerProcessPath) ?? AppContext.BaseDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
-            // Worker plugins use their own logging providers. Redirecting these streams here would
-            // require an always-drained pipe and can block noisy workers if the manager falls behind.
+            // Worker plugins keep their own log providers, but startup failures also need to reach
+            // the supervising manager. StartWorkerProcess drains this pipe asynchronously and the
+            // managed process retains only a bounded tail for the exit log/runtime observation.
             RedirectStandardOutput = false,
-            RedirectStandardError = false
+            RedirectStandardError = true
         };
 
         startInfo.ArgumentList.Add($"--WorkerProcess:AppInstanceId={desired.AppInstanceId:D}");

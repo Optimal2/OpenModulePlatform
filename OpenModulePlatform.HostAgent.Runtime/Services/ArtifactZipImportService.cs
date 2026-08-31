@@ -2008,29 +2008,36 @@ public sealed class ArtifactZipImportService
                 $"Artifact package type '{packageType}' cannot declare a worker-host requirement.");
         }
 
-        var currentVersion = await _repository.GetSelectedWorkerHostVersionAsync(
+        var workerHostVersions = await _repository.GetSelectedAndProvisionedWorkerHostVersionsAsync(
             hostKey,
             package.WorkerHostRequirement.ComponentKey,
             cancellationToken);
-        ValidateWorkerHostRequirement(package.WorkerHostRequirement, currentVersion);
+        ValidateWorkerHostRequirement(
+            package.WorkerHostRequirement,
+            workerHostVersions.SelectedVersion,
+            workerHostVersions.ProvisionedVersion);
     }
 
     internal static void ValidateWorkerHostRequirement(
         OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement requirement,
-        string? currentVersion)
+        string? selectedVersion,
+        string? provisionedVersion)
     {
         var requiredVersion = requirement.MinVersion.Trim();
-        var installedVersion = currentVersion?.Trim();
-        if (!string.IsNullOrWhiteSpace(installedVersion)
-            && ArtifactVersionComparer.Compare(installedVersion, requiredVersion) >= 0)
+        var normalizedSelectedVersion = selectedVersion?.Trim();
+        var normalizedProvisionedVersion = provisionedVersion?.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedSelectedVersion)
+            && ArtifactVersionComparer.Compare(normalizedSelectedVersion, requiredVersion) >= 0
+            && !string.IsNullOrWhiteSpace(normalizedProvisionedVersion)
+            && ArtifactVersionComparer.Compare(normalizedProvisionedVersion, requiredVersion) >= 0)
         {
             return;
         }
 
         throw new InvalidOperationException(
             $"Worker plugin artifact requires component '{requirement.ComponentKey}' version {requiredVersion} or later, " +
-            $"but the currently selected worker host version is {installedVersion ?? "<not selected>"}. " +
-            $"Import and select '{requirement.ComponentKey}' version {requiredVersion} or later before importing this worker plugin.");
+            $"but the selected worker host version is {normalizedSelectedVersion ?? "<not selected>"} and the selected artifact's provisioned version on this host is {normalizedProvisionedVersion ?? "<not provisioned>"}. " +
+            $"Select and provision '{requirement.ComponentKey}' version {requiredVersion} or later before importing this worker plugin.");
     }
 
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)

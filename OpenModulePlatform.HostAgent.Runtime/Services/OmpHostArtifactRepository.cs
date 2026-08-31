@@ -6755,7 +6755,7 @@ VALUES(@widget_id, @permission_id, @role_id);";
             string.IsNullOrWhiteSpace(widget.WidgetVersion) ? "0.0.0" : widget.WidgetVersion;
     }
 
-    public async Task<string?> GetSelectedWorkerHostVersionAsync(
+    internal async Task<WorkerHostVersionState> GetSelectedAndProvisionedWorkerHostVersionsAsync(
         string hostKey,
         string componentKey,
         CancellationToken cancellationToken)
@@ -6785,10 +6785,16 @@ WITH HostRoles AS
     WHERE HostId = @hostId
       AND IsActive = 1
 )
-SELECT TOP (1) ar.Version
+SELECT TOP (1)
+    ar.Version AS SelectedVersion,
+    CASE WHEN has.ArtifactId IS NULL THEN NULL ELSE ar.Version END AS ProvisionedVersion
 FROM omp.AppInstances ai
 INNER JOIN omp.Apps a ON a.AppId = ai.AppId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+LEFT JOIN omp.HostArtifactStates has
+    ON has.HostId = @hostId
+   AND has.ArtifactId = ar.ArtifactId
+   AND has.ProvisioningState = @succeededState
 WHERE @hostId IS NOT NULL
   AND
   (
@@ -6823,8 +6829,16 @@ ORDER BY
         await connection.OpenAsync(cancellationToken);
         await using var command = new SqlCommand(sql, connection);
         command.Parameters.Add("@hostKey", SqlDbType.NVarChar, 100).Value = hostKey;
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        return result is null or DBNull ? null : Convert.ToString(result, System.Globalization.CultureInfo.InvariantCulture);
+        command.Parameters.Add("@succeededState", SqlDbType.TinyInt).Value = ArtifactProvisioningState.Succeeded;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return new WorkerHostVersionState(null, null);
+        }
+
+        return new WorkerHostVersionState(
+            reader.IsDBNull(0) ? null : reader.GetString(0).Trim(),
+            reader.IsDBNull(1) ? null : reader.GetString(1).Trim());
     }
 
     private static void AddDistinct(List<int> values, int value)
@@ -6975,3 +6989,5 @@ ORDER BY
         IReadOnlyList<int> PermissionIds,
         IReadOnlyList<int> RoleIds);
 }
+
+internal sealed record WorkerHostVersionState(string? SelectedVersion, string? ProvisionedVersion);

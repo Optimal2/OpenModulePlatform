@@ -192,6 +192,41 @@ function Add-WorkerPluginCompatibilityManifest {
     }
 }
 
+function Get-EmbeddedWorkerHostMinVersion {
+    param([Parameter(Mandatory = $true)][string]$PayloadZip)
+
+    $entryName = 'omp-worker-plugin.json'
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($PayloadZip)
+    try {
+        $entry = $archive.Entries | Where-Object {
+            [string]::Equals($_.FullName.Replace('\', '/'), $entryName, [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
+        if ($null -eq $entry) {
+            return ''
+        }
+
+        $reader = [System.IO.StreamReader]::new($entry.Open())
+        try {
+            $document = $reader.ReadToEnd() | ConvertFrom-Json
+        }
+        finally {
+            $reader.Dispose()
+        }
+
+        if ([int]$document.formatVersion -ne 1 `
+                -or $null -eq $document.workerHost `
+                -or -not [string]::Equals([string]$document.workerHost.componentKey, 'omp-workerprocesshost', [StringComparison]::OrdinalIgnoreCase) `
+                -or [string]::IsNullOrWhiteSpace([string]$document.workerHost.minVersion)) {
+            throw "Artifact payload compatibility metadata '$entryName' is invalid."
+        }
+
+        return ([string]$document.workerHost.minVersion).Trim()
+    }
+    finally {
+        $archive.Dispose()
+    }
+}
+
 function Compress-PayloadDirectory {
     param(
         [string]$SourceDirectory,
@@ -259,8 +294,21 @@ try {
         throw "PayloadPath must be a directory or a .zip file: $payloadFullPath"
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
-        Add-WorkerPluginCompatibilityManifest -PayloadZip $payloadZip -MinVersion $MinWorkerHostVersion
+    $embeddedMinWorkerHostVersion = Get-EmbeddedWorkerHostMinVersion -PayloadZip $payloadZip
+    $resolvedMinWorkerHostVersion = if ([string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
+        $embeddedMinWorkerHostVersion
+    }
+    else {
+        $MinWorkerHostVersion.Trim()
+    }
+    if (-not [string]::IsNullOrWhiteSpace($embeddedMinWorkerHostVersion) `
+            -and -not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion) `
+            -and -not [string]::Equals($embeddedMinWorkerHostVersion, $MinWorkerHostVersion.Trim(), [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Artifact payload worker-host requirement '$embeddedMinWorkerHostVersion' does not match requested version '$($MinWorkerHostVersion.Trim())'."
+    }
+    if ([string]::IsNullOrWhiteSpace($embeddedMinWorkerHostVersion) `
+            -and -not [string]::IsNullOrWhiteSpace($resolvedMinWorkerHostVersion)) {
+        Add-WorkerPluginCompatibilityManifest -PayloadZip $payloadZip -MinVersion $resolvedMinWorkerHostVersion
     }
 
     $payloadDestination = Join-Path $packageRoot 'payload\artifact.zip'
@@ -298,10 +346,10 @@ try {
             minVersion = $MinModuleDefinitionVersion.Trim()
         }
     }
-    if (-not [string]::IsNullOrWhiteSpace($MinWorkerHostVersion)) {
+    if (-not [string]::IsNullOrWhiteSpace($resolvedMinWorkerHostVersion)) {
         $manifest.workerHost = [ordered]@{
             componentKey = 'omp-workerprocesshost'
-            minVersion = $MinWorkerHostVersion.Trim()
+            minVersion = $resolvedMinWorkerHostVersion
         }
     }
 

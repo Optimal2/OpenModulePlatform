@@ -120,9 +120,21 @@ validate the requirement before registering the artifact.
 `workerHost` is optional and reserved for `worker`/`worker-plugin` packages.
 Repository builders derive it from the component's `minWorkerHostVersion` and
 also write the same requirement as `omp-worker-plugin.json` inside the immutable
-payload. HostAgent checks the selected `omp-workerprocesshost` version at import;
+payload. PowerShell and .NET repackaging preserve the envelope requirement from
+that embedded marker. HostAgent requires both a compatible selected
+`omp-workerprocesshost` artifact and successful provisioning of that exact
+selected artifact on the importing host. It deliberately does not accept an
+unrelated older or newer host artifact that merely remains in the host cache,
+because WorkerManager resolves only the selected-and-provisioned artifact.
 WorkerProcessHost checks again before loading the plugin, which also protects a
 previously imported plugin after a host downgrade.
+
+When an older WorkerManager omits the artifact-root and host-version arguments,
+WorkerProcessHost searches the plugin assembly directory and its ancestors for
+the embedded marker.
+It fails closed when the marker exists but the running host version is unknown,
+while legacy payloads without a marker remain loadable for mixed-version rollout
+compatibility.
 
 The HostAgent check applies to packages imported through a host's zip/folder
 import flow. Portal registers artifacts centrally for potentially different
