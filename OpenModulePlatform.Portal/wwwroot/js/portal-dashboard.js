@@ -2241,6 +2241,15 @@
             const linkObserver = new MutationObserver(() => rewriteExternalLinks(mount));
             linkObserver.observe(mount, { childList: true, subtree: true });
             player.__ompWebampLinkObserver = linkObserver;
+
+            // The right-click context menu is rendered through a React portal on
+            // document.body (outside the mount), so it needs its own narrowly
+            // scoped observer: only webamp's context-menu container is touched.
+            const bodyObserver = new MutationObserver(() => {
+                document.querySelectorAll('#webamp-context-menu').forEach(rewriteExternalLinks);
+            });
+            bodyObserver.observe(document.body, { childList: true, subtree: true });
+            player.__ompWebampBodyObserver = bodyObserver;
         }
 
         const scaleWebampMount = () => {
@@ -4790,6 +4799,7 @@
         widget.querySelectorAll('[data-dashboard-music-player]').forEach((player) => {
             try { player.__ompWebampResizeObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampLinkObserver?.disconnect(); } catch { /* best effort */ }
+            try { player.__ompWebampBodyObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebamp?.dispose?.(); } catch { /* webamp's own dispose is best effort */ }
         });
         revokeDashboardMusicPlayerObjectUrls(widget);
