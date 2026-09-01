@@ -636,8 +636,167 @@
         });
     }
 
+    // --- range mode ---------------------------------------------------------
+    // One field showing a whole period; the popup pairs a preset rail with
+    // Från/Till date fields (full omp-datetime fields, calendars included).
+    // Pages write:
+    //   <span data-omp-daterange data-range-name="range" data-from-name="from"
+    //         data-to-name="to" data-from-text="..." data-to-text="..."
+    //         data-apply-text="...">
+    //       <input type="hidden" name="range|from|to" value="..."> (all three)
+    //       <span data-omp-daterange-preset="7d">Last 7 days</span> ...
+    //   </span>
+    // The hidden inputs are page-owned (server-rendered values, page resx
+    // labels on the presets), so the page's GET contract and localization
+    // stay where they were. Picking a preset applies immediately; custom
+    // dates apply through the footer button. Either date may stay empty for
+    // an open-ended period; both empty applies as the first preset.
+
+    var rangePanel = null;
+    var rangeContainer = null;
+
+    function closeRangePanel() {
+        if (rangePanel) {
+            // A child calendar panel lives inside the range popup; drop it
+            // with the popup or the module would point at a detached panel.
+            if (panel && rangePanel.contains(panel)) { closePanel(); }
+            rangePanel.remove();
+            rangePanel = null;
+            rangeContainer = null;
+        }
+    }
+
+    function enhanceRange(container) {
+        if (container._ompDaterange) { return; }
+
+        var names = {
+            range: container.getAttribute("data-range-name") || "range",
+            from: container.getAttribute("data-from-name") || "from",
+            to: container.getAttribute("data-to-name") || "to"
+        };
+        var hiddenOf = function (name) {
+            return container.querySelector('input[type="hidden"][name="' + name + '"]');
+        };
+        var hiddens = { range: hiddenOf(names.range), from: hiddenOf(names.from), to: hiddenOf(names.to) };
+        if (!hiddens.range || !hiddens.from || !hiddens.to) { return; }
+
+        var presets = Array.prototype.map.call(
+            container.querySelectorAll("[data-omp-daterange-preset]"),
+            function (el) {
+                el.hidden = true;
+                return { key: el.getAttribute("data-omp-daterange-preset"), label: el.textContent };
+            });
+
+        function currentLabel() {
+            var match = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0];
+            if (match) { return match.label; }
+            var from = hiddens.from.value;
+            var to = hiddens.to.value;
+            if (from || to) { return (from || "") + " – " + (to || ""); }
+            return presets.length > 0 ? presets[0].label : "";
+        }
+
+        var field = document.createElement("button");
+        field.type = "button";
+        // Pages hand the button their host input class (e.g. ip-field-input)
+        // so it dresses like the neighboring form fields.
+        field.className = ("omp-daterange__field " + (container.getAttribute("data-field-class") || "")).trim();
+        field.textContent = currentLabel();
+        container.appendChild(field);
+        container.classList.add("omp-daterange");
+
+        var st = { container: container, hiddens: hiddens, presets: presets, field: field };
+        container._ompDaterange = st;
+
+        function applyAndClose(rangeValue, fromValue, toValue) {
+            var changed = hiddens.range.value !== rangeValue
+                || hiddens.from.value !== fromValue
+                || hiddens.to.value !== toValue;
+            hiddens.range.value = rangeValue;
+            hiddens.from.value = fromValue;
+            hiddens.to.value = toValue;
+            field.textContent = currentLabel();
+            closeRangePanel();
+            if (changed) {
+                hiddens.range.dispatchEvent(new Event("change", { bubbles: true }));
+                container.dispatchEvent(new CustomEvent("omp-daterange-change", { bubbles: true }));
+            }
+        }
+
+        function openRangePanel() {
+            closeRangePanel();
+            closePanel();
+            rangePanel = document.createElement("div");
+            rangePanel.className = "omp-datetime-panel omp-daterange-panel";
+            rangeContainer = container;
+
+            var rail = document.createElement("div");
+            rail.className = "omp-daterange-panel__presets";
+            presets.forEach(function (preset) {
+                var button = document.createElement("button");
+                button.type = "button";
+                button.className = "omp-daterange-panel__preset";
+                if (preset.key === hiddens.range.value) { button.classList.add("omp-daterange-panel__preset--active"); }
+                button.textContent = preset.label;
+                button.addEventListener("click", function () { applyAndClose(preset.key, "", ""); });
+                rail.appendChild(button);
+            });
+            rangePanel.appendChild(rail);
+
+            var fields = document.createElement("div");
+            fields.className = "omp-daterange-panel__fields";
+            var makeRow = function (labelText, value) {
+                var row = document.createElement("label");
+                row.className = "omp-daterange-panel__row";
+                var caption = document.createElement("span");
+                caption.textContent = labelText;
+                row.appendChild(caption);
+                var input = document.createElement("input");
+                input.setAttribute("data-omp-datetime", "date");
+                input.value = value;
+                row.appendChild(input);
+                fields.appendChild(row);
+                enhance(input);
+                return input;
+            };
+            var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, hiddens.from.value);
+            var toInput = makeRow(container.getAttribute("data-to-text") || names.to, hiddens.to.value);
+
+            var footer = document.createElement("div");
+            footer.className = "omp-datetime-panel__footer";
+            var apply = document.createElement("button");
+            apply.type = "button";
+            apply.className = "omp-datetime-panel__action omp-datetime-panel__action--on";
+            apply.textContent = container.getAttribute("data-apply-text") || "OK";
+            apply.addEventListener("click", function () {
+                var fromValue = state(fromInput).hidden.value;
+                var toValue = state(toInput).hidden.value;
+                if (fromValue === "" && toValue === "" && presets.length > 0) {
+                    applyAndClose(presets[0].key, "", "");
+                } else {
+                    // Reversed bounds are swapped rather than rejected - the
+                    // server clamps the same way, so the page never disagrees.
+                    if (fromValue !== "" && toValue !== "" && fromValue > toValue) {
+                        var swap = fromValue; fromValue = toValue; toValue = swap;
+                    }
+                    applyAndClose("custom", fromValue, toValue);
+                }
+            });
+            footer.appendChild(apply);
+            fields.appendChild(footer);
+            rangePanel.appendChild(fields);
+
+            container.appendChild(rangePanel);
+        }
+
+        field.addEventListener("click", function () {
+            if (rangeContainer === container) { closeRangePanel(); } else { openRangePanel(); }
+        });
+    }
+
     function init(root) {
         (root || document).querySelectorAll("input[data-omp-datetime]").forEach(enhance);
+        (root || document).querySelectorAll("[data-omp-daterange]").forEach(enhanceRange);
     }
 
     document.addEventListener("click", function (event) {
@@ -648,9 +807,16 @@
         if (panel && !panel.contains(event.target) && !(panelInput && panelInput._ompDatetime.wrapper.contains(event.target))) {
             closePanel();
         }
+        if (rangePanel && rangeContainer && !rangeContainer.contains(event.target)) {
+            closeRangePanel();
+        }
     });
     document.addEventListener("keydown", function (event) {
-        if (event.key === "Escape") { closePanel(); }
+        if (event.key === "Escape") {
+            // The child calendar closes first; a second Escape closes the
+            // range popup itself.
+            if (panel) { closePanel(); } else { closeRangePanel(); }
+        }
     });
 
     window.ompDatetime = { init: init };

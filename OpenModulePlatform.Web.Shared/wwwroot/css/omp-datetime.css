@@ -339,3 +339,98 @@
     border-color: var(--link, #0b57d0);
     color: #fff;
 }
+
+/* --- range mode --------------------------------------------------------- */
+
+.omp-daterange {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+/* The field is a button so the whole period opens the popup; pages hand it
+   their own input class via data-field-class, this only adds the icon room
+   and the calendar glyph. */
+.omp-daterange__field {
+    position: relative;
+    text-align: left;
+    padding-right: 34px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.omp-daterange__field::after {
+    content: "";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    transform: translateY(-50%);
+    background-color: var(--text-muted, #5b667a);
+    -webkit-mask: var(--omp-dt-icon) center / 16px 16px no-repeat;
+    mask: var(--omp-dt-icon) center / 16px 16px no-repeat;
+    --omp-dt-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5'%3E%3Crect x='1.5' y='2.5' width='13' height='12' rx='2'/%3E%3Cpath d='M1.5 6.5h13M5 1v3M11 1v3'/%3E%3C/svg%3E");
+}
+
+.omp-daterange-panel {
+    grid-template-columns: max-content max-content;
+    gap: 0 14px;
+}
+
+.omp-daterange-panel__presets {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-right: 14px;
+    border-right: 1px solid var(--border, #d7deea);
+}
+
+.omp-daterange-panel__preset {
+    text-align: left;
+    padding: 5px 12px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text, #1d2433);
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.omp-daterange-panel__preset:hover {
+    background: var(--accent, #e8f0fe);
+}
+
+.omp-daterange-panel__preset--active,
+.omp-daterange-panel__preset--active:hover {
+    background: var(--link, #0b57d0);
+    border-color: var(--link, #0b57d0);
+    color: #fff;
+}
+
+.omp-daterange-panel__fields {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.omp-daterange-panel__row {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--text-muted, #5b667a);
+}
+
+/* Date-only fields carry no UTC suffix, so less icon room than the base
+   78px; the width fits the yyyy-mm-dd template plus the two icons. */
+.omp-daterange-panel__row .omp-datetime__input {
+    width: 170px;
+    padding-right: 56px;
+}
+
+.omp-daterange-panel__fields .omp-datetime-panel__footer {
+    justify-content: flex-end;
+}
