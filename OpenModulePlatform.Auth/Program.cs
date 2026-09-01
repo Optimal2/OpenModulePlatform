@@ -130,6 +130,10 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
+// CSP violation reports land in the app log (see
+// docs/CONTENT_SECURITY_POLICY.md).
+app.MapOmpCspReportEndpoint();
+
 app.MapGet("/localization/set-language", (
     HttpContext context,
     string culture,

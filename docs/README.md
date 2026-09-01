@@ -60,6 +60,7 @@ For repository and release work:
 - `ADMIN_CONFIGURATION.md` - Portal administration guidance.
 - `PROJECT_STATUS.md` - current project status notes.
 - `SECURITY_AUDIT_2026-05-24.md` - security audit notes from May 24, 2026.
+- `CONTENT_SECURITY_POLICY.md` - CSP rollout model, per-app policies, and documented exceptions.
 
 ## Development
 

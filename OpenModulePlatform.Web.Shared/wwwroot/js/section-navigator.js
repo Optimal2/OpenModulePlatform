@@ -295,6 +295,17 @@
     function init() {
         initPaneCollapse();
 
+        // A branch title that is also a link navigates on click; without this
+        // the click bubbles to the surrounding <summary> and toggles the
+        // branch too. This listener replaces the inline
+        // onclick="event.stopPropagation();" the views used to carry - inline
+        // handlers are blocked by the strict Content-Security-Policy variant.
+        document.querySelectorAll(".section-navigator__summary-link").forEach(function (link) {
+            link.addEventListener("click", function (event) {
+                event.stopPropagation();
+            });
+        });
+
         // One full-height grab edge per shared pane: on wide screens it just
         // widens the draggable surface (its lines stay hidden there), on
         // narrow screens it is what remains of a collapsed pane.

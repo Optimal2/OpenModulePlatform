@@ -1,0 +1,66 @@
+/* File: OpenModulePlatform.Auth/wwwroot/css/login.css
+   The login page styles. Extracted from an inline <style> block in
+   Pages/Login.cshtml so the Auth app runs under the strict
+   Content-Security-Policy (no style-src 'unsafe-inline') — see
+   docs/CONTENT_SECURITY_POLICY.md. */
+:root { color-scheme: light dark; }
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f5f7fa; color: #16202a; }
+main { min-height: 100vh; display: grid; place-items: center; padding: 2rem; }
+.panel { width: min(28rem, 100%); background: #fff; border: 1px solid #d7dde5; border-radius: 8px; padding: 1.5rem; box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08); }
+h1 { margin: 0 0 1rem; font-size: 1.7rem; }
+.muted { color: #586173; line-height: 1.5; }
+.stack { display: grid; gap: 1rem; }
+.panel-header { display: grid; gap: 1rem; }
+.language-selector { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+.language-selector__item { display: inline-flex; align-items: center; justify-content: center; min-width: 2.6rem; min-height: 2rem; padding: .35rem .55rem; border: 1px solid #c8d1dc; border-radius: 999px; color: #2f5fb3; font-size: .82rem; font-weight: 700; line-height: 1; text-decoration: none; }
+.language-selector__item[aria-current="true"] { background: #2f5fb3; border-color: #2f5fb3; color: #fff; }
+.language-selector__item:not([aria-current="true"]):hover,
+.language-selector__item:not([aria-current="true"]):focus-visible { border-color: #2f5fb3; background: #eef4ff; }
+.primary-actions { display: grid; gap: .5rem; align-items: stretch; }
+.auth-options { display: grid; gap: .75rem; }
+.auth-options > summary { cursor: pointer; list-style: none; }
+.auth-options > summary::-webkit-details-marker { display: none; }
+.auth-options:not([open]) .auth-options-list { display: none; }
+.auth-options-heading { display: flex; align-items: center; gap: .75rem; color: #586173; font-size: .86rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.auth-options-heading::before,
+.auth-options-heading::after { content: ""; height: 1px; background: #e2e8f0; flex: 1; }
+.auth-options-list { display: grid; gap: .5rem; }
+.register-action { display: flex; justify-content: center; padding-top: .15rem; }
+label { display: block; margin-bottom: .3rem; font-weight: 700; }
+input { box-sizing: border-box; width: 100%; min-height: 2.5rem; padding: .5rem .65rem; border: 1px solid #c8d1dc; border-radius: 6px; font: inherit; }
+button, .button { display: inline-flex; justify-content: center; align-items: center; min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid #2f5fb3; border-radius: 6px; background: #2f5fb3; color: #fff; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.button.block { width: 100%; }
+.button.secondary { background: #fff; color: #223044; border-color: #c8d1dc; }
+.button.subtle-link { min-height: auto; padding: .2rem .25rem; border: 0; background: transparent; color: #2f5fb3; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.button.subtle-link:hover,
+.button.subtle-link:focus-visible { color: #193f82; background: transparent; }
+.error { padding: .75rem; border: 1px solid #f1a9a9; border-radius: 6px; background: #fff0f0; color: #8a1f1f; }
+.notice { padding: .75rem; border: 1px solid #b8d7c2; border-radius: 6px; background: #eefaf1; color: #1f6b34; }
+dialog { border: 1px solid #c8d1dc; border-radius: 8px; padding: 0; width: min(25rem, calc(100% - 2rem)); box-shadow: 0 18px 48px rgba(15, 23, 42, .18); }
+dialog::backdrop { background: rgba(15, 23, 42, .35); }
+.dialog-body { padding: 1.25rem; }
+.dialog-title { margin: 0 0 .35rem; font-size: 1.25rem; }
+.dialog-intro { margin: 0; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
+.auth-options-indicator { width: 0; height: 0; border-top: .32rem solid transparent; border-bottom: .32rem solid transparent; border-left: .44rem solid currentColor; transition: transform .12s ease; }
+.auth-options[open] .auth-options-indicator { transform: rotate(90deg); }
+@media (prefers-color-scheme: dark) {
+    body { background: #0f172a; color: #e5edf7; }
+    .panel, dialog { background: #111c2d; border-color: #334155; box-shadow: 0 18px 48px rgba(0, 0, 0, .35); }
+    .muted, .auth-options-heading { color: #b6c3d5; }
+    .auth-options-heading::before,
+    .auth-options-heading::after { background: #334155; }
+    .language-selector__item { border-color: #475569; color: #8bb7ff; }
+    .language-selector__item[aria-current="true"] { background: #8bb7ff; border-color: #8bb7ff; color: #0b1220; }
+    .language-selector__item:not([aria-current="true"]):hover,
+    .language-selector__item:not([aria-current="true"]):focus-visible { border-color: #8bb7ff; background: #16243a; }
+    input { background: #0b1220; border-color: #475569; color: #e5edf7; }
+    .button.secondary { background: #111c2d; color: #e5edf7; border-color: #475569; }
+    .button.subtle-link { color: #8bb7ff; }
+    .button.subtle-link:hover,
+    .button.subtle-link:focus-visible { color: #b8d3ff; }
+    .error { background: #3a1518; border-color: #9f3a3f; color: #ffd4d7; }
+    .notice { background: #102b1a; border-color: #2f7d46; color: #c9f2d3; }
+    dialog::backdrop { background: rgba(0, 0, 0, .55); }
+}

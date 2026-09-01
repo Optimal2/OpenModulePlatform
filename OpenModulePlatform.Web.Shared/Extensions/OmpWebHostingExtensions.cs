@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -273,7 +274,7 @@ public static class OmpWebHostingExtensions
             app.UseForwardedHeaders();
         }
 
-        app.UseOmpSecurityHeaders();
+        app.UseOmpSecurityHeaders(optionsSectionName);
 
         app.UseOmpRedirectContentLength();
 
@@ -792,6 +793,10 @@ public static class OmpWebHostingExtensions
         app.MapHub<TopBarNotificationHub>(TopBarNotificationHub.PushEventPath)
             .RequireAuthorization();
 
+        // CSP violation reports land in the app log (see
+        // docs/CONTENT_SECURITY_POLICY.md).
+        app.MapOmpCspReportEndpoint();
+
         // Anonymous apps still read the OMP cookie so shared UI can show the current user,
         // roles, favorites, and module navigation without requiring sign-in.
         app.UseAuthentication();
@@ -891,19 +896,41 @@ public static class OmpWebHostingExtensions
         });
     }
 
-    public static IApplicationBuilder UseOmpSecurityHeaders(this IApplicationBuilder app)
+    public static IApplicationBuilder UseOmpSecurityHeaders(
+        this IApplicationBuilder app,
+        string optionsSectionName = WebAppOptions.DefaultSectionName)
     {
+        var cspOptions = app.ApplicationServices
+            .GetService<IConfiguration>()?
+            .GetSection($"{optionsSectionName}:SecurityHeaders:ContentSecurityPolicy")
+            .Get<ContentSecurityPolicyOptions>() ?? new ContentSecurityPolicyOptions();
+
         return app.Use(async (context, next) =>
         {
             context.Response.OnStarting(static state =>
             {
-                var httpContext = (HttpContext)state;
+                var (httpContext, csp) = ((HttpContext, ContentSecurityPolicyOptions))state;
                 var headers = httpContext.Response.Headers;
 
                 SetHeaderIfMissing(headers, "X-Content-Type-Options", "nosniff");
                 SetHeaderIfMissing(headers, "Referrer-Policy", "same-origin");
                 SetHeaderIfMissing(headers, "X-Frame-Options", "SAMEORIGIN");
                 SetHeaderIfMissing(headers, "Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+                // Same SetHeaderIfMissing pattern as the other headers: an app
+                // that needs a different policy sets the header earlier in its
+                // own pipeline, or overrides it via configuration. Report-only
+                // is the rollout default; enforcement is a config flip. See
+                // docs/CONTENT_SECURITY_POLICY.md.
+                if (csp.Enabled)
+                {
+                    SetHeaderIfMissing(
+                        headers,
+                        csp.ReportOnly
+                            ? "Content-Security-Policy-Report-Only"
+                            : "Content-Security-Policy",
+                        OmpContentSecurityPolicy.Build(csp, httpContext.Request.PathBase));
+                }
 
                 // HSTS only over HTTPS: a plain-HTTP internal deployment never
                 // emits it (and browsers ignore it there anyway), so this is
@@ -914,13 +941,64 @@ public static class OmpWebHostingExtensions
                     SetHeaderIfMissing(headers, "Strict-Transport-Security", "max-age=31536000; includeSubDomains");
                 }
 
-                // OMP still has trusted inline scripts and styles in legacy module pages.
-                // Add CSP only after those pages have been migrated to nonce/hash based assets.
                 return Task.CompletedTask;
-            }, context);
+            }, (context, cspOptions));
 
             await next();
         });
+    }
+
+    /// <summary>
+    /// Maps the endpoint browsers POST CSP violation reports to
+    /// (<see cref="OmpContentSecurityPolicy.ReportPath"/>). Reports are logged
+    /// as warnings under the OpenModulePlatform.Web.Shared.Security.CspReport
+    /// category — the collection point while policies run report-only.
+    /// UseOmpWebDefaults maps this automatically; apps with a hand-rolled
+    /// pipeline (the Auth app) call it directly.
+    /// </summary>
+    public static IEndpointRouteBuilder MapOmpCspReportEndpoint(this IEndpointRouteBuilder endpoints)
+    {
+        // Anonymous: browsers send violation reports without antiforgery
+        // tokens and possibly without the auth cookie (reports can outlive the
+        // session that produced the page). The endpoint only logs, returns
+        // nothing, and caps the body it reads.
+        endpoints.MapPost(OmpContentSecurityPolicy.ReportPath, async (
+            HttpContext context,
+            ILoggerFactory loggerFactory,
+            CancellationToken ct) =>
+        {
+            const int maxReportBytes = 64 * 1024;
+
+            string body;
+            using (var reader = new StreamReader(
+                context.Request.Body,
+                encoding: System.Text.Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: false))
+            {
+                var buffer = new char[4096];
+                var builder = new System.Text.StringBuilder();
+                int read;
+                while (builder.Length <= maxReportBytes
+                    && (read = await reader.ReadAsync(buffer, ct)) > 0)
+                {
+                    builder.Append(buffer, 0, read);
+                }
+
+                body = builder.Length > maxReportBytes
+                    ? string.Concat(builder.ToString(0, maxReportBytes), "...[truncated]")
+                    : builder.ToString();
+            }
+
+            var logger = loggerFactory.CreateLogger("OpenModulePlatform.Web.Shared.Security.CspReport");
+            logger.LogWarning(
+                "CSP violation report ({ContentType}): {Report}",
+                context.Request.ContentType ?? "unknown",
+                body);
+
+            return Results.NoContent();
+        }).AllowAnonymous();
+
+        return endpoints;
     }
 
     private static void SetHeaderIfMissing(

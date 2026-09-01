@@ -22,7 +22,7 @@
                                     <span class="section-navigator__chevron" aria-hidden="true"></span>
                                     @if (!string.IsNullOrWhiteSpace(Model.RootHref))
                                     {
-                                        <a class="section-navigator__summary-link" href="@Model.RootHref" title="@Model.RootText" onclick="event.stopPropagation();">@Model.RootText</a>
+                                        <a class="section-navigator__summary-link" href="@Model.RootHref" title="@Model.RootText">@Model.RootText</a>
                                     }
                                     else
                                     {
