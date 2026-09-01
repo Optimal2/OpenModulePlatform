@@ -4716,7 +4716,7 @@ ORDER BY ArtifactId;
 
         await WriteHostAgentCredentialStoreAsync(credentialPlan);
 
-        await File.WriteAllTextAsync(
+        await AtomicJsonFile.WriteAsync(
             path,
             settings.ToJsonString(JsonOptions),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -5032,7 +5032,7 @@ ORDER BY ArtifactId;
             Directory.CreateDirectory(directory);
         }
 
-        await File.WriteAllTextAsync(
+        await AtomicJsonFile.WriteAsync(
             path,
             JsonSerializer.Serialize(document, JsonOptions),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));

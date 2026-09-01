@@ -4475,7 +4475,7 @@ internal static partial class Program
                 ["sourceStamp"] = sourceStamp,
                 ["createdUtc"] = DateTimeOffset.UtcNow.ToString("O")
             };
-            File.WriteAllText(stampPath, stampDocument.ToJsonString(JsonOptions), new UTF8Encoding(false));
+            AtomicJsonFile.Write(stampPath, stampDocument.ToJsonString(JsonOptions), new UTF8Encoding(false));
         }
 
         private string? BuildArtifactSourceStamp(ManifestComponent component, string packageName)
@@ -5853,7 +5853,7 @@ ORDER BY ar.ArtifactId DESC;
         internal async Task SaveCurrentConfigAsync()
         {
             var json = JsonSerializer.Serialize(_config, JsonOptions);
-            await File.WriteAllTextAsync(_configPath, json + Environment.NewLine, Encoding.UTF8);
+            await AtomicJsonFile.WriteAsync(_configPath, json + Environment.NewLine, Encoding.UTF8);
         }
 
         private static int CompareVersionText(string left, string right)

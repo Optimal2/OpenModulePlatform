@@ -557,7 +557,7 @@ internal static partial class Program
             // account credential). A host-profile config kept OUTSIDE the package
             // takes the metadata-only branch above and retains its local secrets.
             var redistributableJson = RedactRedistributablePackageConfigSecrets(json);
-            await File.WriteAllTextAsync(generatedConfigPath, redistributableJson + Environment.NewLine, Encoding.UTF8);
+            await AtomicJsonFile.WriteAsync(generatedConfigPath, redistributableJson + Environment.NewLine, Encoding.UTF8);
             wroteAnyConfig = true;
         }
 
@@ -626,7 +626,7 @@ internal static partial class Program
         // hand-maintained configs do not carry - the first rewrite silently added
         // EF BB BF (measured 2026-08-31 on linus_hemma/bootstrap.json). BOM-free
         // matches how the files are authored; System.Text.Json reads both.
-        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
+        await AtomicJsonFile.WriteAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
     }
 
     private static async Task WriteGeneratedPayloadMetadataIntoJsonFileAsync(string configPath, BootstrapConfig generatedConfig)
@@ -662,7 +662,7 @@ internal static partial class Program
         // hand-maintained configs do not carry - the first rewrite silently added
         // EF BB BF (measured 2026-08-31 on linus_hemma/bootstrap.json). BOM-free
         // matches how the files are authored; System.Text.Json reads both.
-        await File.WriteAllTextAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
+        await AtomicJsonFile.WriteAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
     }
 
     private static void ApplyGeneratedPayloadMetadata(BootstrapConfig profileConfig, BootstrapConfig generatedConfig)
