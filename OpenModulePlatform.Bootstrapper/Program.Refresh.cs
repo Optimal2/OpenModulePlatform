@@ -1298,7 +1298,26 @@ internal static partial class Program
         }
     }
 
-    private static void ReplaceDirectory(string source, string destination)
+    /// <summary>
+    /// Swaps a freshly generated package root into place, keeping a rollback
+    /// copy until the new destination has been PROVEN complete.
+    ///
+    /// The order here is the point. Until 2026-09-01 the stale-backup sweep ran
+    /// first and the fresh backup was deleted the moment CopyDirectoryRecursive
+    /// returned, so a copy that finished without throwing but left an incomplete
+    /// destination took the last rollback copy with it. Verification now happens
+    /// before anything is deleted, and the sweep happens after -- so at every
+    /// moment where the destination is unproven, at least one backup exists.
+    /// </summary>
+    /// <param name="verifyDestination">
+    /// Test seam. Returns true when the destination is a faithful copy of the
+    /// source. Defaults to the deterministic file-set-and-size comparison in
+    /// <see cref="DestinationMatchesSource"/>.
+    /// </param>
+    internal static void ReplaceDirectory(
+        string source,
+        string destination,
+        Func<string, bool>? verifyDestination = null)
     {
         if (PathOverlaps(source, destination))
         {
@@ -1309,13 +1328,8 @@ internal static partial class Program
         var backup = destinationTrimmed + ".backup-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss");
         DeleteDirectoryIfExists(backup);
 
-        // Sweep stale timestamped backups from earlier runs: each run used a new
-        // timestamp and only cleaned its own name, so a backup that survived a
-        // locked delete accumulated multi-GB copies beside the package root until
-        // an operator noticed (R4-G11).
-        CleanupStaleBackups(destinationTrimmed);
-
-        if (Directory.Exists(destination))
+        var hadDestination = Directory.Exists(destination);
+        if (hadDestination)
         {
             MoveDirectoryWithRetry(destination, backup);
         }
@@ -1323,8 +1337,21 @@ internal static partial class Program
         try
         {
             CopyDirectoryRecursive(source, destination);
-            DeleteDirectoryBestEffort(backup);
-            DeleteDirectoryBestEffort(source);
+
+            // Verify BEFORE deleting anything. A copy that returned without
+            // throwing is not the same thing as a complete package: a file
+            // locked mid-copy or a disk that filled up can leave a destination
+            // that looks plausible and boots into a half-old install.
+            var verified = verifyDestination is null
+                ? DestinationMatchesSource(source, destination)
+                : verifyDestination(destination);
+
+            if (!verified)
+            {
+                throw new InvalidOperationException(
+                    "The replaced package root failed verification against the generated package; " +
+                    "rolling back to the previous root.");
+            }
         }
         catch
         {
@@ -1341,6 +1368,63 @@ internal static partial class Program
 
             throw;
         }
+
+        // Only now is the destination trusted. Sweep the fresh backup and any
+        // stale timestamped ones from earlier runs: each run used a new
+        // timestamp and only cleaned its own name, so a backup that survived a
+        // locked delete accumulated multi-GB copies beside the package root
+        // until an operator noticed (R4-G11).
+        DeleteDirectoryBestEffort(backup);
+        CleanupStaleBackups(destinationTrimmed);
+        DeleteDirectoryBestEffort(source);
+    }
+
+    /// <summary>
+    /// Deterministic comparison of a copied package root against its source:
+    /// same set of relative paths, same byte length per file.
+    ///
+    /// Deliberately not a hash comparison. The failure this guards against is a
+    /// truncated or missing file, which length and set membership catch, and a
+    /// package root is large enough that hashing every file would add minutes to
+    /// every refresh for no additional coverage of that failure.
+    /// </summary>
+    internal static bool DestinationMatchesSource(string source, string destination)
+    {
+        if (!Directory.Exists(source) || !Directory.Exists(destination))
+        {
+            return false;
+        }
+
+        var expected = RelativeFileSizes(source);
+        var actual = RelativeFileSizes(destination);
+
+        if (expected.Count != actual.Count)
+        {
+            return false;
+        }
+
+        foreach (var entry in expected)
+        {
+            if (!actual.TryGetValue(entry.Key, out var size) || size != entry.Value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static Dictionary<string, long> RelativeFileSizes(string root)
+    {
+        var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(root, file)
+                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            sizes[relative] = new FileInfo(file).Length;
+        }
+
+        return sizes;
     }
 
     private static void CleanupStaleBackups(string destinationTrimmed)
