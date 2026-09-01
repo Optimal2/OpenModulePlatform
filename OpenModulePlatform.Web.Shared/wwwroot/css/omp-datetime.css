@@ -424,11 +424,32 @@
     color: var(--text-muted, #5b667a);
 }
 
-/* Date-only fields carry no UTC suffix, so less icon room than the base
-   78px; the width fits the yyyy-mm-dd template plus the two icons. */
+/* The popup's Fran/Till fields sit side by side above the shared range
+   calendar; with no per-field calendar toggle they only need room for the
+   quick-clear icon. */
+.omp-daterange-panel__rows {
+    display: flex;
+    gap: 8px;
+}
+
 .omp-daterange-panel__row .omp-datetime__input {
-    width: 170px;
-    padding-right: 56px;
+    width: 148px;
+}
+
+.omp-datetime--no-toggle .omp-datetime__input {
+    padding-right: 30px;
+}
+
+.omp-datetime--no-toggle .omp-datetime__clear {
+    right: 6px;
+}
+
+/* Days strictly between the range ends (and the hover preview while the
+   second click is pending). */
+.omp-datetime-panel__day--range,
+.omp-datetime-panel__day--range:hover {
+    background: var(--accent, #e8f0fe);
+    border-radius: 4px;
 }
 
 .omp-daterange-panel__fields .omp-datetime-panel__footer {

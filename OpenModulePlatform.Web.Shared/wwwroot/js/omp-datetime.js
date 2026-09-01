@@ -538,7 +538,9 @@
         input.removeAttribute("name");
 
         var wrapper = document.createElement("span");
-        wrapper.className = "omp-datetime";
+        wrapper.className = input.getAttribute("data-omp-datetime-no-toggle") === null
+            ? "omp-datetime"
+            : "omp-datetime omp-datetime--no-toggle";
         input.parentNode.insertBefore(wrapper, input);
         wrapper.appendChild(input);
         wrapper.appendChild(hidden);
@@ -559,11 +561,18 @@
         clearBtn.setAttribute("aria-label", texts.clear);
         wrapper.appendChild(clearBtn);
 
-        var toggle = document.createElement("button");
-        toggle.type = "button";
-        toggle.className = "omp-datetime__toggle";
-        toggle.setAttribute("aria-label", texts.open);
-        wrapper.appendChild(toggle);
+        // The range popup embeds fields next to a shared calendar; those
+        // fields keep the mask and quick-clear but skip their own calendar
+        // toggle - one calendar, not three.
+        var wantsToggle = input.getAttribute("data-omp-datetime-no-toggle") === null;
+        var toggle = null;
+        if (wantsToggle) {
+            toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "omp-datetime__toggle";
+            toggle.setAttribute("aria-label", texts.open);
+            wrapper.appendChild(toggle);
+        }
 
         var st = {
             input: input, hidden: hidden, wrapper: wrapper, toggle: toggle, clear: clearBtn,
@@ -630,10 +639,12 @@
             input.focus();
         });
 
-        toggle.addEventListener("click", function () {
-            if (input.disabled) { return; }
-            if (panelInput === input) { closePanel(); } else { openPanel(st); }
-        });
+        if (toggle) {
+            toggle.addEventListener("click", function () {
+                if (input.disabled) { return; }
+                if (panelInput === input) { closePanel(); } else { openPanel(st); }
+            });
+        }
     }
 
     // --- range mode ---------------------------------------------------------
@@ -745,6 +756,9 @@
 
             var fields = document.createElement("div");
             fields.className = "omp-daterange-panel__fields";
+            var rows = document.createElement("div");
+            rows.className = "omp-daterange-panel__rows";
+            fields.appendChild(rows);
             var makeRow = function (labelText, value) {
                 var row = document.createElement("label");
                 row.className = "omp-daterange-panel__row";
@@ -753,14 +767,168 @@
                 row.appendChild(caption);
                 var input = document.createElement("input");
                 input.setAttribute("data-omp-datetime", "date");
+                // The shared range calendar below serves both fields; the
+                // fields keep the mask and quick-clear only.
+                input.setAttribute("data-omp-datetime-no-toggle", "");
                 input.value = value;
                 row.appendChild(input);
-                fields.appendChild(row);
+                rows.appendChild(row);
                 enhance(input);
                 return input;
             };
             var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, hiddens.from.value);
             var toInput = makeRow(container.getAttribute("data-to-text") || names.to, hiddens.to.value);
+
+            // --- shared range calendar: click start, click end ------------
+            var calHost = document.createElement("div");
+            calHost.className = "omp-datetime-panel__calendar";
+            fields.appendChild(calHost);
+
+            var initialIso = hiddens.from.value || hiddens.to.value;
+            var initial = /^\d{4}-\d{2}-\d{2}/.test(initialIso || "")
+                ? { year: +initialIso.slice(0, 4), month: +initialIso.slice(5, 7) }
+                : { year: new Date().getUTCFullYear(), month: new Date().getUTCMonth() + 1 };
+            var cal = { year: initial.year, month: initial.month, pendingStart: null, hoverIso: null };
+
+            function isoOfCell(cellDate) {
+                return cellDate.getUTCFullYear() + "-" + pad(cellDate.getUTCMonth() + 1) + "-" + pad(cellDate.getUTCDate());
+            }
+
+            function setFieldDate(input, iso) {
+                var fieldState = state(input);
+                digitsFromCanonical(fieldState, iso);
+                fieldState.hidden.value = iso;
+                fieldState.cursor = 0;
+                render(fieldState);
+            }
+
+            function onDayPicked(iso) {
+                if (cal.pendingStart === null) {
+                    cal.pendingStart = iso;
+                    cal.hoverIso = null;
+                    setFieldDate(fromInput, iso);
+                    setFieldDate(toInput, "");
+                } else {
+                    var start = cal.pendingStart;
+                    var end = iso;
+                    if (end < start) { var swap = start; start = end; end = swap; }
+                    setFieldDate(fromInput, start);
+                    setFieldDate(toInput, end);
+                    cal.pendingStart = null;
+                    cal.hoverIso = null;
+                }
+                renderRangeCalendar();
+            }
+
+            function renderRangeCalendar() {
+                calHost.textContent = "";
+                var from = state(fromInput).hidden.value;
+                var to = state(toInput).hidden.value;
+                // While the second click is pending, the preview range runs
+                // from the first click to the hovered day.
+                var previewFrom = from;
+                var previewTo = to;
+                if (cal.pendingStart !== null && cal.hoverIso !== null) {
+                    previewFrom = cal.pendingStart < cal.hoverIso ? cal.pendingStart : cal.hoverIso;
+                    previewTo = cal.pendingStart < cal.hoverIso ? cal.hoverIso : cal.pendingStart;
+                }
+                var now = new Date();
+
+                var head = document.createElement("div");
+                head.className = "omp-datetime-panel__head";
+                var prev = document.createElement("button");
+                prev.type = "button"; prev.className = "omp-datetime-panel__step"; prev.textContent = "‹";
+                prev.addEventListener("click", function () {
+                    cal.month -= 1;
+                    if (cal.month < 1) { cal.month = 12; cal.year -= 1; }
+                    renderRangeCalendar();
+                });
+                var monthSelect = document.createElement("select");
+                monthSelect.className = "omp-datetime-panel__select";
+                monthNames().forEach(function (name, index) {
+                    var option = document.createElement("option");
+                    option.value = String(index + 1); option.textContent = name; option.selected = index + 1 === cal.month;
+                    monthSelect.appendChild(option);
+                });
+                monthSelect.addEventListener("change", function () { cal.month = +monthSelect.value; renderRangeCalendar(); });
+                var yearSelect = document.createElement("select");
+                yearSelect.className = "omp-datetime-panel__select";
+                for (var y = cal.year - 12; y <= cal.year + 12; y++) {
+                    var yearOption = document.createElement("option");
+                    yearOption.value = String(y); yearOption.textContent = String(y); yearOption.selected = y === cal.year;
+                    yearSelect.appendChild(yearOption);
+                }
+                yearSelect.addEventListener("change", function () { cal.year = +yearSelect.value; renderRangeCalendar(); });
+                var next = document.createElement("button");
+                next.type = "button"; next.className = "omp-datetime-panel__step"; next.textContent = "›";
+                next.addEventListener("click", function () {
+                    cal.month += 1;
+                    if (cal.month > 12) { cal.month = 1; cal.year += 1; }
+                    renderRangeCalendar();
+                });
+                head.append(prev, monthSelect, yearSelect, next);
+                calHost.appendChild(head);
+
+                var grid = document.createElement("div");
+                grid.className = "omp-datetime-panel__grid";
+                var weekHead = document.createElement("span");
+                weekHead.className = "omp-datetime-panel__weekno";
+                weekHead.textContent = texts.week;
+                grid.appendChild(weekHead);
+                weekdayNames().forEach(function (name) {
+                    var label = document.createElement("span");
+                    label.className = "omp-datetime-panel__weekday";
+                    label.textContent = name;
+                    grid.appendChild(label);
+                });
+
+                var first = new Date(Date.UTC(cal.year, cal.month - 1, 1));
+                var startOffset = (first.getUTCDay() + 6) % 7;
+                var cursor = new Date(Date.UTC(cal.year, cal.month - 1, 1 - startOffset));
+                for (var week = 0; week < 6; week++) {
+                    var weekCell = document.createElement("span");
+                    weekCell.className = "omp-datetime-panel__weekno";
+                    weekCell.textContent = String(isoWeek(cursor));
+                    grid.appendChild(weekCell);
+                    for (var dayIndex = 0; dayIndex < 7; dayIndex++) {
+                        (function (cellDate) {
+                            var iso = isoOfCell(cellDate);
+                            var button = document.createElement("button");
+                            button.type = "button";
+                            button.className = "omp-datetime-panel__day";
+                            button.textContent = String(cellDate.getUTCDate());
+                            if (cellDate.getUTCMonth() !== cal.month - 1) { button.classList.add("omp-datetime-panel__day--outside"); }
+                            if (cellDate.getUTCFullYear() === now.getUTCFullYear() && cellDate.getUTCMonth() === now.getUTCMonth() && cellDate.getUTCDate() === now.getUTCDate()) {
+                                button.classList.add("omp-datetime-panel__day--today");
+                            }
+                            if (iso === from || iso === to || iso === cal.pendingStart) {
+                                button.classList.add("omp-datetime-panel__day--selected");
+                            } else if (previewFrom && previewTo && iso > previewFrom && iso < previewTo) {
+                                button.classList.add("omp-datetime-panel__day--range");
+                            }
+                            button.addEventListener("click", function () { onDayPicked(iso); });
+                            if (cal.pendingStart !== null) {
+                                button.addEventListener("mouseenter", function () {
+                                    if (cal.hoverIso !== iso) { cal.hoverIso = iso; renderRangeCalendar(); }
+                                });
+                            }
+                            grid.appendChild(button);
+                        })(new Date(cursor));
+                        cursor.setUTCDate(cursor.getUTCDate() + 1);
+                    }
+                }
+                calHost.appendChild(grid);
+            }
+
+            // Typed edits move the highlights too; the hidden inputs bubble
+            // a change on every committed mask edit or quick-clear.
+            rows.addEventListener("change", function () {
+                cal.pendingStart = null;
+                cal.hoverIso = null;
+                renderRangeCalendar();
+            });
+
+            renderRangeCalendar();
 
             var footer = document.createElement("div");
             footer.className = "omp-datetime-panel__footer";
