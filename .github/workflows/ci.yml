@@ -188,21 +188,25 @@ jobs:
         # Second layer of the unsupported-version gate (the first is the
         # derivation script): whatever global.json and setup-dotnet resolved,
         # the SDK that will actually build must be on the major the target
-        # frameworks claim. A matrix pointed at an unsupported version dies
-        # here with a readable message instead of a NuGet restore error.
-        # Exact-pin legs additionally require the resolved SDK to BE the pinned
-        # version, so a silent roll-forward can never pass as a pinned build.
+        # frameworks claim, and an exact-pin leg must have kept its pin.
+        #
+        # The check lives in scripts/omp/assert-leg-sdk.ps1 rather than inline
+        # here, because inline workflow code cannot be tested -- and that
+        # mattered: the 2026-08-28 sabotage meant to prove this gate red came
+        # back GREEN (run 33182860062, leg "SABOTAGE: unsupported .NET major,
+        # the gate must fail" reported success), since the fix landed after the
+        # sabotage was removed. As a script the gate is proven red by
+        # tests/Assert-LegSdk.Tests.ps1 on every CI run and every pre-push.
         shell: pwsh
         run: |
           $sdk = dotnet --version
-          if ($LASTEXITCODE -ne 0) { throw "dotnet --version failed; global.json rejected the installed SDK set for leg '${{ matrix.name }}'." }
-          Write-Host "Resolved SDK: $sdk (expected major: ${{ matrix.expectedMajor }}, pinExact: ${{ matrix.pinExact }})"
-          if (-not $sdk.StartsWith('${{ matrix.expectedMajor }}.')) {
-            throw "Installed SDK $sdk is not on the supported .NET major ${{ matrix.expectedMajor }}; this leg claims a version the repository does not support."
-          }
-          if ('${{ matrix.pinExact }}' -eq 'true' -and $sdk -ne '${{ matrix.sdk }}') {
-            throw "Leg '${{ matrix.name }}' must build on exactly SDK ${{ matrix.sdk }} but resolved $sdk; the pin did not hold."
-          }
+          if ($LASTEXITCODE -ne 0) { $sdk = '' }
+          ./scripts/omp/assert-leg-sdk.ps1 `
+            -ResolvedSdk "$sdk" `
+            -ExpectedMajor '${{ matrix.expectedMajor }}' `
+            -PinnedSdk '${{ matrix.sdk }}' `
+            -PinExact '${{ matrix.pinExact }}' `
+            -LegName '${{ matrix.name }}'
 
       - name: Restore solution
         run: dotnet restore OpenModulePlatform.slnx
