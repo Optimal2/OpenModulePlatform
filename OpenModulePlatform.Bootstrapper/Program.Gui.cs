@@ -1984,6 +1984,39 @@ internal static partial class Program
             Report($"> Universal module package: {result.PackagePath}");
             Report($"> Items: {result.ItemCount}");
 
+            // ---- Pre-stage gate: the registered version must not contradict the content ----
+            // The host agent auto-applies only a HIGHER version, so staging changed
+            // content under an unchanged registered version either ignores the new
+            // content or registers it under an identity that no longer describes it.
+            // This used to be a warning against the previous local source stamp, and a
+            // warning is something a script walks straight past.
+            //
+            // 'DIFF' is precisely "same version, different content" in the developer
+            // source status vocabulary (see CombineDeveloperSourceStatus); 'UPDATE' is
+            // the normal bumped flow and 'NORMALIZED' is path-only drift that is
+            // explicitly never promoted to an update.
+            var preStageStatus = await CheckDeveloperSourceStatusAsync();
+            var preStageVerdict = PreStageVersionGate.Evaluate(
+                preStageStatus.Components
+                    .Select(component => new PreStageComponent(
+                        component.ComponentKey,
+                        component.SourceVersion,
+                        component.InstalledVersion,
+                        component.Status == "DIFF"))
+                    .ToArray(),
+                preStageStatus.DatabaseChecked,
+                preStageStatus.DatabaseFailure);
+
+            if (!preStageVerdict.MayProceed)
+            {
+                foreach (var line in preStageVerdict.Message.Split(Environment.NewLine))
+                {
+                    Report("> " + line);
+                }
+
+                return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, null, false, false);
+            }
+
             // ---- Step 3: stage into THIS host's HostAgent import folder ----
             if (string.IsNullOrWhiteSpace(importRoot))
             {
