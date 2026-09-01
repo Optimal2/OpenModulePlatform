@@ -40,10 +40,19 @@ Implemented as the minimal shared contract layer for worker plugins.
 
 ### Public reference example
 
-The repository now also includes a public reference module for the manager-driven runtime:
+The repository now also includes a public reference module for the manager-driven runtime.
+Both projects live under `examples/WorkerAppModule/`, not at the repository root - searching
+for the project names alone will not find them:
 
-- `OpenModulePlatform.Web.ExampleWorkerAppModule`
-- `OpenModulePlatform.Worker.ExampleWorkerAppModule`
+- `examples/WorkerAppModule/WebApp/OpenModulePlatform.Web.ExampleWorkerAppModule.csproj`
+  (manifest component `example-workerapp-web`, `web-app`)
+- `examples/WorkerAppModule/WorkerApp/OpenModulePlatform.Worker.ExampleWorkerAppModule.csproj`
+  (manifest component `example-workerapp-worker`, `worker`)
+
+The worker component is also the repository's only live example of the host-contract floor:
+it declares `minWorkerHostVersion` in `omp-components.json`, which Check 4b of
+`scripts/omp/validate-component-versions.ps1:579` validates and
+`OpenModulePlatform.WorkerProcessHost` enforces at load time.
 
 This example shows how a neutral OMP module can expose a web administration surface while running its background processing through the worker manager and child host.
 
