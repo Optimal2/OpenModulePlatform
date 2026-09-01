@@ -299,3 +299,197 @@ Describe 'Bump-Version: repository-only bump' {
         }
     }
 }
+
+Describe 'Bump-Version: a rewritten module definition always carries a version bump' {
+    <#
+        The persist loop wrote EVERY loaded module definition unconditionally,
+        while the follow-up definitionVersion bump only covered definitions whose
+        compatibleArtifacts.maxVersion actually changed. A definition that was
+        merely formatted differently on disk -- hand-edited, or written by another
+        generator -- was therefore rewritten by Save-JsonFile while its
+        definitionVersion stayed put. HostAgent rejects a re-imported definition
+        that carries the same definitionVersion with different content, so the
+        validator goes red and the operator has to discover a second command
+        nothing mentions.
+
+        Reproduced 2026-08-28 in iKrock2 under Windows PowerShell 5.1; pinned here
+        so it cannot come back.
+    #>
+
+    It 'Does not rewrite a differently formatted definition without bumping definitionVersion' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            # maxVersion is set high enough that the component bump does NOT
+            # exceed it, so shouldUpdate stays false and the definition is not
+            # semantically touched.
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -CompatibleArtifactMaxVersion '9.9.9'
+            $definitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+
+            # Reformat the definition on disk with four-space indentation, which
+            # is valid JSON but not the shape Format-JsonText produces.
+            $definition = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $reformatted = $definition | ConvertTo-Json -Depth 50
+            [System.IO.File]::WriteAllText($definitionPath, $reformatted, [System.Text.UTF8Encoding]::new($false))
+
+            $before = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+            $versionBefore = ($before | ConvertFrom-Json).definitionVersion
+
+            $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+
+            $after = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+            $versionAfter = ($after | ConvertFrom-Json).definitionVersion
+
+            if ($after -ne $before) {
+                # The file changed, so definitionVersion MUST have changed too.
+                # This is the invariant the validator enforces.
+                ($versionAfter -ne $versionBefore) | Should Be $true
+            }
+            else {
+                # Or the file was left alone entirely, which is equally fine.
+                $versionAfter | Should Be $versionBefore
+            }
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Normalises a differently formatted definition AND bumps it, never one without the other' {
+        # The chosen fix is option (b): if the file will be written with different
+        # bytes, the module counts as touched and gets its definitionVersion
+        # bumped. Option (a) -- skip the write when the output equals the file --
+        # would have left a hand-formatted file untouched, which only closes the
+        # case where the file was already canonical. (b) makes the invariant
+        # structural instead: different bytes on disk implies a bump.
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -CompatibleArtifactMaxVersion '9.9.9'
+            $definitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+
+            $definition = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $reformatted = $definition | ConvertTo-Json -Depth 50
+            [System.IO.File]::WriteAllText($definitionPath, $reformatted, [System.Text.UTF8Encoding]::new($false))
+            $before = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+            $versionBefore = ($before | ConvertFrom-Json).definitionVersion
+
+            $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+
+            $after = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+            ($after -ne $before) | Should Be $true
+            ($after | ConvertFrom-Json).definitionVersion | Should Not Be $versionBefore
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Does not touch a definition that is already canonically formatted and unchanged' {
+        # The other half of the same rule: no gratuitous writes. A definition that
+        # already holds exactly the bytes the script would produce, and that has no
+        # semantic change, must be left alone entirely -- otherwise every bump
+        # produces diffs nobody asked for, and the follow-up bump above would fire
+        # for no reason.
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -CompatibleArtifactMaxVersion '9.9.9'
+            $definitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+
+            # First run canonicalises the file and bumps it.
+            $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+            $afterFirst = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+
+            # Second run has nothing to do to the definition.
+            $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+            $afterSecond = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
+
+            $afterSecond | Should Be $afterFirst
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+}
+
+Describe 'Bump-Version: repeated -ModuleKey does not double-bump' {
+    It 'Bumps a module exactly once even when its key is passed twice' {
+        # '-ModuleKey foo,foo' used to select the same definition twice and bump it
+        # twice in one run, producing a version nobody can explain from the command
+        # that was typed.
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -CompatibleArtifactMaxVersion '9.9.9'
+            $definitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+            $before = (Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json).definitionVersion
+
+            $null = & $bumpScriptPath -ModuleKey 'test_module','test_module' -SkipRepositoryVersion 2>&1 | Out-String
+
+            $after = (Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json).definitionVersion
+            # One bump, not two: 1.0.0 -> 1.0.1, never 1.0.2.
+            $after | Should Be ([string]([System.Version]::Parse($before).Major.ToString() + '.' + [System.Version]::Parse($before).Minor.ToString() + '.' + ([System.Version]::Parse($before).Build + 1).ToString()))
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+}
+
+Describe 'Bump-Version: single write and BOM handling' {
+    It 'Writes the maxVersion change and the definitionVersion bump in the same file state' {
+        # The persist loop used to write the definition with the OLD
+        # definitionVersion, and the definitionVersion loop then RELOADED the file
+        # from disk and wrote it again. An interrupted run therefore left the file
+        # in exactly the half-bumped state the follow-up bump exists to prevent.
+        # The definition is now written once, from the in-memory object, so both
+        # changes land together -- which is observable: if the reload were still
+        # in place, the maxVersion change would be lost.
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            # maxVersion low enough that the component bump exceeds it, so the
+            # definition IS semantically touched.
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -CompatibleArtifactMaxVersion '1.0.0'
+            $definitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+            $before = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+
+            $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+
+            $after = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            # Both changes are present in the same file.
+            $after.compatibleArtifacts[0].maxVersion | Should Be '1.0.1'
+            ($after.definitionVersion -ne $before.definitionVersion) | Should Be $true
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Leaves a byte-order mark intact on a definition it has no reason to write' {
+        # Save-JsonFile always writes WITHOUT a BOM, so a definition that has one
+        # would lose it on the first write and produce a diff nobody asked for.
+        # The would-change comparison reads the file with BOM detection, so a
+        # BOM-carrying file that is otherwise canonical is simply not written --
+        # and if it ever IS written, the follow-up bump now makes that visible
+        # rather than silent.
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0' -CompatibleArtifactMaxVersion '9.9.9'
+            $definitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
+
+            # First run canonicalises the content.
+            $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+
+            # Re-write the same content WITH a BOM.
+            $canonical = [System.IO.File]::ReadAllText($definitionPath)
+            [System.IO.File]::WriteAllText($definitionPath, $canonical, [System.Text.UTF8Encoding]::new($true))
+            $bytesBefore = [System.IO.File]::ReadAllBytes($definitionPath)
+
+            $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+
+            $bytesAfter = [System.IO.File]::ReadAllBytes($definitionPath)
+            ($bytesAfter[0] -eq 0xEF -and $bytesAfter[1] -eq 0xBB -and $bytesAfter[2] -eq 0xBF) | Should Be $true
+            $bytesAfter.Length | Should Be $bytesBefore.Length
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+}
