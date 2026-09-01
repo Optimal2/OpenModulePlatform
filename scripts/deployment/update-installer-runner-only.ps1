@@ -33,6 +33,53 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Get-RunnerSignatureStatus {
+    <#
+        Thin wrapper over Get-AuthenticodeSignature so the refresh script has one
+        place that turns a path into a status string. 'NoTarget' is returned for a
+        path that does not exist yet, and an empty string when the status could
+        not be read at all - the gate treats those very differently, and it
+        should: a missing file is not a signed file, but an unreadable one may be.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return 'NoTarget'
+    }
+
+    try {
+        return [string](Get-AuthenticodeSignature -LiteralPath $Path).Status
+    }
+    catch {
+        Write-Warning "Could not read the Authenticode status of '$Path': $($_.Exception.Message)"
+        return ''
+    }
+}
+
+function Assert-RunnerReplacementAllowed {
+    <#
+        Refuses to overwrite a signed runner with an unsigned or invalidly signed
+        one. The decision itself lives in assert-runner-signature.ps1, which is
+        covered by tests/Assert-RunnerSignature.Tests.ps1 - inline script code
+        cannot be tested, and an untested gate is a gate nobody has seen fail.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceExe,
+        [Parameter(Mandatory = $true)][string]$TargetExe
+    )
+
+    $gate = Join-Path $PSScriptRoot 'assert-runner-signature.ps1'
+    if (-not (Test-Path -LiteralPath $gate -PathType Leaf)) {
+        throw "The runner signature gate is missing: $gate. Refusing to replace a runner without it."
+    }
+
+    & $gate `
+        -TargetSignatureStatus (Get-RunnerSignatureStatus -Path $TargetExe) `
+        -NewSignatureStatus (Get-RunnerSignatureStatus -Path $SourceExe) `
+        -TargetPath $TargetExe `
+        -NewPath $SourceExe
+}
+
 function Resolve-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
     return [System.IO.Path]::GetFullPath($Path)
@@ -236,7 +283,29 @@ try {
         throw "Publish did not produce OpenModulePlatform.Bootstrapper.exe: $publishRoot"
     }
 
+    # Sign the fresh runner through the canonical path before it goes anywhere.
+    # This is a no-op unless signing is configured (see sign-artifacts.ps1), so
+    # unsigned developer packaging keeps working exactly as before.
+    $signScript = Join-Path $PSScriptRoot 'sign-artifacts.ps1'
+    if (Test-Path -LiteralPath $signScript -PathType Leaf) {
+        & $signScript -Path $publishRoot -SkipIfUnconfigured
+        if ($LASTEXITCODE -ne 0) {
+            throw "Code signing failed for '$publishRoot' with exit code $LASTEXITCODE. The package was not modified."
+        }
+    }
+
     $targetExe = Join-Path $packageRootPath 'OpenModulePlatform.Bootstrapper.exe'
+    # Samma rot som Update-PackageToolRunner anvander (rad ~182); en gissad
+    # sokvag hade grindat fel fil och latit den riktiga passera ogrindad.
+    $toolExe = Join-Path (Join-Path $packageRootPath 'tools\OpenModulePlatform.Bootstrapper') 'OpenModulePlatform.Bootstrapper.exe'
+
+    # Gate EVERY target before replacing ANY of them. Checking as we go would
+    # leave a package with a new root runner and an old tools runner when the
+    # second check fails - a partially replaced package is worse than a refused
+    # one, because nothing reports it.
+    Assert-RunnerReplacementAllowed -SourceExe $sourceExe -TargetExe $targetExe
+    Assert-RunnerReplacementAllowed -SourceExe $sourceExe -TargetExe $toolExe
+
     Close-IdleInstallerGui -PackageRoot $packageRootPath
     Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
     Update-PackageToolRunner -PackageRoot $packageRootPath -SourceExe $sourceExe
