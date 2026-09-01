@@ -20,6 +20,14 @@ param(
     [switch]$AllWidgets,
     [switch]$UpdateModuleMinimums,
     [switch]$SkipRepositoryVersion,
+    # Raise repositoryVersion on its own, with no component, module or widget
+    # target. omp-components.json has no Bootstrapper component, and the
+    # installer package takes its identity from repositoryVersion
+    # (package-hostagent-first.ps1), so a Bootstrapper-only change previously
+    # had no canonical way to get a new package identity: the choice was between
+    # hand-editing the manifest and bumping an unrelated artifact. Both are worse
+    # than a flag that says exactly what it does.
+    [switch]$RepositoryOnly,
     [string]$Part = 'patch',
     [string]$Version = '',
     [switch]$Interactive,
@@ -517,7 +525,25 @@ try {
         }
     }
 
-    if (-not $AllComponents -and $ComponentKey.Count -eq 0 -and -not $AllModuleDefinitions -and $ModuleKey.Count -eq 0 -and -not $AllWidgets -and $WidgetFile.Count -eq 0 -and -not $Interactive -and [string]::IsNullOrWhiteSpace($CascadeFrom)) {
+    if ($RepositoryOnly) {
+        # These combinations ask for opposite things. Obeying either silently
+        # would be worse than refusing: -RepositoryOnly with a component target
+        # would bump the artifact the caller said not to touch, and with
+        # -SkipRepositoryVersion it would bump nothing at all while reporting
+        # success.
+        if ($AllComponents -or $ComponentKey.Count -gt 0 -or $AllModuleDefinitions -or $ModuleKey.Count -gt 0 -or
+            $AllWidgets -or $WidgetFile.Count -gt 0 -or $Interactive -or -not [string]::IsNullOrWhiteSpace($CascadeFrom)) {
+            throw '-RepositoryOnly raises repositoryVersion alone and cannot be combined with a component, module, widget, cascade or interactive target. Drop the target, or drop -RepositoryOnly.'
+        }
+
+        if ($SkipRepositoryVersion) {
+            throw '-RepositoryOnly and -SkipRepositoryVersion ask for opposite things: one bumps only the repository version, the other bumps everything except it. Pass at most one.'
+        }
+    }
+    elseif (-not $AllComponents -and $ComponentKey.Count -eq 0 -and -not $AllModuleDefinitions -and $ModuleKey.Count -eq 0 -and -not $AllWidgets -and $WidgetFile.Count -eq 0 -and -not $Interactive -and [string]::IsNullOrWhiteSpace($CascadeFrom)) {
+        # No target given means "everything" -- but NOT when -RepositoryOnly was
+        # asked for, or the flag meant to touch one line would bump every
+        # artifact in the manifest.
         $AllComponents = $true
     }
 
@@ -616,7 +642,7 @@ try {
     $updates = [System.Collections.Generic.List[object]]::new()
 
     $hasSelectedVersionTargets = $selectedComponents.Count -gt 0 -or $selectedModuleDefinitions.Count -gt 0 -or $selectedWidgets.Count -gt 0
-    if (-not $SkipRepositoryVersion -and $hasSelectedVersionTargets) {
+    if (-not $SkipRepositoryVersion -and ($hasSelectedVersionTargets -or $RepositoryOnly)) {
         $currentRepositoryVersion = [string]$manifest.repositoryVersion
         if ([string]::IsNullOrWhiteSpace($currentRepositoryVersion)) {
             throw 'repositoryVersion is missing. Add it manually or use -SkipRepositoryVersion.'

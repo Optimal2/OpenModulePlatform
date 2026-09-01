@@ -541,6 +541,60 @@ tools\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.exe --conf
 The bootstrapper intentionally prompts with `[Y/N, default N]` when `--yes` is
 not supplied.
 
+## Refreshing And Staging A Package
+
+These options belong to the command-line installer
+(`OpenModulePlatform.Bootstrapper.exe`) and cover the loop an operator runs while
+developing: rebuild the package from source, put it where the host agent will
+import it, and wait for the import to finish. They were implemented long before
+they were written down; this section is that catch-up.
+
+| Option | What it does |
+| --- | --- |
+| `--refresh-installer-package` | Rebuilds the installed package from the source repository declared in the installer profile. Package objects are refreshed; the runner itself is only replaced when it passes the signature gate (see below). |
+| `--refresh-and-stage-package` | The same refresh, followed by staging the rebuilt package into the host agent's import folder so the next import picks it up. This is the normal developer loop. |
+| `--skip-refresh` | Stages what is already on disk without rebuilding first. Use it when the package was just built by another step and rebuilding would only cost time. |
+| `--wait-for-import` | Blocks until the host agent has finished importing the staged package, instead of returning as soon as the files are in place. Without it a script can race ahead and check a state the import has not reached yet. |
+| `--wait-for-import-seconds <n>` | How long `--wait-for-import` waits before giving up. Reaching the limit is reported as a failure, not as a completed import: an import that has not finished must never read as one that has. |
+| `--check-developer-source-status` | Reports whether the installed package still matches the source repository, without changing anything. Read-only. |
+
+### How this differs from `--sync-package-objects`
+
+`--sync-package-objects` copies package OBJECTS (module definitions, artifacts,
+host object archives) into an existing installation. It does not rebuild
+anything from source and does not touch the installer runner.
+`--refresh-installer-package` goes the other way round: it rebuilds from source
+and replaces the installed package. Reach for the sync options when the
+installation needs the objects a package already contains; reach for the refresh
+options when the source repository has moved ahead of the installation.
+
+### The runner signature gate
+
+A refresh rebuilds `OpenModulePlatform.Bootstrapper.exe` and replaces it in the
+package root, the tools copy and the tools zip. If the runner already in the
+package carries a valid Authenticode signature, an unsigned or invalidly signed
+replacement is REFUSED before any file is touched -- a package is never left
+partially replaced. Signing itself stays optional: `sign-artifacts.ps1` is a
+no-op unless signing is configured, so unsigned developer packaging works
+unchanged. What the gate forbids is the downgrade: quietly putting an unsigned
+binary where a signed one was.
+
+### Version identity for installer-only changes
+
+The installer package takes its identity from `repositoryVersion` in
+`omp-components.json`, and there is no Bootstrapper component to bump. For a
+change that touches only the installer, raise the repository version on its own:
+
+```powershell
+.\scripts\omp\bump-version.ps1 -RepositoryOnly
+```
+
+`-RepositoryOnly` cannot be combined with a component, module, widget, cascade or
+interactive target, and not with `-SkipRepositoryVersion` -- those combinations
+ask for opposite things, and obeying either silently would bump an artifact
+nobody asked to change. When a product artifact's output really did change, bump
+that component key as well with the same script.
+
 ## Uninstalling
 
 The graphical installer also includes uninstall actions:

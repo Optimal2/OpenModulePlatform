@@ -160,3 +160,17 @@ and normally uses database catalog mode:
 ```json
 "CatalogMode": "OmpDatabase"
 ```
+
+## Refreshing an installed package during development
+
+The command-line installer can rebuild an installed package from source and
+stage it for import: `--refresh-installer-package`, `--refresh-and-stage-package`,
+`--skip-refresh`, `--wait-for-import`, `--wait-for-import-seconds` and
+`--check-developer-source-status`. They are documented together, with how they
+differ from `--sync-package-objects` and how the runner signature gate behaves,
+in [docs/HOST_AGENT_FIRST_INSTALL.md](docs/HOST_AGENT_FIRST_INSTALL.md#refreshing-and-staging-a-package).
+
+For a change that touches only the installer, raise the package identity with
+`.\scripts\omp\bump-version.ps1 -RepositoryOnly` -- the installer package takes
+its identity from `repositoryVersion`, and there is no Bootstrapper component to
+bump.

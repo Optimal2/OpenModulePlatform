@@ -235,3 +235,67 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
         }
     }
 }
+
+Describe 'Bump-Version: repository-only bump' {
+    <#
+        omp-components.json has no Bootstrapper component, and the installer
+        package takes its identity from repositoryVersion
+        (package-hostagent-first.ps1). Until 2026-09-02 bump-version.ps1 could
+        not raise repositoryVersion without also selecting a component, module
+        or widget target -- so a Bootstrapper-only change had no canonical way to
+        get a new package identity, and the choice was between hand-editing the
+        manifest or bumping an unrelated artifact.
+    #>
+
+    It 'Raises repositoryVersion without touching any component' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0'
+            $manifestPath = Join-Path $repoRoot 'omp-components.json'
+            $before = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $componentBefore = $before.components[0].version
+
+            $null = & $bumpScriptPath -RepositoryOnly 2>&1 | Out-String
+
+            $after = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            ([System.Version]$after.repositoryVersion -gt [System.Version]$before.repositoryVersion) | Should Be $true
+            # The whole point: no unrelated artifact is dragged along.
+            $after.components[0].version | Should Be $componentBefore
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Refuses to combine -RepositoryOnly with a component target' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0'
+
+            $output = & $bumpScriptPath -RepositoryOnly -ComponentKey 'test_app' 2>&1 | Out-String
+
+            ($output -match 'RepositoryOnly') | Should Be $true
+            $LASTEXITCODE | Should Not Be 0
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Refuses to combine -RepositoryOnly with -SkipRepositoryVersion' {
+        # The two flags ask for opposite things; obeying either silently would be
+        # worse than refusing.
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0'
+
+            $output = & $bumpScriptPath -RepositoryOnly -SkipRepositoryVersion 2>&1 | Out-String
+
+            ($output -match 'RepositoryOnly') | Should Be $true
+            $LASTEXITCODE | Should Not Be 0
+        }
+        finally {
+            Remove-TemporaryBumpRepository -RootPath $repoRoot
+        }
+    }
+}
