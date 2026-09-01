@@ -28,8 +28,6 @@ DECLARE @AuthModuleInstanceId uniqueidentifier;
 DECLARE @AuthTemplateModuleInstanceId int;
 DECLARE @AuthAppId int;
 DECLARE @AuthAppInstanceId uniqueidentifier;
-DECLARE @AuthArtifactId int;
-DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.184';
 
 SELECT TOP (1)
        @InstanceId = InstanceId,
@@ -82,89 +80,6 @@ SELECT @AuthAppId = AppId
 FROM omp.Apps
 WHERE ModuleId = @AuthModuleId
   AND AppKey = N'omp_auth';
-
-MERGE omp.Artifacts AS target
-USING
-(
-    SELECT @AuthAppId AS AppId,
-           @BaselineArtifactVersion AS Version,
-           N'web-app' AS PackageType,
-           N'omp-auth' AS TargetName,
-           N'omp-auth/web/' + @BaselineArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-) AS source
-ON target.AppId = source.AppId
-AND target.Version = source.Version
-AND target.PackageType = source.PackageType
-AND target.TargetName = source.TargetName
-WHEN MATCHED THEN
-    UPDATE SET RelativePath = source.RelativePath,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
-
--- Repair runs seed the packaged baseline artifact row but should never
--- downgrade desired state after a newer compatible Auth artifact has been
--- imported. Use the latest registered Auth artifact for app/template state.
-SELECT TOP (1) @AuthArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @AuthAppId
-  AND PackageType = N'web-app'
-  AND TargetName = N'omp-auth'
-  AND IsEnabled = 1
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
-
-SELECT @AuthArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @AuthAppId
-  AND Version = @BaselineArtifactVersion
-  AND PackageType = N'web-app'
-  AND TargetName = N'omp-auth'
-  AND @AuthArtifactId IS NULL;
-
-MERGE omp.ArtifactConfigurationFiles AS target
-USING
-(
-    SELECT @AuthArtifactId AS ArtifactId,
-           N'appsettings.json' AS RelativePath,
-           N'{
-  "ConnectionStrings": {
-    "OmpDb": "{{Omp.Json.ConnectionStrings.OmpDb}}"
-  },
-  "OmpAuth": {
-    "CookieName": ".OpenModulePlatform.Auth",
-    "LoginPath": "/auth/login",
-    "LogoutPath": "/auth/logout",
-    "AccessDeniedPath": "/status/403",
-    "ApplicationName": "OpenModulePlatform",
-    "DataProtectionKeyPath": "{{Omp.Json.HostAgent.WebAppDataProtectionKeyPath}}"
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  }
-}' AS FileContent,
-           CAST(1 AS bit) AS IsEnabled
-) AS source
-ON target.ArtifactId = source.ArtifactId
-AND target.RelativePath = source.RelativePath
-WHEN MATCHED THEN
-    UPDATE SET FileContent = source.FileContent,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-    INSERT (ArtifactId, RelativePath, FileContent, IsEnabled)
-    VALUES(source.ArtifactId, source.RelativePath, source.FileContent, source.IsEnabled);
 
 SELECT @AuthModuleInstanceId = ModuleInstanceId
 FROM omp.ModuleInstances
@@ -259,10 +174,10 @@ BEGIN
 
     INSERT INTO omp.AppInstances(
         AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description,
-        RoutePath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)
+        RoutePath, InstallationName, IsEnabled, IsAllowed, DesiredState, SortOrder)
     VALUES(
         @AuthAppInstanceId, @AuthModuleInstanceId, NULL, @AuthAppId, N'omp_auth', N'OMP Auth',
-        N'Shared authentication web application for the default OMP instance', N'auth', N'auth', @AuthArtifactId, 1, 1, 1, 90);
+        N'Shared authentication web application for the default OMP instance', N'auth', N'auth', 1, 1, 1, 90);
 END
 ELSE
 BEGIN
@@ -275,7 +190,6 @@ BEGIN
         Description = N'Shared authentication web application for the default OMP instance',
         RoutePath = N'auth',
         InstallationName = N'auth',
-        ArtifactId = @AuthArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -294,10 +208,10 @@ IF NOT EXISTS
 BEGIN
     INSERT INTO omp.InstanceTemplateAppInstances(
         InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description,
-        RoutePath, InstallationName, DesiredArtifactId, DesiredState, SortOrder)
+        RoutePath, InstallationName, DesiredState, SortOrder)
     VALUES(
         @AuthTemplateModuleInstanceId, NULL, @AuthAppId, N'omp_auth', N'OMP Auth',
-        N'Shared authentication web application for the default template', N'auth', N'auth', @AuthArtifactId, 1, 90);
+        N'Shared authentication web application for the default template', N'auth', N'auth', 1, 90);
 END
 ELSE
 BEGIN
@@ -308,7 +222,6 @@ BEGIN
         Description = N'Shared authentication web application for the default template',
         RoutePath = N'auth',
         InstallationName = N'auth',
-        DesiredArtifactId = @AuthArtifactId,
         DesiredState = 1,
         SortOrder = 90,
         UpdatedUtc = SYSUTCDATETIME()

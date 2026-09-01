@@ -28,13 +28,11 @@ DECLARE @DefaultPortalModuleInstanceId uniqueidentifier;
 DECLARE @DefaultPortalAppInstanceId uniqueidentifier;
 DECLARE @PortalModuleId int;
 DECLARE @PortalAppId int;
-DECLARE @PortalArtifactId int;
 DECLARE @PortalViewPermissionId int;
 DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
-DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.76';
 DECLARE @BootstrapPortalAdminPrincipal nvarchar(256) = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__';
 
 IF @BootstrapPortalAdminPrincipal = N'__BOOTSTRAP_PORTAL_ADMIN_PRINCIPAL__'
@@ -139,123 +137,6 @@ END
 
 SELECT @PortalAppId = AppId FROM omp.Apps WHERE ModuleId = @PortalModuleId AND AppKey = N'omp_portal';
 
-MERGE omp.Artifacts AS target
-USING
-(
-    SELECT @PortalAppId AS AppId,
-           @BaselineArtifactVersion AS Version,
-           N'web-app' AS PackageType,
-           N'omp-portal' AS TargetName,
-           N'omp-portal/web/' + @BaselineArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-) AS source
-ON target.AppId = source.AppId
-AND target.Version = source.Version
-AND target.PackageType = source.PackageType
-AND target.TargetName = source.TargetName
-WHEN MATCHED THEN
-    UPDATE SET RelativePath = source.RelativePath,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
-
--- Repair runs seed the packaged baseline artifact row but should never
--- downgrade desired state after a newer compatible Portal artifact has been
--- imported. Use the latest registered Portal artifact for app/template state.
-SELECT TOP (1) @PortalArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @PortalAppId
-  AND PackageType = N'web-app'
-  AND TargetName = N'omp-portal'
-  AND IsEnabled = 1
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
-
-SELECT @PortalArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @PortalAppId
-  AND Version = @BaselineArtifactVersion
-  AND PackageType = N'web-app'
-  AND TargetName = N'omp-portal'
-  AND @PortalArtifactId IS NULL;
-
-MERGE omp.ArtifactConfigurationFiles AS target
-USING
-(
-    SELECT @PortalArtifactId AS ArtifactId,
-           N'appsettings.json' AS RelativePath,
-           N'{
-  "Portal": {
-    "Title": "OMP Portal",
-    "DefaultCulture": "sv-SE",
-    "SupportedCultures": [ "sv-SE", "en-US" ],
-    "PortalTopBar": {
-      "Enabled": true,
-      "PortalBaseUrl": "/"
-    },
-    "TopbarShortcuts": {
-      "Enabled": true,
-      "AllModules": "m",
-      "Favorites": "f"
-    },
-    "AllowAnonymous": false,
-    "UseForwardedHeaders": false,
-    "PermissionMode": "Any"
-  },
-  "PushEvents": {
-    "Producers": {
-      "UseOutboxForNotificationStateChanges": true
-    },
-    "Dispatcher": {
-      "Enabled": true
-    }
-  },
-  "ConnectionStrings": {
-    "OmpDb": "{{Omp.Json.ConnectionStrings.OmpDb}}"
-  },
-  "OmpAuth": {
-    "CookieName": ".OpenModulePlatform.Auth",
-    "LoginPath": "/auth/login",
-    "LogoutPath": "/auth/logout",
-    "AccessDeniedPath": "/status/403",
-    "ApplicationName": "OpenModulePlatform",
-    "DataProtectionKeyPath": "{{Omp.Json.HostAgent.WebAppDataProtectionKeyPath}}"
-  },
-  "ArtifactUpload": {
-    "ArtifactStoreRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}",
-    "TempRoot": "",
-    "AvailableModuleDefinitionsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\module-definitions",
-    "AvailableArtifactsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\artifacts",
-    "AvailableHostConfigurationsRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\host-configs",
-    "AvailableConfigOverlaysRoot": "{{Omp.Json.HostAgent.CentralArtifactRoot}}\\_available\\config-overlays",
-    "MaxUploadBytes": 536870912
-  },
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  }
-}' AS FileContent,
-           CAST(1 AS bit) AS IsEnabled
-) AS source
-ON target.ArtifactId = source.ArtifactId
-AND target.RelativePath = source.RelativePath
-WHEN MATCHED THEN
-    UPDATE SET FileContent = source.FileContent,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-    INSERT (ArtifactId, RelativePath, FileContent, IsEnabled)
-    VALUES(source.ArtifactId, source.RelativePath, source.FileContent, source.IsEnabled);
-
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @PortalAppId AND PermissionId = @PortalViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@PortalAppId, @PortalViewPermissionId, 0);
 
@@ -341,10 +222,10 @@ BEGIN
 
     INSERT INTO omp.AppInstances(
         AppInstanceId, ModuleInstanceId, HostId, AppId, AppInstanceKey, DisplayName, Description,
-        RoutePath, InstallationName, ArtifactId, IsEnabled, IsAllowed, DesiredState, SortOrder)
+        RoutePath, InstallationName, IsEnabled, IsAllowed, DesiredState, SortOrder)
     VALUES(
         @DefaultPortalAppInstanceId, @DefaultPortalModuleInstanceId, NULL, @PortalAppId, N'omp_portal', N'OMP Portal',
-        N'Primary OMP portal app instance for the default OMP instance', N'', N'portal', @PortalArtifactId, 1, 1, 1, 100);
+        N'Primary OMP portal app instance for the default OMP instance', N'', N'portal', 1, 1, 1, 100);
 END
 ELSE
 BEGIN
@@ -357,7 +238,6 @@ BEGIN
         Description = N'Primary OMP portal app instance for the default OMP instance',
         RoutePath = N'',
         InstallationName = N'portal',
-        ArtifactId = @PortalArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -376,16 +256,15 @@ IF NOT EXISTS
 BEGIN
     INSERT INTO omp.InstanceTemplateAppInstances(
         InstanceTemplateModuleInstanceId, InstanceTemplateHostId, AppId, AppInstanceKey, DisplayName, Description,
-        RoutePath, InstallationName, DesiredArtifactId, DesiredState, SortOrder)
+        RoutePath, InstallationName, DesiredState, SortOrder)
     VALUES(
         @DefaultTemplatePortalModuleInstanceId, NULL, @PortalAppId, N'omp_portal', N'OMP Portal',
-        N'Primary OMP portal app instance for the default template', N'', N'portal', @PortalArtifactId, 1, 100);
+        N'Primary OMP portal app instance for the default template', N'', N'portal', 1, 100);
 END
 
 UPDATE omp.InstanceTemplateAppInstances
 SET InstanceTemplateHostId = NULL,
-    TargetHostTemplateId = NULL,
-    DesiredArtifactId = @PortalArtifactId
+    TargetHostTemplateId = NULL
 WHERE InstanceTemplateModuleInstanceId = @DefaultTemplatePortalModuleInstanceId
   AND AppInstanceKey = N'omp_portal';
 GO

@@ -144,6 +144,26 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
     }
 
     [Fact]
+    public async Task HostAgent_SeedSql_WithSharedWebAndChannelVersion_IsBlockedBeforeGhostArtifactMutation()
+    {
+        await _fixture.CleanModuleDefinitionDocumentsAsync();
+        var repo = _fixture.CreateHostAgentRepository();
+        var definitionJson = BuildArtifactPointerGuardDefinitionJson();
+        var documentId = await _fixture.InsertModuleDefinitionDocumentAsync(
+            "artifact_pointer_guard_test",
+            "1.0.0",
+            definitionJson);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repo.ExecuteImportedModuleDefinitionSqlRepairsAsync(documentId, CancellationToken.None));
+
+        Assert.Contains(
+            "Module definition SQL must not register or mutate omp.Artifacts",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task HostAgent_ImportModuleDefinitionAsync_HealsStaleSchemaWhenInstalledVersionIsNewer()
     {
         await _fixture.DropSchemaObjectsAsync(HostAgentSchemaName);
@@ -711,6 +731,86 @@ WHERE s.name = @schemaName
   }
 }
 """;
+    }
+
+    private static string BuildArtifactPointerGuardDefinitionJson()
+    {
+        const string seedSql = """
+IF OBJECT_ID(N'omp.Apps', N'U') IS NULL
+    CREATE TABLE omp.Apps(AppId int NOT NULL PRIMARY KEY, AppKey nvarchar(100) NOT NULL);
+
+IF OBJECT_ID(N'omp.Artifacts', N'U') IS NULL
+    CREATE TABLE omp.Artifacts
+    (
+        ArtifactId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        AppId int NOT NULL,
+        Version nvarchar(50) NOT NULL,
+        PackageType nvarchar(50) NOT NULL,
+        TargetName nvarchar(100) NOT NULL,
+        RelativePath nvarchar(400) NULL,
+        Sha256 nvarchar(128) NULL,
+        IsEnabled bit NOT NULL
+    );
+
+IF OBJECT_ID(N'omp.InstanceTemplateAppInstances', N'U') IS NULL
+    CREATE TABLE omp.InstanceTemplateAppInstances
+    (
+        InstanceTemplateAppInstanceId int NOT NULL PRIMARY KEY,
+        AppId int NOT NULL,
+        DesiredArtifactId int NULL
+    );
+
+IF NOT EXISTS (SELECT 1 FROM omp.Apps WHERE AppId = 3101)
+    INSERT INTO omp.Apps(AppId, AppKey) VALUES(3101, N'web');
+IF NOT EXISTS (SELECT 1 FROM omp.Apps WHERE AppId = 3102)
+    INSERT INTO omp.Apps(AppId, AppKey) VALUES(3102, N'channel-type');
+IF NOT EXISTS (SELECT 1 FROM omp.InstanceTemplateAppInstances WHERE InstanceTemplateAppInstanceId = 3101)
+    INSERT INTO omp.InstanceTemplateAppInstances(InstanceTemplateAppInstanceId, AppId, DesiredArtifactId)
+    VALUES(3101, 3101, NULL);
+
+DECLARE @WebVersion nvarchar(50) = N'0.3.321';
+DECLARE @ChannelTypeVersion nvarchar(50) = N'0.3.147';
+DECLARE @Version nvarchar(50) = @ChannelTypeVersion;
+DECLARE @WebArtifactId int;
+
+MERGE omp.Artifacts AS target
+USING (VALUES(3101, @Version, N'web-app', N'web')) AS source(AppId, Version, PackageType, TargetName)
+ON target.AppId = source.AppId AND target.Version = source.Version AND target.PackageType = source.PackageType AND target.TargetName = source.TargetName
+WHEN NOT MATCHED THEN
+    INSERT(AppId, Version, PackageType, TargetName, RelativePath, Sha256, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, N'web/' + source.Version, NULL, 1);
+
+MERGE omp.Artifacts AS target
+USING (VALUES(3102, @Version, N'channel-type', N'channel')) AS source(AppId, Version, PackageType, TargetName)
+ON target.AppId = source.AppId AND target.Version = source.Version AND target.PackageType = source.PackageType AND target.TargetName = source.TargetName
+WHEN NOT MATCHED THEN
+    INSERT(AppId, Version, PackageType, TargetName, RelativePath, Sha256, IsEnabled)
+    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, N'channel/' + source.Version, NULL, 1);
+
+SELECT @WebArtifactId = ArtifactId
+FROM omp.Artifacts
+WHERE AppId = 3101 AND Version = @Version;
+
+UPDATE omp.InstanceTemplateAppInstances
+SET DesiredArtifactId = @WebArtifactId
+WHERE InstanceTemplateAppInstanceId = 3101;
+""";
+
+        var root = new JsonObject
+        {
+            ["moduleKey"] = "artifact_pointer_guard_test",
+            ["definitionVersion"] = "1.0.0",
+            ["sqlScripts"] = new JsonArray(
+                new JsonObject
+                {
+                    ["key"] = "seed-artifact-pointer-confusion",
+                    ["phase"] = "setup",
+                    ["order"] = 10,
+                    ["execution"] = "idempotent",
+                    ["inlineSql"] = seedSql
+                })
+        };
+        return root.ToJsonString();
     }
 
     private static string ComputeSha256(string value)

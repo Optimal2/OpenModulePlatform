@@ -2348,7 +2348,7 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
         return buffer.ToString();
     }
 
-    private static string? ValidateSafeModuleDefinitionSql(string sqlText)
+    internal static string? ValidateSafeModuleDefinitionSql(string sqlText)
     {
         sqlText = BlankSqlCommentsAndLiterals(sqlText);
 
@@ -2367,6 +2367,18 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
             return "The script contains TRUNCATE TABLE.";
         }
 
+        var artifactOwnershipSql = ExcludeStoredModuleBodiesFromArtifactOwnershipScan(sqlText);
+        if (ContainsDirectModuleDefinitionTableWrite(artifactOwnershipSql, "Artifacts"))
+        {
+            return "Module definition SQL must not register or mutate omp.Artifacts; artifact registration is owned by the artifact import path.";
+        }
+
+        if (ContainsModuleDefinitionColumnWrite(artifactOwnershipSql, "InstanceTemplateAppInstances", "DesiredArtifactId")
+            || ContainsModuleDefinitionColumnWrite(artifactOwnershipSql, "AppInstances", "ArtifactId"))
+        {
+            return "Module definition SQL must not write omp.InstanceTemplateAppInstances.DesiredArtifactId or omp.AppInstances.ArtifactId; artifact selection is owned by artifact auto-apply.";
+        }
+
         var unsafeDeleteStatement = ModuleDefinitionDeleteStatementRegex().Matches(sqlText)
             .Cast<Match>()
             .Select(static match => match.Groups["statement"].Value)
@@ -2377,6 +2389,110 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
         }
 
         return null;
+    }
+
+    private static string ExcludeStoredModuleBodiesFromArtifactOwnershipScan(string sqlText)
+        => string.Join(
+            ";" + Environment.NewLine,
+            SplitSqlBatches(sqlText).Where(static batch => !Regex.IsMatch(
+                batch,
+                @"(?is)^\s*(?:CREATE(?:\s+OR\s+ALTER)?|ALTER)\s+(?:PROC(?:EDURE)?|TRIGGER|FUNCTION)\b")));
+
+    private static bool ContainsDirectModuleDefinitionTableWrite(string sqlText, string tableName)
+    {
+        var qualifiedTable = BuildOmpQualifiedIdentifierPattern(tableName);
+        const string top = @"(?:TOP\s*(?:\([^)]*\)|\d+)(?:\s+PERCENT)?\s+)?";
+        if (Regex.IsMatch(
+            sqlText,
+            $@"(?is)\b(?:INSERT\s+{top}(?:INTO\s+)?|UPDATE\s+{top}|MERGE\s+{top}(?:INTO\s+)?){qualifiedTable}"))
+        {
+            return true;
+        }
+
+        return Regex.IsMatch(
+            sqlText,
+            $@"(?is)\bUPDATE\s+{top}(?<alias>\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\s+SET\b(?:(?!;|^\s*GO\b).)*?\bFROM\s+{qualifiedTable}(?:\s+WITH\s*\([^)]*\))?\s+(?:AS\s+)?\k<alias>");
+    }
+
+    private static bool ContainsModuleDefinitionColumnWrite(
+        string sqlText,
+        string tableName,
+        string columnName)
+    {
+        var qualifiedTable = BuildOmpQualifiedIdentifierPattern(tableName);
+        var column = BuildSqlIdentifierPattern(columnName);
+        const string top = @"(?:TOP\s*(?:\([^)]*\)|\d+)(?:\s+PERCENT)?\s+)?";
+        const string alias = @"(?:\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)";
+        const string tableHint = @"(?:\s+WITH\s*\([^)]*\))?";
+
+        foreach (Match insert in Regex.Matches(
+            sqlText,
+            $@"(?is)\bINSERT\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)"))
+        {
+            if (Regex.IsMatch(insert.Groups["columns"].Value, column, RegexOptions.IgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        foreach (Match update in Regex.Matches(
+            sqlText,
+            $@"(?is)\bUPDATE\s+{top}{qualifiedTable}{tableHint}(?:\s+(?:AS\s+)?{alias})?\s+SET\b(?<assignments>.*?)(?=\bWHERE\b|;|^\s*GO\b|\z)"))
+        {
+            if (ContainsModuleDefinitionColumnAssignment(update.Groups["assignments"].Value, column, alias))
+            {
+                return true;
+            }
+        }
+
+        foreach (Match update in Regex.Matches(
+            sqlText,
+            $@"(?is)\bUPDATE\s+{top}(?<targetAlias>{alias})\s+SET\b(?<assignments>.*?)\bFROM\s+{qualifiedTable}{tableHint}\s+(?:AS\s+)?\k<targetAlias>"))
+        {
+            if (ContainsModuleDefinitionColumnAssignment(update.Groups["assignments"].Value, column, alias))
+            {
+                return true;
+            }
+        }
+
+        foreach (Match merge in Regex.Matches(
+            sqlText,
+            $@"(?is)\bMERGE\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}(?<body>.*?)(?=;|^\s*GO\b|\z)"))
+        {
+            var body = merge.Groups["body"].Value;
+            if (Regex.Matches(body, @"(?is)\bINSERT\s*\((?<columns>[^)]*)\)")
+                .Cast<Match>()
+                .Any(match => Regex.IsMatch(match.Groups["columns"].Value, column, RegexOptions.IgnoreCase)))
+            {
+                return true;
+            }
+
+            if (Regex.Matches(body, @"(?is)\bUPDATE\s+SET\b(?<assignments>.*?)(?=\bWHEN\b|;|\z)")
+                .Cast<Match>()
+                .Any(match => ContainsModuleDefinitionColumnAssignment(match.Groups["assignments"].Value, column, alias)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsModuleDefinitionColumnAssignment(
+        string assignments,
+        string columnPattern,
+        string aliasPattern)
+        => Regex.IsMatch(
+            assignments,
+            $@"(?is)(?:\A|,)\s*(?:{aliasPattern}\s*\.\s*)?{columnPattern}\s*=");
+
+    private static string BuildOmpQualifiedIdentifierPattern(string tableName)
+        => $@"(?:\[omp\]|""omp""|omp)\s*\.\s*{BuildSqlIdentifierPattern(tableName)}";
+
+    private static string BuildSqlIdentifierPattern(string identifier)
+    {
+        var escaped = Regex.Escape(identifier);
+        return $@"(?:\[{escaped}\]|""{escaped}""|{escaped})(?![A-Za-z0-9_])";
     }
 
     private static string? ValidateReadOnlyModuleDefinitionSql(string sqlText)

@@ -32,10 +32,8 @@ DECLARE @WebModuleInstanceId uniqueidentifier = '11111111-1111-1111-1111-1111111
 DECLARE @WebTemplateModuleInstanceId int;
 DECLARE @WebAppId int;
 DECLARE @WebAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111202';
-DECLARE @WebArtifactId int;
 DECLARE @WebViewPermissionId int;
 DECLARE @WebAdminPermissionId int;
-DECLARE @BaselineArtifactVersion nvarchar(50) = N'0.3.5';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -131,54 +129,6 @@ BEGIN
 END
 
 SELECT @WebAppId = AppId FROM omp.Apps WHERE ModuleId = @WebModuleId AND AppKey = N'example_webapp_webapp';
-
-MERGE omp.Artifacts AS target
-USING
-(
-    SELECT @WebAppId AS AppId,
-           @BaselineArtifactVersion AS Version,
-           N'web-app' AS PackageType,
-           N'example-webapp' AS TargetName,
-           N'example-webapp/web/' + @BaselineArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-) AS source
-ON target.AppId = source.AppId
-AND target.Version = source.Version
-AND target.PackageType = source.PackageType
-AND target.TargetName = source.TargetName
-WHEN MATCHED THEN
-    UPDATE SET RelativePath = source.RelativePath,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
-
--- Repair runs seed the packaged baseline artifact row but should never pick
--- metadata-only artifact rows that were not completed by an artifact package
--- import. Use the latest completed artifact for app/template state.
-SELECT TOP (1) @WebArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @WebAppId
-  AND PackageType = N'web-app'
-  AND TargetName = N'example-webapp'
-  AND IsEnabled = 1
-  AND NULLIF(LTRIM(RTRIM(Sha256)), N'') IS NOT NULL
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
-
-SELECT @WebArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @WebAppId
-  AND Version = @BaselineArtifactVersion
-  AND PackageType = N'web-app'
-  AND TargetName = N'example-webapp'
-  AND @WebArtifactId IS NULL;
 
 IF NOT EXISTS (SELECT 1 FROM omp.AppPermissions WHERE AppId = @WebAppId AND PermissionId = @WebViewPermissionId)
     INSERT INTO omp.AppPermissions(AppId, PermissionId, RequireAll) VALUES(@WebAppId, @WebViewPermissionId, 0);
@@ -299,7 +249,6 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
-        ArtifactId,
         IsEnabled,
         IsAllowed,
         DesiredState,
@@ -314,7 +263,6 @@ BEGIN
         N'Primary web app instance for the example WebAppModule',
         N'ExampleWebAppModule',
         N'webapp',
-        @WebArtifactId,
         1,
         1,
         1,
@@ -338,7 +286,6 @@ BEGIN
         Description = N'Primary web app instance for the example WebAppModule',
         RoutePath = N'ExampleWebAppModule',
         InstallationName = N'webapp',
-        ArtifactId = @WebArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -364,7 +311,6 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
-        DesiredArtifactId,
         DesiredState,
         SortOrder)
     VALUES(
@@ -376,14 +322,8 @@ BEGIN
         N'Primary web app instance for the example WebAppModule',
         N'ExampleWebAppModule',
         N'webapp',
-        @WebArtifactId,
         1,
         300);
 END
-
-UPDATE omp.InstanceTemplateAppInstances
-SET DesiredArtifactId = @WebArtifactId
-WHERE InstanceTemplateModuleInstanceId = @WebTemplateModuleInstanceId
-  AND AppInstanceKey = N'example_webapp_webapp';
 
 GO

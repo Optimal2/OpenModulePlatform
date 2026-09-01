@@ -23,12 +23,10 @@ their own module sql folders.
 
 Reseed safety: this script is also re-executed by repair/heal runs against
 installations that are already in operation. It must therefore never resurrect
-rows an operator has retired (disabled hosts, disabled artifact rows,
-deactivated assignments) and never (re)create the packaged baseline artifact
-rows once an installation has moved on to other registered artifact versions.
-The default mode below keeps every such write insert-only with respect to
-operator state; @AllowBootstrapReseed = 1 is the explicit, logged escape hatch
-for a deliberate manual reseed.
+rows an operator has retired (disabled hosts and deactivated assignments). The
+default mode below keeps every such write insert-only with respect to operator
+state; @AllowBootstrapReseed = 1 is the explicit, logged escape hatch for a
+deliberate manual reseed.
 */
 USE [OpenModulePlatform];
 GO
@@ -56,13 +54,6 @@ DECLARE @ServiceHostTemplateId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @EveryoneRoleId int;
 DECLARE @AuthenticatedUsersRoleId int;
--- These versions seed the minimum artifact rows bundled with the baseline SQL
--- script. They are not desired runtime targets; after portable packages have
--- been imported, the template state below resolves the latest compatible
--- registered artifact versions from omp.Artifacts.
-DECLARE @BaselineHostAgentArtifactVersion nvarchar(50) = N'0.3.55'; -- Minimum bundled host-agent artifact only.
-DECLARE @BaselineWorkerManagerArtifactVersion nvarchar(50) = N'0.3.8'; -- Minimum bundled service-app artifact only.
-DECLARE @BaselineWorkerProcessHostArtifactVersion nvarchar(50) = N'0.3.3'; -- Minimum bundled worker-host artifact only.
 DECLARE @DefaultHostKey nvarchar(128) = N'sample-host';
 DECLARE @DefaultHostDisplayName nvarchar(200) = N'Sample Host';
 DECLARE @DefaultHostEnvironment nvarchar(50) = N'Development';
@@ -443,20 +434,8 @@ DECLARE @CoreModuleId int;
 DECLARE @HostAgentAppId int;
 DECLARE @WorkerManagerAppId int;
 DECLARE @WorkerProcessHostAppId int;
-DECLARE @HostAgentArtifactId int;
-DECLARE @WorkerManagerArtifactId int;
-DECLARE @WorkerProcessHostArtifactId int;
 DECLARE @CoreTemplateModuleInstanceId int;
 DECLARE @DefaultInstanceTemplateHostId int;
-DECLARE @LatestEnabledArtifacts TABLE
-(
-    AppId int NOT NULL,
-    PackageType nvarchar(50) NOT NULL,
-    TargetName nvarchar(100) NOT NULL,
-    ArtifactId int NOT NULL,
-    VersionRank int NOT NULL,
-    PRIMARY KEY(AppId, PackageType, TargetName, VersionRank)
-);
 
 IF EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'omp_core')
 BEGIN
@@ -525,136 +504,6 @@ FROM omp.Apps
 WHERE ModuleId = @CoreModuleId
   AND AppKey IN (N'omp_hostagent', N'omp_workermanager', N'omp_workerprocesshost');
 
--- Reseed safety: the packaged baseline artifact rows are a cold-bootstrap
--- bridge, nothing else. On an installation that already has other registered
--- versions for the same target, (re)creating these rows only reintroduces
--- stale, never-provisioned versions into the enabled artifact set -- the exact
--- poison a heal run must not carry. Existing baseline rows are therefore left
--- completely untouched (a retired baseline row stays retired), and the insert
--- is skipped per target once any other registered version exists there.
-IF @AllowBootstrapReseed = 0
-   AND EXISTS
-   (
-       SELECT 1
-       FROM omp.Artifacts newer
-       WHERE newer.AppId IN (@HostAgentAppId, @WorkerManagerAppId, @WorkerProcessHostAppId)
-         AND newer.TargetName IN (N'omp-hostagent', N'omp-workermanager', N'omp-workerprocesshost')
-         AND newer.Version NOT IN (@BaselineHostAgentArtifactVersion, @BaselineWorkerManagerArtifactVersion, @BaselineWorkerProcessHostArtifactVersion)
-   )
-BEGIN
-    PRINT N'OMP core seed: newer core artifacts are already registered; skipping creation of the packaged baseline artifact rows and leaving any retired baseline rows untouched. Rerun with @AllowBootstrapReseed = 1 to force the legacy behavior.';
-END
-
-MERGE omp.Artifacts AS target
-USING
-(
-    SELECT @HostAgentAppId AS AppId,
-           @BaselineHostAgentArtifactVersion AS Version,
-           N'host-agent' AS PackageType,
-           N'omp-hostagent' AS TargetName,
-           N'omp-hostagent/hostagent/' + @BaselineHostAgentArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-    UNION ALL
-    SELECT @WorkerManagerAppId AS AppId,
-           @BaselineWorkerManagerArtifactVersion AS Version,
-           N'service-app' AS PackageType,
-           N'omp-workermanager' AS TargetName,
-           N'omp-workermanager/service/' + @BaselineWorkerManagerArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-    UNION ALL
-    SELECT @WorkerProcessHostAppId AS AppId,
-           @BaselineWorkerProcessHostArtifactVersion AS Version,
-           N'worker-host' AS PackageType,
-           N'omp-workerprocesshost' AS TargetName,
-           N'omp-workerprocesshost/host/' + @BaselineWorkerProcessHostArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-) AS source
-ON target.AppId = source.AppId
-AND target.Version = source.Version
-AND target.PackageType = source.PackageType
-AND target.TargetName = source.TargetName
-WHEN MATCHED AND @AllowBootstrapReseed = 1 THEN
-    -- Legacy resurrection, only under the explicit logged reseed override.
-    UPDATE SET RelativePath = source.RelativePath,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED AND
-     (
-         @AllowBootstrapReseed = 1
-         OR NOT EXISTS
-         (
-             SELECT 1
-             FROM omp.Artifacts newer
-             WHERE newer.AppId = source.AppId
-               AND newer.PackageType = source.PackageType
-               AND newer.TargetName = source.TargetName
-               AND newer.Version <> source.Version
-         )
-     ) THEN
-    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
-
--- Repair runs seed the packaged baseline artifact rows but should never
--- downgrade desired state after newer compatible core artifacts have been
--- imported. Use the latest registered artifacts for template state.
-INSERT INTO @LatestEnabledArtifacts(AppId, PackageType, TargetName, ArtifactId, VersionRank)
-SELECT ranked.AppId,
-       ranked.PackageType,
-       ranked.TargetName,
-       ranked.ArtifactId,
-       ranked.VersionRank
-FROM
-(
-    SELECT ArtifactId,
-           AppId,
-           PackageType,
-           TargetName,
-           ROW_NUMBER() OVER
-           (
-               PARTITION BY AppId, PackageType, TargetName
-               ORDER BY
-                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-                   COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-                   Version DESC,
-                   ArtifactId DESC
-           ) AS VersionRank
-    FROM omp.Artifacts
-    WHERE IsEnabled = 1
-      AND TargetName IS NOT NULL
-      AND AppId IN (@HostAgentAppId, @WorkerManagerAppId, @WorkerProcessHostAppId)
-      AND TargetName IN (N'omp-hostagent', N'omp-workermanager', N'omp-workerprocesshost')
-) ranked
-WHERE ranked.VersionRank = 1;
-
-SELECT @HostAgentArtifactId =
-           MAX(CASE
-                   WHEN AppId = @HostAgentAppId
-                    AND PackageType = N'host-agent'
-                    AND TargetName = N'omp-hostagent'
-                    AND VersionRank = 1
-                   THEN ArtifactId
-               END),
-       @WorkerManagerArtifactId =
-           MAX(CASE
-                   WHEN AppId = @WorkerManagerAppId
-                    AND PackageType = N'service-app'
-                    AND TargetName = N'omp-workermanager'
-                    AND VersionRank = 1
-                   THEN ArtifactId
-               END),
-       @WorkerProcessHostArtifactId =
-           MAX(CASE
-                   WHEN AppId = @WorkerProcessHostAppId
-                    AND PackageType = N'worker-host'
-                    AND TargetName = N'omp-workerprocesshost'
-                    AND VersionRank = 1
-                   THEN ArtifactId
-               END)
-FROM @LatestEnabledArtifacts
-WHERE VersionRank = 1;
-
 MERGE omp.InstanceTemplateModuleInstances AS target
 USING
 (
@@ -698,9 +547,9 @@ BEGIN
     USING
     (
         VALUES
-            (@CoreTemplateModuleInstanceId, NULL, @ServiceHostTemplateId, @WorkerProcessHostAppId, N'omp_workerprocesshost', N'OMP Worker Process Host', N'Host-local executable used by WorkerManager to run worker plugin artifacts.', NULL, NULL, NULL, NULL, @WorkerProcessHostArtifactId, 1, 20, CONVERT(bit, 1), CONVERT(bit, 1)),
-            (@CoreTemplateModuleInstanceId, NULL, @ServiceHostTemplateId, @WorkerManagerAppId, N'omp_workermanager', N'OMP WorkerManager', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', NULL, NULL, N'WorkerManager', N'OMP.WorkerManager', @WorkerManagerArtifactId, 1, 30, CONVERT(bit, 1), CONVERT(bit, 1))
-    ) AS source(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
+            (@CoreTemplateModuleInstanceId, NULL, @ServiceHostTemplateId, @WorkerProcessHostAppId, N'omp_workerprocesshost', N'OMP Worker Process Host', N'Host-local executable used by WorkerManager to run worker plugin artifacts.', NULL, NULL, NULL, NULL, 1, 20, CONVERT(bit, 1), CONVERT(bit, 1)),
+            (@CoreTemplateModuleInstanceId, NULL, @ServiceHostTemplateId, @WorkerManagerAppId, N'omp_workermanager', N'OMP WorkerManager', N'Host-local Windows service that starts and supervises OMP worker plugin processes.', NULL, NULL, N'WorkerManager', N'OMP.WorkerManager', 1, 30, CONVERT(bit, 1), CONVERT(bit, 1))
+    ) AS source(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredState, SortOrder, IsEnabled, IsAllowed)
     ON target.InstanceTemplateModuleInstanceId = source.InstanceTemplateModuleInstanceId
     AND target.AppInstanceKey = source.AppInstanceKey
     WHEN MATCHED THEN
@@ -713,15 +562,14 @@ BEGIN
                    PublicUrl = source.PublicUrl,
                    InstallPath = source.InstallPath,
                    InstallationName = source.InstallationName,
-                   DesiredArtifactId = source.DesiredArtifactId,
                    DesiredState = source.DesiredState,
                    SortOrder = source.SortOrder,
                    IsEnabled = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsEnabled ELSE target.IsEnabled END,
                    IsAllowed = CASE WHEN @AllowBootstrapReseed = 1 THEN source.IsAllowed ELSE target.IsAllowed END,
                    UpdatedUtc = SYSUTCDATETIME()
     WHEN NOT MATCHED THEN
-        INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredArtifactId, DesiredState, SortOrder, IsEnabled, IsAllowed)
-        VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.TargetHostTemplateId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.DesiredArtifactId, source.DesiredState, source.SortOrder, source.IsEnabled, source.IsAllowed);
+        INSERT(InstanceTemplateModuleInstanceId, InstanceTemplateHostId, TargetHostTemplateId, AppId, AppInstanceKey, DisplayName, Description, RoutePath, PublicUrl, InstallPath, InstallationName, DesiredState, SortOrder, IsEnabled, IsAllowed)
+        VALUES(source.InstanceTemplateModuleInstanceId, source.InstanceTemplateHostId, source.TargetHostTemplateId, source.AppId, source.AppInstanceKey, source.DisplayName, source.Description, source.RoutePath, source.PublicUrl, source.InstallPath, source.InstallationName, source.DesiredState, source.SortOrder, source.IsEnabled, source.IsAllowed);
 END
 
 -------------------------------------------------------------------------------

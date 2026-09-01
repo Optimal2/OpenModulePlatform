@@ -40,13 +40,9 @@ DECLARE @ServiceWebAppId int;
 DECLARE @ServiceWebAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111302';
 DECLARE @ServiceAppId int;
 DECLARE @ServiceAppInstanceId uniqueidentifier = '11111111-1111-1111-1111-111111111303';
-DECLARE @ServiceWebArtifactId int;
 DECLARE @ServiceViewPermissionId int;
 DECLARE @ServiceAdminPermissionId int;
 DECLARE @InitialServiceConfigId int;
-DECLARE @ServiceArtifactId int;
-DECLARE @BaselineWebArtifactVersion nvarchar(50) = N'0.3.5';
-DECLARE @BaselineServiceArtifactVersion nvarchar(50) = N'0.3.5';
 
 SELECT @InstanceId = InstanceId, @InstanceTemplateId = InstanceTemplateId
 FROM omp.Instances
@@ -190,84 +186,6 @@ IF @PortalAdminsRoleId IS NOT NULL
     INSERT INTO omp.RolePermissions(RoleId, PermissionId)
     VALUES(@PortalAdminsRoleId, @ServiceAdminPermissionId);
 
-MERGE omp.Artifacts AS target
-USING
-(
-    SELECT @ServiceWebAppId AS AppId,
-           @BaselineWebArtifactVersion AS Version,
-           N'web-app' AS PackageType,
-           N'example-serviceapp-web' AS TargetName,
-           N'example-serviceapp/web/' + @BaselineWebArtifactVersion AS RelativePath,
-           CAST(1 AS bit) AS IsEnabled
-    UNION ALL
-    SELECT @ServiceAppId,
-           @BaselineServiceArtifactVersion,
-           N'service-app',
-           N'example-serviceapp-service',
-           N'example-serviceapp/service/' + @BaselineServiceArtifactVersion,
-           CAST(1 AS bit)
-) AS source
-ON target.AppId = source.AppId
-AND target.Version = source.Version
-AND target.PackageType = source.PackageType
-AND target.TargetName = source.TargetName
-WHEN MATCHED THEN
-    UPDATE SET RelativePath = source.RelativePath,
-               IsEnabled = source.IsEnabled,
-               UpdatedUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-    INSERT (AppId, Version, PackageType, TargetName, RelativePath, IsEnabled)
-    VALUES(source.AppId, source.Version, source.PackageType, source.TargetName, source.RelativePath, source.IsEnabled);
-
--- Repair runs seed the packaged baseline artifact rows but should never pick
--- metadata-only artifact rows that were not completed by an artifact package
--- import. Use the latest completed artifacts for app/template state.
-SELECT TOP (1) @ServiceWebArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @ServiceWebAppId
-  AND PackageType = N'web-app'
-  AND TargetName = N'example-serviceapp-web'
-  AND IsEnabled = 1
-  AND NULLIF(LTRIM(RTRIM(Sha256)), N'') IS NOT NULL
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
-
-SELECT TOP (1) @ServiceArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @ServiceAppId
-  AND PackageType = N'service-app'
-  AND TargetName = N'example-serviceapp-service'
-  AND IsEnabled = 1
-  AND NULLIF(LTRIM(RTRIM(Sha256)), N'') IS NOT NULL
-ORDER BY
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 4)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 3)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 2)), 0) DESC,
-    COALESCE(TRY_CONVERT(int, PARSENAME(Version, 1)), 0) DESC,
-    Version DESC,
-    ArtifactId DESC;
-
-SELECT @ServiceWebArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @ServiceWebAppId
-  AND Version = @BaselineWebArtifactVersion
-  AND PackageType = N'web-app'
-  AND TargetName = N'example-serviceapp-web'
-  AND @ServiceWebArtifactId IS NULL;
-
-SELECT @ServiceArtifactId = ArtifactId
-FROM omp.Artifacts
-WHERE AppId = @ServiceAppId
-  AND Version = @BaselineServiceArtifactVersion
-  AND PackageType = N'service-app'
-  AND TargetName = N'example-serviceapp-service'
-  AND @ServiceArtifactId IS NULL;
-
 SELECT @ServiceModuleInstanceId = COALESCE(
     (
         SELECT ModuleInstanceId
@@ -362,7 +280,6 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
-        ArtifactId,
         IsEnabled,
         IsAllowed,
         DesiredState,
@@ -377,7 +294,6 @@ BEGIN
         N'Primary web app instance for the example HostAppModule',
         N'ExampleServiceAppModule',
         N'webapp',
-        @ServiceWebArtifactId,
         1,
         1,
         1,
@@ -401,7 +317,6 @@ BEGIN
         Description = N'Primary web app instance for the example HostAppModule',
         RoutePath = N'ExampleServiceAppModule',
         InstallationName = N'webapp',
-        ArtifactId = @ServiceWebArtifactId,
         IsEnabled = 1,
         IsAllowed = 1,
         DesiredState = 1,
@@ -427,7 +342,6 @@ BEGIN
         Description,
         RoutePath,
         InstallationName,
-        DesiredArtifactId,
         DesiredState,
         SortOrder)
     VALUES(
@@ -439,15 +353,9 @@ BEGIN
         N'Primary web app instance for the example HostAppModule',
         N'ExampleServiceAppModule',
         N'webapp',
-        @ServiceWebArtifactId,
         1,
         400);
 END
-
-UPDATE omp.InstanceTemplateAppInstances
-SET DesiredArtifactId = @ServiceWebArtifactId
-WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
-  AND AppInstanceKey = N'example_serviceapp_webapp';
 
 SELECT @ServiceAppInstanceId = COALESCE(
     (
@@ -470,7 +378,6 @@ BEGIN
         Description,
         InstallPath,
         InstallationName,
-        ArtifactId,
         ConfigId,
         ExpectedLogin,
         ExpectedClientHostName,
@@ -489,7 +396,6 @@ BEGIN
         N'Primary service app instance for the example HostAppModule',
         N'ExampleServiceAppModule',
         N'OMP.Service.ExampleServiceAppModule',
-        @ServiceArtifactId,
         @InitialServiceConfigId,
         /*
         Example identity placeholders below are descriptive on purpose so the expected format is obvious.
@@ -516,7 +422,6 @@ BEGIN
         Description = N'Primary service app instance for the example HostAppModule',
         InstallPath = N'ExampleServiceAppModule',
         InstallationName = N'OMP.Service.ExampleServiceAppModule',
-        ArtifactId = @ServiceArtifactId,
         ConfigId = @InitialServiceConfigId,
         -- ExpectedLogin/ExpectedClientHostName/ExpectedClientIp are seeded as
         -- descriptive placeholders on INSERT only; a re-run must not overwrite
@@ -546,7 +451,6 @@ BEGIN
         Description,
         InstallPath,
         InstallationName,
-        DesiredArtifactId,
         DesiredConfigId,
         ExpectedLogin,
         ExpectedClientHostName,
@@ -562,7 +466,6 @@ BEGIN
         N'Primary service app instance for the example HostAppModule',
         N'ExampleServiceAppModule',
         N'OMP.Service.ExampleServiceAppModule',
-        @ServiceArtifactId,
         @InitialServiceConfigId,
         N'DOMAIN\\ServiceAccountName',
         N'hostname.example.com',
@@ -572,8 +475,7 @@ BEGIN
 END
 
 UPDATE omp.InstanceTemplateAppInstances
-SET DesiredArtifactId = @ServiceArtifactId,
-    InstallationName = N'OMP.Service.ExampleServiceAppModule'
+SET InstallationName = N'OMP.Service.ExampleServiceAppModule'
 WHERE InstanceTemplateModuleInstanceId = @ServiceTemplateModuleInstanceId
   AND AppInstanceKey = N'example_serviceapp_service';
 
