@@ -92,13 +92,36 @@ Use the narrowest level that gives real confidence:
 - Formatting hygiene: `git diff --check`
 - Local web visibility: publish/update the runtime, then verify the relevant localhost URL
 
-- Never run builds, publishes, or package creation in parallel when more than
-  one command can build shared OMP projects such as
-  `OpenModulePlatform.Web.Shared`. This applies to OMP web projects and
-  dependent consumer repositories that build shared OMP projects.
-- Parallel file reads and searches are fine. Build/publish/package validation
-  must be sequential: build OpenModulePlatform first when shared platform
-  projects may be involved, then build one dependent repository at a time.
+### Parallel builds across repositories
+
+**Consumer repositories may build in parallel. Do not serialise them.** This rule was the
+opposite until 2026-08-22, and the old text survived here until 2026-09-02 - if you have
+read a serialisation rule in this file before, this paragraph replaces it.
+
+The collision the old rule guarded against was real: two sibling repositories building the
+same referenced OMP projects wrote to the same `obj`/`bin` folders and hit CS2012 "file
+locked by VBCSCompiler". It is now prevented physically rather than by scheduling.
+`scripts/local-ci.ps1` in each consumer passes
+`-p:OmpIsolatedBuildRoot=<folder inside the consumer repo>`, and
+`Directory.Build.props:62-66` redirects `BaseIntermediateOutputPath`, `BaseOutputPath` and
+`MSBuildProjectExtensionsPath` under that root, so two consumer builds cannot share output
+files for Web.Shared, Web.Shared.Analyzers or EventPublisher.*. When the property is unset
+the default in-tree layout applies, so OMP's own builds are unaffected.
+
+The AI Orchestrator dropped its global `build:omp-web-shared` lock in the same change
+(`AI-Orchestrator/src/gui/jobConcurrency.ts:119` says so explicitly); each repository still
+takes its own `repo:<toplevel>` lock, so two implementations in the SAME repository remain
+serialised.
+
+What still holds:
+
+- Parallel file reads and searches are fine - unchanged.
+- Never run two builds in the same repository at the same time.
+- If a consumer build is invoked WITHOUT `-p:OmpIsolatedBuildRoot`, the old collision is
+  back. Go through `scripts/local-ci.ps1` rather than calling `dotnet build` by hand across
+  repositories.
+- Publishing and package creation write to a shared runtime root (see below) and are not
+  covered by build isolation - keep those sequential.
 
 ## Local Runtime Defaults
 

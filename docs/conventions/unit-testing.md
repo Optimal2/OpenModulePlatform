@@ -9,14 +9,21 @@
 > (`LogSearch.Tests` + `LogSearch.UiTests`), Dokumentbibliotek
 > (`tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`), ODVGateway
 > (`tests/ODVGateway.Tests`) — OpenDocViewer's CI runs `npm test` (`.github/workflows/ci.yml:71`),
-> OpenModulePlatform has grown to **7** test projects (adding `Bootstrapper.Tests`,
-> `Worker.Abstractions.Tests`, `OpenModulePlatform.UiTests`, `WorkerManager.WindowsService.Tests`;
-> re-counted 2026-08-27), and VajSkrivare has adopted CPM — so **ODVGateway is now the only .NET
-> repo in the family without a `Directory.Packages.props`**.
-> Test-package pins have also moved (e.g. `Microsoft.NET.Test.Sdk` 18.8.1/18.9.0,
-> `Xunit.SkippableFact` 1.5.61, `Microsoft.Playwright` 1.62.0). Read sections 1, 2 and 4 as the
-> July snapshot — "Tests exist: No" rows and pin versions there are historical. Section 3's
-> conventions remain the standard, extended by the two-tier UI-test standard above.
+> OpenModulePlatform has grown to **8** test projects — `Bootstrapper.Tests`,
+> `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`,
+> `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`,
+> all eight referenced from `OpenModulePlatform.slnx` (re-counted 2026-09-02; the banner said
+> seven) — and VajSkrivare has adopted CPM, so **ODVGateway is still the only .NET repo in the
+> family without a `Directory.Packages.props`**.
+>
+> **Test-package pins, re-measured 2026-09-02.** The per-repo pin values in sections 1, 2 and 4
+> are the July audit and are historical; do not read them as current. Current family-wide state:
+> `Microsoft.NET.Test.Sdk` **18.9.0 in all eight** .NET repos (ODVGateway was lifted 2026-09-01,
+> so the "18.8.1/18.9.0" split this banner used to describe no longer exists),
+> `xunit` **2.9.3** and `xunit.runner.visualstudio` **4.0.0** in all eight (see the runner
+> baseline section below), `Microsoft.Playwright` **1.62.0** in the seven repos that have a UI
+> tier. Read "Tests exist: No" rows in the audit body as July history. Section 3's conventions
+> remain the standard, extended by the two-tier UI-test standard above.
 
 This document records the unit-testing patterns found in the OMP+ODV repositories (audit date 2026-07-15; source code only — `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded from the audit).
 

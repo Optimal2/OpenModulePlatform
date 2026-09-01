@@ -66,3 +66,37 @@ For repository and release work:
 
 - `CODEX_DEVELOPMENT.md` - agent-friendly repository map, validation ladder, and local publish workflow.
 - `OMP_COMPONENT_MANIFEST.md` - repository component manifest and version-bump helper usage.
+- `CODE_SIGNING.md` - signing of the installer runner and what the gate refuses.
+- `TEST_DEBT.md` - deliberately excluded or skipped tests, with the reason for each. Kept in
+  the same commit as the change that adds an entry (see `CONTRIBUTING.md`/`AGENTS.md`).
+
+## Subdirectories
+
+Three folders under `docs/` hold material this index used to omit entirely. If you are
+looking for "how do we do X across the whole platform" or "why is it built this way",
+the answer is more likely here than in a top-level file.
+
+### `conventions/` - one standard per cross-cutting concern
+
+Eight audit documents that map the current state (file:line) and then set ONE standard per
+cross-cutting concern across all ten repositories. Use them as the template for a new module
+and as the reference when hardening an existing one.
+
+`code-style.md`, `configuration.md`, `data-access.md`, `dependency-injection.md`,
+`error-handling.md`, `http-clients.md`, `logging.md`, `unit-testing.md`.
+
+### `adr/` - architecture decision records
+
+Decisions with their reasoning and status, so a later reader can tell a deliberate design
+from an accident.
+
+- `0001-module-configid-bridge.md` - typed `ModuleConfigId` bridge with opt-in validation.
+- `0002-deploy-set-consistency-check.md` - HostAgent deploy-set consistency check.
+- `0003-webshared-private-consumer-cascade.md` - Web.Shared private-consumer cross-repo
+  cascade awareness. This is the reasoning behind Check 14.
+- `0004-channel-type-reconcile-generalization.md` - channel-type reconcile generalization.
+
+### `runbooks/` - what to do when a specific thing has gone wrong
+
+- `schema-ligger-efter-efter-import.md` - the `ConfigSchemaJson` lagging a generation behind
+  the applied module definition after an import, and how to tell it apart from a real gap.

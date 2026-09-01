@@ -21,43 +21,58 @@
 - Källkodsgranskning på djupet: se katalognoten `inspiration/webamp.md` i
   DEV-vaulten (fil:rad-referenser för embed-API, skinmotor, ljudgraf, egress).
 
-## Beslut om grundskinnet (operatör, 2026-08-31 — reviderat samma kväll)
+## Beslut om grundskinnet (operatör, 2026-08-31)
 
-SLUTLÄGE (rev 3, samma kväll): widgeten renderar operatörens WINOMP-bearbetning
-av grundskinnet — WINAMP-texterna och logotypen ersatta i Paint.NET
-(källfiler: DEV-repot, Skins/base-winomp/). Varumärkesdelarna är därmed borta;
-grafiken är en bearbetning av Nullsofts original enligt resonemanget nedan.
-Mellanläget rev 2 (helgenererat skin) är urkopplat men återskapbart.
+**Gällande läge — läs bara det här stycket om du vill veta rättighetsläget i dag.**
+Widgeten renderar `skins/winomp.wsz`: operatörens bearbetning av grundskinnet, där
+WINAMP-texterna och logotypen är ersatta i Paint.NET (källfiler i det privata DEV-repot,
+`Skins/base-winomp/`). Varumärkesdelarna är alltså borta; grafiken är i övrigt en
+bearbetning av Nullsofts original.
 
-Rev 2-läget: widgeten renderar WINOMP — vårt eget genererade skin i klassiskt
-visuellt språk (varje pixel ritad av scripts/skins/generate-omp-skins.py) — som
-default. Nullsofts inbakade grundskin renderas aldrig. Det tidigare
-mellanbeslutet nedan behålls som historik.
+**Webamps inbakade grundskin är gjort oåtkomligt i widgeten.** Tre mekanismer, alla i
+koden och verifierade 2026-09-02:
 
-REV 4 (2026-08-31, sent): det inbakade grundskinnet är gjort OÅTKOMLIGT i
-widgeten — spelaren visas först när WINOMP-skinnet bekräftat laddats (ingen
-blink av originalet vid sidladdning; laddningsfel faller till klassiska
-spelaren i stället för till originalskinnet), och menyvalet "<Base Skin>"
-saneras bort ur skinmenyn. Originalets bytes ligger kvar i bundelfilen (den
-är bit-identisk med npm-artefakten) men kan inte renderas i widgeten.
+- `initialSkin` sätts alltid till det första registrerade skinnet
+  (`OpenModulePlatform.Portal/wwwroot/js/portal-dashboard.js:2312`), och den listan
+  innehåller bara WINOMP
+  (`OpenModulePlatform.Portal/Pages/Shared/_DashboardMusicPlayerWidget.cshtml:21`).
+- Spelaren visas först när WINOMP-skinnet bekräftat laddats — ingen blink av originalet
+  vid sidladdning. Ett laddningsfel faller till den klassiska spelaren, inte till
+  originalskinnet.
+- Menyvalet `<Base Skin>` saneras bort ur skinmenyn
+  (`portal-dashboard.js:2379-2382`, exakt lövmatchning).
 
-## Tidigare mellanbeslut (ersatt)
+Originalets bytes ligger kvar i bundelfilen — den är avsiktligt bit-identisk med
+npm-artefakten (939 674 byte, verifierat 2026-09-02) — men kan inte renderas i widgeten.
 
-Widgeten renderar webamps INBYGGDA klassiska grundskin som standardutseende
-(inget initialSkin sätts). Ställningstagandet: grafiken är Nullsofts original;
-MIT-licensen täcker webamps kod, inte skinnet. Webamp-projektet har distribuerat
-det öppet sedan 2018 med uttrycklig friskrivning i sin README, utan åtgärd från
-rättighetshavarna, och skinnet ligger oavsett inbakat i bundeln — beslutet gäller
-endast om det RENDERAS. Praktisk risk bedömd som mycket låg; formellt olicensierad
-grafik. De egenproducerade OMP-skinsen finns kvar under skins/ som fullt
-rättighetsrena alternativ om hållningen behöver ändras.
+### Hur vi kom hit (historik — inte gällande läge)
+
+Ordningen nedan är kronologisk. Varje steg är ersatt av det som står under det, och det
+gällande läget står i stycket ovan. (Omdisponerat 2026-09-02: dokumentet hade tidigare ett
+avsnitt märkt "SLUTLÄGE (rev 3)" med en senare rev 4 UNDER sig, så en läsare som stannade
+vid ordet SLUTLÄGE fick fel bild av ett rättighetsläge.)
+
+1. **Rev 1 — ersatt.** Widgeten renderade webamps inbyggda klassiska grundskin (inget
+   `initialSkin` sattes). Ställningstagandet var att MIT-licensen täcker webamps kod, inte
+   skinnet; att webamp-projektet distribuerat det öppet sedan 2018 med uttrycklig
+   friskrivning utan åtgärd från rättighetshavarna; och att skinnet ändå ligger inbakat i
+   bundeln, så beslutet gällde bara om det RENDERADES. Risken bedömdes som mycket låg, men
+   grafiken var formellt olicensierad.
+2. **Rev 2 — urkopplat, återskapbart.** WINOMP som helgenererat skin: varje pixel ritad av
+   `scripts/skins/generate-omp-skins.py`. Fullt rättighetsrena pixlar. Kvar som utväg om
+   hållningen behöver ändras.
+3. **Rev 3.** Bytt till operatörens bearbetning av grundskinnet (varumärkesdelarna
+   borttagna) i stället för det helgenererade.
+4. **Rev 4 — gällande.** Grundskinnet gjort oåtkomligt i widgeten, enligt de tre
+   mekanismerna ovan.
 
 ## Kända förbehåll
 
 - Bundeln bär webamps inbakade default-skin (Nullsofts klassiska grundskin som
-  base64-CSS). Vår widget sätter ALLTID `initialSkin` till ett eget skin, så
-  det materialet renderas aldrig; det följer dock med i filen. Webamp-projektet
-  har distribuerat det öppet sedan 2018 med uttrycklig friskrivning i sin
-  README ("the Winamp name, interface ... are surely property of Nullsoft").
+  base64-CSS). Det renderas aldrig — se de tre mekanismerna under "Gällande läge" —
+  men det följer med i filen, eftersom vi medvetet håller bundeln bit-identisk med
+  npm-artefakten. Webamp-projektet har distribuerat det öppet sedan 2018 med uttrycklig
+  friskrivning i sin README ("the Winamp name, interface ... are surely property of
+  Nullsoft").
 - Uppgradering: hämta ny tarball med `npm pack webamp@<version>`, upprepa
   granskningen ovan, uppdatera sha256 här.

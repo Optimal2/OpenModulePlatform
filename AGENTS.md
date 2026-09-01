@@ -17,17 +17,35 @@ Before making changes:
 - If a change must be visible in the local IIS/runtime environment, run the matching publish or install script after the code change.
 - When a task produces repository changes, validate them, commit with a focused message, and push unless the user asks not to or the worktree contains unrelated user changes.
 
-## Cross-repository build sequencing
+## Cross-repository builds run in PARALLEL
 
-When working across more than one repository, never run builds, publishes, or
-package creation in parallel if more than one command can build shared OMP
-projects such as `OpenModulePlatform.Web.Shared`. This applies especially to
-OMP web projects and dependent consumer repositories that build shared OMP
-projects.
+**Consumer repositories may build at the same time. Do not serialise them.** This section
+said the opposite until 2026-09-02; if you have read a serialisation rule here before, this
+replaces it.
 
-Parallel file reads and searches are fine. Build/publish/package work must be
-sequential: build OpenModulePlatform first when shared platform projects may be
-involved, then build one dependent repository at a time.
+The collision it guarded against was real - two sibling repositories building the same
+referenced OMP projects shared `obj`/`bin` and hit CS2012 "file locked by VBCSCompiler" -
+but it is prevented physically now, not by scheduling. Each consumer's
+`scripts/local-ci.ps1` passes `-p:OmpIsolatedBuildRoot=<folder inside that repo>`, and
+`Directory.Build.props:62-66` redirects the intermediate and output paths under it, so two
+consumer builds cannot write the same files. Unset, the default in-tree layout applies, so
+builds of this repository are unaffected. The AI Orchestrator removed its global
+`build:omp-web-shared` job lock in the same change and now states so explicitly in
+`AI-Orchestrator/src/gui/jobConcurrency.ts:119`.
+
+What still holds:
+
+- Parallel file reads and searches are fine - unchanged.
+- Never run two builds in the SAME repository at once; each repository still takes its own
+  `repo:<toplevel>` lock in the orchestrator.
+- A consumer build invoked without `-p:OmpIsolatedBuildRoot` brings the collision back. Go
+  through `scripts/local-ci.ps1` rather than calling `dotnet build` by hand across
+  repositories.
+- Publishes and package creation write to a shared runtime root and are NOT covered by build
+  isolation - keep those sequential.
+
+Rationale and the fuller version: `docs/CODEX_DEVELOPMENT.md`, "Parallel builds across
+repositories".
 
 ## Module-definition SQL changes
 
