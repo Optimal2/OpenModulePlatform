@@ -691,11 +691,19 @@
         var hiddens = { range: hiddenOf(names.range), from: hiddenOf(names.from), to: hiddenOf(names.to) };
         if (!hiddens.range || !hiddens.from || !hiddens.to) { return; }
 
+        // Each preset may carry its resolved dates (data-from/data-to,
+        // computed by the page) so picking one also SETS the date fields and
+        // the calendar - the preset doubles as a base to adjust from.
         var presets = Array.prototype.map.call(
             container.querySelectorAll("[data-omp-daterange-preset]"),
             function (el) {
                 el.hidden = true;
-                return { key: el.getAttribute("data-omp-daterange-preset"), label: el.textContent };
+                return {
+                    key: el.getAttribute("data-omp-daterange-preset"),
+                    label: el.textContent,
+                    from: el.getAttribute("data-from") || "",
+                    to: el.getAttribute("data-to") || ""
+                };
             });
 
         // data-max="today" caps the pickable range at the current UTC day:
@@ -729,7 +737,7 @@
         var st = { container: container, hiddens: hiddens, presets: presets, field: field };
         container._ompDaterange = st;
 
-        function applyAndClose(rangeValue, fromValue, toValue) {
+        function applyChoice(rangeValue, fromValue, toValue, keepOpen) {
             var changed = hiddens.range.value !== rangeValue
                 || hiddens.from.value !== fromValue
                 || hiddens.to.value !== toValue;
@@ -737,7 +745,7 @@
             hiddens.from.value = fromValue;
             hiddens.to.value = toValue;
             field.textContent = currentLabel();
-            closeRangePanel();
+            if (!keepOpen) { closeRangePanel(); }
             if (changed) {
                 hiddens.range.dispatchEvent(new Event("change", { bubbles: true }));
                 container.dispatchEvent(new CustomEvent("omp-daterange-change", { bubbles: true }));
@@ -759,7 +767,27 @@
                 button.className = "omp-daterange-panel__preset";
                 if (preset.key === hiddens.range.value) { button.classList.add("omp-daterange-panel__preset--active"); }
                 button.textContent = preset.label;
-                button.addEventListener("click", function () { applyAndClose(preset.key, "", ""); });
+                // A preset applies right away (the page refreshes softly
+                // behind the popup) but keeps the popup open with its
+                // resolved dates SET in the fields and calendar - the
+                // preset doubles as a base: nudge an end, then apply as a
+                // custom period. Escape or a click outside just closes.
+                button.addEventListener("click", function () {
+                    setFieldDate(fromInput, preset.from);
+                    setFieldDate(toInput, preset.to);
+                    cal.pendingStart = null;
+                    cal.hoverIso = null;
+                    var anchor = preset.to || preset.from;
+                    if (/^\d{4}-\d{2}/.test(anchor)) {
+                        cal.year = +anchor.slice(0, 4);
+                        cal.month = +anchor.slice(5, 7);
+                    }
+                    Array.prototype.forEach.call(rail.children, function (other) {
+                        other.classList.toggle("omp-daterange-panel__preset--active", other === button);
+                    });
+                    renderRangeCalendar();
+                    applyChoice(preset.key, "", "", true);
+                });
                 rail.appendChild(button);
             });
             rangePanel.appendChild(rail);
@@ -786,15 +814,21 @@
                 enhance(input);
                 return input;
             };
-            var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, hiddens.from.value);
-            var toInput = makeRow(container.getAttribute("data-to-text") || names.to, hiddens.to.value);
+            // With a preset active the fields open pre-set to its resolved
+            // dates (the hidden inputs stay empty - the preset stays a
+            // rolling period until the user applies an adjustment).
+            var activePreset = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0] || null;
+            var seedFrom = hiddens.from.value || (activePreset ? activePreset.from : "");
+            var seedTo = hiddens.to.value || (activePreset ? activePreset.to : "");
+            var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, seedFrom);
+            var toInput = makeRow(container.getAttribute("data-to-text") || names.to, seedTo);
 
             // --- shared range calendar: click start, click end ------------
             var calHost = document.createElement("div");
             calHost.className = "omp-datetime-panel__calendar";
             fields.appendChild(calHost);
 
-            var initialIso = hiddens.from.value || hiddens.to.value;
+            var initialIso = seedFrom || seedTo;
             var initial = /^\d{4}-\d{2}-\d{2}/.test(initialIso || "")
                 ? { year: +initialIso.slice(0, 4), month: +initialIso.slice(5, 7) }
                 : { year: new Date().getUTCFullYear(), month: new Date().getUTCMonth() + 1 };
@@ -990,7 +1024,7 @@
                 var fromValue = state(fromInput).hidden.value;
                 var toValue = state(toInput).hidden.value;
                 if (fromValue === "" && toValue === "" && presets.length > 0) {
-                    applyAndClose(presets[0].key, "", "");
+                    applyChoice(presets[0].key, "", "", false);
                 } else {
                     // Reversed bounds are swapped and typed future dates
                     // clamp to the cap, rather than rejected - the server
@@ -1003,7 +1037,7 @@
                     if (fromValue !== "" && toValue !== "" && fromValue > toValue) {
                         var swap = fromValue; fromValue = toValue; toValue = swap;
                     }
-                    applyAndClose("custom", fromValue, toValue);
+                    applyChoice("custom", fromValue, toValue, false);
                 }
             });
             footer.appendChild(apply);
