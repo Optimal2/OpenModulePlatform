@@ -806,7 +806,10 @@
                 var input = document.createElement("input");
                 input.setAttribute("data-omp-datetime", "date");
                 // The shared range calendar below serves both fields; the
-                // fields keep the mask and quick-clear only.
+                // fields keep the mask and quick-clear only. They dress in
+                // the host's input class (same one the trigger field wears)
+                // so they match the page's other fields.
+                input.className = container.getAttribute("data-field-class") || "";
                 input.setAttribute("data-omp-datetime-no-toggle", "");
                 input.value = value;
                 row.appendChild(input);

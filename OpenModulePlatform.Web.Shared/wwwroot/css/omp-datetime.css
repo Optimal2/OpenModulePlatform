@@ -436,6 +436,31 @@
     width: 148px;
 }
 
+/* Base look for the embedded fields, at zero specificity so a host input
+   class handed in via data-field-class always wins. */
+:where(.omp-daterange-panel__row) :where(.omp-datetime__input) {
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 7px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    padding-left: 9px;
+    background: var(--surface, #fff);
+    color: var(--text, #1d2433);
+    font: inherit;
+}
+
+:where(.omp-daterange-panel__row) :where(.omp-datetime__input):focus {
+    outline: none;
+    border-color: var(--link, #0b57d0);
+}
+
+/* The shared calendar centers in the fields column instead of hugging the
+   left edge under the wider field row. */
+.omp-daterange-panel__fields > .omp-datetime-panel__calendar {
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .omp-datetime--no-toggle .omp-datetime__input {
     padding-right: 30px;
 }
