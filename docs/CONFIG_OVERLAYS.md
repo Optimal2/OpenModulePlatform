@@ -59,7 +59,6 @@ customer-specific generation scripts decide which values are meaningful.
   "appKey": "opendocviewer_webapp",
   "packageType": "web-app",
   "targetName": "opendocviewer",
-  "artifactVersion": "2.0.3",
   "configurationFiles": [
     {
       "relativePath": "odv.site.config.js",
@@ -76,6 +75,16 @@ The selectors are intentionally optional except for `overlayKey`,
 - If `appKey` is omitted, it can match any app in the selected module scope.
 - If `packageType`, `targetName`, or `artifactVersion` are omitted, those
   fields do not constrain the match.
+
+**Leave `artifactVersion` out unless the overlay is deliberately tied to one
+artifact build.** A pinned overlay matches that version only and silently stops
+applying at the next artifact upgrade, and the next deployment then falls back to
+the artifact's own configuration file (or, for apps that ship no configuration
+file, to the HostAgent's built-in defaults). Measured on a customer test host in
+August 2026: an Auth overlay pinned to one version lost its OIDC section at the
+following upgrade. An environment overlay should describe the host, not the
+build - key it on `hostKey`, `moduleKey`, `appKey`, `packageType` and
+`targetName`, and bump `overlayVersion` when its content changes.
 
 Configuration files are stored in `omp.ConfigOverlayConfigurationFiles`.
 HostAgent loads artifact-owned configuration first, then matching overlay files.
