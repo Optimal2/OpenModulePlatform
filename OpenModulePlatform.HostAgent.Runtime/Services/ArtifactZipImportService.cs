@@ -811,11 +811,39 @@ public sealed class ArtifactZipImportService
                 try
                 {
                     var definitionResult = await ExecuteModuleDefinitionSqlAsync(definitionContext, cancellationToken);
+
+                    // CLOSES AN ORDERING GAP, not a bug in auto-apply.
+                    //
+                    // Auto-apply fires while the artifacts above are registered, and it UPDATES
+                    // rows -- it never creates them. The definition SQL runs after that (which is
+                    // deliberate, see the long comment further up) and is where a module's app
+                    // instances and instance-template rows are CREATED. Those rows therefore miss
+                    // the pass that was supposed to point them at an artifact, and their pointer
+                    // stays NULL.
+                    //
+                    // The consumer modules hid this by seeding the pointers from their own SQL.
+                    // The ownership guard forbids that -- "artifact selection is owned by artifact
+                    // auto-apply" -- and it is right to, but the sentence was only true for rows
+                    // that already existed. Re-applying here makes it true for the rows the
+                    // definition just created, so the guard and the runtime finally agree.
+                    //
+                    // Cheap and idempotent: it only touches rows whose pointer differs from the
+                    // newest hash-bearing artifact, so a second import changes nothing.
+                    var reapplied = await _repository.ApplyLatestModuleArtifactsAsync(
+                        definitionResult.ModuleKey,
+                        cancellationToken);
+                    var reappliedNote = reapplied.TemplateAppRowsUpdated
+                        + reapplied.AppInstanceRowsUpdated
+                        + reapplied.WorkerInstanceRowsUpdated > 0
+                        ? $" Artifact pointers filled after SQL: {reapplied.TemplateAppRowsUpdated} template, "
+                          + $"{reapplied.AppInstanceRowsUpdated} app instance, {reapplied.WorkerInstanceRowsUpdated} worker."
+                        : string.Empty;
+
                     itemResults.Add(new UniversalHostAgentImportItemResult(
                         "module-definition",
                         item.Path,
                         definitionResult.Applied ? "Applied" : "Stored",
-                        $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}; definition SQL scripts executed: {definitionResult.SqlRepairCount}."));
+                        $"Module {definitionResult.ModuleKey} {definitionResult.DefinitionVersion}; artifacts: {artifactResults.Count}; definition SQL scripts executed: {definitionResult.SqlRepairCount}.{reappliedNote}"));
                 }
                 catch (Exception ex) when (IsExpectedImportFailure(ex))
                 {

@@ -1680,6 +1680,90 @@ SELECT @@ROWCOUNT;";
             : new ArtifactConfigurationCarryForwardResult(sourceVersion, items);
     }
 
+    /// <summary>
+    /// Re-run artifact auto-apply for every app of a module, using each app's newest enabled
+    /// artifact that carries a content hash.
+    /// </summary>
+    /// <remarks>
+    /// Exists because of an ORDERING gap, not because auto-apply was wrong.
+    ///
+    /// A universal import registers a module's artifacts FIRST and runs the module definition's
+    /// own SQL afterwards (deliberately -- see the comment in ArtifactZipImportService: a seed
+    /// that ran before registration recorded the previous import's version and never re-ran).
+    /// Auto-apply fires during artifact registration and UPDATES rows; it does not create them.
+    /// So any app instance or instance-template row that the definition SQL creates AFTERWARDS
+    /// has already missed that pass, and its artifact pointer stays NULL.
+    ///
+    /// Until 2026-09-02 the consumer modules papered over this by seeding the pointers from
+    /// their own SQL. The ownership guard forbids exactly that ("artifact selection is owned by
+    /// artifact auto-apply"), and it is right to -- but the claim was only true for rows that
+    /// already existed. This method makes it true for the rows the definition just created.
+    ///
+    /// Reuses <see cref="ApplyImportedArtifactToMatchingApplicationsAsync"/> per artifact rather
+    /// than duplicating its SQL, so the two paths cannot drift. That method already treats NULL
+    /// as "differs" (ISNULL(..., -1) &lt;&gt; @artifactId), so an empty pointer is filled and a
+    /// pointer that already matches costs nothing.
+    ///
+    /// Artifacts without a Sha256 are skipped on purpose: those are the ghost rows the artifact
+    /// ownership campaign exists to stop pointing production at.
+    /// </remarks>
+    public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyLatestModuleArtifactsAsync(
+        string moduleKey,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(moduleKey))
+        {
+            return (0, 0, 0);
+        }
+
+        var artifactIds = new List<int>();
+        await using (var conn = _db.Create())
+        {
+            await conn.OpenAsync(ct);
+            await using var command = conn.CreateCommand();
+            command.CommandText = @"
+SELECT newest.ArtifactId
+FROM omp.Apps a
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+CROSS APPLY
+(
+    SELECT TOP (1) ar.ArtifactId
+    FROM omp.Artifacts ar
+    WHERE ar.AppId = a.AppId
+      AND ar.IsEnabled = 1
+      AND NULLIF(LTRIM(RTRIM(ar.Sha256)), N'') IS NOT NULL
+    ORDER BY
+        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 4)), 0) DESC,
+        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 3)), 0) DESC,
+        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 2)), 0) DESC,
+        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 1)), 0) DESC,
+        ar.Version DESC,
+        ar.ArtifactId DESC
+) AS newest
+WHERE m.ModuleKey = @moduleKey;";
+            command.Parameters.Add("@moduleKey", System.Data.SqlDbType.NVarChar, 100).Value = moduleKey;
+
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                artifactIds.Add(reader.GetInt32(0));
+            }
+        }
+
+        var templates = 0;
+        var appInstances = 0;
+        var workerInstances = 0;
+        foreach (var artifactId in artifactIds)
+        {
+            var applied = await ApplyImportedArtifactToMatchingApplicationsAsync(artifactId, ct);
+            templates += applied.TemplateAppRowsUpdated;
+            appInstances += applied.AppInstanceRowsUpdated;
+            workerInstances += applied.WorkerInstanceRowsUpdated;
+        }
+
+        return (templates, appInstances, workerInstances);
+    }
+
     public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyImportedArtifactToMatchingApplicationsAsync(
         int artifactId,
         CancellationToken ct)
