@@ -80,11 +80,27 @@ $ErrorActionPreference = 'Stop'
 $sharedScripts = @('scripts/omp/bump-version.ps1')
 
 function Get-FileSha256 {
+    <#
+        Hashar innehallet med radslutsstilen normaliserad bort.
+
+        En ra byte-hash sag CRLF och LF som olika filer, och det ar fel har: sex
+        av konsumentrepona har lokal core.autocrlf=true medan plattformens egna
+        utcheckningar kor utan, sa samma git-innehall hamnar med olika
+        radslut pa disk. Det gav ett PERMANENT falskt driftstopp med
+        instruktionen "kopiera den kanoniska filen" - fast filen redan var
+        identisk. Uppmatt i granskning 2026-09-02.
+
+        En SAKNAD eller EXTRA avslutande radbrytning ar daremot fortfarande en
+        skillnad. Det ar innehall, inte stil.
+    #>
     param([Parameter(Mandatory = $true)][string]$Path)
+
+    $text = [IO.File]::ReadAllText($Path)
+    $normaliserad = $text.Replace("`r`n", "`n").Replace("`r", "`n")
 
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
-        $bytes = [IO.File]::ReadAllBytes($Path)
+        $bytes = [Text.Encoding]::UTF8.GetBytes($normaliserad)
         return ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
     }
     finally {
@@ -111,7 +127,12 @@ if ([System.IO.Path]::GetFullPath($platformRoot) -eq $consumerRoot) {
 if (-not (Test-Path -LiteralPath $platformRoot -PathType Container)) {
     $message = "Shared scripts: NOT VERIFIED - the OpenModulePlatform checkout was not found at '$platformRoot', so the shared scripts could not be compared against their canonical copies. This is expected in CI, which checks out one repository at a time."
     if ($Strict) {
-        throw $message + ' -Strict was passed, so an unverifiable check is a failure.'
+        # Exit code here too, for the same reason as the drift path below: the
+        # callers read $LASTEXITCODE, and a throw would kill them before they
+        # reach their own error branch.
+        Write-Host $message
+        Write-Host '-Strict was passed, so an unverifiable check is a failure.'
+        exit 1
     }
 
     # Visible, not silent: an unmeasured check must never read as a passing one.
@@ -146,10 +167,24 @@ foreach ($relative in $sharedScripts) {
 }
 
 if ($drift.Count -gt 0) {
-    throw (
-        "Shared script drift detected against '$platformRoot':" + [Environment]::NewLine +
-        ($drift -join [Environment]::NewLine) + [Environment]::NewLine +
-        'Copy the canonical file(s) from the platform repository into this one and commit them in the same change. ' +
-        'A stale copy looks green locally and only surfaces when a bump behaves differently here than in a neighbouring repository - typically mid-incident.'
-    )
+    # Exit code, not throw. A throw kills the calling validator before it reaches
+    # its own `if ($LASTEXITCODE -ne 0)` branch, so the wired error handling was
+    # dead code and the validation summary never printed. The run still went red
+    # - by crashing - which is why the original proof looked convincing. Measured
+    # in review 2026-09-02.
+    Write-Host "Shared script drift detected against '$platformRoot':"
+    foreach ($rad in $drift) {
+        Write-Host $rad
+    }
+    Write-Host 'Copy the canonical file(s) from the platform repository into this one and commit them in the same change.'
+    Write-Host 'A stale copy looks green locally and only surfaces when a bump behaves differently here than in a neighbouring repository - typically mid-incident.'
+    exit 1
 }
+
+# An EXPLICIT success exit. Without it an in-process `& script` call leaves
+# $LASTEXITCODE holding whatever the last NATIVE command set - and the callers
+# read exactly that variable. In six repositories Check 14 runs immediately
+# before and its own `exit 0` masked the problem; in ODVGateway and
+# OpenDocViewer, which have no Check 14, a synced repository was reported RED
+# whenever an earlier git call had left 128 behind. Measured in review 2026-09-02.
+exit 0

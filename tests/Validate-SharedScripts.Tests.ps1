@@ -54,19 +54,29 @@ function New-Pair {
 }
 
 function Invoke-Guard {
+    <#
+        Kor vakten som ETT EGET SKRIPT och mater dess SLUTKOD.
+
+        Kontraktet ar exitkod, inte throw. Ett throw dodade den anropande
+        validatorn innan den nadde sin egen felgren, sa den kopplade
+        felhanteringen var dod kod - korningen blev rod genom att KRASCHA, vilket
+        fick det ursprungliga beviset att se overtygande ut. Uppmatt i granskning
+        2026-09-02. Harnesset maste darfor mata slutkoden, annars provar testet
+        fortfarande fel sak.
+
+        3>&1 fangar WARNING-strommen, dar noten om en omatbar kontroll skrivs.
+    #>
     param([hashtable] $Pair, [switch] $Strict)
 
-    try {
-        # 3>&1 fangar WARNING-strommen. Utan den missas just det som testet
-        # "en omatbar kontroll ska SYNAS" ska bevisa - noten skrivs med
-        # Write-Warning, som inte gar via stderr.
-        $out = & $script:GuardScript -ConsumerRepositoryRoot $Pair.Consumer `
-            -PlatformRepositoryRoot $Pair.Platform -Strict:$Strict 3>&1 2>&1 | Out-String
-        return @{ Threw = $false; Output = $out }
-    }
-    catch {
-        return @{ Threw = $true; Output = $_.Exception.Message }
-    }
+    $argsLista = @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script:GuardScript,
+        '-ConsumerRepositoryRoot', $Pair.Consumer,
+        '-PlatformRepositoryRoot', $Pair.Platform
+    )
+    if ($Strict) { $argsLista += '-Strict' }
+
+    $out = & powershell.exe @argsLista 2>&1 | Out-String
+    return @{ Threw = ($LASTEXITCODE -ne 0); Kod = $LASTEXITCODE; Output = $out }
 }
 
 function Remove-Pair {
@@ -157,6 +167,64 @@ Describe 'validate-shared-scripts: cannot-measure is visible, never silently gre
             $result = Invoke-Guard -Pair $pair
             $result.Threw | Should Be $true
             ($result.Output -match 'missing|saknas') | Should Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+}
+
+Describe 'validate-shared-scripts: exitkoden ar kontraktet' {
+    It 'Avslutar med 0 i synk, sa anroparen inte laser ett stale LASTEXITCODE' {
+        # Utan ett uttryckligt exit 0 lamnade vakten $LASTEXITCODE fran senaste
+        # NATIVE-kommando, och anroparna laser exakt den variabeln. I sex repon
+        # maskerades det av att Check 14 kor precis fore och nollstaller; i de tva
+        # utan Check 14 rapporterades ett SYNKAT repo som rott.
+        $pair = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Avslutar med 1 vid drift, sa den kopplade felgrenen faktiskt nas' {
+        $pair = New-Pair -ConsumerBody 'stale content' -PlatformBody 'canonical content'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should Be 1
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Avslutar med 0 nar grannen saknas utan -Strict' {
+        $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformRoot
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+}
+
+Describe 'validate-shared-scripts: radslutsstil ar inte drift' {
+    It 'Behandlar CRLF och LF som samma innehall' {
+        # Sex konsumenter har lokal core.autocrlf=true medan plattformens egna
+        # utcheckningar kor utan, sa samma git-innehall hamnar med olika radslut
+        # pa disk. En ra byte-hash gav da ett PERMANENT falskt driftstopp med
+        # instruktionen "kopiera den kanoniska filen" - fast den redan var
+        # identisk. Uppmatt i granskning 2026-09-02.
+        $pair = New-Pair -ConsumerBody "rad ett`r`nrad tva`r`n" -PlatformBody "rad ett`nrad tva`n"
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Behandlar en SAKNAD avslutande radbrytning som skillnad, inte som stil' {
+        $pair = New-Pair -ConsumerBody "rad ett`n" -PlatformBody 'rad ett'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should Be 1
         }
         finally { Remove-Pair -Pair $pair }
     }
