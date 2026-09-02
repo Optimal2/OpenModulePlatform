@@ -957,9 +957,34 @@
 
             var footer = document.createElement("div");
             footer.className = "omp-datetime-panel__footer";
+            // Bottom-left: jump the calendar view back to the current month,
+            // and clear both dates for a fresh pick (each field also has its
+            // own quick-clear X for emptying just one end).
+            var todayButton = document.createElement("button");
+            todayButton.type = "button";
+            todayButton.className = "omp-datetime-panel__action";
+            todayButton.textContent = texts.today;
+            todayButton.addEventListener("click", function () {
+                var current = new Date();
+                cal.year = current.getUTCFullYear();
+                cal.month = current.getUTCMonth() + 1;
+                renderRangeCalendar();
+            });
+            var clearButton = document.createElement("button");
+            clearButton.type = "button";
+            clearButton.className = "omp-datetime-panel__action";
+            clearButton.textContent = texts.clear;
+            clearButton.addEventListener("click", function () {
+                setFieldDate(fromInput, "");
+                setFieldDate(toInput, "");
+                cal.pendingStart = null;
+                cal.hoverIso = null;
+                renderRangeCalendar();
+            });
+            footer.append(todayButton, clearButton);
             var apply = document.createElement("button");
             apply.type = "button";
-            apply.className = "omp-datetime-panel__action omp-datetime-panel__action--on";
+            apply.className = "omp-datetime-panel__action omp-datetime-panel__action--on omp-daterange-panel__apply";
             apply.textContent = container.getAttribute("data-apply-text") || "OK";
             apply.addEventListener("click", function () {
                 var fromValue = state(fromInput).hidden.value;

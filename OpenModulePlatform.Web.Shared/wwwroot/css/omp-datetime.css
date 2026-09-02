@@ -453,7 +453,12 @@
 }
 
 .omp-daterange-panel__fields .omp-datetime-panel__footer {
-    justify-content: flex-end;
+    justify-content: flex-start;
+}
+
+/* Today and Clear sit bottom-left; Apply alone at the right edge. */
+.omp-daterange-panel__apply {
+    margin-left: auto;
 }
 
 /* Days past the container's data-max cap: visible for calendar context but
