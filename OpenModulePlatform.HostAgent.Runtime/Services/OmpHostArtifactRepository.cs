@@ -5960,8 +5960,28 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
     {
         var qualifiedTable = BuildOmpQualifiedIdentifierPattern(tableName);
         const string top = @"(?:TOP\s*(?:\([^)]*\)|\d+)(?:\s+PERCENT)?\s+)?";
-        return Regex.IsMatch(sqlText, $@"(?is)\bDELETE\s+{top}(?:FROM\s+)?{qualifiedTable}")
-            || ContainsModuleDefinitionCteWrite(sqlText, qualifiedTable, columnPattern: null);
+        if (Regex.IsMatch(sqlText, $@"(?is)\bDELETE\s+{top}(?:FROM\s+)?{qualifiedTable}"))
+        {
+            return true;
+        }
+
+        // DELETE <alias> FROM ... <table> [AS] <alias> — the alias form the UPDATE side already
+        // guards. Without it `DELETE a FROM omp.Artifacts AS a WHERE a.ArtifactId = 1` passed:
+        // the table never sits directly after DELETE or FROM, so the pattern above cannot see it.
+        // Binding the deleted alias to the qualified table also covers the JOIN form
+        // (`DELETE a FROM omp.Artifacts a JOIN ...`), which is why the table is matched anywhere
+        // inside the FROM clause rather than only at its head.
+        // Verified ALLOWED on all three mirrors before this change (independent review 2026-09-02).
+        if (Regex.IsMatch(
+            sqlText,
+            $@"(?is)\bDELETE\s+{top}(?<alias>\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\s+FROM\b"
+            + $@"(?:(?!;|^\s*GO\b).)*?{qualifiedTable}(?:\s+WITH\s*\([^)]*\))?\s+(?:AS\s+)?"
+            + @"\k<alias>(?![A-Za-z0-9_])"))
+        {
+            return true;
+        }
+
+        return ContainsModuleDefinitionCteWrite(sqlText, qualifiedTable, columnPattern: null);
     }
 
     // Matches a CTE whose body reads the given table and that is the target of a
@@ -5972,7 +5992,7 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
         const string alias = @"(?:\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)";
         foreach (Match cte in Regex.Matches(
             sqlText,
-            $@"(?is)\b(?<name>{alias})\s+AS\s*\((?<body>[^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:UPDATE\s+\k<name>(?![A-Za-z0-9_])\s+SET\b|DELETE\s+FROM\s+\k<name>(?![A-Za-z0-9_]))"))
+            $@"(?is)\b(?<name>{alias})\s+AS\s*\((?<body>[^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:UPDATE\s+\k<name>(?![A-Za-z0-9_])\s+SET\b|DELETE\s+(?:FROM\s+)?\k<name>(?![A-Za-z0-9_]))"))
         {
             if (!Regex.IsMatch(cte.Groups["body"].Value, qualifiedTable))
             {

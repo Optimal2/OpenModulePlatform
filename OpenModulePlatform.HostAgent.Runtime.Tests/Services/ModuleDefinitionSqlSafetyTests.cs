@@ -24,6 +24,16 @@ public sealed class ModuleDefinitionSqlSafetyTests
         { "DELETE FROM omp.Artifacts WHERE Version = N'1.0';", ArtifactWriteMessage },
         { "DELETE omp.Artifacts WHERE ArtifactId = 1;", ArtifactWriteMessage },
         { ";WITH c AS (SELECT ArtifactId FROM omp.Artifacts) DELETE FROM c WHERE ArtifactId = 1;", ArtifactWriteMessage },
+        // Family 9, second round (independent review 2026-09-02 ran these ALLOWED against the
+        // first hardening pass — a fix against the test, not against the hole):
+        // the DELETE guard required the table right after DELETE/FROM, so the alias form slipped
+        // through, and the CTE guard demanded DELETE **FROM** <cte> while `DELETE <cte>` is
+        // equally valid T-SQL and writes the base table.
+        { "DELETE a FROM omp.Artifacts AS a WHERE a.ArtifactId = 1;", ArtifactWriteMessage },
+        { "DELETE a FROM omp.Artifacts a WHERE 1 = 1;", ArtifactWriteMessage },
+        { "DELETE a FROM omp.Artifacts a JOIN omp.AppInstances i ON i.ArtifactId = a.ArtifactId WHERE 1 = 1;", ArtifactWriteMessage },
+        { "DELETE TOP (1) a FROM omp.Artifacts a WHERE 1 = 1;", ArtifactWriteMessage },
+        { ";WITH c AS (SELECT ArtifactId FROM omp.Artifacts) DELETE c WHERE 1 = 1;", ArtifactWriteMessage },
         // Mirror divergence: GO with a repeat count must still split batches everywhere.
         { "CREATE PROCEDURE omp.GhostProc AS BEGIN SELECT 1; END\nGO 2\nINSERT INTO omp.Artifacts(AppId) VALUES(1);", ArtifactWriteMessage },
         // Family 5: positional INSERT has no column list to scan.
