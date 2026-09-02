@@ -2560,7 +2560,7 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
 
             // WHEN NOT MATCHED THEN INSERT VALUES(...) has no column list to scan and can
             // target the owned column by ordinal position.
-            if (Regex.IsMatch(body, @"(?is)\bINSERT\s*(?!\()"))
+            if (Regex.IsMatch(body, @"(?is)\bINSERT\b(?!\s*\()"))
             {
                 return true;
             }

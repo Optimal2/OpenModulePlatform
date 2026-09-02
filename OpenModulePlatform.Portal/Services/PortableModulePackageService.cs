@@ -1363,6 +1363,35 @@ public sealed class PortableModulePackageService
             }
         }
 
+        // Rows the definition's SQL just created missed the per-artifact auto-apply above
+        // (it ran before the SQL). Fill them from the newest hash-bearing artifact per app,
+        // the same way the HostAgent folder import does after its SQL phase. The SQL has
+        // already committed, so a failure here is reported, never allowed to fail the import.
+        if (definitionSqlError is null && !definitionSqlDeferred)
+        {
+            try
+            {
+                var reapplied = await _repo.ApplyLatestModuleArtifactsAsync(definition.ModuleKey, ct);
+                if (reapplied.TotalRowsUpdated > 0)
+                {
+                    warnings.Add(
+                        $"Artifact pointers filled after SQL for module '{definition.ModuleKey}': "
+                        + $"{reapplied.TemplateAppRowsUpdated} template, {reapplied.AppInstanceRowsUpdated} app instance, "
+                        + $"{reapplied.WorkerInstanceRowsUpdated} worker, {reapplied.HostAgentDesiredRowsUpdated} host agent.");
+                }
+            }
+            catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+            {
+                warnings.Add(
+                    $"Artifact pointer re-apply after SQL failed for module '{definition.ModuleKey}': {ex.Message} "
+                    + "The next import repeats it.");
+                _logger.LogWarning(
+                    ex,
+                    "Artifact pointer re-apply failed after module-definition SQL; the definition SQL itself succeeded. Module={ModuleKey}",
+                    definition.ModuleKey);
+            }
+        }
+
         return new PortableModulePackageImportResult(
             definition.ModuleKey,
             definition.DefinitionVersion,

@@ -101,7 +101,15 @@ in the bootstrapper, HostAgent, and Portal
 mutating `omp.Artifacts` and from writing the artifact pointer columns
 `omp.AppInstances.ArtifactId` and `omp.InstanceTemplateAppInstances.DesiredArtifactId`;
 artifact registration is owned by the artifact import path and artifact
-selection by artifact auto-apply.
+selection by artifact auto-apply. Module SQL may therefore create app-instance and
+template rows without a pointer; the import re-runs auto-apply for the module after
+the SQL phase and fills them (HostAgent folder import and portal package import).
+Note the order differs per path: those two imports register artifacts BEFORE the
+module SQL, while the Bootstrapper's first install runs the module SQL FIRST and
+registers afterwards - so artifact lookups in module SQL must tolerate NULL on a
+fresh database, and anything that needs an `ArtifactId` (for example
+`omp.HostArtifactRequirements`, which the platform does not seed) must be gated on
+`IS NOT NULL` and filled by a later run of the script.
 
 **This guard is early validation, not a security boundary.** It exists to give
 module authors a clear error at import/validation time. It is a scanner over

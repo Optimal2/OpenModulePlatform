@@ -117,4 +117,48 @@ GO
 
         Assert.Null(Program.ValidateSafeModuleDefinitionSql(sql));
     }
+
+    /// <summary>
+    /// Red before 2026-09-02. The MERGE branch's positional-INSERT probe was
+    /// <c>\bINSERT\s*(?!\()</c>; <c>\s*</c> backtracks to zero width, so ANY whitespace
+    /// between INSERT and the column list read as "no column list". IbsPackager and iKrock2
+    /// put <c>INSERT</c> and <c>(</c> on separate lines and were rejected for a pointer write
+    /// they no longer contain; OpenDocViewer passed only because it writes <c>INSERT(</c>.
+    /// The column list itself was never the problem - the previous probe caught the owned
+    /// column first, which is why this never surfaced while the scripts still wrote it.
+    /// </summary>
+    [Fact]
+    public void BootstrapperValidator_AllowsMergeInsertWhoseColumnListStartsOnTheNextLine()
+    {
+        const string sql = """
+MERGE omp.AppInstances AS target
+USING (SELECT 1 AS AppId, N'x' AS DisplayName) AS source
+ON target.AppId = source.AppId
+WHEN NOT MATCHED THEN
+    INSERT
+    (
+        AppId, DisplayName
+    )
+    VALUES (source.AppId, source.DisplayName);
+""";
+
+        Assert.Null(Program.ValidateSafeModuleDefinitionSql(sql));
+    }
+
+    /// <summary>The fix must not open the hole the probe exists for.</summary>
+    [Fact]
+    public void BootstrapperValidator_StillBlocksMergePositionalInsert()
+    {
+        const string sql = """
+MERGE omp.AppInstances AS target
+USING (SELECT 1 AS AppId) AS source
+ON target.AppId = source.AppId
+WHEN NOT MATCHED THEN
+    INSERT VALUES (NEWID(), 1, NULL);
+""";
+
+        Assert.Equal(
+            "Module definition SQL must not write omp.InstanceTemplateAppInstances.DesiredArtifactId or omp.AppInstances.ArtifactId; artifact selection is owned by artifact auto-apply.",
+            Program.ValidateSafeModuleDefinitionSql(sql));
+    }
 }

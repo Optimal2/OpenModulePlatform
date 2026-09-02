@@ -1716,44 +1716,42 @@ SELECT @@ROWCOUNT;";
             return (0, 0, 0);
         }
 
-        var artifactIds = new List<int>();
+        // "Newest" is decided in C# with ArtifactVersionComparer, the comparer the import
+        // path itself uses to pick activation keys. A PARSENAME-based ORDER BY ranks
+        // "1.2.3-beta" below "1.2.1" (the suffixed part converts to NULL -> 0) while the
+        // comparer strips the suffix and ranks it above, so SQL and the import could have
+        // disagreed on the winner whenever suffixed and plain versions coexist for an app.
+        var candidates = new List<(int AppId, int ArtifactId, string Version)>();
         await using (var conn = _db.Create())
         {
             await conn.OpenAsync(ct);
             await using var command = conn.CreateCommand();
             command.CommandText = @"
-SELECT newest.ArtifactId
-FROM omp.Apps a
+SELECT ar.AppId, ar.ArtifactId, ar.Version
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
 INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
-CROSS APPLY
-(
-    SELECT TOP (1) ar.ArtifactId
-    FROM omp.Artifacts ar
-    WHERE ar.AppId = a.AppId
-      AND ar.IsEnabled = 1
-      AND NULLIF(LTRIM(RTRIM(ar.Sha256)), N'') IS NOT NULL
-    ORDER BY
-        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 4)), 0) DESC,
-        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 3)), 0) DESC,
-        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 2)), 0) DESC,
-        COALESCE(TRY_CONVERT(int, PARSENAME(ar.Version, 1)), 0) DESC,
-        ar.Version DESC,
-        ar.ArtifactId DESC
-) AS newest
-WHERE m.ModuleKey = @moduleKey;";
+WHERE m.ModuleKey = @moduleKey
+  AND ar.IsEnabled = 1
+  AND NULLIF(LTRIM(RTRIM(ar.Sha256)), N'') IS NOT NULL;";
             command.Parameters.Add("@moduleKey", System.Data.SqlDbType.NVarChar, 100).Value = moduleKey;
 
             await using var reader = await command.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
             {
-                artifactIds.Add(reader.GetInt32(0));
+                candidates.Add((
+                    reader.GetInt32(0),
+                    reader.GetInt32(1),
+                    reader.IsDBNull(2) ? string.Empty : reader.GetString(2)));
             }
         }
+
+        var newestPerApp = SelectNewestArtifactPerApp(candidates);
 
         var templates = 0;
         var appInstances = 0;
         var workerInstances = 0;
-        foreach (var artifactId in artifactIds)
+        foreach (var artifactId in newestPerApp)
         {
             var applied = await ApplyImportedArtifactToMatchingApplicationsAsync(artifactId, ct);
             templates += applied.TemplateAppRowsUpdated;
@@ -1763,6 +1761,21 @@ WHERE m.ModuleKey = @moduleKey;";
 
         return (templates, appInstances, workerInstances);
     }
+
+    /// <summary>
+    /// Per app, the artifact that wins under ArtifactVersionComparer (ties go to the higher
+    /// ArtifactId). Kept apart from the query so the choice is testable without a database.
+    /// </summary>
+    internal static IReadOnlyList<int> SelectNewestArtifactPerApp(
+        IEnumerable<(int AppId, int ArtifactId, string Version)> candidates)
+        => candidates
+            .GroupBy(static candidate => candidate.AppId)
+            .Select(static group => group
+                .OrderByDescending(static candidate => candidate.Version, ArtifactVersionComparer.Instance)
+                .ThenByDescending(static candidate => candidate.ArtifactId)
+                .First()
+                .ArtifactId)
+            .ToList();
 
     public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyImportedArtifactToMatchingApplicationsAsync(
         int artifactId,
@@ -6166,7 +6179,7 @@ WHERE ModuleDefinitionSqlExecutionId = @moduleDefinitionSqlExecutionId;";
 
             // WHEN NOT MATCHED THEN INSERT VALUES(...) has no column list to scan and can
             // target the owned column by ordinal position.
-            if (Regex.IsMatch(body, @"(?is)\bINSERT\s*(?!\()"))
+            if (Regex.IsMatch(body, @"(?is)\bINSERT\b(?!\s*\()"))
             {
                 return true;
             }

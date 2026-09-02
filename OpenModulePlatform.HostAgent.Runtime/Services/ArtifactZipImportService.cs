@@ -829,15 +829,38 @@ public sealed class ArtifactZipImportService
                     //
                     // Cheap and idempotent: it only touches rows whose pointer differs from the
                     // newest hash-bearing artifact, so a second import changes nothing.
-                    var reapplied = await _repository.ApplyLatestModuleArtifactsAsync(
-                        definitionResult.ModuleKey,
-                        cancellationToken);
-                    var reappliedNote = reapplied.TemplateAppRowsUpdated
-                        + reapplied.AppInstanceRowsUpdated
-                        + reapplied.WorkerInstanceRowsUpdated > 0
-                        ? $" Artifact pointers filled after SQL: {reapplied.TemplateAppRowsUpdated} template, "
-                          + $"{reapplied.AppInstanceRowsUpdated} app instance, {reapplied.WorkerInstanceRowsUpdated} worker."
-                        : string.Empty;
+                    // The SQL phase above has already committed. A failure here must not
+                    // relabel a succeeded definition as Failed: the pointers heal on the
+                    // next import, so report it on the item and carry on.
+                    var reappliedNote = string.Empty;
+                    try
+                    {
+                        var reapplied = await _repository.ApplyLatestModuleArtifactsAsync(
+                            definitionResult.ModuleKey,
+                            cancellationToken);
+                        if (reapplied.TemplateAppRowsUpdated + reapplied.AppInstanceRowsUpdated + reapplied.WorkerInstanceRowsUpdated > 0)
+                        {
+                            reappliedNote = $" Artifact pointers filled after SQL: {reapplied.TemplateAppRowsUpdated} template, "
+                                + $"{reapplied.AppInstanceRowsUpdated} app instance, {reapplied.WorkerInstanceRowsUpdated} worker.";
+
+                            // Only Failed items are logged below, so without this line the
+                            // fill would be invisible outside the item text nobody reads.
+                            _logger.LogInformation(
+                                "Artifact pointers filled after module-definition SQL. Module={ModuleKey}, Template={Template}, AppInstance={AppInstance}, Worker={Worker}",
+                                definitionResult.ModuleKey,
+                                reapplied.TemplateAppRowsUpdated,
+                                reapplied.AppInstanceRowsUpdated,
+                                reapplied.WorkerInstanceRowsUpdated);
+                        }
+                    }
+                    catch (Exception ex) when (IsExpectedImportFailure(ex))
+                    {
+                        reappliedNote = $" Artifact pointer re-apply after SQL failed: {ex.Message} The next import repeats it.";
+                        _logger.LogWarning(
+                            ex,
+                            "Artifact pointer re-apply failed after module-definition SQL; the definition SQL itself succeeded. Module={ModuleKey}",
+                            definitionResult.ModuleKey);
+                    }
 
                     itemResults.Add(new UniversalHostAgentImportItemResult(
                         "module-definition",

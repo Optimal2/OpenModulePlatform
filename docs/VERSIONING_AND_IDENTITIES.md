@@ -142,6 +142,15 @@ Changing `omp.AppInstances.ArtifactId` or
 Disabling or deleting old artifacts is a cleanup decision, not the upgrade
 mechanism.
 
+Both pointers are owned by artifact auto-apply, and since 2026-09-02 the HostAgent
+folder import and the portal package import re-run that auto-apply for the whole
+module right after the module definition's SQL phase, so rows the SQL just created
+get their pointer in the same import. Auto-apply only ever fills an empty pointer
+or moves it to a newer version; it never downgrades. One consequence for manual
+pins: a `DesiredArtifactId` set to an OLDER artifact in the portal is moved
+forward by the next definition import as well, not only by the next artifact
+import. Pin by disabling the newer artifact instead if the pin has to survive.
+
 Package type describes the deployment contract that HostAgent or another OMP
 runtime component should execute. Use stable values such as:
 

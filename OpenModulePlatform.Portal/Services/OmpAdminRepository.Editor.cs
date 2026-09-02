@@ -3412,6 +3412,71 @@ ORDER BY ar.ArtifactId;";
         };
     }
 
+    /// <summary>
+    /// Re-applies the newest hash-bearing artifact of every app in the module to the rows
+    /// the module's own SQL may just have created. Mirrors
+    /// OmpHostArtifactRepository.ApplyLatestModuleArtifactsAsync: the portal package import
+    /// orders artifacts-then-SQL exactly like the HostAgent folder import, so rows created by
+    /// the SQL phase missed the per-artifact auto-apply in the same way.
+    /// </summary>
+    public async Task<ArtifactApplicationResult> ApplyLatestModuleArtifactsAsync(
+        string moduleKey,
+        CancellationToken ct)
+    {
+        var result = new ArtifactApplicationResult();
+        if (string.IsNullOrWhiteSpace(moduleKey))
+        {
+            return result;
+        }
+
+        var candidates = new List<(int AppId, int ArtifactId, string Version)>();
+        await using (var conn = _db.Create())
+        {
+            await conn.OpenAsync(ct);
+            await using var command = conn.CreateCommand();
+            command.CommandText = @"
+SELECT ar.AppId, ar.ArtifactId, ar.Version
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = @moduleKey
+  AND ar.IsEnabled = 1
+  AND NULLIF(LTRIM(RTRIM(ar.Sha256)), N'') IS NOT NULL;";
+            command.Parameters.Add("@moduleKey", SqlDbType.NVarChar, 100).Value = moduleKey;
+
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                candidates.Add((
+                    reader.GetInt32(0),
+                    reader.GetInt32(1),
+                    reader.IsDBNull(2) ? string.Empty : reader.GetString(2)));
+            }
+        }
+
+        // Same winner rule as the HostAgent mirror: ArtifactVersionComparer, ties to the
+        // higher ArtifactId. A PARSENAME ORDER BY would rank "1.2.3-beta" below "1.2.1".
+        var newestPerApp = candidates
+            .GroupBy(static candidate => candidate.AppId)
+            .Select(static group => group
+                .OrderByDescending(static candidate => candidate.Version, ArtifactVersionComparer.Instance)
+                .ThenByDescending(static candidate => candidate.ArtifactId)
+                .First()
+                .ArtifactId)
+            .ToList();
+
+        foreach (var artifactId in newestPerApp)
+        {
+            var applied = await ApplyArtifactToMatchingApplicationsAsync(artifactId, ct);
+            result.TemplateAppRowsUpdated += applied.TemplateAppRowsUpdated;
+            result.AppInstanceRowsUpdated += applied.AppInstanceRowsUpdated;
+            result.WorkerInstanceRowsUpdated += applied.WorkerInstanceRowsUpdated;
+            result.HostAgentDesiredRowsUpdated += applied.HostAgentDesiredRowsUpdated;
+        }
+
+        return result;
+    }
+
     public async Task<ArtifactApplicationResult> ApplyArtifactToMatchingApplicationsAsync(
         int artifactId,
         CancellationToken ct)
@@ -6706,7 +6771,7 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
 
             // WHEN NOT MATCHED THEN INSERT VALUES(...) has no column list to scan and can
             // target the owned column by ordinal position.
-            if (Regex.IsMatch(body, @"(?is)\bINSERT\s*(?!\()"))
+            if (Regex.IsMatch(body, @"(?is)\bINSERT\b(?!\s*\()"))
             {
                 return true;
             }
