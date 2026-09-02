@@ -93,6 +93,43 @@ execution should still be guarded by a database lock or a central controller so
 only one applier can run a definition version. Portal currently uses
 `sp_getapplock` before executing module-definition repair SQL.
 
+## Module SQL safety guard
+
+Module-definition SQL is validated by a text-based guard, mirrored identically
+in the bootstrapper, HostAgent, and Portal
+(`ValidateSafeModuleDefinitionSql`). It blocks module SQL from registering or
+mutating `omp.Artifacts` and from writing the artifact pointer columns
+`omp.AppInstances.ArtifactId` and `omp.InstanceTemplateAppInstances.DesiredArtifactId`;
+artifact registration is owned by the artifact import path and artifact
+selection by artifact auto-apply.
+
+**This guard is early validation, not a security boundary.** It exists to give
+module authors a clear error at import/validation time. It is a scanner over
+SQL text and cannot see through indirection. Known holes that remain open by
+design:
+
+- **Dynamic SQL** (`EXEC(N'...')`, `sp_executesql`): string literals are
+  blanked before scanning, so dynamically built statements are invisible.
+  Blocking `EXEC` is not possible — the platform's own scripts use it as an
+  idiom.
+- **Stored module bodies**: batches defining procedures, triggers, or functions
+  are exempt from the ownership scan because the platform's own
+  `omp.MaterializeInstanceTemplate` legitimately writes the pointer columns.
+  Any procedure body is therefore unscanned space.
+- **Indirection through views, synonyms, or inline TVFs**, `UPDATE`-with-JOIN
+  shapes whose `FROM` starts on another table, and `ALTER TABLE ... SWITCH`.
+
+The regression suites (`ModuleDefinitionSqlSafetyTests` in the Bootstrapper,
+Portal, and HostAgent test projects) run one shared probe batch against all
+three mirrors so any divergence between them fails the build.
+
+The durable fix for the remaining holes is to execute module SQL under a
+database principal without write permission on the owned tables/columns. The
+decision support for that change — including why the auto-apply path must be
+exempted via `GRANT`, not via text exemptions — is in
+`docs/adr/0005-artifact-ownership-database-principal.md`. The permission change
+itself is operator-gated and not yet implemented.
+
 ## JSON Shape
 
 The document shape is versioned. Version 1 uses these top-level fields:

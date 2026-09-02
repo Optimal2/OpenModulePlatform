@@ -6382,7 +6382,7 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         string? line;
         while ((line = reader.ReadLine()) is not null)
         {
-            if (Regex.IsMatch(line, @"^\s*GO\s*(?:--.*)?$", RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(line, @"^\s*GO(?:\s+[0-9]+)?\s*(?:--.*)?$", RegexOptions.IgnoreCase))
             {
                 yield return batch.ToString();
                 batch.Clear();
@@ -6494,6 +6494,12 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         return buffer.ToString();
     }
 
+    // Early validation, not a security boundary: this is a scanner over SQL text and
+    // cannot see dynamic SQL (literals are blanked), procedure/trigger/function bodies
+    // (exempt by design; the platform's own omp.MaterializeInstanceTemplate writes the
+    // pointer columns), or indirection through views and synonyms. The durable boundary
+    // is a database principal without write permission on the owned tables/columns --
+    // see docs/adr/0005-artifact-ownership-database-principal.md.
     internal static string? ValidateSafeModuleDefinitionSql(string sqlText)
     {
         sqlText = BlankSqlCommentsAndLiterals(sqlText);
@@ -6514,7 +6520,8 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         }
 
         var artifactOwnershipSql = ExcludeStoredModuleBodiesFromArtifactOwnershipScan(sqlText);
-        if (ContainsDirectModuleDefinitionTableWrite(artifactOwnershipSql, "Artifacts"))
+        if (ContainsDirectModuleDefinitionTableWrite(artifactOwnershipSql, "Artifacts")
+            || ContainsDirectModuleDefinitionTableDelete(artifactOwnershipSql, "Artifacts"))
         {
             return "Module definition SQL must not register or mutate omp.Artifacts; artifact registration is owned by the artifact import path.";
         }
@@ -6525,9 +6532,7 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
             return "Module definition SQL must not write omp.InstanceTemplateAppInstances.DesiredArtifactId or omp.AppInstances.ArtifactId; artifact selection is owned by artifact auto-apply.";
         }
 
-        var unsafeDeleteStatement = Regex.Matches(sqlText, @"(?is)(?:\A|(?<=\n)|;)[^\S\r\n]*DELETE\b(?<statement>.*?)(?:;|\r?\n\s*GO\b|\z)")
-            .Cast<Match>()
-            .Select(static match => match.Groups["statement"].Value)
+        var unsafeDeleteStatement = ExtractDeleteStatements(sqlText)
             .FirstOrDefault(static statement => !Regex.IsMatch(statement, @"(?is)\bWHERE\b"));
         if (unsafeDeleteStatement is not null)
         {
@@ -6555,9 +6560,62 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
             return true;
         }
 
-        return Regex.IsMatch(
+        if (Regex.IsMatch(
             sqlText,
-            $@"(?is)\bUPDATE\s+{top}(?<alias>\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\s+SET\b(?:(?!;|^\s*GO\b).)*?\bFROM\s+{qualifiedTable}(?:\s+WITH\s*\([^)]*\))?\s+(?:AS\s+)?\k<alias>");
+            $@"(?is)\bUPDATE\s+{top}(?<alias>\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)\s+SET\b(?:(?!;|^\s*GO\b).)*?\bFROM\s+{qualifiedTable}(?:\s+WITH\s*\([^)]*\))?\s+(?:AS\s+)?\k<alias>"))
+        {
+            return true;
+        }
+
+        // OUTPUT ... INTO writes rows into the table without an INSERT/UPDATE/MERGE
+        // keyword in front of the table name.
+        if (Regex.IsMatch(
+            sqlText,
+            $@"(?ims)\bOUTPUT\b(?:(?!;|^\s*GO\b).)*?\bINTO\s+{qualifiedTable}"))
+        {
+            return true;
+        }
+
+        // A CTE over the table can be the DML target; SQL Server writes the base table.
+        return ContainsModuleDefinitionCteWrite(sqlText, qualifiedTable, columnPattern: null);
+    }
+
+    private static bool ContainsDirectModuleDefinitionTableDelete(string sqlText, string tableName)
+    {
+        var qualifiedTable = BuildOmpQualifiedIdentifierPattern(tableName);
+        const string top = @"(?:TOP\s*(?:\([^)]*\)|\d+)(?:\s+PERCENT)?\s+)?";
+        return Regex.IsMatch(sqlText, $@"(?is)\bDELETE\s+{top}(?:FROM\s+)?{qualifiedTable}")
+            || ContainsModuleDefinitionCteWrite(sqlText, qualifiedTable, columnPattern: null);
+    }
+
+    // Matches a CTE whose body reads the given table and that is the target of a
+    // following UPDATE or DELETE FROM. When columnPattern is supplied, only an UPDATE
+    // whose top-level SET assignments write that column counts.
+    private static bool ContainsModuleDefinitionCteWrite(string sqlText, string qualifiedTable, string? columnPattern)
+    {
+        const string alias = @"(?:\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)";
+        foreach (Match cte in Regex.Matches(
+            sqlText,
+            $@"(?is)\b(?<name>{alias})\s+AS\s*\((?<body>[^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:UPDATE\s+\k<name>(?![A-Za-z0-9_])\s+SET\b|DELETE\s+FROM\s+\k<name>(?![A-Za-z0-9_]))"))
+        {
+            if (!Regex.IsMatch(cte.Groups["body"].Value, qualifiedTable))
+            {
+                continue;
+            }
+
+            if (columnPattern is null)
+            {
+                return true;
+            }
+
+            var assignments = ExtractModuleDefinitionAssignments(sqlText, cte.Index + cte.Length, "WHERE");
+            if (ContainsModuleDefinitionColumnAssignment(assignments, columnPattern, alias))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool ContainsModuleDefinitionColumnWrite(
@@ -6581,11 +6639,24 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
             }
         }
 
+        // A positional INSERT (VALUES/SELECT/DEFAULT VALUES without a column list) has no
+        // list to scan and can target the owned column by ordinal position.
+        if (Regex.IsMatch(
+            sqlText,
+            $@"(?is)\bINSERT\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}(?!\s*\()"))
+        {
+            return true;
+        }
+
         foreach (Match update in Regex.Matches(
             sqlText,
-            $@"(?is)\bUPDATE\s+{top}{qualifiedTable}{tableHint}(?:\s+(?:AS\s+)?{alias})?\s+SET\b(?<assignments>.*?)(?=\bWHERE\b|;|^\s*GO\b|\z)"))
+            $@"(?is)\bUPDATE\s+{top}{qualifiedTable}{tableHint}(?:\s+(?:AS\s+)?{alias})?\s+SET\b"))
         {
-            if (ContainsModuleDefinitionColumnAssignment(update.Groups["assignments"].Value, column, alias))
+            var assignments = ExtractModuleDefinitionAssignments(
+                sqlText,
+                update.Index + update.Length,
+                "WHERE");
+            if (ContainsModuleDefinitionColumnAssignment(assignments, column, alias))
             {
                 return true;
             }
@@ -6613,15 +6684,48 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
                 return true;
             }
 
-            if (Regex.Matches(body, @"(?is)\bUPDATE\s+SET\b(?<assignments>.*?)(?=\bWHEN\b|;|\z)")
-                .Cast<Match>()
-                .Any(match => ContainsModuleDefinitionColumnAssignment(match.Groups["assignments"].Value, column, alias)))
+            // WHEN NOT MATCHED THEN INSERT VALUES(...) has no column list to scan and can
+            // target the owned column by ordinal position.
+            if (Regex.IsMatch(body, @"(?is)\bINSERT\s*(?!\()"))
+            {
+                return true;
+            }
+
+            foreach (Match set in Regex.Matches(body, @"(?is)\bUPDATE\s+SET\b"))
+            {
+                var assignments = ExtractModuleDefinitionAssignments(
+                    body,
+                    set.Index + set.Length,
+                    "WHEN");
+                if (ContainsModuleDefinitionColumnAssignment(assignments, column, alias))
+                {
+                    return true;
+                }
+            }
+        }
+
+        // OUTPUT ... INTO with a column list naming the owned column, or without a column
+        // list at all (positional), writes the column without INSERT/UPDATE/MERGE in
+        // front of the table name.
+        foreach (Match output in Regex.Matches(
+            sqlText,
+            $@"(?ims)\bOUTPUT\b(?:(?!;|^\s*GO\b).)*?\bINTO\s+{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)"))
+        {
+            if (Regex.IsMatch(output.Groups["columns"].Value, column, RegexOptions.IgnoreCase))
             {
                 return true;
             }
         }
 
-        return false;
+        if (Regex.IsMatch(
+            sqlText,
+            $@"(?ims)\bOUTPUT\b(?:(?!;|^\s*GO\b).)*?\bINTO\s+{qualifiedTable}{tableHint}(?!\s*\()"))
+        {
+            return true;
+        }
+
+        // A CTE over the table can be the UPDATE target; SQL Server writes the base table.
+        return ContainsModuleDefinitionCteWrite(sqlText, qualifiedTable, column);
     }
 
     private static bool ContainsModuleDefinitionColumnAssignment(
@@ -6630,7 +6734,113 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         string aliasPattern)
         => Regex.IsMatch(
             assignments,
-            $@"(?is)(?:\A|,)\s*(?:{aliasPattern}\s*\.\s*)?{columnPattern}\s*=");
+            $@"(?is)(?:\A|,)\s*(?:{aliasPattern}\s*\.\s*)?{columnPattern}\s*[-+*/%&^|]?=");
+
+    // Returns the SET assignments starting at startIndex, stopping at the first
+    // terminator (';', a GO line, or one of the given keywords) found at parenthesis
+    // depth zero and outside any CASE...END block. A regex lookahead cannot express
+    // that, and stopping early was a confirmed bypass: a WHERE inside a subquery, a
+    // WHEN inside a CASE expression, or a parameter named @Where all truncated the
+    // scan before the real assignment.
+    private static string ExtractModuleDefinitionAssignments(
+        string sqlText,
+        int startIndex,
+        params string[] terminatorKeywords)
+    {
+        var depth = 0;
+        var caseDepth = 0;
+        for (var index = startIndex; index < sqlText.Length; index++)
+        {
+            var current = sqlText[index];
+            if (current == '(')
+            {
+                depth++;
+                continue;
+            }
+
+            if (current == ')')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+
+                continue;
+            }
+
+            if (depth != 0)
+            {
+                continue;
+            }
+
+            if (caseDepth > 0)
+            {
+                if (IsSqlKeywordAt(sqlText, index, "CASE"))
+                {
+                    caseDepth++;
+                }
+                else if (IsSqlKeywordAt(sqlText, index, "END"))
+                {
+                    caseDepth--;
+                }
+
+                continue;
+            }
+
+            if (current == ';'
+                || ((current == '\r' || current == '\n') && IsGoBatchSeparatorAt(sqlText, index))
+                || terminatorKeywords.Any(keyword => IsSqlKeywordAt(sqlText, index, keyword)))
+            {
+                return sqlText[startIndex..index];
+            }
+
+            if (IsSqlKeywordAt(sqlText, index, "CASE"))
+            {
+                caseDepth++;
+            }
+        }
+
+        return sqlText[startIndex..];
+    }
+
+    private static bool IsGoBatchSeparatorAt(string sqlText, int lineBreakIndex)
+    {
+        var index = lineBreakIndex + 1;
+        if (sqlText[lineBreakIndex] == '\r' && index < sqlText.Length && sqlText[index] == '\n')
+        {
+            index++;
+        }
+
+        while (index < sqlText.Length && (sqlText[index] == ' ' || sqlText[index] == '\t'))
+        {
+            index++;
+        }
+
+        return IsSqlKeywordAt(sqlText, index, "GO");
+    }
+
+    private static bool IsSqlKeywordAt(string sqlText, int index, string keyword)
+    {
+        // A preceding '@' keeps parameters such as @Where from counting as keywords.
+        if (index > 0 && (char.IsLetterOrDigit(sqlText[index - 1]) || sqlText[index - 1] is '_' or '@' or '#' or '$'))
+        {
+            return false;
+        }
+
+        if (index + keyword.Length > sqlText.Length)
+        {
+            return false;
+        }
+
+        if (!sqlText.AsSpan(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var after = index + keyword.Length;
+        return after >= sqlText.Length
+            || !(char.IsLetterOrDigit(sqlText[after]) || sqlText[after] is '_' or '#' or '$');
+    }
 
     private static string BuildOmpQualifiedIdentifierPattern(string tableName)
         => $@"(?:\[omp\]|""omp""|omp)\s*\.\s*{BuildSqlIdentifierPattern(tableName)}";
@@ -6639,6 +6849,38 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
     {
         var escaped = Regex.Escape(identifier);
         return $@"(?:\[{escaped}\]|""{escaped}""|{escaped})(?![A-Za-z0-9_])";
+    }
+
+    private static IEnumerable<string> ExtractDeleteStatements(string sqlText)
+    {
+        foreach (var batch in SplitSqlBatches(sqlText))
+        {
+            foreach (Match match in Regex.Matches(
+                batch,
+                @"(?ims)\bDELETE\b(?<statement>.*?)(?=;|^\s*(?:GO|INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|EXEC(?:UTE)?|GRANT|REVOKE|DENY|SELECT)\b|\z)"))
+            {
+                if (IsForeignKeyOnDeleteClause(batch, match.Index))
+                {
+                    continue;
+                }
+
+                var statement = ("DELETE" + match.Groups["statement"].Value).Trim();
+                if (!string.IsNullOrWhiteSpace(statement))
+                {
+                    yield return statement;
+                }
+            }
+        }
+    }
+
+    private static bool IsForeignKeyOnDeleteClause(string sqlText, int deleteIndex)
+    {
+        var beforeDelete = sqlText[..deleteIndex].TrimEnd();
+        // THEN as well as ON: "WHEN NOT MATCHED BY SOURCE THEN DELETE" is a MERGE action whose
+        // scope is the merge predicate, so requiring a WHERE on it is meaningless -- but the
+        // scan read it as an unguarded delete and blocked a module definition at import. Same
+        // false-positive class as the comment scanning (R8-P3-14).
+        return Regex.IsMatch(beforeDelete, @"(?is)\b(?:ON|THEN)$");
     }
 
     private static string? ValidateReadOnlyModuleDefinitionSql(string sqlText)
