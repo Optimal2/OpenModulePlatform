@@ -455,3 +455,13 @@
 .omp-daterange-panel__fields .omp-datetime-panel__footer {
     justify-content: flex-end;
 }
+
+/* Days past the container's data-max cap: visible for calendar context but
+   plainly not pickable. */
+.omp-datetime-panel__day--disabled,
+.omp-datetime-panel__day--disabled:hover {
+    background: transparent;
+    color: var(--text-muted, #5b667a);
+    opacity: 0.35;
+    cursor: default;
+}

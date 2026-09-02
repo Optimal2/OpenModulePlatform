@@ -698,6 +698,16 @@
                 return { key: el.getAttribute("data-omp-daterange-preset"), label: el.textContent };
             });
 
+        // data-max="today" caps the pickable range at the current UTC day:
+        // future days, months and years are disabled in the calendar, and
+        // typed values clamp on apply. Opt-in - other consumers may
+        // legitimately point into the future.
+        function maxIso() {
+            if (container.getAttribute("data-max") !== "today") { return null; }
+            var now = new Date();
+            return now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
+        }
+
         function currentLabel() {
             var match = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0];
             if (match) { return match.label; }
@@ -833,6 +843,9 @@
                     previewTo = cal.pendingStart < cal.hoverIso ? cal.hoverIso : cal.pendingStart;
                 }
                 var now = new Date();
+                var max = maxIso();
+                var maxYear = max ? +max.slice(0, 4) : 0;
+                var maxMonth = max ? +max.slice(5, 7) : 0;
 
                 var head = document.createElement("div");
                 head.className = "omp-datetime-panel__head";
@@ -848,19 +861,26 @@
                 monthNames().forEach(function (name, index) {
                     var option = document.createElement("option");
                     option.value = String(index + 1); option.textContent = name; option.selected = index + 1 === cal.month;
+                    if (max && cal.year === maxYear && index + 1 > maxMonth) { option.disabled = true; }
                     monthSelect.appendChild(option);
                 });
                 monthSelect.addEventListener("change", function () { cal.month = +monthSelect.value; renderRangeCalendar(); });
                 var yearSelect = document.createElement("select");
                 yearSelect.className = "omp-datetime-panel__select";
-                for (var y = cal.year - 12; y <= cal.year + 12; y++) {
+                var lastYear = max ? Math.min(cal.year + 12, maxYear) : cal.year + 12;
+                for (var y = cal.year - 12; y <= lastYear; y++) {
                     var yearOption = document.createElement("option");
                     yearOption.value = String(y); yearOption.textContent = String(y); yearOption.selected = y === cal.year;
                     yearSelect.appendChild(yearOption);
                 }
-                yearSelect.addEventListener("change", function () { cal.year = +yearSelect.value; renderRangeCalendar(); });
+                yearSelect.addEventListener("change", function () {
+                    cal.year = +yearSelect.value;
+                    if (max && cal.year === maxYear && cal.month > maxMonth) { cal.month = maxMonth; }
+                    renderRangeCalendar();
+                });
                 var next = document.createElement("button");
                 next.type = "button"; next.className = "omp-datetime-panel__step"; next.textContent = "›";
+                next.disabled = !!max && cal.year === maxYear && cal.month === maxMonth;
                 next.addEventListener("click", function () {
                     cal.month += 1;
                     if (cal.month > 12) { cal.month = 1; cal.year += 1; }
@@ -906,11 +926,16 @@
                             } else if (previewFrom && previewTo && iso > previewFrom && iso < previewTo) {
                                 button.classList.add("omp-datetime-panel__day--range");
                             }
-                            button.addEventListener("click", function () { onDayPicked(iso); });
-                            if (cal.pendingStart !== null) {
-                                button.addEventListener("mouseenter", function () {
-                                    if (cal.hoverIso !== iso) { cal.hoverIso = iso; renderRangeCalendar(); }
-                                });
+                            if (max && iso > max) {
+                                button.disabled = true;
+                                button.classList.add("omp-datetime-panel__day--disabled");
+                            } else {
+                                button.addEventListener("click", function () { onDayPicked(iso); });
+                                if (cal.pendingStart !== null) {
+                                    button.addEventListener("mouseenter", function () {
+                                        if (cal.hoverIso !== iso) { cal.hoverIso = iso; renderRangeCalendar(); }
+                                    });
+                                }
                             }
                             grid.appendChild(button);
                         })(new Date(cursor));
@@ -942,8 +967,14 @@
                 if (fromValue === "" && toValue === "" && presets.length > 0) {
                     applyAndClose(presets[0].key, "", "");
                 } else {
-                    // Reversed bounds are swapped rather than rejected - the
-                    // server clamps the same way, so the page never disagrees.
+                    // Reversed bounds are swapped and typed future dates
+                    // clamp to the cap, rather than rejected - the server
+                    // does the same, so the page never disagrees.
+                    var cap = maxIso();
+                    if (cap) {
+                        if (fromValue > cap) { fromValue = cap; }
+                        if (toValue > cap) { toValue = cap; }
+                    }
                     if (fromValue !== "" && toValue !== "" && fromValue > toValue) {
                         var swap = fromValue; fromValue = toValue; toValue = swap;
                     }
