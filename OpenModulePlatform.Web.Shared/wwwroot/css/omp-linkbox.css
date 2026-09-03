@@ -56,9 +56,18 @@
     margin-bottom: 8px;
 }
 
-/* Keep the heading clear of the edit gear when one is rendered. */
+/* Keep the heading clear of the edit gear when one is rendered. :has() is
+   supported by every browser this platform targets (Chrome/Edge 105+, Safari
+   15.4+, Firefox 121+); older engines get the padding unconditionally below,
+   which only costs a little whitespace when no gear is rendered. */
 .omp-linkbox:has(.omp-linkbox__edit) .omp-linkbox__heading {
     padding-right: 26px;
+}
+
+@supports not selector(:has(a)) {
+    .omp-linkbox .omp-linkbox__heading {
+        padding-right: 26px;
+    }
 }
 
 /* Discreet always-visible edit gear (hover-only would be undiscoverable on
@@ -126,25 +135,40 @@
 }
 
 /* Muted group tints: same restrained color-mix language as the tinted form
-   panels. Group keys map to tints in order of first appearance. */
+   panels. Group keys map to tints in order of first appearance. Each group
+   carries its hue plus its own border/background strength: the green and
+   amber hues read lighter than the link blue and the violet, so they get a
+   few percent more mix to land on the same perceived weight. */
 .omp-linkbox__link--group-1 {
-    border-color: color-mix(in srgb, var(--link) 40%, var(--border));
-    background: color-mix(in srgb, var(--link) 9%, var(--surface));
+    --omp-linkbox-group-hue: var(--link);
+    --omp-linkbox-group-border-mix: 40%;
+    --omp-linkbox-group-background-mix: 9%;
 }
 
 .omp-linkbox__link--group-2 {
-    border-color: color-mix(in srgb, #2f9e63 45%, var(--border));
-    background: color-mix(in srgb, #2f9e63 9%, var(--surface));
+    --omp-linkbox-group-hue: #2f9e63;
+    --omp-linkbox-group-border-mix: 45%;
+    --omp-linkbox-group-background-mix: 9%;
 }
 
 .omp-linkbox__link--group-3 {
-    border-color: color-mix(in srgb, #d89614 45%, var(--border));
-    background: color-mix(in srgb, #d89614 10%, var(--surface));
+    --omp-linkbox-group-hue: #d89614;
+    --omp-linkbox-group-border-mix: 45%;
+    --omp-linkbox-group-background-mix: 10%;
 }
 
 .omp-linkbox__link--group-4 {
-    border-color: color-mix(in srgb, #7c5cd6 40%, var(--border));
-    background: color-mix(in srgb, #7c5cd6 9%, var(--surface));
+    --omp-linkbox-group-hue: #7c5cd6;
+    --omp-linkbox-group-border-mix: 40%;
+    --omp-linkbox-group-background-mix: 9%;
+}
+
+.omp-linkbox__link--group-1,
+.omp-linkbox__link--group-2,
+.omp-linkbox__link--group-3,
+.omp-linkbox__link--group-4 {
+    border-color: color-mix(in srgb, var(--omp-linkbox-group-hue) var(--omp-linkbox-group-border-mix), var(--border));
+    background: color-mix(in srgb, var(--omp-linkbox-group-hue) var(--omp-linkbox-group-background-mix), var(--surface));
 }
 
 /* The active page wins over any group tint. */

@@ -249,7 +249,8 @@ public sealed class HostAgentJobProcessor
 
         if (leaseRenewal.IsFaulted && leaseRenewal.Exception is { } exception)
         {
-            foreach (var innerException in exception.Flatten().InnerExceptions)
+            // Cancellation is the expected way for the renewal loop to end; only real faults are logged.
+            foreach (var innerException in exception.Flatten().InnerExceptions.Where(inner => inner is not OperationCanceledException))
             {
                 _logger.LogWarning(innerException, "HostAgent job lease renewal ended with an error while stopping.");
             }

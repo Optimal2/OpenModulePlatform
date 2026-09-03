@@ -27,6 +27,10 @@ namespace OpenModulePlatform.Web.Shared.Web;
 /// not propagate across service boundaries (external viewer -&gt; ODVGateway, Portal -&gt; module);
 /// an inbound correlation id does.
 /// </para>
+/// <para>
+/// Covered by <c>OmpRequestCorrelationMiddlewareTests</c> in the Portal test project: the
+/// allow-list, the length bound, the trimming, and the fallback to a fresh id.
+/// </para>
 /// </remarks>
 public static class OmpRequestCorrelationMiddleware
 {

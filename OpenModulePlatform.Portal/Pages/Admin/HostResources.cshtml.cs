@@ -168,12 +168,9 @@ public sealed class HostResourcesModel : OmpPortalPageModel
             }
         }
 
-        foreach (var entry in versionSampleCounts)
+        foreach (var entry in versionSampleCounts.Where(entry => groups.ContainsKey(entry.Key)))
         {
-            if (groups.TryGetValue(entry.Key, out var group))
-            {
-                group.SampleCount = entry.Value.Values.Sum();
-            }
+            groups[entry.Key].SampleCount = entry.Value.Values.Sum();
         }
 
         // Ensure every enabled host appears at least once, even if it has no samples.
