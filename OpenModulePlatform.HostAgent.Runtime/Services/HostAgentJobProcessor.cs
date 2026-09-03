@@ -1966,7 +1966,11 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Skipped", "Refusing to delete the active HostAgent process directory.");
         }
 
-        if (GetCredentialStoreProtectedDirectories(settings).Any(path => string.Equals(Path.GetFullPath(path), directory, GetPathComparison())))
+        // Bidirectional containment, like the artifact-cache guard below: deleting a PARENT of the
+        // credential store would destroy it just as surely as deleting the store itself.
+        if (GetCredentialStoreProtectedDirectories(settings)
+            .Select(Path.GetFullPath)
+            .Any(protectedDirectory => IsSameOrChildPath(directory, protectedDirectory) || IsSameOrChildPath(protectedDirectory, directory)))
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Skipped", "Refusing to delete a directory that contains the configured HostAgent credential store.");
         }
