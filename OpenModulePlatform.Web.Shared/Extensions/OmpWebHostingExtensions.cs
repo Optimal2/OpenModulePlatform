@@ -984,8 +984,10 @@ public static class OmpWebHostingExtensions
                     builder.Append(buffer, 0, read);
                 }
 
+                // Same marker as the sanitizer below, so its length budget
+                // (maxReportBytes + marker) never re-truncates an already capped body.
                 body = builder.Length > maxReportBytes
-                    ? string.Concat(builder.ToString(0, maxReportBytes), "...[truncated]")
+                    ? string.Concat(builder.ToString(0, maxReportBytes), OmpLogSanitizer.TruncationMarker)
                     : builder.ToString();
             }
 

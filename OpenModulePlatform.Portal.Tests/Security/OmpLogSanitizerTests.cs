@@ -53,4 +53,48 @@ public sealed class OmpLogSanitizerTests
         Assert.Equal(string.Empty, OmpLogSanitizer.ForLog(null));
         Assert.Equal(string.Empty, OmpLogSanitizer.ForLog(string.Empty));
     }
+
+    [Fact]
+    public void ForLog_ReplacesUnicodeLineAndParagraphSeparatorsAndNel()
+    {
+        const char lineSeparator = (char)0x2028;
+        const char paragraphSeparator = (char)0x2029;
+        const char nextLine = (char)0x85;
+        var forged = "a" + lineSeparator + "b" + paragraphSeparator + "c" + nextLine + "d";
+
+        Assert.Equal("a b c d", OmpLogSanitizer.ForLog(forged));
+    }
+
+    [Fact]
+    public void ForLog_AtTheCspReportBudgetNeverAddsASecondMarker()
+    {
+        // The CSP endpoint caps a body at 64 kB + marker and hands the sanitizer the
+        // same budget; an already capped body must pass through with ONE marker.
+        const int maxReportBytes = 64 * 1024;
+        var budget = maxReportBytes + OmpLogSanitizer.TruncationMarker.Length;
+        var alreadyCapped = new string('x', maxReportBytes) + OmpLogSanitizer.TruncationMarker;
+
+        var safe = OmpLogSanitizer.ForLog(alreadyCapped, maxLength: budget);
+
+        Assert.Equal(alreadyCapped, safe);
+        Assert.Equal(1, CountOccurrences(safe, OmpLogSanitizer.TruncationMarker));
+
+        var oneOver = alreadyCapped + "y";
+        var capped = OmpLogSanitizer.ForLog(oneOver, maxLength: budget);
+        Assert.Equal(budget + OmpLogSanitizer.TruncationMarker.Length, capped.Length);
+        Assert.EndsWith(OmpLogSanitizer.TruncationMarker, capped, StringComparison.Ordinal);
+    }
+
+    private static int CountOccurrences(string text, string needle)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += needle.Length;
+        }
+
+        return count;
+    }
 }

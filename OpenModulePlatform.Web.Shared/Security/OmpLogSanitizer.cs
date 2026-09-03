@@ -36,7 +36,10 @@ public static class OmpLogSanitizer
         var chars = text.ToCharArray();
         for (var i = 0; i < chars.Length; i++)
         {
-            if (char.IsControl(chars[i]))
+            // Control covers C0 and C1 (including NEL, U+0085); the Unicode line and
+            // paragraph separators (U+2028, U+2029) are categorised separately and
+            // are line breaks to some log viewers, so they go the same way.
+            if (char.IsControl(chars[i]) || IsUnicodeLineBreak(chars[i]))
             {
                 chars[i] = ' ';
             }
@@ -46,5 +49,12 @@ public static class OmpLogSanitizer
         return text.Length <= maxLength
             ? text
             : string.Concat(text.AsSpan(0, maxLength), TruncationMarker);
+    }
+
+    private static bool IsUnicodeLineBreak(char c)
+    {
+        var category = char.GetUnicodeCategory(c);
+        return category is System.Globalization.UnicodeCategory.LineSeparator
+            or System.Globalization.UnicodeCategory.ParagraphSeparator;
     }
 }
