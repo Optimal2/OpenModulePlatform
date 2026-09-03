@@ -414,21 +414,34 @@ public sealed class HostAgentJobProcessor
                 return;
             }
 
-            var findings = BuildHostAgentLeftoverFindings(
-                job.HostId.Value,
-                hostKey,
-                serviceName,
-                _settings.CurrentValue,
-                cancellationToken).ToList();
-            findings.AddRange(BuildWorkerManagerLeftoverServiceFindings(
-                job.HostId.Value,
-                hostKey,
-                cancellationToken));
-            findings.AddRange(await BuildOrphanServiceAppFindings(
-                job.HostId.Value,
-                hostKey,
-                _settings.CurrentValue,
-                cancellationToken));
+            List<MaintenanceFindingUpsert> findings;
+            // The scan's three service enumerations share one listing (see QueryAllServices).
+            // A failed listing is not cached: each enumerator then queries itself and
+            // reports the sc.exe failure exactly as before.
+            var listing = RunSc("queryex", "type=", "service", "state=", "all");
+            ScanServiceListing.Value = listing.ExitCode == 0 ? listing : null;
+            try
+            {
+                findings = BuildHostAgentLeftoverFindings(
+                    job.HostId.Value,
+                    hostKey,
+                    serviceName,
+                    _settings.CurrentValue,
+                    cancellationToken).ToList();
+                findings.AddRange(BuildWorkerManagerLeftoverServiceFindings(
+                    job.HostId.Value,
+                    hostKey,
+                    cancellationToken));
+                findings.AddRange(await BuildOrphanServiceAppFindings(
+                    job.HostId.Value,
+                    hostKey,
+                    _settings.CurrentValue,
+                    cancellationToken));
+            }
+            finally
+            {
+                ScanServiceListing.Value = null;
+            }
             findings.AddRange(await BuildOrphanHostFindings(
                 job.HostId.Value,
                 hostKey,
@@ -2370,9 +2383,22 @@ public sealed class HostAgentJobProcessor
     private static IReadOnlyList<HostAgentServiceCandidate> EnumerateWorkerManagerServices()
         => EnumerateWindowsServicesByPrefix(KnownWorkerManagerServiceNamePrefixes);
 
+    /// <summary>
+    /// One <c>sc queryex</c> listing shared by every enumeration inside a host maintenance
+    /// scan. The three finding builders used to enumerate the machine's services
+    /// independently, three process launches and full listings per scan; the scan now
+    /// captures the listing once and the enumerators pick it up through this async-local
+    /// scope. Outside a scan (a single install-time lookup) the value is null and the
+    /// enumerators query on their own as before.
+    /// </summary>
+    private static readonly AsyncLocal<ScCommandResult?> ScanServiceListing = new();
+
+    private static ScCommandResult QueryAllServices()
+        => ScanServiceListing.Value ?? RunSc("queryex", "type=", "service", "state=", "all");
+
     private static IReadOnlyList<HostAgentServiceCandidate> EnumerateWindowsServicesByPrefix(IEnumerable<string> serviceNamePrefixes)
     {
-        var result = RunSc("queryex", "type=", "service", "state=", "all");
+        var result = QueryAllServices();
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
@@ -2408,7 +2434,7 @@ public sealed class HostAgentJobProcessor
         var hostAgentInstallRoot = Path.GetFullPath(ResolveHostAgentInstallRoot(settings))
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-        var result = RunSc("queryex", "type=", "service", "state=", "all");
+        var result = QueryAllServices();
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
@@ -2515,35 +2541,6 @@ public sealed class HostAgentJobProcessor
         }
 
         return result;
-    }
-
-    private static string? TryGetServiceDisplayName(string serviceName)
-    {
-        var result = RunSc("qc", serviceName);
-        if (result.ExitCode != 0)
-        {
-            return null;
-        }
-
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var displayNameIndex = line.IndexOf("DISPLAY_NAME", StringComparison.OrdinalIgnoreCase);
-            if (displayNameIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', displayNameIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            var displayName = line[(separatorIndex + 1)..].Trim();
-            return string.IsNullOrWhiteSpace(displayName) ? null : displayName;
-        }
-
-        return null;
     }
 
     private static IReadOnlyList<MaintenanceFindingUpsert> BuildOrphanServiceAppServiceFindings(
@@ -2882,9 +2879,8 @@ public sealed class HostAgentJobProcessor
     /// not exist", which is right where the answer drives a decision -- treating an
     /// access-denied service as absent would make the caller try to install over it. It is
     /// wrong while walking every service on the machine: one protected third-party service
-    /// took down the whole MaintenanceScan job on every scheduled run (R7-D8). Its two
-    /// siblings here, <see cref="TryGetServiceExecutablePath"/> and
-    /// <see cref="TryGetServiceDisplayName"/>, already return null in the same situation --
+    /// took down the whole MaintenanceScan job on every scheduled run (R7-D8). Its
+    /// sibling here, <see cref="TryGetServiceExecutablePath"/>, already returns null in the same situation --
     /// and a candidate with no readable executable path is filtered out downstream anyway.
     /// </remarks>
     private static string? GetServiceStateForInventory(string serviceName)
