@@ -17,14 +17,21 @@ param()
 
       missing results directory            -> 1
       directory without any .trx file      -> 1
+      fewer .trx files than -MinimumTrxFiles -> 1
       .trx with executed = 0               -> 1
       .trx with executed > 0               -> 0
       two .trx files, one with 0 executed  -> 0 without -RequirePerFile
                                            -> 1 with -RequirePerFile
+      malformed .trx (no Counters node,
+        missing counters attributes,
+        zero-byte, or broken XML)          -> 1
 
     The two-file case is the hardening added 2026-09: the directory sum lets a
     test project whose filter matched nothing hide behind a sibling project
-    that did run, so -RequirePerFile requires executed > 0 in every file.
+    that did run, so -RequirePerFile requires executed > 0 in every file. The
+    malformed-file cases fail REGARDLESS of -RequirePerFile: a truncated or
+    corrupt .trx is not a legitimate zero run and must never blend into the
+    directory sum.
 
     Pester 5 runs every container in a separate session state, so the shared
     harness (gate path + TRX fixture writer) lives in
@@ -45,7 +52,7 @@ Describe 'assert-tests-executed: directory and file presence' {
         $result = Invoke-ExecutionGate -ResultsDirectory $missing
 
         $result.ExitCode | Should -Be 1
-        ($result.Output -match 'results directory not found') | Should -Be $true
+        $result.Output | Should -Match 'results directory not found'
     }
 
     It 'Fails when the results directory contains no .trx files' {
@@ -54,7 +61,7 @@ Describe 'assert-tests-executed: directory and file presence' {
             $result = Invoke-ExecutionGate -ResultsDirectory $dir
 
             $result.ExitCode | Should -Be 1
-            ($result.Output -match 'no \.trx files found') | Should -Be $true
+            $result.Output | Should -Match 'no \.trx files found'
         }
         finally {
             Remove-GateResultsDirectory -Path $dir
@@ -75,7 +82,7 @@ Describe 'assert-tests-executed: execution counters' {
             $result = Invoke-ExecutionGate -ResultsDirectory $dir
 
             $result.ExitCode | Should -Be 1
-            ($result.Output -match '0 tests executed') | Should -Be $true
+            $result.Output | Should -Match '0 tests executed'
         }
         finally {
             Remove-GateResultsDirectory -Path $dir
@@ -120,7 +127,7 @@ Describe 'assert-tests-executed: execution counters' {
             $result = Invoke-ExecutionGate -ResultsDirectory $dir -RequirePerFile
 
             $result.ExitCode | Should -Be 1
-            ($result.Output -match 'zero\.trx') | Should -Be $true
+            $result.Output | Should -Match 'zero\.trx'
         }
         finally {
             Remove-GateResultsDirectory -Path $dir
@@ -142,8 +149,101 @@ Describe 'assert-tests-executed: skip reasons stay visible' {
             $result = Invoke-ExecutionGate -ResultsDirectory $dir -ShowSkipReasons
 
             $result.ExitCode | Should -Be 0
-            ($result.Output -match 'Suite\.UiTest') | Should -Be $true
-            ($result.Output -match 'no local Chromium') | Should -Be $true
+            $result.Output | Should -Match 'Suite\.UiTest'
+            $result.Output | Should -Match 'no local Chromium'
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+}
+
+Describe 'assert-tests-executed: malformed files never blend into the sum' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Assert-TestsExecuted.TestHelpers.ps1')
+    }
+
+    It 'Fails and names the file when a .trx has no ResultSummary/Counters node' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-TrxFile -Path (Join-Path $dir 'ran.trx') -Total 5 -Executed 5
+            New-RawTrxFile -Path (Join-Path $dir 'stub.trx') -Content @"
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Results />
+</TestRun>
+"@
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir
+
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'no ResultSummary/Counters node'
+            $result.Output | Should -Match 'stub\.trx'
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+
+    It 'Fails when the Counters node lacks the executed attribute' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-RawTrxFile -Path (Join-Path $dir 'attrless.trx') -Content @"
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <ResultSummary outcome="Completed">
+    <Counters total="5" passed="5" failed="0" />
+  </ResultSummary>
+</TestRun>
+"@
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir
+
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'attrless\.trx'
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+
+    It 'Fails on a zero-byte .trx file' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-RawTrxFile -Path (Join-Path $dir 'empty.trx') -Content ''
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir
+
+            $result.ExitCode | Should -Be 1
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+
+    It 'Fails on a .trx whose XML is not well-formed' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-RawTrxFile -Path (Join-Path $dir 'broken.trx') -Content '<TestRun><ResultSummary><Counters total="5" executed="5"'
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir
+
+            $result.ExitCode | Should -Be 1
+        }
+        finally {
+            Remove-GateResultsDirectory -Path $dir
+        }
+    }
+
+    It 'Fails when fewer .trx files exist than -MinimumTrxFiles expects' {
+        $dir = New-GateResultsDirectory
+        try {
+            New-TrxFile -Path (Join-Path $dir 'ran.trx') -Total 5 -Executed 5
+
+            $result = Invoke-ExecutionGate -ResultsDirectory $dir -MinimumTrxFiles 2
+
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'expected at least 2'
         }
         finally {
             Remove-GateResultsDirectory -Path $dir

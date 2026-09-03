@@ -112,7 +112,12 @@ try {
     }
 
     Invoke-Step 'Pester script tests' {
-        & (Join-Path $repoRoot 'scripts\omp\run-script-tests.ps1')
+        # Invoke via powershell.exe like pre-push.ps1 and ci.yml do: the suites
+        # intentionally run on Windows PowerShell 5.1 (one suite spawns child
+        # powershell.exe processes as a Windows requirement), and an in-process
+        # & call would run them under whatever engine started local-ci.
+        & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File (Join-Path $repoRoot 'scripts\omp\run-script-tests.ps1')
+        if ($LASTEXITCODE -ne 0) { throw "run-script-tests.ps1 failed ($LASTEXITCODE)" }
     }
 
     if (-not $SkipTests) {
@@ -135,29 +140,31 @@ try {
             if (Test-Path -LiteralPath $testResultsDirectory) {
                 Remove-Item -LiteralPath $testResultsDirectory -Recurse -Force
             }
-            # A silently skipped project used to read as a passing one: the loop
-            # simply never ran it. Say out loud which projects were skipped and
-            # why, so a renamed/moved project cannot hide.
-            $skippedProjects = New-Object System.Collections.Generic.List[string]
+            # A skipped project used to read as a passing one: the loop simply
+            # never ran it. A missing csproj means a renamed/moved project, and
+            # that is a hard failure, not a warning: the remaining projects
+            # would still satisfy the zero-execution gate, and the green run
+            # would even stamp the gate cache, silently dropping the project's
+            # coverage from then on.
             foreach ($project in $projects) {
                 $path = Join-Path $repoRoot ("{0}\{0}.csproj" -f $project)
                 if (-not (Test-Path $path)) {
-                    Write-Host "SKIPPED PROJECT: $project -- no project file at $path" -ForegroundColor Yellow
-                    $skippedProjects.Add($project)
-                    continue
+                    throw "SKIPPED PROJECT: $project -- no project file at $path. A renamed/moved test project must update this list, not hide."
                 }
-                dotnet test $path --configuration Release --nologo -v q --no-build --logger trx --results-directory $testResultsDirectory
+                # LogFileName names each trx after its project: the default
+                # machine/user/timestamp name lets two projects finishing in
+                # the same second overwrite each other, and named files make
+                # the gate's per-file output readable.
+                dotnet test $path --configuration Release --nologo -v q --no-build --logger "trx;LogFileName=$project.trx" --results-directory $testResultsDirectory
                 if ($LASTEXITCODE -ne 0) { throw "$project failed" }
-            }
-            if ($skippedProjects.Count -gt 0) {
-                Write-Host ("Skipped {0} project(s): {1}" -f $skippedProjects.Count, ($skippedProjects -join ', ')) -ForegroundColor Yellow
             }
             # Zero-execution gate: VSTest exits 0 even when nothing ran, so a
             # green step does not prove anything executed. -RequirePerFile is
             # correct here: every listed project is a non-UI suite that must
             # run at least one test (the UiTests project is deliberately not
-            # in the list).
-            & (Join-Path $repoRoot 'scripts\omp\assert-tests-executed.ps1') -ResultsDirectory $testResultsDirectory -SuiteName 'local tests' -ShowSkipReasons -RequirePerFile
+            # in the list). -MinimumTrxFiles catches a results file that never
+            # got written at all, which the per-file check cannot see.
+            & (Join-Path $repoRoot 'scripts\omp\assert-tests-executed.ps1') -ResultsDirectory $testResultsDirectory -SuiteName 'local tests' -ShowSkipReasons -RequirePerFile -MinimumTrxFiles $projects.Count
             if ($LASTEXITCODE -ne 0) { throw "zero-execution gate failed ($LASTEXITCODE)" }
         }
     }

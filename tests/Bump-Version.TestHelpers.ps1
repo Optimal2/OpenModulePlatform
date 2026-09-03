@@ -111,20 +111,28 @@ function Remove-TemporaryBumpRepository {
 function Invoke-BumpVersion {
     <#
     .SYNOPSIS
-    Runs bump-version.ps1 in the specified repository and returns its exit code.
+    Runs bump-version.ps1 in a child powershell.exe process and returns its
+    REAL exit code. A child process is required for a meaningful exit-code
+    assertion: an in-process & call never sets $LASTEXITCODE for a script, so
+    the ambient value leaked between Pester containers ($LASTEXITCODE is
+    updated process-wide; Pester 5's session-state isolation does not cover
+    it) and made the old assertion depend on whichever unrelated test ran
+    last.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$BumpScriptPath,
         [Parameter(Mandatory = $false)][string]$ComponentKey = 'test_app'
     )
 
-    $exitCode = $null
+    # ErrorActionPreference 'Stop' would turn the child's redirected stderr
+    # into a throwing ErrorRecord, so relax it locally for the capture.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
-        & $BumpScriptPath -ComponentKey $ComponentKey 2>&1 | Out-String | Out-Null
+        $null = & powershell.exe -NoProfile -File $BumpScriptPath -ComponentKey $ComponentKey 2>&1 | Out-String
+        return $LASTEXITCODE
     }
     finally {
-        $exitCode = $LASTEXITCODE
+        $ErrorActionPreference = $previousErrorActionPreference
     }
-
-    return $exitCode
 }

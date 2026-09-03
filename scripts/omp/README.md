@@ -272,13 +272,21 @@ Pester module, not the engine. Shared per-suite harness code lives in
 file-scope functions and variables are not visible inside `It` blocks). Exit
 contract: exit 1 when any test fails, exit 0 otherwise — `Invoke-Pester` never
 sets `$LASTEXITCODE`, so the explicit exit in the runner IS the contract.
+`FailedCount` alone is not sufficient, so the runner also exits 1 when the
+overall Pester result is not `Passed` (covers suites that die at discovery
+time), when zero tests passed, and when fewer containers ran than
+`*.Tests.ps1` files exist on disk (a renamed suite would otherwise silently
+stop running).
 
 `assert-tests-executed.ps1` is the zero-execution gate for VSTest TRX results.
 VSTest exits 0 even when a `--filter` matches nothing, so a green test step
 does not prove anything ran. The gate parses every `*.trx` file in a results
 directory with namespace-agnostic XPath (`local-name()`), sums
 `ResultSummary/Counters` `total`/`executed`, and exits 1 when the directory is
-missing, when no `.trx` file exists, or when `executed == 0`.
+missing, when no `.trx` file exists, or when `executed == 0`. A `.trx` file
+without a `ResultSummary/Counters` node (truncated, corrupt, or a logger
+stub) always exits 1 and is named — it is not a legitimate zero run and must
+never blend silently into the directory sum.
 
 ```powershell
 .\scripts\omp\assert-tests-executed.ps1 -ResultsDirectory TestResults -SuiteName 'fast gate (Category!=Ui)'
@@ -299,6 +307,11 @@ Parameters:
   solution-wide run whose filter legitimately zeroes out a whole project (for
   example the `Category=Ui`-only `UiTests` project under a `Category!=Ui`
   fast-gate filter).
+- `-MinimumTrxFiles <int>`: fail when the directory contains FEWER `.trx`
+  files than this. Per-file checks can only inspect files that exist, so a
+  caller that tests a known list of projects should pass that list's count —
+  `scripts/local-ci.ps1` passes its project count. Default 0 disables the
+  check.
 
 Consumer repositories (LogSearch, and any future consumer with TRX-producing
 test steps) call THIS copy — from a sibling checkout locally and from the

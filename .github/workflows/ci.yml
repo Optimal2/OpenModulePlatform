@@ -139,8 +139,13 @@ jobs:
           }
 
       - name: Run Pester script tests
-        shell: pwsh
-        run: powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\scripts\omp\run-script-tests.ps1
+        # shell: powershell (Windows PowerShell 5.1) directly, not pwsh wrapping
+        # powershell.exe: the install step above lands the pinned module in the
+        # PS 5.1 CurrentUser path, which a powershell.exe spawned FROM pwsh
+        # would not inherit (pwsh's PSModulePath omits it). One shell, one
+        # module path.
+        shell: powershell
+        run: .\scripts\omp\run-script-tests.ps1
 
   build-test:
     # One leg per supported .NET configuration, derived by the version-matrix
@@ -265,7 +270,12 @@ jobs:
           $listOutput = dotnet test OpenModulePlatform.slnx --configuration Release --no-build --filter $excludeFilter --list-tests
           if ($LASTEXITCODE -ne 0) { $listOutput | ForEach-Object { Write-Host $_ }; exit $LASTEXITCODE }
           $excludedCount = @($listOutput | Where-Object { $_ -match '^\s{4}\S' }).Count
+          if ($excludedCount -eq 0) { Write-Host '::error::Excluded-test count parsed as 0; the --list-tests output format must have changed, and exclusions would read as coverage.'; exit 1 }
           Write-Host "Excluded: $excludedCount tests (Portal.Tests.Integration, HostDeploymentLease, Category=Ui) - exclusions tracked in docs/TEST_DEBT.md"
+          # Remove stale TRX files so the zero-execution gate only sees the
+          # current run; hosted runners are fresh today, but the gate must not
+          # depend on where the job happens to run.
+          Remove-Item -LiteralPath TestResults -Recurse -Force -ErrorAction SilentlyContinue
           dotnet test OpenModulePlatform.slnx --configuration Release --no-build --logger trx --results-directory TestResults --filter "FullyQualifiedName!~Portal.Tests.Integration&FullyQualifiedName!~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests&Category!=Ui"
 
       - name: Verify test execution

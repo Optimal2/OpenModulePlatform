@@ -33,7 +33,7 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 
             $exitCode = Invoke-BumpVersion -BumpScriptPath $bumpScriptPath
 
-            ($exitCode -eq 0 -or $exitCode -eq $null) | Should -Be $true
+            $exitCode | Should -Be 0
 
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -51,7 +51,7 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 
             $exitCode = Invoke-BumpVersion -BumpScriptPath $bumpScriptPath
 
-            ($exitCode -eq 0 -or $exitCode -eq $null) | Should -Be $true
+            $exitCode | Should -Be 0
 
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -69,7 +69,7 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 
             $exitCode = Invoke-BumpVersion -BumpScriptPath $bumpScriptPath
 
-            ($exitCode -eq 0 -or $exitCode -eq $null) | Should -Be $true
+            $exitCode | Should -Be 0
 
             # Discriminating assertion: the component bump itself must have run.
             # Without this, 'maxVersion still 2.0.0' would also pass if the new
@@ -165,10 +165,22 @@ Describe 'Bump-Version: repository-only bump' {
         try {
             $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0'
 
-            $output = & $bumpScriptPath -RepositoryOnly -ComponentKey 'test_app' 2>&1 | Out-String
+            # The refusal path ends in 'throw', so run it in a child process:
+            # in-process the ambient $LASTEXITCODE leaks between Pester
+            # containers (the engine updates it process-wide) and the
+            # assertion would measure whichever unrelated test ran last.
+            $previousErrorActionPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $output = & powershell.exe -NoProfile -File $bumpScriptPath -RepositoryOnly -ComponentKey 'test_app' 2>&1 | Out-String
+                $exitCode = $LASTEXITCODE
+            }
+            finally {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
 
-            ($output -match 'RepositoryOnly') | Should -Be $true
-            $LASTEXITCODE | Should -Not -Be 0
+            $output | Should -Match 'RepositoryOnly'
+            $exitCode | Should -Be 1
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -182,10 +194,18 @@ Describe 'Bump-Version: repository-only bump' {
         try {
             $bumpScriptPath = New-TemporaryBumpRepository -RootPath $repoRoot -ComponentVersion '1.0.0'
 
-            $output = & $bumpScriptPath -RepositoryOnly -SkipRepositoryVersion 2>&1 | Out-String
+            $previousErrorActionPreference = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $output = & powershell.exe -NoProfile -File $bumpScriptPath -RepositoryOnly -SkipRepositoryVersion 2>&1 | Out-String
+                $exitCode = $LASTEXITCODE
+            }
+            finally {
+                $ErrorActionPreference = $previousErrorActionPreference
+            }
 
-            ($output -match 'RepositoryOnly') | Should -Be $true
-            $LASTEXITCODE | Should -Not -Be 0
+            $output | Should -Match 'RepositoryOnly'
+            $exitCode | Should -Be 1
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot

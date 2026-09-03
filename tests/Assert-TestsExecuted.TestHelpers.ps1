@@ -50,6 +50,20 @@ $resultsXml
     [System.IO.File]::WriteAllText($Path, $trx, [System.Text.UTF8Encoding]::new($false))
 }
 
+function New-RawTrxFile {
+    <#
+    .SYNOPSIS
+    Writes raw text as a .trx file, for the malformed/truncated fixture cases
+    where New-TrxFile's well-formed shape is exactly what must NOT be emitted.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content
+    )
+
+    [System.IO.File]::WriteAllText($Path, $Content, [System.Text.UTF8Encoding]::new($false))
+}
+
 function Invoke-ExecutionGate {
     <#
     .SYNOPSIS
@@ -60,7 +74,8 @@ function Invoke-ExecutionGate {
     param(
         [Parameter(Mandatory = $true)][string]$ResultsDirectory,
         [Parameter(Mandatory = $false)][switch]$ShowSkipReasons,
-        [Parameter(Mandatory = $false)][switch]$RequirePerFile
+        [Parameter(Mandatory = $false)][switch]$RequirePerFile,
+        [Parameter(Mandatory = $false)][int]$MinimumTrxFiles = 0
     )
 
     $arguments = @(
@@ -70,6 +85,7 @@ function Invoke-ExecutionGate {
     )
     if ($ShowSkipReasons) { $arguments += '-ShowSkipReasons' }
     if ($RequirePerFile) { $arguments += '-RequirePerFile' }
+    if ($MinimumTrxFiles -gt 0) { $arguments += @('-MinimumTrxFiles', "$MinimumTrxFiles") }
 
     # ErrorActionPreference 'Stop' would turn the child's redirected stderr
     # into a throwing ErrorRecord, so relax it locally for the capture.

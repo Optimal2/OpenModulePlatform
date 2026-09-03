@@ -25,8 +25,16 @@
     every container in a separate session state where file-scope functions
     and variables are not visible.
 
-    Invoke-Pester never sets $LASTEXITCODE, so the explicit exit below IS the
-    contract: exit 1 when any test fails, exit 0 otherwise.
+    Invoke-Pester never sets $LASTEXITCODE, so the explicit exits below ARE
+    the contract. FailedCount alone is not enough: it only counts tests that
+    RAN and failed, so a suite that dies at discovery time (syntax error, a
+    bad BeforeDiscovery) or a tests path that resolves to nothing would
+    report FailedCount 0 and exit 0 -- the same false green the
+    zero-execution TRX gate closes for dotnet test. The runner therefore
+    also fails when the overall Pester result is not 'Passed' (covers
+    container/discovery failures), when zero tests passed, and when fewer
+    containers ran than suite files exist on disk (a suite renamed away from
+    the *.Tests.ps1 glob would otherwise silently stop running).
 
 .EXAMPLE
     powershell.exe -NoProfile -File scripts/omp/run-script-tests.ps1
@@ -55,6 +63,20 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $testsPath = Join-Path $repoRoot 'tests'
 
 $results = Invoke-Pester -Path $testsPath -PassThru
+
+$suiteFileCount = @(Get-ChildItem -LiteralPath $testsPath -Filter '*.Tests.ps1' -File).Count
+if ($results.Result -ne 'Passed') {
+    Write-Host "GATE FAIL: overall Pester result is '$($results.Result)', not 'Passed' (a container failed before or during its run)." -ForegroundColor Red
+    exit 1
+}
+if ($results.PassedCount -eq 0) {
+    Write-Host "GATE FAIL: Pester ran 0 passing tests. A green exit from zero assertions proves nothing." -ForegroundColor Red
+    exit 1
+}
+if (@($results.Containers).Count -ne $suiteFileCount) {
+    Write-Host "GATE FAIL: $suiteFileCount suite file(s) match *.Tests.ps1 under $testsPath, but $(@($results.Containers).Count) container(s) ran." -ForegroundColor Red
+    exit 1
+}
 if ($results.FailedCount -gt 0) {
     exit 1
 }

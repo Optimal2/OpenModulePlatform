@@ -18,6 +18,15 @@
     project whose filter matched nothing is masked by a sibling project in
     the same step that did run tests; -RequirePerFile closes that hole.
 
+    A .trx file WITHOUT a ResultSummary/Counters node (truncated, corrupt, or
+    written by a logger stub) is categorically different from a legitimate
+    executed="0" and always fails the gate, with or without -RequirePerFile:
+    it must never blend silently into the directory sum.
+
+    With -MinimumTrxFiles the gate also fails when FEWER .trx files exist than
+    the caller expected, which catches a results file that never got written
+    at all (per-file checks can only inspect files that exist).
+
     Canonical location: OpenModulePlatform/scripts/omp/. Consumer
     repositories invoke this copy (from a sibling checkout or a CI checkout
     of OpenModulePlatform) instead of keeping their own, so the gate cannot
@@ -34,6 +43,12 @@
 
 .PARAMETER RequirePerFile
     Require executed > 0 in EVERY .trx file, not just in the directory sum.
+
+.PARAMETER MinimumTrxFiles
+    Fail when the directory contains fewer .trx files than this. 0 (default)
+    disables the check. Callers that test a known list of projects should
+    pass that list's count, so a project whose results file never got
+    written cannot hide.
 #>
 [CmdletBinding()]
 param(
@@ -47,7 +62,10 @@ param(
     [switch]$ShowSkipReasons,
 
     [Parameter(Mandatory = $false)]
-    [switch]$RequirePerFile
+    [switch]$RequirePerFile,
+
+    [Parameter(Mandatory = $false)]
+    [int]$MinimumTrxFiles = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,21 +82,39 @@ if ($trxFiles.Count -eq 0) {
     exit 1
 }
 
+if ($MinimumTrxFiles -gt 0 -and $trxFiles.Count -lt $MinimumTrxFiles) {
+    Write-Host "GATE FAIL [$SuiteName]: expected at least $MinimumTrxFiles .trx file(s), found $($trxFiles.Count) in $ResultsDirectory." -ForegroundColor Red
+    Write-Host 'A results file that never got written is invisible to the per-file checks.' -ForegroundColor Red
+    exit 1
+}
+
 $totalTests = 0
 $executedTests = 0
 $skipped = [System.Collections.Generic.List[hashtable]]::new()
 $zeroExecutedFiles = [System.Collections.Generic.List[string]]::new()
+$malformedFiles = [System.Collections.Generic.List[string]]::new()
 
 foreach ($trxFile in $trxFiles) {
-    [xml]$trx = Get-Content -LiteralPath $trxFile.FullName -Raw
+    # XmlDocument.Load honours the file's declared encoding; a Get-Content
+    # cast would have to guess it.
+    $trx = New-Object System.Xml.XmlDocument
+    $trx.Load($trxFile.FullName)
 
     $fileExecuted = 0
-    $counters = $trx.SelectSingleNode('//*[local-name()="Counters"]')
-    if ($null -ne $counters) {
-        $totalTests += [int]$counters.GetAttribute('total')
-        $fileExecuted = [int]$counters.GetAttribute('executed')
-        $executedTests += $fileExecuted
+    # Anchored to the VSTest shape: exactly one Counters node, under
+    # ResultSummary at the document root.
+    $counters = $trx.SelectSingleNode('/*[local-name()="TestRun"]/*[local-name()="ResultSummary"]/*[local-name()="Counters"]')
+    # A missing Counters node (or missing counters attributes: GetAttribute
+    # returns '' for an absent one, which casts to 0) means a truncated or
+    # corrupt file. That is categorically different from a legitimate
+    # executed="0" and must never blend silently into the directory sum.
+    if ($null -eq $counters -or -not $counters.HasAttribute('total') -or -not $counters.HasAttribute('executed')) {
+        $malformedFiles.Add($trxFile.Name)
+        continue
     }
+    $totalTests += [int]$counters.GetAttribute('total')
+    $fileExecuted = [int]$counters.GetAttribute('executed')
+    $executedTests += $fileExecuted
 
     if ($fileExecuted -eq 0) {
         $zeroExecutedFiles.Add($trxFile.Name)
@@ -113,6 +149,15 @@ if ($ShowSkipReasons -and $skipped.Count -gt 0) {
         Write-Host "  SKIP: $($entry.Name)"
         Write-Host "        $($entry.Reason)"
     }
+}
+
+if ($malformedFiles.Count -gt 0) {
+    Write-Host "GATE FAIL [$SuiteName]: $($malformedFiles.Count) .trx file(s) have no ResultSummary/Counters node (truncated or corrupt):" -ForegroundColor Red
+    foreach ($name in $malformedFiles) {
+        Write-Host "  - $name" -ForegroundColor Red
+    }
+    Write-Host 'A malformed file is not a legitimate zero run; re-run the test step and inspect the logger.' -ForegroundColor Red
+    exit 1
 }
 
 if ($RequirePerFile -and $zeroExecutedFiles.Count -gt 0) {
