@@ -200,35 +200,59 @@ public sealed class PortalDeploymentLockLease : IAsyncDisposable
         while (await timer.WaitForNextTickAsync(ct))
         {
             // Renewal overwrites the lock file, so it must first establish that the file is
-            // still ours. This loop had no ownership check at all: it wrote every 30 seconds
-            // regardless of what the file said. If a long import outlived its five-minute
-            // lease and HostAgent legitimately claimed the expired lock, the very next
-            // renewal tick handed ownership back to the Portal while HostAgent was mid-flight
-            // -- and HostAgent's own renewal then read a foreign LockId and stopped, so the
-            // deployment that was actually running lost its protection to the one that had
-            // let its lease lapse. Same invariant as the HostAgent lease, opposite failure
-            // direction (R12-A4 sibling).
-            var current = DeploymentLockFile.ReadStatus(_applicationRoot, DateTimeOffset.UtcNow);
-            var verdict = ClassifyRenewalOwnership(current, _lockId);
-            if (verdict == RenewalOwnership.Lost)
+            // still ours -- and the check and the write must be one atomic step. This loop
+            // used to read the status and then call WriteAsync as two separate operations;
+            // a foreign claim that landed between them was silently overwritten, and this
+            // lease went on renewing a lock it no longer held. TryRenewExclusiveAsync does
+            // the read, the LockId comparison and the write inside a single exclusive
+            // handle (FileShare.None), so a competing claimant is either seen (Lost) or
+            // blocked until the renewed document is on disk.
+            var now = DateTimeOffset.UtcNow;
+            var candidate = _document with
+            {
+                UpdatedUtc = now,
+                ExpiresUtc = now.Add(_lockLease)
+            };
+
+            var outcome = await DeploymentLockFile.TryRenewExclusiveAsync(
+                _applicationRoot,
+                _lockId,
+                _ => candidate,
+                ct);
+
+            if (outcome.Result == DeploymentLockRenewalResult.Lost)
             {
                 _logger.LogWarning(
                     "Portal deployment lock is no longer held by this lease; renewal stopped. LockId={LockId}, OwnerLockId={OwnerLockId}, LockPath={LockPath}",
                     _lockId,
-                    current.Document?.LockId,
+                    outcome.Document?.LockId,
                     DeploymentLockFile.GetPath(_applicationRoot));
                 return;
             }
 
-            if (verdict == RenewalOwnership.Indeterminate)
+            if (outcome.Result == DeploymentLockRenewalResult.NotFound)
             {
-                // ReadStatus fails CLOSED: an IOException, a denied read, a half-written file
-                // or a planted reparse point all come back as Locked with a null Document.
-                // Comparing that null against _lockId would make a momentary read failure
-                // indistinguishable from a real change of owner and end renewal for good
-                // while the import it protects kept running. Tolerate a bounded run of them,
-                // and never claim the lease was taken when all that is known is that the file
-                // could not be read (R12-A4).
+                // Nobody holds the lock at all; the import this lease protects is still
+                // running, so re-assert it through the atomic claim -- never through a
+                // blind overwrite, which would erase a claimant that arrived first.
+                if (await TryReassertLockAsync(candidate, ct))
+                {
+                    _document = candidate;
+                    consecutiveIndeterminateReads = 0;
+                }
+
+                continue;
+            }
+
+            if (outcome.Result == DeploymentLockRenewalResult.Indeterminate)
+            {
+                // TryRenewExclusiveAsync fails CLOSED the same way ReadStatus does: an
+                // IOException, a denied read, a half-written file or a planted reparse
+                // point all come back with no document. Comparing that against _lockId
+                // would make a momentary read failure indistinguishable from a real change
+                // of owner and end renewal for good while the import it protects kept
+                // running. Tolerate a bounded run of them, and never claim the lease was
+                // taken when all that is known is that the file could not be read (R12-A4).
                 consecutiveIndeterminateReads++;
                 if (consecutiveIndeterminateReads >= _maxConsecutiveIndeterminateReads)
                 {
@@ -237,7 +261,7 @@ public sealed class PortalDeploymentLockLease : IAsyncDisposable
                         consecutiveIndeterminateReads,
                         _lockId,
                         DeploymentLockFile.GetPath(_applicationRoot),
-                        current.Diagnostic);
+                        outcome.Diagnostic);
                     return;
                 }
 
@@ -246,30 +270,43 @@ public sealed class PortalDeploymentLockLease : IAsyncDisposable
                     consecutiveIndeterminateReads,
                     _lockId,
                     DeploymentLockFile.GetPath(_applicationRoot),
-                    current.Diagnostic);
+                    outcome.Diagnostic);
                 continue;
             }
 
             consecutiveIndeterminateReads = 0;
+            _document = outcome.Document ?? candidate;
+        }
+    }
 
-            var now = DateTimeOffset.UtcNow;
-            _document = _document with
+    /// <summary>
+    /// Re-asserts this lease's claim when the lock file has vanished, using the same atomic
+    /// create-if-absent primitive as acquisition so a simultaneous claimant is never
+    /// overwritten (R12-A2).
+    /// </summary>
+    private async Task<bool> TryReassertLockAsync(DeploymentLockDocument candidate, CancellationToken ct)
+    {
+        try
+        {
+            if (await DeploymentLockFile.TryCreateExclusiveAsync(_applicationRoot, candidate, ct))
             {
-                UpdatedUtc = now,
-                ExpiresUtc = now.Add(_lockLease)
-            };
+                return true;
+            }
 
-            try
-            {
-                await DeploymentLockFile.WriteAsync(_applicationRoot, _document, ct);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to renew Portal deployment lock. LockId={LockId}",
-                    _lockId);
-            }
+            _logger.LogInformation(
+                "Portal deployment lock file was gone, but another claimant took it before it could be re-asserted; the next renewal tick will establish the owner. LockId={LockId}, LockPath={LockPath}",
+                _lockId,
+                DeploymentLockFile.GetPath(_applicationRoot));
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to re-assert Portal deployment lock. LockId={LockId}, LockPath={LockPath}",
+                _lockId,
+                DeploymentLockFile.GetPath(_applicationRoot));
+            return false;
         }
     }
 

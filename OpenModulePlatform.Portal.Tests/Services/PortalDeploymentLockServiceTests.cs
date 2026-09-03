@@ -1,6 +1,8 @@
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text;
+using System.Text.Json;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Services;
 
@@ -209,6 +211,60 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
 
         // Dispose must not remove a lock file this lease no longer owns either.
         Assert.True(File.Exists(DeploymentLockFile.GetPath(_root)));
+    }
+
+    /// <summary>
+    /// A foreign claim injected while the lock file is exclusively held is never
+    /// overwritten: the renewal's read-verify-write is one atomic step inside an exclusive
+    /// handle, so the injected write either lands first (and is seen, ending renewal as
+    /// Lost) or is blocked until the renewed document is on disk.
+    /// </summary>
+    /// <remarks>
+    /// This exercises the exact interleaving the old read-then-write renewal lost: the
+    /// foreign write happens in the middle of the renewal loop's activity -- while renewal
+    /// is retrying to open the file it cannot yet read. With the write going through a
+    /// FileShare.None handle held across several renewal ticks, nothing the lease does can
+    /// interpose between the injected document's read and anyone's write; the renewed
+    /// document must never replace it.
+    /// </remarks>
+    [Fact]
+    public async Task Renewal_DoesNotOverwrite_AForeignClaimInjectedWhileTheLockFileIsExclusivelyHeld()
+    {
+        var lease = await CreateService().AcquireUniversalImportLockAsync(
+            "tester",
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMilliseconds(50),
+            maxConsecutiveIndeterminateReads: 100,
+            CancellationToken.None);
+
+        var now = DateTimeOffset.UtcNow;
+        var foreign = DeploymentLockFile.Create("hostagent-lock-id", "omp_portal", "HostAgent", "deploying", now, now.AddMinutes(5));
+        var path = DeploymentLockFile.GetPath(_root);
+
+        // Hold the lock file exclusively across several renewal ticks and write the foreign
+        // claim through that handle. The renewal's own exclusive open retries behind it.
+        await using (var handle = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            var json = JsonSerializer.Serialize(foreign, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+            handle.SetLength(0);
+            handle.Position = 0;
+            await handle.WriteAsync(Encoding.UTF8.GetBytes(json));
+            await handle.FlushAsync();
+
+            await Task.Delay(400);
+        }
+
+        // Give the renewal loop room for several more ticks; the first tick after the
+        // handle closes must read the foreign document and stop as Lost.
+        await Task.Delay(600);
+
+        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        Assert.Equal("hostagent-lock-id", status.Document!.LockId);
+        Assert.Equal(foreign.UpdatedUtc, status.Document.UpdatedUtc);
+
+        await lease.DisposeAsync();
+
+        Assert.True(File.Exists(path));
     }
 
     /// <summary>

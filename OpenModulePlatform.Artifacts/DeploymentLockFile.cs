@@ -54,6 +54,16 @@ public static class DeploymentLockFile
             ExpiresUtc = expiresUtc
         };
 
+    /// <summary>
+    /// How long <see cref="TryRenewExclusiveAsync"/> and <see cref="WriteAsync"/> keep
+    /// retrying when the lock file is held open exclusively by the other side's renewal.
+    /// A renewal holds its handle for a single read-compare-write, so ten attempts at
+    /// 50 ms span it comfortably without turning a real I/O failure into a hang.
+    /// </summary>
+    private const int MaxSharingViolationAttempts = 10;
+
+    private static readonly TimeSpan SharingViolationRetryDelay = TimeSpan.FromMilliseconds(50);
+
     public static async Task WriteAsync(
         string applicationRoot,
         DeploymentLockDocument document,
@@ -74,11 +84,178 @@ public static class DeploymentLockFile
         {
             var json = JsonSerializer.Serialize(document, JsonOptions);
             await File.WriteAllTextAsync(tempPath, json, Utf8NoBom, ct);
-            File.Move(tempPath, path, overwrite: true);
+
+            // File.Move(overwrite: true) onto a target that is open with FileShare.None
+            // -- an atomic renewal holding its read-verify-write handle, for example --
+            // fails with a sharing violation (IOException) or, for the replace-existing
+            // variant, an access denial (UnauthorizedAccessException). That state lasts
+            // milliseconds, so retry it briefly instead of failing the write; a persistent
+            // I/O problem still surfaces once the bounded run of attempts is spent.
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    File.Move(tempPath, path, overwrite: true);
+                    break;
+                }
+                catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException)
+                    && attempt < MaxSharingViolationAttempts)
+                {
+                    await Task.Delay(SharingViolationRetryDelay, ct);
+                }
+            }
         }
         finally
         {
             TryDelete(tempPath);
+        }
+    }
+
+    /// <summary>
+    /// Atomically reads the lock file, verifies it belongs to <paramref name="expectedLockId"/>
+    /// and writes the renewed document, all inside one exclusive file handle.
+    /// </summary>
+    /// <remarks>
+    /// The read-then-write pair this replaces had the ownership check and the overwrite as
+    /// two separate operations: a foreign claim that landed between them was silently
+    /// overwritten, and the renewal that did it went on believing it still held the lock.
+    /// Opening the file with <see cref="FileShare.None"/> and doing the read, the LockId
+    /// comparison and the write without letting the handle go closes that window -- a
+    /// competing claimant either arrives before the open (and is seen, so the result is
+    /// <see cref="DeploymentLockRenewalResult.Lost"/>) or is blocked until the renewed
+    /// document is on disk.
+    ///
+    /// This method never throws for the lock file's own I/O problems; like
+    /// <see cref="ReadStatus"/> it fails closed, reporting them as
+    /// <see cref="DeploymentLockRenewalResult.Indeterminate"/> so the caller can apply its
+    /// bounded tolerance instead of ending a lease on one transient fault.
+    /// </remarks>
+    public static async Task<DeploymentLockRenewalOutcome> TryRenewExclusiveAsync(
+        string applicationRoot,
+        string expectedLockId,
+        Func<DeploymentLockDocument, DeploymentLockDocument> renew,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(renew);
+
+        var path = GetPath(applicationRoot);
+        if (!File.Exists(path))
+        {
+            return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.NotFound, null, null);
+        }
+
+        // Same fail-closed branch as ReadStatus: never open a planted link, and never
+        // delete it either -- renewal proves ownership, it does not repair the root.
+        if (OmpReparsePointGuard.IsReparsePoint(path))
+        {
+            return new DeploymentLockRenewalOutcome(
+                DeploymentLockRenewalResult.Indeterminate,
+                null,
+                "Deployment lock file is a reparse point (junction/symlink) and was not read.");
+        }
+
+        FileStream? exclusiveHandle;
+        try
+        {
+            // Validates the directories above the file before writing through them, exactly
+            // as WriteAsync does. The leaf itself was checked just above and is left alone.
+            OmpReparsePointGuard.PrepareOwnedFileForWrite(path, applicationRoot, "Deployment lock file");
+
+            exclusiveHandle = await OpenExclusiveWithRetryAsync(path, ct);
+        }
+        catch (FileNotFoundException)
+        {
+            // The file vanished between the existence check and the open: nobody holds
+            // the lock, so the caller re-asserts it through the atomic claim.
+            return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.NotFound, null, null);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new DeploymentLockRenewalOutcome(
+                DeploymentLockRenewalResult.Indeterminate,
+                null,
+                $"Deployment lock file could not be opened exclusively: {ex.Message}");
+        }
+
+        if (exclusiveHandle is null)
+        {
+            return new DeploymentLockRenewalOutcome(
+                DeploymentLockRenewalResult.Indeterminate,
+                null,
+                "Deployment lock file stayed exclusively locked by another process.");
+        }
+
+        await using (var stream = exclusiveHandle)
+        {
+            DeploymentLockDocument? document;
+            try
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+                var json = await reader.ReadToEndAsync(ct);
+                document = JsonSerializer.Deserialize<DeploymentLockDocument>(json, JsonOptions);
+            }
+            catch (Exception ex) when (ex is IOException or JsonException)
+            {
+                return new DeploymentLockRenewalOutcome(
+                    DeploymentLockRenewalResult.Indeterminate,
+                    null,
+                    $"Deployment lock file could not be read: {ex.Message}");
+            }
+
+            if (document is null)
+            {
+                return new DeploymentLockRenewalOutcome(
+                    DeploymentLockRenewalResult.Indeterminate,
+                    null,
+                    "Deployment lock file exists but did not contain a valid document.");
+            }
+
+            // The comparison happens while this handle still holds the file exclusively,
+            // so the document just read is provably still the document on disk.
+            if (!string.Equals(document.LockId, expectedLockId, StringComparison.Ordinal))
+            {
+                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Lost, document, null);
+            }
+
+            var renewed = renew(document);
+            var renewedJson = JsonSerializer.Serialize(renewed, JsonOptions);
+            stream.SetLength(0);
+            stream.Position = 0;
+            await stream.WriteAsync(Utf8NoBom.GetBytes(renewedJson), ct);
+            await stream.FlushAsync(ct);
+
+            return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Renewed, renewed, null);
+        }
+    }
+
+    /// <summary>
+    /// Opens the lock file exclusively, retrying a sharing violation for a bounded moment:
+    /// the other side's atomic renewal holds the same kind of handle for milliseconds.
+    /// </summary>
+    private static async Task<FileStream?> OpenExclusiveWithRetryAsync(string path, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None, bufferSize: 4096, useAsync: true);
+            }
+            catch (FileNotFoundException)
+            {
+                throw;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                throw;
+            }
+            catch (IOException) when (attempt < MaxSharingViolationAttempts)
+            {
+                await Task.Delay(SharingViolationRetryDelay, ct);
+            }
+            catch (IOException)
+            {
+                return null;
+            }
         }
     }
 
@@ -306,3 +483,30 @@ public sealed record DeploymentLockStatus(
         return builder.ToString();
     }
 }
+
+/// <summary>
+/// What one atomic renewal attempt of the deployment lock established.
+/// </summary>
+public enum DeploymentLockRenewalResult
+{
+    /// <summary>The lock file named this lease and the renewed document was written.</summary>
+    Renewed,
+
+    /// <summary>The lock file names a different lease. This is the only real loss.</summary>
+    Lost,
+
+    /// <summary>The lock file could not be read, so nothing about ownership is known.</summary>
+    Indeterminate,
+
+    /// <summary>There is no lock file at all; the caller may re-assert its claim.</summary>
+    NotFound
+}
+
+/// <summary>
+/// The outcome of <see cref="DeploymentLockFile.TryRenewExclusiveAsync"/>: the verdict,
+/// the document that was read (or written), and a diagnostic when nothing could be proven.
+/// </summary>
+public sealed record DeploymentLockRenewalOutcome(
+    DeploymentLockRenewalResult Result,
+    DeploymentLockDocument? Document,
+    string? Diagnostic);
