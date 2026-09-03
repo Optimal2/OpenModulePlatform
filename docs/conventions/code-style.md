@@ -6,16 +6,16 @@ Audit of the ten repositories in the `omp-odv` campaign. Only documentation file
 
 | Repository | Path | Type |
 |------------|------|------|
-| OpenModulePlatform | `E:\Linus Dunkers\Documents\GitHub\OpenModulePlatform` | .NET |
-| IbsPackager | `E:\Linus Dunkers\Documents\GitHub\IbsPackager` | .NET |
-| LogSearch | `E:\Linus Dunkers\Documents\GitHub\LogSearch` | .NET |
-| EArkivChecker | `E:\Linus Dunkers\Documents\GitHub\EArkivChecker` | .NET |
-| Dokumentbibliotek | `E:\Linus Dunkers\Documents\GitHub\Dokumentbibliotek` | .NET |
-| VajSkrivare | `E:\Linus Dunkers\Documents\GitHub\VajSkrivare` | .NET |
-| iKrock2 | `E:\Linus Dunkers\Documents\GitHub\iKrock2` | .NET |
-| ODVGateway | `E:\Linus Dunkers\Documents\GitHub\ODVGateway` | .NET |
-| OpenDocViewer | `E:\Linus Dunkers\Documents\GitHub\OpenDocViewer` | JS/npm |
-| AgentDocMap | `E:\Linus Dunkers\Documents\GitHub\AgentDocMap` | JS/npm |
+| OpenModulePlatform | `<workspace>\OpenModulePlatform` | .NET |
+| IbsPackager | `<workspace>\IbsPackager` | .NET |
+| LogSearch | `<workspace>\LogSearch` | .NET |
+| EArkivChecker | `<workspace>\EArkivChecker` | .NET |
+| Dokumentbibliotek | `<workspace>\Dokumentbibliotek` | .NET |
+| VajSkrivare | `<workspace>\VajSkrivare` | .NET |
+| iKrock2 | `<workspace>\iKrock2` | .NET |
+| ODVGateway | `<workspace>\ODVGateway` | .NET |
+| OpenDocViewer | `<workspace>\OpenDocViewer` | JS/npm |
+| AgentDocMap | `<workspace>\AgentDocMap` | JS/npm |
 
 Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 

@@ -44,22 +44,21 @@ public static class OmpOidcSignInDiagnostics
             "OIDC sign-in diagnostics: incoming claim types with value counts: {ClaimTypes}.",
             BuildClaimTypeSummary(incomingPrincipal));
 
-        // Principal values (account names, SIDs translated from them) are personal
-        // data, so the default line carries only the count per principal type.
-        // The full list is opt-in together with the claim values (CodeQL
-        // cs/cleartext-storage-of-sensitive-information, alert #10).
+        // Principal values -- account names, and SIDs translated from account names
+        // -- are personal data and are never written to the log, not even opt-in
+        // (CodeQL cs/cleartext-storage-of-sensitive-information, alerts #10 and
+        // #13). What incident diagnostics actually needs is the SHAPE of what the
+        // resolver produced: did the SID<->name enrichment yield both forms, and how
+        // many of each. That is what is logged. The raw claim values, opted in
+        // below, let an operator reconstruct the actual principals when they must.
         logger.LogInformation(
-            "OIDC sign-in diagnostics: resolved role principals by type: {PrincipalTypes}.",
-            BuildPrincipalTypeSummary(resultingRolePrincipals));
+            "OIDC sign-in diagnostics: resolved role principals by type and form: {PrincipalShapes}.",
+            BuildPrincipalShapeSummary(resultingRolePrincipals));
 
         if (!diagnostics.IncludeClaimValues)
         {
             return;
         }
-
-        logger.LogInformation(
-            "OIDC sign-in diagnostics: resolved role principals: {Principals}.",
-            string.Join(", ", resultingRolePrincipals));
 
         LogClaimValues(logger, incomingPrincipal);
     }
@@ -108,23 +107,69 @@ public static class OmpOidcSignInDiagnostics
     }
 
     /// <summary>
-    /// "User (1), ADUser (3), OIDCUser (1)" — the principal type before the first
-    /// '|' with a count, never the value after it.
+    /// "ADUser|SID (2), ADUser|domain\name (1), OIDCSubject|opaque (1), OmpUser|number (1),
+    /// User|upn (1)" — the principal type before the first '|' and the FORM of the value
+    /// after it, with a count. The value itself is never part of the output: the form
+    /// is a fixed label chosen by a pattern test, so the log shows that the SID/name
+    /// enrichment produced both forms without carrying either.
     /// </summary>
-    private static string BuildPrincipalTypeSummary(IReadOnlyList<string> principals)
+    private static string BuildPrincipalShapeSummary(IReadOnlyList<string> principals)
     {
         var summary = principals
             .Select(principal =>
             {
                 var separator = principal.IndexOf('|', StringComparison.Ordinal);
-                return separator > 0 ? principal[..separator] : principal;
+                var type = separator > 0 ? principal[..separator] : "(untyped)";
+                var value = separator >= 0 ? principal[(separator + 1)..] : principal;
+                return type + "|" + ClassifyPrincipalForm(value);
             })
-            .GroupBy(type => type, StringComparer.Ordinal)
+            .GroupBy(shape => shape, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => $"{group.Key} ({group.Count()})")
             .ToList();
         return summary.Count == 0 ? "none" : string.Join(", ", summary);
     }
+
+    private static string ClassifyPrincipalForm(string value)
+    {
+        if (value.Length == 0)
+        {
+            return "empty";
+        }
+
+        if (SidForm.IsMatch(value))
+        {
+            return "SID";
+        }
+
+        if (value.Contains('\\', StringComparison.Ordinal))
+        {
+            return "domain\\name";
+        }
+
+        if (value.Contains('@', StringComparison.Ordinal))
+        {
+            return "upn";
+        }
+
+        if (value.All(char.IsAsciiDigit))
+        {
+            return "number";
+        }
+
+        if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return "issuer-qualified";
+        }
+
+        return "opaque";
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex SidForm = new(
+        @"^S-1-\d+(?:-\d+)+$",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
 
     private static void LogClaimValues(ILogger logger, ClaimsPrincipal incomingPrincipal)
     {

@@ -565,7 +565,7 @@ the pattern new OMP modules (examples, shared helpers) already teach.
   `ValidateOnStart` registrations landed, verified 2026-08-27); password-bearing
   prod psd1 combined with `IncludeConfigInPackage = $true`.
 - Migration: remove the dead `BackendClientOptions`/health-check config; move
-  MLL links/credentials and patient data into config sections bound to options
+  external-system links/credentials and patient data into config sections bound to options
   and supplied by overlays (customer values out of C#); ~~add
   `ValidateOnStart()`~~ (done); delete the dead DI overload; ensure secret-bearing
   psd1 files are excluded from packages.

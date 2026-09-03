@@ -16,7 +16,7 @@ Repositories audited:
 | `Dokumentbibliotek` | .NET + browser JS | Yes — browser `fetch` only |
 | `VajSkrivare` | .NET + minimal JS | No |
 | `iKrock2` | .NET + minimal JS | No |
-| `ODVGateway` | .NET | Yes — remote inline/WebClient source proxy |
+| `ODVGateway` | .NET | Yes — remote inline/viewer source proxy |
 | `OpenDocViewer` | JS/npm | Yes — browser `fetch`, `axios`, `navigator.sendBeacon` |
 | `AgentDocMap` | JS/npm | No |
 

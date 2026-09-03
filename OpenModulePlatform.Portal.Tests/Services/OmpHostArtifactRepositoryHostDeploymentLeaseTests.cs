@@ -15,6 +15,12 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
     private readonly OmpHostArtifactRepository _repository;
     private readonly List<long> _createdDeploymentIds = [];
 
+    // These tests claim "the next pending row" in omp.HostDeployments of the shared
+    // local development database, so two test hosts running at the same time take
+    // each other's rows (measured 2026-09-03: Expected 2396, Actual 2395). The gate
+    // serialises the class across processes; xUnit already serialises it within one.
+    private readonly IDisposable _gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire("HostDeploymentLease");
+
     public OmpHostArtifactRepositoryHostDeploymentLeaseTests()
     {
         _connectionString = GetConnectionString();
@@ -23,7 +29,14 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
 
     public void Dispose()
     {
-        CleanupCreatedDeployments();
+        try
+        {
+            CleanupCreatedDeployments();
+        }
+        finally
+        {
+            _gate.Dispose();
+        }
     }
 
     [Fact]

@@ -25,8 +25,8 @@ using OpenModulePlatform.WorkerProcessHost.Services;
 //
 // It must ALSO stay on the drive the worker host was provisioned onto. The
 // default used to be CommonApplicationData (C:\ProgramData), which is wrong on
-// every installation that keeps the platform off the system drive. At VGR that
-// folder does not exist and must not be created, so a worker that threw during
+// every installation that keeps the platform off the system drive. At one such
+// installation that folder does not exist and must not be created, so a worker that threw during
 // startup logged NOWHERE: the process exited 1 every fifteen seconds and the
 // only trace was WorkerManager observing the exit code. Measured 2026-08-23 on
 // the IbsPackager workers in production.

@@ -168,7 +168,7 @@ SELECT sourceFile.RelativePath,
            -- simply predate the PackageFileContent column (added 2026-08-12) and never
            -- have been re-imported. Requiring a baseline on the SOURCE made these rows Conflict
            -- and let the package default win, which is how a configured OmpAuth:Oidc
-           -- block disappeared from a working install (VGR Test, measured 2026-08-23):
+           -- block disappeared from a working install (a customer test environment, measured 2026-08-23):
            -- the operator's row sat on the previous artifact while every newer version
            -- carried the package default, and once one version held that default it
            -- became the carry-forward source for the next -- the loss compounded and

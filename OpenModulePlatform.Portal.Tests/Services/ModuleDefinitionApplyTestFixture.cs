@@ -14,7 +14,9 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// </summary>
 public sealed class ModuleDefinitionApplyTestFixture : IAsyncLifetime
 {
-    public const string DatabaseName = "OpenModulePlatform_PortalTests_ModuleDefinitionApply";
+    // Per-process name (pid + start time) so concurrent test hosts never share a
+    // database; stale copies from crashed runs are swept by the provisioner.
+    public static readonly string DatabaseName = OmpTestDatabaseNames.ForPortalTests("ModuleDefinitionApply");
 
     public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 

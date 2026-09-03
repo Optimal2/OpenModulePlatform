@@ -146,14 +146,14 @@ of the HTML and JSON files.
 Deployments may either keep files in separate folders:
 
 ```text
-\\server\share\EMP\Data\ContentReports
-\\server\share\EMP\Data\ContentPages
+\\server\share\OMP\Data\ContentReports
+\\server\share\OMP\Data\ContentPages
 ```
 
 or place JSON and HTML files directly in the shared `Data` folder:
 
 ```text
-\\server\share\EMP\Data
+\\server\share\OMP\Data
 ```
 
 When `ServerReportsPath` ends with `Data\ContentReports` or `HtmlFilesPath`

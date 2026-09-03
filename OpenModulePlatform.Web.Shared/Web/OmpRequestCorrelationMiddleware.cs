@@ -24,7 +24,7 @@ namespace OpenModulePlatform.Web.Shared.Web;
 /// <c>X-Correlation-ID</c> is honoured only when it is a short, safe token; otherwise a
 /// fresh id is generated so the value that reaches the logs is never attacker-controlled
 /// beyond a bounded token shape. ${aspnet-TraceIdentifier} alone is per-process and does
-/// not propagate across service boundaries (WebClient -&gt; ODVGateway, Portal -&gt; module);
+/// not propagate across service boundaries (external viewer -&gt; ODVGateway, Portal -&gt; module);
 /// an inbound correlation id does.
 /// </para>
 /// </remarks>

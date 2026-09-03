@@ -450,12 +450,12 @@ local `App_Data` folders during normal requests.
     "FileMirrors": [
       {
         "SourcePath": "\\\\fileserver\\share\\OMP\\Data\\ContentReports",
-        "TargetPath": "D:\\\\Netserv\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentReports",
+        "TargetPath": "D:\\\\Apps\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentReports",
         "DeleteStaleTargetEntries": true
       },
       {
         "SourcePath": "\\\\fileserver\\share\\OMP\\Data\\ContentPages",
-        "TargetPath": "D:\\\\Netserv\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentPages",
+        "TargetPath": "D:\\\\Apps\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentPages",
         "DeleteStaleTargetEntries": true
       }
     ]

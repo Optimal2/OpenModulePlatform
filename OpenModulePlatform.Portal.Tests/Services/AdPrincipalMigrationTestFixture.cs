@@ -16,7 +16,9 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// </summary>
 public sealed class AdPrincipalMigrationTestFixture : IAsyncLifetime
 {
-    public const string DatabaseName = "OpenModulePlatform_PortalTests_AdPrincipalMigration";
+    // Per-process name (pid + start time) so concurrent test hosts never share a
+    // database; stale copies from crashed runs are swept by the provisioner.
+    public static readonly string DatabaseName = OmpTestDatabaseNames.ForPortalTests("AdPrincipalMigration");
 
     public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 

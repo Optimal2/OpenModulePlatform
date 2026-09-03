@@ -63,7 +63,7 @@ public sealed class OmpOidcSignInDiagnosticsTests
         Assert.DoesNotContain(@"CONTOSO\anna", text);
         Assert.DoesNotContain("S-1-5-21-11-22-33-2001", text);
         Assert.DoesNotContain(@"FABRIKAM\bo", text);
-        Assert.Contains("ADUser (1)", text);
+        Assert.Contains(@"ADUser|domain\name (1)", text);
     }
 
     [Fact]
@@ -78,8 +78,8 @@ public sealed class OmpOidcSignInDiagnosticsTests
             principal,
             resolved!,
             [
-                "User|lindu5@example.test",
-                @"ADUser|EXAMPLE\lindu5",
+                "User|anna@example.test",
+                @"ADUser|EXAMPLE\anna",
                 "ADUser|S-1-5-21-11-22-33-6091592",
                 "OIDCSubject|subject-1",
                 "OmpUser|4"
@@ -87,9 +87,36 @@ public sealed class OmpOidcSignInDiagnosticsTests
             new OmpOidcDiagnosticsOptions { Enabled = true });
 
         var text = string.Join("\n", logger.Entries.Select(entry => entry.Message));
-        Assert.Contains("ADUser (2), OIDCSubject (1), OmpUser (1), User (1)", text);
-        Assert.DoesNotContain("lindu5", text);
+        // Type and FORM with counts -- proves the SID/name enrichment produced both
+        // forms -- but never a value (CodeQL alerts #10 and #13).
+        Assert.Contains(
+            @"ADUser|SID (1), ADUser|domain\name (1), OIDCSubject|opaque (1), OmpUser|number (1), User|upn (1)",
+            text);
+        Assert.DoesNotContain("anna", text);
         Assert.DoesNotContain("S-1-5-21-11-22-33-6091592", text);
+        Assert.DoesNotContain("subject-1", text);
+    }
+
+    [Fact]
+    public void LogSignIn_IncludeClaimValues_StillNeverLogsPrincipalValues()
+    {
+        var logger = new ListLogger();
+        var principal = CreatePrincipal(new Claim("sub", "subject-1"));
+        var resolved = OmpOidcClaimResolver.Resolve(principal, new OmpOidcOptions());
+
+        OmpOidcSignInDiagnostics.LogSignIn(
+            logger,
+            principal,
+            resolved!,
+            [@"ADUser|EXAMPLE\anna", "ADUser|S-1-5-21-11-22-33-6091592"],
+            new OmpOidcDiagnosticsOptions { Enabled = true, IncludeClaimValues = true });
+
+        var text = string.Join("\n", logger.Entries.Select(entry => entry.Message));
+        // Claim values are opt-in; the enriched principal values are not logged at all.
+        Assert.Contains("claim sub value(s): subject-1", text);
+        Assert.DoesNotContain("anna", text);
+        Assert.DoesNotContain("S-1-5-21-11-22-33-6091592", text);
+        Assert.Contains(@"ADUser|SID (1), ADUser|domain\name (1)", text);
     }
 
     [Fact]
@@ -109,10 +136,11 @@ public sealed class OmpOidcSignInDiagnosticsTests
             new OmpOidcDiagnosticsOptions { Enabled = true, IncludeClaimValues = true });
 
         var text = string.Join("\n", logger.Entries.Select(entry => entry.Message));
-        Assert.Contains(@"CONTOSO\anna", text);
-        // The full principal list (account names, translated SIDs) is opt-in
-        // together with the claim values.
-        Assert.Contains("resolved role principals: ADUser|CONTOSO\\anna, ADUser|S-1-5-21-11-22-33-1001", text);
+        // The claim value is logged (opt-in); the principal list is never logged as
+        // values, only as type|form counts.
+        Assert.Contains("claim unique_name value(s): CONTOSO\\anna", text);
+        Assert.DoesNotContain("resolved role principals: ADUser|", text);
+        Assert.DoesNotContain("S-1-5-21-11-22-33-1001", text);
     }
 
     [Fact]

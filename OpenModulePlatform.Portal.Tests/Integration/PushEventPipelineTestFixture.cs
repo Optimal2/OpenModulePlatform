@@ -10,7 +10,9 @@ namespace OpenModulePlatform.Portal.Tests.Integration;
 /// </summary>
 public sealed class PushEventPipelineTestFixture : IAsyncLifetime
 {
-    public const string DatabaseName = "OpenModulePlatform_PortalTests_PushEvents";
+    // Per-process name (pid + start time) so concurrent test hosts never share a
+    // database; stale copies from crashed runs are swept by the provisioner.
+    public static readonly string DatabaseName = OmpTestDatabaseNames.ForPortalTests("PushEvents");
 
     public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 
@@ -34,6 +36,29 @@ public sealed class PushEventPipelineTestFixture : IAsyncLifetime
         if (Factory is not null)
         {
             await Factory.DisposeAsync();
+        }
+
+        // The database name is per process now, so keeping it between runs would
+        // leak one database per test host. Best-effort: the provisioner's sweep
+        // removes whatever a crashed run leaves behind.
+        var builder = new SqlConnectionStringBuilder(ConnectionString)
+        {
+            InitialCatalog = "master"
+        };
+        try
+        {
+            await using var conn = new SqlConnection(builder.ConnectionString);
+            await conn.OpenAsync();
+            await using var cmd = new SqlCommand(
+                $@"
+ALTER DATABASE [{DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+DROP DATABASE [{DatabaseName}];",
+                conn);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch (SqlException)
+        {
+            // Best-effort cleanup.
         }
     }
 

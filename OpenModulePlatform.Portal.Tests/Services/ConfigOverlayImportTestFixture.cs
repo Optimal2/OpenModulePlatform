@@ -16,7 +16,9 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// </summary>
 public sealed class ConfigOverlayImportTestFixture : IAsyncLifetime
 {
-    public const string DatabaseName = "OpenModulePlatform_PortalTests_ConfigOverlayImport";
+    // Per-process name (pid + start time) so concurrent test hosts never share a
+    // database; stale copies from crashed runs are swept by the provisioner.
+    public static readonly string DatabaseName = OmpTestDatabaseNames.ForPortalTests("ConfigOverlayImport");
 
     public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 

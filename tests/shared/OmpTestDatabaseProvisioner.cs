@@ -68,6 +68,12 @@ public static class OmpTestDatabaseProvisioner
 
     private static void CreateDatabaseCore(string masterConnectionString, string createStatement)
     {
+        // Once per process, before the first database is created: drop Portal test
+        // databases whose owning process is gone. Per-process names (see
+        // OmpTestDatabaseNames) stop concurrent runs from colliding, and the sweep
+        // stops crashed runs from leaking a database per process.
+        OmpTestDatabaseNames.SweepStalePortalDatabasesOnce(masterConnectionString);
+
         for (var attempt = 1; ; attempt++)
         {
             try

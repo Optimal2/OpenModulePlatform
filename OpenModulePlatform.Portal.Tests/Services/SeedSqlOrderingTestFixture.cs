@@ -16,7 +16,9 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// </summary>
 public sealed class SeedSqlOrderingTestFixture : IAsyncLifetime
 {
-    public const string DatabaseName = "OpenModulePlatform_PortalTests_SeedSqlOrdering";
+    // Per-process name (pid + start time) so concurrent test hosts never share a
+    // database; stale copies from crashed runs are swept by the provisioner.
+    public static readonly string DatabaseName = OmpTestDatabaseNames.ForPortalTests("SeedSqlOrdering");
 
     public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
 
