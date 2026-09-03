@@ -107,7 +107,11 @@ Audited repositories (all under the local workspace root):
   `appsettings.Production.json` (`scripts/deployment/install-ibspackager.ps1:799`);
   CLI-arg overrides to OMP WorkerProcessHost (`.dev/run-worker.ps1:67-73`);
   channel configuration as JSON stored in the database
-  (`IbsPackager.Web/Pages/Channels/Edit.cshtml.cs:288`).
+  (`IbsPackager.Web/Pages/Channels/Index.cshtml.cs`, e.g. the serialise/deserialise points at
+  `:70`, `:1355` and `:1738`). **Corrected 2026-09-04:** this used to point at
+  `Pages/Channels/Edit.cshtml.cs:288`. That page was folded into the combined channel admin
+  page; `Edit.cshtml.cs` is now an 18-line redirect stub that only preserves old links, so the
+  old anchor pointed 270 lines past the end of the file.
 - **IOptions usage:** `builder.AddOmpWebDefaults<IbsPackagerResource>("WebApp")`
   (`IbsPackager.Web/Program.cs:8`); `services.Configure<OpenDocViewerOptions>`
   (`IbsPackager.Web/Program.cs:9`); `IOptions<T>` in page models. The worker

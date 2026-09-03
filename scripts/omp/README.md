@@ -126,6 +126,27 @@ rejects the consumer artifact at import.
 .\scripts\omp\validate-shared-dependencies.ps1 -ConsumerRepositoryRoot '..\SomeConsumerRepo' -Strict
 ```
 
+`validate-shared-scripts.ps1` is the canonical implementation of the consumer-side
+"Check 15" shared-script drift guard, and is the sibling of the Check 14 guard above.
+Where Check 14 locks shared source TREES, Check 15 locks the shared SCRIPTS that are
+copied verbatim across the fleet -- today exactly one file, `scripts/omp/bump-version.ps1`
+(the `$sharedScripts` list), which is byte-identical in all nine repositories. The
+consumer's `scripts/validate-component-versions.ps1` calls this script out of the sibling
+OpenModulePlatform checkout; it is deliberately **not** copied into the consumers, because
+a copied guard would be subject to the very drift it exists to detect. Comparison is a
+SHA-256 over line-ending-normalised content, so a CRLF/LF difference alone does not fail
+the check. Neighbour resolution and fail-open behaviour are the same as Check 14: a missing
+neighbour is skipped VISIBLY, and `-Strict` turns that skip into an error.
+
+There is no separate reference to maintain -- the canonical file in this repository IS the
+reference. When it changes here, copy it to the eight consumers in the same change; this
+guard is what tells you which repositories still need it.
+
+```powershell
+# Same shape as Check 14; CI and pre-push pass -Strict
+.\scripts\omp\validate-shared-scripts.ps1 -ConsumerRepositoryRoot '..\SomeConsumerRepo' -Strict
+```
+
 What `validate-component-versions.ps1` protects against (the list below describes
 that script, not the Check 14 guard above):
 

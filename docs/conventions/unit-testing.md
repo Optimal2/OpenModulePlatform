@@ -69,7 +69,12 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 
 - **Tests exist:** Yes — 3 test projects, ~56 test files, ~270 test methods (239 `[Fact]` + 31 `[Theory]`).
   - `OpenModulePlatform.Portal.Tests` (31 files), `OpenModulePlatform.HostAgent.Runtime.Tests` (24 files), `OpenModulePlatform.Web.Shared.Analyzers.Tests` (1 file)
-  - Plus two Pester files: `tests/Bump-Version.Tests.ps1` and `tests/Validate-ComponentVersions.Tests.ps1` (script tests, not unit tests)
+  - ~~Plus two Pester files: `tests/Bump-Version.Tests.ps1` and `tests/Validate-ComponentVersions.Tests.ps1`~~
+    Superseded 2026-09-04: `tests/` now holds **eight** Pester suites (script tests, not unit tests) —
+    `ArtifactPackageWorkerHostRoundTrip`, `Assert-LegSdk`, `Assert-RunnerSignature`,
+    `Assert-TestsExecuted`, `Bump-Version`, `Get-CiVersionMatrix`, `Validate-ComponentVersions`
+    and `Validate-SharedScripts` (`*.Tests.ps1`), all in the Pester 5 dialect. See the status
+    banner at the top of this file.
 - **Framework:** xUnit.
   - `Directory.Packages.props` (`xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0)
   - `OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj:17-18`

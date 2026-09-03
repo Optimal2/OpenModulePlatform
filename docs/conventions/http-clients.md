@@ -12,7 +12,7 @@ Repositories audited:
 | `OpenModulePlatform` | .NET + browser JS | Yes — HostAgent health monitor, browser `fetch`, SignalR |
 | `IbsPackager` | .NET | No |
 | `LogSearch` | .NET | No |
-| `EArkivChecker` | .NET + browser JS | Yes — browser `fetch` + SignalR only |
+| `EArkivChecker` | .NET + browser JS | Yes — browser `fetch` + shared `ompLiveRefresh` subscription |
 | `Dokumentbibliotek` | .NET + browser JS | Yes — browser `fetch` only |
 | `VajSkrivare` | .NET + minimal JS | No |
 | `iKrock2` | .NET + minimal JS | No |
@@ -88,18 +88,39 @@ Repositories audited:
 
 **HTTP client creation**
 - C#: no `HttpClient`/`IHttpClientFactory`. Push events go through SQL (`SqlPushEventPublisher`).
-- Browser: standard `fetch` in `EArkivChecker.Web/wwwroot/js/earkiv-checker.js:609-615` and `ec-target-form.js:68-75`.
-- SignalR browser client: `earkiv-checker.js:389-397` (`withAutomaticReconnect()`).
+- Browser: standard `fetch` in `EArkivChecker.Web/wwwroot/js/earkiv-checker.js:443-448`
+  (`refreshStatuses`, `credentials: "same-origin"`, `Accept: application/json`) and
+  `ec-target-form.js:64-71`.
+- **No SignalR client in this repository.** Re-measured 2026-09-04: the strings `signalR` /
+  `withAutomaticReconnect` do not occur anywhere in EArkivChecker (`.cs`, `.js`, `.cshtml`,
+  `.csproj`). The live-refresh transport moved into the shared platform asset
+  `OpenModulePlatform.Web.Shared/wwwroot/js/omp-live-refresh.js`, which owns the
+  `HubConnectionBuilder` and `withAutomaticReconnect()` (`:388-390`) and exposes
+  `window.ompLiveRefresh` (`:525`).
 
 **Resilience**
 - No C# HTTP resilience.
-- JS: SignalR auto-reconnect + polling fallback (`earkiv-checker.js:212-221`, `:424-436`).
-- Poll interval default 60 s, clamped min 10 s (`earkiv-checker.js:13,38-45,105-109`).
+- JS: the module subscribes through the shared helper rather than owning a connection --
+  `window.ompLiveRefresh.subscribe({ module, categories, debounceMs, requestPush, fallback, ... })`
+  (`earkiv-checker.js:252-270`). Reconnect behaviour therefore lives in `omp-live-refresh.js`.
+  When the shared helper is absent the module degrades to plain polling at the behaviour's
+  fallback interval (`earkiv-checker.js:244-249`) -- an explicit, commented fallback, not an
+  accident.
+- Poll interval: read from the DOM attribute `data-ec-poll-interval-ms`, default 60 000 ms
+  (`earkiv-checker.js:13`), clamped to a 10 000 ms minimum with `0` preserved as "off"
+  (`:42`, `:129`).
 
 **Base URL configuration**
-- Status snapshot URL from DOM `data-ec-snapshot-url` (`Index.cshtml:54` → `earkiv-checker.js:7`).
-- SignalR URL resolved from top-bar attribute (`earkiv-checker.js:254-270`).
-- Server notification URL built from configurable `NotificationRoutePath` (`EArkivCheckerOptions.cs:19`, `EArkivCheckerRepository.cs:884-897`).
+- Status snapshot URL from DOM `data-ec-snapshot-url` (`earkiv-checker.js:7`).
+- Live-refresh subscription is addressed by module key + category, not by a URL the module
+  resolves itself (`earkiv-checker.js:252-256`); the connection URL is the shared helper's concern.
+- Server notification URL built from configurable `NotificationRoutePath` (`EArkivCheckerOptions.cs`,
+  `EArkivCheckerRepository.cs`).
+
+> **Anchors re-verified 2026-09-04 (board-prep).** The previous version of this section pointed at
+> `earkiv-checker.js:609-615`, `:389-397`, `:212-221`, `:424-436` and `:254-270` in a file that is
+> now 562 lines long, and described a SignalR client the repository no longer contains. The
+> mechanism did not disappear -- it was centralised into Web.Shared.
 
 **Authentication headers**
 - Browser: same-origin cookie auth.
@@ -267,7 +288,7 @@ Repositories audited:
 | **OpenModulePlatform** | `IHttpClientFactory` named clients (`Program.cs:52-57`) | None for HTTP; per-cycle probe only | Config-driven (`HostAgentSettings.cs:361-421`) | None; optional `Host` header only | System.Text.Json | Manual status range check; no `EnsureSuccessStatusCode` |
 | **IbsPackager** | None | N/A | N/A (only iframe URL) | N/A | System.Text.Json | N/A |
 | **LogSearch** | None | N/A | N/A | N/A | None (SQL/Excel) | N/A |
-| **EArkivChecker** | Browser `fetch` only; no C# client | SignalR auto-reconnect + polling fallback | DOM attributes / config route path | Same-origin cookie; anti-forgery token on POST | System.Text.Json (C#); `response.json()` (JS) | `response.ok` check; C# push failures logged/swallowed |
+| **EArkivChecker** | Browser `fetch` only; no C# client | Shared `ompLiveRefresh` subscription (reconnect owned by Web.Shared) + polling fallback | DOM attributes / config route path | Same-origin cookie; anti-forgery token on POST | System.Text.Json (C#); `response.json()` (JS) | `response.ok` check; C# push failures logged/swallowed |
 | **Dokumentbibliotek** | Browser `fetch` only; no C# client | `AbortController` cancellations only | Relative URLs; configurable ODV path | Same-origin cookie; `X-Requested-With` | System.Text.Json (C#); HTML parsing (JS) | `response.ok` → full navigation fallback |
 | **VajSkrivare** | None | N/A | N/A | N/A | System.Text.Json | N/A (inbound only) |
 | **iKrock2** | None | N/A | Config-driven redirect URLs only | N/A | System.Text.Json | N/A |
@@ -393,7 +414,7 @@ export async function fetchWithRetry(url, options, { maxAttempts = 3, baseDelayM
 | **OpenModulePlatform** | Named `IHttpClientFactory` client; no Polly; manual status check; dangerous-cert named client | Convert `WebAppHealthMonitor` to a typed client; add `AddStandardResilienceHandler` for retry/timeout; replace manual status check with `EnsureSuccessStatusCode` or typed result; gate dangerous-cert handler behind explicit dev flag | Medium |
 | **ODVGateway** | Named client; hand-rolled retry/timeout; unenforced config options; cookie-only auth | Convert to typed client; replace custom retry with Polly / `AddStandardResilienceHandler`; enforce or remove `MaxConcurrency`/`MaxCount`; keep cookie forwarding in a delegating handler | Medium |
 | **OpenDocViewer** | Mixed `fetch`/`axios`/`sendBeacon`; hand-rolled retry; hard-coded relative WASM path; `x-log-token` header only for system log | Consolidate on `fetch` (retain `sendBeacon` for fire-and-forget logs); create one `httpClient.js` wrapper with retry/timeout; move WASM base URL to runtime config; unify auth model if feasible | Medium |
-| **EArkivChecker** | Browser `fetch` only; SignalR reconnect + polling fallback; no C# HTTP client | Add a small `fetch` wrapper with retry/timeout for status polls; C# remains SQL-only, no change needed | Low |
+| **EArkivChecker** | Browser `fetch` only; live refresh via the shared `ompLiveRefresh` helper with polling fallback; no C# HTTP client | Add a small `fetch` wrapper with retry/timeout for status polls; C# remains SQL-only, no change needed | Low |
 | **Dokumentbibliotek** | Browser `fetch` only; `AbortController` cancellations; no retry | Add a small `fetch` wrapper with retry/timeout; keep full-navigation fallback as last resort | Low |
 | **iKrock2** | No HTTP clients; credentials in query string for redirect URLs | No HTTP client migration needed; review security of query-string credential transfer with the customer | Low |
 | **IbsPackager** | No HTTP clients | No migration needed unless future features require outbound HTTP | — |

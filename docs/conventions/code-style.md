@@ -2,6 +2,13 @@
 
 Audit of the ten repositories in the `omp-odv` campaign. Only documentation files were inspected; no source code was changed.
 
+> **Re-measured 2026-09-04 (board-prep).** This is a point-in-time audit and it had drifted:
+> Dokumentbibliotek and VajSkrivare have since adopted CPM, Dokumentbibliotek gained an
+> `.editorconfig`, a `Directory.Build.props` and a `global.json`, and LogSearch/EArkivChecker moved
+> off the preview SDK. Every row below was re-verified against the working trees on this date and
+> the corrected values are in place. Treat the file:line anchors as indicative -- they age faster
+> than the facts they point at.
+
 ## Scope
 
 | Repository | Path | Type |
@@ -42,7 +49,8 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — missing.
 - **`Directory.Build.props`** — present. Sets `TargetFramework` `net10.0` (`:3`), `Nullable` `enable` (`:4`), `ImplicitUsings` `enable` (`:5`), and explicitly `TreatWarningsAsErrors` `false` (`:6`). Does not set `LangVersion` or `AnalysisLevel`.
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.100-preview.4.25258.110` (`:3-4`), a preview build.
+- **`global.json`** — pins SDK `10.0.302` with `rollForward: latestFeature`. (Was the preview
+  build `10.0.100-preview.4.25258.110` at the original audit; corrected 2026-09-04.)
 - **`.csproj`** — no project-level overrides found; all inherit from `Directory.Build.props`.
 
 ### EArkivChecker
@@ -50,24 +58,43 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 - **`.editorconfig`** — missing.
 - **`Directory.Build.props`** — identical shape to LogSearch: `TargetFramework` `net10.0` (`:3`), `Nullable` `enable` (`:4`), `ImplicitUsings` `enable` (`:5`), `TreatWarningsAsErrors` `false` (`:6`).
 - **`Directory.Packages.props`** — present, CPM enabled (`:3`).
-- **`global.json`** — pins SDK `10.0.100-preview.4.25258.110` (`:3-4`), same preview as LogSearch.
+- **`global.json`** — pins SDK `10.0.302` with `rollForward: latestFeature`, same as LogSearch.
+  (Both were on that preview build at the original audit; corrected 2026-09-04.)
 - **`.csproj`** — no project-level overrides found.
 
 ### Dokumentbibliotek
 
-- **`.editorconfig`** — missing.
-- **`Directory.Build.props`** — missing.
-- **`Directory.Packages.props`** — missing.
-- **`global.json`** — missing.
-- **`.csproj`** — single project `OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj`. Targets `net10.0` (`:3`), `Nullable`/`ImplicitUsings` enabled (`:4-5`), `RootNamespace` set (`:6`). References `OpenModulePlatform.Web.Shared` (`:27`). No CPM, no analyzer settings, no shared build props.
+- **`.editorconfig`** — present. `root = true`, `charset = utf-8`, `end_of_line = crlf`,
+  `insert_final_newline = true`, `trim_trailing_whitespace = true`, space indent 4.
+- **`Directory.Build.props`** — present. Sets `TargetFramework` `net10.0`, `Nullable` `enable`,
+  `ImplicitUsings` `enable`, `LangVersion` `latest`, `AnalysisLevel` `latest`,
+  `TreatWarningsAsErrors` `false`, plus the shared
+  `IncludeSourceRevisionInInformationalVersion` `false` block that keeps the git commit out of
+  assembly bytes (OMP artifact identity is manifest version + payload SHA-256, so an embedded
+  commit made every build look like new artifact content).
+- **`Directory.Packages.props`** — present, CPM enabled.
+- **`global.json`** — pins SDK `10.0.302` with `rollForward: latestFeature`.
+- **`.csproj`** — single project `OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj`,
+  now inheriting framework and analysis settings from `Directory.Build.props` and package versions
+  from CPM. References `OpenModulePlatform.Web.Shared`.
+
+  (All five bullets above read "missing" in the original audit. Corrected 2026-09-04.)
 
 ### VajSkrivare
 
 - **`.editorconfig`** — present (`:1`). `root = true` (`:1`), `charset = utf-8` (`:4`), `end_of_line = crlf` (`:5`), `insert_final_newline = true` (`:6`), space indent 4 (`:7-8`, `:12`), JSON/MD/YAML 2 spaces (`:14`).
 - **`Directory.Build.props`** — present. Sets `Nullable` `enable` (`:3`), `ImplicitUsings` `enable` (`:4`), `AnalysisLevel` `latest` (`:5`), `TreatWarningsAsErrors` `false` (`:6`), `LangVersion` `latest` (`:7`). Does **not** set `EnforceCodeStyleInBuild`.
-- **`Directory.Packages.props`** — missing (CPM not enabled).
-- **`global.json`** — missing.
-- **`.csproj`** — `Skrivarkoppling.Web.csproj` targets `net10.0` (`:4`) and declares inline `PackageReference` versions (`:12-13`). Test project `Skrivarkoppling.Web.Tests.csproj` uses older package versions such as `Microsoft.NET.Test.Sdk` `17.14.0` (`:13`) and `xunit.runner.visualstudio` `2.8.2` (`:15`), unlike the 10.x/3.x versions used by CPM repos.
+- **`Directory.Packages.props`** — present, CPM enabled. (Read "missing" in the original audit;
+  corrected 2026-09-04.)
+- **`global.json`** — missing. VajSkrivare is the only .NET repository in the family without an SDK
+  pin, so its build floats to whatever SDK the host has installed.
+- **`.csproj`** — `src/Skrivarkoppling.Web/Skrivarkoppling.Web.csproj` targets `net10.0`;
+  its `PackageReference` entries are **versionless** and resolved through CPM. The test projects
+  `tests/Skrivarkoppling.Web.Tests` and `tests/Skrivarkoppling.Web.UiTests` are likewise versionless;
+  the central versions are `Microsoft.NET.Test.Sdk` `18.9.0`, `xunit` `2.9.3`,
+  `xunit.runner.visualstudio` `4.0.0` and `Microsoft.Playwright` `1.62.0` — in line with the rest of
+  the family. (The original audit reported pinned `17.14.0`/`2.8.2` versions here; that predates CPM
+  adoption. Corrected 2026-09-04.)
 
 ### iKrock2
 
@@ -107,10 +134,10 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 |------------|-----------------|-----|------------|------------------|--------------------------|---------------|-----------------|---------------------------|-----------|---------------|---------|-----------|-----------|
 | OpenModulePlatform | yes (LF) | yes | enable | enable | — | default* | — | — | analyzer project only | 10.0.400 | — | — | — |
 | IbsPackager | no | yes | enable | enable | — | default | — | — | none | 10.0.200 | — | — | — |
-| LogSearch | no | yes | enable | enable | false | default | — | — | none | preview | — | — | — |
-| EArkivChecker | no | yes | enable | enable | false | default | — | — | none | preview | — | — | — |
-| Dokumentbibliotek | no | no | enable | enable | — | default | — | — | none | none | — | — | — |
-| VajSkrivare | yes (CRLF) | no | enable | enable | false | latest | latest | — | none | none | — | — | — |
+| LogSearch | no | yes | enable | enable | false | default | — | — | none | 10.0.302 | — | — | — |
+| EArkivChecker | no | yes | enable | enable | false | default | — | — | none | 10.0.302 | — | — | — |
+| Dokumentbibliotek | yes (CRLF) | yes | enable | enable | false | latest | latest | — | none | 10.0.302 | — | — | — |
+| VajSkrivare | yes (CRLF) | yes | enable | enable | false | latest | latest | — | none | none | — | — | — |
 | iKrock2 | no | yes | enable | enable | — | default | — | — | none | 10.0.200 | — | — | — |
 | ODVGateway | yes (CRLF) | no | enable | enable | false | default | latest | true | none | 10.0.300 | — | — | — |
 | OpenDocViewer | no | — | — | — | — | — | — | — | — | — | ESLint flat | implicit Prettier | none |
@@ -120,12 +147,12 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 
 ## Key divergences
 
-1. **`.editorconfig` coverage** — Only OpenModulePlatform, VajSkrivare, and ODVGateway have one. Six .NET repos and both JS repos lack it.
+1. **`.editorconfig` coverage** — OpenModulePlatform, VajSkrivare, ODVGateway and Dokumentbibliotek have one. IbsPackager, LogSearch, EArkivChecker, iKrock2 and both JS repos lack it.
 2. **Line endings** — OpenModulePlatform enforces LF; VajSkrivare and ODVGateway enforce CRLF. The rest have no rule.
-3. **Central Package Management** — Enabled in OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, and iKrock2. Missing in Dokumentbibliotek, VajSkrivare, and ODVGateway.
-4. **Warning/error handling** — LogSearch, EArkivChecker, VajSkrivare, and ODVGateway explicitly set `TreatWarningsAsErrors` to `false`. OpenModulePlatform, IbsPackager, iKrock2, and Dokumentbibliotek do not set it at all. None treat warnings as errors.
-5. **Static analysis** — `AnalysisLevel` is set only in VajSkrivare (`latest`) and ODVGateway (`latest`). `EnforceCodeStyleInBuild` is set only in ODVGateway (`true`).
-6. **SDK pinning** — LogSearch/EArkivChecker use a preview SDK (`10.0.100-preview.4.25258.110`). VajSkrivare and Dokumentbibliotek have no `global.json`.
+3. **Central Package Management** — Enabled in seven of the eight .NET repositories: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, iKrock2, Dokumentbibliotek and VajSkrivare. **ODVGateway is the only one without it**, which is also the mechanism behind its package-pin drift: with no `Directory.Packages.props` there is no single place to lift a version.
+4. **Warning/error handling** — LogSearch, EArkivChecker, VajSkrivare, ODVGateway and Dokumentbibliotek explicitly set `TreatWarningsAsErrors` to `false`. OpenModulePlatform, IbsPackager and iKrock2 do not set it at all. None treat warnings as errors.
+5. **Static analysis** — `AnalysisLevel` is set in VajSkrivare, Dokumentbibliotek and ODVGateway (all `latest`). `EnforceCodeStyleInBuild` is set only in ODVGateway (`true`).
+6. **SDK pinning** — Seven of eight .NET repositories pin an SDK in `global.json`, all with `rollForward: latestFeature`: OpenModulePlatform `10.0.400`, ODVGateway `10.0.300`, LogSearch/EArkivChecker/Dokumentbibliotek `10.0.302`, IbsPackager/iKrock2 `10.0.200`. **VajSkrivare is the only repository with no pin** and therefore floats to the host SDK. The pins span four feature bands; today they all roll forward to the same installed SDK, so the spread is latent rather than active.
 7. **JS/TS tooling** — Only OpenDocViewer has ESLint. Neither JS repo has an `.editorconfig`, a Prettier configuration file, or a `tsconfig.json`. AgentDocMap has no lint or format scripts.
 
 ## Recommended standard
