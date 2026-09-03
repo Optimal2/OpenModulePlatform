@@ -20,8 +20,9 @@ An independent review (2026-09-01) ran a probe harness against the compiled
 validators and found multiple independent bypasses. The 2026-09-02 hardening
 round closed the regex-reachable ones (OUTPUT INTO, positional INSERT, compound
 assignment, CTE writes, truncated assignment scans, DELETE, and the
-`GO n`/DELETE-FK mirror divergence). Two families remain open **by design**,
-because no text-based scanner can close them:
+`GO n`/DELETE-FK mirror divergence). Three families remain open: two **by
+design**, because no text-based scanner can close them, and a third by operator
+choice rather than by impossibility:
 
 1. **Dynamic SQL.** `EXEC(N'INSERT INTO omp.Artifacts ...')` is invisible to
    the guard because string literals are blanked before scanning. Blocking
@@ -33,11 +34,25 @@ because no text-based scanner can close them:
    legitimately writes the pointer columns. Any module can therefore hide a
    write inside a procedure body — including an `ALTER PROCEDURE` that
    overwrites the platform procedure itself.
+3. **Row DELETEs against the pointer tables.** The pointer path
+   (`ContainsModuleDefinitionColumnWrite`) fires on a SET assignment, and a
+   `DELETE` has none — so a CTE delete such as
+   `;WITH c AS (SELECT InstanceTemplateAppInstanceId, DesiredArtifactId FROM
+   omp.InstanceTemplateAppInstances) DELETE c WHERE 1 = 1;` still passes. Note
+   the distinction from the hardening list above: CTE *writes* were closed;
+   this is a CTE *delete*. It was left open deliberately, not missed —
+   extending the guard to row deletes would also block module SQL that legitimately
+   deletes its own `omp.AppInstances` rows, and that cost is borne by the customer.
+   Recorded as an open operator question in `campaign-notes.md`,
+   "spokartefaktspaerren — en ÖPPEN FRÅGA som medvetet inte stängdes (2026-09-02)".
 
 Smaller residual holes exist for the same reason (writes through views,
 synonyms, or inline table-valued functions; `UPDATE`-with-JOIN shapes whose
 `FROM` starts on another table; `ALTER TABLE ... SWITCH`). A regular-expression
 guard cannot see through indirection; only the database engine can.
+
+All three families are closed by the same move: a principal that cannot write
+the surface at all. That is the argument for this ADR over another regex round.
 
 ## Problem
 

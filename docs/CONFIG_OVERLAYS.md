@@ -90,6 +90,38 @@ Configuration files are stored in `omp.ConfigOverlayConfigurationFiles`.
 HostAgent loads artifact-owned configuration first, then matching overlay files.
 If both define the same `relativePath`, the overlay wins for that host.
 
+## The other layer: artifact-owned configuration
+
+Overlays are only half of the model, and the other half is easy to miss because
+it is never shipped inside the artifact zip. Artifact-owned configuration files
+live in `omp.ArtifactConfigurationFiles`, keyed by `ArtifactId` + `RelativePath`.
+HostAgent loads those first and then applies matching overlay files on top, so
+an operator editing a deployed `appsettings.json` on disk is editing something
+that HostAgent will overwrite on the next deployment.
+
+**A new artifact version does not inherit configuration automatically - it is
+copied, and only under one narrow condition.** The Bootstrapper's
+`CopyMissingArtifactConfigurationFilesFromPreviousVersionAsync`
+(`OpenModulePlatform.Bootstrapper/Program.cs:4525`, current `main` `b181adad`)
+behaves as follows:
+
+1. It runs **only if the target artifact has zero configuration files**. If the
+   new version already carries even one file, nothing is copied and the rest of
+   the previous version's files are simply absent.
+2. The source is chosen from artifacts whose version compares **strictly lower**
+   than the target's; among those it takes the **highest** version, breaking ties
+   on the higher `ArtifactId`.
+3. The copy is `INSERT ... WHERE NOT EXISTS` on `RelativePath`, so it never
+   overwrites a file the target already has.
+
+The consequence worth internalising: **the source is the newest earlier version,
+which is not necessarily the version currently deployed.** If a host is running
+an older artifact than the newest one registered, the configuration carried into
+the next version comes from that newer registered artifact, not from what the
+host actually runs. Anything that must follow the environment rather than the
+build belongs in a config overlay keyed on `hostKey` - see the `artifactVersion`
+warning above.
+
 ## Config Overlay Package Zip
 
 Use a zip package when the overlay contains JavaScript, HTML, XML, or other text

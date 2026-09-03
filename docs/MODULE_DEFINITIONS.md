@@ -126,6 +126,14 @@ design:
   Any procedure body is therefore unscanned space.
 - **Indirection through views, synonyms, or inline TVFs**, `UPDATE`-with-JOIN
   shapes whose `FROM` starts on another table, and `ALTER TABLE ... SWITCH`.
+- **Row DELETEs against the pointer tables.** The pointer check
+  (`ContainsModuleDefinitionColumnWrite`) requires a SET assignment to fire, and
+  a `DELETE` has none — so a CTE delete against
+  `omp.InstanceTemplateAppInstances` or `omp.AppInstances` passes. Unlike the
+  entries above this one is open by **choice, not by impossibility**: widening
+  the guard to row deletes would also block module SQL that legitimately deletes
+  its own `omp.AppInstances` rows. It is tracked as an open operator question,
+  not as a defect.
 
 The regression suites (`ModuleDefinitionSqlSafetyTests` in the Bootstrapper,
 Portal, and HostAgent test projects) run one shared probe batch against all
