@@ -177,8 +177,12 @@
 }
 
 /* Border compensation for the pane's gap-bridging rule (which otherwise
-   overrides the bottom offset above at higher specificity). */
-.section-navigator-pane > .omp-linkbox:has(+ *) .omp-linkbox__resize-handle {
+   overrides the bottom offset above at higher specificity). Mirrors the
+   navigator's selector: only a REAL following pane element warrants
+   bridging the gap - the pane's edge helper is not one, and bridging
+   toward it once poked the handle 12px past the pane's scrollport, which
+   gave a lone link box a phantom scrollbar. */
+.section-navigator-pane > .omp-linkbox:has(+ :not(.section-navigator-pane__edge)) .omp-linkbox__resize-handle {
     bottom: calc(0px - var(--section-navigator-pane-gap, 12px) - 1px);
 }
 
