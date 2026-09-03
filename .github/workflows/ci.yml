@@ -126,6 +126,18 @@ jobs:
         shell: pwsh
         run: .\scripts\omp\run-script-analyzer.ps1
 
+      - name: Install pinned Pester for the script test suites
+        # run-script-tests.ps1 pins Pester 5.9.1 (the suites were migrated off
+        # the Pester 3.4.0 legacy dialect in 2026-09). The windows-latest image
+        # carries 3.4.0 inbox and a floating 5.x, so install the exact pin when
+        # it is missing. Runs under Windows PowerShell on purpose: the module
+        # must land where powershell.exe (not pwsh) can import it.
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -eq [Version]'5.9.1' })) {
+            Install-Module Pester -RequiredVersion 5.9.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+
       - name: Run Pester script tests
         shell: pwsh
         run: powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\scripts\omp\run-script-tests.ps1
@@ -247,7 +259,25 @@ jobs:
             $env:DOTNET_ROLL_FORWARD = 'Disable'
             Write-Host "runtime-floor leg: DOTNET_ROLL_FORWARD=Disable, test hosts load exactly runtime ${{ matrix.runtimeFloor }}"
           }
+          # Make the exclusions visible the same way LogSearch does: count the
+          # tests the filter excludes, so an exclusion never reads as coverage.
+          $excludeFilter = 'FullyQualifiedName~Portal.Tests.Integration|FullyQualifiedName~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests|Category=Ui'
+          $listOutput = dotnet test OpenModulePlatform.slnx --configuration Release --no-build --filter $excludeFilter --list-tests
+          if ($LASTEXITCODE -ne 0) { $listOutput | ForEach-Object { Write-Host $_ }; exit $LASTEXITCODE }
+          $excludedCount = @($listOutput | Where-Object { $_ -match '^\s{4}\S' }).Count
+          Write-Host "Excluded: $excludedCount tests (Portal.Tests.Integration, HostDeploymentLease, Category=Ui) - exclusions tracked in docs/TEST_DEBT.md"
           dotnet test OpenModulePlatform.slnx --configuration Release --no-build --logger trx --results-directory TestResults --filter "FullyQualifiedName!~Portal.Tests.Integration&FullyQualifiedName!~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests&Category!=Ui"
+
+      - name: Verify test execution
+        # A filter that matches zero tests still lets VSTest exit 0; turn that
+        # false green red by asserting the TRX counters show executed > 0.
+        # -RequirePerFile is deliberately NOT set here: the UiTests project is
+        # entirely Category=Ui, so its .trx legitimately shows 0 executed under
+        # this filter and a per-file requirement would fail a healthy run.
+        # The local gate (scripts/local-ci.ps1) tests named non-UI projects
+        # individually and DOES enforce -RequirePerFile there.
+        shell: powershell
+        run: powershell -File scripts\omp\assert-tests-executed.ps1 -ResultsDirectory TestResults -SuiteName "CI gate (Integration/lease/Ui excluded)" -ShowSkipReasons
 
       - name: Surface test-database cleanup failures
         if: always()

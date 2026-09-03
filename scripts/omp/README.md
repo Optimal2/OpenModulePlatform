@@ -255,6 +255,59 @@ config overlays, widgets, or widget runtime-data zips below `OutputRoot`.
 Keep private host profiles in the private installer or DEV repository, not in
 public module repositories.
 
+## Script Test Gates
+
+`run-script-tests.ps1` is the canonical entry point for the Pester script test
+suites (`tests/*.Tests.ps1`), wired as a blocking step in the pre-push hook
+(via `scripts/local-ci.ps1`) and in `ci.yml`. The suites use the **Pester 5**
+dialect and the runner pins **Pester 5.9.1**; if the pinned version is missing
+locally the runner fails loudly and prints the install command
+(`Install-Module Pester -RequiredVersion 5.9.1 -Scope CurrentUser -Force
+-SkipPublisherCheck`). CI installs the pin before invoking the runner. The
+runner is invoked via `powershell.exe` because one suite spawns child
+`powershell.exe` processes as a Windows requirement; the pin concerns the
+Pester module, not the engine. Shared per-suite harness code lives in
+`tests/*.TestHelpers.ps1` and is dot-sourced from each `Describe` block's
+`BeforeAll` (Pester 5 runs containers in a separate session state, so
+file-scope functions and variables are not visible inside `It` blocks). Exit
+contract: exit 1 when any test fails, exit 0 otherwise — `Invoke-Pester` never
+sets `$LASTEXITCODE`, so the explicit exit in the runner IS the contract.
+
+`assert-tests-executed.ps1` is the zero-execution gate for VSTest TRX results.
+VSTest exits 0 even when a `--filter` matches nothing, so a green test step
+does not prove anything ran. The gate parses every `*.trx` file in a results
+directory with namespace-agnostic XPath (`local-name()`), sums
+`ResultSummary/Counters` `total`/`executed`, and exits 1 when the directory is
+missing, when no `.trx` file exists, or when `executed == 0`.
+
+```powershell
+.\scripts\omp\assert-tests-executed.ps1 -ResultsDirectory TestResults -SuiteName 'fast gate (Category!=Ui)'
+```
+
+Parameters:
+
+- `-ResultsDirectory` (mandatory): directory with the `.trx` files (searched
+  non-recursively).
+- `-SuiteName`: label used in log output.
+- `-ShowSkipReasons`: also print every `NotExecuted` test with its recorded
+  skip reason, so intentional skips stay readable instead of hiding as green.
+- `-RequirePerFile`: require `executed > 0` in EVERY individual `.trx` file.
+  The default sums `executed` across all files, so a test project whose filter
+  matched nothing is masked by a sibling project in the same step. Use it when
+  every project that produced a `.trx` is expected to run tests (for example
+  `scripts/local-ci.ps1`'s named non-UI test projects); do NOT use it for a
+  solution-wide run whose filter legitimately zeroes out a whole project (for
+  example the `Category=Ui`-only `UiTests` project under a `Category!=Ui`
+  fast-gate filter).
+
+Consumer repositories (LogSearch, and any future consumer with TRX-producing
+test steps) call THIS copy — from a sibling checkout locally and from the
+`OpenModulePlatform` checkout in CI — instead of keeping their own, so the
+gate cannot drift per repo.
+
+The gate is covered by `tests/Assert-TestsExecuted.Tests.ps1`, which runs it
+as a child process against generated TRX fixtures and asserts the exit codes.
+
 ## Validating Command Wrappers
 
 Use `test-cmd-wrappers.ps1` to verify that repository `.cmd` package builders

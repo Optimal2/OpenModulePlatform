@@ -1,4 +1,10 @@
 #Requires -Version 5.1
+# Pester 5's 'Should -Be/-Not -Be/-Match' parameters are provided by the pinned
+# Pester module (5.9.1), not by the inbox Pester 3.4.0 profile the compatibility
+# rule measures against; suppress for the whole file, not per assertion.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
+    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+param()
 <#
 .SYNOPSIS
     Proves the CI matrix leg's runtime SDK gate actually fails an unsupported
@@ -28,62 +34,39 @@
     scripts/omp/assert-leg-sdk.ps1 and is proven to throw here, on every CI run
     and every pre-push, instead of once by a sabotage commit that has to be
     remembered, repeated and trusted.
+
+    Pester 5 runs every container in a separate session state, so the shared
+    harness (gate path + Invoke-Gate) lives in Assert-LegSdk.TestHelpers.ps1
+    and is dot-sourced from each Describe block's BeforeAll.
 #>
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-$script:AssertScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/omp/assert-leg-sdk.ps1'
-
-function Invoke-Gate {
-    <#
-        Invokes the gate in-process so a thrown failure is catchable, and
-        reports both whether it threw and what it said. A gate that throws the
-        wrong message is not a working gate.
-    #>
-    param(
-        [string] $ResolvedSdk,
-        [string] $ExpectedMajor,
-        [string] $PinnedSdk,
-        [string] $PinExact,
-        [string] $LegName = 'test-leg'
-    )
-
-    try {
-        & $script:AssertScript `
-            -ResolvedSdk $ResolvedSdk `
-            -ExpectedMajor $ExpectedMajor `
-            -PinnedSdk $PinnedSdk `
-            -PinExact $PinExact `
-            -LegName $LegName | Out-Null
-        return @{ Threw = $false; ErrorMessage = '' }
-    }
-    catch {
-        return @{ Threw = $true; ErrorMessage = $_.Exception.Message }
-    }
-}
 
 Describe 'assert-leg-sdk: unsupported major gate' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Assert-LegSdk.TestHelpers.ps1')
+    }
+
     It 'Fails when the resolved SDK is on a major the repository does not support' {
         # This is the exact case the 2026-08-28 sabotage was meant to prove and
         # did not: the leg asked for .NET 9 but the image built on .NET 10.
         $result = Invoke-Gate -ResolvedSdk '9.0.100' -ExpectedMajor '10' -PinnedSdk '9.0.100' -PinExact 'false'
 
-        $result.Threw | Should Be $true
-        ($result.ErrorMessage -match 'not on the supported .NET major') | Should Be $true
+        $result.Threw | Should -Be $true
+        ($result.ErrorMessage -match 'not on the supported .NET major') | Should -Be $true
     }
 
     It 'Names the offending versions in the failure so the log is readable' {
         $result = Invoke-Gate -ResolvedSdk '9.0.100' -ExpectedMajor '10' -PinnedSdk '9.0.100' -PinExact 'false'
 
-        ($result.ErrorMessage -match '9\.0\.100') | Should Be $true
-        ($result.ErrorMessage -match '10') | Should Be $true
+        ($result.ErrorMessage -match '9\.0\.100') | Should -Be $true
+        ($result.ErrorMessage -match '10') | Should -Be $true
     }
 
     It 'Passes when the resolved SDK is on the supported major' {
         $result = Invoke-Gate -ResolvedSdk '10.0.400' -ExpectedMajor '10' -PinnedSdk '10.0.x' -PinExact 'false'
 
-        $result.Threw | Should Be $false
+        $result.Threw | Should -Be $false
     }
 
     It 'Does not accept a major that merely starts with the same digits' {
@@ -91,46 +74,54 @@ Describe 'assert-leg-sdk: unsupported major gate' {
         # of '1'. A prefix comparison without the dot would let both through.
         $result = Invoke-Gate -ResolvedSdk '1.0.100' -ExpectedMajor '10' -PinnedSdk '1.0.100' -PinExact 'false'
 
-        $result.Threw | Should Be $true
+        $result.Threw | Should -Be $true
     }
 }
 
 Describe 'assert-leg-sdk: exact-pin gate' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Assert-LegSdk.TestHelpers.ps1')
+    }
+
     It 'Fails when an exact-pin leg silently rolled forward to another SDK' {
         # The documented failure mode: the leg asked for 10.0.200 but the image
         # resolved 10.0.400 under rollForward, so a "pinned" leg proved nothing.
         $result = Invoke-Gate -ResolvedSdk '10.0.400' -ExpectedMajor '10' -PinnedSdk '10.0.200' -PinExact 'true'
 
-        $result.Threw | Should Be $true
-        ($result.ErrorMessage -match 'the pin did not hold') | Should Be $true
+        $result.Threw | Should -Be $true
+        ($result.ErrorMessage -match 'the pin did not hold') | Should -Be $true
     }
 
     It 'Passes when an exact-pin leg resolved exactly its pinned SDK' {
         $result = Invoke-Gate -ResolvedSdk '10.0.200' -ExpectedMajor '10' -PinnedSdk '10.0.200' -PinExact 'true'
 
-        $result.Threw | Should Be $false
+        $result.Threw | Should -Be $false
     }
 
     It 'Allows band drift on a leg that does not claim an exact pin' {
         $result = Invoke-Gate -ResolvedSdk '10.0.400' -ExpectedMajor '10' -PinnedSdk '10.0.x' -PinExact 'false'
 
-        $result.Threw | Should Be $false
+        $result.Threw | Should -Be $false
     }
 }
 
 Describe 'assert-leg-sdk: refuses to pass on missing input' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Assert-LegSdk.TestHelpers.ps1')
+    }
+
     It 'Fails when the resolved SDK could not be read instead of passing silently' {
         # An empty version means `dotnet --version` failed. Absence of a
         # measurement must never read as a passing measurement.
         $result = Invoke-Gate -ResolvedSdk '' -ExpectedMajor '10' -PinnedSdk '10.0.200' -PinExact 'true'
 
-        $result.Threw | Should Be $true
-        ($result.ErrorMessage -match 'could not be determined') | Should Be $true
+        $result.Threw | Should -Be $true
+        ($result.ErrorMessage -match 'could not be determined') | Should -Be $true
     }
 
     It 'Fails when the expected major is missing rather than accepting anything' {
         $result = Invoke-Gate -ResolvedSdk '10.0.400' -ExpectedMajor '' -PinnedSdk '10.0.x' -PinExact 'false'
 
-        $result.Threw | Should Be $true
+        $result.Threw | Should -Be $true
     }
 }

@@ -1,3 +1,9 @@
+# Pester 5's 'Should -Be/-Not -Be/-Match' parameters are provided by the pinned
+# Pester module (5.9.1), not by the inbox Pester 3.4.0 profile the compatibility
+# rule measures against; suppress for the whole file, not per assertion.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
+    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+param()
 <#
 .SYNOPSIS
 Pester tests for scripts/omp/bump-version.ps1.
@@ -8,135 +14,18 @@ compatibleArtifacts.maxVersion entry in the module definition. The
 2026-08-18 IbsPackager import failure showed that leaving this step
 manual lets the artifact version cap drift behind the component version,
 so the host rejects the produced artifact at import time.
+
+Pester 5 runs every container in a separate session state, so the shared
+harness (script path + temp-repo helpers) lives in
+Bump-Version.TestHelpers.ps1 and is dot-sourced from each Describe block's
+BeforeAll.
 #>
 
-$ErrorActionPreference = 'Stop'
-
-$scriptPath = Resolve-Path (Join-Path $PSScriptRoot '..\scripts\omp\bump-version.ps1')
-
-function New-TemporaryBumpRepository {
-    <#
-    .SYNOPSIS
-    Creates a temporary repository with bump-version.ps1, a minimal
-    omp-components.json, a module definition, and a fake .csproj project.
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RootPath,
-
-        [Parameter(Mandatory = $false)]
-        [string]$ComponentVersion = '1.0.0',
-
-        [Parameter(Mandatory = $false)]
-        [string]$CompatibleArtifactMaxVersion = ''
-    )
-
-    if (Test-Path -LiteralPath $RootPath -PathType Container) {
-        Remove-Item -LiteralPath $RootPath -Recurse -Force
-    }
-
-    $null = New-Item -ItemType Directory -Path $RootPath -Force
-
-    # Copy the bump script so its $repositoryRoot resolves to the temp repo.
-    $ompScriptsDir = Join-Path $RootPath 'scripts\omp'
-    $null = New-Item -ItemType Directory -Path $ompScriptsDir -Force
-    Copy-Item -LiteralPath $scriptPath -Destination (Join-Path $ompScriptsDir 'bump-version.ps1') -Force
-
-    # Create component project.
-    $projectDir = Join-Path $RootPath 'TestApp'
-    $null = New-Item -ItemType Directory -Path $projectDir -Force
-    $csprojContent = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <PropertyGroup>`r`n    <TargetFramework>net8.0</TargetFramework>`r`n  </PropertyGroup>`r`n</Project>`r`n"
-    [System.IO.File]::WriteAllText((Join-Path $projectDir 'TestApp.csproj'), $csprojContent, [System.Text.Encoding]::UTF8)
-
-    # Create module definition.
-    $moduleDir = Join-Path $RootPath 'TestModule'
-    $null = New-Item -ItemType Directory -Path $moduleDir -Force
-
-    $compatibleArtifact = @{
-        appKey = 'test_app'
-        packageType = 'web-app'
-        targetName = 'test-app'
-        relativePathTemplate = 'test-app/web/{version}'
-        minVersion = '1.0.0'
-    }
-    if (-not [string]::IsNullOrWhiteSpace($CompatibleArtifactMaxVersion)) {
-        $compatibleArtifact['maxVersion'] = $CompatibleArtifactMaxVersion
-    }
-
-    $moduleDefinition = @{
-        moduleKey = 'test_module'
-        definitionVersion = '1.0.0'
-        compatibleArtifacts = @($compatibleArtifact)
-        sqlScripts = @()
-    }
-
-    $moduleDefinitionJson = $moduleDefinition | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText((Join-Path $moduleDir 'test.module-definition.json'), $moduleDefinitionJson, [System.Text.Encoding]::UTF8)
-
-    # Create the component manifest.
-    $manifest = @{
-        repositoryVersion = '1.0.0'
-        repositoryKey = 'testrepo'
-        moduleDefinitions = @(
-            @{
-                moduleKey = 'test_module'
-                definitionVersion = '1.0.0'
-                path = 'TestModule/test.module-definition.json'
-            }
-        )
-        components = @(
-            @{
-                componentKey = 'test_app'
-                appKey = 'test_app'
-                moduleKey = 'test_module'
-                version = $ComponentVersion
-                projectPath = 'TestApp/TestApp.csproj'
-            }
-        )
-    }
-    $manifestJson = $manifest | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText((Join-Path $RootPath 'omp-components.json'), $manifestJson, [System.Text.Encoding]::UTF8)
-
-    return (Join-Path $ompScriptsDir 'bump-version.ps1')
-}
-
-function Remove-TemporaryBumpRepository {
-    <#
-    .SYNOPSIS
-    Removes a temporary repository created by New-TemporaryBumpRepository.
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RootPath
-    )
-
-    if (Test-Path -LiteralPath $RootPath -PathType Container) {
-        Remove-Item -LiteralPath $RootPath -Recurse -Force
-    }
-}
-
-function Invoke-BumpVersion {
-    <#
-    .SYNOPSIS
-    Runs bump-version.ps1 in the specified repository and returns its exit code.
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$BumpScriptPath,
-        [Parameter(Mandatory = $false)][string]$ComponentKey = 'test_app'
-    )
-
-    $exitCode = $null
-    try {
-        & $BumpScriptPath -ComponentKey $ComponentKey 2>&1 | Out-String | Out-Null
-    }
-    finally {
-        $exitCode = $LASTEXITCODE
-    }
-
-    return $exitCode
-}
-
 Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Bump-Version.TestHelpers.ps1')
+    }
+
     It 'Sets maxVersion from null to the bumped component version' {
         $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
         try {
@@ -144,11 +33,11 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 
             $exitCode = Invoke-BumpVersion -BumpScriptPath $bumpScriptPath
 
-            ($exitCode -eq 0 -or $exitCode -eq $null) | Should Be $true
+            ($exitCode -eq 0 -or $exitCode -eq $null) | Should -Be $true
 
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $moduleDefinition.compatibleArtifacts[0].maxVersion | Should Be '1.0.1'
+            $moduleDefinition.compatibleArtifacts[0].maxVersion | Should -Be '1.0.1'
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -162,11 +51,11 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 
             $exitCode = Invoke-BumpVersion -BumpScriptPath $bumpScriptPath
 
-            ($exitCode -eq 0 -or $exitCode -eq $null) | Should Be $true
+            ($exitCode -eq 0 -or $exitCode -eq $null) | Should -Be $true
 
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $moduleDefinition.compatibleArtifacts[0].maxVersion | Should Be '1.0.8'
+            $moduleDefinition.compatibleArtifacts[0].maxVersion | Should -Be '1.0.8'
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -180,18 +69,18 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 
             $exitCode = Invoke-BumpVersion -BumpScriptPath $bumpScriptPath
 
-            ($exitCode -eq 0 -or $exitCode -eq $null) | Should Be $true
+            ($exitCode -eq 0 -or $exitCode -eq $null) | Should -Be $true
 
             # Discriminating assertion: the component bump itself must have run.
             # Without this, 'maxVersion still 2.0.0' would also pass if the new
             # sync logic never executed at all.
             $manifestPath = Join-Path $repoRoot 'omp-components.json'
             $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $manifest.components[0].version | Should Be '1.0.6'
+            $manifest.components[0].version | Should -Be '1.0.6'
 
             $moduleDefinitionPath = Join-Path $repoRoot 'TestModule/test.module-definition.json'
             $moduleDefinition = Get-Content -LiteralPath $moduleDefinitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $moduleDefinition.compatibleArtifacts[0].maxVersion | Should Be '2.0.0'
+            $moduleDefinition.compatibleArtifacts[0].maxVersion | Should -Be '2.0.0'
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -223,12 +112,12 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
                 $ErrorActionPreference = $previousErrorActionPreference
             }
 
-            $exitCode | Should Be 1
-            $output | Should Match 'non-numeric maxVersion'
+            $exitCode | Should -Be 1
+            $output | Should -Match 'non-numeric maxVersion'
 
             # Atomic abort: the throw must happen before any file is written.
-            [System.IO.File]::ReadAllText($manifestPath) | Should Be $manifestBefore
-            [System.IO.File]::ReadAllText($moduleDefinitionPath) | Should Be $moduleDefinitionBefore
+            [System.IO.File]::ReadAllText($manifestPath) | Should -Be $manifestBefore
+            [System.IO.File]::ReadAllText($moduleDefinitionPath) | Should -Be $moduleDefinitionBefore
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -237,6 +126,10 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
 }
 
 Describe 'Bump-Version: repository-only bump' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Bump-Version.TestHelpers.ps1')
+    }
+
     <#
         omp-components.json has no Bootstrapper component, and the installer
         package takes its identity from repositoryVersion
@@ -258,9 +151,9 @@ Describe 'Bump-Version: repository-only bump' {
             $null = & $bumpScriptPath -RepositoryOnly 2>&1 | Out-String
 
             $after = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            ([System.Version]$after.repositoryVersion -gt [System.Version]$before.repositoryVersion) | Should Be $true
+            ([System.Version]$after.repositoryVersion -gt [System.Version]$before.repositoryVersion) | Should -Be $true
             # The whole point: no unrelated artifact is dragged along.
-            $after.components[0].version | Should Be $componentBefore
+            $after.components[0].version | Should -Be $componentBefore
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -274,8 +167,8 @@ Describe 'Bump-Version: repository-only bump' {
 
             $output = & $bumpScriptPath -RepositoryOnly -ComponentKey 'test_app' 2>&1 | Out-String
 
-            ($output -match 'RepositoryOnly') | Should Be $true
-            $LASTEXITCODE | Should Not Be 0
+            ($output -match 'RepositoryOnly') | Should -Be $true
+            $LASTEXITCODE | Should -Not -Be 0
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -291,8 +184,8 @@ Describe 'Bump-Version: repository-only bump' {
 
             $output = & $bumpScriptPath -RepositoryOnly -SkipRepositoryVersion 2>&1 | Out-String
 
-            ($output -match 'RepositoryOnly') | Should Be $true
-            $LASTEXITCODE | Should Not Be 0
+            ($output -match 'RepositoryOnly') | Should -Be $true
+            $LASTEXITCODE | Should -Not -Be 0
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -301,6 +194,10 @@ Describe 'Bump-Version: repository-only bump' {
 }
 
 Describe 'Bump-Version: a rewritten module definition always carries a version bump' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Bump-Version.TestHelpers.ps1')
+    }
+
     <#
         The persist loop wrote EVERY loaded module definition unconditionally,
         while the follow-up definitionVersion bump only covered definitions whose
@@ -342,11 +239,11 @@ Describe 'Bump-Version: a rewritten module definition always carries a version b
             if ($after -ne $before) {
                 # The file changed, so definitionVersion MUST have changed too.
                 # This is the invariant the validator enforces.
-                ($versionAfter -ne $versionBefore) | Should Be $true
+                ($versionAfter -ne $versionBefore) | Should -Be $true
             }
             else {
                 # Or the file was left alone entirely, which is equally fine.
-                $versionAfter | Should Be $versionBefore
+                $versionAfter | Should -Be $versionBefore
             }
         }
         finally {
@@ -375,8 +272,8 @@ Describe 'Bump-Version: a rewritten module definition always carries a version b
             $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
 
             $after = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
-            ($after -ne $before) | Should Be $true
-            ($after | ConvertFrom-Json).definitionVersion | Should Not Be $versionBefore
+            ($after -ne $before) | Should -Be $true
+            ($after | ConvertFrom-Json).definitionVersion | Should -Not -Be $versionBefore
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -402,7 +299,7 @@ Describe 'Bump-Version: a rewritten module definition always carries a version b
             $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
             $afterSecond = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8
 
-            $afterSecond | Should Be $afterFirst
+            $afterSecond | Should -Be $afterFirst
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -411,6 +308,10 @@ Describe 'Bump-Version: a rewritten module definition always carries a version b
 }
 
 Describe 'Bump-Version: repeated -ModuleKey does not double-bump' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Bump-Version.TestHelpers.ps1')
+    }
+
     It 'Bumps a module exactly once even when its key is passed twice' {
         # '-ModuleKey foo,foo' used to select the same definition twice and bump it
         # twice in one run, producing a version nobody can explain from the command
@@ -425,7 +326,7 @@ Describe 'Bump-Version: repeated -ModuleKey does not double-bump' {
 
             $after = (Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json).definitionVersion
             # One bump, not two: 1.0.0 -> 1.0.1, never 1.0.2.
-            $after | Should Be ([string]([System.Version]::Parse($before).Major.ToString() + '.' + [System.Version]::Parse($before).Minor.ToString() + '.' + ([System.Version]::Parse($before).Build + 1).ToString()))
+            $after | Should -Be ([string]([System.Version]::Parse($before).Major.ToString() + '.' + [System.Version]::Parse($before).Minor.ToString() + '.' + ([System.Version]::Parse($before).Build + 1).ToString()))
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -434,6 +335,10 @@ Describe 'Bump-Version: repeated -ModuleKey does not double-bump' {
 }
 
 Describe 'Bump-Version: single write and BOM handling' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Bump-Version.TestHelpers.ps1')
+    }
+
     It 'Writes the maxVersion change and the definitionVersion bump in the same file state' {
         # The persist loop used to write the definition with the OLD
         # definitionVersion, and the definitionVersion loop then RELOADED the file
@@ -454,8 +359,8 @@ Describe 'Bump-Version: single write and BOM handling' {
 
             $after = Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8 | ConvertFrom-Json
             # Both changes are present in the same file.
-            $after.compatibleArtifacts[0].maxVersion | Should Be '1.0.1'
-            ($after.definitionVersion -ne $before.definitionVersion) | Should Be $true
+            $after.compatibleArtifacts[0].maxVersion | Should -Be '1.0.1'
+            ($after.definitionVersion -ne $before.definitionVersion) | Should -Be $true
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot
@@ -485,8 +390,8 @@ Describe 'Bump-Version: single write and BOM handling' {
             $null = & $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
 
             $bytesAfter = [System.IO.File]::ReadAllBytes($definitionPath)
-            ($bytesAfter[0] -eq 0xEF -and $bytesAfter[1] -eq 0xBB -and $bytesAfter[2] -eq 0xBF) | Should Be $true
-            $bytesAfter.Length | Should Be $bytesBefore.Length
+            ($bytesAfter[0] -eq 0xEF -and $bytesAfter[1] -eq 0xBB -and $bytesAfter[2] -eq 0xBF) | Should -Be $true
+            $bytesAfter.Length | Should -Be $bytesBefore.Length
         }
         finally {
             Remove-TemporaryBumpRepository -RootPath $repoRoot

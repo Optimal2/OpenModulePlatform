@@ -1,4 +1,10 @@
 #Requires -Version 5.1
+# Pester 5's 'Should -Be/-Not -Be/-Match' parameters are provided by the pinned
+# Pester module (5.9.1), not by the inbox Pester 3.4.0 profile the compatibility
+# rule measures against; suppress for the whole file, not per assertion.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
+    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+param()
 <#
 .SYNOPSIS
     Proves the shared-script drift guard fails loudly on divergence and stays
@@ -20,77 +26,26 @@
     the consumers rather than copied into them. A guard that were itself copied
     would be subject to the drift it exists to detect - as the Check 14 code puts
     it, two implementations of the same rule are how the original gap went silent.
+
+    Pester 5 runs every container in a separate session state, so the shared
+    harness (guard path + pair helpers) lives in
+    Validate-SharedScripts.TestHelpers.ps1 and is dot-sourced from each
+    Describe block's BeforeAll.
 #>
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-$script:GuardScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/omp/validate-shared-scripts.ps1'
-
-function New-Pair {
-    <# Creates a consumer root and a platform root with the given script bodies. #>
-    param(
-        [string] $ConsumerBody,
-        [string] $PlatformBody,
-        [switch] $OmitConsumerScript,
-        [switch] $OmitPlatformRoot
-    )
-
-    $root = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
-    $consumer = Join-Path $root 'Consumer'
-    $platform = Join-Path $root 'OpenModulePlatform'
-
-    New-Item -ItemType Directory -Path (Join-Path $consumer 'scripts\omp') -Force | Out-Null
-    if (-not $OmitConsumerScript) {
-        [IO.File]::WriteAllText((Join-Path $consumer 'scripts\omp\bump-version.ps1'), $ConsumerBody)
-    }
-
-    if (-not $OmitPlatformRoot) {
-        New-Item -ItemType Directory -Path (Join-Path $platform 'scripts\omp') -Force | Out-Null
-        [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\bump-version.ps1'), $PlatformBody)
-    }
-
-    return @{ Root = $root; Consumer = $consumer; Platform = $platform }
-}
-
-function Invoke-Guard {
-    <#
-        Kor vakten som ETT EGET SKRIPT och mater dess SLUTKOD.
-
-        Kontraktet ar exitkod, inte throw. Ett throw dodade den anropande
-        validatorn innan den nadde sin egen felgren, sa den kopplade
-        felhanteringen var dod kod - korningen blev rod genom att KRASCHA, vilket
-        fick det ursprungliga beviset att se overtygande ut. Uppmatt i granskning
-        2026-09-02. Harnesset maste darfor mata slutkoden, annars provar testet
-        fortfarande fel sak.
-
-        3>&1 fangar WARNING-strommen, dar noten om en omatbar kontroll skrivs.
-    #>
-    param([hashtable] $Pair, [switch] $Strict)
-
-    $argsLista = @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script:GuardScript,
-        '-ConsumerRepositoryRoot', $Pair.Consumer,
-        '-PlatformRepositoryRoot', $Pair.Platform
-    )
-    if ($Strict) { $argsLista += '-Strict' }
-
-    $out = & powershell.exe @argsLista 2>&1 | Out-String
-    return @{ Threw = ($LASTEXITCODE -ne 0); Kod = $LASTEXITCODE; Output = $out }
-}
-
-function Remove-Pair {
-    param([hashtable] $Pair)
-    try { Remove-Item -LiteralPath $Pair.Root -Recurse -Force -ErrorAction Stop } catch { }
-}
 
 Describe 'validate-shared-scripts: drift is loud' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
     It 'Fails when the consumer copy differs from the canonical one' {
         $pair = New-Pair -ConsumerBody 'stale content' -PlatformBody 'canonical content'
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Threw | Should Be $true
-            ($result.Output -match 'bump-version\.ps1') | Should Be $true
+            $result.Threw | Should -Be $true
+            ($result.Output -match 'bump-version\.ps1') | Should -Be $true
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -100,7 +55,7 @@ Describe 'validate-shared-scripts: drift is loud' {
         try {
             $result = Invoke-Guard -Pair $pair
             # Two different SHA-256 prefixes must appear in the message.
-            ([regex]::Matches($result.Output, '[0-9a-f]{16}')).Count -ge 2 | Should Be $true
+            ([regex]::Matches($result.Output, '[0-9a-f]{16}')).Count -ge 2 | Should -Be $true
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -109,7 +64,7 @@ Describe 'validate-shared-scripts: drift is loud' {
         $pair = New-Pair -ConsumerBody 'stale content' -PlatformBody 'canonical content'
         try {
             $result = Invoke-Guard -Pair $pair
-            ($result.Output -match 'Copy') | Should Be $true
+            ($result.Output -match 'Copy') | Should -Be $true
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -118,7 +73,7 @@ Describe 'validate-shared-scripts: drift is loud' {
         $pair = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content'
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Threw | Should Be $false
+            $result.Threw | Should -Be $false
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -130,21 +85,25 @@ Describe 'validate-shared-scripts: drift is loud' {
         $pair = New-Pair -ConsumerBody "same content`n" -PlatformBody 'same content'
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Threw | Should Be $true
+            $result.Threw | Should -Be $true
         }
         finally { Remove-Pair -Pair $pair }
     }
 }
 
 Describe 'validate-shared-scripts: cannot-measure is visible, never silently green' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
     It 'Skips with a visible note when the platform repository is not beside the consumer' {
         # CI checks out one repository, so the neighbour is usually absent. That
         # must not fail the build - but it must not read as a passing check either.
         $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformRoot
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Threw | Should Be $false
-            ($result.Output -match 'not verified|skipp') | Should Be $true
+            $result.Threw | Should -Be $false
+            ($result.Output -match 'not verified|skipp') | Should -Be $true
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -155,7 +114,7 @@ Describe 'validate-shared-scripts: cannot-measure is visible, never silently gre
         $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformRoot
         try {
             $result = Invoke-Guard -Pair $pair -Strict
-            $result.Threw | Should Be $true
+            $result.Threw | Should -Be $true
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -165,14 +124,18 @@ Describe 'validate-shared-scripts: cannot-measure is visible, never silently gre
         $pair = New-Pair -ConsumerBody '' -PlatformBody 'canonical content' -OmitConsumerScript
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Threw | Should Be $true
-            ($result.Output -match 'missing|saknas') | Should Be $true
+            $result.Threw | Should -Be $true
+            ($result.Output -match 'missing|saknas') | Should -Be $true
         }
         finally { Remove-Pair -Pair $pair }
     }
 }
 
 Describe 'validate-shared-scripts: exitkoden ar kontraktet' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
     It 'Avslutar med 0 i synk, sa anroparen inte laser ett stale LASTEXITCODE' {
         # Utan ett uttryckligt exit 0 lamnade vakten $LASTEXITCODE fran senaste
         # NATIVE-kommando, och anroparna laser exakt den variabeln. I sex repon
@@ -181,7 +144,7 @@ Describe 'validate-shared-scripts: exitkoden ar kontraktet' {
         $pair = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content'
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Kod | Should Be 0
+            $result.Kod | Should -Be 0
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -190,7 +153,7 @@ Describe 'validate-shared-scripts: exitkoden ar kontraktet' {
         $pair = New-Pair -ConsumerBody 'stale content' -PlatformBody 'canonical content'
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Kod | Should Be 1
+            $result.Kod | Should -Be 1
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -199,13 +162,17 @@ Describe 'validate-shared-scripts: exitkoden ar kontraktet' {
         $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformRoot
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Kod | Should Be 0
+            $result.Kod | Should -Be 0
         }
         finally { Remove-Pair -Pair $pair }
     }
 }
 
 Describe 'validate-shared-scripts: radslutsstil ar inte drift' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
     It 'Behandlar CRLF och LF som samma innehall' {
         # Sex konsumenter har lokal core.autocrlf=true medan plattformens egna
         # utcheckningar kor utan, sa samma git-innehall hamnar med olika radslut
@@ -215,7 +182,7 @@ Describe 'validate-shared-scripts: radslutsstil ar inte drift' {
         $pair = New-Pair -ConsumerBody "rad ett`r`nrad tva`r`n" -PlatformBody "rad ett`nrad tva`n"
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Kod | Should Be 0
+            $result.Kod | Should -Be 0
         }
         finally { Remove-Pair -Pair $pair }
     }
@@ -224,7 +191,7 @@ Describe 'validate-shared-scripts: radslutsstil ar inte drift' {
         $pair = New-Pair -ConsumerBody "rad ett`n" -PlatformBody 'rad ett'
         try {
             $result = Invoke-Guard -Pair $pair
-            $result.Kod | Should Be 1
+            $result.Kod | Should -Be 1
         }
         finally { Remove-Pair -Pair $pair }
     }

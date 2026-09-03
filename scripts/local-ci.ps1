@@ -129,12 +129,36 @@ try {
                 'OpenModulePlatform.WorkerProcessHost.Tests',
                 'OpenModulePlatform.WorkerManager.WindowsService.Tests'
             )
+            # Remove stale TRX files so the zero-execution gate below only sees
+            # the current run; old files would mask a run that produced nothing.
+            $testResultsDirectory = Join-Path $repoRoot 'TestResults'
+            if (Test-Path -LiteralPath $testResultsDirectory) {
+                Remove-Item -LiteralPath $testResultsDirectory -Recurse -Force
+            }
+            # A silently skipped project used to read as a passing one: the loop
+            # simply never ran it. Say out loud which projects were skipped and
+            # why, so a renamed/moved project cannot hide.
+            $skippedProjects = New-Object System.Collections.Generic.List[string]
             foreach ($project in $projects) {
                 $path = Join-Path $repoRoot ("{0}\{0}.csproj" -f $project)
-                if (-not (Test-Path $path)) { continue }
-                dotnet test $path --configuration Release --nologo -v q --no-build
+                if (-not (Test-Path $path)) {
+                    Write-Host "SKIPPED PROJECT: $project -- no project file at $path" -ForegroundColor Yellow
+                    $skippedProjects.Add($project)
+                    continue
+                }
+                dotnet test $path --configuration Release --nologo -v q --no-build --logger trx --results-directory $testResultsDirectory
                 if ($LASTEXITCODE -ne 0) { throw "$project failed" }
             }
+            if ($skippedProjects.Count -gt 0) {
+                Write-Host ("Skipped {0} project(s): {1}" -f $skippedProjects.Count, ($skippedProjects -join ', ')) -ForegroundColor Yellow
+            }
+            # Zero-execution gate: VSTest exits 0 even when nothing ran, so a
+            # green step does not prove anything executed. -RequirePerFile is
+            # correct here: every listed project is a non-UI suite that must
+            # run at least one test (the UiTests project is deliberately not
+            # in the list).
+            & (Join-Path $repoRoot 'scripts\omp\assert-tests-executed.ps1') -ResultsDirectory $testResultsDirectory -SuiteName 'local tests' -ShowSkipReasons -RequirePerFile
+            if ($LASTEXITCODE -ne 0) { throw "zero-execution gate failed ($LASTEXITCODE)" }
         }
     }
     else {
