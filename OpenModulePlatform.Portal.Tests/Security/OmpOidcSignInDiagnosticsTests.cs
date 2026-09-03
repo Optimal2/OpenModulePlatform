@@ -55,12 +55,41 @@ public sealed class OmpOidcSignInDiagnosticsTests
         Assert.Contains("sub", text);
         Assert.Contains("groups", text);
         Assert.Contains("unique_name", text);
-        // Raw claim values must not be logged unless IncludeClaimValues is set;
-        // the resolved principal forms are the intended output of the diagnostics.
+        // Raw claim values must not be logged unless IncludeClaimValues is set.
+        // Since 2026-09-03 (CodeQL cs/cleartext-storage-of-sensitive-information,
+        // alert #10) the same holds for the resolved principal VALUES: the default
+        // line carries the principal types with counts, never the account name.
         Assert.DoesNotContain("subject-1", text);
         Assert.DoesNotContain(@"CONTOSO\anna", text);
         Assert.DoesNotContain("S-1-5-21-11-22-33-2001", text);
-        Assert.Contains(@"FABRIKAM\bo", text);
+        Assert.DoesNotContain(@"FABRIKAM\bo", text);
+        Assert.Contains("ADUser (1)", text);
+    }
+
+    [Fact]
+    public void LogSignIn_Enabled_SummarisesPrincipalTypesWithCounts()
+    {
+        var logger = new ListLogger();
+        var principal = CreatePrincipal(new Claim("sub", "subject-1"));
+        var resolved = OmpOidcClaimResolver.Resolve(principal, new OmpOidcOptions());
+
+        OmpOidcSignInDiagnostics.LogSignIn(
+            logger,
+            principal,
+            resolved!,
+            [
+                "User|lindu5@example.test",
+                @"ADUser|EXAMPLE\lindu5",
+                "ADUser|S-1-5-21-11-22-33-6091592",
+                "OIDCSubject|subject-1",
+                "OmpUser|4"
+            ],
+            new OmpOidcDiagnosticsOptions { Enabled = true });
+
+        var text = string.Join("\n", logger.Entries.Select(entry => entry.Message));
+        Assert.Contains("ADUser (2), OIDCSubject (1), OmpUser (1), User (1)", text);
+        Assert.DoesNotContain("lindu5", text);
+        Assert.DoesNotContain("S-1-5-21-11-22-33-6091592", text);
     }
 
     [Fact]
@@ -76,11 +105,14 @@ public sealed class OmpOidcSignInDiagnosticsTests
             logger,
             principal,
             resolved!,
-            ["ADUser|CONTOSO\\anna"],
+            ["ADUser|CONTOSO\\anna", "ADUser|S-1-5-21-11-22-33-1001"],
             new OmpOidcDiagnosticsOptions { Enabled = true, IncludeClaimValues = true });
 
         var text = string.Join("\n", logger.Entries.Select(entry => entry.Message));
         Assert.Contains(@"CONTOSO\anna", text);
+        // The full principal list (account names, translated SIDs) is opt-in
+        // together with the claim values.
+        Assert.Contains("resolved role principals: ADUser|CONTOSO\\anna, ADUser|S-1-5-21-11-22-33-1001", text);
     }
 
     [Fact]

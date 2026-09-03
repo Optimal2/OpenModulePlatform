@@ -990,10 +990,13 @@ public static class OmpWebHostingExtensions
             }
 
             var logger = loggerFactory.CreateLogger("OpenModulePlatform.Web.Shared.Security.CspReport");
+            // Both values come straight from an anonymous request. Sanitized so
+            // a report can neither fabricate extra log lines nor hide one behind a
+            // carriage return (CodeQL cs/log-forging, alerts #11 and #12).
             logger.LogWarning(
                 "CSP violation report ({ContentType}): {Report}",
-                context.Request.ContentType ?? "unknown",
-                body);
+                OmpLogSanitizer.ForLog(context.Request.ContentType ?? "unknown", maxLength: 200),
+                OmpLogSanitizer.ForLog(body, maxLength: maxReportBytes + OmpLogSanitizer.TruncationMarker.Length));
 
             return Results.NoContent();
         }).AllowAnonymous();

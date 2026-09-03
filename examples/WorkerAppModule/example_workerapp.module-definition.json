@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_workerapp",
-  "definitionVersion": "0.3.70",
+  "definitionVersion": "0.3.71",
   "module": {
     "displayName": "Example WorkerApp",
     "moduleType": "HostAppModule",
@@ -35,7 +35,7 @@
       "targetName": "example-workerapp-web",
       "relativePathTemplate": "example-workerapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.201"
+      "maxVersion": "0.3.202"
     },
     {
       "appKey": "example_workerapp_worker",
@@ -43,7 +43,7 @@
       "targetName": "example-workerapp",
       "relativePathTemplate": "example-workerapp/worker/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.81"
+      "maxVersion": "0.3.82"
     }
   ],
   "sqlScripts": [

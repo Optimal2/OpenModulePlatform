@@ -44,14 +44,22 @@ public static class OmpOidcSignInDiagnostics
             "OIDC sign-in diagnostics: incoming claim types with value counts: {ClaimTypes}.",
             BuildClaimTypeSummary(incomingPrincipal));
 
+        // Principal values (account names, SIDs translated from them) are personal
+        // data, so the default line carries only the count per principal type.
+        // The full list is opt-in together with the claim values (CodeQL
+        // cs/cleartext-storage-of-sensitive-information, alert #10).
         logger.LogInformation(
-            "OIDC sign-in diagnostics: resolved role principals: {Principals}.",
-            string.Join(", ", resultingRolePrincipals));
+            "OIDC sign-in diagnostics: resolved role principals by type: {PrincipalTypes}.",
+            BuildPrincipalTypeSummary(resultingRolePrincipals));
 
         if (!diagnostics.IncludeClaimValues)
         {
             return;
         }
+
+        logger.LogInformation(
+            "OIDC sign-in diagnostics: resolved role principals: {Principals}.",
+            string.Join(", ", resultingRolePrincipals));
 
         LogClaimValues(logger, incomingPrincipal);
     }
@@ -97,6 +105,25 @@ public static class OmpOidcSignInDiagnostics
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => $"{group.Key} ({group.Count()})");
         return string.Join(", ", claimTypeSummary);
+    }
+
+    /// <summary>
+    /// "User (1), ADUser (3), OIDCUser (1)" — the principal type before the first
+    /// '|' with a count, never the value after it.
+    /// </summary>
+    private static string BuildPrincipalTypeSummary(IReadOnlyList<string> principals)
+    {
+        var summary = principals
+            .Select(principal =>
+            {
+                var separator = principal.IndexOf('|', StringComparison.Ordinal);
+                return separator > 0 ? principal[..separator] : principal;
+            })
+            .GroupBy(type => type, StringComparer.Ordinal)
+            .OrderBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => $"{group.Key} ({group.Count()})")
+            .ToList();
+        return summary.Count == 0 ? "none" : string.Join(", ", summary);
     }
 
     private static void LogClaimValues(ILogger logger, ClaimsPrincipal incomingPrincipal)
