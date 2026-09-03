@@ -67,6 +67,7 @@
         <div>
             <h3 class="section-heading-line">
                 <span>@L["Hosts"]</span>
+                <span class="info-badge" tabindex="0" role="img" title="@L["Hosts define the host keys that belong to this installation. Concrete machines report in with matching host keys."]" aria-label="@L["Hosts define the host keys that belong to this installation. Concrete machines report in with matching host keys."]">i</span>
                 <a class="action-link admin-icon-button admin-icon-button--add"
                    href="~/admin/instancetemplatehostedit?templateId=@Model.Template.InstanceTemplateId"
                    title="@L["Add host"]"
@@ -74,7 +75,6 @@
                     <span class="visually-hidden">@L["Add host"]</span>
                 </a>
             </h3>
-            <p class="muted">@L["Hosts define the host keys that belong to this installation. Concrete machines report in with matching host keys."]</p>
         </div>
     </div>
 
@@ -84,15 +84,20 @@
     }
     else
     {
-        <table class="grid">
+        <div class="toolbar">
+            <input type="search" class="list-search" data-list-search="template-hosts-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="template-hosts-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="template-hosts-list" hidden>@L["No rows match the current filters."]</div>
+        <table id="template-hosts-list" class="grid sortable-list" data-sortable-list>
             <thead>
                 <tr>
-                    <th>@L["Host key"]</th>
-                    <th>@L["Host role"]</th>
-                    <th>@L["Display name"]</th>
-                    <th>@L["Environment"]</th>
-                    <th>@L["Enabled"]</th>
-                    <th>@L["Actions"]</th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host key"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host role"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Display name"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Environment"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Enabled"]</button></th>
+                    <th scope="col">@L["Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -124,6 +129,7 @@
         <div>
             <h3 class="section-heading-line">
                 <span>@L["Module instances"]</span>
+                <span class="info-badge" tabindex="0" role="img" title="@L["Module instances are desired module slots for this installation. Desired apps attach to them before HostAgent creates runtime module instances."]" aria-label="@L["Module instances are desired module slots for this installation. Desired apps attach to them before HostAgent creates runtime module instances."]">i</span>
                 <a class="action-link admin-icon-button admin-icon-button--add"
                    href="~/admin/instancetemplatemoduleedit?templateId=@Model.Template.InstanceTemplateId"
                    title="@L["Add module instance"]"
@@ -131,7 +137,6 @@
                     <span class="visually-hidden">@L["Add module instance"]</span>
                 </a>
             </h3>
-            <p class="muted">@L["Module instances are desired module slots for this installation. Desired apps attach to them before HostAgent creates runtime module instances."]</p>
         </div>
     </div>
 
@@ -141,14 +146,19 @@
     }
     else
     {
-        <table class="grid">
+        <div class="toolbar">
+            <input type="search" class="list-search" data-list-search="template-modules-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="template-modules-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="template-modules-list" hidden>@L["No rows match the current filters."]</div>
+        <table id="template-modules-list" class="grid sortable-list" data-sortable-list>
             <thead>
                 <tr>
-                    <th>@L["Module"]</th>
-                    <th>@L["Module instance"]</th>
-                    <th>@L["Display name"]</th>
-                    <th>@L["Enabled"]</th>
-                    <th>@L["Actions"]</th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module instance"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Display name"]</button></th>
+                    <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Enabled"]</button></th>
+                    <th scope="col">@L["Actions"]</th>
                 </tr>
             </thead>
             <tbody>
@@ -179,6 +189,7 @@
         <div>
             <h3 class="section-heading-line">
                 <span>@L["Desired apps"]</span>
+                <span class="info-badge" tabindex="0" role="img" title="@L["Change versions, placement and desired runtime policy here. HostAgent updates the concrete app instances after its next cycle."]" aria-label="@L["Change versions, placement and desired runtime policy here. HostAgent updates the concrete app instances after its next cycle."]">i</span>
                 <a class="action-link admin-icon-button admin-icon-button--add"
                    href="~/admin/instancetemplateappedit?templateId=@Model.Template.InstanceTemplateId"
                    title="@L["Add desired app"]"
@@ -186,7 +197,6 @@
                     <span class="visually-hidden">@L["Add desired app"]</span>
                 </a>
             </h3>
-            <p class="muted">@L["Change versions, placement and desired runtime policy here. HostAgent updates the concrete app instances after its next cycle."]</p>
         </div>
     </div>
 
