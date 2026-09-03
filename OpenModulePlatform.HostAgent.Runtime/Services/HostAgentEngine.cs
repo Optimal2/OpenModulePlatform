@@ -529,17 +529,18 @@ public sealed class HostAgentEngine
         Task leaseRenewal)
     {
         await processingCancellation.CancelAsync();
-        try
+
+        // SuppressThrowing lets cleanup always reach the fault-inspection block below. The
+        // exception is still observed and logged explicitly through leaseRenewal.Exception.
+        await ((Task)leaseRenewal).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        if (leaseRenewal.IsFaulted && leaseRenewal.Exception is { } exception)
         {
-            await leaseRenewal;
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Host deployment lease renewal ended with an error while stopping.");
+            // Cancellation is the expected way for the renewal loop to end; only real faults are logged.
+            foreach (var innerException in exception.Flatten().InnerExceptions.Where(inner => inner is not OperationCanceledException))
+            {
+                _logger.LogWarning(innerException, "Host deployment lease renewal ended with an error while stopping.");
+            }
         }
     }
 
@@ -651,17 +652,18 @@ public sealed class HostAgentEngine
         Task<bool> leaseRenewal)
     {
         await cycleCancellation.CancelAsync();
-        try
+
+        // SuppressThrowing lets cleanup always reach the fault-inspection block below. The
+        // exception is still observed and logged explicitly through leaseRenewal.Exception.
+        await ((Task)leaseRenewal).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        if (leaseRenewal.IsFaulted && leaseRenewal.Exception is { } exception)
         {
-            await leaseRenewal;
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "HostAgent lease renewal ended with an error while stopping.");
+            // Cancellation is the expected way for the renewal loop to end; only real faults are logged.
+            foreach (var innerException in exception.Flatten().InnerExceptions.Where(inner => inner is not OperationCanceledException))
+            {
+                _logger.LogWarning(innerException, "HostAgent lease renewal ended with an error while stopping.");
+            }
         }
     }
 

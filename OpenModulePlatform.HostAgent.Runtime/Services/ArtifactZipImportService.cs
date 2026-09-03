@@ -462,13 +462,11 @@ public sealed class ArtifactZipImportService
         }
 
         protectedPaths.Add(newest.Path);
-        foreach (var entry in orderedOldestFirst)
+        foreach (var entry in orderedOldestFirst.Where(entry =>
+                     IsArchiveErrorSidecar(entry.Path)
+                     && entry.Path.StartsWith(newest.Path, StringComparison.OrdinalIgnoreCase)))
         {
-            if (IsArchiveErrorSidecar(entry.Path)
-                && entry.Path.StartsWith(newest.Path, StringComparison.OrdinalIgnoreCase))
-            {
-                protectedPaths.Add(entry.Path);
-            }
+            protectedPaths.Add(entry.Path);
         }
 
         return protectedPaths;

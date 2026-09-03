@@ -165,10 +165,12 @@ WHERE d.ModuleKey = @p0 AND d.DefinitionVersion = @p1 AND e.ExecutionStatus = N'
     {
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
-        foreach (var batch in batches)
+        foreach (var cmd in batches.Select(batch => new SqlCommand(batch, conn)))
         {
-            await using var cmd = new SqlCommand(batch, conn);
-            await cmd.ExecuteNonQueryAsync();
+            await using (cmd)
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
     }
 

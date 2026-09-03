@@ -140,17 +140,20 @@ internal static class ArtifactSourceStamp
             return false;
         }
 
-        foreach (Match match in Regex.Matches(
-            projectText,
-            @"<ProjectReference\s+[^>]*Include\s*=\s*""([^""]+)""",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-            TimeSpan.FromSeconds(5)))
+        foreach (var rawInclude in Regex.Matches(
+                projectText,
+                @"<ProjectReference\s+[^>]*Include\s*=\s*""([^""]+)""",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                TimeSpan.FromSeconds(5))
+            .Cast<Match>()
+            .Select(match => match.Groups[1].Value.Trim()))
         {
-            var include = match.Groups[1].Value.Trim();
-            if (include.Length == 0)
+            if (rawInclude.Length == 0)
             {
                 return DeclineScopedStamp($"empty ProjectReference in {projectFile}");
             }
+
+            var include = rawInclude;
 
             if (include.Contains('$'))
             {
@@ -234,14 +237,11 @@ internal static class ArtifactSourceStamp
         var current = Path.GetDirectoryName(projectFile);
         for (var level = 0; level < 16 && !string.IsNullOrWhiteSpace(current); level++)
         {
-            foreach (var name in (string[])["Directory.Build.props", "Directory.Build.targets"])
-            {
-                var path = Path.Join(current, name);
-                if (File.Exists(path))
-                {
-                    files.Add(Path.GetFullPath(path));
-                }
-            }
+            var directory = current;
+            files.AddRange(((string[])["Directory.Build.props", "Directory.Build.targets"])
+                .Select(name => Path.Join(directory, name))
+                .Where(File.Exists)
+                .Select(Path.GetFullPath));
 
             if (Directory.Exists(Path.Join(current, ".git")) || File.Exists(Path.Join(current, ".git")))
             {

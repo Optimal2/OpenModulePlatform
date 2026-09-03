@@ -2503,14 +2503,13 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
         const string alias = @"(?:\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)";
         const string tableHint = @"(?:\s+WITH\s*\([^)]*\))?";
 
-        foreach (Match insert in Regex.Matches(
-            sqlText,
-            $@"(?is)\bINSERT\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)"))
+        if (Regex.Matches(
+                sqlText,
+                $@"(?is)\bINSERT\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)")
+            .Cast<Match>()
+            .Any(insert => Regex.IsMatch(insert.Groups["columns"].Value, column, RegexOptions.IgnoreCase)))
         {
-            if (Regex.IsMatch(insert.Groups["columns"].Value, column, RegexOptions.IgnoreCase))
-            {
-                return true;
-            }
+            return true;
         }
 
         // A positional INSERT (VALUES/SELECT/DEFAULT VALUES without a column list) has no
@@ -2522,35 +2521,34 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
             return true;
         }
 
-        foreach (Match update in Regex.Matches(
-            sqlText,
-            $@"(?is)\bUPDATE\s+{top}{qualifiedTable}{tableHint}(?:\s+(?:AS\s+)?{alias})?\s+SET\b"))
-        {
-            var assignments = ExtractModuleDefinitionAssignments(
+        if (Regex.Matches(
+                sqlText,
+                $@"(?is)\bUPDATE\s+{top}{qualifiedTable}{tableHint}(?:\s+(?:AS\s+)?{alias})?\s+SET\b")
+            .Cast<Match>()
+            .Select(update => ExtractModuleDefinitionAssignments(
                 sqlText,
                 update.Index + update.Length,
-                "WHERE");
-            if (ContainsModuleDefinitionColumnAssignment(assignments, column, alias))
-            {
-                return true;
-            }
+                "WHERE"))
+            .Any(assignments => ContainsModuleDefinitionColumnAssignment(assignments, column, alias)))
+        {
+            return true;
         }
 
-        foreach (Match update in Regex.Matches(
-            sqlText,
-            $@"(?is)\bUPDATE\s+{top}(?<targetAlias>{alias})\s+SET\b(?<assignments>.*?)\bFROM\s+{qualifiedTable}{tableHint}\s+(?:AS\s+)?\k<targetAlias>"))
+        if (Regex.Matches(
+                sqlText,
+                $@"(?is)\bUPDATE\s+{top}(?<targetAlias>{alias})\s+SET\b(?<assignments>.*?)\bFROM\s+{qualifiedTable}{tableHint}\s+(?:AS\s+)?\k<targetAlias>")
+            .Cast<Match>()
+            .Any(update => ContainsModuleDefinitionColumnAssignment(update.Groups["assignments"].Value, column, alias)))
         {
-            if (ContainsModuleDefinitionColumnAssignment(update.Groups["assignments"].Value, column, alias))
-            {
-                return true;
-            }
+            return true;
         }
 
-        foreach (Match merge in Regex.Matches(
-            sqlText,
-            $@"(?is)\bMERGE\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}(?<body>.*?)(?=;|^\s*GO\b|\z)"))
+        foreach (var body in Regex.Matches(
+                sqlText,
+                $@"(?is)\bMERGE\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}(?<body>.*?)(?=;|^\s*GO\b|\z)")
+            .Cast<Match>()
+            .Select(merge => merge.Groups["body"].Value))
         {
-            var body = merge.Groups["body"].Value;
             if (Regex.Matches(body, @"(?is)\bINSERT\s*\((?<columns>[^)]*)\)")
                 .Cast<Match>()
                 .Any(match => Regex.IsMatch(match.Groups["columns"].Value, column, RegexOptions.IgnoreCase)))
@@ -2565,30 +2563,28 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
                 return true;
             }
 
-            foreach (Match set in Regex.Matches(body, @"(?is)\bUPDATE\s+SET\b"))
-            {
-                var assignments = ExtractModuleDefinitionAssignments(
+            if (Regex.Matches(body, @"(?is)\bUPDATE\s+SET\b")
+                .Cast<Match>()
+                .Select(set => ExtractModuleDefinitionAssignments(
                     body,
                     set.Index + set.Length,
-                    "WHEN");
-                if (ContainsModuleDefinitionColumnAssignment(assignments, column, alias))
-                {
-                    return true;
-                }
+                    "WHEN"))
+                .Any(assignments => ContainsModuleDefinitionColumnAssignment(assignments, column, alias)))
+            {
+                return true;
             }
         }
 
         // OUTPUT ... INTO with a column list naming the owned column, or without a column
         // list at all (positional), writes the column without INSERT/UPDATE/MERGE in
         // front of the table name.
-        foreach (Match output in Regex.Matches(
-            sqlText,
-            $@"(?ims)\bOUTPUT\b(?:(?!;|^\s*GO\b).)*?\bINTO\s+{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)"))
+        if (Regex.Matches(
+                sqlText,
+                $@"(?ims)\bOUTPUT\b(?:(?!;|^\s*GO\b).)*?\bINTO\s+{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)")
+            .Cast<Match>()
+            .Any(output => Regex.IsMatch(output.Groups["columns"].Value, column, RegexOptions.IgnoreCase)))
         {
-            if (Regex.IsMatch(output.Groups["columns"].Value, column, RegexOptions.IgnoreCase))
-            {
-                return true;
-            }
+            return true;
         }
 
         if (Regex.IsMatch(
@@ -6557,13 +6553,41 @@ ORDER BY ArtifactId;
 
     // Process-lifetime console bindings. See EnsureConsole: these are deliberately never
     // disposed, because Console holds them for as long as the process runs.
+    /// <summary>
+    /// Completes when <paramref name="task"/> has settled and never throws. A boundary that must
+    /// survive every failure awaits this and then reads the task's state, so no catch clause is
+    /// needed to observe a fault.
+    /// </summary>
+    internal static Task WhenSettledAsync(Task task)
+        => task.ContinueWith(
+            static _ => { },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    /// <summary>The failure a settled task ended with, or <c>null</c> when it ran to completion.</summary>
+    internal static Exception? FailureOf(Task task)
+        => task.Exception?.GetBaseException() ?? (task.IsCanceled ? new TaskCanceledException(task) : null);
+
     private static StreamWriter? _attachedConsoleOut;
     private static StreamWriter? _attachedConsoleError;
     private static StreamReader? _attachedConsoleIn;
 
-    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    // Bound at call time through NativeLibrary and a delegate rather than declared as an
+    // extern P/Invoke: the console attach is a one-shot Windows-only call at startup, and
+    // binding by hand keeps the interop surface a single plain delegate.
+    [System.Runtime.InteropServices.UnmanagedFunctionPointer(
+        System.Runtime.InteropServices.CallingConvention.Winapi, SetLastError = true)]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-    private static extern bool AttachConsole(uint dwProcessId);
+    private delegate bool AttachConsoleFn(uint dwProcessId);
+
+    private static bool AttachConsole(uint processId)
+    {
+        var kernel32 = System.Runtime.InteropServices.NativeLibrary.Load("kernel32.dll");
+        var attach = System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<AttachConsoleFn>(
+            System.Runtime.InteropServices.NativeLibrary.GetExport(kernel32, "AttachConsole"));
+        return attach(processId);
+    }
 
     private static void EnsureConsole()
     {

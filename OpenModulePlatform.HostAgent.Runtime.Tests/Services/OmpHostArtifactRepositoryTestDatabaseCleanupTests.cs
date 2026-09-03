@@ -185,7 +185,7 @@ public sealed class OmpHostArtifactRepositoryTestDatabaseCleanupTests
     [Fact]
     public void RecordCleanupFailureAppendsToLogFile()
     {
-        var logPath = Path.Combine(Path.GetTempPath(), $"OmpHostAgentTests-cleanup-test-{Guid.NewGuid():N}.log");
+        var logPath = Path.Join(Path.GetTempPath(), $"OmpHostAgentTests-cleanup-test-{Guid.NewGuid():N}.log");
         var previous = Environment.GetEnvironmentVariable("OMP_TEST_CLEANUP_LOG");
         var marker = $"cleanup-log-marker-{Guid.NewGuid():N}";
 

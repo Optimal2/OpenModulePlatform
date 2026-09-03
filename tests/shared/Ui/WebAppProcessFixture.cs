@@ -55,9 +55,9 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         RepoRoot = UiTestPaths.FindRepoRoot(SolutionFileName);
-        var projectDir = Path.Combine(RepoRoot, WebProjectDirectory);
+        var projectDir = Path.Join(RepoRoot, WebProjectDirectory);
         var (configuration, tfm) = UiTestPaths.BuildOutputSegments();
-        var exePath = Path.Combine(projectDir, "bin", configuration, tfm, AssemblyName + ".exe");
+        var exePath = Path.Join(projectDir, "bin", configuration, tfm, AssemblyName + ".exe");
         if (!File.Exists(exePath))
         {
             UnavailableReason = $"app binary not found: {exePath}";
@@ -90,7 +90,7 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
         {
             _process = Process.Start(startInfo);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
             UnavailableReason = $"app failed to start: {ex.Message}";
             return;

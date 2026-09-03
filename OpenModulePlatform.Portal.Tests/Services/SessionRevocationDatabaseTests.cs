@@ -30,9 +30,9 @@ public sealed class SessionRevocationDatabaseTests(SessionRevocationTestFixture 
 
         var after = await fixture.ReadAccountStateAsync(userId);
         Assert.Equal(ResetLocalPasswordResult.Reset, result);
-        Assert.NotNull(before);
-        Assert.NotNull(after);
-        Assert.NotEqual(before.Value.SecurityStamp, after.Value.SecurityStamp);
+        var beforeState = Assert.NotNull(before);
+        var afterState = Assert.NotNull(after);
+        Assert.NotEqual(beforeState.SecurityStamp, afterState.SecurityStamp);
     }
 
     [Fact]
@@ -52,10 +52,10 @@ public sealed class SessionRevocationDatabaseTests(SessionRevocationTestFixture 
 
         var after = await fixture.ReadAccountStateAsync(userId);
         Assert.True(updated);
-        Assert.NotNull(before);
-        Assert.NotNull(after);
-        Assert.Equal(2, after.Value.AccountStatus);
-        Assert.NotEqual(before.Value.SecurityStamp, after.Value.SecurityStamp);
+        var beforeState = Assert.NotNull(before);
+        var afterState = Assert.NotNull(after);
+        Assert.Equal(2, afterState.AccountStatus);
+        Assert.NotEqual(beforeState.SecurityStamp, afterState.SecurityStamp);
     }
 
     [Fact]
@@ -76,9 +76,9 @@ public sealed class SessionRevocationDatabaseTests(SessionRevocationTestFixture 
 
         var after = await fixture.ReadAccountStateAsync(userId);
         Assert.True(updated);
-        Assert.NotNull(before);
-        Assert.NotNull(after);
-        Assert.Equal(before.Value.SecurityStamp, after.Value.SecurityStamp);
+        var beforeState = Assert.NotNull(before);
+        var afterState = Assert.NotNull(after);
+        Assert.Equal(beforeState.SecurityStamp, afterState.SecurityStamp);
     }
 
     [Fact]
@@ -91,10 +91,10 @@ public sealed class SessionRevocationDatabaseTests(SessionRevocationTestFixture 
         // served, it never changes the verdict.
         var userId = await fixture.CreateUserWithLocalLoginAsync("revocation-e2e-1");
         var signedInState = await fixture.ReadAccountStateAsync(userId);
-        Assert.NotNull(signedInState);
+        var signedInAccount = Assert.NotNull(signedInState);
 
         var store = fixture.CreateRevocationStore();
-        var signedIn = CreateContext(userId, signedInState.Value.SecurityStamp);
+        var signedIn = CreateContext(userId, signedInAccount.SecurityStamp);
         await CreateValidator(store).ValidateAsync(signedIn);
         Assert.True(signedIn.Principal?.Identity?.IsAuthenticated);
 
@@ -107,7 +107,7 @@ public sealed class SessionRevocationDatabaseTests(SessionRevocationTestFixture 
             },
             CancellationToken.None);
 
-        var nextRequest = CreateContext(userId, signedInState.Value.SecurityStamp);
+        var nextRequest = CreateContext(userId, signedInAccount.SecurityStamp);
         await CreateValidator(store).ValidateAsync(nextRequest);
 
         Assert.Null(nextRequest.Principal);

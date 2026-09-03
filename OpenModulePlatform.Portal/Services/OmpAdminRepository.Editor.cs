@@ -6714,14 +6714,13 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         const string alias = @"(?:\[[^\]]+\]|""[^""]+""|[A-Za-z_][A-Za-z0-9_]*)";
         const string tableHint = @"(?:\s+WITH\s*\([^)]*\))?";
 
-        foreach (Match insert in Regex.Matches(
-            sqlText,
-            $@"(?is)\bINSERT\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)"))
+        if (Regex.Matches(
+                sqlText,
+                $@"(?is)\bINSERT\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)")
+            .Cast<Match>()
+            .Any(insert => Regex.IsMatch(insert.Groups["columns"].Value, column, RegexOptions.IgnoreCase)))
         {
-            if (Regex.IsMatch(insert.Groups["columns"].Value, column, RegexOptions.IgnoreCase))
-            {
-                return true;
-            }
+            return true;
         }
 
         // A positional INSERT (VALUES/SELECT/DEFAULT VALUES without a column list) has no
@@ -6733,35 +6732,34 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
             return true;
         }
 
-        foreach (Match update in Regex.Matches(
-            sqlText,
-            $@"(?is)\bUPDATE\s+{top}{qualifiedTable}{tableHint}(?:\s+(?:AS\s+)?{alias})?\s+SET\b"))
-        {
-            var assignments = ExtractModuleDefinitionAssignments(
+        if (Regex.Matches(
+                sqlText,
+                $@"(?is)\bUPDATE\s+{top}{qualifiedTable}{tableHint}(?:\s+(?:AS\s+)?{alias})?\s+SET\b")
+            .Cast<Match>()
+            .Select(update => ExtractModuleDefinitionAssignments(
                 sqlText,
                 update.Index + update.Length,
-                "WHERE");
-            if (ContainsModuleDefinitionColumnAssignment(assignments, column, alias))
-            {
-                return true;
-            }
+                "WHERE"))
+            .Any(assignments => ContainsModuleDefinitionColumnAssignment(assignments, column, alias)))
+        {
+            return true;
         }
 
-        foreach (Match update in Regex.Matches(
-            sqlText,
-            $@"(?is)\bUPDATE\s+{top}(?<targetAlias>{alias})\s+SET\b(?<assignments>.*?)\bFROM\s+{qualifiedTable}{tableHint}\s+(?:AS\s+)?\k<targetAlias>"))
+        if (Regex.Matches(
+                sqlText,
+                $@"(?is)\bUPDATE\s+{top}(?<targetAlias>{alias})\s+SET\b(?<assignments>.*?)\bFROM\s+{qualifiedTable}{tableHint}\s+(?:AS\s+)?\k<targetAlias>")
+            .Cast<Match>()
+            .Any(update => ContainsModuleDefinitionColumnAssignment(update.Groups["assignments"].Value, column, alias)))
         {
-            if (ContainsModuleDefinitionColumnAssignment(update.Groups["assignments"].Value, column, alias))
-            {
-                return true;
-            }
+            return true;
         }
 
-        foreach (Match merge in Regex.Matches(
-            sqlText,
-            $@"(?is)\bMERGE\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}(?<body>.*?)(?=;|^\s*GO\b|\z)"))
+        foreach (var body in Regex.Matches(
+                sqlText,
+                $@"(?is)\bMERGE\s+{top}(?:INTO\s+)?{qualifiedTable}{tableHint}(?<body>.*?)(?=;|^\s*GO\b|\z)")
+            .Cast<Match>()
+            .Select(merge => merge.Groups["body"].Value))
         {
-            var body = merge.Groups["body"].Value;
             if (Regex.Matches(body, @"(?is)\bINSERT\s*\((?<columns>[^)]*)\)")
                 .Cast<Match>()
                 .Any(match => Regex.IsMatch(match.Groups["columns"].Value, column, RegexOptions.IgnoreCase)))
@@ -6776,30 +6774,28 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
                 return true;
             }
 
-            foreach (Match set in Regex.Matches(body, @"(?is)\bUPDATE\s+SET\b"))
-            {
-                var assignments = ExtractModuleDefinitionAssignments(
+            if (Regex.Matches(body, @"(?is)\bUPDATE\s+SET\b")
+                .Cast<Match>()
+                .Select(set => ExtractModuleDefinitionAssignments(
                     body,
                     set.Index + set.Length,
-                    "WHEN");
-                if (ContainsModuleDefinitionColumnAssignment(assignments, column, alias))
-                {
-                    return true;
-                }
+                    "WHEN"))
+                .Any(assignments => ContainsModuleDefinitionColumnAssignment(assignments, column, alias)))
+            {
+                return true;
             }
         }
 
         // OUTPUT ... INTO with a column list naming the owned column, or without a column
         // list at all (positional), writes the column without INSERT/UPDATE/MERGE in
         // front of the table name.
-        foreach (Match output in Regex.Matches(
-            sqlText,
-            $@"(?ims)\bOUTPUT\b(?:(?!;|^\s*GO\b).)*?\bINTO\s+{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)"))
+        if (Regex.Matches(
+                sqlText,
+                $@"(?ims)\bOUTPUT\b(?:(?!;|^\s*GO\b).)*?\bINTO\s+{qualifiedTable}{tableHint}\s*\((?<columns>[^)]*)\)")
+            .Cast<Match>()
+            .Any(output => Regex.IsMatch(output.Groups["columns"].Value, column, RegexOptions.IgnoreCase)))
         {
-            if (Regex.IsMatch(output.Groups["columns"].Value, column, RegexOptions.IgnoreCase))
-            {
-                return true;
-            }
+            return true;
         }
 
         if (Regex.IsMatch(

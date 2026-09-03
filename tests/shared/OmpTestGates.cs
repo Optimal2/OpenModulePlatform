@@ -39,7 +39,7 @@ public static class OmpTestGates
             throw new ArgumentException("name must be a plain file-name-safe token.", nameof(name));
         }
 
-        var path = Path.Combine(Path.GetTempPath(), "OpenModulePlatform.Tests." + name + ".lock");
+        var path = Path.Join(Path.GetTempPath(), "OpenModulePlatform.Tests." + name + ".lock");
         var deadline = DateTime.UtcNow + WaitTimeout;
         while (true)
         {
@@ -54,13 +54,9 @@ public static class OmpTestGates
                     FileOptions.DeleteOnClose);
                 return new Release(stream);
             }
-            catch (IOException) when (DateTime.UtcNow < deadline)
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && DateTime.UtcNow < deadline)
             {
                 // Held by another test host (or another class in this host). Wait.
-                Thread.Sleep(RetryDelay);
-            }
-            catch (UnauthorizedAccessException) when (DateTime.UtcNow < deadline)
-            {
                 Thread.Sleep(RetryDelay);
             }
             catch (IOException ex)

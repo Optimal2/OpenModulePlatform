@@ -248,18 +248,15 @@ static async Task LogSelfRegistrationStateAtStartupAsync(
         .GetRequiredService<ILoggerFactory>()
         .CreateLogger("OpenModulePlatform.Auth.Startup");
 
-    OmpSelfRegistrationStatus status;
-    try
-    {
-        await using var scope = app.Services.CreateAsyncScope();
-        var configurationService = scope.ServiceProvider.GetRequiredService<OmpConfigurationService>();
-        var read = await configurationService.ReadGlobalStringAsync(
-            OmpAuthDefaults.ConfigurationCategory,
-            OmpAuthDefaults.SelfRegistrationEnabledSetting,
-            CancellationToken.None);
-        status = OmpSelfRegistrationStatusCheck.Evaluate(read);
-    }
-    catch (Exception ex)
+    // Fail-open startup diagnostic: nothing here may keep the application from starting,
+    // so the read runs as a task whose fault is observed and logged rather than caught.
+    var check = ReadSelfRegistrationStatusAsync(app);
+    await check.ContinueWith(
+        static _ => { },
+        CancellationToken.None,
+        TaskContinuationOptions.ExecuteSynchronously,
+        TaskScheduler.Default);
+    if ((check.Exception?.GetBaseException() ?? (check.IsCanceled ? new TaskCanceledException(check) : null)) is { } ex)
     {
         logger.LogWarning(
             ex,
@@ -267,10 +264,22 @@ static async Task LogSelfRegistrationStateAtStartupAsync(
         return;
     }
 
+    var status = check.Result;
     if (status.Warning is not null)
     {
         logger.LogWarning("{SelfRegistrationWarning}", status.Warning);
     }
+}
+
+static async Task<OmpSelfRegistrationStatus> ReadSelfRegistrationStatusAsync(WebApplication app)
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var configurationService = scope.ServiceProvider.GetRequiredService<OmpConfigurationService>();
+    var read = await configurationService.ReadGlobalStringAsync(
+        OmpAuthDefaults.ConfigurationCategory,
+        OmpAuthDefaults.SelfRegistrationEnabledSetting,
+        CancellationToken.None);
+    return OmpSelfRegistrationStatusCheck.Evaluate(read);
 }
 
 static string ResolveSafeReturnUrl(HttpContext context, string? returnUrl)

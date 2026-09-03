@@ -27,7 +27,8 @@ CHAR_W, CHAR_H = 5, 6
 
 
 def las_geometri():
-    d = json.load(open(GEOMETRI, encoding="utf-8"))
+    with open(GEOMETRI, encoding="utf-8") as f:
+        d = json.load(f)
     font = {k: tuple(v) for k, v in d["font_lookup"].items()}
     return d["ark"], font
 

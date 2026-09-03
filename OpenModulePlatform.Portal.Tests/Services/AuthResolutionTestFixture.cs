@@ -171,10 +171,12 @@ END",
 
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
-        foreach (var batch in batches)
+        foreach (var cmd in batches.Select(batch => new SqlCommand(batch, conn)))
         {
-            await using var cmd = new SqlCommand(batch, conn);
-            await cmd.ExecuteNonQueryAsync();
+            await using (cmd)
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
     }
 
@@ -196,9 +198,8 @@ END",
         // Split on GO batch separators (SqlCommand cannot execute GO).
         var batches = new List<string>();
         var current = new List<string>();
-        foreach (var rawLine in block.Split('\n'))
+        foreach (var line in block.Split('\n').Select(rawLine => rawLine.TrimEnd('\r')))
         {
-            var line = rawLine.TrimEnd('\r');
             if (string.Equals(line.Trim(), "GO", StringComparison.OrdinalIgnoreCase))
             {
                 batches.Add(string.Join('\n', current));

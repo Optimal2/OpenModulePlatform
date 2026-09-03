@@ -84,9 +84,8 @@ public sealed class ArtifactProvisioner
             if (Directory.Exists(path))
             {
                 long count = 0, totalLength = 0, maxTicks = 0;
-                foreach (var file in Directory.EnumerateFiles(path, "*", OmpReparsePointGuard.RecursiveNoFollow))
+                foreach (var info in Directory.EnumerateFiles(path, "*", OmpReparsePointGuard.RecursiveNoFollow).Select(file => new FileInfo(file)))
                 {
-                    var info = new FileInfo(file);
                     count++;
                     totalLength += info.Length;
                     var ticks = info.LastWriteTimeUtc.Ticks;

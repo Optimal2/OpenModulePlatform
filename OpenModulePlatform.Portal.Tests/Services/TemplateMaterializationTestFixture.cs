@@ -326,10 +326,12 @@ WHERE i.InstanceKey = @instanceKey
         await using var conn = new SqlConnection(ConnectionString);
         await conn.OpenAsync();
 
-        foreach (var batch in SplitBatches(portableSql))
+        foreach (var cmd in SplitBatches(portableSql).Select(batch => new SqlCommand(batch, conn)))
         {
-            await using var cmd = new SqlCommand(batch, conn);
-            await cmd.ExecuteNonQueryAsync();
+            await using (cmd)
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
     }
 

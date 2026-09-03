@@ -17,9 +17,10 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
 
     // These tests claim "the next pending row" in omp.HostDeployments of the shared
     // local development database, so two test hosts running at the same time take
-    // each other's rows (measured 2026-09-03: Expected 2396, Actual 2395). The gate
-    // serialises the class across processes; xUnit already serialises it within one.
-    private readonly IDisposable _gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire("HostDeploymentLease");
+    // each other's rows (measured 2026-09-03: Expected 2396, Actual 2395). Every test
+    // therefore holds the cross-process gate for its whole body (using declaration);
+    // xUnit already serialises the tests within one process.
+    private const string GateName = "HostDeploymentLease";
 
     public OmpHostArtifactRepositoryHostDeploymentLeaseTests()
     {
@@ -29,19 +30,13 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
 
     public void Dispose()
     {
-        try
-        {
-            CleanupCreatedDeployments();
-        }
-        finally
-        {
-            _gate.Dispose();
-        }
+        CleanupCreatedDeployments();
     }
 
     [Fact]
     public async Task TryClaimNextHostDeploymentAsync_ClaimsPendingRowAndSetsLease()
     {
+        using var gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire(GateName);
         var hostKey = await GetDefaultHostKeyAsync();
         var hostTemplateId = await GetDefaultHostTemplateIdAsync();
         var deploymentId = await InsertPendingDeploymentAsync(hostKey, hostTemplateId);
@@ -70,6 +65,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
     [Fact]
     public async Task TryClaimNextHostDeploymentAsync_ReclaimsExpiredRunningRow()
     {
+        using var gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire(GateName);
         var hostKey = await GetDefaultHostKeyAsync();
         var hostTemplateId = await GetDefaultHostTemplateIdAsync();
         var deploymentId = await InsertRunningDeploymentAsync(
@@ -100,6 +96,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
     [Fact]
     public async Task TryClaimNextHostDeploymentAsync_FailsExpiredRunningRow_WhenMaxAttemptsReached()
     {
+        using var gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire(GateName);
         var hostKey = await GetDefaultHostKeyAsync();
         var hostTemplateId = await GetDefaultHostTemplateIdAsync();
         var deploymentId = await InsertRunningDeploymentAsync(
@@ -128,6 +125,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
     [Fact]
     public async Task TryClaimNextHostDeploymentAsync_UsesConfiguredMaxAttempts_WhenReclaimingExpiredRunningRow()
     {
+        using var gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire(GateName);
         var hostKey = await GetDefaultHostKeyAsync();
         var hostTemplateId = await GetDefaultHostTemplateIdAsync();
         var configuredMaxAttempts = 5;
@@ -157,6 +155,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
     [Fact]
     public async Task RenewHostDeploymentLeaseAsync_ExtendsLease()
     {
+        using var gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire(GateName);
         var hostKey = await GetDefaultHostKeyAsync();
         var hostTemplateId = await GetDefaultHostTemplateIdAsync();
         var deploymentId = await InsertPendingDeploymentAsync(hostKey, hostTemplateId);
@@ -188,6 +187,7 @@ public sealed class OmpHostArtifactRepositoryHostDeploymentLeaseTests : IDisposa
     [Fact]
     public async Task CompleteHostDeploymentAsync_WithLeaseToken_SetsSucceededAndClearsLease()
     {
+        using var gate = OpenModulePlatform.TestSupport.OmpTestGates.Acquire(GateName);
         var hostKey = await GetDefaultHostKeyAsync();
         var hostTemplateId = await GetDefaultHostTemplateIdAsync();
         var deploymentId = await InsertPendingDeploymentAsync(hostKey, hostTemplateId);

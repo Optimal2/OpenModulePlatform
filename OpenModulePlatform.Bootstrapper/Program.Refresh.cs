@@ -221,19 +221,23 @@ internal static partial class Program
 
             try
             {
-                form.SetStatus("Building updated installer package...");
-                await RunInstallerPackageRefreshCoreAsync(cli, logPath);
-                exitCode = 0;
-                form.SetStatus("Updated installer package created. Starting installer...");
-            }
-            catch (Exception ex)
-            {
                 // R11-B2. Progress UI boundary: keep the background refresh failure visible
                 // while preserving the detailed log file. This handler is subscribed to
                 // Shown as an async lambda, so it is an async void method: an exception
-                // outside the filter does not merely skip this dialog, it takes the whole
-                // installer down while a package refresh is half-written. Same reasoning as
-                // the GUI action boundary -- the widest filter is the correct one here.
+                // that escaped would not merely skip this dialog, it would take the whole
+                // installer down while a package refresh is half-written. Awaiting the
+                // settled task and reading its failure observes every outcome without a
+                // catch clause, the same design as the GUI action boundary.
+                form.SetStatus("Building updated installer package...");
+                var refresh = RunInstallerPackageRefreshCoreAsync(cli, logPath);
+                await Program.WhenSettledAsync(refresh);
+                if (Program.FailureOf(refresh) is not { } ex)
+                {
+                    exitCode = 0;
+                    form.SetStatus("Updated installer package created. Starting installer...");
+                }
+                else
+                {
                 Console.Error.WriteLine("Installer package refresh failed.");
                 Console.Error.WriteLine(ex);
                 form.SetStatus("Installer package refresh failed.");
@@ -243,6 +247,7 @@ internal static partial class Program
                     "OpenModulePlatform installer",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
+                }
             }
             finally
             {
@@ -371,7 +376,7 @@ internal static partial class Program
         var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var userScope = string.IsNullOrWhiteSpace(userProfile)
             ? string.Empty
-            : Path.Combine(userProfile, "WindowsPowerShell", "Modules");
+            : Path.Join(userProfile, "WindowsPowerShell", "Modules");
 
         if (string.IsNullOrWhiteSpace(userScope))
         {
@@ -1403,15 +1408,8 @@ internal static partial class Program
             return false;
         }
 
-        foreach (var entry in expected)
-        {
-            if (!actual.TryGetValue(entry.Key, out var size) || size != entry.Value)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return expected.All(entry =>
+            actual.TryGetValue(entry.Key, out var size) && size == entry.Value);
     }
 
     private static Dictionary<string, long> RelativeFileSizes(string root)

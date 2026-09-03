@@ -210,14 +210,12 @@ public sealed class OmpOidcConfiguredClaimReporter
         ArgumentNullException.ThrowIfNull(principal);
         ArgumentNullException.ThrowIfNull(claimTypes);
 
-        foreach (var missing in FindMissingConfiguredClaimTypes(principal, claimTypes))
+        foreach (var missing in FindMissingConfiguredClaimTypes(principal, claimTypes)
+            .Where(missing => _reported.TryAdd(missing, 0)))
         {
-            if (_reported.TryAdd(missing, 0))
-            {
-                logger.LogWarning(
-                    "OIDC configuration maps claim type {ClaimType}, but that claim was not present in a validated sign-in. Check the OmpAuth:Oidc:ClaimTypes mapping against what the provider actually sends.",
-                    missing);
-            }
+            logger.LogWarning(
+                "OIDC configuration maps claim type {ClaimType}, but that claim was not present in a validated sign-in. Check the OmpAuth:Oidc:ClaimTypes mapping against what the provider actually sends.",
+                missing);
         }
     }
 

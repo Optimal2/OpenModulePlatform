@@ -276,7 +276,7 @@ public sealed class OmpDataProtectionKeyProtectionTests
     {
         using var oldCertificate = CreateSelfSignedCertificate("CN=OMP-Test-DP-Old");
         using var newCertificate = CreateSelfSignedCertificate("CN=OMP-Test-DP-New");
-        var keyDirectory = Path.Combine(
+        var keyDirectory = Path.Join(
             Path.GetTempPath(),
             "omp-dp-cert-rotation-" + Guid.NewGuid().ToString("N"));
 
@@ -539,7 +539,7 @@ public sealed class OmpDataProtectionKeyProtectionTests
     public void EndToEnd_CertificateMode_PersistsKeyFileWithEncryptedXmlDecryptor()
     {
         using var certificate = CreateSelfSignedCertificate();
-        var keyDirectory = Path.Combine(
+        var keyDirectory = Path.Join(
             Path.GetTempPath(),
             "omp-dp-cert-test-" + Guid.NewGuid().ToString("N"));
 
@@ -633,16 +633,7 @@ public sealed class OmpDataProtectionKeyProtectionTests
     private static Func<string, X509Certificate2?> ResolverFor(params X509Certificate2[] certificates)
     {
         return thumbprint =>
-        {
-            foreach (var certificate in certificates)
-            {
-                if (string.Equals(certificate.Thumbprint, thumbprint, StringComparison.OrdinalIgnoreCase))
-                {
-                    return certificate;
-                }
-            }
-
-            return null;
-        };
+            certificates.FirstOrDefault(certificate =>
+                string.Equals(certificate.Thumbprint, thumbprint, StringComparison.OrdinalIgnoreCase));
     }
 }

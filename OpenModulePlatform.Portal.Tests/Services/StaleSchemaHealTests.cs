@@ -628,10 +628,12 @@ IF SCHEMA_ID(N'{schemaName}') IS NOT NULL EXEC(N'DROP SCHEMA [{schemaName}]');",
     {
         await using var conn = new SqlConnection(_fixture.ConnectionString);
         await conn.OpenAsync();
-        foreach (var batch in batches)
+        foreach (var cmd in batches.Select(batch => new SqlCommand(batch, conn)))
         {
-            await using var cmd = new SqlCommand(batch, conn);
-            await cmd.ExecuteNonQueryAsync();
+            await using (cmd)
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
     }
 

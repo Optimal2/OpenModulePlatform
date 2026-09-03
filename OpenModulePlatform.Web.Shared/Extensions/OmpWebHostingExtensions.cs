@@ -976,7 +976,7 @@ public static class OmpWebHostingExtensions
                 detectEncodingFromByteOrderMarks: false))
             {
                 var buffer = new char[4096];
-                var builder = new System.Text.StringBuilder();
+                var builder = new System.Text.StringBuilder(maxReportBytes);
                 int read;
                 while (builder.Length <= maxReportBytes
                     && (read = await reader.ReadAsync(buffer, ct)) > 0)
@@ -1666,19 +1666,40 @@ public static class OmpWebHostingExtensions
     }
 
     private static bool IsSafeLocalReturnUrl(string? returnUrl)
+        => IsSafeLocalPath(returnUrl, enforceWellFormedAndUnescaped: true);
+
+    private static bool IsSafeLocalDestination(string? destinationUrl)
+        => IsSafeLocalPath(destinationUrl, enforceWellFormedAndUnescaped: false);
+
+    // One implementation for "is this a safe local (non-open-redirect) path", so
+    // the two entry points can no longer drift apart the next time a bypass
+    // technique has to be blocked. The base checks (non-blank, rooted at '/', not
+    // '//', no backslash) always run; the return-url path additionally requires a
+    // well-formed relative URI and re-applies the '//' and backslash rules after
+    // unescaping -- the stricter behaviour the login redirect already relied on.
+    private static bool IsSafeLocalPath(string? url, bool enforceWellFormedAndUnescaped)
     {
-        if (string.IsNullOrWhiteSpace(returnUrl)
-            || !Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
-            || !returnUrl.StartsWith("/", StringComparison.Ordinal)
-            || returnUrl.StartsWith("//", StringComparison.Ordinal)
-            || returnUrl.Contains('\\', StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(url)
+            || !url.StartsWith("/", StringComparison.Ordinal)
+            || url.StartsWith("//", StringComparison.Ordinal)
+            || url.Contains('\\', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!enforceWellFormedAndUnescaped)
+        {
+            return true;
+        }
+
+        if (!Uri.IsWellFormedUriString(url, UriKind.Relative))
         {
             return false;
         }
 
         try
         {
-            var unescaped = Uri.UnescapeDataString(returnUrl);
+            var unescaped = Uri.UnescapeDataString(url);
             return !unescaped.StartsWith("//", StringComparison.Ordinal)
                 && !unescaped.Contains('\\', StringComparison.Ordinal);
         }
@@ -1687,12 +1708,6 @@ public static class OmpWebHostingExtensions
             return false;
         }
     }
-
-    private static bool IsSafeLocalDestination(string? destinationUrl)
-        => !string.IsNullOrWhiteSpace(destinationUrl)
-           && destinationUrl.StartsWith("/", StringComparison.Ordinal)
-           && !destinationUrl.StartsWith("//", StringComparison.Ordinal)
-           && !destinationUrl.Contains('\\', StringComparison.Ordinal);
 
     private static string ToToastSnippet(string value)
     {

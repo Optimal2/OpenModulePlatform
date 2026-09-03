@@ -22,7 +22,7 @@ public static class UiTestPaths
     public static string FindRepoRoot(string solutionFileName)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, solutionFileName)))
+        while (dir is not null && !File.Exists(Path.Join(dir.FullName, solutionFileName)))
         {
             dir = dir.Parent;
         }
@@ -65,6 +65,6 @@ public static class UiTestPaths
             return fromEnv;
         }
 
-        return Path.GetFullPath(Path.Combine(repoRoot, "..", "OpenModulePlatform"));
+        return Path.GetFullPath(Path.Join(repoRoot, "..", "OpenModulePlatform"));
     }
 }

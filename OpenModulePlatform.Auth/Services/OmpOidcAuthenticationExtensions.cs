@@ -87,10 +87,14 @@ public static class OmpOidcAuthenticationExtensions
                         // instance, so a sign-in makes at most one directory lookup
                         // per distinct claim value.
                         var sidTranslator = new WindowsOmpSidAccountTranslator(logger);
+                        // OnTokenValidated only runs after the OIDC handler has built a principal
+                        // from the validated token, so context.Principal is never null here. The
+                        // property is nullable-annotated; ThrowIfNull states the invariant as a
+                        // postcondition the compiler's null-state analysis understands, without
+                        // a branch whose null side can never be taken.
                         var incomingPrincipal = context.Principal;
-                        var resolvedClaims = incomingPrincipal is null
-                            ? null
-                            : OmpOidcClaimResolver.Resolve(incomingPrincipal, currentOptions, sidTranslator);
+                        ArgumentNullException.ThrowIfNull(incomingPrincipal);
+                        var resolvedClaims = OmpOidcClaimResolver.Resolve(incomingPrincipal, currentOptions, sidTranslator);
                         if (resolvedClaims is null)
                         {
                             logger.LogWarning(
@@ -119,22 +123,25 @@ public static class OmpOidcAuthenticationExtensions
                             return;
                         }
 
-                        if (incomingPrincipal is not null)
-                        {
-                            var claimReporter = context.HttpContext.RequestServices
-                                .GetRequiredService<OmpOidcConfiguredClaimReporter>();
-                            claimReporter.ReportMissingConfiguredClaimTypes(
-                                logger, incomingPrincipal, currentOptions.ClaimTypes);
+                        // Reaching this point proves incomingPrincipal is non-null: the
+                        // `if (resolvedClaims is null) return` above returns otherwise, and the
+                        // resolver only yields a value for a non-null principal. The earlier
+                        // `is not null` guard here was always true (flagged as a constant
+                        // condition); ThrowIfNull above already establishes non-null in the
+                        // compiler's null state, so the branch is redundant.
+                        var claimReporter = context.HttpContext.RequestServices
+                            .GetRequiredService<OmpOidcConfiguredClaimReporter>();
+                        claimReporter.ReportMissingConfiguredClaimTypes(
+                            logger, incomingPrincipal, currentOptions.ClaimTypes);
 
-                            OmpOidcSignInDiagnostics.LogSignIn(
-                                logger,
-                                incomingPrincipal,
-                                resolvedClaims,
-                                user.RolePrincipals
-                                    .Select(principal => principal.PrincipalType + "|" + principal.Principal)
-                                    .ToList(),
-                                currentOptions.Diagnostics);
-                        }
+                        OmpOidcSignInDiagnostics.LogSignIn(
+                            logger,
+                            incomingPrincipal,
+                            resolvedClaims,
+                            user.RolePrincipals
+                                .Select(principal => principal.PrincipalType + "|" + principal.Principal)
+                                .ToList(),
+                            currentOptions.Diagnostics);
 
                         context.Principal = user.ToClaimsPrincipal();
                         context.Properties ??= new AuthenticationProperties();

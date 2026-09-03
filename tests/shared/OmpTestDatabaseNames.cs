@@ -160,13 +160,18 @@ public static class OmpTestDatabaseNames
             return;
         }
 
-        try
+        // The sweep runs as a task whose fault is observed rather than caught: the contract
+        // (report on stderr, never fail a test) holds for every exception type without a
+        // catch clause that would have to name them all.
+        var sweep = Task.Run(() => SweepStalePortalDatabases(masterConnectionString));
+        sweep.ContinueWith(
+            static _ => { },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default).Wait();
+        if (sweep.Exception is { } failure)
         {
-            SweepStalePortalDatabases(masterConnectionString);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[OmpTestDatabaseNames] Sweep of stale Portal test databases failed: {ex.Message}");
+            Console.Error.WriteLine($"[OmpTestDatabaseNames] Sweep of stale Portal test databases failed: {failure.GetBaseException().Message}");
         }
     }
 

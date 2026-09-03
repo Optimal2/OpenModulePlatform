@@ -234,10 +234,16 @@ public sealed class WorkerManagerHostedService : BackgroundService
                 // startability preflight (R6-F3), drain before restart, the R7-F1
                 // resume, and the R5-F1 else-branch that cancels a pending drain when
                 // a host rollback makes the combined predicate turn false again.
-                var hostRestart = managed.IsRunning()
+                // The artifact the worker must be recycled onto, or null when no host restart
+                // is due. Carrying the artifact instead of a bool keeps the log call below
+                // free of null-conditional reads that can only ever succeed on this path.
+                var hostRestartTarget = managed.IsRunning() && cycleHost is not null
                     && HostRestartCheck.RequiresHostRestart(
                         managed.StartedHostArtifactId,
-                        cycleHost?.ArtifactId);
+                        cycleHost.ArtifactId)
+                    ? cycleHost
+                    : null;
+                var hostRestart = hostRestartTarget is not null;
 
                 if (!managed.HasEquivalentConfiguration(desired) || hostRestart)
                 {
@@ -290,20 +296,21 @@ public sealed class WorkerManagerHostedService : BackgroundService
                         continue;
                     }
 
-                    if (hostRestart)
+                    if (hostRestartTarget is not null)
                     {
                         // The generic configuration-changed line below cannot say WHY;
                         // for a host recycle the operator needs both builds named to
                         // tie this restart to the Pending row in the deployment
-                        // diagnostics without reading source.
+                        // diagnostics without reading source. hostRestartTarget is the
+                        // artifact itself, so both builds are read without null checks.
                         _logger.LogInformation(
                             "Worker host build changed; recycling worker onto the desired host. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}, RunningHostArtifactId={RunningHostArtifactId}, RunningHostArtifactVersion={RunningHostArtifactVersion}, DesiredHostArtifactId={DesiredHostArtifactId}, DesiredHostArtifactVersion={DesiredHostArtifactVersion}",
                             desired.AppInstanceId,
                             desired.WorkerInstanceId,
                             managed.StartedHostArtifactId,
                             managed.StartedHostArtifactVersion,
-                            cycleHost?.ArtifactId,
-                            cycleHost?.Version);
+                            hostRestartTarget.ArtifactId,
+                            hostRestartTarget.Version);
                     }
 
                     _logger.LogInformation(

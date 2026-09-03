@@ -14,6 +14,11 @@
     const string ModulesSectionId = "instancetemplate-modules";
     const string AppsSectionId = "instancetemplate-apps";
 
+    // One descriptive tooltip drives both the visual tooltip (title) and the
+    // accessible name (aria-label) on the info badge; declared once so the two
+    // never drift apart.
+    var installationInfoTooltip = L["This page is the desired state for the current OMP installation. HostAgent materializes these rows into concrete hosts, module instances and app instances."].Value;
+
     var sectionNavigatorItems = new List<SectionNavigatorItem>();
     if (!string.IsNullOrWhiteSpace(Model.StatusMessage))
     {
@@ -39,7 +44,7 @@
         <section class="page-header">
             <div>
                 <div class="eyebrow">@L["Installation"]</div>
-                <h2>@L["Installation"] <span class="info-badge" tabindex="0" role="img" title="@L["This page is the desired state for the current OMP installation. HostAgent materializes these rows into concrete hosts, module instances and app instances."]" aria-label="@L["This page is the desired state for the current OMP installation. HostAgent materializes these rows into concrete hosts, module instances and app instances."]">i</span></h2>
+                <h2>@L["Installation"] <span class="info-badge" tabindex="0" role="img" title="@installationInfoTooltip" aria-label="@installationInfoTooltip">i</span></h2>
             </div>
         </section>
     </div>

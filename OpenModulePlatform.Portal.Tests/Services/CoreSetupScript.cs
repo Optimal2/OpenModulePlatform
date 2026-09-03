@@ -27,10 +27,12 @@ internal static class CoreSetupScript
         await using var conn = new SqlConnection(connectionString);
         await conn.OpenAsync();
 
-        foreach (var batch in SplitBatches(portableSql))
+        foreach (var cmd in SplitBatches(portableSql).Select(batch => new SqlCommand(batch, conn)))
         {
-            await using var cmd = new SqlCommand(batch, conn);
-            await cmd.ExecuteNonQueryAsync();
+            await using (cmd)
+            {
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
     }
 

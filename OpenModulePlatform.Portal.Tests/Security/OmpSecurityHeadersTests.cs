@@ -149,7 +149,7 @@ public sealed class OmpSecurityHeadersTests
         var (app, client) = await StartAppAsync();
         await using var _ = app;
 
-        var report = new StringContent(
+        using var report = new StringContent(
             """{"csp-report":{"document-uri":"http://localhost/","violated-directive":"script-src","blocked-uri":"inline"}}""",
             System.Text.Encoding.UTF8,
             "application/csp-report");
@@ -165,9 +165,10 @@ public sealed class OmpSecurityHeadersTests
         var (app, client) = await StartAppAsync();
         await using var _ = app;
 
+        using var report = new StringContent("", System.Text.Encoding.UTF8, "application/csp-report");
         var response = await client.PostAsync(
             OmpContentSecurityPolicy.ReportPath,
-            new StringContent("", System.Text.Encoding.UTF8, "application/csp-report"));
+            report);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }

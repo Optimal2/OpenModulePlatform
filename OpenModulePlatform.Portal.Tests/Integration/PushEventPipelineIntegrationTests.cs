@@ -159,7 +159,12 @@ public sealed class PushEventPipelineIntegrationTests
             await Task.Delay(250);
         }
 
-        Assert.NotNull(row);
+        if (row is null)
+        {
+            throw new Xunit.Sdk.XunitException(
+                "The sabotage outbox row was never observed before the deadline.");
+        }
+
         Assert.NotEqual("dispatched", row.Status);
         Assert.True(
             row.RetryCount > 0,

@@ -132,11 +132,13 @@ public sealed class WorkerCatalogRowIsolationTests
 
         foreach (var row in rows)
         {
-            if (OmpDatabaseWorkerInstanceCatalog.TryCreateDesiredWorker(
+            if (!OmpDatabaseWorkerInstanceCatalog.TryCreateDesiredWorker(
                     row, RuntimeKind, seen, out var worker, out _))
             {
-                desired.Add(worker);
+                continue;
             }
+
+            desired.Add(worker);
         }
 
         Assert.Equal(3, desired.Count);

@@ -242,17 +242,17 @@ public sealed class HostAgentJobProcessor
         Task leaseRenewal)
     {
         await processingCancellation.CancelAsync();
-        try
+
+        // SuppressThrowing lets cleanup always reach the fault-inspection block below. The
+        // exception is still observed and logged explicitly through leaseRenewal.Exception.
+        await leaseRenewal.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        if (leaseRenewal.IsFaulted && leaseRenewal.Exception is { } exception)
         {
-            await leaseRenewal;
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "HostAgent job lease renewal ended with an error while stopping.");
+            foreach (var innerException in exception.Flatten().InnerExceptions)
+            {
+                _logger.LogWarning(innerException, "HostAgent job lease renewal ended with an error while stopping.");
+            }
         }
     }
 
@@ -2468,9 +2468,8 @@ public sealed class HostAgentJobProcessor
         var result = new Dictionary<string, (string? State, string? DisplayName)>(StringComparer.OrdinalIgnoreCase);
         string? currentName = null;
 
-        foreach (var rawLine in output.Split(["\r\n", "\n"], StringSplitOptions.None))
+        foreach (var line in output.Split(["\r\n", "\n"], StringSplitOptions.None).Select(rawLine => rawLine.Trim()))
         {
-            var line = rawLine.Trim();
             if (line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
             {
                 var name = line["SERVICE_NAME:".Length..].Trim();

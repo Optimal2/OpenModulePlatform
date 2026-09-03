@@ -242,13 +242,13 @@ public static class OmpOidcClaimResolver
             // the translated DOMAIN\name form for every account. A role row
             // stored in either form must match regardless of which form the
             // provider sends.
-            foreach (var sid in candidates.Where(IsSid).ToList())
+            foreach (var accountName in candidates
+                .Where(IsSid)
+                .ToList()
+                .Select(sidTranslator.TryTranslateSidToAccountName)
+                .Where(name => !string.IsNullOrWhiteSpace(name)))
             {
-                var accountName = sidTranslator.TryTranslateSidToAccountName(sid);
-                if (!string.IsNullOrWhiteSpace(accountName))
-                {
-                    candidates.Add(accountName);
-                }
+                candidates.Add(accountName!);
             }
         }
 

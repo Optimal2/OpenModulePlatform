@@ -161,11 +161,21 @@ WHERE NOT EXISTS
                 switch (decision.Outcome)
                 {
                     case AdRolePrincipalMigrationOutcome.Move:
+                        if (decision.TargetUserId is not int targetUserId)
+                        {
+                            // The planner sets TargetUserId (the matched link's UserId) for
+                            // every Move decision, so this is unreachable; guard it explicitly
+                            // instead of dereferencing a nullable the analyzer cannot prove is
+                            // set here.
+                            throw new InvalidOperationException(
+                                $"The Move decision for role {decision.RoleId} has no TargetUserId.");
+                        }
+
                         var inserted = await InsertOmpUserAssignmentAsync(
                             conn,
                             tx,
                             decision.RoleId,
-                            decision.TargetUserId!.Value,
+                            targetUserId,
                             ct);
                         if (inserted)
                         {
@@ -174,7 +184,7 @@ WHERE NOT EXISTS
                                 decision.RoleName,
                                 decision.PrincipalType,
                                 decision.Principal,
-                                decision.TargetUserId.Value,
+                                targetUserId,
                                 decision.TargetDisplayName ?? string.Empty));
                         }
                         else

@@ -143,7 +143,7 @@ WHEN NOT MATCHED THEN
         // this (R3-E4 in PushEventDispatcherHostedService, R5-D1 in HostAgentHostedService);
         // the class remark above has claimed since it was written that every failure path is
         // swallowed after logging, and this is what makes that true.
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Measurements for this interval are lost. That is the correct trade: the
             // alternative is retaining them and growing the in-memory map without limit
@@ -222,7 +222,7 @@ WHEN NOT MATCHED THEN
             // Shutdown. Leave the schedule alone so the next process start runs maintenance.
             throw;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _nextMaintenanceUtc = DateTime.UtcNow.Add(MaintenanceRetryDelay);
             _logger.LogWarning(

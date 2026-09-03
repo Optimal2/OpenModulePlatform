@@ -34,7 +34,7 @@ using OpenModulePlatform.WorkerProcessHost.Services;
 // A sibling of the artifact folder satisfies both: outside basedir, and on
 // whichever drive HostAgent put the worker host on (D:\Services\WorkerProcessHost
 // becomes D:\Services\Logs\WorkerProcessHost).
-static string? ResolveDefaultLogDirectory()
+static string? EnsureDefaultLogDirectory()
 {
     try
     {
@@ -74,7 +74,7 @@ static void ConfigureDefaultNLog()
 
     var config = new NLog.Config.LoggingConfiguration();
 
-    var logDirectory = ResolveDefaultLogDirectory();
+    var logDirectory = EnsureDefaultLogDirectory();
     if (logDirectory is not null)
     {
         var logfile = new NLog.Targets.FileTarget("logfile")

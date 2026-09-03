@@ -45,7 +45,7 @@ public sealed class PublicApiSurfaceTests
     {
         var actual = PublicApiSnapshotBuilder.Build(typeof(IWorkerModuleFactory).Assembly);
 
-        var snapshotPath = Path.Combine(AppContext.BaseDirectory, SnapshotFileName);
+        var snapshotPath = Path.Join(AppContext.BaseDirectory, SnapshotFileName);
         Assert.True(
             File.Exists(snapshotPath),
             $"Approved snapshot not found at '{snapshotPath}'. The snapshot file must be copied to the test output directory.");
@@ -56,7 +56,7 @@ public sealed class PublicApiSurfaceTests
             return;
         }
 
-        var receivedPath = Path.Combine(AppContext.BaseDirectory, ReceivedFileName);
+        var receivedPath = Path.Join(AppContext.BaseDirectory, ReceivedFileName);
         File.WriteAllText(receivedPath, actual);
 
         Assert.Fail(
@@ -164,9 +164,10 @@ internal static class PublicApiSnapshotBuilder
             yield return $"method {modifiers}{FormatTypeName(method.ReturnType)} {method.Name}{generic}({FormatParameters(method.GetParameters())})";
         }
 
+        var accessors = new StringBuilder();
         foreach (var property in type.GetProperties(flags))
         {
-            var accessors = new StringBuilder();
+            accessors.Clear();
             if (property.GetMethod is not null)
             {
                 accessors.Append("get; ");

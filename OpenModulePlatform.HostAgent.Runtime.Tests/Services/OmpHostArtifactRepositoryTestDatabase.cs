@@ -85,7 +85,7 @@ public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
             {
                 DropDatabaseIfExists(baseConnectionString, _databaseName);
             }
-            catch (Exception dropEx)
+            catch (Exception dropEx) when (dropEx is not (OutOfMemoryException or StackOverflowException))
             {
                 RecordCleanupFailure(
                     $"Failed to drop test database '{_databaseName}' after a constructor failure. " +
@@ -116,7 +116,7 @@ public sealed class OmpHostArtifactRepositoryTestDatabase : IDisposable
         {
             DropDatabase(baseConnectionString, _databaseName);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
         {
             // A failed drop must never fail the test run, but it must never be silent
             // either: silent drops are how stale OmpHostAgentTests_* databases pile up.
@@ -815,13 +815,13 @@ END;",
                     // The database is gone either way, which is all the sweep wanted.
                     Console.WriteLine($"[OmpHostAgentTests] Stale test database '{name}' was already gone.");
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
                 {
                     RecordCleanupFailure($"Failed to sweep stale test database '{name}':{Environment.NewLine}{ex}");
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not (OutOfMemoryException or StackOverflowException))
         {
             // The sweep is belt-and-braces; it must never break the test run, but it
             // must never fail silently either.
@@ -854,7 +854,7 @@ END;",
     {
         var fromEnvironment = Environment.GetEnvironmentVariable("OMP_TEST_CLEANUP_LOG");
         return string.IsNullOrWhiteSpace(fromEnvironment)
-            ? Path.Combine(Path.GetTempPath(), "OmpHostAgentTests-cleanup.log")
+            ? Path.Join(Path.GetTempPath(), "OmpHostAgentTests-cleanup.log")
             : fromEnvironment;
     }
 

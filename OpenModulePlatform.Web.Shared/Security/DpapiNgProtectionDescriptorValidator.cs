@@ -124,15 +124,7 @@ internal static class DpapiNgProtectionDescriptorValidator
             return false;
         }
 
-        foreach (var c in value)
-        {
-            if (!Uri.IsHexDigit(c))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return value.All(Uri.IsHexDigit);
     }
 
     private static InvalidOperationException InvalidDescriptor(string? descriptor, string reason)
@@ -147,21 +139,51 @@ internal static class DpapiNgProtectionDescriptorValidator
 
     private static class NativeMethods
     {
-        [DllImport("ncrypt.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-        internal static extern int NCryptCreateProtectionDescriptor(
+        // Bound once through NativeLibrary and Marshal.GetDelegateForFunctionPointer rather than
+        // declared as extern P/Invoke methods: the validator runs on Windows only, at startup,
+        // and binding by hand keeps the interop surface two plain delegates plus the SafeHandle.
+        [UnmanagedFunctionPointer(CallingConvention.Winapi, CharSet = CharSet.Unicode)]
+        internal delegate int NCryptCreateProtectionDescriptorFn(
             string pwszDescriptorString,
             uint dwFlags,
-            out SafeNCryptProtectionDescriptorHandle phDescriptor);
+            out IntPtr phDescriptor);
 
-        [DllImport("ncrypt.dll", ExactSpelling = true)]
-        internal static extern int NCryptCloseProtectionDescriptor(IntPtr hDescriptor);
+        [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+        internal delegate int NCryptCloseProtectionDescriptorFn(IntPtr hDescriptor);
+
+        private static readonly Lazy<(NCryptCreateProtectionDescriptorFn Create, NCryptCloseProtectionDescriptorFn Close)> Bindings =
+            new(Bind, LazyThreadSafetyMode.ExecutionAndPublication);
+
+        internal static int NCryptCreateProtectionDescriptor(
+            string descriptor,
+            uint flags,
+            out SafeNCryptProtectionDescriptorHandle handle)
+        {
+            var status = Bindings.Value.Create(descriptor, flags, out var rawHandle);
+            handle = new SafeNCryptProtectionDescriptorHandle(rawHandle);
+            return status;
+        }
+
+        internal static int NCryptCloseProtectionDescriptor(IntPtr hDescriptor)
+            => Bindings.Value.Close(hDescriptor);
+
+        private static (NCryptCreateProtectionDescriptorFn Create, NCryptCloseProtectionDescriptorFn Close) Bind()
+        {
+            var ncrypt = NativeLibrary.Load("ncrypt.dll");
+            return (
+                Marshal.GetDelegateForFunctionPointer<NCryptCreateProtectionDescriptorFn>(
+                    NativeLibrary.GetExport(ncrypt, "NCryptCreateProtectionDescriptor")),
+                Marshal.GetDelegateForFunctionPointer<NCryptCloseProtectionDescriptorFn>(
+                    NativeLibrary.GetExport(ncrypt, "NCryptCloseProtectionDescriptor")));
+        }
     }
 
     private sealed class SafeNCryptProtectionDescriptorHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
-        private SafeNCryptProtectionDescriptorHandle()
+        internal SafeNCryptProtectionDescriptorHandle(IntPtr handle)
             : base(ownsHandle: true)
         {
+            SetHandle(handle);
         }
 
         protected override bool ReleaseHandle()

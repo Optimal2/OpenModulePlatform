@@ -882,16 +882,15 @@ internal static partial class Program
         private EventHandler HandlerFor(Func<Task> action)
             => async (_, _) =>
             {
-                try
+                // Async void boundary: the alternative to observing everything here is
+                // terminating the installer process, which is strictly worse than
+                // reporting the failure and leaving the window open. The task is awaited
+                // through WhenSettledAsync, so its fault is read back without a catch.
+                var run = action();
+                await Program.WhenSettledAsync(run);
+                if (Program.FailureOf(run) is { } failure)
                 {
-                    await action();
-                }
-                catch (Exception ex)
-                {
-                    // Async void boundary: the alternative to catching everything here is
-                    // terminating the installer process, which is strictly worse than
-                    // reporting the failure and leaving the window open.
-                    ReportUnhandledActionFailure(ex);
+                    ReportUnhandledActionFailure(failure);
                 }
             };
 
@@ -2059,12 +2058,15 @@ internal static partial class Program
             // the source-status view simply keeps reporting the rows until the next run.
             if (persistConfigTargets)
             {
-                try
+                // Best-effort persistence: the write may fail for any reason and must only
+                // warn, so its task is awaited settled and the failure read back without a catch.
+                var persist = WriteSyncedArtifactTargetsIntoConfigAsync(_configPath, _config);
+                await Program.WhenSettledAsync(persist);
+                if (Program.FailureOf(persist) is not { } ex)
                 {
-                    await WriteSyncedArtifactTargetsIntoConfigAsync(_configPath, _config);
                     Report($"> Updated host profile config with synced artifact targets: {_configPath}");
                 }
-                catch (Exception ex)
+                else
                 {
                     Report($"> WARN: could not persist artifact targets to {_configPath} ({ex.Message}) — the developer source-status view will keep reporting these rows.");
                 }
@@ -4821,13 +4823,13 @@ internal static partial class Program
             var current = projectDirectory;
             for (var level = 0; level < 16 && !string.IsNullOrWhiteSpace(current); level++)
             {
-                foreach (var name in ScopedStampSharedBuildFiles)
+                var directory = current;
+                foreach (var existingFile in ScopedStampSharedBuildFiles
+                    .Select(name => Path.Join(directory, name))
+                    .Where(File.Exists)
+                    .Select(Path.GetFullPath))
                 {
-                    var path = Path.Join(current, name);
-                    if (File.Exists(path))
-                    {
-                        scopedFiles.Add(Path.GetFullPath(path));
-                    }
+                    scopedFiles.Add(existingFile);
                 }
 
                 if (Directory.Exists(Path.Join(current, ".git")) || File.Exists(Path.Join(current, ".git")))
@@ -5966,33 +5968,39 @@ ORDER BY ar.ArtifactId DESC;
 
             try
             {
-                ExitCode = await Task.Run(operation);
-                SetReadyStatus(ExitCode == 0 ? successText : incompleteText);
-
-                MessageBox.Show(
-                    ExitCode == 0 ? successText : incompleteText,
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    ExitCode == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-            }
-            catch (Exception ex)
-            {
-                ExitCode = 1;
                 // R11-B2. Action execution is the main GUI boundary; log and show the failure
-                // so the operator has both summary and details. This was two identical
-                // clauses for JsonException and SystemException. That pair covers nearly
-                // every type these actions raise today -- but "nearly" is what R10-S1 was:
-                // an exception no filter listed, escaping the boundary written to contain it.
-                // At the outermost boundary of a GUI action the correct filter is the widest
-                // one, because the only thing narrowing it buys is a crashed installer.
-                writer.WriteLine(failureText);
-                writer.WriteLine(ex.Message);
-                SetReadyStatus(failureText);
-                MessageBox.Show(
-                    ex.Message,
-                    "OpenModulePlatform installer",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                // so the operator has both summary and details. Earlier this was a catch of
+                // Exception, and before that two clauses for JsonException and SystemException
+                // that covered nearly every type these actions raise -- but "nearly" is what
+                // R10-S1 was: an exception no filter listed, escaping the boundary written to
+                // contain it. Awaiting the settled task and reading its failure observes every
+                // outcome without a catch clause at all, so nothing can escape and crash the
+                // installer.
+                var run = Task.Run(operation);
+                await Program.WhenSettledAsync(run);
+                if (Program.FailureOf(run) is { } failure)
+                {
+                    ExitCode = 1;
+                    writer.WriteLine(failureText);
+                    writer.WriteLine(failure.Message);
+                    SetReadyStatus(failureText);
+                    MessageBox.Show(
+                        failure.Message,
+                        "OpenModulePlatform installer",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+                else
+                {
+                    ExitCode = run.Result;
+                    SetReadyStatus(ExitCode == 0 ? successText : incompleteText);
+
+                    MessageBox.Show(
+                        ExitCode == 0 ? successText : incompleteText,
+                        "OpenModulePlatform installer",
+                        MessageBoxButtons.OK,
+                        ExitCode == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                }
             }
             finally
             {
