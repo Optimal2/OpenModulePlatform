@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 
 namespace OpenModulePlatform.Artifacts;
 
@@ -131,10 +133,24 @@ public static class DeploymentLockFile
     /// bounded tolerance instead of ending a lease on one transient fault. That covers the
     /// write phase too: an I/O failure there is reported, not raised.
     /// </remarks>
-    public static async Task<DeploymentLockRenewalOutcome> TryRenewExclusiveAsync(
+    public static Task<DeploymentLockRenewalOutcome> TryRenewExclusiveAsync(
         string applicationRoot,
         string expectedLockId,
         Func<DeploymentLockDocument, DeploymentLockDocument> renew,
+        CancellationToken ct)
+        => TryRenewExclusiveAsync(applicationRoot, expectedLockId, renew, OpenExclusiveWithRetryAsync, ct);
+
+    /// <summary>
+    /// Test seam: same atomic renewal, but the exclusive open is supplied by the caller
+    /// so a test can hand in a handle whose write phase fails at an exact point --
+    /// before or after the truncation -- which is what decides whether a truncated
+    /// residue must be deleted. Production always uses the public overload.
+    /// </summary>
+    internal static async Task<DeploymentLockRenewalOutcome> TryRenewExclusiveAsync(
+        string applicationRoot,
+        string expectedLockId,
+        Func<DeploymentLockDocument, DeploymentLockDocument> renew,
+        Func<string, CancellationToken, Task<FileStream?>> openExclusive,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(renew);
@@ -162,7 +178,7 @@ public static class DeploymentLockFile
             // as WriteAsync does. The leaf itself was checked just above and is left alone.
             OmpReparsePointGuard.PrepareOwnedFileForWrite(path, applicationRoot, "Deployment lock file");
 
-            exclusiveHandle = await OpenExclusiveWithRetryAsync(path, ct);
+            exclusiveHandle = await openExclusive(path, ct);
         }
         catch (FileNotFoundException)
         {
@@ -186,96 +202,75 @@ public static class DeploymentLockFile
                 "Deployment lock file stayed exclusively locked by another process.");
         }
 
-        // Set when the write phase failed after truncating the file: what is on disk is
-        // then empty or half-written residue, deleted in the finally below once the
-        // exclusive handle has been released.
-        string? truncatedResidueToDelete = null;
-        try
+        await using (var stream = exclusiveHandle)
         {
-            await using (var stream = exclusiveHandle)
+            // Same zero-byte rule as ReadStatus: an empty file is the residue of an
+            // interrupted claim or renewal and can never be a valid claim, so report it
+            // as absent and let the caller re-assert through the atomic claim path.
+            if (stream.Length == 0)
             {
-                // Same zero-byte rule as ReadStatus: an empty file is the residue of an
-                // interrupted claim or renewal and can never be a valid claim, so report it
-                // as absent and let the caller re-assert through the atomic claim path.
-                if (stream.Length == 0)
-                {
-                    return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.NotFound, null, null);
-                }
-
-                DeploymentLockDocument? document;
-                try
-                {
-                    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-                    var json = await reader.ReadToEndAsync(ct);
-                    document = JsonSerializer.Deserialize<DeploymentLockDocument>(json, JsonOptions);
-                }
-                catch (Exception ex) when (ex is IOException or JsonException)
-                {
-                    return new DeploymentLockRenewalOutcome(
-                        DeploymentLockRenewalResult.Indeterminate,
-                        null,
-                        $"Deployment lock file could not be read: {ex.Message}");
-                }
-
-                if (document is null)
-                {
-                    return new DeploymentLockRenewalOutcome(
-                        DeploymentLockRenewalResult.Indeterminate,
-                        null,
-                        "Deployment lock file exists but did not contain a valid document.");
-                }
-
-                // The comparison happens while this handle still holds the file exclusively,
-                // so the document just read is provably still the document on disk.
-                if (!string.Equals(document.LockId, expectedLockId, StringComparison.Ordinal))
-                {
-                    return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Lost, document, null);
-                }
-
-                var renewed = renew(document);
-                var renewedJson = JsonSerializer.Serialize(renewed, JsonOptions);
-
-                // Cancellation is honoured only up to here. Once SetLength(0) has run, the
-                // write must either complete or be reported: aborting between the truncation
-                // and the flush leaves an empty or half-written lock file, which every reader
-                // then fails closed on. This is a ~500-byte write through an already-open
-                // handle and cannot realistically hang, so finishing it without the token is
-                // by far the smaller risk (regression fix for the atomic in-place renewal).
-                //
-                // An I/O failure in the write phase is not raised either: it is reported as
-                // Indeterminate, exactly like a failed open or read, so the lease loop's
-                // bounded tolerance decides whether the lease survives the tick. And because
-                // the failure can strike between the truncation and the flush, the residue
-                // the failed write leaves behind is deleted once the handle is released --
-                // the file is provably still ours (the LockId comparison ran inside this
-                // same exclusive handle, so nobody else could have written through it), and
-                // a non-empty half-written file would otherwise fail every reader closed for
-                // good (R12-A4), a lock held by nobody that blocks every deployment until
-                // someone deletes the file by hand.
-                ct.ThrowIfCancellationRequested();
-                var writeFailure = await TryRewriteHeldContentAsync(stream, renewedJson);
-                if (writeFailure is not null)
-                {
-                    truncatedResidueToDelete = path;
-                    return new DeploymentLockRenewalOutcome(
-                        DeploymentLockRenewalResult.Indeterminate,
-                        null,
-                        writeFailure);
-                }
-
-                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Renewed, renewed, null);
+                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.NotFound, null, null);
             }
-        }
-        finally
-        {
-            if (truncatedResidueToDelete is not null)
+
+            DeploymentLockDocument? document;
+            try
             {
-                // Best effort. If the delete itself fails, a zero-byte residue is treated
-                // as absent by every reader and taken over by the next claim; a non-empty
-                // half-written one keeps failing closed, and the lease loop's bounded
-                // tolerance stops the renewal instead of pretending the lock is held.
-                TryDelete(truncatedResidueToDelete);
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+                var json = await reader.ReadToEndAsync(ct);
+                document = JsonSerializer.Deserialize<DeploymentLockDocument>(json, JsonOptions);
             }
+            catch (Exception ex) when (ex is IOException or JsonException)
+            {
+                return new DeploymentLockRenewalOutcome(
+                    DeploymentLockRenewalResult.Indeterminate,
+                    null,
+                    $"Deployment lock file could not be read: {ex.Message}");
+            }
+
+            if (document is null)
+            {
+                return new DeploymentLockRenewalOutcome(
+                    DeploymentLockRenewalResult.Indeterminate,
+                    null,
+                    "Deployment lock file exists but did not contain a valid document.");
+            }
+
+            // The comparison happens while this handle still holds the file exclusively,
+            // so the document just read is provably still the document on disk.
+            if (!string.Equals(document.LockId, expectedLockId, StringComparison.Ordinal))
+            {
+                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Lost, document, null);
+            }
+
+            var renewed = renew(document);
+            var renewedJson = JsonSerializer.Serialize(renewed, JsonOptions);
+
+            // Cancellation is honoured only up to here. Once SetLength(0) has run, the
+            // write must either complete or be reported: aborting between the truncation
+            // and the flush leaves an empty or half-written lock file, which every reader
+            // then fails closed on. This is a ~500-byte write through an already-open
+            // handle and cannot realistically hang, so finishing it without the token is
+            // by far the smaller risk (regression fix for the atomic in-place renewal).
+            //
+            // An I/O failure in the write phase is not raised either: it is reported as
+            // Indeterminate, exactly like a failed open or read, so the lease loop's
+            // bounded tolerance decides whether the lease survives the tick. What such a
+            // failure leaves behind is handled by TryRewriteHeldContentAsync itself: a
+            // failed truncation keeps the intact document (nothing is deleted), and a
+            // post-truncation residue is marked for deletion on the close of THIS handle
+            // -- the one that just proved ownership -- never by a path-based delete after
+            // the handle is gone.
+            ct.ThrowIfCancellationRequested();
+            var writeFailure = await TryRewriteHeldContentAsync(stream, renewedJson);
+            if (writeFailure is not null)
+            {
+                return new DeploymentLockRenewalOutcome(
+                    DeploymentLockRenewalResult.Indeterminate,
+                    null,
+                    writeFailure);
+            }
+
+            return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Renewed, renewed, null);
         }
     }
 
@@ -283,14 +278,36 @@ public static class DeploymentLockFile
     /// Overwrites the content of the exclusively held lock file handle with the renewed
     /// document. Returns null on success, or a diagnostic when the write itself failed --
     /// never throws for an I/O error, so the caller can report the attempt as
-    /// <see cref="DeploymentLockRenewalResult.Indeterminate"/> and clean up the truncated
-    /// residue instead of dying mid-lease.
+    /// <see cref="DeploymentLockRenewalResult.Indeterminate"/> instead of dying mid-lease.
     /// </summary>
+    /// <remarks>
+    /// The two failure points are deliberately separated:
+    ///
+    /// A failure of the TRUNCATION itself leaves the intact, still-valid document on disk.
+    /// Nothing is deleted: the lease's next tick simply retries against it. Deleting there
+    /// turned one transient write fault into a lock-less gap of up to a renewal interval,
+    /// in which a competitor could claim while this lease still believed it held the lock.
+    ///
+    /// A failure AFTER the truncation leaves empty or half-written residue, which is
+    /// deleted -- but the deletion rides this handle: it is armed with
+    /// SetFileInformationByHandle while the handle that proved ownership is still held,
+    /// and completed by its close. A path-based delete after the release could land on a
+    /// claim that arrived in the microseconds in between, which is exactly the window the
+    /// delete-on-close form does not have.
+    /// </remarks>
     internal static async Task<string?> TryRewriteHeldContentAsync(Stream stream, string renewedJson)
     {
         try
         {
             stream.SetLength(0);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Deployment lock file could not be written: {ex.Message}";
+        }
+
+        try
+        {
             stream.Position = 0;
             await stream.WriteAsync(Utf8NoBom.GetBytes(renewedJson), CancellationToken.None);
             await stream.FlushAsync(CancellationToken.None);
@@ -298,6 +315,14 @@ public static class DeploymentLockFile
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            if (stream is FileStream fileStream)
+            {
+                // Best effort: if the arming itself fails, the residue stays and is treated
+                // as absent by every reader (zero-byte) or fails closed (R12-A4), and the
+                // lease loop's bounded tolerance stops the renewal.
+                TryArmDeleteOnClose(fileStream, out _);
+            }
+
             return $"Deployment lock file could not be written: {ex.Message}";
         }
     }
@@ -312,7 +337,7 @@ public static class DeploymentLockFile
         {
             try
             {
-                return new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None, bufferSize: 4096, useAsync: true);
+                return OpenExclusiveWithDeleteAccess(path);
             }
             catch (FileNotFoundException)
             {
@@ -331,6 +356,136 @@ public static class DeploymentLockFile
                 return null;
             }
         }
+    }
+
+    /// <summary>
+    /// Opens the lock file with full access and no sharing, including DELETE access so the
+    /// holder can mark the file for deletion on close
+    /// (<c>SetFileInformationByHandle(FileDispositionInfo)</c>) -- the only deletion form
+    /// whose effect cannot outlive the ownership the handle proved, because the file is
+    /// unlinked by the close of that very handle. While the handle is held no other handle
+    /// to the file can be opened at all, so whatever the holder verifies about the content
+    /// is still true when it acts on it.
+    /// </summary>
+    /// <remarks>
+    /// This is the one place the platform drops to CreateFile: FileStream cannot express
+    /// "DELETE in the desired access". The mapping to the Framework exception shapes keeps
+    /// every caller's existing catch filters working unchanged.
+    /// </remarks>
+    internal static FileStream OpenExclusiveWithDeleteAccess(string path)
+        => new(OpenExclusiveHandleWithDeleteAccess(path), FileAccess.ReadWrite, bufferSize: 4096, isAsync: false);
+
+    /// <summary>
+    /// The raw handle form of <see cref="OpenExclusiveWithDeleteAccess"/>, for tests that
+    /// wrap the handle in a FileStream subclass with an injected failure.
+    /// </summary>
+    internal static SafeFileHandle OpenExclusiveHandleWithDeleteAccess(string path)
+    {
+        var handle = NativeMethods.CreateFile(
+            @"\\?\" + path,
+            NativeMethods.GenericRead | NativeMethods.GenericWrite | NativeMethods.Delete,
+            dwShareMode: 0,
+            IntPtr.Zero,
+            NativeMethods.OpenExisting,
+            NativeMethods.FileAttributeNormal,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            throw CreateOpenException(path, Marshal.GetLastWin32Error());
+        }
+
+        return handle;
+    }
+
+    /// <summary>
+    /// Maps a failed CreateFile to the exception shape the managed FileStream open would
+    /// have produced, so existing catch filters (FileNotFoundException, IOException for a
+    /// sharing violation, UnauthorizedAccessException for a denial) behave identically.
+    /// </summary>
+    private static Exception CreateOpenException(string path, int error)
+        => error switch
+        {
+            NativeMethods.ErrorFileNotFound
+                => new FileNotFoundException($"Could not find deployment lock file '{path}'.", path),
+            NativeMethods.ErrorPathNotFound
+                => new DirectoryNotFoundException($"Could not find deployment lock directory for '{path}'."),
+            NativeMethods.ErrorAccessDenied
+                => new UnauthorizedAccessException($"Access to the deployment lock file '{path}' is denied."),
+            _ => new IOException(
+                $"Could not open deployment lock file '{path}' (Win32 error {error}).",
+                unchecked((int)0x80070000 | error))
+        };
+
+    /// <summary>
+    /// Marks the file an exclusive handle holds for deletion when that handle closes.
+    /// Best effort: returns false with a diagnostic instead of throwing, so a failed arming
+    /// is reported like any other I/O fault and the residue is left for the zero-byte rules.
+    /// </summary>
+    private static bool TryArmDeleteOnClose(FileStream stream, out string? diagnostic)
+    {
+        try
+        {
+            var info = new NativeMethods.FileDispositionInfo { DeleteFile = 1 };
+            if (!NativeMethods.SetFileInformationByHandle(
+                    stream.SafeFileHandle,
+                    NativeMethods.FileDispositionInfoClass,
+                    ref info,
+                    NativeMethods.FileDispositionInfoSize))
+            {
+                diagnostic =
+                    $"Deployment lock file could not be marked for deletion on close (Win32 error {Marshal.GetLastWin32Error()}).";
+                return false;
+            }
+
+            diagnostic = null;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            diagnostic = $"Deployment lock file could not be marked for deletion on close: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static class NativeMethods
+    {
+        internal const uint GenericRead = 0x80000000;
+        internal const uint GenericWrite = 0x40000000;
+        internal const uint Delete = 0x00010000;
+        internal const uint OpenExisting = 3;
+        internal const uint CreateNew = 1;
+        internal const uint FileAttributeNormal = 0x80;
+
+        internal const int ErrorFileNotFound = 2;
+        internal const int ErrorPathNotFound = 3;
+        internal const int ErrorAccessDenied = 5;
+
+        internal const int FileDispositionInfoClass = 4;
+        internal const int FileDispositionInfoSize = 1;
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct FileDispositionInfo
+        {
+            internal byte DeleteFile;
+        }
+
+        [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
+        internal static extern SafeFileHandle CreateFile(
+            string lpFileName,
+            uint dwDesiredAccess,
+            uint dwShareMode,
+            IntPtr lpSecurityAttributes,
+            uint dwCreationDisposition,
+            uint dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetFileInformationByHandle(
+            SafeFileHandle hFile,
+            int fileInformationClass,
+            ref FileDispositionInfo lpFileInformation,
+            int dwBufferSize);
     }
 
     public static DeploymentLockStatus ReadStatus(string applicationRoot, DateTimeOffset nowUtc)
@@ -456,7 +611,7 @@ public static class DeploymentLockFile
         FileStream stream;
         try
         {
-            stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            stream = OpenClaimWithDeleteAccess(path, NativeMethods.CreateNew);
         }
         catch (IOException) when (File.Exists(path))
         {
@@ -481,21 +636,59 @@ public static class DeploymentLockFile
         try
         {
             var json = JsonSerializer.Serialize(document, JsonOptions);
-            await using var writer = new StreamWriter(stream, Utf8NoBom);
-            await writer.WriteAsync(json.AsMemory(), ct);
-            await writer.FlushAsync(ct);
+            // leaveOpen: the writer is disposed when this block unwinds -- including
+            // before the catch below runs -- and the handle must still be open there so
+            // the cleanup deletion can be armed on it.
+            await using (var writer = new StreamWriter(stream, Utf8NoBom, bufferSize: 4096, leaveOpen: true))
+            {
+                await writer.WriteAsync(json.AsMemory(), ct);
+                await writer.FlushAsync(ct);
+            }
         }
         catch
         {
-            // The claim succeeded but its contents did not land. Leaving an empty or
-            // half-written lock file would block every future deployment of this
-            // application until someone deleted it by hand.
+            // The claim succeeded but its contents did not land. The deletion rides the
+            // handle that created the claim -- armed while it is still held, completed by
+            // its close -- so it can never remove a claim that landed at the path after
+            // the release. Only if the arming itself fails is there a path-based
+            // fallback: an undeleted empty or half-written residue would otherwise block
+            // every future deployment of this application until deleted by hand.
+            var armed = TryArmDeleteOnClose(stream, out _);
             await stream.DisposeAsync();
-            TryDelete(path);
+            if (!armed)
+            {
+                TryDelete(path);
+            }
+
             throw;
         }
 
+        await stream.DisposeAsync();
         return true;
+    }
+
+    /// <summary>
+    /// Opens the lock file for a claim with no sharing and DELETE access, so a failed
+    /// claim write can be cleaned up by marking the file for deletion on the close of
+    /// the very handle that created it. <see cref="NativeMethods.CreateNew"/> fails with
+    /// an IOException when the file already exists, exactly like FileMode.CreateNew.
+    /// </summary>
+    private static FileStream OpenClaimWithDeleteAccess(string path, uint creationDisposition)
+    {
+        var handle = NativeMethods.CreateFile(
+            @"\\?\" + path,
+            NativeMethods.GenericRead | NativeMethods.GenericWrite | NativeMethods.Delete,
+            dwShareMode: 0,
+            IntPtr.Zero,
+            creationDisposition,
+            NativeMethods.FileAttributeNormal,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            throw CreateOpenException(path, Marshal.GetLastWin32Error());
+        }
+
+        return new FileStream(handle, FileAccess.ReadWrite, bufferSize: 4096, isAsync: false);
     }
 
     /// <summary>
@@ -515,7 +708,7 @@ public static class DeploymentLockFile
         FileStream stream;
         try
         {
-            stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None);
+            stream = OpenClaimWithDeleteAccess(path, NativeMethods.OpenExisting);
         }
         catch (IOException)
         {
@@ -536,6 +729,147 @@ public static class DeploymentLockFile
         }
 
         return stream;
+    }
+
+    /// <summary>
+    /// Atomically reads the lock file, verifies it still belongs to
+    /// <paramref name="expectedLockId"/>, and deletes it -- all inside one exclusive file
+    /// handle.
+    /// </summary>
+    /// <remarks>
+    /// This is the compare-and-delete primitive that replaces every "read the status,
+    /// compare the owner, then File.Delete by path" pair. That pattern's verification and
+    /// deletion were two separate operations, and anything could happen between them: two
+    /// agents that both verified the same expired lock could each delete the other's fresh
+    /// claim, and both ended up believing they owned the deployment. Here the file is
+    /// opened with <see cref="FileShare.None"/> (so nothing can be opened, renamed or
+    /// deleted behind the handle's back), the LockId comparison runs while the handle is
+    /// held, and the deletion is armed on that same handle with
+    /// <c>SetFileInformationByHandle(FileDispositionInfo)</c> -- the file is unlinked by
+    /// the close of the very handle that proved ownership, so the deletion can never land
+    /// on a claim that arrived after the verification.
+    ///
+    /// <paramref name="deletionRequirement"/> runs inside the handle, after the ownership
+    /// comparison: callers clearing an EXPIRED lock pass an expiry check so a lock its
+    /// owner renewed in the meantime (same LockId, future expiry) is left alone.
+    ///
+    /// Like <see cref="TryRenewExclusiveAsync(string, string, Func{DeploymentLockDocument, DeploymentLockDocument}, CancellationToken)"/>
+    /// this method never throws for the lock file's own I/O problems; it fails closed and
+    /// reports them as <see cref="DeploymentLockDeleteResult.Indeterminate"/> instead.
+    /// </remarks>
+    public static async Task<DeploymentLockDeleteOutcome> TryDeleteIfOwnedExclusiveAsync(
+        string applicationRoot,
+        string expectedLockId,
+        Func<DeploymentLockDocument, bool>? deletionRequirement,
+        CancellationToken ct)
+    {
+        var path = GetPath(applicationRoot);
+        if (!File.Exists(path))
+        {
+            return new DeploymentLockDeleteOutcome(DeploymentLockDeleteResult.NotFound, null, null);
+        }
+
+        // Same fail-closed branch as ReadStatus: never open a planted link, and never
+        // delete it either -- deletion proves ownership, it does not repair the root.
+        if (OmpReparsePointGuard.IsReparsePoint(path))
+        {
+            return new DeploymentLockDeleteOutcome(
+                DeploymentLockDeleteResult.Indeterminate,
+                null,
+                "Deployment lock file is a reparse point (junction/symlink) and was not read.");
+        }
+
+        FileStream? exclusiveHandle;
+        try
+        {
+            // Validates the directories above the file before acting through them,
+            // exactly as the renewal does. The leaf itself was checked just above.
+            OmpReparsePointGuard.PrepareOwnedFileForWrite(path, applicationRoot, "Deployment lock file");
+
+            exclusiveHandle = await OpenExclusiveWithRetryAsync(path, ct);
+        }
+        catch (FileNotFoundException)
+        {
+            // The file vanished between the existence check and the open: nobody holds
+            // the lock, so the caller proceeds through the atomic claim.
+            return new DeploymentLockDeleteOutcome(DeploymentLockDeleteResult.NotFound, null, null);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new DeploymentLockDeleteOutcome(
+                DeploymentLockDeleteResult.Indeterminate,
+                null,
+                $"Deployment lock file could not be opened exclusively: {ex.Message}");
+        }
+
+        if (exclusiveHandle is null)
+        {
+            return new DeploymentLockDeleteOutcome(
+                DeploymentLockDeleteResult.Indeterminate,
+                null,
+                "Deployment lock file stayed exclusively locked by another process.");
+        }
+
+        await using (var stream = exclusiveHandle)
+        {
+            // Same zero-byte rule as ReadStatus and the renewal: residue of an
+            // interrupted claim or renewal, treated as absent and left for the takeover
+            // path rather than deleted here.
+            if (stream.Length == 0)
+            {
+                return new DeploymentLockDeleteOutcome(DeploymentLockDeleteResult.NotFound, null, null);
+            }
+
+            DeploymentLockDocument? document;
+            try
+            {
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+                var json = await reader.ReadToEndAsync(ct);
+                document = JsonSerializer.Deserialize<DeploymentLockDocument>(json, JsonOptions);
+            }
+            catch (Exception ex) when (ex is IOException or JsonException)
+            {
+                return new DeploymentLockDeleteOutcome(
+                    DeploymentLockDeleteResult.Indeterminate,
+                    null,
+                    $"Deployment lock file could not be read: {ex.Message}");
+            }
+
+            if (document is null)
+            {
+                return new DeploymentLockDeleteOutcome(
+                    DeploymentLockDeleteResult.Indeterminate,
+                    null,
+                    "Deployment lock file exists but did not contain a valid document.");
+            }
+
+            // The comparison happens while this handle still holds the file exclusively,
+            // so the document just read is provably still the document on disk -- and the
+            // deletion below is armed on this same handle, so it cannot outlive the proof.
+            if (!string.Equals(document.LockId, expectedLockId, StringComparison.Ordinal))
+            {
+                return new DeploymentLockDeleteOutcome(DeploymentLockDeleteResult.NotOwned, document, null);
+            }
+
+            if (deletionRequirement is not null && !deletionRequirement(document))
+            {
+                return new DeploymentLockDeleteOutcome(DeploymentLockDeleteResult.NotOwned, document, null);
+            }
+
+            // Cancellation is honoured only up to here: once the deletion is armed, the
+            // close completes it, and claiming otherwise after cancelling would be a lie.
+            ct.ThrowIfCancellationRequested();
+
+            if (!TryArmDeleteOnClose(stream, out var armDiagnostic))
+            {
+                return new DeploymentLockDeleteOutcome(
+                    DeploymentLockDeleteResult.Indeterminate,
+                    null,
+                    armDiagnostic);
+            }
+
+            return new DeploymentLockDeleteOutcome(DeploymentLockDeleteResult.Deleted, document, null);
+        }
     }
 
     public static void TryDelete(string path)
@@ -670,5 +1004,38 @@ public enum DeploymentLockRenewalResult
 /// </summary>
 public sealed record DeploymentLockRenewalOutcome(
     DeploymentLockRenewalResult Result,
+    DeploymentLockDocument? Document,
+    string? Diagnostic);
+
+/// <summary>
+/// What one atomic compare-and-delete attempt of the deployment lock established.
+/// </summary>
+public enum DeploymentLockDeleteResult
+{
+    /// <summary>The lock file named the expected owner and was deleted.</summary>
+    Deleted,
+
+    /// <summary>
+    /// The lock file names a different owner, or no longer meets the caller's deletion
+    /// requirement. It was left in place.
+    /// </summary>
+    NotOwned,
+
+    /// <summary>
+    /// The lock file could not be opened or read, so nothing about ownership was proven
+    /// and nothing was deleted.
+    /// </summary>
+    Indeterminate,
+
+    /// <summary>There is no lock file at all.</summary>
+    NotFound
+}
+
+/// <summary>
+/// The outcome of <see cref="DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync"/>: the
+/// verdict, the document that was read, and a diagnostic when nothing could be proven.
+/// </summary>
+public sealed record DeploymentLockDeleteOutcome(
+    DeploymentLockDeleteResult Result,
     DeploymentLockDocument? Document,
     string? Diagnostic);

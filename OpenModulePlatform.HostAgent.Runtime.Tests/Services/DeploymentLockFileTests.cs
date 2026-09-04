@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 using OpenModulePlatform.Artifacts;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
@@ -322,6 +323,172 @@ public sealed class DeploymentLockFileTests : IDisposable
         public override void SetLength(long value) => throw new IOException("simulated write failure");
     }
 
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_WhenOwned_DeletesTheFile()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _root, "lock-id", deletionRequirement: null, CancellationToken.None);
+
+        Assert.Equal(DeploymentLockDeleteResult.Deleted, outcome.Result);
+        Assert.Equal("lock-id", outcome.Document!.LockId);
+        Assert.False(File.Exists(DeploymentLockFile.GetPath(_root)));
+    }
+
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_WhenOwnedByAnotherClaimant_ReturnsNotOwnedAndKeepsTheFile()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var foreign = DeploymentLockFile.Create("foreign-lock-id", "app-key", "HostAgent", "deploying", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, foreign, CancellationToken.None);
+        var originalBytes = await File.ReadAllBytesAsync(DeploymentLockFile.GetPath(_root));
+
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _root, "our-lock-id", deletionRequirement: null, CancellationToken.None);
+
+        Assert.Equal(DeploymentLockDeleteResult.NotOwned, outcome.Result);
+        Assert.Equal("foreign-lock-id", outcome.Document!.LockId);
+        Assert.Equal(originalBytes, await File.ReadAllBytesAsync(DeploymentLockFile.GetPath(_root)));
+    }
+
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_MissingFile_ReturnsNotFound()
+    {
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _root, "lock-id", deletionRequirement: null, CancellationToken.None);
+
+        Assert.Equal(DeploymentLockDeleteResult.NotFound, outcome.Result);
+        Assert.Null(outcome.Document);
+    }
+
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_ZeroByteFile_IsTreatedAsAbsentAndLeftAlone()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, Array.Empty<byte>());
+
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _root, "lock-id", deletionRequirement: null, CancellationToken.None);
+
+        Assert.Equal(DeploymentLockDeleteResult.NotFound, outcome.Result);
+        // The residue is left for the zero-byte takeover path, not deleted here.
+        Assert.True(File.Exists(path));
+    }
+
+    /// <summary>
+    /// The expiry requirement runs inside the exclusive handle: a lock its owner renewed
+    /// meanwhile (same LockId, future expiry) is a live lock again and is left alone.
+    /// </summary>
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_WhenTheRequirementNoLongerHolds_LeavesTheFile()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var renewed = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, renewed, CancellationToken.None);
+
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _root,
+            "lock-id",
+            document => document.ExpiresUtc <= DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        Assert.Equal(DeploymentLockDeleteResult.NotOwned, outcome.Result);
+        Assert.True(File.Exists(DeploymentLockFile.GetPath(_root)));
+    }
+
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_WhenTheRequirementHolds_DeletesTheFile()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var expired = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now.AddMinutes(-30), now.AddMinutes(-10));
+        await DeploymentLockFile.WriteAsync(_root, expired, CancellationToken.None);
+
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _root,
+            "lock-id",
+            document => document.ExpiresUtc <= DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        Assert.Equal(DeploymentLockDeleteResult.Deleted, outcome.Result);
+        Assert.False(File.Exists(DeploymentLockFile.GetPath(_root)));
+    }
+
+    /// <summary>
+    /// The atomicity guarantee, pinned at its sharpest point: the deletion requirement
+    /// runs inside the exclusive handle immediately after the ownership read -- the exact
+    /// instant the old read-then-delete-by-path pattern let a foreign claim in -- and an
+    /// actor that KNOWS the read already happened still cannot get a claim onto the file
+    /// before the deletion. Against the two-step pattern this write succeeds and the
+    /// subsequent path-based delete removes the foreign claim: this test is RED there.
+    /// </summary>
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_AClaimAttemptedAtTheMomentOfVerification_CannotInterpose()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now.AddMinutes(-30), now.AddMinutes(-10));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        var foreign = DeploymentLockFile.Create("foreign-lock-id", "app-key", "HostAgent", "deploying", now, now.AddMinutes(5));
+        var foreignJson = JsonSerializer.Serialize(foreign, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+
+        var requirementRan = false;
+        var interpositionBlocked = false;
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _root,
+            "lock-id",
+            document =>
+            {
+                requirementRan = true;
+                try
+                {
+                    File.WriteAllText(path, foreignJson);
+                }
+                catch (IOException)
+                {
+                    // The exclusive handle is held: no write can interpose between the
+                    // verification and the deletion it armed.
+                    interpositionBlocked = true;
+                }
+
+                return true;
+            },
+            CancellationToken.None);
+
+        Assert.True(requirementRan, "the deletion requirement never ran -- the test proves nothing");
+        Assert.True(interpositionBlocked, "a foreign claim could be written between verification and deletion");
+        Assert.Equal(DeploymentLockDeleteResult.Deleted, outcome.Result);
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// A foreign exclusive handle blocks the compare-and-delete's open for as long as it
+    /// is held: the attempt reports Indeterminate and deletes nothing.
+    /// </summary>
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_WhileHeldExclusively_DeletesNothingAndReportsIndeterminate()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now.AddMinutes(-30), now.AddMinutes(-10));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        DeploymentLockDeleteOutcome outcome;
+        await using (var handle = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+                _root, "lock-id", deletionRequirement: null, CancellationToken.None);
+        }
+
+        Assert.Equal(DeploymentLockDeleteResult.Indeterminate, outcome.Result);
+        Assert.True(File.Exists(path));
+        Assert.Equal("lock-id", DeploymentLockFile.ReadStatus(_root, now).Document!.LockId);
+    }
+
     /// <summary>
     /// ReadStatus must NEVER throw: eight call sites (the HostAgent lease loop, both deployment
     /// services, the health monitor) call it with no try/catch and treat the returned status as
@@ -476,6 +643,121 @@ public sealed class DeploymentLockFileTests : IDisposable
 
         Assert.Equal(DeploymentLockRenewalResult.NotFound, outcome.Result);
         Assert.Null(outcome.Document);
+    }
+
+    /// <summary>
+    /// A1: when the truncation itself fails, the file still holds the intact document the
+    /// renewal just proved is ours -- it must NOT be deleted. Deleting it turned one
+    /// transient write fault into a lock-less gap of up to a renewal interval (30 s in
+    /// production): the lease's next tick would have retried against an intact file, but
+    /// with the file gone a competitor could claim in between and two deployments ran.
+    /// </summary>
+    [Fact]
+    public async Task TryRenewExclusiveAsync_WhenTruncationItselfFails_LeavesTheIntactDocumentInPlace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+        var originalBytes = await File.ReadAllBytesAsync(path);
+
+        var outcome = await DeploymentLockFile.TryRenewExclusiveAsync(
+            _root,
+            "lock-id",
+            current => current with { UpdatedUtc = now.AddSeconds(30) },
+            (p, ct) => Task.FromResult<FileStream?>(new TruncationThrowingFileStream(p)),
+            CancellationToken.None);
+
+        Assert.Equal(DeploymentLockRenewalResult.Indeterminate, outcome.Result);
+        Assert.True(File.Exists(path));
+        Assert.Equal(originalBytes, await File.ReadAllBytesAsync(path));
+        Assert.Equal("lock-id", DeploymentLockFile.ReadStatus(_root, now).Document!.LockId);
+    }
+
+    /// <summary>
+    /// A2 (mechanism): when the write fails AFTER the truncation, what is on disk is
+    /// residue and must be deleted -- but the deletion rides the handle that proved
+    /// ownership: armed with SetFileInformationByHandle while the handle is still held,
+    /// completed by its close. A path-based delete after the handle is released can land
+    /// on a claim that arrived in between, and is gone from the design.
+    /// </summary>
+    [Fact]
+    public async Task TryRewriteHeldContentAsync_WhenTheWriteFailsAfterTruncation_TheResidueDeletionRidesTheHeldHandle()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        var stream = new WriteThrowingFileStream(DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(path));
+        var diagnostic = await DeploymentLockFile.TryRewriteHeldContentAsync(stream, "{}");
+
+        Assert.NotNull(diagnostic);
+
+        await stream.DisposeAsync();
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// A2 (end to end): a failed renewal write deletes its residue through the handle that
+    /// proved ownership, and a claim that lands at the path afterwards is a new file that
+    /// nothing deletes.
+    /// </summary>
+    [Fact]
+    public async Task TryRenewExclusiveAsync_WhenTheWriteFailsAfterTruncation_DeletesTheResidueAndNeverTouchesLaterClaims()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        var outcome = await DeploymentLockFile.TryRenewExclusiveAsync(
+            _root,
+            "lock-id",
+            current => current with { UpdatedUtc = now.AddSeconds(30) },
+            (p, ct) => Task.FromResult<FileStream?>(
+                new WriteThrowingFileStream(DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(p))),
+            CancellationToken.None);
+
+        Assert.Equal(DeploymentLockRenewalResult.Indeterminate, outcome.Result);
+        Assert.False(File.Exists(path));
+
+        var claim = DeploymentLockFile.Create("new-claim-id", "app-key", "other-owner", "deploying", now, now.AddMinutes(5));
+        Assert.True(await DeploymentLockFile.TryCreateExclusiveAsync(_root, claim, CancellationToken.None));
+        Assert.Equal("new-claim-id", DeploymentLockFile.ReadStatus(_root, now).Document!.LockId);
+    }
+
+    /// <summary>
+    /// A stream whose truncation fails the way a genuinely broken handle fails it: the
+    /// write phase never starts, and the content on disk is untouched.
+    /// </summary>
+    private sealed class TruncationThrowingFileStream : FileStream
+    {
+        public TruncationThrowingFileStream(string path)
+            : base(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+        {
+        }
+
+        public override void SetLength(long value) => throw new IOException("simulated truncation failure");
+    }
+
+    /// <summary>
+    /// A stream whose truncation succeeds but whose writes then fail: what is on disk is
+    /// truncated residue. The handle comes from the production exclusive open so it
+    /// carries the DELETE access the delete-on-close arming needs.
+    /// </summary>
+    private sealed class WriteThrowingFileStream : FileStream
+    {
+        public WriteThrowingFileStream(SafeFileHandle handle)
+            : base(handle, FileAccess.ReadWrite)
+        {
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => Task.FromException(new IOException("simulated write failure"));
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            => ValueTask.FromException(new IOException("simulated write failure"));
     }
 
     /// <summary>

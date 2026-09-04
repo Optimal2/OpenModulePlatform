@@ -110,7 +110,8 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
             DeploymentLockFile.Create("competitor-lock-id", "omp_portal", "HostAgent", "deploying", now, now.AddMinutes(5)),
             CancellationToken.None);
 
-        PortalDeploymentLockService.TryClearExpiredLock(_root, "stale-lock-id", NullLogger.Instance);
+        await PortalDeploymentLockService.TryClearExpiredLockAsync(
+            _root, "stale-lock-id", NullLogger.Instance, CancellationToken.None);
 
         Assert.True(File.Exists(DeploymentLockFile.GetPath(_root)));
         Assert.Equal("competitor-lock-id", DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
@@ -125,9 +126,116 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
             DeploymentLockFile.Create("stale-lock-id", "omp_portal", "owner", "reason", now.AddMinutes(-30), now.AddMinutes(-10)),
             CancellationToken.None);
 
-        PortalDeploymentLockService.TryClearExpiredLock(_root, "stale-lock-id", NullLogger.Instance);
+        await PortalDeploymentLockService.TryClearExpiredLockAsync(
+            _root, "stale-lock-id", NullLogger.Instance, CancellationToken.None);
 
         Assert.False(File.Exists(DeploymentLockFile.GetPath(_root)));
+    }
+
+    /// <summary>
+    /// A claim that replaces the expired document while the clear is still in flight must
+    /// survive: only the expired document whose ownership was verified may be deleted,
+    /// and the verification and the deletion must be one atomic step.
+    /// </summary>
+    /// <remarks>
+    /// The test handle shares the file for READS and DELETES but not for writes. A
+    /// status read through it succeeds, and a path-based File.Delete also succeeds --
+    /// the file goes delete-pending and is unlinked when this handle closes, so the
+    /// competitor claim written through the handle AFTER the clear returns is destroyed
+    /// by a delete that was issued against the expired document. That is exactly the
+    /// double-deployment interleaving: two claimants verify the same expired lock, one
+    /// clears and claims, the other's already-issued delete removes the fresh claim.
+    /// An atomic compare-and-delete cannot do this: its exclusive open is blocked
+    /// behind this handle (writes are not shared), it reports the file as busy, and
+    /// nothing is deleted.
+    ///
+    /// RED against the read-then-delete-by-path pattern by construction -- the sharing
+    /// modes force the ordering, no timing is involved.
+    /// </remarks>
+    [Fact]
+    public async Task TryClearExpiredLock_AClaimThatReplacedTheExpiredDocumentBeforeTheDeleteLanded_Survives()
+    {
+        var now = DateTimeOffset.UtcNow;
+        await DeploymentLockFile.WriteAsync(
+            _root,
+            DeploymentLockFile.Create("stale-lock-id", "omp_portal", "owner", "crashed import", now.AddMinutes(-30), now.AddMinutes(-10)),
+            CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        using (var handle = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete))
+        {
+            await PortalDeploymentLockService.TryClearExpiredLockAsync(
+                _root, "stale-lock-id", NullLogger.Instance, CancellationToken.None);
+
+            var competitor = DeploymentLockFile.Create(
+                "competitor-lock-id",
+                "omp_portal",
+                "HostAgent",
+                "deploying",
+                now,
+                now.AddMinutes(5));
+            var json = JsonSerializer.Serialize(
+                competitor,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+            handle.SetLength(0);
+            handle.Position = 0;
+            handle.Write(Encoding.UTF8.GetBytes(json));
+            handle.Flush();
+        }
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(
+            "competitor-lock-id",
+            DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
+    }
+
+    /// <summary>
+    /// A claim that lands while DisposeAsync is deciding to delete must survive: the
+    /// ownership check and the delete must be one atomic step, or disposal destroys a
+    /// lock somebody else took over in between.
+    /// </summary>
+    /// <remarks>
+    /// Same construction as the expired-clear test above: the held handle lets the
+    /// disposal's ownership read and a path-based delete both succeed, and the foreign
+    /// claim written through it afterwards is then unlinked by the delete that was
+    /// issued against this lease's own document. An atomic compare-and-delete instead
+    /// finds the file busy, deletes nothing, and the foreign claim survives.
+    /// </remarks>
+    [Fact]
+    public async Task Dispose_AClaimThatLandedBetweenTheOwnershipCheckAndTheDelete_Survives()
+    {
+        var lease = await CreateService().AcquireUniversalImportLockAsync(
+            "tester",
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(10),
+            maxConsecutiveIndeterminateReads: 100,
+            CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        using (var handle = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read | FileShare.Delete))
+        {
+            await lease.DisposeAsync();
+
+            var foreign = DeploymentLockFile.Create(
+                "foreign-lock-id",
+                "omp_portal",
+                "HostAgent",
+                "deploying",
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow.AddMinutes(5));
+            var json = JsonSerializer.Serialize(
+                foreign,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+            handle.SetLength(0);
+            handle.Position = 0;
+            handle.Write(Encoding.UTF8.GetBytes(json));
+            handle.Flush();
+        }
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(
+            "foreign-lock-id",
+            DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
     }
 
     // The expected verdict travels as a string because the enum is internal to the Portal

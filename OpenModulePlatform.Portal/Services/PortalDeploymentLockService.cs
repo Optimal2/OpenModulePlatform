@@ -80,13 +80,13 @@ public sealed class PortalDeploymentLockService
             // Portal's files from underneath the other. FileMode.CreateNew lets exactly one
             // of them win, and the loser is told so.
             //
-            // Only an EXPIRED lock is cleared first, and only after a second read confirms it
-            // is still the same expired document -- an unconditional TryDelete in front of
-            // CreateNew is what reopened the race in the HostAgent copy, because
-            // `IsLocked == false` is also true for "no file at all".
+            // Only an EXPIRED lock is cleared first, and the clear is itself atomic:
+            // TryClearExpiredLockAsync re-verifies the LockId and the expiry inside one
+            // exclusive handle and deletes through it, so it cannot remove a claim that
+            // landed after this caller's advisory read.
             if (existing.IsExpired)
             {
-                TryClearExpiredLock(root, existing.Document?.LockId, _logger);
+                await TryClearExpiredLockAsync(root, existing.Document?.LockId, _logger, ct);
             }
 
             if (!await DeploymentLockFile.TryCreateExclusiveAsync(root, document, ct))
@@ -117,32 +117,50 @@ public sealed class PortalDeploymentLockService
 
     /// <summary>
     /// Deletes the lock file only while it is still provably the expired document the caller
-    /// observed (R12-A2).
+    /// observed (R12-A2) -- proven and deleted inside a single exclusive handle.
     /// </summary>
     /// <remarks>
-    /// The re-read is what makes this safe in the case that matters: a competing HostAgent
-    /// that cleared the same stale file and claimed it writes a document with a new LockId
-    /// and a future expiry, so the confirmation fails, this caller leaves it alone, and then
-    /// loses the CreateNew race and is told so. A residual interleaving remains -- the file
-    /// could in principle be replaced between the confirmation and the delete -- but the
-    /// window went from "every acquisition" to "two claimants inside the same few
-    /// microseconds of an expiry", and closing it completely needs a compare-and-delete
-    /// primitive the file API does not offer.
+    /// TryDeleteIfOwnedExclusiveAsync is a compare-and-delete: it opens the file with
+    /// FileShare.None, re-reads the document, compares the LockId and re-checks the expiry
+    /// while the handle is held, and marks the file for deletion on the close of that very
+    /// handle. The interleaving the previous read-then-delete-by-path version could not
+    /// survive -- two claimants verify the same expired lock, one clears and claims, the
+    /// other's already-issued delete removes the fresh claim -- is closed by construction:
+    /// a competing claim is either seen by the re-read (and left alone) or physically
+    /// unable to land while the handle is held.
     /// </remarks>
-    internal static void TryClearExpiredLock(string applicationRoot, string? expectedLockId, ILogger logger)
+    internal static async Task TryClearExpiredLockAsync(
+        string applicationRoot,
+        string? expectedLockId,
+        ILogger logger,
+        CancellationToken ct)
     {
-        var confirmation = DeploymentLockFile.ReadStatus(applicationRoot, DateTimeOffset.UtcNow);
-        if (!confirmation.IsExpired
-            || !string.Equals(confirmation.Document?.LockId, expectedLockId, StringComparison.Ordinal))
+        if (string.IsNullOrEmpty(expectedLockId))
         {
-            logger.LogInformation(
-                "Portal deployment lock was no longer the expired document that was observed; it was left in place. ExpectedLockId={ExpectedLockId}, LockPath={LockPath}",
-                expectedLockId ?? "(unknown)",
-                DeploymentLockFile.GetPath(applicationRoot));
+            // Nothing to compare against; the atomic CreateNew alone decides the race.
             return;
         }
 
-        DeploymentLockFile.TryDelete(DeploymentLockFile.GetPath(applicationRoot));
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            applicationRoot,
+            expectedLockId,
+            // The expiry check runs inside the exclusive handle too: a lock its owner
+            // renewed meanwhile (same LockId, future expiry) is a live lock again and
+            // must be left alone.
+            document =>
+                string.Equals(document.Schema, DeploymentLockFile.Schema, StringComparison.Ordinal)
+                && document.ExpiresUtc <= DateTimeOffset.UtcNow,
+            ct);
+
+        if (outcome.Result != DeploymentLockDeleteResult.Deleted)
+        {
+            logger.LogInformation(
+                "Portal deployment lock was no longer the expired document that was observed; it was left in place. ExpectedLockId={ExpectedLockId}, LockPath={LockPath}, Result={Result}, Diagnostic={Diagnostic}",
+                expectedLockId,
+                DeploymentLockFile.GetPath(applicationRoot),
+                outcome.Result,
+                outcome.Diagnostic);
+        }
     }
 }
 
@@ -190,7 +208,7 @@ public sealed class PortalDeploymentLockLease : IAsyncDisposable
         }
 
         _disposeCts.Dispose();
-        DeleteIfOwned();
+        await DeleteIfOwnedAsync();
     }
 
     private async Task RenewUntilDisposedAsync(CancellationToken ct)
@@ -394,24 +412,28 @@ public sealed class PortalDeploymentLockLease : IAsyncDisposable
         return status.IsLocked ? RenewalOwnership.Indeterminate : RenewalOwnership.Held;
     }
 
-    private void DeleteIfOwned()
+    /// <summary>
+    /// Removes the lock file on disposal only while it is still provably ours -- proven
+    /// and deleted inside a single exclusive handle, so a claim that landed while the
+    /// import was finishing can never be removed by it.
+    /// </summary>
+    private async Task DeleteIfOwnedAsync()
     {
-        var path = DeploymentLockFile.GetPath(_applicationRoot);
-        try
-        {
-            var status = DeploymentLockFile.ReadStatus(_applicationRoot, DateTimeOffset.UtcNow);
-            if (string.Equals(status.Document?.LockId, _lockId, StringComparison.Ordinal))
-            {
-                File.Delete(path);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+            _applicationRoot,
+            _lockId,
+            deletionRequirement: null,
+            CancellationToken.None);
+
+        // NotOwned and NotFound are ordinary outcomes (the lock was lost or re-asserted
+        // elsewhere); only an unproven read is worth a warning.
+        if (outcome.Result == DeploymentLockDeleteResult.Indeterminate)
         {
             _logger.LogWarning(
-                ex,
-                "Failed to remove Portal deployment lock. LockId={LockId}, LockPath={LockPath}",
+                "Failed to remove Portal deployment lock. LockId={LockId}, LockPath={LockPath}, Diagnostic={Diagnostic}",
                 _lockId,
-                path);
+                DeploymentLockFile.GetPath(_applicationRoot),
+                outcome.Diagnostic);
         }
     }
 }
