@@ -301,19 +301,30 @@ public static class DeploymentLockFile
         // forever. A NON-EMPTY but unparseable file still fails closed below -- that
         // distinction is R12-A4's safety net and is deliberately kept.
         //
-        // ONE FileInfo, Exists read BEFORE Length. This is not a style preference: the probe
-        // sits outside the try block below, and a bare `new FileInfo(path).Length` throws
-        // FileNotFoundException when the file is gone -- measured, including when the FileInfo
-        // was constructed while the file still existed. ReadStatus is documented as returning a
-        // status rather than throwing, and eight call sites (the HostAgent lease loop, both
-        // deployment services, the health monitor) call it with no try/catch, so an exception
-        // here kills a renewal loop mid-deployment. The File.Exists check above does not protect
-        // it: DeleteIfOwned or expiry cleanup on another thread is enough to land in between.
+        // DO NOT REORDER THIS CONDITION. `!info.Exists` must stay on the LEFT of the `||`.
         //
-        // FileInfo caches its stat on first property access, so reading Exists first makes the
-        // pair a SINGLE filesystem query -- the race is removed rather than caught. A file that
-        // vanishes after the stat then reads as its cached length and fails in ReadAllText
-        // below, inside the try, which is the fail-closed path R12-A4 intends.
+        // The probe sits outside the try block below, so whatever it does is what ReadStatus
+        // does. A bare `new FileInfo(path).Length` throws FileNotFoundException once the file is
+        // gone (measured), and ReadStatus is contracted to return a status rather than throw --
+        // most of its ~15 call sites, including the HostAgent lease loop, both deployment
+        // services and the health monitor, call it with no try/catch, so an exception here kills
+        // a renewal loop mid-deployment. (DeleteIfOwned is the one caller that does guard it.)
+        // The File.Exists check above is no protection: DeleteIfOwned or expiry cleanup on
+        // another thread lands in between.
+        //
+        // TWO mechanisms make this safe, and the order is what binds them together:
+        //   * File present at the stat: FileInfo caches it on first property access, so Length
+        //     reuses that stat and cannot throw even if the file vanishes a moment later. The
+        //     stale length then fails in ReadAllText below, INSIDE the try -- the fail-closed
+        //     path R12-A4 intends.
+        //   * File already gone at the stat: Exists returns false WITHOUT caching anything
+        //     (Refresh throws internally and the cache stays uninitialised), so a later Length
+        //     would issue a fresh query and throw. Nothing here saves us -- the `||`
+        //     short-circuit does, by never evaluating Length at all.
+        //
+        // Writing this as `info.Length == 0 || !info.Exists` reads identically and reintroduces
+        // the crash for exactly the case the fix exists for. Verified in .NET 10 by an
+        // independent review, which is why the warning is a line of code's worth of comment.
         var info = new FileInfo(path);
         if (!info.Exists || info.Length == 0)
         {

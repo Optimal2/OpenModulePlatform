@@ -299,7 +299,9 @@ public sealed class DeploymentLockFileTests : IDisposable
     /// This test is the guard for that. It churns the lock file in and out of existence while
     /// reading it, and requires BOTH that the race was actually exercised (the reader saw the
     /// file present and absent) and that nothing was thrown -- a green result where the race
-    /// never happened would prove nothing, so that case fails loudly instead.
+    /// never happened would prove nothing, so that case fails loudly instead. The reader waits
+    /// for the churn thread's first write before it starts counting, so "exercised" is a
+    /// synchronisation guarantee rather than a bet on the scheduler.
     /// </summary>
     [Fact]
     public void ReadStatus_FileVanishingDuringTheProbe_DoesNotThrow()
@@ -311,6 +313,12 @@ public sealed class DeploymentLockFileTests : IDisposable
             DeploymentLockFile.Create("id", "app", "owner", "reason", now, now.AddMinutes(5)));
 
         using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
+        // The churn thread signals that it has actually written once. Without it, "the race was
+        // exercised" is a probability: 2000 iterations of the absent-file path take ~94 ms, so a
+        // loaded runner that does not schedule the churn thread inside that window would fail a
+        // correct tree. Waiting on the signal makes the guarantee deterministic.
+        using var churning = new ManualResetEventSlim(false);
         var churn = Task.Run(() =>
         {
             while (!stopping.IsCancellationRequested)
@@ -318,14 +326,20 @@ public sealed class DeploymentLockFileTests : IDisposable
                 try
                 {
                     File.WriteAllText(path, json, Encoding.UTF8);
+                    churning.Set();
                     File.Delete(path);
                 }
-                catch (IOException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
                     // The reader may hold the file for an instant; not what is being measured.
+                    // Catching BOTH matters: an unhandled exception here faults the task, and
+                    // churn.Wait() in the finally below would then throw an AggregateException
+                    // that masks the assertions this test exists to report.
                 }
             }
         });
+        Assert.True(churning.Wait(TimeSpan.FromSeconds(10)),
+            "the churn thread never wrote the file -- the race could not be exercised");
 
         Exception? observed = null;
         var sawLocked = false;
