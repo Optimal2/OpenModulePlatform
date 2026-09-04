@@ -187,6 +187,14 @@ public static class DeploymentLockFile
 
         await using (var stream = exclusiveHandle)
         {
+            // Same zero-byte rule as ReadStatus: an empty file is the residue of an
+            // interrupted claim or renewal and can never be a valid claim, so report it
+            // as absent and let the caller re-assert through the atomic claim path.
+            if (stream.Length == 0)
+            {
+                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.NotFound, null, null);
+            }
+
             DeploymentLockDocument? document;
             try
             {
@@ -219,10 +227,19 @@ public static class DeploymentLockFile
 
             var renewed = renew(document);
             var renewedJson = JsonSerializer.Serialize(renewed, JsonOptions);
+
+            // Cancellation is honoured only up to here. Once SetLength(0) has run, the
+            // write MUST complete: aborting between the truncation and the flush leaves
+            // an empty or half-written lock file, which every reader then fails closed
+            // on -- a lock held by nobody that blocks every deployment until someone
+            // deletes the file by hand. This is a ~500-byte write through an already-open
+            // handle and cannot realistically hang, so finishing it without the token is
+            // by far the smaller risk (regression fix for the atomic in-place renewal).
+            ct.ThrowIfCancellationRequested();
             stream.SetLength(0);
             stream.Position = 0;
-            await stream.WriteAsync(Utf8NoBom.GetBytes(renewedJson), ct);
-            await stream.FlushAsync(ct);
+            await stream.WriteAsync(Utf8NoBom.GetBytes(renewedJson), CancellationToken.None);
+            await stream.FlushAsync(CancellationToken.None);
 
             return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Renewed, renewed, null);
         }
@@ -277,6 +294,15 @@ public static class DeploymentLockFile
                 path,
                 null,
                 "Deployment lock file is a reparse point (junction/symlink) and was not read.");
+        }
+
+        // A zero-byte lock file is the residue of an interrupted claim or renewal; it can
+        // never be a valid claim, so it reads as "no lock" instead of failing closed
+        // forever. A NON-EMPTY but unparseable file still fails closed below -- that
+        // distinction is R12-A4's safety net and is deliberately kept.
+        if (new FileInfo(path).Length == 0)
+        {
+            return DeploymentLockStatus.NotLocked(path);
         }
 
         try
@@ -351,9 +377,22 @@ public static class DeploymentLockFile
         }
         catch (IOException) when (File.Exists(path))
         {
-            // Another claimant got there first. Any other IOException -- a full disk, a
-            // vanished share -- is a real failure and must not be reported as a lost race.
-            return false;
+            // Another claimant got there first -- unless what got there is a zero-byte
+            // residue of an interrupted claim or renewal, which can never be a valid
+            // claim (ReadStatus treats it as "no lock" for the same reason) and which
+            // would otherwise block every deployment until deleted by hand. The takeover
+            // opens the residue exclusively, so a claim still being written -- which
+            // holds its own FileShare.None handle -- makes the open fail and the race is
+            // lost exactly as if the file were a real claim. An IOException raised while
+            // the file does NOT exist fails the filter above and propagates as before:
+            // a full disk or a vanished share is a real failure, not a lost race.
+            var takeover = TryOpenZeroByteResidueForTakeover(path);
+            if (takeover is null)
+            {
+                return false;
+            }
+
+            stream = takeover;
         }
 
         try
@@ -374,6 +413,46 @@ public static class DeploymentLockFile
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Opens an existing lock file for takeover only while it is provably a zero-byte
+    /// residue: the open is exclusive, so a live claim still being written defeats it,
+    /// and anything that is not empty -- a complete claim, or a non-empty unparseable
+    /// file under R12-A4's fail-closed rule -- is left alone.
+    /// </summary>
+    private static FileStream? TryOpenZeroByteResidueForTakeover(string path)
+    {
+        // Never write through a planted link; losing the race is the fail-closed answer.
+        if (OmpReparsePointGuard.IsReparsePoint(path))
+        {
+            return null;
+        }
+
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None);
+        }
+        catch (IOException)
+        {
+            // Vanished between the existence check and the open, or held exclusively by
+            // the claimant whose CreateNew beat ours: either way the race is lost.
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        if (stream.Length != 0)
+        {
+            // A complete claim landed between the failed CreateNew and this open.
+            stream.Dispose();
+            return null;
+        }
+
+        return stream;
     }
 
     public static void TryDelete(string path)

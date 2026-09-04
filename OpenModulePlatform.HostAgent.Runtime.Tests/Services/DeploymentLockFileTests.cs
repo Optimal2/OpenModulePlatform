@@ -251,6 +251,104 @@ public sealed class DeploymentLockFileTests : IDisposable
     }
 
     /// <summary>
+    /// A dispose-time CancelAsync lands mid-renewal with the token already cancelled when
+    /// the write phase begins. The write phase must not take the token past the truncation
+    /// point: cancelling between SetLength(0) and the flush would leave an empty lock file
+    /// that every reader then fails closed on until someone deletes it by hand.
+    /// </summary>
+    [Fact]
+    public async Task TryRenewExclusiveAsync_CancellationAtWritePhase_LeavesTheLockFileValidAndParseable()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var originalBytes = await File.ReadAllBytesAsync(DeploymentLockFile.GetPath(_root));
+
+        using var cts = new CancellationTokenSource();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            DeploymentLockFile.TryRenewExclusiveAsync(
+                _root,
+                "lock-id",
+                current =>
+                {
+                    // Fires between the ownership check and the write phase -- exactly where
+                    // DisposeAsync's CancelAsync lands when it interrupts a renewal there.
+                    cts.Cancel();
+                    return current with { UpdatedUtc = now.AddSeconds(30) };
+                },
+                cts.Token));
+
+        // Whatever the write phase did, the file afterwards is still a valid, parseable
+        // lock document -- never an empty or half-written one.
+        var status = DeploymentLockFile.ReadStatus(_root, now);
+        Assert.Equal("lock-id", status.Document?.LockId);
+        Assert.Equal(originalBytes, await File.ReadAllBytesAsync(DeploymentLockFile.GetPath(_root)));
+    }
+
+    /// <summary>
+    /// A zero-byte lock file is the residue of an interrupted claim or renewal (R12-A4
+    /// follow-up). It can never be a valid claim, so it reads as "no lock" and a new
+    /// claimant can take the file over instead of being permanently locked out.
+    /// </summary>
+    [Fact]
+    public async Task ReadStatus_ZeroByteFile_IsNotLockedAndANewClaimantCanTakeOver()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, Array.Empty<byte>());
+
+        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+
+        Assert.False(status.IsLocked);
+        Assert.False(status.IsExpired);
+        Assert.Null(status.Document);
+
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("new-lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        Assert.True(await DeploymentLockFile.TryCreateExclusiveAsync(_root, doc, CancellationToken.None));
+        Assert.Equal("new-lock-id", DeploymentLockFile.ReadStatus(_root, now).Document?.LockId);
+    }
+
+    /// <summary>
+    /// A NON-EMPTY but unparseable lock file still fails closed (R12-A4's net): it reports
+    /// locked, and the zero-byte takeover must not touch it.
+    /// </summary>
+    [Fact]
+    public async Task ReadStatus_NonEmptyUnparseableFile_StillFailsClosedAndBlocksTakeover()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, "{ this is not a lock document");
+
+        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+
+        Assert.True(status.IsLocked);
+        Assert.Null(status.Document);
+        Assert.NotNull(status.Diagnostic);
+
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("new-lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        Assert.False(await DeploymentLockFile.TryCreateExclusiveAsync(_root, doc, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task TryRenewExclusiveAsync_ZeroByteFile_IsTreatedAsAbsent()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllBytesAsync(path, Array.Empty<byte>());
+
+        var outcome = await DeploymentLockFile.TryRenewExclusiveAsync(
+            _root,
+            "lock-id",
+            current => current,
+            CancellationToken.None);
+
+        Assert.Equal(DeploymentLockRenewalResult.NotFound, outcome.Result);
+        Assert.Null(outcome.Document);
+    }
+
+    /// <summary>
     /// File.Move(overwrite: true) onto an exclusively locked target fails with a sharing
     /// violation; WriteAsync retries it for a bounded moment instead of failing the write.
     /// </summary>
