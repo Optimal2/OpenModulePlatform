@@ -136,12 +136,29 @@ function Get-BumpedComponentKeys {
     reading +/- lines: a reformat would defeat the line-based reading, and the value comparison
     survives it.
     #>
-    param([string]$CommitRef = 'HEAD')
+    param([string]$CommitRef = 'HEAD', [string]$Upstream = '')
 
-    $parent = (Invoke-Git -Arguments @('rev-parse', "$CommitRef^") -AllowFailure)
-    if ($parent.ExitCode -ne 0) { return @() }   # root commit: nothing to compare against
+    # Basen ar ALLT som inte ar pushat, inte bara toppcommiten.
+    #
+    # Ursprungligen jamforde den HEAD mot HEAD^, och alfons_windows pekade ut luckan vid
+    # genomlasningen: med TVA eller flera opushade commits, dar den UNDRE commitens bump
+    # kolliderar med det publicerade, blir den bumpen en no-op i rebasen medan rebumpen bara
+    # raknar om toppcommitens komponentset. Grinden stoppar det (fails closed) men rapporterar
+    # det som "a real finding about this change, not a race" — fel diagnos, och ingen auto-fix.
+    #
+    # Merge-basen mot upstream ar stabil over en rebase, till skillnad fran upstream sjalv.
+    $base = ''
+    if ($Upstream) {
+        $mb = (Invoke-Git -Arguments @('merge-base', $Upstream, $CommitRef) -AllowFailure)
+        if ($mb.ExitCode -eq 0) { $base = $mb.Output.Trim() }
+    }
+    if (-not $base) {
+        $parent = (Invoke-Git -Arguments @('rev-parse', "$CommitRef^") -AllowFailure)
+        if ($parent.ExitCode -ne 0) { return @() }   # root commit: nothing to compare against
+        $base = $parent.Output.Trim()
+    }
 
-    $beforeText = (Invoke-Git -Arguments @('show', "$($parent.Output.Trim()):omp-components.json") -AllowFailure)
+    $beforeText = (Invoke-Git -Arguments @('show', "$base`:omp-components.json") -AllowFailure)
     if ($beforeText.ExitCode -ne 0) { return @() }
     $afterText = (Invoke-Git -Arguments @('show', "$CommitRef`:omp-components.json") -AllowFailure)
     if ($afterText.ExitCode -ne 0) { return @() }
@@ -192,7 +209,7 @@ if ($branch -eq 'HEAD') { throw 'Detached HEAD; check out a branch first.' }
 # @() runt anropet ar inte kosmetik: under Set-StrictMode -Version Latest packar
 # PowerShell upp en enelementslista till en skalar, och da finns ingen .Count.
 # Ett enda bumpat komponentnamn hade alltsa kraschat skriptet — hittat av torrkorningen.
-$bumpedKeys = @(Get-BumpedComponentKeys)
+$bumpedKeys = @()   # raknas ut i loopen, efter fetch: basen beror pa upstream
 if ($bumpedKeys.Count -gt 0) {
     Write-Note "This commit bumps: $($bumpedKeys -join ', ')"
 }
@@ -209,6 +226,21 @@ for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
 
     $upstream = "$Remote/$branch"
     $behind = [int](Invoke-Git -Arguments @('rev-list', '--count', "HEAD..$upstream")).Output.Trim()
+
+    # Efter fetch vet vi var upstream star, sa komponentsetet kan raknas ut mot merge-basen.
+    # Det gors om varje varv: en rebase flyttar basen.
+    $bumpedKeys = @(Get-BumpedComponentKeys -Upstream $upstream)
+    if ($attempt -eq 1) {
+        if ($bumpedKeys.Count -gt 0) { Write-Note "Opushat arbete bumpar: $($bumpedKeys -join ', ')" }
+        else { Write-Note 'Inget opushat arbete bumpar nagon komponentversion; rebump hoppas over.' }
+    }
+
+    # Inget att pusha: kor inte en attaminuters grind for en no-op. (alfons_windows, 2026-09-04)
+    $ahead = [int](Invoke-Git -Arguments @('rev-list', '--count', "$upstream..HEAD")).Output.Trim()
+    if ($ahead -eq 0 -and $behind -eq 0) {
+        Write-Good "Ingenting att pusha: HEAD ar redan $upstream."
+        exit 0
+    }
 
     if ($behind -gt 0) {
         Write-Warn "$upstream moved ahead by $behind commit(s) -- rebasing onto it."
