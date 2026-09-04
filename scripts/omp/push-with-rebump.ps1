@@ -77,8 +77,20 @@ function Invoke-Git {
     #>
     param([Parameter(Mandatory)][string[]]$Arguments, [switch]$AllowFailure)
 
-    $stdout = & git @Arguments 2>&1
-    $code = $LASTEXITCODE
+    # EAP maste sankas RUNT anropet, inte bara beskrivas i kommentaren ovan. Med
+    # $ErrorActionPreference = 'Stop' pa skriptniva gor `2>&1` att varje rad git skriver
+    # till stderr blir ett TERMINERANDE fel — och git skriver sin normala "To <url>" dit
+    # vid en LYCKAD push. Skriptet dog darfor precis efter att ha pushat, forsta gangen
+    # det kordes skarpt. Domen ska falla pa $LASTEXITCODE, inget annat.
+    $tidigareEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $stdout = & git @Arguments 2>&1
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $tidigareEap
+    }
     $text = ($stdout | Out-String).TrimEnd()
     if ($code -ne 0 -and -not $AllowFailure) {
         throw "git $($Arguments -join ' ') failed with exit code $code`n$text"
