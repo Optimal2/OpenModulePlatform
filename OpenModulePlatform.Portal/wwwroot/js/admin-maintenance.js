@@ -1,17 +1,34 @@
 // File: OpenModulePlatform.Portal/wwwroot/js/admin-maintenance.js
+// Finding details expand on row click; the text lives in a full-width
+// follow row (data-list-follow keeps it glued to its finding through
+// sorting, filtering and search) instead of a <details> inside the cell.
+// The collapse state is a CSS class rather than the hidden attribute, which
+// the shared list refresh owns for group visibility. Selection (select-all,
+// counts, enabling the bulk buttons) is the shared list's job.
 (() => {
     'use strict';
 
-    const selector = document.getElementById('select-maintenance-findings');
-    if (!selector) {
-        return;
-    }
-
-    const boxes = Array.from(document.querySelectorAll('.maintenance-finding-checkbox'));
-    selector.addEventListener('change', () => {
-        for (const box of boxes) {
-            box.checked = selector.checked;
+    document.addEventListener('click', (event) => {
+        if (event.target.closest('a, button, input, select, textarea, summary, label')) {
+            return;
         }
+
+        const row = event.target.closest('tr[data-finding-row]');
+        if (!row) {
+            return;
+        }
+
+        if (String(window.getSelection?.() || '')) {
+            return;
+        }
+
+        const follow = row.nextElementSibling;
+        if (!follow || !follow.classList.contains('maintenance-finding-detail')) {
+            return;
+        }
+
+        const open = follow.classList.toggle('maintenance-finding-detail--open');
+        row.classList.toggle('maintenance-finding-open', open);
     });
 })();
 

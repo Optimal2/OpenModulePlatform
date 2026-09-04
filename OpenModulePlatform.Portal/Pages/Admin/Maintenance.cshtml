@@ -68,72 +68,87 @@
     }
     else
     {
-        <form method="post" class="top-gap">
+        <form method="post" class="top-gap" id="maintenance-findings-form">
             <div class="toolbar">
-                <button type="submit"
-                        asp-page-handler="CleanupMaintenanceFindings"
-                        class="btn btn-danger"
-                        data-omp-confirm="@L["Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything."]"
-                        data-omp-confirm-ok="@L["Queue cleanup"]"
-                        data-omp-confirm-cancel="@L["Cancel"]">
-                    @L["Queue cleanup"]
-                </button>
-                <button type="submit"
-                        asp-page-handler="IgnoreMaintenanceFindings"
-                        class="btn btn-secondary">
-                    @L["Ignore selected"]
-                </button>
+                <details class="list-filter" data-list-filter="maintenance-findings-list">
+                    <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                    <div class="list-filter__menu">
+                        <fieldset class="list-filter__group" data-filter-group="status">
+                            <legend>@L["Status"]</legend>
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="@MaintenanceFindingStatuses.Open" /> @L["Open"]</label>
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="@MaintenanceFindingStatuses.CleanupQueued" /> @L["Cleanup queued"]</label>
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="@MaintenanceFindingStatuses.Cleaned" /> @L["Cleaned"]</label>
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="@MaintenanceFindingStatuses.Failed" /> @L["Failed"]</label>
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="@MaintenanceFindingStatuses.Skipped" /> @L["Skipped"]</label>
+                            <label class="list-filter__option"><input type="checkbox" data-filter-column="3" data-filter-equals="@MaintenanceFindingStatuses.Ignored" /> @L["Ignored"]</label>
+                        </fieldset>
+                        <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                    </div>
+                </details>
+                <input type="search" class="list-search" data-list-search="maintenance-findings-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+                <div class="list-selection-actions" data-list-selection-actions="maintenance-findings-list">
+                    <span class="list-selected-count" data-list-selected-count data-template="@L["{0} selected"]"></span>
+                    <button type="submit"
+                            asp-page-handler="CleanupMaintenanceFindings"
+                            class="btn btn-danger btn-sm"
+                            data-list-selection-action
+                            disabled
+                            data-omp-confirm="@L["Queue cleanup jobs for the selected maintenance findings? HostAgents will revalidate each target before deleting anything."]"
+                            data-omp-confirm-ok="@L["Queue cleanup"]"
+                            data-omp-confirm-cancel="@L["Cancel"]">
+                        @L["Queue cleanup"]
+                    </button>
+                    <button type="submit"
+                            asp-page-handler="IgnoreMaintenanceFindings"
+                            class="btn btn-secondary btn-sm"
+                            data-list-selection-action
+                            disabled>
+                        @L["Ignore selected"]
+                    </button>
+                </div>
+                <span class="list-count" data-list-count="maintenance-findings-list" data-template="@L["Showing {0} of {1} rows."]"></span>
             </div>
+            <div class="empty-state" data-list-empty="maintenance-findings-list" hidden>@L["No rows match the current filters."]</div>
 
-            <div class="table-scroll top-gap">
-                <table class="grid">
+            <div class="table-scroll">
+                <table id="maintenance-findings-list" class="grid maintenance-findings-grid sortable-list" data-sortable-list data-list-fit data-list-selection="maintenance-findings-list">
                     <thead>
                         <tr>
-                            <th>
+                            <th scope="col" class="list-selection-cell">
                                 <input type="checkbox"
-                                       id="select-maintenance-findings"
+                                       data-list-select-all
                                        aria-label="@L["Select all maintenance findings"]" />
                             </th>
-                            <th>@L["Target"]</th>
-                            <th>@L["Host"]</th>
-                            <th>@L["Status"]</th>
-                            <th>@L["Safety"]</th>
-                            <th>@L["Last seen UTC"]</th>
+                            <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Target"]</button></th>
+                            <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host"]</button></th>
+                            <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
+                            <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Safety"]</button></th>
+                            <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last seen UTC"]</button></th>
                         </tr>
                     </thead>
                     <tbody>
                     @foreach (var row in Model.MaintenanceFindings)
                     {
-                        <tr>
-                            <td>
+                        var hasDetail = !string.IsNullOrWhiteSpace(row.Detail)
+                            || !string.IsNullOrWhiteSpace(row.RecommendedAction)
+                            || !string.IsNullOrWhiteSpace(row.SafetyNotes)
+                            || !string.IsNullOrWhiteSpace(row.ResultMessage);
+                        <tr data-finding-row="@(hasDetail ? row.MaintenanceFindingId.ToString(System.Globalization.CultureInfo.InvariantCulture) : null)"
+                            data-search="@row.Detail @row.RecommendedAction @row.SafetyNotes @row.ResultMessage">
+                            <td class="list-selection-cell">
                                 <input type="checkbox"
                                        name="SelectedMaintenanceFindingIds"
                                        value="@row.MaintenanceFindingId"
-                                       class="maintenance-finding-checkbox"
+                                       data-list-select-row
                                        aria-label="@L["Select maintenance finding {0}", row.MaintenanceFindingId]" />
                             </td>
-                            <td>
+                            <td data-sort-value="@row.Title">
                                 <strong>@row.Title</strong>
                                 <div class="muted">@row.Category / @row.TargetKind</div>
                                 <code>@row.TargetIdentifier</code>
-                                @if (!string.IsNullOrWhiteSpace(row.Detail))
+                                @if (hasDetail)
                                 {
-                                    <details class="top-gap-sm">
-                                        <summary>@L["Details"]</summary>
-                                        <div>@row.Detail</div>
-                                        @if (!string.IsNullOrWhiteSpace(row.RecommendedAction))
-                                        {
-                                            <div class="top-gap-sm"><strong>@L["Recommended action"]:</strong> @row.RecommendedAction</div>
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(row.SafetyNotes))
-                                        {
-                                            <div class="top-gap-sm"><strong>@L["Why this is considered safe"]:</strong> @row.SafetyNotes</div>
-                                        }
-                                        @if (!string.IsNullOrWhiteSpace(row.ResultMessage))
-                                        {
-                                            <div class="top-gap-sm"><strong>@L["Result"]:</strong> @row.ResultMessage</div>
-                                        }
-                                    </details>
+                                    <div class="maintenance-finding-hint muted">@L["Show details"]</div>
                                 }
                             </td>
                             <td>
@@ -150,13 +165,36 @@
                                     }
                                 }
                             </td>
-                            <td><span class="pill">@L[MaintenanceModel.FormatMaintenanceFindingStatus(row.Status)]</span></td>
-                            <td>
+                            <td data-sort-value="@row.Status"><span class="pill">@L[MaintenanceModel.FormatMaintenanceFindingStatus(row.Status)]</span></td>
+                            <td data-sort-value="@row.Severity">
                                 <div>@L["Severity"]: @row.Severity</div>
                                 <div>@L["Confidence"]: @row.Confidence%</div>
                             </td>
-                            <td>@row.LastSeenUtc.ToString("u")</td>
+                            <td data-sort-value="@row.LastSeenUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">@row.LastSeenUtc.ToString("u")</td>
                         </tr>
+                        @if (hasDetail)
+                        {
+                            <tr class="maintenance-finding-detail" data-list-follow>
+                                <td colspan="6">
+                                    @if (!string.IsNullOrWhiteSpace(row.Detail))
+                                    {
+                                        <div>@row.Detail</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(row.RecommendedAction))
+                                    {
+                                        <div class="top-gap-sm"><strong>@L["Recommended action"]:</strong> @row.RecommendedAction</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(row.SafetyNotes))
+                                    {
+                                        <div class="top-gap-sm"><strong>@L["Why this is considered safe"]:</strong> @row.SafetyNotes</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(row.ResultMessage))
+                                    {
+                                        <div class="top-gap-sm"><strong>@L["Result"]:</strong> @row.ResultMessage</div>
+                                    }
+                                </td>
+                            </tr>
+                        }
                     }
                     </tbody>
                 </table>
@@ -196,7 +234,7 @@
         </div>
         <div class="empty-state" data-list-empty="hostagent-jobs-list" hidden>@L["No rows match the current filters."]</div>
         <div class="table-scroll" data-list-message-hint="@L["Click to show the full message"]">
-            <table id="hostagent-jobs-list" class="grid hostagent-jobs-grid sortable-list" data-sortable-list data-list-fit data-page-size="25">
+            <table id="hostagent-jobs-list" class="grid hostagent-jobs-grid sortable-list" data-sortable-list data-list-fit>
                 <colgroup>
                     <col class="hostagent-jobs-grid__job" />
                     <col class="hostagent-jobs-grid__host" />
@@ -227,7 +265,7 @@
                             <code>@row.HostAgentJobId</code>
                             <div class="muted">@row.JobType</div>
                         </td>
-                        <td data-sort-value="@(row.HostKey ?? string.Empty)">
+                        <td data-sort-value="@row.HostKey">
                             <code>@(string.IsNullOrWhiteSpace(row.HostKey) ? L["Any HostAgent"].Value : row.HostKey)</code>
                             @if (!string.IsNullOrWhiteSpace(row.HostDisplayName))
                             {
@@ -243,7 +281,7 @@
                             }
                         </td>
                         <td data-sort-value="@row.AttemptCount">@row.AttemptCount / @row.MaxAttempts</td>
-                        <td data-sort-value="@(row.ClaimedByServiceName ?? string.Empty)">
+                        <td data-sort-value="@row.ClaimedByServiceName">
                             @if (string.IsNullOrWhiteSpace(row.ClaimedByServiceName))
                             {
                                 <span class="muted">@L["None"]</span>
@@ -257,7 +295,7 @@
                                 }
                             }
                         </td>
-                        <td data-sort-value="@(row.CompletedUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">
+                        <td data-sort-value="@row.CompletedUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">
                             @if (row.CompletedUtc.HasValue)
                             {
                                 @row.CompletedUtc.Value.ToString("u")

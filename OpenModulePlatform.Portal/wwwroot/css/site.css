@@ -6981,12 +6981,44 @@ tr.linkbox-editor-row--dragging {
     max-width: 320px;
 }
 
+/* Maintenance: finding rows open their detail follow row on click. */
+.maintenance-findings-grid tr[data-finding-row] {
+    cursor: pointer;
+}
+
+.maintenance-finding-hint {
+    margin-top: 4px;
+    font-size: 0.82rem;
+}
+
+.maintenance-finding-hint::before {
+    content: "\25B8 ";
+}
+
+.maintenance-finding-open .maintenance-finding-hint::before {
+    content: "\25BE ";
+}
+
+.maintenance-finding-detail {
+    display: none;
+}
+
+.maintenance-finding-detail.maintenance-finding-detail--open {
+    display: table-row;
+}
+
+.maintenance-finding-detail > td {
+    padding: 4px 14px 14px 48px;
+    background: var(--surface-muted);
+}
+
 /* Maintenance: HostAgent job queue list. Compact type and padding like the
    host deployment lists, fixed layout so the percentage columns hold and
-   the list never scrolls sideways; fit mode wraps cells instead of
-   clipping, and long errors truncate to one line inside the list-message
-   block (full text in the shared info popover on click). The message
-   column absorbs the remaining width. */
+   the list never scrolls sideways; fit mode makes cells wrap inside their
+   fixed columns instead of clipping (the columns themselves stay put), and
+   long errors truncate to one line inside the list-message block (full
+   text in the shared info popover on click). The message column absorbs
+   the remaining width. */
 .hostagent-jobs-grid {
     table-layout: fixed;
     font-size: 0.82rem;

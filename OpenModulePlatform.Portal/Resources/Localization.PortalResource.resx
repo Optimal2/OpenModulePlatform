@@ -3202,4 +3202,5 @@
   <data name="The principal resolves to more than one active OMP user, so nothing was added. Resolve the duplicate AD links first." xml:space="preserve"><value>The principal resolves to more than one active OMP user, so nothing was added. Resolve the duplicate AD links first.</value></data>
   <data name="After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins." xml:space="preserve"><value>After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins.</value></data>
   <data name="Click to show the full message" xml:space="preserve"><value>Click to show the full message</value></data>
+  <data name="Show details" xml:space="preserve"><value>Show details</value></data>
 </root>
