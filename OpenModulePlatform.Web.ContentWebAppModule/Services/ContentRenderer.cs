@@ -35,6 +35,7 @@ public sealed partial class ContentRenderer
         string content,
         string? contentType,
         string? serverReportKey,
+        string serverReportScriptUrl,
         CancellationToken ct)
     {
         var format = ContentTypes.Normalize(contentType);
@@ -45,10 +46,10 @@ public sealed partial class ContentRenderer
 
         if (format == ContentTypes.HtmlFile)
         {
-            return await RenderHtmlFileAsync(serverReportKey, ct);
+            return await RenderHtmlFileAsync(serverReportKey, serverReportScriptUrl, ct);
         }
 
-        var expandedContent = await ExpandServerReportShortcodesAsync(content ?? string.Empty, ct);
+        var expandedContent = await ExpandServerReportShortcodesAsync(content ?? string.Empty, serverReportScriptUrl, ct);
         return format switch
         {
             ContentTypes.Html => expandedContent,
@@ -56,12 +57,12 @@ public sealed partial class ContentRenderer
         };
     }
 
-    private async Task<string> RenderHtmlFileAsync(string? htmlFileKey, CancellationToken ct)
+    private async Task<string> RenderHtmlFileAsync(string? htmlFileKey, string serverReportScriptUrl, CancellationToken ct)
     {
         try
         {
             var content = await _htmlFileLoader.LoadAsync(htmlFileKey, ct).ConfigureAwait(false);
-            return await ExpandServerReportShortcodesAsync(content, ct).ConfigureAwait(false);
+            return await ExpandServerReportShortcodesAsync(content, serverReportScriptUrl, ct).ConfigureAwait(false);
         }
         catch (HtmlContentFileException ex)
         {
@@ -75,7 +76,7 @@ public sealed partial class ContentRenderer
         }
     }
 
-    private async Task<string> ExpandServerReportShortcodesAsync(string content, CancellationToken ct)
+    private async Task<string> ExpandServerReportShortcodesAsync(string content, string serverReportScriptUrl, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(content)
             || content.IndexOf("[DB", StringComparison.OrdinalIgnoreCase) < 0)
@@ -101,6 +102,7 @@ public sealed partial class ContentRenderer
                 result.Append(await _serverReportRenderer.RenderJavaScriptAsync(
                     key,
                     match.Groups["variable"].Success ? match.Groups["variable"].Value : null,
+                    serverReportScriptUrl,
                     ct));
             }
             else

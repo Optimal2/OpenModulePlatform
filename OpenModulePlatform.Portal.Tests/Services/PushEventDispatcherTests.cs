@@ -189,20 +189,24 @@ public sealed class PushEventDispatcherTests
     public void PortalMessageThreadPage_FollowsTopbarUpdateModeAndFiltersPushByConversation()
     {
         var page = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml");
+        // The page script moved out of the .cshtml to a static file so the Portal
+        // script-src can drop 'unsafe-inline' (campaign csp-vagen-till-enforcement).
+        var script = ReadRepositoryTextFile("OpenModulePlatform.Portal", "wwwroot", "js", "message-thread-page.js");
         var pageModel = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml.cs");
 
         Assert.Contains("data-refresh-url", page);
-        Assert.Contains("data-notification-update-mode", page);
-        Assert.Contains("data-notification-poll-interval", page);
-        Assert.Contains("form.addEventListener('submit', submitMessage);", page);
-        Assert.Contains("'Accept': 'text/html'", page);
-        Assert.Contains("replaceMessages(html, { stickToBottom: true, suppressSound: true })", page);
-        Assert.Contains("window.ompToastSound?.playMessage(false);", page);
-        Assert.Contains("const PUSH_EVENT_NAME = 'omp:push-event';", page);
-        Assert.Contains("const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';", page);
-        Assert.Contains("getPayloadConversationId(payload) !== conversationId", page);
-        Assert.Contains("config.mode !== UPDATE_PUSH_MODE", page);
-        Assert.Contains("config.mode !== UPDATE_POLL_MODE", page);
+        Assert.Contains("""<script src="~/js/message-thread-page.js"></script>""", page);
+        Assert.Contains("data-notification-update-mode", script);
+        Assert.Contains("data-notification-poll-interval", script);
+        Assert.Contains("form.addEventListener('submit', submitMessage);", script);
+        Assert.Contains("'Accept': 'text/html'", script);
+        Assert.Contains("replaceMessages(html, { stickToBottom: true, suppressSound: true })", script);
+        Assert.Contains("window.ompToastSound?.playMessage(false);", script);
+        Assert.Contains("const PUSH_EVENT_NAME = 'omp:push-event';", script);
+        Assert.Contains("const MESSAGE_PUSH_CATEGORY = 'topbar.message-state-changed';", script);
+        Assert.Contains("getPayloadConversationId(payload) !== conversationId", script);
+        Assert.Contains("config.mode !== UPDATE_PUSH_MODE", script);
+        Assert.Contains("config.mode !== UPDATE_POLL_MODE", script);
         Assert.Contains("public async Task<IActionResult> OnGetMessages", pageModel);
         Assert.Contains("return Partial(MessagesPartialName, this);", pageModel);
         Assert.Contains("await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: true, ct);", pageModel);

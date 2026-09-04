@@ -86,16 +86,17 @@ public sealed class ServerReportRenderer
     public async Task<string> RenderJavaScriptAsync(
         string? reportKey,
         string? variableName,
+        string readerScriptUrl,
         CancellationToken ct)
     {
         try
         {
-            return await RenderJavaScriptCoreAsync(reportKey, variableName, ct).ConfigureAwait(false);
+            return await RenderJavaScriptCoreAsync(reportKey, variableName, readerScriptUrl, ct).ConfigureAwait(false);
         }
         catch (ServerReportException ex)
         {
             _logger.LogWarning(ex, "Server report JavaScript definition could not be rendered for key {ReportKey}", reportKey);
-            return RenderJavaScriptError(reportKey, variableName, ex.Message);
+            return RenderJavaScriptError(reportKey, variableName, ex.Message, readerScriptUrl);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -106,12 +107,12 @@ public sealed class ServerReportRenderer
         catch (OperationCanceledException ex)
         {
             _logger.LogError(ex, "Unexpected server report JavaScript rendering cancellation for key {ReportKey}", reportKey);
-            return RenderJavaScriptError(reportKey, variableName, _localizer["The server report could not be rendered."].Value);
+            return RenderJavaScriptError(reportKey, variableName, _localizer["The server report could not be rendered."].Value, readerScriptUrl);
         }
         catch (SystemException ex)
         {
             _logger.LogError(ex, "Unexpected server report JavaScript rendering failure for key {ReportKey}", reportKey);
-            return RenderJavaScriptError(reportKey, variableName, _localizer["The server report could not be rendered."].Value);
+            return RenderJavaScriptError(reportKey, variableName, _localizer["The server report could not be rendered."].Value, readerScriptUrl);
         }
     }
 
@@ -125,11 +126,12 @@ public sealed class ServerReportRenderer
     private async Task<string> RenderJavaScriptCoreAsync(
         string? reportKey,
         string? variableName,
+        string readerScriptUrl,
         CancellationToken ct)
     {
         var definition = await _definitionLoader.LoadAsync(reportKey, ct).ConfigureAwait(false);
         var result = await _queryRunner.ExecuteAsync(definition, ct).ConfigureAwait(false);
-        return RenderJavaScriptResult(result, ResolveJavaScriptVariableName(reportKey, variableName));
+        return RenderJavaScriptResult(result, ResolveJavaScriptVariableName(reportKey, variableName), readerScriptUrl);
     }
 
     private static string RenderResult(
@@ -258,32 +260,25 @@ public sealed class ServerReportRenderer
         return html.ToString();
     }
 
-    private static string RenderJavaScriptResult(ServerReportResult result, string variableName)
+    // The DB_JSON_SCRIPT shortcode emits a non-executable JSON data block (CSP
+    // report-only preparation, campaign csp-vagen-till-enforcement) followed by the
+    // static reader script, which assigns the documented window.<name> (rows only) and
+    // window.<name>Report (full metadata) globals. The reader tag is emitted after each
+    // data block so a following script in the trusted content sees the globals in source
+    // order, exactly as the old inline assignment did.
+    private static string RenderJavaScriptResult(ServerReportResult result, string variableName, string readerScriptUrl)
     {
         var report = ToJavaScriptReport(result);
-        // The shortcode API intentionally exposes both window.<name> (rows only)
-        // and window.<name>Report (full metadata). Serialize both with the same
-        // options here so the two JavaScript globals stay in lockstep.
-        var rowsJson = JsonSerializer.Serialize(report.Rows, JavaScriptJsonOptions);
-        var reportJson = JsonSerializer.Serialize(report, JavaScriptJsonOptions);
+        var payloadJson = JsonSerializer.Serialize(
+            new { rows = report.Rows, report },
+            JavaScriptJsonOptions);
 
         var html = new StringBuilder();
-        html.AppendLine("<script>");
-        html.Append("window.");
-        html.Append(variableName);
-        html.Append(" = ");
-        html.Append(rowsJson);
-        html.AppendLine(";");
-        html.Append("window.");
-        html.Append(variableName);
-        html.Append("Report = ");
-        html.Append(reportJson);
-        html.AppendLine(";");
-        html.AppendLine("</script>");
+        AppendJavaScriptPayloadBlock(html, variableName, payloadJson, readerScriptUrl);
         return html.ToString();
     }
 
-    private string RenderJavaScriptError(string? reportKey, string? variableName, string message)
+    private string RenderJavaScriptError(string? reportKey, string? variableName, string message, string readerScriptUrl)
     {
         var resolvedVariableName = ResolveJavaScriptVariableName(reportKey, variableName);
         var report = new JavaScriptServerReport
@@ -298,19 +293,31 @@ public sealed class ServerReportRenderer
             ]
         };
 
-        var reportJson = JsonSerializer.Serialize(report, JavaScriptJsonOptions);
+        var payloadJson = JsonSerializer.Serialize(
+            new { rows = Array.Empty<object>(), report },
+            JavaScriptJsonOptions);
         var html = new StringBuilder();
-        html.AppendLine("<script>");
-        html.Append("window.");
-        html.Append(resolvedVariableName);
-        html.AppendLine(" = [];");
-        html.Append("window.");
-        html.Append(resolvedVariableName);
-        html.Append("Report = ");
-        html.Append(reportJson);
-        html.AppendLine(";");
-        html.AppendLine("</script>");
+        AppendJavaScriptPayloadBlock(html, resolvedVariableName, payloadJson, readerScriptUrl);
         return html.ToString();
+    }
+
+    private static void AppendJavaScriptPayloadBlock(
+        StringBuilder html,
+        string variableName,
+        string payloadJson,
+        string readerScriptUrl)
+    {
+        // variableName comes from ResolveJavaScriptVariableName (ASCII letters, digits,
+        // underscore), so it is safe as a bare attribute value. The payload encoder keeps
+        // '<' escaped, so no database value can emit a closing tag inside the block.
+        html.Append("<script type=\"application/json\" data-omp-server-report-json data-variable-name=\"");
+        html.Append(variableName);
+        html.AppendLine("\">");
+        html.AppendLine(payloadJson);
+        html.AppendLine("</script>");
+        html.Append("<script src=\"");
+        html.Append(readerScriptUrl);
+        html.AppendLine("\"></script>");
     }
 
     private static JavaScriptServerReport ToJavaScriptReport(ServerReportResult result)

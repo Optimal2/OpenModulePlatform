@@ -97,24 +97,15 @@ Directive notes:
 The baseline must work unmodified for every app, and these code paths still
 require it (each is a removal candidate; see "Migration plan"):
 
-- **Inline `<script>` blocks in Portal pages** (16 blocks):
-  `Pages/Notifications.cshtml`, `Pages/Messages/Index.cshtml`,
-  `Pages/Messages/Thread.cshtml`, `Pages/Admin/AppInstanceEdit.cshtml`,
-  `Pages/Admin/ArtifactUpload.cshtml`, `Pages/Admin/ConfigSettings.cshtml`,
-  `Pages/Admin/IFrameUrls.cshtml`, `Pages/Admin/InstanceTemplateAppEdit.cshtml`,
-  `Pages/Admin/Maintenance.cshtml`, `Pages/Admin/ModuleEdit.cshtml`,
-  `Pages/Admin/ModulePackageImport.cshtml`, `Pages/Admin/Navigation.cshtml`,
-  `Pages/Admin/PortalEntries.cshtml`, `Pages/Admin/UniversalPackageBuilder.cshtml`,
-  `Pages/Admin/Rbac/Role.cshtml`, `Pages/Shared/_ValidationScriptsPartial.cshtml`.
 - **Inline `<script>` in ContentWebAppModule**: the admin editor bootstrap
-  (`Pages/Admin/Edit.cshtml`) and the data-dependent `DB_JSON_SCRIPT` block
-  emitted by `Services/ServerReportRenderer.cs` (cannot be hashed — the JSON
-  payload varies per report).
+  (`Pages/Admin/Edit.cshtml`) and administrator-authored trusted HTML content
+  (which may carry its own scripts by design).
 - **Inline `<script>` in the example modules' OpenDocViewer demo pages**
   (server-rendered JSON bootstrap via `@Html.Raw`).
 - **The shared fallback status page**
   (`BuildFallbackStatusPageHtml`) — a deliberate inline-HTML page that must
-  render even when static assets are unavailable during error handling.
+  render even when static assets are unavailable during error handling. It
+  carries inline `<style>` only, never `<script>`.
 - **Inline `<style>` and style attributes**: webamp injects its skin CSS as a
   runtime `<style>` element (dynamic, cannot be hashed), and Razor renders
   dynamic style attributes the dashboard needs
@@ -122,20 +113,37 @@ require it (each is a removal candidate; see "Migration plan"):
   `Portal/Pages/Messages/_ThreadMessages.cshtml`,
   `Portal/Pages/Admin/PortalEntries.cshtml`).
 
+The Portal's 16 inline `<script>` blocks moved to static files under
+`OpenModulePlatform.Portal/wwwroot/js/` on 2026-09-04 (campaign
+csp-vagen-till-enforcement), and the Content module's data-dependent
+`DB_JSON_SCRIPT` block now renders as a non-executable
+`<script type="application/json">` data block read by the static
+`wwwroot/js/omp-server-report.js` (the documented `window.<name>` /
+`window.<name>Report` globals are assigned by that reader, which the renderer
+emits immediately after each data block so source-order consumers are
+unaffected). `PortalInlineScriptGuardTests` fails the build if an executable
+inline block returns to a Portal page.
+
 ## Per-app policies
 
 The appsettings.json of each app carries its effective policy:
 
 - **Portal** — baseline plus `blob:` in `img-src`/`media-src` (webamp unzips
   skins in JS and serves sprites via `URL.createObjectURL`; track/album-art
-  blobs) and `frame-src 'none'` (Portal embeds nothing).
-- **ContentWebAppModule** — baseline plus `https://uicdn.toast.com` in
-  `script-src`/`style-src` (the admin editor loads the TOAST UI editor from
-  that CDN) and `https:` in `img-src` (trusted DB/file-driven content may
-  reference external images by design).
-- **iFrameWebAppModule** — baseline with `frame-src 'self' https: http:`: the
-  module's purpose is embedding administrator-configured URLs stored in the
-  database, so frame targets are runtime data, not a build-time list.
+  blobs) and `frame-src 'none'` (Portal embeds nothing). Since
+  2026-09-04 `script-src` has **no** `unsafe-inline`; `style-src` keeps it for
+  webamp's runtime-injected skin stylesheet and the dynamic style attributes
+  listed above.
+- **ContentWebAppModule** — baseline plus `https:` in `img-src` (trusted
+  DB/file-driven content may reference external images by design). The TOAST
+  UI editor is vendored under `wwwroot/lib/toastui-editor/` (see
+  `PROVENANCE.md` there), so no third-party origin remains in any directive.
+- **iFrameWebAppModule** — baseline with `frame-src 'self'`, replaced per
+  request by the `UseIFrameFrameSourceCsp` middleware
+  (`Security/IFrameFrameSourcePolicy.cs`) with an allowlist of the exact
+  origins of the enabled URLs in `omp_iframe.urls` (cached 60 s; on a database
+  error the directive falls back to `frame-src 'self'` for that request). The
+  old `https: http:` scheme wildcards are gone.
 - **Auth** — the strict-policy reference: after the login page's inline
   `<style>`/`<script>` blocks were moved to `wwwroot/css/login.css` and
   `wwwroot/js/login.js`, the Auth app runs
@@ -147,39 +155,91 @@ The appsettings.json of each app carries its effective policy:
 
 ## Migration plan (removing the remaining unsafe-inline)
 
-1. Move the Portal and Content-module inline script blocks to static JS
+1. ~~Move the Portal and Content-module inline script blocks to static JS
    files; replace `DB_JSON_SCRIPT` with an `application/json` block read by
-   static JS.
-2. Vendor the TOAST UI editor (removes the only third-party origin).
-3. Then drop `'unsafe-inline'` from the baseline's `script-src`, and from
-   `style-src` once webamp is replaced or its style injection is hashed.
+   static JS.~~ **Done 2026-09-04** (Portal blocks and `DB_JSON_SCRIPT`; the
+   Content module's `Pages/Admin/Edit.cshtml` editor bootstrap remains, as
+   does trusted-HTML inline scripting by design).
+2. ~~Vendor the TOAST UI editor (removes the only third-party origin).~~
+   **Done 2026-09-04** (`wwwroot/lib/toastui-editor/`).
+3. Drop `'unsafe-inline'` from the baseline's `script-src` once the example
+   modules' demo pages and the Content module's editor bootstrap are migrated
+   (trusted-HTML content scripting keeps the Content module on a per-app
+   `unsafe-inline` regardless), and from `style-src` once webamp is replaced
+   or its style injection is hashed. The iFrame module has no inline scripts
+   at all; its `script-src 'unsafe-inline'` is now unjustified and can be
+   dropped with a smoke test as the only cost.
+4. Then the per-app enforcement flips — see "Enforcement exit gate" below.
 
-## Security review notes (independent review, 2026-09-01)
+## Security review notes (independent review, 2026-09-01; decided 2026-09-04)
 
-An independent security review of this design raised points that are
-recorded here as accepted follow-ups rather than silently dropped:
+An independent security review of this design raised points that were decided
+one at a time in campaign csp-vagen-till-enforcement. A rejected finding keeps
+its reason here so it does not come back:
 
-- `connect-src 'self' ws: wss:` accepts any WebSocket origin. Tightening
-  candidate: pin the deployment's own ws(s):// origin per app once
-  enforcement starts (the host varies per installation, so the shared
-  baseline cannot pin it).
-- The iFrame module's `frame-src 'self' https: http:` is the weakest
-  exception. Before that app enforces, replace it with a DB-driven allowlist
-  of exact https: origins (the module already scheme-sanitizes; an origin
-  allowlist is the natural next step).
-- The Content module's `img-src https:` trusts administrator-authored
-  content by design; tightening means an explicit image-origin allowlist.
-- The report endpoint is anonymous and log-only with a 64 KB body cap. If
-  report volume or abuse becomes a concern, add rate limiting and payload
-  schema validation before enforcement.
-- CSP reports can contain URLs and referrer data; treat the app logs they
-  land in as operational telemetry with the usual access limits.
-- Enforcement exit gate per app: flip `ReportOnly` to `false` only after a
-  bake period with zero actionable violations in the app's CspReport log,
-  and keep the flip reversible (it is a config value, not a code change).
-- `upgrade-insecure-requests` is deliberately absent: the platform supports
-  plain-HTTP intranet deployments, where the directive would break every
-  non-TLS page.
+1. **`connect-src 'self' ws: wss:` accepts any WebSocket origin.**
+   **Rejected for the shared baseline, kept as flip-time hardening.** The
+   deployment's own WebSocket host varies per installation, so the shared
+   baseline cannot pin it; a script that can open a WebSocket can already open
+   an HTTP connection to the same origin, and `ws:` to an attacker host
+   additionally requires script execution, which the other directives gate.
+   Operators who flip an app to enforcement may pin the exact `wss://` origin
+   in that app's configured `Policy` — see the exit-gate checklist.
+2. **The iFrame module's `frame-src 'self' https: http:` was the weakest
+   exception.** **Implemented.** `UseIFrameFrameSourceCsp` now replaces the
+   directive per request with the exact origins of the enabled configured
+   URLs, and the Standalone read path (`Pages/Standalone.cshtml.cs`) applies
+   the same `OmpUrlSafety.SanitizeHref` guard as Index (R8-P1-4 symmetry).
+3. **The Content module's `img-src https:` trusts administrator-authored
+   content.** **Rejected (accepted risk, by design).** The module's trusted
+   HTML/markdown model deliberately lets administrators reference intranet
+   image origins; an image-origin allowlist would break existing content
+   silently, and images cannot execute script. The residual risk (a malicious
+   or compromised administrator embedding a tracking pixel) is an
+   administrator-trust question, not a CSP gap — the pages already render raw
+   HTML by design.
+4. **The report endpoint is anonymous and log-only with a 64 KB body cap.**
+   **Rejected for now (watch item).** The endpoint only writes a warning log
+   line; the 64 KB cap bounds memory per request, and NLog's file targets
+   bound disk growth. Rate limiting and payload schema validation add real
+   complexity to a log-only sink; they become mandatory if the CspReport log
+   category ever shows abuse volume during the bake period.
+5. **CSP reports can contain URLs and referrer data.** **Accepted (process,
+   not code).** The app logs that collect `CspReport` warnings are operational
+   telemetry and keep the same access limits as the rest of the application
+   logs; no report content is rendered back into any page.
+6. **Enforcement exit gate.** Formalized below — the flip stays a reversible
+   per-app configuration change.
+7. **`upgrade-insecure-requests` is deliberately absent**: the platform
+   supports plain-HTTP intranet deployments, where the directive would break
+   every non-TLS page. Unchanged by this campaign.
+
+## Enforcement exit gate (ReportOnly: false)
+
+The flip is an operator decision per app, taken only when all of this is true:
+
+1. **Bake period.** The app has run with its final report-only policy (the
+   exact `Policy` string it will enforce) for **at least 14 days** of normal
+   traffic, covering every page type the app serves — not just the start page.
+2. **Empty actionable log.** The app's `CspReport` log category
+   (`OpenModulePlatform.Web.Shared.Security.CspReport` warnings in the app's
+   own log file) shows **zero actionable violations** for the whole bake
+   period. Actionable means the report's `blocked-uri`/`violated-directive`
+   traces to platform or module markup, scripts, or styles. Reports caused by
+   browser extensions, translation overlays, or `about:`/`chrome-extension:`
+   URLs are not actionable but must be written down when dismissed, so the
+   next reviewer does not re-triage them.
+3. **Coverage proof.** A manual pass (or the Playwright smoke suite) visited
+   every page family of the app during the bake — for the Portal: dashboard,
+   notifications, messages list and thread, and every admin page.
+4. **Flip mechanics.** Set `ReportOnly: false` in the app's
+   `<Section>:SecurityHeaders:ContentSecurityPolicy` config and restart the
+   app. The flip is config-only and reversible; keep the previous value ready.
+   At flip time an operator may additionally pin `connect-src` to the
+   deployment's exact WebSocket origin (point 1 above).
+5. **After the flip.** Watch the same log category for 7 days with
+   enforcement active; any new actionable violation flips the app back to
+   report-only and re-enters triage.
 
 ## Verifying the policy (break test)
 

@@ -2,6 +2,7 @@ using OpenModulePlatform.Web.iFrameWebAppModule.Services;
 using OpenModulePlatform.Web.iFrameWebAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -72,7 +73,17 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
             return Page();
         }
 
-        SelectedUrl = selectedRow.Url;
+        // Same read-path guard as Index (R8-P1-4): rows predating the write-side
+        // scheme check, or written by any other route into the table, must never
+        // reach <iframe src> unchecked.
+        var safeUrl = OmpUrlSafety.SanitizeHref(selectedRow.Url);
+        if (safeUrl is null)
+        {
+            SelectedError = T("The selected URL is not a valid web address and was not opened.");
+            return Page();
+        }
+
+        SelectedUrl = safeUrl;
         SelectedDisplayName = selectedRow.DisplayName;
         return Page();
     }

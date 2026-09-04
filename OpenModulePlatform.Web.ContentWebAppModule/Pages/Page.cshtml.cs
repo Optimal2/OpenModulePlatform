@@ -75,6 +75,7 @@ public sealed class PageModel : ContentWebAppModulePageModel
             PageContent.Body,
             PageContent.ContentType,
             PageContent.ServerReportKey,
+            Url.Content("~/js/omp-server-report.js"),
             ct);
         return Page();
     }

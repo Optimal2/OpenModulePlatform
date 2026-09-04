@@ -113,4 +113,31 @@ WHERE u.[id] = @UrlId;";
             Enabled = rdr.GetBoolean(4)
         };
     }
+
+    /// <summary>
+    /// Raw URLs of every enabled row. Used by the frame-src allowlist middleware,
+    /// which reduces them to distinct origins via OmpUrlSafety; the raw values
+    /// stay here so the SQL stays a plain column read.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetEnabledUrlsAsync(CancellationToken ct)
+    {
+        const string sql = @"
+SELECT u.[url]
+FROM omp_iframe.urls u
+WHERE u.[enabled] = 1;";
+
+        var urls = new List<string>();
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            urls.Add(rdr.GetString(0));
+        }
+
+        return urls;
+    }
 }
