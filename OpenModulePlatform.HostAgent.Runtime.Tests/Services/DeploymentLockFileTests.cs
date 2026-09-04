@@ -761,6 +761,168 @@ public sealed class DeploymentLockFileTests : IDisposable
     }
 
     /// <summary>
+    /// The ~500-byte renewal write sits in the FileStream buffer until the flush, so the
+    /// real "write fails after truncation" shape is: SetLength succeeds, WriteAsync
+    /// succeeds (buffered), FlushAsync throws -- and the disposal then retries the write
+    /// and throws the same error AGAIN. The renewal contract says I/O failures are
+    /// reported as Indeterminate, never thrown, so the disposal's failure must be
+    /// swallowed by the method that already reported it.
+    /// </summary>
+    [Fact]
+    public async Task TryRenewExclusiveAsync_WhenTheFlushFailsAfterABufferedWrite_ReportsIndeterminateWithoutThrowing()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        var outcome = await DeploymentLockFile.TryRenewExclusiveAsync(
+            _root,
+            "lock-id",
+            current => current with { UpdatedUtc = now.AddSeconds(30) },
+            (p, ct) => Task.FromResult<FileStream?>(
+                new FlushThrowingFileStream(DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(p))),
+            CancellationToken.None);
+
+        Assert.Equal(DeploymentLockRenewalResult.Indeterminate, outcome.Result);
+        Assert.Contains("could not be written", outcome.Diagnostic);
+        // The truncation ran, so what the flush failure left was residue: it was armed
+        // for deletion on the close of the handle that proved ownership.
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// A claim whose write fails must clean up its own residue through the handle that
+    /// created it: armed for deletion while still held, completed by its close. The
+    /// original error propagates -- the claim failed -- but no half-written lock file
+    /// is left behind to block every later deployment until handled by hand.
+    /// </summary>
+    [Fact]
+    public async Task TryCreateExclusiveAsync_WhenTheClaimWriteFails_TheResidueIsDeletedByTheCreatingHandle()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("claim-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        var path = DeploymentLockFile.GetPath(_root);
+
+        await Assert.ThrowsAsync<IOException>(() => DeploymentLockFile.TryCreateExclusiveAsync(
+            _root,
+            doc,
+            (p, disposition) => new WriteThrowingFileStream(
+                DeploymentLockFile.OpenClaimHandleWithDeleteAccess(p, disposition)),
+            CancellationToken.None));
+
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// When the delete-on-close arming itself fails, the cleanup falls back to the
+    /// compare-and-delete primitive with the claim's own LockId -- still no path-based
+    /// delete without proven ownership. The write failed before a byte landed, so what
+    /// remains is a zero-byte residue the primitive deliberately leaves: every reader
+    /// treats it as absent and the takeover path claims it on the next attempt.
+    /// </summary>
+    [Fact]
+    public async Task TryCreateExclusiveAsync_WhenTheArmingFails_TheFallbackLeavesTheZeroByteResidueForTheTakeover()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("claim-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        var path = DeploymentLockFile.GetPath(_root);
+
+        await Assert.ThrowsAsync<IOException>(() => DeploymentLockFile.TryCreateExclusiveAsync(
+            _root,
+            doc,
+            (p, disposition) => new UnarmableWriteThrowingFileStream(
+                DeploymentLockFile.OpenClaimHandleWithDeleteAccess(p, disposition)),
+            CancellationToken.None));
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(0, new FileInfo(path).Length);
+
+        var retry = DeploymentLockFile.Create("retry-claim-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        Assert.True(await DeploymentLockFile.TryCreateExclusiveAsync(_root, retry, CancellationToken.None));
+        Assert.Equal("retry-claim-id", DeploymentLockFile.ReadStatus(_root, now).Document!.LockId);
+    }
+
+    /// <summary>
+    /// A file marked for deletion on close answers CreateFile with ERROR_ACCESS_DENIED,
+    /// not a sharing violation, for the microseconds until the last handle closes. A
+    /// claim that lands in that window has lost the race: it must return false, never
+    /// throw UnauthorizedAccessException out of the acquire path.
+    /// </summary>
+    [Fact]
+    public async Task TryCreateExclusiveAsync_WhenTheFileIsDeletePending_LosesTheRaceInsteadOfThrowing()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        await using (var holder = new FileStream(
+            DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(path), FileAccess.ReadWrite))
+        {
+            Assert.True(DeploymentLockFile.TryArmDeleteOnClose(holder, out _));
+
+            var claim = DeploymentLockFile.Create("new-claim-id", "app-key", "other", "deploying", now, now.AddMinutes(5));
+            Assert.False(await DeploymentLockFile.TryCreateExclusiveAsync(_root, claim, CancellationToken.None));
+        }
+
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// A stream whose buffered write succeeds but whose flush fails -- the real shape of
+    /// "write fails after truncation" against a FileStream with a buffer -- and whose
+    /// disposal then fails the retried write again, the way a genuinely broken device
+    /// fails it. The handle still closes, so an armed deletion completes.
+    /// </summary>
+    private sealed class FlushThrowingFileStream : FileStream
+    {
+        public FlushThrowingFileStream(SafeFileHandle handle)
+            : base(handle, FileAccess.ReadWrite)
+        {
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+            => Task.FromException(new IOException("simulated flush failure"));
+
+        public override async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await base.DisposeAsync();
+            }
+            catch (IOException)
+            {
+                // The dirty buffer's flush hits the same failing device; close anyway so
+                // an armed deletion completes, the way a real handle close would.
+                Dispose();
+            }
+
+            throw new IOException("simulated dispose flush failure");
+        }
+    }
+
+    /// <summary>
+    /// A stream whose write fails and whose reported safe handle is unusable, so the
+    /// delete-on-close arming fails too and the claim cleanup has to take its fallback.
+    /// </summary>
+    private sealed class UnarmableWriteThrowingFileStream : FileStream
+    {
+        public UnarmableWriteThrowingFileStream(SafeFileHandle handle)
+            : base(handle, FileAccess.ReadWrite)
+        {
+        }
+
+        public override SafeFileHandle SafeFileHandle => new(IntPtr.Zero, ownsHandle: false);
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => Task.FromException(new IOException("simulated write failure"));
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            => ValueTask.FromException(new IOException("simulated write failure"));
+    }
+
+    /// <summary>
     /// File.Move(overwrite: true) onto an exclusively locked target fails with a sharing
     /// violation; WriteAsync retries it for a bounded moment instead of failing the write.
     /// </summary>

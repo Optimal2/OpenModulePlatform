@@ -206,6 +206,12 @@ public sealed class PortalDeploymentLockLease : IAsyncDisposable
         {
             // Expected when the lease is disposed after a completed import.
         }
+        catch (Exception ex)
+        {
+            // A faulted renewal loop must not skip the CTS disposal or the lock
+            // cleanup below, and must not turn DisposeAsync itself into a throw.
+            _logger.LogError(ex, "The Portal deployment lock renewal loop faulted.");
+        }
 
         _disposeCts.Dispose();
         await DeleteIfOwnedAsync();
@@ -419,21 +425,34 @@ public sealed class PortalDeploymentLockLease : IAsyncDisposable
     /// </summary>
     private async Task DeleteIfOwnedAsync()
     {
-        var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
-            _applicationRoot,
-            _lockId,
-            deletionRequirement: null,
-            CancellationToken.None);
-
-        // NotOwned and NotFound are ordinary outcomes (the lock was lost or re-asserted
-        // elsewhere); only an unproven read is worth a warning.
-        if (outcome.Result == DeploymentLockDeleteResult.Indeterminate)
+        try
         {
-            _logger.LogWarning(
-                "Failed to remove Portal deployment lock. LockId={LockId}, LockPath={LockPath}, Diagnostic={Diagnostic}",
+            var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+                _applicationRoot,
                 _lockId,
-                DeploymentLockFile.GetPath(_applicationRoot),
-                outcome.Diagnostic);
+                deletionRequirement: null,
+                CancellationToken.None);
+
+            // NotOwned and NotFound are ordinary outcomes (the lock was lost or re-asserted
+            // elsewhere); only an unproven read is worth a warning.
+            if (outcome.Result == DeploymentLockDeleteResult.Indeterminate)
+            {
+                _logger.LogWarning(
+                    "Failed to remove Portal deployment lock. LockId={LockId}, LockPath={LockPath}, Diagnostic={Diagnostic}",
+                    _lockId,
+                    DeploymentLockFile.GetPath(_applicationRoot),
+                    outcome.Diagnostic);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Disposal must never throw: a leftover lock file expires on its own, a
+            // thrown DisposeAsync masks the import's real outcome.
+            _logger.LogWarning(
+                ex,
+                "Failed to remove Portal deployment lock. LockId={LockId}, LockPath={LockPath}",
+                _lockId,
+                DeploymentLockFile.GetPath(_applicationRoot));
         }
     }
 }

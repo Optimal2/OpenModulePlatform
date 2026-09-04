@@ -202,7 +202,8 @@ public static class DeploymentLockFile
                 "Deployment lock file stayed exclusively locked by another process.");
         }
 
-        await using (var stream = exclusiveHandle)
+        var stream = exclusiveHandle;
+        try
         {
             // Same zero-byte rule as ReadStatus: an empty file is the residue of an
             // interrupted claim or renewal and can never be a valid claim, so report it
@@ -272,6 +273,23 @@ public static class DeploymentLockFile
 
             return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Renewed, renewed, null);
         }
+        finally
+        {
+            // The ~500-byte write sits in the FileStream buffer until the flush, so a
+            // failed flush leaves the buffer dirty and DisposeAsync retries the write --
+            // throwing the same I/O error again, out of a method that just reported the
+            // failure as Indeterminate. The write phase already spoke for itself; the
+            // disposal must not turn that report into an exception.
+            try
+            {
+                await stream.DisposeAsync();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The failed write was already reported, and a truncated residue rides
+                // the deletion TryRewriteHeldContentAsync armed on this handle.
+            }
+        }
     }
 
     /// <summary>
@@ -330,6 +348,10 @@ public static class DeploymentLockFile
     /// <summary>
     /// Opens the lock file exclusively, retrying a sharing violation for a bounded moment:
     /// the other side's atomic renewal holds the same kind of handle for milliseconds.
+    /// A delete-pending file (marked for deletion on close, not yet unlinked) answers
+    /// CreateFile with ERROR_ACCESS_DENIED rather than a sharing violation, so a denial
+    /// is retried on the same bounded budget -- a real ACL denial simply reports
+    /// Indeterminate after the budget instead of immediately.
     /// </summary>
     private static async Task<FileStream?> OpenExclusiveWithRetryAsync(string path, CancellationToken ct)
     {
@@ -347,11 +369,12 @@ public static class DeploymentLockFile
             {
                 throw;
             }
-            catch (IOException) when (attempt < MaxSharingViolationAttempts)
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException)
+                && attempt < MaxSharingViolationAttempts)
             {
                 await Task.Delay(SharingViolationRetryDelay, ct);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 return null;
             }
@@ -373,7 +396,19 @@ public static class DeploymentLockFile
     /// every caller's existing catch filters working unchanged.
     /// </remarks>
     internal static FileStream OpenExclusiveWithDeleteAccess(string path)
-        => new(OpenExclusiveHandleWithDeleteAccess(path), FileAccess.ReadWrite, bufferSize: 4096, isAsync: false);
+    {
+        var handle = OpenExclusiveHandleWithDeleteAccess(path);
+        try
+        {
+            return new FileStream(handle, FileAccess.ReadWrite, bufferSize: 4096, isAsync: false);
+        }
+        catch
+        {
+            // Never leak the raw handle if the FileStream construction itself fails.
+            handle.Dispose();
+            throw;
+        }
+    }
 
     /// <summary>
     /// The raw handle form of <see cref="OpenExclusiveWithDeleteAccess"/>, for tests that
@@ -420,8 +455,9 @@ public static class DeploymentLockFile
     /// Marks the file an exclusive handle holds for deletion when that handle closes.
     /// Best effort: returns false with a diagnostic instead of throwing, so a failed arming
     /// is reported like any other I/O fault and the residue is left for the zero-byte rules.
+    /// Internal so tests can put a file into the delete-pending state directly.
     /// </summary>
-    private static bool TryArmDeleteOnClose(FileStream stream, out string? diagnostic)
+    internal static bool TryArmDeleteOnClose(FileStream stream, out string? diagnostic)
     {
         try
         {
@@ -596,9 +632,21 @@ public static class DeploymentLockFile
     /// the same stale file is harmless: both delete, one creates, the other is told it
     /// lost.
     /// </remarks>
-    public static async Task<bool> TryCreateExclusiveAsync(
+    public static Task<bool> TryCreateExclusiveAsync(
         string applicationRoot,
         DeploymentLockDocument document,
+        CancellationToken ct)
+        => TryCreateExclusiveAsync(applicationRoot, document, OpenClaimWithDeleteAccess, ct);
+
+    /// <summary>
+    /// Test seam: same atomic claim, but the open is supplied by the caller so a test
+    /// can hand in a handle whose write phase fails and watch the cleanup ride the
+    /// creating handle. Production always uses the public overload.
+    /// </summary>
+    internal static async Task<bool> TryCreateExclusiveAsync(
+        string applicationRoot,
+        DeploymentLockDocument document,
+        Func<string, uint, FileStream> openClaim,
         CancellationToken ct)
     {
         var path = GetPath(applicationRoot);
@@ -611,9 +659,9 @@ public static class DeploymentLockFile
         FileStream stream;
         try
         {
-            stream = OpenClaimWithDeleteAccess(path, NativeMethods.CreateNew);
+            stream = openClaim(path, NativeMethods.CreateNew);
         }
-        catch (IOException) when (File.Exists(path))
+        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && File.Exists(path))
         {
             // Another claimant got there first -- unless what got there is a zero-byte
             // residue of an interrupted claim or renewal, which can never be a valid
@@ -624,6 +672,12 @@ public static class DeploymentLockFile
             // lost exactly as if the file were a real claim. An IOException raised while
             // the file does NOT exist fails the filter above and propagates as before:
             // a full disk or a vanished share is a real failure, not a lost race.
+            //
+            // The UnauthorizedAccessException half covers a delete-pending file: marked
+            // for deletion on close but not yet unlinked, it answers CreateFile with
+            // ERROR_ACCESS_DENIED. That is a lost race too -- the takeover open fails the
+            // same way and this claim returns false instead of throwing out of the
+            // acquire path.
             var takeover = TryOpenZeroByteResidueForTakeover(path);
             if (takeover is null)
             {
@@ -644,20 +698,33 @@ public static class DeploymentLockFile
                 await writer.WriteAsync(json.AsMemory(), ct);
                 await writer.FlushAsync(ct);
             }
+
+            // The writer's flush only empties the WRITER's buffer into the FileStream's;
+            // a deferred write failure would otherwise surface for the first time in the
+            // disposal below, outside this try, where the catch could no longer arm the
+            // deletion on the still-held handle.
+            await stream.FlushAsync(ct);
         }
         catch
         {
             // The claim succeeded but its contents did not land. The deletion rides the
             // handle that created the claim -- armed while it is still held, completed by
             // its close -- so it can never remove a claim that landed at the path after
-            // the release. Only if the arming itself fails is there a path-based
-            // fallback: an undeleted empty or half-written residue would otherwise block
-            // every future deployment of this application until deleted by hand.
+            // the release. If the arming itself fails the cleanup falls back to the
+            // compare-and-delete primitive with our own LockId -- still no path-based
+            // delete without proven ownership. A residue the primitive cannot prove ours
+            // (zero-byte, or half-written past recognition) is left behind: the zero-byte
+            // rules treat it as absent and the takeover path claims it, and an
+            // unparseable one fails closed -- the safe direction.
             var armed = TryArmDeleteOnClose(stream, out _);
             await stream.DisposeAsync();
             if (!armed)
             {
-                TryDelete(path);
+                await TryDeleteIfOwnedExclusiveAsync(
+                    applicationRoot,
+                    document.LockId,
+                    deletionRequirement: null,
+                    CancellationToken.None);
             }
 
             throw;
@@ -673,7 +740,26 @@ public static class DeploymentLockFile
     /// the very handle that created it. <see cref="NativeMethods.CreateNew"/> fails with
     /// an IOException when the file already exists, exactly like FileMode.CreateNew.
     /// </summary>
-    private static FileStream OpenClaimWithDeleteAccess(string path, uint creationDisposition)
+    internal static FileStream OpenClaimWithDeleteAccess(string path, uint creationDisposition)
+    {
+        var handle = OpenClaimHandleWithDeleteAccess(path, creationDisposition);
+        try
+        {
+            return new FileStream(handle, FileAccess.ReadWrite, bufferSize: 4096, isAsync: false);
+        }
+        catch
+        {
+            // Never leak the raw handle if the FileStream construction itself fails.
+            handle.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The raw handle form of <see cref="OpenClaimWithDeleteAccess"/>, for tests that
+    /// wrap the handle in a FileStream subclass with an injected failure.
+    /// </summary>
+    internal static SafeFileHandle OpenClaimHandleWithDeleteAccess(string path, uint creationDisposition)
     {
         var handle = NativeMethods.CreateFile(
             @"\\?\" + path,
@@ -688,7 +774,7 @@ public static class DeploymentLockFile
             throw CreateOpenException(path, Marshal.GetLastWin32Error());
         }
 
-        return new FileStream(handle, FileAccess.ReadWrite, bufferSize: 4096, isAsync: false);
+        return handle;
     }
 
     /// <summary>
