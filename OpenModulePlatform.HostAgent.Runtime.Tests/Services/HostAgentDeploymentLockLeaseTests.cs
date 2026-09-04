@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Services;
@@ -335,6 +336,93 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
 
         // Dispose must not remove a lock file this lease no longer owns either.
         Assert.True(File.Exists(DeploymentLockFile.GetPath(_root)));
+    }
+
+    /// <summary>
+    /// A foreign claim injected mid-tick -- after the renewal's ownership read but before
+    /// its overwrite lands -- is never overwritten: the renewal's read-verify-write is one
+    /// atomic step inside an exclusive handle, so the injected claim either is seen (ending
+    /// renewal as Lost) or blocks the renewal's open until it is on disk.
+    /// </summary>
+    /// <remarks>
+    /// This is the exact interleaving the old two-step renewal (ReadStatus, classify, then
+    /// an unconditional WriteAsync) lost. The test holds the lock file open with a handle
+    /// that still lets the old loop's ReadStatus succeed -- FileAccess.Read with
+    /// FileShare.ReadWrite, deliberately WITHOUT FileShare.Delete -- writes the foreign
+    /// claim through a second handle while the tick's File.Move retry loop is blocked
+    /// behind the first, and only then lets go. Against the old pattern the stuck tick's
+    /// Move retry waited this handle out and overwrote the foreign claim, because nothing
+    /// re-checked ownership after the read: this test was RED there. TryRenewExclusiveAsync
+    /// holds the file exclusively across the read, the LockId comparison and the write, so
+    /// its open retries behind the test handle and the first successful open reads the
+    /// foreign claim and stops the lease.
+    /// </remarks>
+    [Fact]
+    public async Task Renewal_DoesNotOverwrite_AForeignClaimInjectedBetweenOwnershipCheckAndWrite()
+    {
+        var result = await HostAgentDeploymentLockLease.TryAcquireAsync(
+            _root,
+            "app-key",
+            "owner",
+            "reason",
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMilliseconds(50),
+            maxConsecutiveIndeterminateReads: 100,
+            NullLogger.Instance,
+            CancellationToken.None);
+
+        Assert.NotNull(result.Lease);
+
+        var now = DateTimeOffset.UtcNow;
+        var foreign = DeploymentLockFile.Create(
+            "foreign-lock-id",
+            "app-key",
+            "other-owner",
+            "deploying",
+            now,
+            now.AddMinutes(5));
+        var path = DeploymentLockFile.GetPath(_root);
+
+        // Hold the file so a status READ still succeeds but no temp+Move overwrite can
+        // land, across several renewal ticks. While this handle is held, a tick of the old
+        // loop is stuck in WriteAsync's Move retry loop; the foreign claim is written into
+        // that window. The atomic renewal's exclusive open simply retries behind it. The
+        // open itself is retried for the same reason ReadWithRetry/WriteWithRetry exist: a
+        // renewal tick holding its own exclusive handle in this microsecond window is a
+        // collision the test is not about.
+        using (var handle = RetryFileOperation(() =>
+            new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
+        {
+            await Task.Delay(150);
+
+            var json = JsonSerializer.Serialize(
+                foreign,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+            WriteWithRetry(path, json);
+
+            await Task.Delay(250);
+        }
+
+        // Give the renewal loop room for several more ticks; the first tick that can open
+        // the file must read the foreign document and stop as Lost, never replace it.
+        await Task.Delay(600);
+
+        // Poll past a read that collides with a renewal hold (ReadStatus fails closed with
+        // a null Document there) instead of dereferencing through it. The ownership
+        // assertion itself is unchanged: against the old two-step loop the settled content
+        // is the lease's own document, because the stuck tick's Move retry waited the test
+        // handle out and overwrote the foreign claim.
+        var status = await WaitUntilAsync(
+            () => DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document is not null)
+            ? DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow)
+            : throw new InvalidOperationException("Deployment lock file stayed unreadable past the test deadline.");
+        Assert.Equal("foreign-lock-id", status.Document!.LockId);
+        Assert.Equal(foreign.UpdatedUtc, status.Document.UpdatedUtc);
+
+        await result.Lease!.DisposeAsync();
+
+        // Dispose must not remove a lock file this lease no longer owns either.
+        Assert.True(File.Exists(path));
     }
 
     private static async Task<bool> WaitUntilAsync(Func<bool> condition)

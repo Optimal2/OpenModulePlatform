@@ -79,6 +79,10 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
         ILogger logger,
         CancellationToken ct)
     {
+        // Advisory read, not check-then-act: the answer decides only whether a stale file
+        // is worth clearing and which status to report back. The claim itself is the
+        // atomic TryCreateExclusiveAsync below, so anything this read gets wrong costs a
+        // wrong skip-reason at worst, never ownership of the lock.
         var existing = DeploymentLockFile.ReadStatus(applicationRoot, DateTimeOffset.UtcNow);
         if (existing.IsLocked)
         {
@@ -109,6 +113,9 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
 
         if (!await DeploymentLockFile.TryCreateExclusiveAsync(applicationRoot, document, ct))
         {
+            // Advisory read for reporting only: the race was already decided atomically by
+            // CreateNew; this just names the winner for the operator and falls back to a
+            // generic message when the file cannot be read. No action is taken on it.
             var winner = DeploymentLockFile.ReadStatus(applicationRoot, DateTimeOffset.UtcNow);
             return HostAgentDeploymentLockAcquireResult.Locked(
                 winner.IsLocked
@@ -180,32 +187,62 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
         var consecutiveIndeterminateReads = 0;
         while (await timer.WaitForNextTickAsync(ct))
         {
-            // Renewal overwrites the lock file, so it must first establish that the file
-            // is still ours. If this lease expired and another deployment claimed it, an
-            // unconditional write would hand ownership back to us while that deployment
-            // was mid-flight.
-            var current = DeploymentLockFile.ReadStatus(_applicationRoot, DateTimeOffset.UtcNow);
-            var verdict = ClassifyRenewalOwnership(current, _lockId);
-            if (verdict == RenewalOwnership.Lost)
+            // Renewal overwrites the lock file, so it must first establish that the file is
+            // still ours -- and the check and the write must be one atomic step. This loop
+            // used to read the status and then call WriteAsync as two separate operations;
+            // a foreign claim that landed between them was silently overwritten (the Move
+            // retry loop even waited out a sharing violation to do it), and this lease went
+            // on renewing a lock it no longer held. TryRenewExclusiveAsync does the read,
+            // the LockId comparison and the write inside a single exclusive handle
+            // (FileShare.None), so a competing claimant is either seen (Lost) or blocked
+            // until the renewed document is on disk.
+            var now = DateTimeOffset.UtcNow;
+            var candidate = _document with
+            {
+                UpdatedUtc = now,
+                ExpiresUtc = now.Add(_lockLease)
+            };
+
+            var outcome = await DeploymentLockFile.TryRenewExclusiveAsync(
+                _applicationRoot,
+                _lockId,
+                _ => candidate,
+                ct);
+
+            if (outcome.Result == DeploymentLockRenewalResult.Lost)
             {
                 _logger.LogWarning(
                     "HostAgent deployment lock is no longer held by this lease; renewal stopped. LockId={LockId}, OwnerLockId={OwnerLockId}, LockPath={LockPath}",
                     _lockId,
-                    current.Document?.LockId,
+                    outcome.Document?.LockId,
                     DeploymentLockFile.GetPath(_applicationRoot));
                 return;
             }
 
-            if (verdict == RenewalOwnership.Indeterminate)
+            if (outcome.Result == DeploymentLockRenewalResult.NotFound)
             {
-                // ReadStatus fails CLOSED: an IOException, a denied read, a half-written
-                // file or a planted reparse point all come back as Locked with a null
-                // Document. Comparing that null against _lockId made a momentary read
-                // failure indistinguishable from a real change of owner, so a single
-                // transient fault ended the renewal loop for good -- while the deployment
-                // it was protecting kept running, its lock quietly expiring underneath it.
-                // Tolerate a bounded run of them, and never claim the lease was taken when
-                // all that is known is that the file could not be read (R12-A4).
+                // Nobody holds the lock at all; the deployment this lease protects is
+                // still running, so re-assert it through the atomic claim -- never through
+                // a blind overwrite, which would erase a claimant that arrived first.
+                if (await TryReassertLockAsync(candidate, ct))
+                {
+                    _document = candidate;
+                    consecutiveIndeterminateReads = 0;
+                }
+
+                continue;
+            }
+
+            if (outcome.Result == DeploymentLockRenewalResult.Indeterminate)
+            {
+                // TryRenewExclusiveAsync fails CLOSED the same way ReadStatus does: an
+                // IOException, a denied read, a half-written file or a planted reparse
+                // point all come back with no document. Treating that as a change of
+                // owner would end the renewal loop for good on a single transient fault --
+                // while the deployment it was protecting kept running, its lock quietly
+                // expiring underneath it. Tolerate a bounded run of them, and never claim
+                // the lease was taken when all that is known is that the file could not be
+                // read (R12-A4).
                 consecutiveIndeterminateReads++;
                 if (consecutiveIndeterminateReads >= _maxConsecutiveIndeterminateReads)
                 {
@@ -214,7 +251,7 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
                         consecutiveIndeterminateReads,
                         _lockId,
                         DeploymentLockFile.GetPath(_applicationRoot),
-                        current.Diagnostic);
+                        outcome.Diagnostic);
                     return;
                 }
 
@@ -223,31 +260,43 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
                     consecutiveIndeterminateReads,
                     _lockId,
                     DeploymentLockFile.GetPath(_applicationRoot),
-                    current.Diagnostic);
+                    outcome.Diagnostic);
                 continue;
             }
 
             consecutiveIndeterminateReads = 0;
+            _document = outcome.Document ?? candidate;
+        }
+    }
 
-            var now = DateTimeOffset.UtcNow;
-            _document = _document with
+    /// <summary>
+    /// Re-asserts this lease's claim when the lock file has vanished, using the same atomic
+    /// create-if-absent primitive as acquisition so a simultaneous claimant is never
+    /// overwritten (R12-A2).
+    /// </summary>
+    private async Task<bool> TryReassertLockAsync(DeploymentLockDocument candidate, CancellationToken ct)
+    {
+        try
+        {
+            if (await DeploymentLockFile.TryCreateExclusiveAsync(_applicationRoot, candidate, ct))
             {
-                UpdatedUtc = now,
-                ExpiresUtc = now.Add(_lockLease)
-            };
+                return true;
+            }
 
-            try
-            {
-                await DeploymentLockFile.WriteAsync(_applicationRoot, _document, ct);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to renew HostAgent deployment lock. LockId={LockId}, LockPath={LockPath}",
-                    _lockId,
-                    DeploymentLockFile.GetPath(_applicationRoot));
-            }
+            _logger.LogInformation(
+                "HostAgent deployment lock file was gone, but another claimant took it before it could be re-asserted; the next renewal tick will establish the owner. LockId={LockId}, LockPath={LockPath}",
+                _lockId,
+                DeploymentLockFile.GetPath(_applicationRoot));
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to re-assert HostAgent deployment lock. LockId={LockId}, LockPath={LockPath}",
+                _lockId,
+                DeploymentLockFile.GetPath(_applicationRoot));
+            return false;
         }
     }
 
@@ -276,6 +325,11 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
     /// holds the lock at all; the deployment this lease protects is still running, so the
     /// renewal write re-asserts it rather than falling silent. Everything else is
     /// ReadStatus's fail-closed branch and proves nothing.
+    ///
+    /// The renewal loop no longer consults this classifier: it gets the same verdicts
+    /// atomically from TryRenewExclusiveAsync. The classifier is retained because the
+    /// Portal lease keeps a deliberate second copy of it, both copies document the
+    /// ReadStatus semantics the atomic renewal was built from, and the tests pin them.
     /// </remarks>
     internal static RenewalOwnership ClassifyRenewalOwnership(DeploymentLockStatus status, string lockId)
     {
