@@ -300,7 +300,22 @@ public static class DeploymentLockFile
         // never be a valid claim, so it reads as "no lock" instead of failing closed
         // forever. A NON-EMPTY but unparseable file still fails closed below -- that
         // distinction is R12-A4's safety net and is deliberately kept.
-        if (new FileInfo(path).Length == 0)
+        //
+        // ONE FileInfo, Exists read BEFORE Length. This is not a style preference: the probe
+        // sits outside the try block below, and a bare `new FileInfo(path).Length` throws
+        // FileNotFoundException when the file is gone -- measured, including when the FileInfo
+        // was constructed while the file still existed. ReadStatus is documented as returning a
+        // status rather than throwing, and eight call sites (the HostAgent lease loop, both
+        // deployment services, the health monitor) call it with no try/catch, so an exception
+        // here kills a renewal loop mid-deployment. The File.Exists check above does not protect
+        // it: DeleteIfOwned or expiry cleanup on another thread is enough to land in between.
+        //
+        // FileInfo caches its stat on first property access, so reading Exists first makes the
+        // pair a SINGLE filesystem query -- the race is removed rather than caught. A file that
+        // vanishes after the stat then reads as its cached length and fails in ReadAllText
+        // below, inside the try, which is the fail-closed path R12-A4 intends.
+        var info = new FileInfo(path);
+        if (!info.Exists || info.Length == 0)
         {
             return DeploymentLockStatus.NotLocked(path);
         }

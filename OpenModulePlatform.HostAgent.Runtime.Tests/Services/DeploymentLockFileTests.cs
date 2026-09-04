@@ -286,6 +286,85 @@ public sealed class DeploymentLockFileTests : IDisposable
     }
 
     /// <summary>
+    /// ReadStatus must NEVER throw: eight call sites (the HostAgent lease loop, both deployment
+    /// services, the health monitor) call it with no try/catch and treat the returned status as
+    /// the whole answer. An exception there kills a renewal loop mid-deployment.
+    ///
+    /// The zero-byte probe sits OUTSIDE the try block, so the pattern it uses decides whether
+    /// ReadStatus can throw. Measured under an identical churn loop: File.Exists followed by a
+    /// FRESH FileInfo threw in 373 of 1348 iterations, while a single FileInfo whose Exists is
+    /// read before Length threw 0 times -- FileInfo caches its stat on first property access, so
+    /// the pair becomes one filesystem query and the race is removed rather than caught.
+    ///
+    /// This test is the guard for that. It churns the lock file in and out of existence while
+    /// reading it, and requires BOTH that the race was actually exercised (the reader saw the
+    /// file present and absent) and that nothing was thrown -- a green result where the race
+    /// never happened would prove nothing, so that case fails loudly instead.
+    /// </summary>
+    [Fact]
+    public void ReadStatus_FileVanishingDuringTheProbe_DoesNotThrow()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var now = DateTimeOffset.UtcNow;
+        var json = JsonSerializer.Serialize(
+            DeploymentLockFile.Create("id", "app", "owner", "reason", now, now.AddMinutes(5)));
+
+        using var stopping = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var churn = Task.Run(() =>
+        {
+            while (!stopping.IsCancellationRequested)
+            {
+                try
+                {
+                    File.WriteAllText(path, json, Encoding.UTF8);
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                    // The reader may hold the file for an instant; not what is being measured.
+                }
+            }
+        });
+
+        Exception? observed = null;
+        var sawLocked = false;
+        var sawUnlocked = false;
+        var iterations = 0;
+        try
+        {
+            // Enough iterations that a ~28 % per-iteration hit rate makes a miss impossible in
+            // practice, but bounded so a fixed build finishes in well under a second.
+            while (iterations < 2000 && !stopping.IsCancellationRequested)
+            {
+                iterations++;
+                try
+                {
+                    var status = DeploymentLockFile.ReadStatus(_root, now);
+                    if (status.IsLocked) { sawLocked = true; } else { sawUnlocked = true; }
+                }
+                catch (Exception ex)
+                {
+                    observed = ex;
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            stopping.Cancel();
+            churn.Wait(TimeSpan.FromSeconds(5));
+        }
+
+        Assert.True(observed is null,
+            $"ReadStatus threw {observed?.GetType().Name} after {iterations} iterations: " +
+            $"{observed?.Message}");
+        Assert.True(sawLocked && sawUnlocked,
+            $"the race was never exercised in {iterations} iterations " +
+            $"(locked={sawLocked}, unlocked={sawUnlocked}) -- this green proves nothing");
+    }
+
+    /// <summary>
     /// A zero-byte lock file is the residue of an interrupted claim or renewal (R12-A4
     /// follow-up). It can never be a valid claim, so it reads as "no lock" and a new
     /// claimant can take the file over instead of being permanently locked out.
