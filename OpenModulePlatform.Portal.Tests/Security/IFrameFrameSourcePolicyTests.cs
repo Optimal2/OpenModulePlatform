@@ -72,4 +72,40 @@ public sealed class IFrameFrameSourcePolicyTests
         Assert.Contains("frame-src 'self' https://a.example;", rewritten);
         Assert.DoesNotContain("https: http:", rewritten);
     }
+
+    [Fact]
+    public void ReplaceFrameSource_DoesNotCorruptChildFrameSourceDirective()
+    {
+        // Regression guard (campaign csp-sista-undantagen): the frame-src match
+        // must not fire inside a "child-frame-src" directive. Without the
+        // lookbehind, the "frame-src ..." tail of "child-frame-src ..." is
+        // rewritten and the child directive is corrupted.
+        const string policy =
+            "default-src 'self'; child-frame-src https://child.example; frame-ancestors 'self'";
+
+        var rewritten = IFrameFrameSourcePolicy.ReplaceFrameSource(
+            policy,
+            "frame-src 'self' https://reports.example.internal");
+
+        Assert.Equal(
+            "default-src 'self'; child-frame-src https://child.example; frame-ancestors 'self'; frame-src 'self' https://reports.example.internal",
+            rewritten);
+    }
+
+    [Fact]
+    public void ReplaceFrameSource_ReplacesRealDirectiveWhenChildFrameSourcePresent()
+    {
+        // Same guard, with both directives present: child-frame-src stays
+        // byte-identical, the real frame-src is the one replaced.
+        const string policy =
+            "default-src 'self'; child-frame-src https://child.example; frame-src 'self' https: http:; frame-ancestors 'self'";
+
+        var rewritten = IFrameFrameSourcePolicy.ReplaceFrameSource(
+            policy,
+            "frame-src 'self' https://reports.example.internal");
+
+        Assert.Equal(
+            "default-src 'self'; child-frame-src https://child.example; frame-src 'self' https://reports.example.internal; frame-ancestors 'self'",
+            rewritten);
+    }
 }

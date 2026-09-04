@@ -101,7 +101,9 @@ require it (each is a removal candidate; see "Migration plan"):
   (`Pages/Admin/Edit.cshtml`) and administrator-authored trusted HTML content
   (which may carry its own scripts by design).
 - **Inline `<script>` in the example modules' OpenDocViewer demo pages**
-  (server-rendered JSON bootstrap via `@Html.Raw`).
+  (server-rendered JSON bootstrap via `@Html.Raw`, plus one pure client-side
+  block in the WebAppModule demo). Classified block by block under
+  "Example modules: inline-script classification" below — all four are movable.
 - **The shared fallback status page**
   (`BuildFallbackStatusPageHtml`) — a deliberate inline-HTML page that must
   render even when static assets are unavailable during error handling. It
@@ -143,7 +145,11 @@ The appsettings.json of each app carries its effective policy:
   (`Security/IFrameFrameSourcePolicy.cs`) with an allowlist of the exact
   origins of the enabled URLs in `omp_iframe.urls` (cached 60 s; on a database
   error the directive falls back to `frame-src 'self'` for that request). The
-  old `https: http:` scheme wildcards are gone.
+  old `https: http:` scheme wildcards are gone. Since 2026-09-04 (campaign
+  csp-sista-undantagen) `script-src` has **no** `unsafe-inline` — the module
+  renders zero inline scripts, pinned by `IFrameCspSmokeTests`
+  (OpenModulePlatform.UiTests) against Index and Standalone. `style-src` keeps
+  the baseline's `unsafe-inline` (shared runtime-injected styles).
 - **Auth** — the strict-policy reference: after the login page's inline
   `<style>`/`<script>` blocks were moved to `wwwroot/css/login.css` and
   `wwwroot/js/login.js`, the Auth app runs
@@ -152,6 +158,39 @@ The appsettings.json of each app carries its effective policy:
 - **examples/** — the baseline. The OpenDocViewer demo pages frame the ODV
   origin configured via `OpenDocViewer:BaseUrl`; deployments with an
   off-origin viewer extend `frame-src` through the same configuration.
+
+## Example modules: inline-script classification
+
+Every inline `<script>` block under `examples/` (inventoried 2026-09-04,
+campaign csp-sista-undantagen), classified as movable or rejected-with-reason.
+Inline event handlers and `javascript:` URLs were also swept for: none exist.
+Once the four blocks below are migrated, the baseline's
+`script-src 'unsafe-inline'` has no remaining consumer in `examples/`.
+
+1. `examples/WebAppModule/WebApp/Pages/OpenDocViewerDemo.cshtml:32` —
+   bootstrap block: `window.ODV_BOOTSTRAP = @Html.Raw(Model.BundleJson)` plus a
+   `window.ODV_DEMO_OPTIONS` object with `JsonSerializer`-escaped values.
+   **Movable.** Same migration as the Content module's `DB_JSON_SCRIPT` block:
+   render the JSON as non-executable `<script type="application/json">` data
+   blocks and read them from a static JS file (the reader assigns the
+   documented `window.*` globals immediately after each data block, so
+   source-order consumers are unaffected). The `Html.Raw` string-escape
+   question disappears with the pattern — JSON goes through the data block's
+   HTML encoding, never into executable script context.
+2. `examples/WebAppModule/WebApp/Pages/OpenDocViewerDemo.cshtml:52` — the
+   local-files IIFE (file-input handling, `URL.createObjectURL` bundle
+   building, new-tab wiring). Contains no server-rendered data at all.
+   **Movable.** Lifts verbatim into a static `wwwroot/js/` file; it consumes
+   only the globals from block 1 and DOM ids.
+3. `examples/ServiceAppModule/WebApp/Pages/OpenDocViewerDemo.cshtml:21` —
+   bootstrap block: `window.ODV_BOOTSTRAP = @Html.Raw(Model.BundleJson)`.
+   **Movable.** Same `application/json` data-block pattern as block 1.
+4. `examples/WorkerAppModule/WebApp/Pages/OpenDocViewerDemo.cshtml:21` —
+   identical bootstrap block. **Movable.** Same pattern.
+
+No block is rejected: none of them needs to stay inline (no error-path
+rendering constraint like the fallback status page, no administrator-authored
+scripting surface like the Content module's trusted HTML).
 
 ## Migration plan (removing the remaining unsafe-inline)
 
@@ -166,9 +205,15 @@ The appsettings.json of each app carries its effective policy:
    modules' demo pages and the Content module's editor bootstrap are migrated
    (trusted-HTML content scripting keeps the Content module on a per-app
    `unsafe-inline` regardless), and from `style-src` once webamp is replaced
-   or its style injection is hashed. The iFrame module has no inline scripts
+   or its style injection is hashed. ~~The iFrame module has no inline scripts
    at all; its `script-src 'unsafe-inline'` is now unjustified and can be
-   dropped with a smoke test as the only cost.
+   dropped with a smoke test as the only cost.~~ **Done 2026-09-04** (campaign
+   csp-sista-undantagen): the iFrame module runs `script-src 'self'`, proven
+   by `IFrameCspSmokeTests`; the example blocks are classified above, all
+   movable. As part of the same campaign the `ReplaceFrameSource` regex gained
+   a `(?<![-\w])` lookbehind so a future `child-frame-src` directive cannot be
+   corrupted by the frame-src rewrite (regression tests in
+   `IFrameFrameSourcePolicyTests`).
 4. Then the per-app enforcement flips — see "Enforcement exit gate" below.
 
 ## Security review notes (independent review, 2026-09-01; decided 2026-09-04)

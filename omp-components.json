@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.625",
+  "repositoryVersion": "0.3.626",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -20,7 +20,7 @@
     },
     {
       "moduleKey": "iframe_webapp",
-      "definitionVersion": "0.3.70",
+      "definitionVersion": "0.3.71",
       "path": "OpenModulePlatform.Web.iFrameWebAppModule/iframe_webapp.module-definition.json"
     },
     {
@@ -196,7 +196,7 @@
       "appKey": "iframe_webapp_webapp",
       "packageType": "web-app",
       "targetName": "iframe-webapp",
-      "version": "0.3.225",
+      "version": "0.3.226",
       "projectPath": "OpenModulePlatform.Web.iFrameWebAppModule",
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.iFrameWebAppModule.zip",

@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.Auth\OpenModulePlatform.Auth.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Portal\OpenModulePlatform.Portal.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.Web.iFrameWebAppModule\OpenModulePlatform.Web.iFrameWebAppModule.csproj" />
   </ItemGroup>
 
   <ItemGroup>

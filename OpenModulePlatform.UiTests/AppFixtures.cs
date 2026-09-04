@@ -30,8 +30,24 @@ public sealed class AuthAppFixture : WebAppProcessFixture
     protected override string ReadinessPath => "/login";
 }
 
+/// <summary>
+/// The iFrame web app module as app-under-test (campaign csp-sista-undantagen):
+/// its script-src dropped 'unsafe-inline', so Index and Standalone must render
+/// with no executable inline scripts and no CSP violations. Same "Portal"
+/// options section as the Portal, hence the same AllowAnonymous override.
+/// </summary>
+public sealed class IFrameAppFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.iFrameWebAppModule";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
+}
+
 [CollectionDefinition("ui")]
 public sealed class UiCollection :
     ICollectionFixture<PlaywrightSessionFixture>,
     ICollectionFixture<PortalAppFixture>,
-    ICollectionFixture<AuthAppFixture>;
+    ICollectionFixture<AuthAppFixture>,
+    ICollectionFixture<IFrameAppFixture>;

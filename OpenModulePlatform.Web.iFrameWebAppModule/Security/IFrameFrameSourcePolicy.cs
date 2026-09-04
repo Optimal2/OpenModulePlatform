@@ -146,6 +146,9 @@ public static partial class IFrameFrameSourcePolicy
         });
     }
 
-    [GeneratedRegex(@"frame-src\s+[^;]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    // The lookbehind keeps the match from firing inside another directive name:
+    // a plain \b is not enough because '-' is a non-word character, so the
+    // "frame-src" tail of "child-frame-src" would still match and be rewritten.
+    [GeneratedRegex(@"(?<![-\w])frame-src\s+[^;]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FrameSourceDirectiveRegex();
 }
