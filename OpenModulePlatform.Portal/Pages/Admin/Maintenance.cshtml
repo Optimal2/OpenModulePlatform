@@ -148,7 +148,10 @@
                                 <code>@row.TargetIdentifier</code>
                                 @if (hasDetail)
                                 {
-                                    <div class="maintenance-finding-hint muted">@L["Show details"]</div>
+                                    <button type="button"
+                                            class="maintenance-finding-hint muted"
+                                            aria-expanded="false"
+                                            aria-controls="maintenance-finding-detail-@row.MaintenanceFindingId">@L["Show details"]</button>
                                 }
                             </td>
                             <td>
@@ -174,7 +177,7 @@
                         </tr>
                         @if (hasDetail)
                         {
-                            <tr class="maintenance-finding-detail" data-list-follow>
+                            <tr class="maintenance-finding-detail" id="maintenance-finding-detail-@row.MaintenanceFindingId" data-list-follow>
                                 <td colspan="6">
                                     @if (!string.IsNullOrWhiteSpace(row.Detail))
                                     {

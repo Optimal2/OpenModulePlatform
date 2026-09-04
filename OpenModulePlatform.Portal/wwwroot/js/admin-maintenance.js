@@ -1,14 +1,38 @@
 // File: OpenModulePlatform.Portal/wwwroot/js/admin-maintenance.js
-// Finding details expand on row click; the text lives in a full-width
-// follow row (data-list-follow keeps it glued to its finding through
-// sorting, filtering and search) instead of a <details> inside the cell.
-// The collapse state is a CSS class rather than the hidden attribute, which
-// the shared list refresh owns for group visibility. Selection (select-all,
-// counts, enabling the bulk buttons) is the shared list's job.
+// Finding details expand on row click or via the "Show details" button in
+// the row (the keyboard and screen-reader path: a real button with
+// aria-expanded/aria-controls). The text lives in a full-width follow row
+// (data-list-follow keeps it glued to its finding through sorting,
+// filtering and search) instead of a <details> inside the cell. The open
+// state is a CSS class; the shared list refresh owns the hidden attribute
+// for group visibility, and the page CSS lets hidden win over the open
+// class so a filtered-out finding never leaves its detail behind.
+// Selection (select-all, counts, enabling the bulk buttons) is the shared
+// list's job.
 (() => {
     'use strict';
 
+    const toggleFinding = (row) => {
+        const follow = row.nextElementSibling;
+        if (!follow || !follow.classList.contains('maintenance-finding-detail')) {
+            return;
+        }
+
+        const open = follow.classList.toggle('maintenance-finding-detail--open');
+        row.classList.toggle('maintenance-finding-open', open);
+        row.querySelector('.maintenance-finding-hint')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
     document.addEventListener('click', (event) => {
+        const hint = event.target.closest('.maintenance-finding-hint');
+        if (hint) {
+            const row = hint.closest('tr[data-finding-row]');
+            if (row) {
+                toggleFinding(row);
+            }
+            return;
+        }
+
         if (event.target.closest('a, button, input, select, textarea, summary, label')) {
             return;
         }
@@ -22,14 +46,19 @@
             return;
         }
 
-        const follow = row.nextElementSibling;
-        if (!follow || !follow.classList.contains('maintenance-finding-detail')) {
-            return;
-        }
-
-        const open = follow.classList.toggle('maintenance-finding-detail--open');
-        row.classList.toggle('maintenance-finding-open', open);
+        toggleFinding(row);
     });
+
+    // The list search box sits inside the findings POST form so the filter
+    // and bulk buttons share one toolbar; Enter in it must not submit the
+    // form (whose default button is Queue cleanup).
+    document.getElementById('maintenance-findings-form')
+        ?.querySelector('[data-list-search]')
+        ?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+            }
+        });
 })();
 
 (() => {

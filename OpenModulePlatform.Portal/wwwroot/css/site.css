@@ -6987,8 +6987,20 @@ tr.linkbox-editor-row--dragging {
 }
 
 .maintenance-finding-hint {
+    display: block;
     margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
     font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.maintenance-finding-hint:hover,
+.maintenance-finding-hint:focus-visible {
+    color: var(--link-hover);
+    text-decoration: underline dotted;
 }
 
 .maintenance-finding-hint::before {
@@ -7005,6 +7017,13 @@ tr.linkbox-editor-row--dragging {
 
 .maintenance-finding-detail.maintenance-finding-detail--open {
     display: table-row;
+}
+
+/* The shared list hides filtered-out groups with the hidden attribute; an
+   author display rule would otherwise beat the UA [hidden] rule and leave
+   an expanded detail row standing without its finding. */
+.maintenance-finding-detail[hidden] {
+    display: none;
 }
 
 .maintenance-finding-detail > td {
