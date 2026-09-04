@@ -130,6 +130,16 @@ inline block returns to a Portal page.
 
 The appsettings.json of each app carries its effective policy:
 
+> **The hardening lives in configuration, and losing the key un-does it silently.**
+> `OmpContentSecurityPolicy.Build` falls back to `Baseline` whenever
+> `ContentSecurityPolicy:Policy` is null, empty, or whitespace
+> (`OpenModulePlatform.Web.Shared/Security/OmpContentSecurityPolicy.cs`), and that baseline
+> still carries `script-src 'self' 'unsafe-inline'`. So an app whose `Policy` key is dropped —
+> by a hand-edited `appsettings.json`, or by a config file copied forward from an older
+> artifact version — silently returns to allowing inline script. There is no warning and no
+> failed startup: the header is simply weaker. When you change an app's configuration, assert
+> the emitted `Content-Security-Policy` header rather than assuming the key survived.
+
 - **Portal** — baseline plus `blob:` in `img-src`/`media-src` (webamp unzips
   skins in JS and serves sprites via `URL.createObjectURL`; track/album-art
   blobs) and `frame-src 'none'` (Portal embeds nothing). Since

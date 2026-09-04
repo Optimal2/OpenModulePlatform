@@ -23,8 +23,10 @@ Markdown and raw HTML content is stored in the database. HTML file pages are sto
 
 Choose the page content type before editing the body:
 
-- `markdown` uses visual and Markdown-source tabs. If the editor CDN cannot
-  load, the raw textarea remains available and the page still saves Markdown.
+- `markdown` uses visual and Markdown-source tabs. The editor is served from the
+  module itself (`wwwroot/lib/toastui-editor/`), not from a CDN — there is no
+  external origin to be unavailable. If the asset still fails to load, the raw
+  textarea remains available and the page still saves Markdown.
 - `html` uses visual and HTML-source tabs. HTML is trusted editor content and is
   rendered without sanitization.
 - `html_file` stores only a file key in the database. The trusted HTML body is

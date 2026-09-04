@@ -92,6 +92,21 @@ Use the narrowest level that gives real confidence:
 - Formatting hygiene: `git diff --check`
 - Local web visibility: publish/update the runtime, then verify the relevant localhost URL
 
+### Pushing a version bump
+
+`repositoryVersion` in `omp-components.json` is the repository's hottest field, and two
+machines bumping in parallel take the same number: git merges the identical lines cleanly and
+the gate fails afterwards with "changed but not bumped". Use
+`scripts/omp/push-with-rebump.ps1` instead of a hand-run fetch/rebase/bump/push loop. It
+fetches, rebases when origin moved, re-runs `scripts/omp/bump-version.ps1` for the component
+set taken from the commit's own diff, amends, and retries a bounded number of times.
+
+Bump with `scripts/omp/bump-version.ps1`, never by editing `omp-components.json` by hand: the
+tool raises `repositoryVersion` for you, and since 2026-09-04
+`scripts/omp/validate-component-versions.ps1` fails the build when a component version moved
+while `repositoryVersion` stayed put. See `docs/VERSIONING_AND_IDENTITIES.md` for why that
+value is the universal package's identity.
+
 ### Parallel builds across repositories
 
 **Consumer repositories may build in parallel. Do not serialise them.** This rule was the
@@ -108,10 +123,12 @@ locked by VBCSCompiler". It is now prevented physically rather than by schedulin
 files for Web.Shared, Web.Shared.Analyzers or EventPublisher.*. When the property is unset
 the default in-tree layout applies, so OMP's own builds are unaffected.
 
-The AI Orchestrator dropped its global `build:omp-web-shared` lock in the same change
-(`AI-Orchestrator/src/gui/jobConcurrency.ts:119` says so explicitly); each repository still
-takes its own `repo:<toplevel>` lock, so two implementations in the SAME repository remain
-serialised.
+The AI Orchestrator dropped its global `build:omp-web-shared` lock in the same change; each
+repository still takes its own `repo:<toplevel>` lock, so two implementations in the SAME
+repository remain serialised. (The orchestrator lives in the private DEV workspace, not in
+this repository: `AI-Orchestrator/src/gui/jobConcurrency.ts` carries the reasoning as a
+comment next to the lock list. It is named here for provenance only — it is not a path you
+can open from a clone of this repo.)
 
 What still holds:
 

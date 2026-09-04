@@ -32,6 +32,16 @@ still part of the current OMP object/installer model.
   `export-universal-package.ps1`, and `export-universal-package.cmd`.
   See `docs/OMP_COMPONENT_MANIFEST.md` for the conformance checklist and
   `scripts/omp/README.md` for the canonical object-builder behavior.
+- `omp/push-with-rebump.ps1` pushes a version bump without losing a race to
+  another machine: it fetches, rebases when `origin/main` moved, re-runs
+  `bump-version.ps1` for the component set read from the commit's own diff,
+  amends, and retries a bounded number of times. Prefer it over a hand-run
+  fetch/rebase/bump/push loop. Present in this repository only; the consumer
+  repositories have not adopted it yet.
+- `omp/validate-component-versions.ps1` also fails the build when a component
+  version moved against the base ref while `repositoryVersion` stayed put, since
+  that value is the universal package's identity. See
+  `docs/VERSIONING_AND_IDENTITIES.md`.
 
 ## Removed Legacy Scripts
 

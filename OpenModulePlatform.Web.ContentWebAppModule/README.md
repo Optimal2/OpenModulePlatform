@@ -40,6 +40,8 @@ Permissions:
 - Ordinary editors can edit existing pages through page-level `can_write`.
 - Ordinary readers can view enabled pages through page-level `can_read`.
 
-The editor page chooses the editor from the page content type. Markdown uses TOAST UI Editor 3.2.2 from the TOAST CDN with visual and source tabs, HTML uses a trusted visual editor with an HTML source tab, `html_file` uses an HTML file-key picker, and `server_report` uses a report-key picker. If the CDN asset cannot load, Markdown falls back to the raw textarea.
+The editor page chooses the editor from the page content type. Markdown uses TOAST UI Editor 3.2.2 with visual and source tabs, HTML uses a trusted visual editor with an HTML source tab, `html_file` uses an HTML file-key picker, and `server_report` uses a report-key picker. If the editor asset cannot load, Markdown falls back to the raw textarea.
+
+The TOAST UI Editor is **vendored**, not loaded from a CDN: `Pages/Admin/Edit.cshtml` references `~/lib/toastui-editor/toastui-editor.min.css` and `~/lib/toastui-editor/toastui-editor-all.min.js`. It was `https://uicdn.toast.com` until campaign `csp-vagen-till-enforcement`, which vendored it because that origin was the only third-party origin in any OMP content-security policy. Removing it took the origin out of the module's `script-src`/`style-src` and removed the runtime dependency on the CDN's availability. See `wwwroot/lib/toastui-editor/PROVENANCE.md` for the exact files, byte sizes, license, and the upgrade procedure — and update that file when the version changes.
 
 Not in scope for this iteration: SQL editing in the browser, arbitrary file browsing, JSON uploads, version history, publishing workflow, media library, uploads, block editing, comments, self-service, AD autocomplete, charts, or advanced HTML sanitization.

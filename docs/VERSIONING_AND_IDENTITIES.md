@@ -25,9 +25,27 @@ stores it as text because different module repositories may have their own
 release tooling, but new deployable artifacts should use SemVer-compatible
 versions whenever practical.
 
-`Repository version` is an optional source-control or release-bundle version.
-It may describe a coordinated release from a repository, but it is not the
-version HostAgent deploys.
+`Repository version` (`omp-components.json` → `repositoryVersion`) is the
+source-control or release-bundle version for the repository as a whole. It is
+not the version HostAgent deploys — that is always the component version on the
+artifact row — but it is **not cosmetic either**, and two rules follow from
+that:
+
+- **It is the universal package's identity.** `scripts/omp/build-universal-package.ps1`
+  takes the package version from `repositoryVersion`, and
+  `scripts/omp/export-universal-package.ps1` writes it into the package as
+  `sourceRepositoryVersion`. If it does not move, new content ships under an old
+  package identity — which is exactly what HostAgent's identity guard refuses,
+  discovered at import time instead of at push time.
+- **It must move whenever any component version moves.** Since 2026-09-04
+  `scripts/omp/validate-component-versions.ps1` fails the build when a component
+  version changed against the base ref while `repositoryVersion` stayed put. The
+  check compares component versions only; a module `definitionVersion` that moves
+  alone is owned by the module-definition checks instead.
+
+`scripts/omp/bump-version.ps1` raises `repositoryVersion` on every bump, so a
+change made with the repository's own tooling cannot trip this. Tripping it means
+`omp-components.json` was hand-edited — which is the case worth catching.
 
 `Component version` is the version of one deployable application or package in a
 repository. This is the value stored on `omp.Artifacts.Version`.
@@ -98,7 +116,7 @@ identity fields:
 
 ```text
 repository key
-optional repository release version
+repository release version   (repositoryVersion — gated, see Concepts above)
 components:
   - module key
   - app key
