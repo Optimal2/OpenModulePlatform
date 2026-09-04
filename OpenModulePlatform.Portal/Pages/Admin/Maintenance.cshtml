@@ -366,28 +366,25 @@
             <button type="submit"
                     asp-page-handler="Preview"
                     asp-fragment="@RetentionSectionId"
-                    class="btn maintenance-retention-action maintenance-retention-action--confirm"
+                    class="btn btn-success btn-leading-icon btn-leading-icon--check"
                     data-maintenance-retention-confirm
                     disabled>
-                <span class="maintenance-retention-action__icon" aria-hidden="true"></span>
                 @L["Confirm change"]
             </button>
             <button type="button"
-                    class="btn maintenance-retention-action maintenance-retention-action--cancel"
+                    class="btn btn-warning btn-leading-icon btn-leading-icon--cancel"
                     data-maintenance-retention-cancel
                     disabled>
-                <span class="maintenance-retention-action__icon" aria-hidden="true"></span>
                 @L["Cancel"]
             </button>
             <button type="submit"
                     asp-page-handler="CleanupArtifacts"
-                    class="btn maintenance-retention-action maintenance-retention-action--queue"
+                    class="btn btn-danger btn-leading-icon btn-leading-icon--delete"
                     data-omp-confirm="@L["Queue a HostAgent job to delete unreferenced old artifact versions?"]"
                     data-omp-confirm-ok="@L["Queue artifact cleanup"]"
                     data-omp-confirm-cancel="@L["Cancel"]"
                     data-maintenance-retention-queue
                     disabled>
-                <span class="maintenance-retention-action__icon" aria-hidden="true"></span>
                 @L["Queue artifact cleanup"]
             </button>
         </div>
