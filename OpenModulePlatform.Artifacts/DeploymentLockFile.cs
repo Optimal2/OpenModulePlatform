@@ -128,7 +128,8 @@ public static class DeploymentLockFile
     /// This method never throws for the lock file's own I/O problems; like
     /// <see cref="ReadStatus"/> it fails closed, reporting them as
     /// <see cref="DeploymentLockRenewalResult.Indeterminate"/> so the caller can apply its
-    /// bounded tolerance instead of ending a lease on one transient fault.
+    /// bounded tolerance instead of ending a lease on one transient fault. That covers the
+    /// write phase too: an I/O failure there is reported, not raised.
     /// </remarks>
     public static async Task<DeploymentLockRenewalOutcome> TryRenewExclusiveAsync(
         string applicationRoot,
@@ -185,63 +186,119 @@ public static class DeploymentLockFile
                 "Deployment lock file stayed exclusively locked by another process.");
         }
 
-        await using (var stream = exclusiveHandle)
+        // Set when the write phase failed after truncating the file: what is on disk is
+        // then empty or half-written residue, deleted in the finally below once the
+        // exclusive handle has been released.
+        string? truncatedResidueToDelete = null;
+        try
         {
-            // Same zero-byte rule as ReadStatus: an empty file is the residue of an
-            // interrupted claim or renewal and can never be a valid claim, so report it
-            // as absent and let the caller re-assert through the atomic claim path.
-            if (stream.Length == 0)
+            await using (var stream = exclusiveHandle)
             {
-                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.NotFound, null, null);
-            }
+                // Same zero-byte rule as ReadStatus: an empty file is the residue of an
+                // interrupted claim or renewal and can never be a valid claim, so report it
+                // as absent and let the caller re-assert through the atomic claim path.
+                if (stream.Length == 0)
+                {
+                    return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.NotFound, null, null);
+                }
 
-            DeploymentLockDocument? document;
-            try
+                DeploymentLockDocument? document;
+                try
+                {
+                    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+                    var json = await reader.ReadToEndAsync(ct);
+                    document = JsonSerializer.Deserialize<DeploymentLockDocument>(json, JsonOptions);
+                }
+                catch (Exception ex) when (ex is IOException or JsonException)
+                {
+                    return new DeploymentLockRenewalOutcome(
+                        DeploymentLockRenewalResult.Indeterminate,
+                        null,
+                        $"Deployment lock file could not be read: {ex.Message}");
+                }
+
+                if (document is null)
+                {
+                    return new DeploymentLockRenewalOutcome(
+                        DeploymentLockRenewalResult.Indeterminate,
+                        null,
+                        "Deployment lock file exists but did not contain a valid document.");
+                }
+
+                // The comparison happens while this handle still holds the file exclusively,
+                // so the document just read is provably still the document on disk.
+                if (!string.Equals(document.LockId, expectedLockId, StringComparison.Ordinal))
+                {
+                    return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Lost, document, null);
+                }
+
+                var renewed = renew(document);
+                var renewedJson = JsonSerializer.Serialize(renewed, JsonOptions);
+
+                // Cancellation is honoured only up to here. Once SetLength(0) has run, the
+                // write must either complete or be reported: aborting between the truncation
+                // and the flush leaves an empty or half-written lock file, which every reader
+                // then fails closed on. This is a ~500-byte write through an already-open
+                // handle and cannot realistically hang, so finishing it without the token is
+                // by far the smaller risk (regression fix for the atomic in-place renewal).
+                //
+                // An I/O failure in the write phase is not raised either: it is reported as
+                // Indeterminate, exactly like a failed open or read, so the lease loop's
+                // bounded tolerance decides whether the lease survives the tick. And because
+                // the failure can strike between the truncation and the flush, the residue
+                // the failed write leaves behind is deleted once the handle is released --
+                // the file is provably still ours (the LockId comparison ran inside this
+                // same exclusive handle, so nobody else could have written through it), and
+                // a non-empty half-written file would otherwise fail every reader closed for
+                // good (R12-A4), a lock held by nobody that blocks every deployment until
+                // someone deletes the file by hand.
+                ct.ThrowIfCancellationRequested();
+                var writeFailure = await TryRewriteHeldContentAsync(stream, renewedJson);
+                if (writeFailure is not null)
+                {
+                    truncatedResidueToDelete = path;
+                    return new DeploymentLockRenewalOutcome(
+                        DeploymentLockRenewalResult.Indeterminate,
+                        null,
+                        writeFailure);
+                }
+
+                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Renewed, renewed, null);
+            }
+        }
+        finally
+        {
+            if (truncatedResidueToDelete is not null)
             {
-                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-                var json = await reader.ReadToEndAsync(ct);
-                document = JsonSerializer.Deserialize<DeploymentLockDocument>(json, JsonOptions);
+                // Best effort. If the delete itself fails, a zero-byte residue is treated
+                // as absent by every reader and taken over by the next claim; a non-empty
+                // half-written one keeps failing closed, and the lease loop's bounded
+                // tolerance stops the renewal instead of pretending the lock is held.
+                TryDelete(truncatedResidueToDelete);
             }
-            catch (Exception ex) when (ex is IOException or JsonException)
-            {
-                return new DeploymentLockRenewalOutcome(
-                    DeploymentLockRenewalResult.Indeterminate,
-                    null,
-                    $"Deployment lock file could not be read: {ex.Message}");
-            }
+        }
+    }
 
-            if (document is null)
-            {
-                return new DeploymentLockRenewalOutcome(
-                    DeploymentLockRenewalResult.Indeterminate,
-                    null,
-                    "Deployment lock file exists but did not contain a valid document.");
-            }
-
-            // The comparison happens while this handle still holds the file exclusively,
-            // so the document just read is provably still the document on disk.
-            if (!string.Equals(document.LockId, expectedLockId, StringComparison.Ordinal))
-            {
-                return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Lost, document, null);
-            }
-
-            var renewed = renew(document);
-            var renewedJson = JsonSerializer.Serialize(renewed, JsonOptions);
-
-            // Cancellation is honoured only up to here. Once SetLength(0) has run, the
-            // write MUST complete: aborting between the truncation and the flush leaves
-            // an empty or half-written lock file, which every reader then fails closed
-            // on -- a lock held by nobody that blocks every deployment until someone
-            // deletes the file by hand. This is a ~500-byte write through an already-open
-            // handle and cannot realistically hang, so finishing it without the token is
-            // by far the smaller risk (regression fix for the atomic in-place renewal).
-            ct.ThrowIfCancellationRequested();
+    /// <summary>
+    /// Overwrites the content of the exclusively held lock file handle with the renewed
+    /// document. Returns null on success, or a diagnostic when the write itself failed --
+    /// never throws for an I/O error, so the caller can report the attempt as
+    /// <see cref="DeploymentLockRenewalResult.Indeterminate"/> and clean up the truncated
+    /// residue instead of dying mid-lease.
+    /// </summary>
+    internal static async Task<string?> TryRewriteHeldContentAsync(Stream stream, string renewedJson)
+    {
+        try
+        {
             stream.SetLength(0);
             stream.Position = 0;
             await stream.WriteAsync(Utf8NoBom.GetBytes(renewedJson), CancellationToken.None);
             await stream.FlushAsync(CancellationToken.None);
-
-            return new DeploymentLockRenewalOutcome(DeploymentLockRenewalResult.Renewed, renewed, null);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Deployment lock file could not be written: {ex.Message}";
         }
     }
 

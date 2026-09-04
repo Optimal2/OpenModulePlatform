@@ -1,6 +1,8 @@
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using OpenModulePlatform.Artifacts;
@@ -334,9 +336,74 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
         await lease.DisposeAsync();
     }
 
-    private static async Task<bool> WaitUntilAsync(Func<bool> condition)
+    /// <summary>
+    /// A re-assert that fails with an I/O error counts against the same bound as an
+    /// unreadable lock file: renewal stops instead of looping forever with the import left
+    /// unlocked.
+    /// </summary>
+    /// <remarks>
+    /// A directory at the lock file's path makes the fault deterministic and persistent:
+    /// File.Exists is false for a directory, so every tick sees NotFound and tries to
+    /// re-assert, and FileMode.CreateNew on a directory path throws
+    /// UnauthorizedAccessException every single time. No timing decides WHAT the loop
+    /// sees, and the barrier below -- the bound-hit error in the captured log -- decides
+    /// WHEN the test proceeds, so a slow scheduler can only make the test slower, never
+    /// greener. Against the old behaviour (a failed re-assert logged and forgotten, the
+    /// counter untouched) the loop never stops, the barrier never fires, and the test is
+    /// RED.
+    /// </remarks>
+    [Fact]
+    public async Task Renewal_CountsFailedReassertsAgainstTheBoundAndStops()
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var logger = new ListLogger();
+        var lease = await new PortalDeploymentLockService(new StubHostEnvironment(_root), logger)
+            .AcquireUniversalImportLockAsync(
+                "tester",
+                TimeSpan.FromMinutes(5),
+                TimeSpan.FromMilliseconds(50),
+                maxConsecutiveIndeterminateReads: 2,
+                CancellationToken.None);
+
+        var path = DeploymentLockFile.GetPath(_root);
+
+        // Replace the lock file with a directory at its path. A tick can re-create the
+        // file in the microseconds between the delete and the CreateDirectory, so the pair
+        // runs as one retried operation that converges on the directory.
+        RetryFileOperation<object?>(() =>
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+
+            return null;
+        });
+
+        // Deterministic barrier: this error is logged exactly when the bounded run of
+        // failed re-asserts stops the loop.
+        var stopped = await WaitUntilAsync(() =>
+            logger.Messages.Any(m => m.Contains("could not be re-asserted", StringComparison.Ordinal)));
+        Assert.True(
+            stopped,
+            "Renewal never stopped: failed re-asserts were not counted against the bound.");
+
+        // A loop that was still alive would re-assert the lock on a later tick once the
+        // fault is gone; the stopped loop never touches the path again.
+        Directory.Delete(path);
+        var resurrected = await WaitUntilAsync(() => File.Exists(path), TimeSpan.FromSeconds(2));
+        Assert.False(resurrected, "Renewal resumed after the bounded run of failed re-asserts.");
+
+        await lease.DisposeAsync();
+    }
+
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(10));
         while (DateTime.UtcNow < deadline)
         {
             if (condition())
@@ -394,5 +461,28 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
         public string ContentRootPath { get; set; }
 
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    /// <summary>
+    /// Captures formatted log messages so a test can wait for a specific entry -- a
+    /// synchronisation guarantee -- instead of for a number of milliseconds.
+    /// </summary>
+    private sealed class ListLogger : ILogger<PortalDeploymentLockService>
+    {
+        private readonly ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyCollection<string> Messages => _messages.ToArray();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => _messages.Enqueue(formatter(state, exception));
     }
 }

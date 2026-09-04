@@ -224,10 +224,31 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
                 // Nobody holds the lock at all; the deployment this lease protects is
                 // still running, so re-assert it through the atomic claim -- never through
                 // a blind overwrite, which would erase a claimant that arrived first.
-                if (await TryReassertLockAsync(candidate, ct))
+                var reassert = await TryReassertLockAsync(candidate, ct);
+                if (reassert == ReassertOutcome.Reasserted)
                 {
                     _document = candidate;
                     consecutiveIndeterminateReads = 0;
+                    continue;
+                }
+
+                if (reassert == ReassertOutcome.Faulted)
+                {
+                    // A failed re-assert leaves the deployment unprotected in exactly the
+                    // way an unreadable lock file leaves ownership unproven, so it counts
+                    // against the same bound. Without this, a persistent I/O fault (a
+                    // denied write, a vanished share) would be logged once per tick forever
+                    // while the lock stayed unheld, with nothing reacting.
+                    consecutiveIndeterminateReads++;
+                    if (consecutiveIndeterminateReads >= _maxConsecutiveIndeterminateReads)
+                    {
+                        _logger.LogError(
+                            "HostAgent deployment lock could not be re-asserted on {FailedAttempts} consecutive renewal attempts; renewal stopped and the deployment is left without a held lock. LockId={LockId}, LockPath={LockPath}",
+                            consecutiveIndeterminateReads,
+                            _lockId,
+                            DeploymentLockFile.GetPath(_applicationRoot));
+                        return;
+                    }
                 }
 
                 continue;
@@ -274,20 +295,20 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
     /// create-if-absent primitive as acquisition so a simultaneous claimant is never
     /// overwritten (R12-A2).
     /// </summary>
-    private async Task<bool> TryReassertLockAsync(DeploymentLockDocument candidate, CancellationToken ct)
+    private async Task<ReassertOutcome> TryReassertLockAsync(DeploymentLockDocument candidate, CancellationToken ct)
     {
         try
         {
             if (await DeploymentLockFile.TryCreateExclusiveAsync(_applicationRoot, candidate, ct))
             {
-                return true;
+                return ReassertOutcome.Reasserted;
             }
 
             _logger.LogInformation(
                 "HostAgent deployment lock file was gone, but another claimant took it before it could be re-asserted; the next renewal tick will establish the owner. LockId={LockId}, LockPath={LockPath}",
                 _lockId,
                 DeploymentLockFile.GetPath(_applicationRoot));
-            return false;
+            return ReassertOutcome.ClaimedByOther;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -296,8 +317,26 @@ internal sealed class HostAgentDeploymentLockLease : IAsyncDisposable
                 "Failed to re-assert HostAgent deployment lock. LockId={LockId}, LockPath={LockPath}",
                 _lockId,
                 DeploymentLockFile.GetPath(_applicationRoot));
-            return false;
+            return ReassertOutcome.Faulted;
         }
+    }
+
+    /// <summary>
+    /// What one re-assert attempt established. A fault is distinguished from a lost race
+    /// because only the fault says something is persistently wrong: it counts against the
+    /// same bound as an unreadable lock file, while a lost race just means the next tick
+    /// reads the winner.
+    /// </summary>
+    private enum ReassertOutcome
+    {
+        /// <summary>The lock file was re-created with this lease's claim.</summary>
+        Reasserted,
+
+        /// <summary>Another claimant won the atomic create; the next tick reads the owner.</summary>
+        ClaimedByOther,
+
+        /// <summary>The create itself failed with an I/O error; nothing about the lock is known.</summary>
+        Faulted
     }
 
     /// <summary>

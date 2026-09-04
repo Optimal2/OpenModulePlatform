@@ -286,6 +286,43 @@ public sealed class DeploymentLockFileTests : IDisposable
     }
 
     /// <summary>
+    /// The renewal's write phase fails closed too: an I/O error while the renewed document
+    /// is written comes back as a diagnostic the caller reports as Indeterminate, never as
+    /// an exception -- an unhandled fault there killed the renewal loop on the first
+    /// transient blow, with the deployment it protected still running.
+    /// </summary>
+    [Fact]
+    public async Task TryRewriteHeldContentAsync_WhenTheWriteFails_ReturnsADiagnosticInsteadOfThrowing()
+    {
+        await using var stream = new ThrowingWriteStream();
+
+        var diagnostic = await DeploymentLockFile.TryRewriteHeldContentAsync(stream, "{}");
+
+        Assert.NotNull(diagnostic);
+        Assert.Contains("could not be written", diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TryRewriteHeldContentAsync_WhenTheWriteSucceeds_ReturnsNullAndLeavesTheNewContent()
+    {
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes("old content that is longer than the new"));
+
+        var diagnostic = await DeploymentLockFile.TryRewriteHeldContentAsync(stream, "new");
+
+        Assert.Null(diagnostic);
+        Assert.Equal("new", Encoding.UTF8.GetString(stream.ToArray()));
+    }
+
+    /// <summary>
+    /// A stream whose write phase fails the way a full disk or a vanished share fails the
+    /// real handle: the truncation itself already throws.
+    /// </summary>
+    private sealed class ThrowingWriteStream : MemoryStream
+    {
+        public override void SetLength(long value) => throw new IOException("simulated write failure");
+    }
+
+    /// <summary>
     /// ReadStatus must NEVER throw: eight call sites (the HostAgent lease loop, both deployment
     /// services, the health monitor) call it with no try/catch and treat the returned status as
     /// the whole answer. An exception there kills a renewal loop mid-deployment.

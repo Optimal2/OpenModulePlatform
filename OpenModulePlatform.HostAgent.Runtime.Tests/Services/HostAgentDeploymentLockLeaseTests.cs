@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Services;
@@ -348,14 +350,22 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
     /// This is the exact interleaving the old two-step renewal (ReadStatus, classify, then
     /// an unconditional WriteAsync) lost. The test holds the lock file open with a handle
     /// that still lets the old loop's ReadStatus succeed -- FileAccess.Read with
-    /// FileShare.ReadWrite, deliberately WITHOUT FileShare.Delete -- writes the foreign
-    /// claim through a second handle while the tick's File.Move retry loop is blocked
-    /// behind the first, and only then lets go. Against the old pattern the stuck tick's
-    /// Move retry waited this handle out and overwrote the foreign claim, because nothing
-    /// re-checked ownership after the read: this test was RED there. TryRenewExclusiveAsync
-    /// holds the file exclusively across the read, the LockId comparison and the write, so
-    /// its open retries behind the test handle and the first successful open reads the
-    /// foreign claim and stops the lease.
+    /// FileShare.ReadWrite, deliberately WITHOUT FileShare.Delete -- and injects the foreign
+    /// claim into the window where the old loop's File.Move retry is blocked behind it.
+    ///
+    /// The injection is gated on a deterministic barrier, not on a number of milliseconds.
+    /// The old two-step loop writes through WriteAsync's temp+Move, so a tick that has
+    /// passed its ownership read and entered the write phase leaves its temp file
+    /// (".*.tmp") in App_Data for as long as the Move retries behind the test handle --
+    /// and observing that file PROVES the ownership read already happened, because the
+    /// write phase is only entered after it. On the old code the foreign claim below then
+    /// necessarily lands between the read and the overwrite, the stuck Move waits the test
+    /// handle out and replaces the claim, and the final assertion fails: this test is RED
+    /// against the two-step pattern by construction, not by scheduling luck (measured: the
+    /// pre-4f45aee1 loop fails the ownership assertion). The atomic renewal writes in
+    /// place and never creates a temp file, so the barrier simply expires; its exclusive
+    /// open retries behind the test handle and reads the foreign claim on the first open
+    /// after release.
     /// </remarks>
     [Fact]
     public async Task Renewal_DoesNotOverwrite_AForeignClaimInjectedBetweenOwnershipCheckAndWrite()
@@ -372,6 +382,21 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
             CancellationToken.None);
 
         Assert.NotNull(result.Lease);
+        var path = DeploymentLockFile.GetPath(_root);
+        var directory = Path.GetDirectoryName(path)!;
+
+        // Barrier one: the renewal loop proves it is alive and ticking by completing a
+        // renewal before the test interferes. Without this, everything below rests on the
+        // assumption that a loop is running at all. A renewal holds its exclusive handle
+        // for a moment, which fails a colliding ReadStatus closed with a null Document --
+        // the condition simply waits that out.
+        var acquiredUpdatedUtc = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.UpdatedUtc;
+        var loopAlive = await WaitUntilAsync(() =>
+            DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document is { } document
+            && document.UpdatedUtc > acquiredUpdatedUtc);
+        Assert.True(
+            loopAlive,
+            "Renewal never completed a first tick; the test cannot prove anything about the interleaving.");
 
         var now = DateTimeOffset.UtcNow;
         var foreign = DeploymentLockFile.Create(
@@ -381,26 +406,33 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
             "deploying",
             now,
             now.AddMinutes(5));
-        var path = DeploymentLockFile.GetPath(_root);
 
         // Hold the file so a status READ still succeeds but no temp+Move overwrite can
-        // land, across several renewal ticks. While this handle is held, a tick of the old
-        // loop is stuck in WriteAsync's Move retry loop; the foreign claim is written into
-        // that window. The atomic renewal's exclusive open simply retries behind it. The
-        // open itself is retried for the same reason ReadWithRetry/WriteWithRetry exist: a
-        // renewal tick holding its own exclusive handle in this microsecond window is a
-        // collision the test is not about.
+        // land. The open itself is retried for the same reason ReadWithRetry/WriteWithRetry
+        // exist: a renewal tick holding its own exclusive handle in this microsecond window
+        // is a collision the test is not about.
         using (var handle = RetryFileOperation(() =>
             new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
         {
-            await Task.Delay(150);
+            // Barrier two (the deterministic one): wait for the old pattern's write-phase
+            // temp file. On the two-step code it appears within one tick (~50 ms) of this
+            // handle landing, so a three-second wait cannot miss it; on the atomic code it
+            // can never appear, and the expired wait costs the test nothing but time --
+            // the renewal's exclusive open is blocked behind this handle either way, so it
+            // cannot have read anything before the injection below.
+            await WaitUntilAsync(
+                () => Directory.EnumerateFiles(directory, ".*.tmp").Any(),
+                TimeSpan.FromSeconds(3));
 
             var json = JsonSerializer.Serialize(
                 foreign,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
             WriteWithRetry(path, json);
 
-            await Task.Delay(250);
+            // On the old pattern the handle must go back well inside WriteAsync's ~500 ms
+            // Move-retry budget so the stuck tick can complete its overwrite: the temp file
+            // is detected within one 25 ms poll of being created, and the injection plus
+            // the release take microseconds, so several retry attempts always remain.
         }
 
         // Give the renewal loop room for several more ticks; the first tick that can open
@@ -425,9 +457,78 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         Assert.True(File.Exists(path));
     }
 
-    private static async Task<bool> WaitUntilAsync(Func<bool> condition)
+    /// <summary>
+    /// A re-assert that fails with an I/O error counts against the same bound as an
+    /// unreadable lock file: renewal stops instead of looping forever with the deployment
+    /// left unlocked.
+    /// </summary>
+    /// <remarks>
+    /// A directory at the lock file's path makes the fault deterministic and persistent:
+    /// File.Exists is false for a directory, so every tick sees NotFound and tries to
+    /// re-assert, and FileMode.CreateNew on a directory path throws
+    /// UnauthorizedAccessException every single time. No timing decides WHAT the loop
+    /// sees, and the barrier below -- the bound-hit error in the captured log -- decides
+    /// WHEN the test proceeds, so a slow scheduler can only make the test slower, never
+    /// greener. Against the old behaviour (a failed re-assert logged and forgotten, the
+    /// counter untouched) the loop never stops, the barrier never fires, and the test is
+    /// RED.
+    /// </remarks>
+    [Fact]
+    public async Task Renewal_CountsFailedReassertsAgainstTheBoundAndStops()
     {
-        var deadline = DateTime.UtcNow.AddSeconds(10);
+        var logger = new ListLogger();
+        var result = await HostAgentDeploymentLockLease.TryAcquireAsync(
+            _root,
+            "app-key",
+            "owner",
+            "reason",
+            TimeSpan.FromMinutes(5),
+            TimeSpan.FromMilliseconds(50),
+            maxConsecutiveIndeterminateReads: 2,
+            logger,
+            CancellationToken.None);
+
+        Assert.NotNull(result.Lease);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        // Replace the lock file with a directory at its path. A tick can re-create the
+        // file in the microseconds between the delete and the CreateDirectory, so the pair
+        // runs as one retried operation that converges on the directory.
+        RetryFileOperation<object?>(() =>
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+
+            return null;
+        });
+
+        // Deterministic barrier: this error is logged exactly when the bounded run of
+        // failed re-asserts stops the loop.
+        var stopped = await WaitUntilAsync(() =>
+            logger.Messages.Any(m => m.Contains("could not be re-asserted", StringComparison.Ordinal)));
+        Assert.True(
+            stopped,
+            "Renewal never stopped: failed re-asserts were not counted against the bound.");
+
+        // A loop that was still alive would re-assert the lock on a later tick once the
+        // fault is gone; the stopped loop never touches the path again.
+        Directory.Delete(path);
+        var resurrected = await WaitUntilAsync(() => File.Exists(path), TimeSpan.FromSeconds(2));
+        Assert.False(resurrected, "Renewal resumed after the bounded run of failed re-asserts.");
+
+        await result.Lease!.DisposeAsync();
+    }
+
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
+    {
+        var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(10));
         while (DateTime.UtcNow < deadline)
         {
             if (condition())
@@ -439,6 +540,29 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Captures formatted log messages so a test can wait for a specific entry -- a
+    /// synchronisation guarantee -- instead of for a number of milliseconds.
+    /// </summary>
+    private sealed class ListLogger : ILogger
+    {
+        private readonly ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyCollection<string> Messages => _messages.ToArray();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => _messages.Enqueue(formatter(state, exception));
     }
 
     /// <summary>
