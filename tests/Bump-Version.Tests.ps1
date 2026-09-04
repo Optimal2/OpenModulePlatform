@@ -179,7 +179,10 @@ Describe 'Bump-Version: repository-only bump' {
                 $ErrorActionPreference = $previousErrorActionPreference
             }
 
-            $output | Should -Match 'RepositoryOnly'
+            # Windows PowerShell wraps the error record to the console width when
+            # no console is attached (git hooks), which can split the word; match
+            # with whitespace removed.
+            ($output -replace '\s', '') | Should -Match 'RepositoryOnly'
             $exitCode | Should -Be 1
         }
         finally {
@@ -204,7 +207,10 @@ Describe 'Bump-Version: repository-only bump' {
                 $ErrorActionPreference = $previousErrorActionPreference
             }
 
-            $output | Should -Match 'RepositoryOnly'
+            # Windows PowerShell wraps the error record to the console width when
+            # no console is attached (git hooks), which can split the word; match
+            # with whitespace removed.
+            ($output -replace '\s', '') | Should -Match 'RepositoryOnly'
             $exitCode | Should -Be 1
         }
         finally {
