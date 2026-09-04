@@ -51,6 +51,15 @@
   ],
   "sharedProjects": [
     {
+      "projectPath": "OpenModulePlatform.Artifacts/OpenModulePlatform.Artifacts.csproj",
+      "description": "Artifact identity, deployment lock and package payload contracts, consumed by the Portal, the HostAgent runtime and the worker process host",
+      "consumers": [
+        "omp-portal-web",
+        "omp-hostagent-service",
+        "omp-workerprocesshost"
+      ]
+    },
+    {
       "projectPath": "OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj",
       "description": "Canonical OMP web integration library (topbar, role-switch, auth defaults) plus module-config identity, which non-web components consume too",
       "consumers": [

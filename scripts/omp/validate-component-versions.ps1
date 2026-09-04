@@ -1494,6 +1494,54 @@ else {
             $transitiveCheckCount++
         }
     }
+
+    # repositoryVersion must MOVE when any component version moved.
+    #
+    # Until 2026-09-04 this file only checked that repositoryVersion EXISTS and is
+    # semver-shaped (the Test-SemverLikeVersion check far above). Nothing checked that it
+    # changed, so "Repository version validated" meant "the field is filled in", not "the
+    # number is right" -- a line that reads like a result and is not one.
+    #
+    # It cost a real defect the same day: commit 4f45aee1 raised omp-hostagent-service
+    # 0.3.244 -> 0.3.245 and left repositoryVersion at 0.3.621, byte-identical to its parent.
+    # Local CI green, GitHub CI 5/5 green; an independent reviewer found it, not the gate.
+    # The universal package takes its filename and sourceRepositoryVersion from this value, so
+    # new content can ship under an old package identity -- exactly what the identity guard in
+    # HostAgent exists to refuse, discovered at import time instead of at push time.
+    #
+    # bump-version.ps1 raises repositoryVersion on every bump, so a change that used the
+    # repository's own tool cannot trip this. Tripping it means the manifest was hand-edited,
+    # which is the case worth catching.
+    #
+    # SCOPE, deliberately narrow: this compares COMPONENT versions only. A hand-edit that
+    # moves a module definitionVersion without touching any component version is not caught
+    # here; the module-definition checks above own that ground, and a broad check that guesses
+    # is worse than a narrow one that is right.
+    if ($baseRefAvailable -and $null -ne $baseManifest -and $null -ne $baseComponentsByKey) {
+        $movedComponents = [System.Collections.Generic.List[string]]::new()
+        foreach ($component in @($manifest.components)) {
+            $componentKey = [string](Get-OptionalPropertyValue -Object $component -Name 'componentKey')
+            if ([string]::IsNullOrWhiteSpace($componentKey)) { continue }
+            if (-not $baseComponentsByKey.ContainsKey($componentKey)) { continue }
+
+            $baseComponentVersion = [string](Get-OptionalPropertyValue -Object $baseComponentsByKey[$componentKey] -Name 'version')
+            $currentComponentVersion = [string](Get-OptionalPropertyValue -Object $component -Name 'version')
+            if ([string]::IsNullOrWhiteSpace($baseComponentVersion) -or [string]::IsNullOrWhiteSpace($currentComponentVersion)) { continue }
+
+            if (-not [string]::Equals($baseComponentVersion, $currentComponentVersion, [StringComparison]::Ordinal)) {
+                [void]$movedComponents.Add($componentKey)
+            }
+        }
+
+        if ($movedComponents.Count -gt 0) {
+            $baseRepositoryVersion = [string](Get-OptionalPropertyValue -Object $baseManifest -Name 'repositoryVersion')
+            if (-not [string]::IsNullOrWhiteSpace($baseRepositoryVersion) -and
+                [string]::Equals($baseRepositoryVersion, $repositoryVersion, [StringComparison]::Ordinal)) {
+                $movedList = ($movedComponents | Sort-Object) -join ', '
+                Add-ValidationError -Errors $errors -Message ("Component version(s) moved since $baseRef ($movedList) but repositoryVersion stayed at '$repositoryVersion'. The universal package takes its filename and sourceRepositoryVersion from repositoryVersion, so new content would ship under an old package identity. Run scripts/omp/bump-version.ps1 instead of editing omp-components.json by hand -- it raises repositoryVersion for you.")
+            }
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
