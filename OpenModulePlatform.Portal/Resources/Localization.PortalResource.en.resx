@@ -1055,4 +1055,5 @@
   <data name="Protected by" xml:space="preserve"><value>Protected by</value></data>
   <data name="Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running." xml:space="preserve"><value>Workers run through the worker manager instead of HostAgent app deployments, so they are listed here with their latest observed runtime state to keep this page a complete picture of everything running.</value></data>
   <data name="Stored definition versions" xml:space="preserve"><value>Stored definition versions</value></data>
+  <data name="Click to show the full message" xml:space="preserve"><value>Click to show the full message</value></data>
 </root>

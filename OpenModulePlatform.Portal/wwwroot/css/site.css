@@ -6980,3 +6980,57 @@ tr.linkbox-editor-row--dragging {
 #config-values-list td:first-child .list-message {
     max-width: 320px;
 }
+
+/* Maintenance: HostAgent job queue list. Compact type and padding like the
+   host deployment lists, fixed layout so the percentage columns hold and
+   the list never scrolls sideways; fit mode wraps cells instead of
+   clipping, and long errors truncate to one line inside the list-message
+   block (full text in the shared info popover on click). The message
+   column absorbs the remaining width. */
+.hostagent-jobs-grid {
+    table-layout: fixed;
+    font-size: 0.82rem;
+}
+
+.hostagent-jobs-grid th,
+.hostagent-jobs-grid td {
+    padding: 8px 9px;
+}
+
+.hostagent-jobs-grid th:first-child,
+.hostagent-jobs-grid td:first-child {
+    padding-left: 14px;
+}
+
+.hostagent-jobs-grid code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.hostagent-jobs-grid__job {
+    width: 14%;
+}
+
+.hostagent-jobs-grid__host {
+    width: 12%;
+}
+
+.hostagent-jobs-grid__status {
+    width: 9%;
+}
+
+.hostagent-jobs-grid__requested {
+    width: 15%;
+}
+
+.hostagent-jobs-grid__attempts {
+    width: 5%;
+}
+
+.hostagent-jobs-grid__claimed {
+    width: 15%;
+}
+
+.hostagent-jobs-grid__completed {
+    width: 12%;
+}

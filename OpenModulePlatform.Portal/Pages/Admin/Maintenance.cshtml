@@ -175,45 +175,75 @@
     }
     else
     {
-        <div class="table-scroll">
-            <table class="grid">
+        <div class="toolbar">
+            <details class="list-filter" data-list-filter="hostagent-jobs-list">
+                <summary class="btn btn-ghost">@L["Filter"]<span class="list-filter__count" data-filter-count hidden></span></summary>
+                <div class="list-filter__menu">
+                    <fieldset class="list-filter__group" data-filter-group="status">
+                        <legend>@L["Status"]</legend>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="@HostAgentJobStatuses.Pending" /> @L["Pending"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="@HostAgentJobStatuses.Running" /> @L["Running"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="@HostAgentJobStatuses.Succeeded" /> @L["Succeeded"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="@HostAgentJobStatuses.Warning" /> @L["Warning"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="@HostAgentJobStatuses.Failed" /> @L["Failed"]</label>
+                        <label class="list-filter__option"><input type="checkbox" data-filter-column="2" data-filter-equals="@HostAgentJobStatuses.Cancelled" /> @L["Cancelled"]</label>
+                    </fieldset>
+                    <button type="button" class="btn btn-ghost btn-sm" data-filter-clear>@L["Clear filters"]</button>
+                </div>
+            </details>
+            <input type="search" class="list-search" data-list-search="hostagent-jobs-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="hostagent-jobs-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <div class="empty-state" data-list-empty="hostagent-jobs-list" hidden>@L["No rows match the current filters."]</div>
+        <div class="table-scroll" data-list-message-hint="@L["Click to show the full message"]">
+            <table id="hostagent-jobs-list" class="grid hostagent-jobs-grid sortable-list" data-sortable-list data-list-fit data-page-size="25">
+                <colgroup>
+                    <col class="hostagent-jobs-grid__job" />
+                    <col class="hostagent-jobs-grid__host" />
+                    <col class="hostagent-jobs-grid__status" />
+                    <col class="hostagent-jobs-grid__requested" />
+                    <col class="hostagent-jobs-grid__attempts" />
+                    <col class="hostagent-jobs-grid__claimed" />
+                    <col class="hostagent-jobs-grid__completed" />
+                    <col class="hostagent-jobs-grid__message" />
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>@L["Job"]</th>
-                        <th>@L["Host"]</th>
-                        <th>@L["Status"]</th>
-                        <th>@L["Requested UTC"]</th>
-                        <th>@L["Attempts"]</th>
-                        <th>@L["Claimed by"]</th>
-                        <th>@L["Completed UTC"]</th>
-                        <th>@L["Message"]</th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Job"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Requested UTC"]</button></th>
+                        <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Attempts"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Claimed by"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Completed UTC"]</button></th>
+                        <th scope="col">@L["Message"]</th>
                     </tr>
                 </thead>
                 <tbody>
                 @foreach (var row in Model.RecentHostAgentJobs)
                 {
                     <tr>
-                        <td>
+                        <td data-sort-value="@row.HostAgentJobId">
                             <code>@row.HostAgentJobId</code>
                             <div class="muted">@row.JobType</div>
                         </td>
-                        <td>
+                        <td data-sort-value="@(row.HostKey ?? string.Empty)">
                             <code>@(string.IsNullOrWhiteSpace(row.HostKey) ? L["Any HostAgent"].Value : row.HostKey)</code>
                             @if (!string.IsNullOrWhiteSpace(row.HostDisplayName))
                             {
                                 <div class="muted">@row.HostDisplayName</div>
                             }
                         </td>
-                        <td><span class="pill">@L[MaintenanceModel.FormatHostAgentJobStatus(row.Status)]</span></td>
-                        <td>
+                        <td data-sort-value="@row.Status"><span class="pill">@L[MaintenanceModel.FormatHostAgentJobStatus(row.Status)]</span></td>
+                        <td data-sort-value="@row.RequestedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">
                             <div>@row.RequestedUtc.ToString("u")</div>
                             @if (!string.IsNullOrWhiteSpace(row.RequestedBy))
                             {
                                 <div class="muted">@row.RequestedBy</div>
                             }
                         </td>
-                        <td>@row.AttemptCount / @row.MaxAttempts</td>
-                        <td>
+                        <td data-sort-value="@row.AttemptCount">@row.AttemptCount / @row.MaxAttempts</td>
+                        <td data-sort-value="@(row.ClaimedByServiceName ?? string.Empty)">
                             @if (string.IsNullOrWhiteSpace(row.ClaimedByServiceName))
                             {
                                 <span class="muted">@L["None"]</span>
@@ -227,8 +257,26 @@
                                 }
                             }
                         </td>
-                        <td>@(row.CompletedUtc.HasValue ? row.CompletedUtc.Value.ToString("u") : L["None"].Value)</td>
-                        <td>@(string.IsNullOrWhiteSpace(row.LastError) ? L["None"].Value : row.LastError)</td>
+                        <td data-sort-value="@(row.CompletedUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">
+                            @if (row.CompletedUtc.HasValue)
+                            {
+                                @row.CompletedUtc.Value.ToString("u")
+                            }
+                            else
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                        </td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(row.LastError))
+                            {
+                                <span class="muted">@L["None"]</span>
+                            }
+                            else
+                            {
+                                <button type="button" class="list-message">@row.LastError</button>
+                            }
+                        </td>
                     </tr>
                 }
                 </tbody>
