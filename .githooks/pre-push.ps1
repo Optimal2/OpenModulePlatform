@@ -87,6 +87,18 @@ if ($cacheHit) {
     exit 0
 }
 
+# Git exports its own location to hooks (GIT_DIR, GIT_INDEX_FILE, ...), and from a linked
+# worktree GIT_DIR is an absolute path. Every nested `git -C <tempdir> init/config/commit`
+# in the gate's Pester suites then acts on THIS repository instead of the temp repository:
+# on 2026-09-05 a push from a G:\wt worktree wrote the test identity
+# 'Test User <test@example.com>' into .git/config (commits authored afterwards carry it)
+# and stacked four 'Initial commit's on the worktree's HEAD. Drop the inherited variables
+# so the gate's child processes discover repositories from their own cwd, as a plain
+# shell would. $repoRoot above was resolved before this point and is unaffected.
+foreach ($name in 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_OBJECT_DIRECTORY', 'GIT_PREFIX') {
+    if (Test-Path "Env:$name") { Remove-Item "Env:$name" }
+}
+
 & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $localCi
 $code = $LASTEXITCODE
 
