@@ -259,9 +259,8 @@ public sealed class ServiceAppDeploymentService
                 deployment.ArtifactId,
                 deployment.HostKey,
                 cancellationToken);
-            foreach (var skip in versionSkippedOverlays)
+            foreach (var skipWarning in versionSkippedOverlays.Select(skip => skip.ToDiagnosticWarning(deployment.Version)))
             {
-                var skipWarning = skip.ToDiagnosticWarning(deployment.Version);
                 _logger.LogWarning(
                     "Config overlay skipped by artifact version minimum for service app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
                     deployment.AppInstanceId,

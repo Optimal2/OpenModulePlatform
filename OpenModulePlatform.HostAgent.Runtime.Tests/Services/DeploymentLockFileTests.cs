@@ -17,6 +17,24 @@ public sealed class DeploymentLockFileTests : IDisposable
     {
         try
         {
+            // A test that fails before its own restore may leave a ReadOnly attribute behind
+            // (the deny ACEs restore in finally blocks); clear attributes first so the
+            // recursive delete does not fail on the fixture's own leftovers.
+            if (Directory.Exists(_root))
+            {
+                foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                {
+                    try
+                    {
+                        File.SetAttributes(file, FileAttributes.Normal);
+                    }
+                    catch (IOException)
+                    {
+                        // Best effort: the delete below reports what it cannot remove.
+                    }
+                }
+            }
+
             Directory.Delete(_root, recursive: true);
         }
         catch (IOException ex)
@@ -1385,12 +1403,6 @@ public sealed class DeploymentLockFileTests : IDisposable
     }
 
     /// <summary>
-    /// Denies <paramref name="rights"/> on the file for the current user for the duration
-    /// of <paramref name="body"/>, then restores the original ACL so the fixture cleanup
-    /// can delete the file. Deny ACEs hold for the file's owner too, which is what makes
-    /// the denial deterministic in this test.
-    /// </summary>
-    /// <summary>
     /// Denies the delete right on the file for the duration of <paramref name="body"/> --
     /// deny-Delete on the file itself AND deny-DeleteSubdirectoriesAndFiles (FILE_DELETE_CHILD)
     /// on its parent directory, because the delete right can come from either -- then
@@ -1455,13 +1467,6 @@ public sealed class DeploymentLockFileTests : IDisposable
             AccessControlType.Deny);
 
     /// <summary>
-    /// Maps a local absolute path onto the localhost administrative share
-    /// (C:\foo\bar -> \\localhost\C$\foo\bar), giving the tests a real UNC path without
-    /// creating a share. The callers assert the mapped path is actually reachable so an
-    /// environment without administrative shares fails loudly instead of silently proving
-    /// nothing.
-    /// </summary>
-    /// <summary>
     /// Best-effort ACL restore for test teardown. The owner keeps implicit WRITE_DAC even under a
     /// self-inflicted Deny(FullControl), so this normally succeeds; when it does not (a scanner's
     /// ACE, a rotated OWNER_RIGHTS policy) the failure must not hide the test's own verdict nor
@@ -1497,6 +1502,13 @@ public sealed class DeploymentLockFileTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Maps a local absolute path onto the localhost administrative share
+    /// (C:\foo\bar -> \\localhost\C$\foo\bar), giving the tests a real UNC path without
+    /// creating a share. The callers assert the mapped path is actually reachable so an
+    /// environment without administrative shares fails loudly instead of silently proving
+    /// nothing.
+    /// </summary>
     private static string ToLocalhostUncPath(string localPath)
     {
         var fullPath = Path.GetFullPath(localPath);

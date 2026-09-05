@@ -133,3 +133,47 @@ Describe 'run-script-tests: zero-test gate' {
         }
     }
 }
+
+Describe 'pester-bootstrap: Windows PowerShell-safe module path' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')
+        # Dot-sourcing loads the functions only (script mode is skipped); the
+        # function reads $env:PSModulePath, which each It sets and restores.
+        . $script:BootstrapScript
+    }
+
+    It 'Drops the PowerShell 7 module folders and keeps everything else, in order' {
+        $original = $env:PSModulePath
+        try {
+            $env:PSModulePath = @(
+                'C:\Users\u\Documents\WindowsPowerShell\Modules',
+                'C:\Program Files\PowerShell\7',
+                'C:\Program Files\PowerShell\7\Modules\',
+                'C:\Program Files\PowerShell\Modules',
+                'C:\Users\u\Documents\PowerShell\Modules',
+                'C:\Program Files\WindowsPowerShell\Modules',
+                '',
+                'C:\Windows\system32\WindowsPowerShell\v1.0\Modules'
+            ) -join ';'
+
+            $kept = Get-WindowsPowerShellSafeModulePath
+
+            $kept | Should -Be 'C:\Users\u\Documents\WindowsPowerShell\Modules;C:\Program Files\WindowsPowerShell\Modules;C:\Windows\system32\WindowsPowerShell\v1.0\Modules'
+        }
+        finally {
+            $env:PSModulePath = $original
+        }
+    }
+
+    It 'Is case-insensitive and does not touch lookalike paths' {
+        $original = $env:PSModulePath
+        try {
+            $env:PSModulePath = 'c:\program files\powershell\7;D:\Tools\PowerShell7Modules;E:\Documents\PowerShell\Modules;C:\Keep\Modules'
+
+            Get-WindowsPowerShellSafeModulePath | Should -Be 'D:\Tools\PowerShell7Modules;C:\Keep\Modules'
+        }
+        finally {
+            $env:PSModulePath = $original
+        }
+    }
+}

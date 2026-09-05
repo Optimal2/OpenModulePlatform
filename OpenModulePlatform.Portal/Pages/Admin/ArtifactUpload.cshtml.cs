@@ -867,11 +867,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
     {
         TryDelete(backupPath);
 
-        if (Directory.Exists(finalPath))
-        {
-            MoveFileOrDirectory(finalPath, backupPath);
-        }
-        else if (System.IO.File.Exists(finalPath))
+        if (Directory.Exists(finalPath) || System.IO.File.Exists(finalPath))
         {
             MoveFileOrDirectory(finalPath, backupPath);
         }
@@ -888,14 +884,9 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
             TryDelete(finalPath);
             Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-            if (Directory.Exists(backupPath))
-            {
-                MoveFileOrDirectory(backupPath, finalPath);
-            }
-            else
-            {
-                MoveFileOrDirectory(backupPath, finalPath);
-            }
+            // The existence check above already proved the backup is a directory or a file;
+            // MoveFileOrDirectory handles both.
+            MoveFileOrDirectory(backupPath, finalPath);
         }
         catch (IOException)
         {

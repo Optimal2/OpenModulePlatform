@@ -92,12 +92,10 @@ internal static class ConfigurationContinuityGate
                     if (section.Value.ValueKind == JsonValueKind.Object
                         && nextSection.ValueKind == JsonValueKind.Object)
                     {
-                        foreach (var child in section.Value.EnumerateObject())
+                        foreach (var child in section.Value.EnumerateObject()
+                                     .Where(child => !nextSection.TryGetProperty(child.Name, out _)))
                         {
-                            if (!nextSection.TryGetProperty(child.Name, out _))
-                            {
-                                missing.Add(section.Name + ":" + child.Name);
-                            }
+                            missing.Add(section.Name + ":" + child.Name);
                         }
                     }
                 }
