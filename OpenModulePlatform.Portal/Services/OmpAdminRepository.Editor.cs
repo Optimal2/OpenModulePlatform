@@ -3652,15 +3652,21 @@ WHERE ai.AppId = @AppId
 
         var copied = new List<string>();
         var carriedEdits = new List<string>();
+        var skipped = new List<string>();
         await using var cmd = new SqlCommand(sql, conn);
         Add(cmd, "@ArtifactId", artifactId);
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
             var relativePath = rdr.GetString(0);
-            if (string.Equals(rdr.GetString(1), "Copied", StringComparison.Ordinal))
+            var kind = rdr.GetString(1);
+            if (string.Equals(kind, "Copied", StringComparison.Ordinal))
             {
                 copied.Add(relativePath);
+            }
+            else if (string.Equals(kind, "SkippedBaselineDiffers", StringComparison.Ordinal))
+            {
+                skipped.Add(relativePath);
             }
             else
             {
@@ -3669,7 +3675,7 @@ WHERE ai.AppId = @AppId
         }
 
         var total = copied.Count + carriedEdits.Count;
-        if (total == 0)
+        if (total == 0 && skipped.Count == 0)
         {
             return (0, null);
         }
@@ -3683,6 +3689,13 @@ WHERE ai.AppId = @AppId
         if (carriedEdits.Count > 0)
         {
             parts.Add($"carried operator edit(s) for {string.Join(", ", carriedEdits)}");
+        }
+
+        if (skipped.Count > 0)
+        {
+            // Same rule as the HostAgent reader: a differing package baseline means the
+            // old edit is not applied whole; the operator re-applies it deliberately.
+            parts.Add($"SkippedBaselineDiffers: operator edit(s) for {string.Join(", ", skipped)} NOT carried because the new version's package baseline differs -- re-apply them on the new version");
         }
 
         return (total, $"Configuration continuity: {string.Join("; ", parts)} onto the new artifact before moving application pointers.");

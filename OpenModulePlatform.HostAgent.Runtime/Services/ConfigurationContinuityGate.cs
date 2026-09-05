@@ -107,10 +107,17 @@ internal static class ConfigurationContinuityGate
                     return null;
                 }
 
+                // The gate cannot tell an operator's lost section from a package that
+                // dropped one on purpose, so the way past it is operator-controlled and
+                // explicit: edit the previously deployed file (the evidence the gate
+                // reads) and deploy again (independent review, 2026-09-05).
                 return
                     "the previous deploy had configuration the new artifact resolution no longer provides: " +
                     string.Join(", ", missing) +
-                    "; refusing to silently fall back to the built-in default configuration";
+                    "; refusing to silently fall back to the built-in default configuration. " +
+                    "If the removal is intended, delete those sections from the previously deployed " +
+                    Path.Join(targetPath, AppSettingsRelativePath) +
+                    " and deploy again";
             }
         }
     }

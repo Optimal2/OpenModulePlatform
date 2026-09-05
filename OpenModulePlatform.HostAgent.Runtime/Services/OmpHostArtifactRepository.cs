@@ -1930,15 +1930,21 @@ WHERE ai.AppId = @appId
 
         var copied = new List<string>();
         var carriedEdits = new List<string>();
+        var skipped = new List<string>();
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@ArtifactId", artifactId);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
             var relativePath = reader.GetString(0);
-            if (string.Equals(reader.GetString(1), "Copied", StringComparison.Ordinal))
+            var kind = reader.GetString(1);
+            if (string.Equals(kind, "Copied", StringComparison.Ordinal))
             {
                 copied.Add(relativePath);
+            }
+            else if (string.Equals(kind, "SkippedBaselineDiffers", StringComparison.Ordinal))
+            {
+                skipped.Add(relativePath);
             }
             else
             {
@@ -1947,7 +1953,7 @@ WHERE ai.AppId = @appId
         }
 
         var total = copied.Count + carriedEdits.Count;
-        if (total == 0)
+        if (total == 0 && skipped.Count == 0)
         {
             return (0, null);
         }
@@ -1961,6 +1967,15 @@ WHERE ai.AppId = @appId
         if (carriedEdits.Count > 0)
         {
             parts.Add($"carried operator edit(s) for {string.Join(", ", carriedEdits)}");
+        }
+
+        if (skipped.Count > 0)
+        {
+            // Not carried: the new version ships a different package baseline for the
+            // file, so the old edit cannot be applied whole without losing what the
+            // package changed. Said out loud so the operator re-applies the edit
+            // deliberately (SkippedBaselineDiffers).
+            parts.Add($"SkippedBaselineDiffers: operator edit(s) for {string.Join(", ", skipped)} NOT carried because the new version's package baseline differs -- re-apply them on the new version");
         }
 
         return (total, $"Configuration continuity: {string.Join("; ", parts)} onto the new artifact before moving application pointers.");

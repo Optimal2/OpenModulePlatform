@@ -555,7 +555,7 @@ WHERE PathRank = 1;
 DECLARE @Changes TABLE
 (
     RelativePath nvarchar(400) NOT NULL,
-    ChangeKind nvarchar(20) NOT NULL
+    ChangeKind nvarchar(40) NOT NULL
 );
 
 INSERT INTO omp.ArtifactConfigurationFiles
@@ -593,16 +593,44 @@ WHERE target.ArtifactId = @ArtifactId
   AND target.PackageFileContent IS NOT NULL
   AND CAST(target.FileContent AS varbinary(max)) = CAST(target.PackageFileContent AS varbinary(max))
   AND target.IsEnabled = 1
+  -- Only when both versions ship the SAME package baseline: the source edit was
+  -- made against that exact text, so applying it whole loses nothing. A target
+  -- whose package baseline differs (the new version changed the file) is left
+  -- pristine and reported as 'SkippedBaselineDiffers' -- copying the old edit
+  -- whole would drop what the new package added and record a false delta
+  -- (independent review, 2026-09-05).
+  AND sourceRows.PackageFileContent IS NOT NULL
+  AND CAST(target.PackageFileContent AS varbinary(max)) = CAST(sourceRows.PackageFileContent AS varbinary(max))
   AND
   (
-      sourceRows.PackageFileContent IS NULL
-      OR CAST(sourceRows.FileContent AS varbinary(max)) <> CAST(sourceRows.PackageFileContent AS varbinary(max))
+      CAST(sourceRows.FileContent AS varbinary(max)) <> CAST(sourceRows.PackageFileContent AS varbinary(max))
       OR sourceRows.IsEnabled = 0
   )
   AND
   (
       CAST(target.FileContent AS varbinary(max)) <> CAST(sourceRows.FileContent AS varbinary(max))
       OR target.IsEnabled <> sourceRows.IsEnabled
+  );
+
+INSERT INTO @Changes (RelativePath, ChangeKind)
+SELECT target.RelativePath, N'SkippedBaselineDiffers'
+FROM omp.ArtifactConfigurationFiles target
+INNER JOIN @SourceRows sourceRows
+    ON sourceRows.RelativePath = target.RelativePath
+WHERE target.ArtifactId = @ArtifactId
+  AND target.PackageFileContent IS NOT NULL
+  AND CAST(target.FileContent AS varbinary(max)) = CAST(target.PackageFileContent AS varbinary(max))
+  AND target.IsEnabled = 1
+  AND
+  (
+      sourceRows.PackageFileContent IS NULL
+      OR CAST(target.PackageFileContent AS varbinary(max)) <> CAST(sourceRows.PackageFileContent AS varbinary(max))
+  )
+  AND
+  (
+      sourceRows.PackageFileContent IS NULL
+      OR CAST(sourceRows.FileContent AS varbinary(max)) <> CAST(sourceRows.PackageFileContent AS varbinary(max))
+      OR sourceRows.IsEnabled = 0
   );
 
 SELECT RelativePath,
@@ -655,6 +683,11 @@ BEGIN
                 AND ISNULL(newer.TargetName, N'') = ISNULL(d.TargetName, N'')
                 AND newer.RetentionRank < d.RetentionRank
                 AND CAST(newerFile.FileContent AS varbinary(max)) = CAST(configFile.FileContent AS varbinary(max))
+                -- The delta definition above counts an operator-disabled file as a delta,
+                -- so the newer copy only preserves it if it is disabled too; identical
+                -- text that is enabled again is a different operator decision
+                -- (independent review, 2026-09-05).
+                AND newerFile.IsEnabled = configFile.IsEnabled
                 AND NOT EXISTS
                 (
                     SELECT 1

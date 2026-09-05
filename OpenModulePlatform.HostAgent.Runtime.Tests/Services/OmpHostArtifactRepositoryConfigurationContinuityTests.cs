@@ -163,7 +163,7 @@ public sealed class OmpHostArtifactRepositoryConfigurationContinuityTests : IDis
         _database.InsertArtifactWithApp(100, "web-app", "2.0.0", "test-module", "test-app");
         _database.InsertArtifact(200, "web-app", "2.1.0", T1);
         _database.InsertArtifactConfigurationFile(100, AppSettingsPath, OperatorEdited, PackagedV1);
-        _database.InsertArtifactConfigurationFile(200, AppSettingsPath, PackagedV2, PackagedV2);
+        _database.InsertArtifactConfigurationFile(200, AppSettingsPath, PackagedV1, PackagedV1);
         var appInstanceId = _database.InsertAppInstanceForApp(appId: 1, artifactId: 100);
 
         var applied = await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(200, CancellationToken.None);
@@ -172,7 +172,34 @@ public sealed class OmpHostArtifactRepositoryConfigurationContinuityTests : IDis
         Assert.Equal(200, _database.GetAppInstanceArtifactId(appInstanceId));
         var row = Assert.Single(_database.GetArtifactConfigurationFiles(200));
         Assert.Equal(OperatorEdited, row.FileContent);
+        Assert.Equal(PackagedV1, row.PackageFileContent);
+    }
+
+    /// <summary>
+    /// Pointer move, case 2 with a CHANGED package baseline: the new version ships a
+    /// different appsettings.json (it added "Feature"). Applying the old edit whole
+    /// would drop what the new package added and record a false delta ("operator
+    /// removed Feature"), so the pristine target row is left untouched and the skip
+    /// is reported instead of guessed (independent review, 2026-09-05). The
+    /// three-way carry-forward is the place that reasons about differing baselines.
+    /// </summary>
+    [Fact]
+    public async Task ApplyImportedArtifact_PointerMove_LeavesPristineTargetRowWhenPackageBaselineDiffers()
+    {
+        _database.InsertArtifactWithApp(100, "web-app", "2.0.0", "test-module", "test-app");
+        _database.InsertArtifact(200, "web-app", "2.1.0", T1);
+        _database.InsertArtifactConfigurationFile(100, AppSettingsPath, OperatorEdited, PackagedV1);
+        _database.InsertArtifactConfigurationFile(200, AppSettingsPath, PackagedV2, PackagedV2);
+        var appInstanceId = _database.InsertAppInstanceForApp(appId: 1, artifactId: 100);
+
+        var applied = await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(200, CancellationToken.None);
+
+        Assert.Equal(1, applied.AppInstanceRowsUpdated);
+        Assert.Equal(200, _database.GetAppInstanceArtifactId(appInstanceId));
+        var row = Assert.Single(_database.GetArtifactConfigurationFiles(200));
+        Assert.Equal(PackagedV2, row.FileContent);
         Assert.Equal(PackagedV2, row.PackageFileContent);
+        Assert.Contains("SkippedBaselineDiffers", applied.ConfigurationCarryMessage ?? string.Empty, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -234,5 +261,26 @@ public sealed class OmpHostArtifactRepositoryConfigurationContinuityTests : IDis
         Assert.Contains(result.DeletedArtifacts, deleted => deleted.ArtifactId == 100);
         Assert.False(_database.ArtifactExists(100));
         Assert.True(_database.ArtifactExists(101));
+    }
+
+    /// <summary>
+    /// Retention treats an operator-DISABLED file as a delta even when its text equals
+    /// the package baseline. The guard must then require the newer copy to be disabled
+    /// too: identical text that is enabled again is a different operator decision, so
+    /// the old artifact still carries unique configuration and is kept (independent
+    /// review, 2026-09-05).
+    /// </summary>
+    [Fact]
+    public async Task RetentionCleanup_KeepsArtifactWhoseOnlyDeltaIsDisabledFileWhenNewerCopyIsEnabled()
+    {
+        _database.InsertArtifactWithApp(100, "web-app", "1.0.0", "test-module", "test-app");
+        _database.InsertArtifact(101, "web-app", "2.0.0", T1);
+        _database.InsertArtifactConfigurationFile(100, AppSettingsPath, PackagedV1, PackagedV1, isEnabled: false);
+        _database.InsertArtifactConfigurationFile(101, AppSettingsPath, PackagedV1, PackagedV1, isEnabled: true);
+
+        var result = await _repository.ExecuteArtifactRetentionCleanupAsync(1, "test", CancellationToken.None);
+
+        Assert.DoesNotContain(result.DeletedArtifacts, deleted => deleted.ArtifactId == 100);
+        Assert.True(_database.ArtifactExists(100));
     }
 }
