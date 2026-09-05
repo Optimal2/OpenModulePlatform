@@ -24,6 +24,31 @@ namespace OpenModulePlatform.Web.iFrameWebAppModule.Security;
 public static partial class IFrameFrameSourcePolicy
 {
     /// <summary>
+    /// The module's own tightened policy — the shared
+    /// <see cref="OmpContentSecurityPolicy.Baseline"/> minus
+    /// <c>script-src 'unsafe-inline'</c>. Used when the configured
+    /// <c>Portal:SecurityHeaders:ContentSecurityPolicy:Policy</c> key is missing, so
+    /// a lost key cannot silently re-open inline script execution (the shared baseline
+    /// still carries the exception for other apps). Must stay byte-identical to the
+    /// shipped appsettings.json Policy value; IFrameModuleInlineScriptGuardTests pins
+    /// both sides.
+    /// </summary>
+    public const string ModulePolicyBaseline =
+        "default-src 'self'; " +
+        "script-src 'self'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; " +
+        "font-src 'self'; " +
+        "connect-src 'self' ws: wss:; " +
+        "media-src 'self'; " +
+        "worker-src 'none'; " +
+        "object-src 'none'; " +
+        "base-uri 'self'; " +
+        "form-action 'self'; " +
+        "frame-src 'self'; " +
+        "frame-ancestors 'self'";
+
+    /// <summary>
     /// Reduces configured URLs to the frame-src directive: <c>frame-src 'self'</c>
     /// plus each distinct, scheme-validated origin. Relative rows are same-origin and
     /// already covered by 'self'; rows failing <see cref="OmpUrlSafety"/> contribute
@@ -69,7 +94,10 @@ public static partial class IFrameFrameSourcePolicy
         }
 
         return FrameSourceDirectiveRegex().IsMatch(policy)
-            ? FrameSourceDirectiveRegex().Replace(policy, frameSourceDirective)
+            ? FrameSourceDirectiveRegex().Replace(policy, match =>
+                match.Groups[1].Value.Length == 0
+                    ? frameSourceDirective
+                    : match.Groups[1].Value + " " + frameSourceDirective)
             : policy.Trim().TrimEnd(';') + "; " + frameSourceDirective;
     }
 
@@ -90,6 +118,17 @@ public static partial class IFrameFrameSourcePolicy
         var logger = app.ApplicationServices
             .GetRequiredService<ILoggerFactory>()
             .CreateLogger("OpenModulePlatform.Web.iFrameWebAppModule.Security.IFrameFrameSourcePolicy");
+
+        // A missing Policy key must not silently restore the shared baseline's
+        // script-src 'unsafe-inline' (review follow-up, campaign
+        // iframe-csp-grinden-ar-inte-deterministisk): warn loudly and fall back to
+        // the module's own tightened policy, which keeps the hardening.
+        if (string.IsNullOrWhiteSpace(cspOptions.Policy))
+        {
+            logger.LogWarning(
+                "The {Section}:SecurityHeaders:ContentSecurityPolicy:Policy key is missing; falling back to the module's built-in tightened policy (no script-src 'unsafe-inline').",
+                optionsSectionName);
+        }
 
         // Short-lived process-local cache: the allowlist changes when an administrator
         // edits URLs in the Portal, and a minute of staleness there is acceptable, while
@@ -134,7 +173,7 @@ public static partial class IFrameFrameSourcePolicy
             {
                 Enabled = cspOptions.Enabled,
                 ReportOnly = cspOptions.ReportOnly,
-                Policy = ReplaceFrameSource(cspOptions.Policy ?? OmpContentSecurityPolicy.Baseline, directive),
+                Policy = ReplaceFrameSource(cspOptions.Policy ?? ModulePolicyBaseline, directive),
                 ReportPath = cspOptions.ReportPath
             };
 
@@ -146,9 +185,14 @@ public static partial class IFrameFrameSourcePolicy
         });
     }
 
-    // The lookbehind keeps the match from firing inside another directive name:
-    // a plain \b is not enough because '-' is a non-word character, so the
-    // "frame-src" tail of "child-frame-src" would still match and be rewritten.
-    [GeneratedRegex(@"(?<![-\w])frame-src\s+[^;]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    // The match must start at a directive boundary — the start of the policy or just
+    // after a ';' — captured in group 1 so the replacement can re-emit it. Anchoring
+    // only the character before the name (the old (?<![-\w]) lookbehind) still let the
+    // match fire inside another directive's VALUE (e.g. an administrator-configured
+    // "script-src https://cdn.example/frame-src/libs/"), and [^;]* would then overwrite
+    // the rest of that directive. The (?=[\s;]|$) lookahead keeps "frame-src" a complete
+    // directive name and lets an empty value ("frame-src;") match so it is replaced
+    // instead of duplicated by the append fallback.
+    [GeneratedRegex(@"(^|;)\s*frame-src(?=[\s;]|$)[^;]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FrameSourceDirectiveRegex();
 }

@@ -107,7 +107,14 @@ require it (each is a removal candidate; see "Migration plan"):
 - **The shared fallback status page**
   (`BuildFallbackStatusPageHtml`) — a deliberate inline-HTML page that must
   render even when static assets are unavailable during error handling. It
-  carries inline `<style>` only, never `<script>`.
+  carries inline `<style>` only and no script execution of any kind: no
+  `<script>` element and no inline event handlers. Its back button was removed
+  on 2026-09-05 (campaign iframe-csp-grinden-ar-inte-deterministisk) because
+  its only possible form — an inline `onclick='history.back()'` handler — is
+  script execution under CSP and the button died silently in any app whose
+  `script-src` forbids `'unsafe-inline'`. The Razor error views
+  (`OmpErrorView.razor`, `Components/OmpError/Default.cshtml`) never rendered
+  a back button; the fallback page now matches them.
 - **Inline `<style>` and style attributes**: webamp injects its skin CSS as a
   runtime `<style>` element (dynamic, cannot be hashed), and Razor renders
   dynamic style attributes the dashboard needs
@@ -139,6 +146,14 @@ The appsettings.json of each app carries its effective policy:
 > artifact version — silently returns to allowing inline script. There is no warning and no
 > failed startup: the header is simply weaker. When you change an app's configuration, assert
 > the emitted `Content-Security-Policy` header rather than assuming the key survived.
+>
+> Exception since 2026-09-05 (campaign iframe-csp-grinden-ar-inte-deterministisk): the
+> iFrame module's `UseIFrameFrameSourceCsp` middleware falls back to the module's own
+> built-in tightened policy (`IFrameFrameSourcePolicy.ModulePolicyBaseline`, no
+> `script-src 'unsafe-inline'`) and logs a warning when the key is missing, and the
+> non-skippable `IFrameModuleInlineScriptGuardTests` fail the build if the key
+> disappears from the shipped appsettings.json. Every other app still has the silent
+> fallback described above.
 
 - **Portal** — baseline plus `blob:` in `img-src`/`media-src` (webamp unzips
   skins in JS and serves sprites via `URL.createObjectURL`; track/album-art
@@ -157,9 +172,18 @@ The appsettings.json of each app carries its effective policy:
   error the directive falls back to `frame-src 'self'` for that request). The
   old `https: http:` scheme wildcards are gone. Since 2026-09-04 (campaign
   csp-sista-undantagen) `script-src` has **no** `unsafe-inline` — the module
-  renders zero inline scripts, pinned by `IFrameCspSmokeTests`
-  (OpenModulePlatform.UiTests) against Index and Standalone. `style-src` keeps
-  the baseline's `unsafe-inline` (shared runtime-injected styles).
+  renders zero inline scripts, pinned by the non-skippable
+  `IFrameModuleInlineScriptGuardTests` (OpenModulePlatform.Portal.Tests: scans
+  the module's .cshtml for executable inline blocks, asserts the configured
+  policy's `script-src` carries no `unsafe-inline`, and fails if the `Policy`
+  key itself disappears) plus the browser-level `IFrameCspSmokeTests`
+  (OpenModulePlatform.UiTests) against Index and Standalone. If the `Policy`
+  key is missing at runtime, the middleware logs a warning and falls back to
+  the module's own built-in tightened policy
+  (`IFrameFrameSourcePolicy.ModulePolicyBaseline`) rather than the shared
+  baseline, so a lost key no longer restores `script-src 'unsafe-inline'`.
+  `style-src` keeps the baseline's `unsafe-inline` (shared runtime-injected
+  styles).
 - **Auth** — the strict-policy reference: after the login page's inline
   `<style>`/`<script>` blocks were moved to `wwwroot/css/login.css` and
   `wwwroot/js/login.js`, the Auth app runs
@@ -173,7 +197,11 @@ The appsettings.json of each app carries its effective policy:
 
 Every inline `<script>` block under `examples/` (inventoried 2026-09-04,
 campaign csp-sista-undantagen), classified as movable or rejected-with-reason.
-Inline event handlers and `javascript:` URLs were also swept for: none exist.
+Inline event handlers and `javascript:` URLs were also swept for, **within
+`examples/` scope**: none exist there. (Repo-wide, the rendered markup carried
+exactly one inline event handler — the fallback status page's
+`onclick='history.back()'` — removed 2026-09-05 in campaign
+iframe-csp-grinden-ar-inte-deterministisk.)
 Once the four blocks below are migrated, the baseline's
 `script-src 'unsafe-inline'` has no remaining consumer in `examples/`.
 
@@ -223,7 +251,11 @@ scripting surface like the Content module's trusted HTML).
    movable. As part of the same campaign the `ReplaceFrameSource` regex gained
    a `(?<![-\w])` lookbehind so a future `child-frame-src` directive cannot be
    corrupted by the frame-src rewrite (regression tests in
-   `IFrameFrameSourcePolicyTests`).
+   `IFrameFrameSourcePolicyTests`). The regex was anchored further on
+   2026-09-05 (campaign iframe-csp-grinden-ar-inte-deterministisk): the match
+   must now start at a directive boundary (`(^|;)\s*frame-src(?=[\s;]|$)[^;]*`),
+   so `frame-src` text inside another directive's value can no longer be
+   rewritten, and an empty `frame-src;` is replaced instead of duplicated.
 4. Then the per-app enforcement flips — see "Enforcement exit gate" below.
 
 ## Security review notes (independent review, 2026-09-01; decided 2026-09-04)

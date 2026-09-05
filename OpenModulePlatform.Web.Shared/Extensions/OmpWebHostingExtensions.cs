@@ -324,7 +324,10 @@ public static class OmpWebHostingExtensions
                     portalHref,
                     appHomeHref,
                     localizer,
-                    showBackButton: true);
+                    // The fallback page renders no back button: its only possible
+                    // form (an inline onclick handler) is script execution under
+                    // CSP and dies silently where script-src forbids 'unsafe-inline'.
+                    showBackButton: false);
 
                 return Results.Content(
                     BuildFallbackStatusPageHtml(model, branding),
@@ -361,7 +364,8 @@ public static class OmpWebHostingExtensions
                     portalHref,
                     appHomeHref,
                     localizer,
-                    showBackButton: true);
+                    // Same as /error above: no script-dependent back button.
+                    showBackButton: false);
 
                 return Results.Content(
                     BuildFallbackStatusPageHtml(model, branding),
@@ -1819,13 +1823,14 @@ public static class OmpWebHostingExtensions
         var safePortalText = WebUtility.HtmlEncode(model.PortalText ?? string.Empty);
         var safeAppHomeHref = WebUtility.HtmlEncode(model.AppHomeHref ?? string.Empty);
         var safeAppHomeText = WebUtility.HtmlEncode(model.AppHomeText ?? string.Empty);
-        var safeBackText = WebUtility.HtmlEncode(model.BackText ?? string.Empty);
         var requestedUrlMarkup = string.IsNullOrWhiteSpace(model.RequestedUrl)
             ? string.Empty
             : $"<p class='omp-error-view__detail'><strong>{safeRequestedUrlLabel}:</strong> <code>{safeRequestedUrl}</code></p>";
-        var backButtonMarkup = model.ShowBackButton && !string.IsNullOrWhiteSpace(model.BackText)
-            ? $"<button type='button' class='omp-error-view__button omp-error-view__button--secondary' onclick='history.back()'>{safeBackText}</button>"
-            : string.Empty;
+        // No back button here: it could only work through an inline onclick handler,
+        // and inline event handlers are script execution under CSP — the button dies
+        // silently in any app whose script-src forbids 'unsafe-inline' (campaign
+        // iframe-csp-grinden-ar-inte-deterministisk). The Razor error views never
+        // render one either; the link buttons below cover navigation.
         var appHomeMarkup = string.IsNullOrWhiteSpace(model.AppHomeHref) || string.IsNullOrWhiteSpace(model.AppHomeText)
             ? string.Empty
             : $"<a class='omp-error-view__button omp-error-view__button--secondary' href='{safeAppHomeHref}'>{safeAppHomeText}</a>";
@@ -1873,7 +1878,6 @@ public static class OmpWebHostingExtensions
       <p class="omp-error-view__message">{{safeMessage}}</p>
       {{requestedUrlMarkup}}
       <div class="omp-error-view__actions">
-        {{backButtonMarkup}}
         {{appHomeMarkup}}
         {{portalMarkup}}
       </div>

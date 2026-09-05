@@ -108,4 +108,41 @@ public sealed class IFrameFrameSourcePolicyTests
             "default-src 'self'; child-frame-src https://child.example; frame-src 'self' https://reports.example.internal; frame-ancestors 'self'",
             rewritten);
     }
+
+    [Fact]
+    public void ReplaceFrameSource_DoesNotRewriteFrameSourceTextInsideAnotherDirectiveValue()
+    {
+        // Anchoring guard (campaign iframe-csp-grinden-ar-inte-deterministisk): the
+        // match must start at a directive boundary. The old lookbehind only protected
+        // the character before the name, so the "frame-src" text inside another
+        // directive's value matched and [^;]* overwrote the rest of that directive.
+        const string policy =
+            "default-src 'self'; script-src https://cdn.example/frame-src/libs/; frame-ancestors 'self'";
+
+        var rewritten = IFrameFrameSourcePolicy.ReplaceFrameSource(
+            policy,
+            "frame-src 'self' https://reports.example.internal");
+
+        Assert.Equal(
+            "default-src 'self'; script-src https://cdn.example/frame-src/libs/; frame-ancestors 'self'; frame-src 'self' https://reports.example.internal",
+            rewritten);
+    }
+
+    [Fact]
+    public void ReplaceFrameSource_ReplacesEmptyValueDirectiveInsteadOfAppending()
+    {
+        // "frame-src;" with an empty value matched nothing under the old
+        // "frame-src\s+[^;]*" (\s+ requires whitespace), so a second frame-src was
+        // appended instead of replacing the empty one.
+        const string policy =
+            "default-src 'self'; frame-src; frame-ancestors 'self'";
+
+        var rewritten = IFrameFrameSourcePolicy.ReplaceFrameSource(
+            policy,
+            "frame-src 'self' https://reports.example.internal");
+
+        Assert.Equal(
+            "default-src 'self'; frame-src 'self' https://reports.example.internal; frame-ancestors 'self'",
+            rewritten);
+    }
 }
