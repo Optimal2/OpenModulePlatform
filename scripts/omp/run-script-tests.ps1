@@ -65,6 +65,11 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $PSScriptRoot 'pester-bootstrap.ps1')
 $pesterModulePath = Ensure-PinnedPester -RequiredVersion $script:RequiredPesterVersion -CacheRoot (Join-Path $repoRoot '.psmodules')
 Import-Module (Join-Path $pesterModulePath 'Pester.psd1') -Force
+$loadedPester = Get-Module -Name Pester | Where-Object { $_.ModuleBase -eq $pesterModulePath } | Select-Object -First 1
+if (-not $loadedPester -or $loadedPester.Version.ToString() -ne $script:RequiredPesterVersion) {
+    Write-Host "GATE FAIL: expected Pester $script:RequiredPesterVersion from $pesterModulePath but loaded '$(if ($loadedPester) { $loadedPester.Version } else { 'nothing' })'."
+    exit 1
+}
 
 $testsPath = $TestsPath
 if ([string]::IsNullOrWhiteSpace($testsPath)) {
