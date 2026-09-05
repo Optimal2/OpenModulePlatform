@@ -94,9 +94,12 @@ function Get-WindowsPowerShellSafeModulePath {
         dropped; the caller applies it only for the duration of the restore.
     #>
     $entries = @($env:PSModulePath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    # Wildcards, not regex: a regex here needs escaped backslashes, and one copy of this file
+    # reached CI with them stripped ("Malformed \p{X} character escape", 2026-09-05). -like is
+    # case-insensitive in PowerShell and has nothing to escape.
     $kept = @($entries | Where-Object {
-        $e = $_.TrimEnd('')
-        -not ($e -match '(?i)\PowerShell\7(\|$)' -or $e -match '(?i)\Program Files\PowerShell\Modules$' -or $e -match '(?i)\Documents\PowerShell\Modules$')
+        $e = $_.TrimEnd([char]92)
+        -not (($e -like '*\PowerShell\7') -or ($e -like '*\PowerShell\7\*') -or ($e -like '*\Program Files\PowerShell\Modules') -or ($e -like '*\Documents\PowerShell\Modules'))
     })
     return ($kept -join ';')
 }

@@ -1344,7 +1344,6 @@ public sealed class DeploymentLockFileTests : IDisposable
         File.WriteAllText(path, "{}", Encoding.UTF8);
 
         var file = new FileInfo(path);
-        var originalAcl = file.GetAccessControl();
         var modifiedAcl = file.GetAccessControl();
         modifiedAcl.AddAccessRule(DenyRule(FileSystemRights.FullControl));
         file.SetAccessControl(modifiedAcl);
@@ -1354,9 +1353,9 @@ public sealed class DeploymentLockFileTests : IDisposable
         }
         finally
         {
-            // Each restore on its own: a deny ACE left behind blocks the fixture's recursive
-            // delete and leaks temp directories between runs (independent review, 2026-09-05).
-            RestoreAcl(() => file.SetAccessControl(originalAcl));
+            // A deny ACE left behind blocks the fixture's recursive delete and leaks temp
+            // directories between runs (independent review, 2026-09-05).
+            RestoreAcl(() => RemoveDenyRule(file, FileSystemRights.FullControl));
         }
     }
 
@@ -1403,8 +1402,6 @@ public sealed class DeploymentLockFileTests : IDisposable
     {
         var file = new FileInfo(filePath);
         var directory = file.Directory!;
-        var originalFileAcl = file.GetAccessControl();
-        var originalDirectoryAcl = directory.GetAccessControl();
 
         var fileAcl = file.GetAccessControl();
         fileAcl.AddAccessRule(DenyRule(FileSystemRights.Delete));
@@ -1419,9 +1416,33 @@ public sealed class DeploymentLockFileTests : IDisposable
         finally
         {
             // Each restore on its own, so a failed file restore never skips the directory's.
-            RestoreAcl(() => file.SetAccessControl(originalFileAcl));
-            RestoreAcl(() => directory.SetAccessControl(originalDirectoryAcl));
+            RestoreAcl(() => RemoveDenyRule(file, FileSystemRights.Delete));
+            RestoreAcl(() => RemoveDenyRule(directory, FileSystemRights.DeleteSubdirectoriesAndFiles));
         }
+    }
+
+    /// <summary>
+    /// Restores by REMOVING the deny ACE, never by writing back the pre-test FileSecurity
+    /// object: SetAccessControl persists only the sections the object itself has modified,
+    /// so an unmodified snapshot persists nothing and the deny ACE stays. With the parent's
+    /// DeleteSubdirectoriesAndFiles also denied, the fixture's recursive delete then fails
+    /// with UnauthorizedAccessException in Dispose (CI run 33976204580, 2026-09-05; the
+    /// no-op was reproduced with icacls before and after the snapshot write-back).
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void RemoveDenyRule(FileInfo file, FileSystemRights rights)
+    {
+        var acl = file.GetAccessControl();
+        acl.RemoveAccessRule(DenyRule(rights));
+        file.SetAccessControl(acl);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void RemoveDenyRule(DirectoryInfo directory, FileSystemRights rights)
+    {
+        var acl = directory.GetAccessControl();
+        acl.RemoveAccessRule(DenyRule(rights));
+        directory.SetAccessControl(acl);
     }
 
     [SupportedOSPlatform("windows")]
