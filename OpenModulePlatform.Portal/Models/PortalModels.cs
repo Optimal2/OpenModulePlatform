@@ -714,7 +714,14 @@ public sealed class ArtifactRetentionCandidateRow
     /// </summary>
     public string? ProtectedReferenceSources { get; set; }
 
-    public bool IsProtected => ProtectedReferenceCount > 0;
+    /// <summary>
+    /// True when the artifact is spared by the operator-delta guard: its
+    /// configuration rows carry an operator edit that does not survive
+    /// byte-identically on any newer preserved version in the same slot.
+    /// </summary>
+    public bool OperatorDeltaProtected { get; set; }
+
+    public bool IsProtected => ProtectedReferenceCount > 0 || OperatorDeltaProtected;
 
     public string IdentityKey => string.Join(
         "|",

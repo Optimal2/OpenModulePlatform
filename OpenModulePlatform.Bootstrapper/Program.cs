@@ -4532,56 +4532,24 @@ SELECT COUNT(1) FROM @changes;
             return 0;
         }
 
-        var candidates = await QueryArtifactConfigurationCopyCandidatesAsync(
-            connection,
-            target.ArtifactId,
-            commandTimeoutSeconds);
-        var sourceCandidates = candidates
-            .Where(candidate => CompareVersionText(candidate.Version, target.Version) < 0)
-            .ToList();
-        var source = sourceCandidates.Count == 0
-            ? null
-            : sourceCandidates.Aggregate(static (current, candidate) =>
-                CompareVersionText(candidate.Version, current.Version) > 0
-                    || (CompareVersionText(candidate.Version, current.Version) == 0
-                        && candidate.ArtifactId > current.ArtifactId)
-                    ? candidate
-                    : current);
-        if (source is null)
+        // Shared with the HostAgent and Portal import paths
+        // (ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource):
+        // the source is the artifact the slot's pointers referenced, with the
+        // per-path operator-delta fallback when no pointer names a source --
+        // never simply the most recently created sibling.
+        await using var command = new SqlCommand(
+            ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource,
+            connection);
+        command.CommandTimeout = commandTimeoutSeconds;
+        command.Parameters.AddWithValue("@ArtifactId", target.ArtifactId);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
         {
             return 0;
         }
 
-        const string sql = """
-INSERT INTO omp.ArtifactConfigurationFiles
-(
-    ArtifactId,
-    RelativePath,
-    FileContent,
-    PackageFileContent,
-    IsEnabled
-)
-SELECT @targetArtifactId,
-       sourceFile.RelativePath,
-       sourceFile.FileContent,
-       sourceFile.PackageFileContent,
-       sourceFile.IsEnabled
-FROM omp.ArtifactConfigurationFiles sourceFile
-WHERE sourceFile.ArtifactId = @sourceArtifactId
-  AND NOT EXISTS
-  (
-      SELECT 1
-      FROM omp.ArtifactConfigurationFiles existing
-      WHERE existing.ArtifactId = @targetArtifactId
-        AND existing.RelativePath = sourceFile.RelativePath
-  );
-""";
-
-        await using var command = new SqlCommand(sql, connection);
-        command.CommandTimeout = commandTimeoutSeconds;
-        command.Parameters.AddWithValue("@targetArtifactId", target.ArtifactId);
-        command.Parameters.AddWithValue("@sourceArtifactId", source.ArtifactId);
-        return await command.ExecuteNonQueryAsync();
+        return reader.GetInt32(2);
     }
 
     private static async Task<ArtifactConfigurationCopyTarget?> QueryArtifactConfigurationCopyTargetAsync(
@@ -4624,46 +4592,6 @@ ORDER BY a.ArtifactId;
             _ => throw new InvalidOperationException(
                 $"Cannot copy artifact configuration files because multiple enabled artifact rows have RelativePath '{artifactRelativePath}'.")
         };
-    }
-
-    private static async Task<IReadOnlyList<ArtifactConfigurationCopyCandidate>> QueryArtifactConfigurationCopyCandidatesAsync(
-        SqlConnection connection,
-        int targetArtifactId,
-        int commandTimeoutSeconds)
-    {
-        const string sql = """
-SELECT candidate.ArtifactId,
-       candidate.Version
-FROM omp.Artifacts target
-INNER JOIN omp.Artifacts candidate
-    ON candidate.AppId = target.AppId
-   AND candidate.PackageType = target.PackageType
-   AND ISNULL(candidate.TargetName, N'') = ISNULL(target.TargetName, N'')
-WHERE target.ArtifactId = @targetArtifactId
-  AND candidate.ArtifactId <> target.ArtifactId
-  AND candidate.IsEnabled = 1
-  AND EXISTS
-  (
-      SELECT 1
-      FROM omp.ArtifactConfigurationFiles sourceFile
-      WHERE sourceFile.ArtifactId = candidate.ArtifactId
-  );
-""";
-
-        await using var command = new SqlCommand(sql, connection);
-        command.CommandTimeout = commandTimeoutSeconds;
-        command.Parameters.AddWithValue("@targetArtifactId", targetArtifactId);
-
-        var rows = new List<ArtifactConfigurationCopyCandidate>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            rows.Add(new ArtifactConfigurationCopyCandidate(
-                reader.GetInt32(0),
-                reader.GetString(1)));
-        }
-
-        return rows;
     }
 
     private static async Task<bool> ArtifactHasConfigurationRowsAsync(
@@ -6678,10 +6606,6 @@ internal sealed record ArtifactConfigurationCopyTarget(
     int ArtifactId,
     string Version,
     int ConfigurationFileCount);
-
-internal sealed record ArtifactConfigurationCopyCandidate(
-    int ArtifactId,
-    string Version);
 
 internal sealed record ConfiguredArtifactIdentity(
     string ModuleKey,

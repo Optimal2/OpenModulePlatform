@@ -342,6 +342,7 @@ ALTER TABLE omp.Artifacts ADD
     AppId int NULL,
     Version nvarchar(50) NULL,
     TargetName nvarchar(200) NULL,
+    RelativePath nvarchar(400) NULL,
     CreatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME();");
         Execute(@"
 CREATE TABLE omp.Modules
@@ -354,7 +355,9 @@ CREATE TABLE omp.Apps
 (
     AppId int NOT NULL PRIMARY KEY,
     ModuleId int NOT NULL,
-    AppKey nvarchar(100) NOT NULL
+    AppKey nvarchar(100) NOT NULL,
+    AppType nvarchar(50) NOT NULL DEFAULT('WebApp'),
+    IsEnabled bit NOT NULL DEFAULT(1)
 );");
         Execute(@"
 CREATE TABLE omp.ArtifactConfigurationFiles
@@ -370,7 +373,7 @@ CREATE TABLE omp.ArtifactConfigurationFiles
         CreateConfigOverlayTables();
     }
 
-    public int InsertArtifactWithApp(int artifactId, string packageType, string version, string moduleKey, string appKey)
+    public int InsertArtifactWithApp(int artifactId, string packageType, string version, string moduleKey, string appKey, string? targetName = null, DateTime? createdUtc = null)
     {
         Execute(
             "INSERT INTO omp.Modules(ModuleId, ModuleKey) VALUES(1, @moduleKey);",
@@ -379,20 +382,23 @@ CREATE TABLE omp.ArtifactConfigurationFiles
             "INSERT INTO omp.Apps(AppId, ModuleId, AppKey) VALUES(1, 1, @appKey);",
             new SqlParameter("@appKey", appKey));
         Execute(
-            "INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled, AppId, Version, TargetName) VALUES(@artifactId, @packageType, 1, 1, @version, NULL);",
-            new SqlParameter("@artifactId", artifactId),
-            new SqlParameter("@packageType", packageType),
-            new SqlParameter("@version", version));
-        return artifactId;
-    }
-
-    public int InsertArtifact(int artifactId, string packageType, string version, DateTime createdUtc)
-    {
-        Execute(
-            "INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled, AppId, Version, TargetName, CreatedUtc) VALUES(@artifactId, @packageType, 1, 1, @version, NULL, @createdUtc);",
+            "INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled, AppId, Version, TargetName, CreatedUtc) VALUES(@artifactId, @packageType, 1, 1, @version, @targetName, COALESCE(@createdUtc, SYSUTCDATETIME()));",
             new SqlParameter("@artifactId", artifactId),
             new SqlParameter("@packageType", packageType),
             new SqlParameter("@version", version),
+            new SqlParameter("@targetName", targetName ?? (object)DBNull.Value),
+            new SqlParameter("@createdUtc", createdUtc ?? (object)DBNull.Value));
+        return artifactId;
+    }
+
+    public int InsertArtifact(int artifactId, string packageType, string version, DateTime createdUtc, string? targetName = null)
+    {
+        Execute(
+            "INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled, AppId, Version, TargetName, CreatedUtc) VALUES(@artifactId, @packageType, 1, 1, @version, @targetName, COALESCE(@createdUtc, SYSUTCDATETIME()));",
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@packageType", packageType),
+            new SqlParameter("@version", version),
+            new SqlParameter("@targetName", targetName ?? (object)DBNull.Value),
             new SqlParameter("@createdUtc", createdUtc));
         return artifactId;
     }
@@ -415,6 +421,57 @@ WHERE ArtifactId = @artifactId
             new SqlParameter("@relativePath", relativePath),
             new SqlParameter("@fileContent", fileContent),
             new SqlParameter("@isEnabled", (object?)isEnabled ?? DBNull.Value));
+    }
+
+    public Guid InsertAppInstanceForApp(int appId, int? artifactId, string? appInstanceKey = null)
+    {
+        var appInstanceId = Guid.NewGuid();
+        Execute(
+            "INSERT INTO omp.AppInstances(AppInstanceId, AppId, AppInstanceKey, ArtifactId, IsEnabled, IsAllowed, DesiredState) VALUES(@appInstanceId, @appId, @appInstanceKey, @artifactId, 1, 1, 1);",
+            new SqlParameter("@appInstanceId", appInstanceId),
+            new SqlParameter("@appId", appId),
+            new SqlParameter("@appInstanceKey", appInstanceKey ?? $"app-{appInstanceId:N}"),
+            new SqlParameter("@artifactId", artifactId ?? (object)DBNull.Value));
+        return appInstanceId;
+    }
+
+    public int? GetAppInstanceArtifactId(Guid appInstanceId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "SELECT ArtifactId FROM omp.AppInstances WHERE AppInstanceId = @appInstanceId;",
+            conn);
+        cmd.Parameters.AddWithValue("@appInstanceId", appInstanceId);
+        var result = cmd.ExecuteScalar();
+        return result is null or DBNull ? null : Convert.ToInt32(result);
+    }
+
+    public void InsertArtifactConfigurationFile(
+        int artifactId,
+        string relativePath,
+        string fileContent,
+        string? packageFileContent,
+        bool isEnabled = true)
+    {
+        Execute(
+            "INSERT INTO omp.ArtifactConfigurationFiles(ArtifactId, RelativePath, FileContent, PackageFileContent, IsEnabled) VALUES(@artifactId, @relativePath, @fileContent, @packageFileContent, @isEnabled);",
+            new SqlParameter("@artifactId", artifactId),
+            new SqlParameter("@relativePath", relativePath),
+            new SqlParameter("@fileContent", fileContent),
+            new SqlParameter("@packageFileContent", packageFileContent ?? (object)DBNull.Value),
+            new SqlParameter("@isEnabled", isEnabled));
+    }
+
+    public bool ArtifactExists(int artifactId)
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "SELECT COUNT(1) FROM omp.Artifacts WHERE ArtifactId = @artifactId;",
+            conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        return (int)cmd.ExecuteScalar()! > 0;
     }
 
     public void ClearArtifactConfigurationFileBaseline(int artifactId, string relativePath)
@@ -945,12 +1002,14 @@ CREATE TABLE omp.AppInstances
 (
     AppInstanceId uniqueidentifier NOT NULL PRIMARY KEY,
     ModuleInstanceId uniqueidentifier NULL,
+    AppId int NULL,
     AppInstanceKey nvarchar(100) NOT NULL,
     HostId uniqueidentifier NULL,
     ArtifactId int NULL,
     IsEnabled bit NOT NULL DEFAULT(1),
     IsAllowed bit NOT NULL DEFAULT(1),
-    DesiredState bit NOT NULL DEFAULT(1)
+    DesiredState bit NOT NULL DEFAULT(1),
+    UpdatedUtc datetime2(3) NULL
 );");
         Execute(@"
 CREATE TABLE omp.HostArtifactRequirements
@@ -980,7 +1039,55 @@ CREATE TABLE omp.HostAppDeploymentStates
     TargetPath nvarchar(500) NULL,
     RuntimeName nvarchar(200) NULL,
     ArtifactId int NULL,
+    DeploymentState tinyint NOT NULL DEFAULT(2),
+    LastAppliedUtc datetime2(3) NULL,
     CONSTRAINT PK_HostAppDeploymentStates PRIMARY KEY(HostId, AppInstanceId)
+);");
+        // Pointer-move and retention coverage needs the remaining artifact-reference
+        // tables the production schema always has; keep them minimal but present.
+        Execute(@"
+CREATE TABLE omp.InstanceTemplateAppInstances
+(
+    InstanceTemplateAppInstanceId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    AppId int NULL,
+    DesiredArtifactId int NULL,
+    IsEnabled bit NOT NULL DEFAULT(1),
+    UpdatedUtc datetime2(3) NULL
+);");
+        Execute(@"
+CREATE TABLE omp.WorkerInstances
+(
+    WorkerInstanceId uniqueidentifier NOT NULL PRIMARY KEY,
+    AppInstanceId uniqueidentifier NOT NULL,
+    HostId uniqueidentifier NULL,
+    ArtifactId int NULL,
+    IsEnabled bit NOT NULL DEFAULT(1),
+    UpdatedUtc datetime2(3) NULL
+);");
+        Execute(@"
+CREATE TABLE omp.HostAgentDesiredStates
+(
+    HostId uniqueidentifier NOT NULL PRIMARY KEY,
+    ArtifactId int NULL,
+    IsEnabled bit NOT NULL DEFAULT(1)
+);");
+        Execute(@"
+CREATE TABLE omp.HostAgentRuntimeStates
+(
+    HostId uniqueidentifier NOT NULL,
+    ArtifactId int NULL,
+    IsActive bit NOT NULL DEFAULT(0)
+);");
+        Execute(@"
+CREATE TABLE omp.HostAgentJobs
+(
+    HostAgentJobId bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    HostId uniqueidentifier NULL,
+    JobType nvarchar(100) NOT NULL,
+    PayloadJson nvarchar(max) NULL,
+    Status tinyint NOT NULL DEFAULT(0),
+    RequestedBy nvarchar(256) NULL,
+    MaxAttempts int NOT NULL DEFAULT(3)
 );");
     }
 

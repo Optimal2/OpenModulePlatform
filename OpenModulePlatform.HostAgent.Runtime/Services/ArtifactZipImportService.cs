@@ -850,6 +850,16 @@ public sealed class ArtifactZipImportService
                                 reapplied.AppInstanceRowsUpdated,
                                 reapplied.WorkerInstanceRowsUpdated);
                         }
+
+                        if (!string.IsNullOrWhiteSpace(reapplied.ConfigurationCarryMessage))
+                        {
+                            reappliedNote += " " + reapplied.ConfigurationCarryMessage;
+                            _logger.LogInformation(
+                                "Configuration rows carried onto module artifacts before pointer moves. Module={ModuleKey}, RowsCarried={RowsCarried}, Detail={Detail}",
+                                definitionResult.ModuleKey,
+                                reapplied.ConfigurationRowsCarried,
+                                reapplied.ConfigurationCarryMessage);
+                        }
                     }
                     catch (Exception ex) when (IsExpectedImportFailure(ex))
                     {
@@ -1437,7 +1447,15 @@ public sealed class ArtifactZipImportService
                         ? await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(
                             existingIdentity.ArtifactId,
                             cancellationToken)
-                        : (TemplateAppRowsUpdated: 0, AppInstanceRowsUpdated: 0, WorkerInstanceRowsUpdated: 0);
+                        : (TemplateAppRowsUpdated: 0, AppInstanceRowsUpdated: 0, WorkerInstanceRowsUpdated: 0, ConfigurationRowsCarried: 0, ConfigurationCarryMessage: (string?)null);
+                    if (!string.IsNullOrWhiteSpace(existingApplication.ConfigurationCarryMessage))
+                    {
+                        _logger.LogInformation(
+                            "Configuration rows carried onto the artifact before application pointer moves. ArtifactId={ArtifactId}, RowsCarried={RowsCarried}, Detail={Detail}",
+                            existingIdentity.ArtifactId,
+                            existingApplication.ConfigurationRowsCarried,
+                            existingApplication.ConfigurationCarryMessage);
+                    }
                     var existingHostAgentDesiredRows = 0;
                     if (applyToMatchingApplications
                         && string.Equals(metadata.PackageType, "host-agent", StringComparison.OrdinalIgnoreCase))
@@ -1660,19 +1678,39 @@ public sealed class ArtifactZipImportService
             }
             else if (importSettings.CopyConfigurationFilesFromPreviousVersion)
             {
-                copiedConfigurationFiles = await _repository.CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+                // The source is the artifact the slot's pointers referenced
+                // before this import -- not whichever sibling was created most
+                // recently -- with a per-path operator-delta fallback when no
+                // pointer names a source.
+                var continuityCopy = await _repository.CopyConfigurationFilesFromContinuitySourceAsync(
                     artifactId,
-                    app.AppId,
-                    metadata.PackageType,
-                    metadata.TargetName,
                     cancellationToken);
+                copiedConfigurationFiles = continuityCopy.CopiedCount;
+                if (continuityCopy.CopiedCount > 0)
+                {
+                    _logger.LogInformation(
+                        "Copied {Count} configuration file row(s) onto the new artifact from its continuity source. ArtifactId={ArtifactId}, SourceArtifactId={SourceArtifactId}, SourceVersion={SourceVersion}",
+                        continuityCopy.CopiedCount,
+                        artifactId,
+                        continuityCopy.SourceArtifactId,
+                        continuityCopy.SourceVersion ?? "(per-path fallback)");
+                }
             }
 
             var application = applyToMatchingApplications
                 ? await _repository.ApplyImportedArtifactToMatchingApplicationsAsync(
                     artifactId,
                     cancellationToken)
-                : (TemplateAppRowsUpdated: 0, AppInstanceRowsUpdated: 0, WorkerInstanceRowsUpdated: 0);
+                : (TemplateAppRowsUpdated: 0, AppInstanceRowsUpdated: 0, WorkerInstanceRowsUpdated: 0, ConfigurationRowsCarried: 0, ConfigurationCarryMessage: (string?)null);
+            if (!string.IsNullOrWhiteSpace(application.ConfigurationCarryMessage))
+            {
+                _logger.LogInformation(
+                    "Configuration rows carried onto the new artifact before application pointer moves. ArtifactId={ArtifactId}, RowsCarried={RowsCarried}, Detail={Detail}",
+                    artifactId,
+                    application.ConfigurationRowsCarried,
+                    application.ConfigurationCarryMessage);
+            }
+
             var hostAgentDesiredRows = 0;
             if (applyToMatchingApplications
                 && string.Equals(metadata.PackageType, "host-agent", StringComparison.OrdinalIgnoreCase))
@@ -1685,6 +1723,12 @@ public sealed class ArtifactZipImportService
                     cancellationToken);
             }
 
+            var combinedMessage = configurationCarryForwardMessage is null
+                ? application.ConfigurationCarryMessage
+                : application.ConfigurationCarryMessage is null
+                    ? configurationCarryForwardMessage
+                    : configurationCarryForwardMessage + " " + application.ConfigurationCarryMessage;
+
             return new ArtifactZipImportResult(
                 artifactId,
                 metadata.Version,
@@ -1695,11 +1739,11 @@ public sealed class ArtifactZipImportService
                 application.WorkerInstanceRowsUpdated,
                 hostAgentDesiredRows,
                 adoptedExistingContent,
-                Message: configurationCarryForwardMessage is null
+                Message: combinedMessage is null
                     ? emptyDiffDuplicateNote
                     : emptyDiffDuplicateNote is null
-                        ? configurationCarryForwardMessage
-                        : configurationCarryForwardMessage + " " + emptyDiffDuplicateNote);
+                        ? combinedMessage
+                        : combinedMessage + " " + emptyDiffDuplicateNote);
         }
         catch
         {

@@ -1379,6 +1379,16 @@ public sealed class PortableModulePackageService
                         + $"{reapplied.TemplateAppRowsUpdated} template, {reapplied.AppInstanceRowsUpdated} app instance, "
                         + $"{reapplied.WorkerInstanceRowsUpdated} worker, {reapplied.HostAgentDesiredRowsUpdated} host agent.");
                 }
+
+                if (!string.IsNullOrWhiteSpace(reapplied.ConfigurationCarryMessage))
+                {
+                    warnings.Add(reapplied.ConfigurationCarryMessage);
+                    _logger.LogInformation(
+                        "Configuration rows carried onto module artifacts before pointer moves. Module={ModuleKey}, RowsCarried={RowsCarried}, Detail={Detail}",
+                        definition.ModuleKey,
+                        reapplied.ConfigurationRowsCarried,
+                        reapplied.ConfigurationCarryMessage);
+                }
             }
             catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
             {
@@ -1903,11 +1913,8 @@ public sealed class PortableModulePackageService
             {
                 try
                 {
-                    await _repo.CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+                    await _repo.CopyConfigurationFilesFromContinuitySourceAsync(
                         artifactId,
-                        app.AppId,
-                        identity.PackageType,
-                        identity.TargetName,
                         ct);
                 }
                 catch (SqlException ex)
@@ -1922,7 +1929,11 @@ public sealed class PortableModulePackageService
             {
                 try
                 {
-                    await _repo.ApplyArtifactToMatchingApplicationsAsync(artifactId, ct);
+                    var applied = await _repo.ApplyArtifactToMatchingApplicationsAsync(artifactId, ct);
+                    if (!string.IsNullOrWhiteSpace(applied.ConfigurationCarryMessage))
+                    {
+                        warning = AppendWarning(warning, applied.ConfigurationCarryMessage);
+                    }
                 }
                 catch (SqlException ex)
                 {

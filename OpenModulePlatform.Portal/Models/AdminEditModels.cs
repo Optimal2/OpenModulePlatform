@@ -205,9 +205,13 @@ public sealed class ArtifactConfigVersionStatus
 /// </summary>
 public sealed class ArtifactConfigurationFileCopyResult
 {
-    public int SourceArtifactId { get; set; }
+    /// <summary>
+    /// NULL when the per-path operator-delta fallback supplied the rows (no
+    /// single source artifact exists to name).
+    /// </summary>
+    public int? SourceArtifactId { get; set; }
 
-    public string SourceVersion { get; set; } = string.Empty;
+    public string? SourceVersion { get; set; }
 
     public int CopiedCount { get; set; }
 }
@@ -487,6 +491,18 @@ public sealed class ArtifactApplicationResult
     public int WorkerInstanceRowsUpdated { get; set; }
 
     public int HostAgentDesiredRowsUpdated { get; set; }
+
+    /// <summary>
+    /// Configuration rows carried onto the artifact before the pointer moves
+    /// (missing rows copied, operator edits carried over pristine baselines).
+    /// </summary>
+    public int ConfigurationRowsCarried { get; set; }
+
+    /// <summary>
+    /// Human-readable detail of <see cref="ConfigurationRowsCarried"/> for the
+    /// import/upload status message.
+    /// </summary>
+    public string? ConfigurationCarryMessage { get; set; }
 
     public string? AutoApplyInfoMessage { get; set; }
 

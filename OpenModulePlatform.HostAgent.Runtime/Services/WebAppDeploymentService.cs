@@ -211,6 +211,30 @@ public sealed class WebAppDeploymentService
                     : diagnosticWarning + Environment.NewLine + missingRequiredSectionsWarning;
             }
 
+            // Continuity gate: a previous successful deploy that provably had
+            // more configuration (file or whole sections) must not be replaced
+            // by a resolution that silently falls back to the built-in default.
+            // Fail loudly and leave the currently deployed version untouched.
+            var continuityViolation = ConfigurationContinuityGate.EvaluateViolation(
+                targetPath,
+                configurationFiles,
+                configurationVariables);
+            if (continuityViolation is not null)
+            {
+                _logger.LogWarning(
+                    "Web app deployment failed the configuration continuity gate. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Violation={Violation}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    continuityViolation);
+
+                await _repository.PublishAppDeploymentResultAsync(
+                    deployment,
+                    WithDeploySetWarning(
+                        AppDeploymentResult.Failed(targetPath, runtimeName, continuityViolation)),
+                    cancellationToken);
+                return;
+            }
+
             if (IsAlreadyApplied(settings, deployment, targetPath, iisAppName, runtimeName)
                 && ArtifactConfigurationFileWriter.AreApplied(targetPath, configurationFiles, configurationVariables))
             {

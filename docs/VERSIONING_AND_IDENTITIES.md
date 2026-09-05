@@ -69,6 +69,29 @@ as `odv.site.config.js` into deployable artifacts. Simple OMP runtime
 configuration is written by the bootstrap/deployment layer, and app-specific
 deployment-owned files belong in `omp.ArtifactConfigurationFiles`.
 
+**Configuration rows follow the desired artifact.** Because artifacts no longer
+carry `appsettings*.json` in their payload, every mechanism that selects or
+moves to an artifact must keep the operator's configuration continuous instead
+of falling back to a default:
+
+- Import-time copy and carry-forward resolve their source from the artifact the
+  slot's pointers (`omp.AppInstances.ArtifactId`,
+  `omp.InstanceTemplateAppInstances.DesiredArtifactId`, latest successful
+  `omp.HostAppDeploymentStates`) pointed to BEFORE the import — not from the
+  most recently created artifact. Without any pointer they fall back to the
+  newest row carrying an operator delta, per relative path. The rule lives once
+  in `ArtifactConfigurationFileImportSql` and is shared by the HostAgent
+  import, the carry-forward, and the Bootstrapper.
+- Moving a pointer (HostAgent apply, Portal apply, Portal version change)
+  carries missing rows and operator deltas onto the target artifact BEFORE the
+  pointer moves.
+- Retention never deletes an artifact whose configuration rows carry an
+  operator delta that no NEWER preserved version in the same slot holds
+  byte-identically.
+- A web app deployment whose previous on-disk `appsettings.json` provably had a
+  file or section the new resolution no longer provides fails loudly, naming the
+  lost section, instead of silently writing the built-in default.
+
 `Desired artifact` is the artifact currently selected by an app instance,
 desired installation app row, worker instance, or host artifact requirement. HostAgent
 deploys that selected artifact. It does not choose the highest version on its

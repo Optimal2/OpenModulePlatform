@@ -770,7 +770,7 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             instanceTemplateAppInstanceId,
             ct);
 
-    public async Task<(string TargetVersion, ArtifactConfigurationCarryForwardResult CarryForward)> UpgradeInstanceTemplateAppArtifactAsync(
+    public async Task<(string TargetVersion, ArtifactConfigurationCarryForwardResult CarryForward, string? ConfigurationCarryMessage)> UpgradeInstanceTemplateAppArtifactAsync(
         int instanceTemplateAppInstanceId,
         int artifactId,
         CancellationToken ct)
@@ -780,7 +780,8 @@ SELECT currentArtifact.Version,
        targetArtifact.Version,
        targetArtifact.AppId,
        targetArtifact.PackageType,
-       targetArtifact.TargetName
+       targetArtifact.TargetName,
+       tai.DesiredArtifactId
 FROM omp.InstanceTemplateAppInstances tai
 INNER JOIN omp.Artifacts currentArtifact
     ON currentArtifact.ArtifactId = tai.DesiredArtifactId
@@ -797,6 +798,7 @@ WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
         int targetAppId;
         string packageType;
         string? targetName;
+        int currentArtifactId;
 
         await using (var conn = _db.Create())
         {
@@ -815,6 +817,7 @@ WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
             targetAppId = rdr.GetInt32(2);
             packageType = rdr.GetString(3);
             targetName = rdr.IsDBNull(4) ? null : rdr.GetString(4);
+            currentArtifactId = rdr.GetInt32(5);
         }
 
         if (ArtifactVersionComparer.Compare(targetVersion, currentVersion) <= 0)
@@ -823,6 +826,18 @@ WHERE tai.InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
         }
 
         await RequireCompatibleArtifactSlotAsync(targetAppId, targetVersion, packageType, targetName, ct);
+
+        // Carry configuration continuity onto the new artifact BEFORE the
+        // pointer moves: rows the target lacks entirely, and operator edits on
+        // the current artifact where the target row is still a pristine package
+        // baseline. Same rule as the import-time auto-apply paths.
+        string? configurationCarryMessage = null;
+        await using (var conn = _db.Create())
+        {
+            await conn.OpenAsync(ct);
+            var carry = await CarryConfigurationRowsOnPointerMoveAsync(conn, artifactId, [currentArtifactId], ct);
+            configurationCarryMessage = carry.Message;
+        }
 
         const string updateSql = @"
 UPDATE omp.InstanceTemplateAppInstances
@@ -844,7 +859,7 @@ WHERE InstanceTemplateAppInstanceId = @InstanceTemplateAppInstanceId;";
         // so a version bump stranded edits made to the old version (R5-F11).
         var carryForward = await CarryForwardArtifactConfigurationFilesAsync(artifactId, ct);
 
-        return (targetVersion, carryForward);
+        return (targetVersion, carryForward, configurationCarryMessage);
     }
 
     public async Task<InstanceTemplateHostEditData?> GetInstanceTemplateHostAsync(
@@ -3103,86 +3118,43 @@ WHERE ar.AppId = @AppId
             artifactConfigurationFileId,
             ct);
 
-    public async Task<ArtifactConfigurationFileCopyResult?> CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+    /// <summary>
+    /// Copies configuration rows onto a newly registered artifact whose package
+    /// shipped no configuration files. Shares its SQL with the HostAgent import
+    /// and the Bootstrapper
+    /// (ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource):
+    /// the source is the artifact the slot's pointers referenced before the
+    /// upload, with a per-path operator-delta fallback when no pointer names a
+    /// source. Returns NULL when nothing was copied.
+    /// </summary>
+    public async Task<ArtifactConfigurationFileCopyResult?> CopyConfigurationFilesFromContinuitySourceAsync(
         int artifactId,
-        int appId,
-        string packageType,
-        string? targetName,
         CancellationToken ct)
     {
-        const string sql = @"
-DECLARE @SourceArtifactId int;
-DECLARE @SourceVersion nvarchar(50);
-DECLARE @CopiedCount int = 0;
-
-SELECT TOP (1)
-       @SourceArtifactId = source.ArtifactId,
-       @SourceVersion = source.Version
-FROM omp.Artifacts source
-WHERE source.ArtifactId <> @ArtifactId
-  AND source.AppId = @AppId
-  AND source.PackageType = @PackageType
-  AND ((source.TargetName = @TargetName) OR (source.TargetName IS NULL AND @TargetName IS NULL))
-  AND source.IsEnabled = 1
-  AND EXISTS
-  (
-      SELECT 1
-      FROM omp.ArtifactConfigurationFiles sourceFile
-      WHERE sourceFile.ArtifactId = source.ArtifactId
-  )
-ORDER BY source.CreatedUtc DESC, source.ArtifactId DESC;
-
-IF @SourceArtifactId IS NOT NULL
-BEGIN
-    INSERT INTO omp.ArtifactConfigurationFiles
-    (
-        ArtifactId,
-        RelativePath,
-        FileContent,
-        PackageFileContent,
-        IsEnabled
-    )
-    SELECT @ArtifactId,
-           sourceFile.RelativePath,
-           sourceFile.FileContent,
-           sourceFile.PackageFileContent,
-           sourceFile.IsEnabled
-    FROM omp.ArtifactConfigurationFiles sourceFile
-    WHERE sourceFile.ArtifactId = @SourceArtifactId
-      AND NOT EXISTS
-      (
-          SELECT 1
-          FROM omp.ArtifactConfigurationFiles targetFile
-          WHERE targetFile.ArtifactId = @ArtifactId
-            AND targetFile.RelativePath = sourceFile.RelativePath
-      );
-
-    SET @CopiedCount = @@ROWCOUNT;
-END;
-
-SELECT @SourceArtifactId AS SourceArtifactId,
-       @SourceVersion AS SourceVersion,
-       @CopiedCount AS CopiedCount;";
-
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(
+            ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource,
+            conn);
         Add(cmd, "@ArtifactId", artifactId);
-        Add(cmd, "@AppId", appId);
-        Add(cmd, "@PackageType", packageType);
-        Add(cmd, "@TargetName", targetName);
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        if (!await rdr.ReadAsync(ct) || rdr.IsDBNull(0))
+        if (!await rdr.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        var copiedCount = rdr.GetInt32(2);
+        if (copiedCount == 0 && rdr.IsDBNull(0))
         {
             return null;
         }
 
         return new ArtifactConfigurationFileCopyResult
         {
-            SourceArtifactId = rdr.GetInt32(0),
-            SourceVersion = rdr.GetString(1),
-            CopiedCount = rdr.GetInt32(2)
+            SourceArtifactId = rdr.IsDBNull(0) ? null : rdr.GetInt32(0),
+            SourceVersion = rdr.IsDBNull(1) ? null : rdr.GetString(1),
+            CopiedCount = copiedCount
         };
     }
 
@@ -3472,6 +3444,13 @@ WHERE m.ModuleKey = @moduleKey
             result.AppInstanceRowsUpdated += applied.AppInstanceRowsUpdated;
             result.WorkerInstanceRowsUpdated += applied.WorkerInstanceRowsUpdated;
             result.HostAgentDesiredRowsUpdated += applied.HostAgentDesiredRowsUpdated;
+            result.ConfigurationRowsCarried += applied.ConfigurationRowsCarried;
+            if (!string.IsNullOrWhiteSpace(applied.ConfigurationCarryMessage))
+            {
+                result.ConfigurationCarryMessage = result.ConfigurationCarryMessage is null
+                    ? applied.ConfigurationCarryMessage
+                    : result.ConfigurationCarryMessage + " " + applied.ConfigurationCarryMessage;
+            }
         }
 
         return result;
@@ -3494,6 +3473,17 @@ WHERE m.ModuleKey = @moduleKey
         {
             return CreateIncompatibleAutoApplySkipResult(target.PackageType, target.AppType, target.AppKey);
         }
+
+        // Carry configuration continuity onto the new artifact BEFORE any
+        // pointer moves, exactly like the HostAgent twin
+        // (OmpHostArtifactRepository.ApplyImportedArtifactToMatchingApplicationsAsync):
+        // rows the target lacks entirely, and operator edits sitting on the
+        // pointed-away-from artifact where the target row is still a pristine
+        // package baseline.
+        var pointerMoveSources = await CollectPointerMoveSourceArtifactIdsAsync(conn, artifactId, target.AppId, target.Version, ct);
+        var configurationCarry = pointerMoveSources.Count == 0
+            ? (RowsCarried: 0, Message: (string?)null)
+            : await CarryConfigurationRowsOnPointerMoveAsync(conn, artifactId, pointerMoveSources, ct);
 
         var templateAppRowsUpdated = await ApplyArtifactToIntRowsAsync(
             conn,
@@ -3570,8 +3560,132 @@ WHERE WorkerInstanceId = @RowId;",
             TemplateAppRowsUpdated = templateAppRowsUpdated,
             AppInstanceRowsUpdated = appInstanceRowsUpdated,
             WorkerInstanceRowsUpdated = workerInstanceRowsUpdated,
-            HostAgentDesiredRowsUpdated = hostAgentDesiredRowsUpdated
+            HostAgentDesiredRowsUpdated = hostAgentDesiredRowsUpdated,
+            ConfigurationRowsCarried = configurationCarry.RowsCarried,
+            ConfigurationCarryMessage = configurationCarry.Message
         };
+    }
+
+    /// <summary>
+    /// Collects the distinct artifact ids that enabled pointers of the target's
+    /// app currently reference and that <em>will</em> move to the target
+    /// artifact (same version gate as the apply itself). Twin of
+    /// OmpHostArtifactRepository.CollectPointerMoveSourceArtifactIdsAsync.
+    /// </summary>
+    private static async Task<IReadOnlyList<int>> CollectPointerMoveSourceArtifactIdsAsync(
+        SqlConnection conn,
+        int artifactId,
+        int appId,
+        string targetVersion,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT DISTINCT currentArtifact.ArtifactId,
+       currentArtifact.Version
+FROM omp.AppInstances ai
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = ai.ArtifactId
+WHERE ai.AppId = @AppId
+  AND ai.IsEnabled = 1
+  AND ai.ArtifactId IS NOT NULL
+  AND ai.ArtifactId <> @ArtifactId
+
+UNION
+
+SELECT DISTINCT currentArtifact.ArtifactId,
+       currentArtifact.Version
+FROM omp.InstanceTemplateAppInstances tai
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = tai.DesiredArtifactId
+WHERE tai.AppId = @AppId
+  AND tai.IsEnabled = 1
+  AND tai.DesiredArtifactId IS NOT NULL
+  AND tai.DesiredArtifactId <> @ArtifactId
+
+UNION
+
+SELECT DISTINCT currentArtifact.ArtifactId,
+       currentArtifact.Version
+FROM omp.WorkerInstances wi
+INNER JOIN omp.AppInstances ai
+    ON ai.AppInstanceId = wi.AppInstanceId
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = wi.ArtifactId
+WHERE ai.AppId = @AppId
+  AND wi.IsEnabled = 1
+  AND wi.ArtifactId IS NOT NULL
+  AND wi.ArtifactId <> @ArtifactId;";
+
+        var sourceArtifactIds = new List<int>();
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+        Add(cmd, "@AppId", appId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var currentVersion = rdr.IsDBNull(1) ? null : rdr.GetString(1);
+            if (ShouldApplyImportedArtifact(targetVersion, currentVersion))
+            {
+                sourceArtifactIds.Add(rdr.GetInt32(0));
+            }
+        }
+
+        return sourceArtifactIds;
+    }
+
+    /// <summary>
+    /// Runs the shared pointer-move carry (ArtifactConfigurationFileImportSql.
+    /// CarryConfigurationRowsOnPointerMove) and renders the outcome as a status
+    /// message fragment. The source id list is interpolated as int literals --
+    /// values came from the database, so this cannot inject SQL.
+    /// </summary>
+    private static async Task<(int RowsCarried, string? Message)> CarryConfigurationRowsOnPointerMoveAsync(
+        SqlConnection conn,
+        int artifactId,
+        IReadOnlyList<int> sourceArtifactIds,
+        CancellationToken ct)
+    {
+        var valuesList = string.Join(",", sourceArtifactIds.Distinct().Select(static id => "(" + id + ")"));
+        var sql = ArtifactConfigurationFileImportSql.CarryConfigurationRowsOnPointerMove.Replace(
+            ArtifactConfigurationFileImportSql.PointerMoveSourceIdsMarker,
+            valuesList);
+
+        var copied = new List<string>();
+        var carriedEdits = new List<string>();
+        await using var cmd = new SqlCommand(sql, conn);
+        Add(cmd, "@ArtifactId", artifactId);
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var relativePath = rdr.GetString(0);
+            if (string.Equals(rdr.GetString(1), "Copied", StringComparison.Ordinal))
+            {
+                copied.Add(relativePath);
+            }
+            else
+            {
+                carriedEdits.Add(relativePath);
+            }
+        }
+
+        var total = copied.Count + carriedEdits.Count;
+        if (total == 0)
+        {
+            return (0, null);
+        }
+
+        var parts = new List<string>();
+        if (copied.Count > 0)
+        {
+            parts.Add($"copied {string.Join(", ", copied)}");
+        }
+
+        if (carriedEdits.Count > 0)
+        {
+            parts.Add($"carried operator edit(s) for {string.Join(", ", carriedEdits)}");
+        }
+
+        return (total, $"Configuration continuity: {string.Join("; ", parts)} onto the new artifact before moving application pointers.");
     }
 
     private async Task<ArtifactAutoApplyTarget?> ReadArtifactAutoApplyTargetAsync(

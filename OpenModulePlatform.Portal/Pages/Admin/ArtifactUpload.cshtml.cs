@@ -334,11 +334,8 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
             {
                 try
                 {
-                    copyResult = await _repo.CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+                    copyResult = await _repo.CopyConfigurationFilesFromContinuitySourceAsync(
                         artifactId,
-                        artifactData.AppId,
-                        artifactData.PackageType,
-                        artifactData.TargetName,
                         ct);
                 }
                 catch (SqlException)
@@ -771,7 +768,7 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
                 message += " " + string.Format(
                     T("Copied {0} configuration file(s) from artifact version {1}."),
                     copyResult.CopiedCount,
-                    copyResult.SourceVersion);
+                    copyResult.SourceVersion ?? T("the per-path operator-edit fallback"));
             }
         }
 
@@ -845,15 +842,25 @@ public sealed class ArtifactUploadModel : OmpPortalPageModel
 
     private string BuildArtifactAutoApplyStatusMessage(ArtifactApplicationResult? applicationResult)
     {
+        string message;
         if (!string.IsNullOrWhiteSpace(applicationResult?.AutoApplyInfoMessage))
         {
-            return applicationResult.AutoApplyInfoMessage!;
+            message = applicationResult.AutoApplyInfoMessage!;
+        }
+        else
+        {
+            var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
+            message = string.Format(
+                T("Selected this artifact as desired version for {0} matching deployment row(s)."),
+                updatedRows);
         }
 
-        var updatedRows = applicationResult?.TotalRowsUpdated ?? 0;
-        return string.Format(
-            T("Selected this artifact as desired version for {0} matching deployment row(s)."),
-            updatedRows);
+        if (!string.IsNullOrWhiteSpace(applicationResult?.ConfigurationCarryMessage))
+        {
+            message += " " + applicationResult.ConfigurationCarryMessage;
+        }
+
+        return message;
     }
 
     private static void MoveExistingArtifactToBackup(string finalPath, string backupPath)

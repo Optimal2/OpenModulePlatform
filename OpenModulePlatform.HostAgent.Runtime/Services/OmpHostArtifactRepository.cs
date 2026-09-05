@@ -1475,72 +1475,37 @@ WHERE ArtifactId = @artifactId;";
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<int> CopyConfigurationFilesFromLatestPreviousArtifactAsync(
+    /// <summary>
+    /// Copies configuration rows onto a newly registered artifact whose package
+    /// shipped no configuration files. The source is the artifact the slot's
+    /// pointers referenced before the import (app instances, template rows,
+    /// last successful deployment states); when no pointer names a source, the
+    /// per-path fallback takes the newest operator-delta row for each relative
+    /// path across all previous enabled versions. The SQL is shared with the
+    /// Portal upload and the Bootstrapper so the rule cannot drift
+    /// (ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource).
+    /// </summary>
+    public async Task<ArtifactConfigurationContinuityCopyResult> CopyConfigurationFilesFromContinuitySourceAsync(
         int artifactId,
-        int appId,
-        string packageType,
-        string targetName,
         CancellationToken ct)
     {
-        const string sql = @"
-DECLARE @SourceArtifactId int;
-
-SELECT TOP (1)
-       @SourceArtifactId = source.ArtifactId
-FROM omp.Artifacts source
-WHERE source.ArtifactId <> @artifactId
-  AND source.AppId = @appId
-  AND source.PackageType = @packageType
-  AND ((source.TargetName = @targetName) OR (source.TargetName IS NULL AND @targetName IS NULL))
-  AND source.IsEnabled = 1
-  AND EXISTS
-  (
-      SELECT 1
-      FROM omp.ArtifactConfigurationFiles sourceFile
-      WHERE sourceFile.ArtifactId = source.ArtifactId
-  )
-ORDER BY source.CreatedUtc DESC, source.ArtifactId DESC;
-
-IF @SourceArtifactId IS NULL
-BEGIN
-    SELECT CAST(0 AS int);
-    RETURN;
-END;
-
-INSERT INTO omp.ArtifactConfigurationFiles
-(
-    ArtifactId,
-    RelativePath,
-    FileContent,
-    PackageFileContent,
-    IsEnabled
-)
-SELECT @artifactId,
-       sourceFile.RelativePath,
-       sourceFile.FileContent,
-       sourceFile.PackageFileContent,
-       sourceFile.IsEnabled
-FROM omp.ArtifactConfigurationFiles sourceFile
-WHERE sourceFile.ArtifactId = @SourceArtifactId
-  AND NOT EXISTS
-  (
-      SELECT 1
-      FROM omp.ArtifactConfigurationFiles targetFile
-      WHERE targetFile.ArtifactId = @artifactId
-        AND targetFile.RelativePath = sourceFile.RelativePath
-  );
-
-SELECT @@ROWCOUNT;";
-
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@artifactId", artifactId);
-        cmd.Parameters.AddWithValue("@appId", appId);
-        cmd.Parameters.AddWithValue("@packageType", packageType);
-        cmd.Parameters.AddWithValue("@targetName", targetName);
+        await using var cmd = new SqlCommand(
+            ArtifactConfigurationFileImportSql.CopyConfigurationFilesFromContinuitySource,
+            conn);
+        cmd.Parameters.AddWithValue("@ArtifactId", artifactId);
 
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+        {
+            return new ArtifactConfigurationContinuityCopyResult(null, null, 0);
+        }
+
+        return new ArtifactConfigurationContinuityCopyResult(
+            reader.IsDBNull(0) ? null : reader.GetInt32(0),
+            reader.IsDBNull(1) ? null : reader.GetString(1),
+            reader.GetInt32(2));
     }
 
     public async Task<int> ReplaceArtifactConfigurationFilesAsync(
@@ -1707,13 +1672,13 @@ SELECT @@ROWCOUNT;";
     /// Artifacts without a Sha256 are skipped on purpose: those are the ghost rows the artifact
     /// ownership campaign exists to stop pointing production at.
     /// </remarks>
-    public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyLatestModuleArtifactsAsync(
+    public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated, int ConfigurationRowsCarried, string? ConfigurationCarryMessage)> ApplyLatestModuleArtifactsAsync(
         string moduleKey,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(moduleKey))
         {
-            return (0, 0, 0);
+            return (0, 0, 0, 0, null);
         }
 
         // "Newest" is decided in C# with ArtifactVersionComparer, the comparer the import
@@ -1751,15 +1716,24 @@ WHERE m.ModuleKey = @moduleKey
         var templates = 0;
         var appInstances = 0;
         var workerInstances = 0;
+        var configurationRowsCarried = 0;
+        string? configurationCarryMessage = null;
         foreach (var artifactId in newestPerApp)
         {
             var applied = await ApplyImportedArtifactToMatchingApplicationsAsync(artifactId, ct);
             templates += applied.TemplateAppRowsUpdated;
             appInstances += applied.AppInstanceRowsUpdated;
             workerInstances += applied.WorkerInstanceRowsUpdated;
+            configurationRowsCarried += applied.ConfigurationRowsCarried;
+            if (!string.IsNullOrWhiteSpace(applied.ConfigurationCarryMessage))
+            {
+                configurationCarryMessage = configurationCarryMessage is null
+                    ? applied.ConfigurationCarryMessage
+                    : configurationCarryMessage + " " + applied.ConfigurationCarryMessage;
+            }
         }
 
-        return (templates, appInstances, workerInstances);
+        return (templates, appInstances, workerInstances, configurationRowsCarried, configurationCarryMessage);
     }
 
     /// <summary>
@@ -1777,7 +1751,7 @@ WHERE m.ModuleKey = @moduleKey
                 .ArtifactId)
             .ToList();
 
-    public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated)> ApplyImportedArtifactToMatchingApplicationsAsync(
+    public async Task<(int TemplateAppRowsUpdated, int AppInstanceRowsUpdated, int WorkerInstanceRowsUpdated, int ConfigurationRowsCarried, string? ConfigurationCarryMessage)> ApplyImportedArtifactToMatchingApplicationsAsync(
         int artifactId,
         CancellationToken ct)
     {
@@ -1787,8 +1761,19 @@ WHERE m.ModuleKey = @moduleKey
         var target = await ReadArtifactAutoApplyTargetAsync(conn, artifactId, ct);
         if (target is null || !IsArtifactPackageCompatibleWithAppType(target.PackageType, target.AppType))
         {
-            return (0, 0, 0);
+            return (0, 0, 0, 0, null);
         }
+
+        // Carry configuration continuity onto the new artifact BEFORE any
+        // pointer moves: rows the target lacks entirely, and operator edits
+        // sitting on the pointed-away-from artifact where the target row is
+        // still a pristine package baseline. Without this a pointer move to an
+        // artifact whose package ships no (or a changed) configuration silently
+        // drops the running configuration at the next deployment.
+        var pointerMoveSources = await CollectPointerMoveSourceArtifactIdsAsync(conn, artifactId, target, ct);
+        var (configurationRowsCarried, configurationCarryMessage) = pointerMoveSources.Count == 0
+            ? (0, null)
+            : await CarryConfigurationRowsOnPointerMoveAsync(conn, artifactId, pointerMoveSources, ct);
 
         var templateRowsUpdated = await ApplyArtifactToIntRowsAsync(
             conn,
@@ -1856,7 +1841,129 @@ WHERE WorkerInstanceId = @rowId;",
             target.AppId,
             ct);
 
-        return (templateRowsUpdated, appRowsUpdated, workerRowsUpdated);
+        return (templateRowsUpdated, appRowsUpdated, workerRowsUpdated, configurationRowsCarried, configurationCarryMessage);
+    }
+
+    /// <summary>
+    /// Collects the distinct artifact ids that enabled pointers of the target's
+    /// app currently reference and that <em>will</em> move to the target
+    /// artifact (same version gate as the apply itself). This is the pre-move
+    /// reader twin of the three pointer selects in
+    /// <see cref="ApplyImportedArtifactToMatchingApplicationsAsync"/>.
+    /// </summary>
+    private static async Task<IReadOnlyList<int>> CollectPointerMoveSourceArtifactIdsAsync(
+        SqlConnection conn,
+        int artifactId,
+        ArtifactAutoApplyTarget target,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT DISTINCT currentArtifact.ArtifactId,
+       currentArtifact.Version
+FROM omp.AppInstances ai
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = ai.ArtifactId
+WHERE ai.AppId = @appId
+  AND ai.IsEnabled = 1
+  AND ai.ArtifactId IS NOT NULL
+  AND ai.ArtifactId <> @artifactId
+
+UNION
+
+SELECT DISTINCT currentArtifact.ArtifactId,
+       currentArtifact.Version
+FROM omp.InstanceTemplateAppInstances tai
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = tai.DesiredArtifactId
+WHERE tai.AppId = @appId
+  AND tai.IsEnabled = 1
+  AND tai.DesiredArtifactId IS NOT NULL
+  AND tai.DesiredArtifactId <> @artifactId
+
+UNION
+
+SELECT DISTINCT currentArtifact.ArtifactId,
+       currentArtifact.Version
+FROM omp.WorkerInstances wi
+INNER JOIN omp.AppInstances ai
+    ON ai.AppInstanceId = wi.AppInstanceId
+INNER JOIN omp.Artifacts currentArtifact
+    ON currentArtifact.ArtifactId = wi.ArtifactId
+WHERE ai.AppId = @appId
+  AND wi.IsEnabled = 1
+  AND wi.ArtifactId IS NOT NULL
+  AND wi.ArtifactId <> @artifactId;";
+
+        var sourceArtifactIds = new List<int>();
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@appId", target.AppId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var currentVersion = reader.IsDBNull(1) ? null : reader.GetString(1);
+            if (ShouldAutoApplyImportedArtifact(target.Version, currentVersion))
+            {
+                sourceArtifactIds.Add(reader.GetInt32(0));
+            }
+        }
+
+        return sourceArtifactIds;
+    }
+
+    /// <summary>
+    /// Runs the shared pointer-move carry (ArtifactConfigurationFileImportSql.
+    /// CarryConfigurationRowsOnPointerMove) and renders the outcome as an
+    /// import-message fragment. The source id list is interpolated as int
+    /// literals -- values came from the database, so this cannot inject SQL.
+    /// </summary>
+    private static async Task<(int RowsCarried, string? Message)> CarryConfigurationRowsOnPointerMoveAsync(
+        SqlConnection conn,
+        int artifactId,
+        IReadOnlyList<int> sourceArtifactIds,
+        CancellationToken ct)
+    {
+        var valuesList = string.Join(",", sourceArtifactIds.Distinct().Select(static id => "(" + id + ")"));
+        var sql = ArtifactConfigurationFileImportSql.CarryConfigurationRowsOnPointerMove.Replace(
+            ArtifactConfigurationFileImportSql.PointerMoveSourceIdsMarker,
+            valuesList);
+
+        var copied = new List<string>();
+        var carriedEdits = new List<string>();
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@ArtifactId", artifactId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var relativePath = reader.GetString(0);
+            if (string.Equals(reader.GetString(1), "Copied", StringComparison.Ordinal))
+            {
+                copied.Add(relativePath);
+            }
+            else
+            {
+                carriedEdits.Add(relativePath);
+            }
+        }
+
+        var total = copied.Count + carriedEdits.Count;
+        if (total == 0)
+        {
+            return (0, null);
+        }
+
+        var parts = new List<string>();
+        if (copied.Count > 0)
+        {
+            parts.Add($"copied {string.Join(", ", copied)}");
+        }
+
+        if (carriedEdits.Count > 0)
+        {
+            parts.Add($"carried operator edit(s) for {string.Join(", ", carriedEdits)}");
+        }
+
+        return (total, $"Configuration continuity: {string.Join("; ", parts)} onto the new artifact before moving application pointers.");
     }
 
     public async Task<int> ApplyImportedHostAgentArtifactToCurrentHostAsync(
@@ -2294,6 +2401,26 @@ WHERE HostDeploymentId = @hostDeploymentId
 DECLARE @DeleteArtifacts TABLE
 (
     ArtifactId int NOT NULL PRIMARY KEY,
+    AppId int NOT NULL,
+    ModuleKey nvarchar(100) NOT NULL,
+    AppKey nvarchar(100) NOT NULL,
+    Version nvarchar(50) NOT NULL,
+    PackageType nvarchar(50) NOT NULL,
+    TargetName nvarchar(100) NULL,
+    RelativePath nvarchar(400) NULL,
+    CreatedUtc datetime2(3) NOT NULL,
+    RetentionRank int NOT NULL,
+    TotalVersions int NOT NULL,
+    ProtectedReferenceCount int NOT NULL
+);
+
+-- Every ranked artifact, not just the deletion candidates: the operator-delta
+-- guard below must know which NEWER versions survive (inside the keep limit,
+-- referenced, or spared by the guard itself) before a candidate may be deleted.
+DECLARE @RankedArtifacts TABLE
+(
+    ArtifactId int NOT NULL PRIMARY KEY,
+    AppId int NOT NULL,
     ModuleKey nvarchar(100) NOT NULL,
     AppKey nvarchar(100) NOT NULL,
     Version nvarchar(50) NOT NULL,
@@ -2334,6 +2461,7 @@ DECLARE @CreatedJobs TABLE
 WITH RankedArtifacts AS
 (
     SELECT ar.ArtifactId,
+           ar.AppId,
            m.ModuleKey,
            a.AppKey,
            ar.Version,
@@ -2436,9 +2564,10 @@ WITH RankedArtifacts AS
         ) grouped
     ) pr
 )
-INSERT INTO @DeleteArtifacts
+INSERT INTO @RankedArtifacts
 (
     ArtifactId,
+    AppId,
     ModuleKey,
     AppKey,
     Version,
@@ -2451,6 +2580,7 @@ INSERT INTO @DeleteArtifacts
     ProtectedReferenceCount
 )
 SELECT ArtifactId,
+       AppId,
        ModuleKey,
        AppKey,
        Version,
@@ -2461,10 +2591,41 @@ SELECT ArtifactId,
        RetentionRank,
        TotalVersions,
        ProtectedReferenceCount
-FROM RankedArtifacts
+FROM RankedArtifacts;
+
+INSERT INTO @DeleteArtifacts
+(
+    ArtifactId,
+    AppId,
+    ModuleKey,
+    AppKey,
+    Version,
+    PackageType,
+    TargetName,
+    RelativePath,
+    CreatedUtc,
+    RetentionRank,
+    TotalVersions,
+    ProtectedReferenceCount
+)
+SELECT ArtifactId,
+       AppId,
+       ModuleKey,
+       AppKey,
+       Version,
+       PackageType,
+       TargetName,
+       RelativePath,
+       CreatedUtc,
+       RetentionRank,
+       TotalVersions,
+       ProtectedReferenceCount
+FROM @RankedArtifacts
 WHERE TotalVersions > @MaxVersionsToKeep
   AND RetentionRank > @MaxVersionsToKeep
   AND ProtectedReferenceCount = 0;
+
+/*OPERATOR_DELTA_PROTECTION*/
 
 INSERT INTO @CacheEntries
 (
@@ -2658,9 +2819,13 @@ FROM @CreatedJobs;";
         await conn.OpenAsync(ct);
 
         var externalReferences = await DiscoverExternalArtifactReferencesAsync(conn, ct);
-        var sql = sqlTemplate.Replace(
-            ArtifactRetentionProtectedReferences.SqlMarker,
-            ArtifactRetentionProtectedReferences.BuildProtectionClauses(externalReferences));
+        var sql = sqlTemplate
+            .Replace(
+                ArtifactRetentionProtectedReferences.SqlMarker,
+                ArtifactRetentionProtectedReferences.BuildProtectionClauses(externalReferences))
+            .Replace(
+                "/*OPERATOR_DELTA_PROTECTION*/",
+                ArtifactConfigurationFileImportSql.ProtectUniqueOperatorDeltaArtifacts);
 
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 

@@ -117,8 +117,12 @@ public sealed class InstanceTemplateEditModel : OmpPortalPageModel
 
         try
         {
-            var (version, carryForward) = await _repo.UpgradeInstanceTemplateAppArtifactAsync(id, artifactId, ct);
+            var (version, carryForward, configurationCarryMessage) = await _repo.UpgradeInstanceTemplateAppArtifactAsync(id, artifactId, ct);
             var successMessage = string.Format(T("Desired artifact updated to version {0}."), version);
+            if (!string.IsNullOrWhiteSpace(configurationCarryMessage))
+            {
+                successMessage += " " + configurationCarryMessage;
+            }
 
             // Carry-forward outcomes are surfaced inline on the rendered page
             // rather than via TempData that can go stale (R5-F12).

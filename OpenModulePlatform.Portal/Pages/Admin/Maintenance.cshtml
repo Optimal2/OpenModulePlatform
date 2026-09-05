@@ -493,6 +493,10 @@ else
                                         {
                                             <div class="muted small-text">@L["Protected by"]: @row.ProtectedReferenceSources</div>
                                         }
+                                        @if (row.OperatorDeltaProtected)
+                                        {
+                                            <div class="muted small-text">@L["Protected by"]: @L["Configuration operator delta"]</div>
+                                        }
                                     }
                                     else
                                     {

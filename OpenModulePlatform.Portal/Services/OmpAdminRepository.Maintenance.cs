@@ -1,4 +1,5 @@
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using System.Text.Json;
 
@@ -15,9 +16,40 @@ public sealed partial class OmpAdminRepository
     // cleanup job excludes. Twin logic lives in
     // OpenModulePlatform.HostAgent.Runtime/Services/ArtifactRetentionProtectedReferences.cs.
     private const string ArtifactRetentionCandidateSql = @"
+DECLARE @RankedArtifacts TABLE
+(
+    ArtifactId int NOT NULL PRIMARY KEY,
+    AppId int NOT NULL,
+    ModuleKey nvarchar(100) NOT NULL,
+    AppKey nvarchar(100) NOT NULL,
+    Version nvarchar(50) NOT NULL,
+    PackageType nvarchar(50) NOT NULL,
+    TargetName nvarchar(100) NULL,
+    RelativePath nvarchar(400) NULL,
+    CreatedUtc datetime2(3) NOT NULL,
+    RetentionRank int NOT NULL,
+    TotalVersions int NOT NULL,
+    ProtectedReferenceCount int NOT NULL,
+    ProtectedReferenceSources nvarchar(max) NULL
+);
+
+-- The current deletion candidates. The operator-delta guard narrows this set:
+-- a candidate whose configuration rows carry an operator edit that survives
+-- byte-identically on no NEWER preserved version is kept. Twin of the
+-- HostAgent cleanup in OmpHostArtifactRepository.
+DECLARE @DeleteArtifacts TABLE
+(
+    ArtifactId int NOT NULL PRIMARY KEY,
+    AppId int NOT NULL,
+    PackageType nvarchar(50) NOT NULL,
+    TargetName nvarchar(100) NULL,
+    RetentionRank int NOT NULL
+);
+
 WITH RankedArtifacts AS
 (
     SELECT ar.ArtifactId,
+           ar.AppId,
            m.ModuleKey,
            a.AppKey,
            ar.Version,
@@ -121,7 +153,24 @@ WITH RankedArtifacts AS
         ) grouped
     ) pr
 )
+INSERT INTO @RankedArtifacts
+(
+    ArtifactId,
+    AppId,
+    ModuleKey,
+    AppKey,
+    Version,
+    PackageType,
+    TargetName,
+    RelativePath,
+    CreatedUtc,
+    RetentionRank,
+    TotalVersions,
+    ProtectedReferenceCount,
+    ProtectedReferenceSources
+)
 SELECT ArtifactId,
+       AppId,
        ModuleKey,
        AppKey,
        Version,
@@ -133,7 +182,52 @@ SELECT ArtifactId,
        TotalVersions,
        ProtectedReferenceCount,
        ProtectedReferenceSources
-FROM RankedArtifacts
+FROM RankedArtifacts;
+
+INSERT INTO @DeleteArtifacts
+(
+    ArtifactId,
+    AppId,
+    PackageType,
+    TargetName,
+    RetentionRank
+)
+SELECT ArtifactId,
+       AppId,
+       PackageType,
+       TargetName,
+       RetentionRank
+FROM @RankedArtifacts
+WHERE TotalVersions > @MaxVersionsToKeep
+  AND RetentionRank > @MaxVersionsToKeep
+  AND ProtectedReferenceCount = 0;
+
+/*OPERATOR_DELTA_PROTECTION*/
+
+SELECT ArtifactId,
+       ModuleKey,
+       AppKey,
+       Version,
+       PackageType,
+       TargetName,
+       RelativePath,
+       CreatedUtc,
+       RetentionRank,
+       TotalVersions,
+       ProtectedReferenceCount,
+       ProtectedReferenceSources,
+       CASE
+           WHEN ProtectedReferenceCount = 0
+                AND NOT EXISTS
+                (
+                    SELECT 1
+                    FROM @DeleteArtifacts d
+                    WHERE d.ArtifactId = ranked.ArtifactId
+                )
+               THEN 1
+           ELSE 0
+       END AS OperatorDeltaProtected
+FROM @RankedArtifacts ranked
 WHERE TotalVersions > @MaxVersionsToKeep
   AND RetentionRank > @MaxVersionsToKeep
 ORDER BY ModuleKey,
@@ -148,9 +242,13 @@ ORDER BY ModuleKey,
         int maxVersionsToKeep,
         CancellationToken ct)
     {
-        var sql = ArtifactRetentionCandidateSql.Replace(
-            ExternalArtifactReferenceMarker,
-            BuildExternalArtifactReferenceClauses(await DiscoverExternalArtifactReferencesAsync(ct)));
+        var sql = ArtifactRetentionCandidateSql
+            .Replace(
+                ExternalArtifactReferenceMarker,
+                BuildExternalArtifactReferenceClauses(await DiscoverExternalArtifactReferencesAsync(ct)))
+            .Replace(
+                "/*OPERATOR_DELTA_PROTECTION*/",
+                ArtifactConfigurationFileImportSql.ProtectUniqueOperatorDeltaArtifacts);
 
         var candidates = await ReadArtifactRetentionCandidatesAsync(
             sql,
@@ -826,7 +924,8 @@ SELECT @@ROWCOUNT;";
             RetentionRank = rdr.GetInt32(8),
             TotalVersions = rdr.GetInt32(9),
             ProtectedReferenceCount = rdr.GetInt32(10),
-            ProtectedReferenceSources = rdr.IsDBNull(11) ? null : rdr.GetString(11)
+            ProtectedReferenceSources = rdr.IsDBNull(11) ? null : rdr.GetString(11),
+            OperatorDeltaProtected = rdr.GetInt32(12) == 1
         };
 
     private sealed record MaintenanceCleanupCandidate(
