@@ -350,8 +350,11 @@ public static class DeploymentLockFile
     /// the other side's atomic renewal holds the same kind of handle for milliseconds.
     /// A delete-pending file (marked for deletion on close, not yet unlinked) answers
     /// CreateFile with ERROR_ACCESS_DENIED rather than a sharing violation, so a denial
-    /// is retried on the same bounded budget -- a real ACL denial simply reports
-    /// Indeterminate after the budget instead of immediately.
+    /// that probes as delete-pending is retried on the same bounded budget. A denial
+    /// that does NOT probe as delete-pending is a real permission failure -- wrong
+    /// service account, a read-only file, a missing DELETE right -- which does not
+    /// clear inside the budget; it is rethrown so the caller reports it as what it is
+    /// instead of "locked by another process".
     /// </summary>
     private static async Task<FileStream?> OpenExclusiveWithRetryAsync(string path, CancellationToken ct)
     {
@@ -367,6 +370,12 @@ public static class DeploymentLockFile
             }
             catch (DirectoryNotFoundException)
             {
+                throw;
+            }
+            catch (UnauthorizedAccessException) when (!FileIsDeletePending(path))
+            {
+                // A real ACL denial, retried and then misreported as a lost race, sent
+                // the operator hunting for a competing deployment that does not exist.
                 throw;
             }
             catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException)
@@ -433,6 +442,33 @@ public static class DeploymentLockFile
     }
 
     /// <summary>
+    /// Distinguishes the two causes of ERROR_ACCESS_DENIED on the lock file, which have
+    /// opposite meanings here. A file marked for deletion on close (delete-pending --
+    /// a lost race whose unlink lands when the last handle closes) refuses EVERY new
+    /// open, including this metadata-only probe with zero desired access. A real
+    /// permission failure -- wrong service account, a read-only file, a missing DELETE
+    /// right -- still answers it, because the probe requests no data access at all.
+    /// The probe is the only distinction available: a delete-pending file cannot be
+    /// opened for a query either, so no handle-based query can settle it directly.
+    /// A denial even of the probe is treated as delete-pending: an ACL exotic enough
+    /// to refuse attribute reads is indistinguishable from it, and the fail-closed
+    /// answer is the same.
+    /// </summary>
+    private static bool FileIsDeletePending(string path)
+    {
+        using var probe = NativeMethods.CreateFile(
+            @"\\?\" + path,
+            dwDesiredAccess: 0,
+            NativeMethods.FileShareReadWriteDelete,
+            IntPtr.Zero,
+            NativeMethods.OpenExisting,
+            NativeMethods.FileAttributeNormal,
+            IntPtr.Zero);
+        return probe.IsInvalid
+            && Marshal.GetLastWin32Error() == NativeMethods.ErrorAccessDenied;
+    }
+
+    /// <summary>
     /// Maps a failed CreateFile to the exception shape the managed FileStream open would
     /// have produced, so existing catch filters (FileNotFoundException, IOException for a
     /// sharing violation, UnauthorizedAccessException for a denial) behave identically.
@@ -488,6 +524,7 @@ public static class DeploymentLockFile
         internal const uint GenericRead = 0x80000000;
         internal const uint GenericWrite = 0x40000000;
         internal const uint Delete = 0x00010000;
+        internal const uint FileShareReadWriteDelete = 0x00000007;
         internal const uint OpenExisting = 3;
         internal const uint CreateNew = 1;
         internal const uint FileAttributeNormal = 0x80;
@@ -661,7 +698,9 @@ public static class DeploymentLockFile
         {
             stream = openClaim(path, NativeMethods.CreateNew);
         }
-        catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && File.Exists(path))
+        catch (Exception ex) when ((ex is IOException
+            || (ex is UnauthorizedAccessException && FileIsDeletePending(path)))
+            && File.Exists(path))
         {
             // Another claimant got there first -- unless what got there is a zero-byte
             // residue of an interrupted claim or renewal, which can never be a valid
@@ -673,11 +712,14 @@ public static class DeploymentLockFile
             // the file does NOT exist fails the filter above and propagates as before:
             // a full disk or a vanished share is a real failure, not a lost race.
             //
-            // The UnauthorizedAccessException half covers a delete-pending file: marked
-            // for deletion on close but not yet unlinked, it answers CreateFile with
-            // ERROR_ACCESS_DENIED. That is a lost race too -- the takeover open fails the
-            // same way and this claim returns false instead of throwing out of the
-            // acquire path.
+            // The UnauthorizedAccessException half covers ONLY a delete-pending file:
+            // marked for deletion on close but not yet unlinked, it answers CreateFile
+            // with ERROR_ACCESS_DENIED, and that is a lost race too -- the takeover open
+            // fails the same way and this claim returns false instead of throwing out of
+            // the acquire path. A denial that does not probe as delete-pending is a real
+            // permission failure (wrong service account, read-only file, missing DELETE
+            // right): it fails the filter and propagates, so the operator is told
+            // "access denied" rather than "another deployment claimed the lock first".
             var takeover = TryOpenZeroByteResidueForTakeover(path);
             if (takeover is null)
             {
@@ -802,10 +844,13 @@ public static class DeploymentLockFile
             // the claimant whose CreateNew beat ours: either way the race is lost.
             return null;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException) when (FileIsDeletePending(path))
         {
+            // Delete-pending: the race is lost and the unlink lands with the last close.
             return null;
         }
+        // A denial that does not probe as delete-pending is a real permission failure:
+        // it propagates so the acquire path reports it as what it is.
 
         if (stream.Length != 0)
         {

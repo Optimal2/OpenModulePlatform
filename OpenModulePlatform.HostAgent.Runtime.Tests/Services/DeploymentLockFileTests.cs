@@ -870,6 +870,142 @@ public sealed class DeploymentLockFileTests : IDisposable
     }
 
     /// <summary>
+    /// A REAL access denial is not a lost race. A lock file the process may not open --
+    /// here a read-only file, standing in for a wrong service account or a missing
+    /// DELETE right; all three surface as the same ERROR_ACCESS_DENIED from CreateFile --
+    /// must be reported as the permission problem it is. Before the fix this attempt
+    /// returned false, and both acquire callers translated that into "Another deployment
+    /// claimed the lock first", sending the operator hunting for a competing deployment
+    /// that does not exist (commit bfe824ee folded every ACCESS_DENIED into the lost-race
+    /// branch because a delete-pending file answers CreateFile the same way).
+    /// </summary>
+    [Fact]
+    public async Task TryCreateExclusiveAsync_WhenTheExistingFileDeniesAccess_ReportsTheDenialInsteadOfALostRace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            var claim = DeploymentLockFile.Create("new-claim-id", "app-key", "other", "deploying", now, now.AddMinutes(5));
+            var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(
+                () => DeploymentLockFile.TryCreateExclusiveAsync(_root, claim, CancellationToken.None));
+            Assert.Contains("denied", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+
+        // Fail-closed: nothing was claimed and the existing lock file is untouched.
+        Assert.Equal("lock-id", DeploymentLockFile.ReadStatus(_root, now).Document!.LockId);
+    }
+
+    /// <summary>
+    /// Same distinction on the renewal's exclusive open: a real denial must surface as
+    /// "access denied", not as "stayed exclusively locked by another process" after the
+    /// retry budget -- a permission problem does not clear inside 500 ms, and the wrong
+    /// message starts the diagnosis at a competing process that does not exist.
+    /// </summary>
+    [Fact]
+    public async Task TryRenewExclusiveAsync_WhenTheFileDeniesAccess_ReportsTheDenialInsteadOfLockedByAnotherProcess()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            var outcome = await DeploymentLockFile.TryRenewExclusiveAsync(
+                _root,
+                "lock-id",
+                current => current with { UpdatedUtc = now.AddSeconds(30) },
+                CancellationToken.None);
+
+            // Still fail-closed (Indeterminate, not Lost and not Renewed) -- only the
+            // diagnosis changes.
+            Assert.Equal(DeploymentLockRenewalResult.Indeterminate, outcome.Result);
+            Assert.NotNull(outcome.Diagnostic);
+            Assert.Contains("denied", outcome.Diagnostic, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("another process", outcome.Diagnostic, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+
+        Assert.Equal("lock-id", DeploymentLockFile.ReadStatus(_root, now).Document!.LockId);
+    }
+
+    /// <summary>
+    /// Same distinction on the compare-and-delete's exclusive open, which shares the
+    /// retrying opener with the renewal.
+    /// </summary>
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_WhenTheFileDeniesAccess_ReportsTheDenialInsteadOfLockedByAnotherProcess()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now.AddMinutes(-30), now.AddMinutes(-10));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            var outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+                _root, "lock-id", deletionRequirement: null, CancellationToken.None);
+
+            Assert.Equal(DeploymentLockDeleteResult.Indeterminate, outcome.Result);
+            Assert.NotNull(outcome.Diagnostic);
+            Assert.Contains("denied", outcome.Diagnostic, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("another process", outcome.Diagnostic, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+
+        // Fail-closed: the file could not be proven ours, so it was left in place.
+        Assert.True(File.Exists(path));
+        Assert.Equal("lock-id", DeploymentLockFile.ReadStatus(_root, now).Document!.LockId);
+    }
+
+    /// <summary>
+    /// The regression guard for the other half of the distinction: a delete-pending
+    /// file (marked for deletion on close, not yet unlinked) answers CreateFile with
+    /// the same ERROR_ACCESS_DENIED as a real ACL denial, and it must STILL be treated
+    /// as a lost race -- retried within the bounded budget, then reported as a lock
+    /// held by another process -- otherwise the fix has only swapped one wrong message
+    /// for another. Pairs with the claim-path guard
+    /// <see cref="TryCreateExclusiveAsync_WhenTheFileIsDeletePending_LosesTheRaceInsteadOfThrowing"/>.
+    /// </summary>
+    [Fact]
+    public async Task TryDeleteIfOwnedExclusiveAsync_WhenTheFileIsDeletePending_StillReportsTheLostRace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("lock-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await DeploymentLockFile.WriteAsync(_root, doc, CancellationToken.None);
+        var path = DeploymentLockFile.GetPath(_root);
+
+        DeploymentLockDeleteOutcome outcome;
+        await using (var holder = new FileStream(
+            DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(path), FileAccess.ReadWrite))
+        {
+            Assert.True(DeploymentLockFile.TryArmDeleteOnClose(holder, out _));
+
+            outcome = await DeploymentLockFile.TryDeleteIfOwnedExclusiveAsync(
+                _root, "lock-id", deletionRequirement: null, CancellationToken.None);
+        }
+
+        Assert.Equal(DeploymentLockDeleteResult.Indeterminate, outcome.Result);
+        Assert.NotNull(outcome.Diagnostic);
+        Assert.Contains("stayed exclusively locked by another process", outcome.Diagnostic, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
     /// A stream whose buffered write succeeds but whose flush fails -- the real shape of
     /// "write fails after truncation" against a FileStream with a buffer -- and whose
     /// disposal then fails the retried write again, the way a genuinely broken device
