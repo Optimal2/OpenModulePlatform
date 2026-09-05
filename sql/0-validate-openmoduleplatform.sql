@@ -114,6 +114,7 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp', N'HostAppDeploymentStates', N'EffectiveOmpAuthCookieName'),
         (N'omp', N'HostAppDeploymentStates', N'EffectiveOmpAuthApplicationName'),
         (N'omp', N'HostAppDeploymentStates', N'EffectiveOmpAuthDataProtectionKeyPath'),
+        (N'omp', N'ConfigOverlayConfigurationFiles', N'MergeMode'),
         (N'omp', N'InstanceTemplateAppInstances', N'TargetHostTemplateId'),
         (N'omp', N'InstanceTemplateAppInstances', N'IsAllowed'),
         (N'omp', N'HostAgentJobs', N'LeaseToken'),

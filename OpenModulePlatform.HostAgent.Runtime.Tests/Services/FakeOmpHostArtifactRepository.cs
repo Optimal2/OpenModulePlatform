@@ -188,6 +188,14 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ArtifactConfigurationFileDescriptor>>(ArtifactConfigurationFiles);
 
+    public List<ConfigOverlayVersionSkip> VersionSkippedConfigOverlays { get; set; } = [];
+
+    public Task<IReadOnlyList<ConfigOverlayVersionSkip>> GetVersionSkippedConfigOverlaysAsync(
+        int artifactId,
+        string hostKey,
+        CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ConfigOverlayVersionSkip>>(VersionSkippedConfigOverlays);
+
     public Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
         int artifactId,
         CancellationToken ct)

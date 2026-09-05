@@ -267,8 +267,34 @@ CREATE TABLE omp.ConfigOverlayConfigurationFiles
     ConfigOverlayDocumentId int NOT NULL,
     RelativePath nvarchar(500) NOT NULL,
     FileContent nvarchar(max) NOT NULL,
+    MergeMode nvarchar(20) NULL,
     IsEnabled bit NOT NULL DEFAULT(1)
 );");
+    }
+
+    public IReadOnlyList<(string RelativePath, string FileContent, string? MergeMode)> GetOverlayConfigurationFiles(int documentId)
+    {
+        var rows = new List<(string, string, string?)>();
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            @"
+SELECT RelativePath, FileContent, MergeMode
+FROM omp.ConfigOverlayConfigurationFiles
+WHERE ConfigOverlayDocumentId = @documentId
+ORDER BY RelativePath;",
+            conn);
+        cmd.Parameters.AddWithValue("@documentId", documentId);
+        using var rdr = cmd.ExecuteReader();
+        while (rdr.Read())
+        {
+            rows.Add((
+                rdr.GetString(0),
+                rdr.GetString(1),
+                rdr.IsDBNull(2) ? null : rdr.GetString(2)));
+        }
+
+        return rows;
     }
 
     public IReadOnlyList<(int DocumentId, string OverlayVersion, bool IsEnabled, DateTime UpdatedUtc)> GetOverlayDocuments(
@@ -381,6 +407,16 @@ CREATE TABLE omp.ArtifactConfigurationFiles
         Execute(
             "INSERT INTO omp.Apps(AppId, ModuleId, AppKey) VALUES(1, 1, @appKey);",
             new SqlParameter("@appKey", appKey));
+        return InsertArtifactForExistingApp(artifactId, packageType, version, targetName, createdUtc);
+    }
+
+    /// <summary>
+    /// Adds another artifact to the app that <see cref="InsertArtifactWithApp"/>
+    /// created (AppId 1), so a test can resolve configuration for several artifact
+    /// versions in the same database.
+    /// </summary>
+    public int InsertArtifactForExistingApp(int artifactId, string packageType, string version, string? targetName = null, DateTime? createdUtc = null)
+    {
         Execute(
             "INSERT INTO omp.Artifacts(ArtifactId, PackageType, IsEnabled, AppId, Version, TargetName, CreatedUtc) VALUES(@artifactId, @packageType, 1, 1, @version, @targetName, COALESCE(@createdUtc, SYSUTCDATETIME()));",
             new SqlParameter("@artifactId", artifactId),

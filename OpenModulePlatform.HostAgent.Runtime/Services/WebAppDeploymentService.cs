@@ -211,6 +211,27 @@ public sealed class WebAppDeploymentService
                     : diagnosticWarning + Environment.NewLine + missingRequiredSectionsWarning;
             }
 
+            // ADR 0006: an enabled overlay that matches every selector except its
+            // artifactVersion minimum did not apply. Surface it as a diagnostic
+            // warning so the fallback to artifact-owned configuration is visible.
+            var versionSkippedOverlays = await _repository.GetVersionSkippedConfigOverlaysAsync(
+                deployment.ArtifactId,
+                deployment.HostKey,
+                cancellationToken);
+            foreach (var skip in versionSkippedOverlays)
+            {
+                var skipWarning = skip.ToDiagnosticWarning(deployment.Version);
+                _logger.LogWarning(
+                    "Config overlay skipped by artifact version minimum for web app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    skipWarning);
+
+                diagnosticWarning = string.IsNullOrWhiteSpace(diagnosticWarning)
+                    ? skipWarning
+                    : diagnosticWarning + Environment.NewLine + skipWarning;
+            }
+
             // Continuity gate: a previous successful deploy that provably had
             // more configuration (file or whole sections) must not be replaced
             // by a resolution that silently falls back to the built-in default.

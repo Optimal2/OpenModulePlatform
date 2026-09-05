@@ -250,6 +250,29 @@ public sealed class ServiceAppDeploymentService
                     : deploySetWarning + Environment.NewLine + missingRequiredSectionsWarning;
             }
 
+            // ADR 0006: an enabled overlay that matches every selector except its
+            // artifactVersion minimum did not apply. deploySetWarning doubles as
+            // the diagnostic-warning accumulator for every publish site below, so
+            // the skip warning is appended there (the blocked-path early return
+            // above has already read it and is unaffected).
+            var versionSkippedOverlays = await _repository.GetVersionSkippedConfigOverlaysAsync(
+                deployment.ArtifactId,
+                deployment.HostKey,
+                cancellationToken);
+            foreach (var skip in versionSkippedOverlays)
+            {
+                var skipWarning = skip.ToDiagnosticWarning(deployment.Version);
+                _logger.LogWarning(
+                    "Config overlay skipped by artifact version minimum for service app deployment. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Warning={Warning}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    skipWarning);
+
+                deploySetWarning = string.IsNullOrWhiteSpace(deploySetWarning)
+                    ? skipWarning
+                    : deploySetWarning + Environment.NewLine + skipWarning;
+            }
+
             // Already-applied is evaluated before the deployment lock, matching the web app
             // path. The other order published a Warning for a deployment that was in fact
             // converged, and Warning drops the row out of the already-applied fast path

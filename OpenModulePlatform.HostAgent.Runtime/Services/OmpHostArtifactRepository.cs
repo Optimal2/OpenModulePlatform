@@ -3318,19 +3318,19 @@ BEGIN
         CAST(NULL AS nvarchar(max)) AS FileContent,
         CAST(NULL AS int) AS SourcePriority,
         CAST(NULL AS datetime2(3)) AS SourceUpdatedUtc,
-        CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion;
+        CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion,
+        CAST(NULL AS nvarchar(20)) AS MergeMode,
+        CAST(NULL AS nvarchar(50)) AS OverlayArtifactVersion;
     RETURN;
 END;
 
 DECLARE @ModuleKey nvarchar(100);
 DECLARE @AppKey nvarchar(100);
-DECLARE @Version nvarchar(50);
 DECLARE @PackageType nvarchar(50);
 DECLARE @TargetName nvarchar(100);
 
 SELECT @ModuleKey = m.ModuleKey,
        @AppKey = app.AppKey,
-       @Version = ar.Version,
        @PackageType = ar.PackageType,
        @TargetName = ar.TargetName
 FROM omp.Artifacts ar
@@ -3347,10 +3347,57 @@ BEGIN
            FileContent,
            CAST(0 AS int) AS SourcePriority,
            UpdatedUtc AS SourceUpdatedUtc,
-           CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion
+           CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion,
+           CAST(NULL AS nvarchar(20)) AS MergeMode,
+           CAST(NULL AS nvarchar(50)) AS OverlayArtifactVersion
     FROM omp.ArtifactConfigurationFiles
     WHERE ArtifactId = @artifactId
       AND IsEnabled = 1
+    ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;
+    RETURN;
+END;
+
+-- ADR 0006: overlay.ArtifactVersion is no longer compared here. It is a minimum
+-- version evaluated in C# with ArtifactVersionComparer, because SQL string
+-- ordering cannot express numeric version order. The pin is returned as
+-- OverlayArtifactVersion and filtered by the caller.
+
+IF COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') IS NULL
+BEGIN
+    SELECT ArtifactConfigurationFileId,
+           ArtifactId,
+           RelativePath,
+           FileContent,
+           CAST(0 AS int) AS SourcePriority,
+           UpdatedUtc AS SourceUpdatedUtc,
+           CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion,
+           CAST(NULL AS nvarchar(20)) AS MergeMode,
+           CAST(NULL AS nvarchar(50)) AS OverlayArtifactVersion
+    FROM omp.ArtifactConfigurationFiles
+    WHERE ArtifactId = @artifactId
+      AND IsEnabled = 1
+
+    UNION ALL
+
+    SELECT overlayFile.ConfigOverlayConfigurationFileId AS ArtifactConfigurationFileId,
+           @artifactId AS ArtifactId,
+           overlayFile.RelativePath,
+           overlayFile.FileContent,
+           CAST(1 AS int) AS SourcePriority,
+           overlay.UpdatedUtc AS SourceUpdatedUtc,
+           overlay.OverlayVersion AS SourceOverlayVersion,
+           CAST(NULL AS nvarchar(20)) AS MergeMode,
+           overlay.ArtifactVersion AS OverlayArtifactVersion
+    FROM omp.ConfigOverlayDocuments overlay
+    INNER JOIN omp.ConfigOverlayConfigurationFiles overlayFile
+        ON overlayFile.ConfigOverlayDocumentId = overlay.ConfigOverlayDocumentId
+    WHERE overlay.IsEnabled = 1
+      AND overlayFile.IsEnabled = 1
+      AND overlay.HostKey = @hostKey
+      AND (overlay.ModuleKey IS NULL OR overlay.ModuleKey = @ModuleKey)
+      AND (overlay.AppKey IS NULL OR overlay.AppKey = @AppKey)
+      AND (overlay.PackageType IS NULL OR overlay.PackageType = @PackageType)
+      AND (overlay.TargetName IS NULL OR overlay.TargetName = @TargetName)
     ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;
     RETURN;
 END;
@@ -3361,7 +3408,9 @@ SELECT ArtifactConfigurationFileId,
        FileContent,
        CAST(0 AS int) AS SourcePriority,
        UpdatedUtc AS SourceUpdatedUtc,
-       CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion
+       CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion,
+       CAST(NULL AS nvarchar(20)) AS MergeMode,
+       CAST(NULL AS nvarchar(50)) AS OverlayArtifactVersion
 FROM omp.ArtifactConfigurationFiles
 WHERE ArtifactId = @artifactId
   AND IsEnabled = 1
@@ -3374,7 +3423,9 @@ SELECT overlayFile.ConfigOverlayConfigurationFileId AS ArtifactConfigurationFile
        overlayFile.FileContent,
        CAST(1 AS int) AS SourcePriority,
        overlay.UpdatedUtc AS SourceUpdatedUtc,
-       overlay.OverlayVersion AS SourceOverlayVersion
+       overlay.OverlayVersion AS SourceOverlayVersion,
+       overlayFile.MergeMode,
+       overlay.ArtifactVersion AS OverlayArtifactVersion
 FROM omp.ConfigOverlayDocuments overlay
 INNER JOIN omp.ConfigOverlayConfigurationFiles overlayFile
     ON overlayFile.ConfigOverlayDocumentId = overlay.ConfigOverlayDocumentId
@@ -3385,12 +3436,14 @@ WHERE overlay.IsEnabled = 1
   AND (overlay.AppKey IS NULL OR overlay.AppKey = @AppKey)
   AND (overlay.PackageType IS NULL OR overlay.PackageType = @PackageType)
   AND (overlay.TargetName IS NULL OR overlay.TargetName = @TargetName)
-  AND (overlay.ArtifactVersion IS NULL OR overlay.ArtifactVersion = @Version)
 ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;";
 
-        var rows = new Dictionary<string, ResolvedConfigurationFile>(StringComparer.OrdinalIgnoreCase);
+        var rows = new Dictionary<string, List<ResolvedConfigurationFile>>(StringComparer.OrdinalIgnoreCase);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
+
+        var artifactVersion = await GetArtifactVersionAsync(conn, artifactId, ct);
+
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@artifactId", artifactId);
         cmd.Parameters.AddWithValue("@hostKey", hostKey);
@@ -3408,19 +3461,159 @@ ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFi
                 },
                 rdr.GetInt32(4),
                 rdr.GetDateTime(5),
-                rdr.IsDBNull(6) ? null : rdr.GetString(6));
+                rdr.IsDBNull(6) ? null : rdr.GetString(6),
+                rdr.IsDBNull(7) ? null : rdr.GetString(7),
+                rdr.IsDBNull(8) ? null : rdr.GetString(8));
 
-            if (!rows.TryGetValue(candidate.Descriptor.RelativePath, out var existing)
-                || ConfigurationFileCandidateWins(candidate, existing))
+            // ADR 0006: the overlay pin is a minimum artifact version. An overlay
+            // pinned to 0.3.183 applies to 0.3.229 but not to 0.3.100.
+            if (candidate.SourcePriority > 0
+                && candidate.OverlayArtifactVersion is not null
+                && ArtifactVersionComparer.Compare(artifactVersion, candidate.OverlayArtifactVersion) < 0)
             {
-                rows[candidate.Descriptor.RelativePath] = candidate;
+                continue;
             }
+
+            if (!rows.TryGetValue(candidate.Descriptor.RelativePath, out var group))
+            {
+                group = [];
+                rows[candidate.Descriptor.RelativePath] = group;
+            }
+
+            group.Add(candidate);
         }
 
-        return rows.Values
-            .Select(static item => item.Descriptor)
+        var resolved = new List<ArtifactConfigurationFileDescriptor>(rows.Count);
+        foreach (var group in rows.Values)
+        {
+            var winner = group[0];
+            for (var i = 1; i < group.Count; i++)
+            {
+                if (ConfigurationFileCandidateWins(group[i], winner))
+                {
+                    winner = group[i];
+                }
+            }
+
+            // mergeMode: a winning overlay row deep-merges onto the artifact-owned
+            // base row instead of replacing it (default for .json paths).
+            if (winner.SourcePriority > 0
+                && ArtifactConfigurationFileWriter.ShouldMergeOverlayConfiguration(winner.MergeMode, winner.Descriptor.RelativePath))
+            {
+                var baseRow = group.FirstOrDefault(static row => row.SourcePriority == 0);
+                if (baseRow is not null)
+                {
+                    winner = winner with
+                    {
+                        Descriptor = new ArtifactConfigurationFileDescriptor
+                        {
+                            ArtifactConfigurationFileId = winner.Descriptor.ArtifactConfigurationFileId,
+                            ArtifactId = winner.Descriptor.ArtifactId,
+                            RelativePath = winner.Descriptor.RelativePath,
+                            FileContent = ArtifactConfigurationFileWriter.MergeOverlayJsonConfiguration(
+                                baseRow.Descriptor.FileContent,
+                                winner.Descriptor.FileContent,
+                                winner.Descriptor.RelativePath)
+                        }
+                    };
+                }
+            }
+
+            resolved.Add(winner.Descriptor);
+        }
+
+        return resolved
             .OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// Enabled config overlays that match every selector for this artifact except
+    /// their <c>artifactVersion</c> minimum (ADR 0006): the overlay did not apply.
+    /// Deployment surfaces these as diagnostic warnings so a version-skipped
+    /// overlay is visible instead of silently falling back to artifact defaults.
+    /// </summary>
+    public async Task<IReadOnlyList<ConfigOverlayVersionSkip>> GetVersionSkippedConfigOverlaysAsync(
+        int artifactId,
+        string hostKey,
+        CancellationToken ct)
+    {
+        const string sql = @"
+IF OBJECT_ID(N'omp.ConfigOverlayDocuments', N'U') IS NULL
+BEGIN
+    SELECT TOP (0)
+        CAST(NULL AS nvarchar(200)) AS OverlayKey,
+        CAST(NULL AS nvarchar(50)) AS OverlayVersion,
+        CAST(NULL AS nvarchar(50)) AS ArtifactVersion;
+    RETURN;
+END;
+
+DECLARE @ModuleKey nvarchar(100);
+DECLARE @AppKey nvarchar(100);
+DECLARE @PackageType nvarchar(50);
+DECLARE @TargetName nvarchar(100);
+
+SELECT @ModuleKey = m.ModuleKey,
+       @AppKey = app.AppKey,
+       @PackageType = ar.PackageType,
+       @TargetName = ar.TargetName
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps app ON app.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = app.ModuleId
+WHERE ar.ArtifactId = @artifactId;
+
+SELECT DISTINCT
+       overlay.OverlayKey,
+       overlay.OverlayVersion,
+       overlay.ArtifactVersion
+FROM omp.ConfigOverlayDocuments overlay
+WHERE overlay.IsEnabled = 1
+  AND overlay.HostKey = @hostKey
+  AND (overlay.ModuleKey IS NULL OR overlay.ModuleKey = @ModuleKey)
+  AND (overlay.AppKey IS NULL OR overlay.AppKey = @AppKey)
+  AND (overlay.PackageType IS NULL OR overlay.PackageType = @PackageType)
+  AND (overlay.TargetName IS NULL OR overlay.TargetName = @TargetName)
+  AND overlay.ArtifactVersion IS NOT NULL
+ORDER BY overlay.OverlayKey, overlay.OverlayVersion;";
+
+        var skips = new List<ConfigOverlayVersionSkip>();
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+
+        var artifactVersion = await GetArtifactVersionAsync(conn, artifactId, ct);
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var minimumArtifactVersion = rdr.GetString(2);
+            if (ArtifactVersionComparer.Compare(artifactVersion, minimumArtifactVersion) >= 0)
+            {
+                continue;
+            }
+
+            skips.Add(new ConfigOverlayVersionSkip(
+                rdr.GetString(0),
+                rdr.GetString(1),
+                minimumArtifactVersion));
+        }
+
+        return skips;
+    }
+
+    private async Task<string?> GetArtifactVersionAsync(SqlConnection conn, int artifactId, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ar.Version
+FROM omp.Artifacts ar
+WHERE ar.ArtifactId = @artifactId;";
+
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@artifactId", artifactId);
+        return (await cmd.ExecuteScalarAsync(ct)) as string;
     }
 
     /// <summary>
@@ -3456,7 +3649,9 @@ ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFi
         ArtifactConfigurationFileDescriptor Descriptor,
         int SourcePriority,
         DateTime SourceUpdatedUtc,
-        string? OverlayVersion);
+        string? OverlayVersion,
+        string? MergeMode,
+        string? OverlayArtifactVersion);
 
     public async Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
         int artifactId,
@@ -5117,7 +5312,30 @@ WHERE ConfigOverlayDocumentId = @configOverlayDocumentId;";
             await delete.ExecuteNonQueryAsync(ct);
         }
 
+        // The MergeMode column arrives with the 1-setup migration for ADR 0006;
+        // a database not yet migrated keeps the implicit default (merge for
+        // .json paths, replace otherwise) by storing no mode at all.
+        var hasMergeModeColumn = await ColumnExistsAsync(conn, tx, "omp", "ConfigOverlayConfigurationFiles", "MergeMode", ct);
+
         const string insertSql = @"
+INSERT INTO omp.ConfigOverlayConfigurationFiles
+(
+    ConfigOverlayDocumentId,
+    RelativePath,
+    FileContent,
+    MergeMode,
+    IsEnabled
+)
+VALUES
+(
+    @configOverlayDocumentId,
+    @relativePath,
+    @fileContent,
+    @mergeMode,
+    1
+);";
+
+        const string insertSqlWithoutMergeMode = @"
 INSERT INTO omp.ConfigOverlayConfigurationFiles
 (
     ConfigOverlayDocumentId,
@@ -5135,10 +5353,18 @@ VALUES
 
         foreach (var configurationFile in configurationFiles)
         {
-            await using var insert = new SqlCommand(insertSql, conn, tx);
+            await using var insert = new SqlCommand(
+                hasMergeModeColumn ? insertSql : insertSqlWithoutMergeMode,
+                conn,
+                tx);
             Add(insert, "@configOverlayDocumentId", documentId);
             Add(insert, "@relativePath", configurationFile.RelativePath);
             Add(insert, "@fileContent", configurationFile.FileContent);
+            if (hasMergeModeColumn)
+            {
+                Add(insert, "@mergeMode", configurationFile.MergeMode);
+            }
+
             await insert.ExecuteNonQueryAsync(ct);
         }
     }
@@ -5555,6 +5781,15 @@ WHERE s.name = @schema
         string table,
         string column,
         CancellationToken ct)
+        => await ColumnExistsAsync(conn, null, schema, table, column, ct);
+
+    private static async Task<bool> ColumnExistsAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        string schema,
+        string table,
+        string column,
+        CancellationToken ct)
     {
         const string sql = @"
 SELECT 1
@@ -5565,7 +5800,7 @@ WHERE s.name = @schema
   AND t.name = @table
   AND c.name = @column;";
 
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(sql, conn, tx);
         Add(cmd, "@schema", schema);
         Add(cmd, "@table", table);
         Add(cmd, "@column", column);

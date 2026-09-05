@@ -585,7 +585,30 @@ WHERE ConfigOverlayDocumentId = @ConfigOverlayDocumentId;";
             await delete.ExecuteNonQueryAsync(ct);
         }
 
+        // The MergeMode column arrives with the 1-setup migration for ADR 0006;
+        // a database not yet migrated stores no mode and keeps the implicit
+        // default (merge for .json paths, replace otherwise).
+        var hasMergeModeColumn = await ColumnExistsAsync(conn, tx, "omp.ConfigOverlayConfigurationFiles", "MergeMode", ct);
+
         const string insertSql = @"
+INSERT INTO omp.ConfigOverlayConfigurationFiles
+(
+    ConfigOverlayDocumentId,
+    RelativePath,
+    FileContent,
+    MergeMode,
+    IsEnabled
+)
+VALUES
+(
+    @ConfigOverlayDocumentId,
+    @RelativePath,
+    @FileContent,
+    @MergeMode,
+    1
+);";
+
+        const string insertSqlWithoutMergeMode = @"
 INSERT INTO omp.ConfigOverlayConfigurationFiles
 (
     ConfigOverlayDocumentId,
@@ -603,10 +626,18 @@ VALUES
 
         foreach (var configurationFile in configurationFiles)
         {
-            await using var insert = new SqlCommand(insertSql, conn, tx);
+            await using var insert = new SqlCommand(
+                hasMergeModeColumn ? insertSql : insertSqlWithoutMergeMode,
+                conn,
+                tx);
             Add(insert, "@ConfigOverlayDocumentId", documentId);
             Add(insert, "@RelativePath", configurationFile.RelativePath);
             Add(insert, "@FileContent", configurationFile.FileContent);
+            if (hasMergeModeColumn)
+            {
+                Add(insert, "@MergeMode", configurationFile.MergeMode);
+            }
+
             await insert.ExecuteNonQueryAsync(ct);
         }
     }

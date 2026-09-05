@@ -75,20 +75,59 @@ The selectors are intentionally optional except for `overlayKey`,
 - If `appKey` is omitted, it can match any app in the selected module scope.
 - If `packageType`, `targetName`, or `artifactVersion` are omitted, those
   fields do not constrain the match.
+- `artifactVersion` is a **minimum** version (ADR 0006), compared with
+  `ArtifactVersionComparer`: an overlay with `artifactVersion: "0.3.183"`
+  applies to artifact `0.3.183` and later (for example `0.3.229`) but not to
+  `0.3.100`. When an enabled overlay matches every other selector but not the
+  version floor, the deployment still succeeds and its result carries a
+  diagnostic warning naming the overlay and both versions.
 
-**Leave `artifactVersion` out unless the overlay is deliberately tied to one
-artifact build.** A pinned overlay matches that version only and silently stops
-applying at the next artifact upgrade, and the next deployment then falls back to
-the artifact's own configuration file (or, for apps that ship no configuration
-file, to the HostAgent's built-in defaults). Measured on a customer test host in
-August 2026: an Auth overlay pinned to one version lost its OIDC section at the
-following upgrade. An environment overlay should describe the host, not the
-build - key it on `hostKey`, `moduleKey`, `appKey`, `packageType` and
-`targetName`, and bump `overlayVersion` when its content changes.
+**Leave `artifactVersion` out unless the overlay genuinely requires a minimum
+build.** An environment overlay should describe the host, not the build - key
+it on `hostKey`, `moduleKey`, `appKey`, `packageType` and `targetName`, and
+bump `overlayVersion` when its content changes. Before ADR 0006 the field was
+an exact match, and a pinned overlay silently stopped applying at the next
+artifact upgrade: measured on a customer test host in August 2026, an Auth
+overlay pinned to one version lost its OIDC section at the following upgrade.
+The minimum semantics keep a pinned overlay applying across upgrades; a
+rollback below the minimum excludes it again, with a deployment warning.
 
 Configuration files are stored in `omp.ConfigOverlayConfigurationFiles`.
 HostAgent loads artifact-owned configuration first, then matching overlay files.
 If both define the same `relativePath`, the overlay wins for that host.
+
+## Per-file mergeMode
+
+Each `configurationFiles` entry accepts an optional `mergeMode`
+(`"merge"` or `"replace"`, case-insensitive):
+
+```json
+"configurationFiles": [
+  {
+    "relativePath": "odv.site.config.js",
+    "fileContent": "window.OpenDocViewerSiteConfig = { apiBaseUrl: '/OpenDocViewer' };",
+    "mergeMode": "replace"
+  }
+]
+```
+
+- **Default (field omitted):** `"merge"` when `relativePath` ends in `.json`,
+  `"replace"` otherwise. The default is applied at deployment time; the stored
+  column stays `NULL`.
+- **"merge":** the overlay file is deep-merged on top of the artifact-owned
+  configuration row (the base) with the same semantics as the built-in web app
+  configuration merge: objects merge recursively, every other value is replaced
+  by the overlay. The overlay only needs to carry the keys it changes. Merge
+  requires both sides to be JSON objects - a merge-mode overlay whose content
+  (or whose artifact base) is not a JSON object fails the deployment loudly
+  instead of silently dropping the base. Set `"replace"` for non-JSON content.
+- **"replace":** the overlay file replaces the artifact-owned row entirely
+  (the historical behavior for all files).
+
+An overlay file whose path has no artifact-owned row stands alone in both
+modes. The mode is stored per file in
+`omp.ConfigOverlayConfigurationFiles.MergeMode` (added by the
+`sql/1-setup-openmoduleplatform.sql` migration for ADR 0006).
 
 ## The other layer: artifact-owned configuration
 

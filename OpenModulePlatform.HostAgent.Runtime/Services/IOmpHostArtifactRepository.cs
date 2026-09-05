@@ -108,6 +108,15 @@ public interface IOmpHostArtifactRepository
         string hostKey,
         CancellationToken ct);
 
+    /// <summary>
+    /// Enabled config overlays that match every selector for the artifact except
+    /// their artifactVersion minimum (ADR 0006), surfaced as deployment warnings.
+    /// </summary>
+    Task<IReadOnlyList<ConfigOverlayVersionSkip>> GetVersionSkippedConfigOverlaysAsync(
+        int artifactId,
+        string hostKey,
+        CancellationToken ct);
+
     Task<IReadOnlyList<string>> GetRequiredConfigRootSectionsAsync(
         int artifactId,
         CancellationToken ct);

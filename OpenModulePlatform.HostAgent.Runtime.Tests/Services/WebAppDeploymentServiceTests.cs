@@ -29,6 +29,37 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeployDesiredWebAppsAsync_WhenOverlaySkippedByVersionMinimum_AttachesWarningWithOverlayKeyAndVersions()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.VersionSkippedConfigOverlays.Add(
+            new ConfigOverlayVersionSkip("auth-oidc", "1.2.0", "0.3.183"));
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Equal(HostDeploymentStatuses.Succeeded, last.Result.State);
+        Assert.Contains("auth-oidc", last.Result.DiagnosticWarningMessage, StringComparison.Ordinal);
+        Assert.Contains("0.3.183", last.Result.DiagnosticWarningMessage, StringComparison.Ordinal);
+        Assert.Contains(descriptor.Version, last.Result.DiagnosticWarningMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_WhenNoOverlaySkippedByVersion_LeavesDiagnosticWarningMessageClean()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Null(last.Result.DiagnosticWarningMessage);
+    }
+
+    [Fact]
     public async Task DeployDesiredWebAppsAsync_WhenDeploySetWarningExists_AttachesWarningToDiagnosticWarningMessage()
     {
         var (service, repository, _) = CreateServiceWithFakeRepository();

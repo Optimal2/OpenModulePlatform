@@ -2115,9 +2115,12 @@ ORDER BY TRY_CAST(PARSENAME(nv.NormalizedVersion, 4) AS bigint) DESC,
     }
 
     private static async Task<bool> ColumnExistsAsync(SqlConnection conn, string tableName, string columnName, CancellationToken ct)
+        => await ColumnExistsAsync(conn, (SqlTransaction?)null, tableName, columnName, ct);
+
+    private static async Task<bool> ColumnExistsAsync(SqlConnection conn, SqlTransaction? tx, string tableName, string columnName, CancellationToken ct)
     {
         const string sql = "SELECT CAST(CASE WHEN COL_LENGTH(@TableName, @ColumnName) IS NULL THEN 0 ELSE 1 END AS bit);";
-        await using var cmd = new SqlCommand(sql, conn);
+        await using var cmd = new SqlCommand(sql, conn, tx);
         cmd.Parameters.AddWithValue("@TableName", tableName);
         cmd.Parameters.AddWithValue("@ColumnName", columnName);
         return Convert.ToBoolean(await cmd.ExecuteScalarAsync(ct));

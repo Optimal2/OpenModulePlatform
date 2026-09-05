@@ -33,6 +33,22 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AlreadyApplied_OverlaySkippedByVersionMinimum_EmitsWarningWithOverlayKeyAndVersions()
+    {
+        var (service, repository, _, deployment, _) = CreateScenario();
+        repository.VersionSkippedConfigOverlays.Add(
+            new ConfigOverlayVersionSkip("auth-oidc", "1.2.0", "0.3.183"));
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        var result = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, result.State);
+        Assert.Contains("auth-oidc", result.DiagnosticWarningMessage, StringComparison.Ordinal);
+        Assert.Contains("0.3.183", result.DiagnosticWarningMessage, StringComparison.Ordinal);
+        Assert.Contains(deployment.Version, result.DiagnosticWarningMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AlreadyApplied_ServiceStopped_DesiredRunning_StartsServiceAndEmitsWarning()
     {
         var (service, repository, control, deployment, targetPath) = CreateScenario();

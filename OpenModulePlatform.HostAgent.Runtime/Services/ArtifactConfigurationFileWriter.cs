@@ -544,6 +544,50 @@ internal static class ArtifactConfigurationFileWriter
             AppSettingsRelativePath,
             StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Effective merge behavior for an overlay configuration file: an explicit
+    /// <paramref name="mergeMode"/> wins; when it is null the file merges onto the
+    /// artifact-owned base for <c>.json</c> paths and replaces otherwise.
+    /// </summary>
+    internal static bool ShouldMergeOverlayConfiguration(string? mergeMode, string relativePath)
+    {
+        if (!string.IsNullOrWhiteSpace(mergeMode))
+        {
+            return string.Equals(mergeMode.Trim(), "merge", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return relativePath.Trim().EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Deep-merges a merge-mode overlay file (override) onto the artifact-owned
+    /// configuration row (base) with the same semantics as the built-in web app
+    /// configuration merge. Throws when either side is not a JSON object -- a
+    /// merge-mode overlay on non-JSON content is a configuration error and must
+    /// fail the deployment loudly rather than silently dropping the base.
+    /// </summary>
+    internal static string MergeOverlayJsonConfiguration(
+        string baseContent,
+        string overrideContent,
+        string relativePath)
+    {
+        try
+        {
+            var baseObject = ParseJsonObject(baseContent, $"artifact configuration base for '{relativePath}'");
+            var overrideObject = ParseJsonObject(overrideContent, relativePath);
+            var merged = MergeJsonObjects(baseObject, overrideObject);
+
+            return merged.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"Config overlay file '{relativePath}' is merge-mode but the overlay content or the artifact-owned base is not a valid JSON object. " +
+                "Set mergeMode to \"replace\" to overwrite the file instead.",
+                ex);
+        }
+    }
+
     private static string MergeJsonConfiguration(
         string baseContent,
         string overrideContent,

@@ -726,6 +726,9 @@ BEGIN
         ConfigOverlayDocumentId int NOT NULL,
         RelativePath nvarchar(400) NOT NULL,
         FileContent nvarchar(max) NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_FileContent DEFAULT(N''),
+        -- ADR 0006: per-file merge behavior ('merge'/'replace'). NULL applies the
+        -- resolution-time default: merge for .json paths, replace otherwise.
+        MergeMode nvarchar(20) NULL,
         IsEnabled bit NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_IsEnabled DEFAULT(1),
         CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_CreatedUtc DEFAULT SYSUTCDATETIME(),
         UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_ConfigOverlayConfigurationFiles_UpdatedUtc DEFAULT SYSUTCDATETIME(),
@@ -736,6 +739,14 @@ BEGIN
         CONSTRAINT UQ_omp_ConfigOverlayConfigurationFiles_Document_Path
             UNIQUE(ConfigOverlayDocumentId, RelativePath)
     );
+END
+GO
+
+-- ADR 0006: add MergeMode to databases created before the column existed.
+IF COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') IS NULL
+BEGIN
+    ALTER TABLE omp.ConfigOverlayConfigurationFiles
+    ADD MergeMode nvarchar(20) NULL;
 END
 GO
 

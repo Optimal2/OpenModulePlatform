@@ -45,7 +45,8 @@ public sealed record PortableConfigOverlayDocument(
 
 public sealed record PortableConfigOverlayConfigurationFile(
     string RelativePath,
-    string FileContent);
+    string FileContent,
+    string? MergeMode = null);
 
 /// <summary>
 /// Reads the host-specific configuration objects that are intentionally kept
@@ -291,10 +292,41 @@ public sealed class ConfigOverlayPackageReader
             item.Remove("content");
             item.Remove("source");
             item.Remove("path");
-            files.Add(new PortableConfigOverlayConfigurationFile(relativePath, content));
+            files.Add(new PortableConfigOverlayConfigurationFile(
+                relativePath,
+                content,
+                NormalizeMergeMode(item, relativePath)));
         }
 
         return files;
+    }
+
+    /// <summary>
+    /// Reads the optional per-file <c>mergeMode</c> ("merge" or "replace",
+    /// case-insensitive) and normalizes it to lowercase. <c>null</c> means the
+    /// deployment-time default applies (merge for <c>.json</c> files, replace
+    /// otherwise).
+    /// </summary>
+    private static string? NormalizeMergeMode(JsonObject item, string relativePath)
+    {
+        var value = NullIfWhiteSpace(GetString(item, "mergeMode"));
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value.Equals("merge", StringComparison.OrdinalIgnoreCase))
+        {
+            return "merge";
+        }
+
+        if (value.Equals("replace", StringComparison.OrdinalIgnoreCase))
+        {
+            return "replace";
+        }
+
+        throw new InvalidOperationException(
+            $"Config overlay configuration file '{relativePath}' has mergeMode '{value}'; expected 'merge' or 'replace'.");
     }
 
     private static int NormalizeSqlScripts(JsonObject root, ZipArchive? archive, string? externalRoot)

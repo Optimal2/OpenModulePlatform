@@ -103,6 +103,51 @@ public sealed class ConfigOverlayPackageReaderTests : IDisposable
         Assert.Equal(0, overlay.SqlScriptCount);
     }
 
+    [Fact]
+    public async Task ReadConfigOverlayAsync_WithMergeMode_ParsesAndNormalizesPerFile()
+    {
+        var path = WriteOverlayJson("""
+        {
+          "overlayKey": "test-overlay",
+          "overlayVersion": "1.0.0",
+          "hostKey": "test-host",
+          "configurationFiles": [
+            { "relativePath": "appsettings.json", "fileContent": "{ \"a\": 1 }", "mergeMode": "Merge" },
+            { "relativePath": "site.config.js", "fileContent": "x = 1;", "mergeMode": "replace" },
+            { "relativePath": "extra.json", "fileContent": "{ \"b\": 2 }" }
+          ]
+        }
+        """);
+
+        var overlay = await new ConfigOverlayPackageReader().ReadConfigOverlayAsync(path, "test.json", CancellationToken.None);
+
+        Assert.Equal(3, overlay.ConfigurationFiles.Count);
+        Assert.Equal("merge", overlay.ConfigurationFiles[0].MergeMode);
+        Assert.Equal("replace", overlay.ConfigurationFiles[1].MergeMode);
+        Assert.Null(overlay.ConfigurationFiles[2].MergeMode);
+        // The stored document JSON round-trips the field for later re-export.
+        Assert.Contains("mergeMode", overlay.OverlayJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReadConfigOverlayAsync_WithInvalidMergeMode_Throws()
+    {
+        var path = WriteOverlayJson("""
+        {
+          "overlayKey": "test-overlay",
+          "overlayVersion": "1.0.0",
+          "hostKey": "test-host",
+          "configurationFiles": [
+            { "relativePath": "appsettings.json", "fileContent": "{ \"a\": 1 }", "mergeMode": "append" }
+          ]
+        }
+        """);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new ConfigOverlayPackageReader().ReadConfigOverlayAsync(path, "test.json", CancellationToken.None));
+        Assert.Contains("mergeMode", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private string WriteOverlayJson(string json)
     {
         var path = GetTempFilePath($"overlay-{Guid.NewGuid():N}.json");

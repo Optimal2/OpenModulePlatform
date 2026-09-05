@@ -66,23 +66,83 @@ public sealed class OmpHostArtifactRepositoryConfigOverlayResolutionTests : IDis
         Assert.Equal("{ \"a\": 2 }", file.FileContent);
     }
 
-    private static PortableConfigOverlayDocument CreateOverlay(string version, string json)
+    [Fact]
+    public async Task OverlayPinnedToOlderMinimum_AppliesToNewerArtifactVersion()
+    {
+        // ADR 0006: artifactVersion is a minimum. An overlay pinned to 0.3.183
+        // must still apply when the artifact has moved on to 0.3.229.
+        const int newArtifactId = 43;
+        _database.InsertArtifactForExistingApp(newArtifactId, "web-app", "0.3.229");
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", "overlay-wins", artifactVersion: "0.3.183", relativePath: "site.config.js"),
+            replaceExisting: false,
+            CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(newArtifactId, HostKey, CancellationToken.None);
+
+        var file = Assert.Single(files);
+        Assert.Equal("site.config.js", file.RelativePath);
+        Assert.Equal("overlay-wins", file.FileContent);
+    }
+
+    [Fact]
+    public async Task OverlayPinnedToNewerMinimum_DoesNotApplyToOlderArtifactVersion()
+    {
+        // ADR 0006: the same pinned overlay must NOT apply to an artifact older
+        // than its minimum; the artifact's own configuration file stands.
+        const int oldArtifactId = 44;
+        _database.InsertArtifactForExistingApp(oldArtifactId, "web-app", "0.3.100");
+        _database.InsertArtifactConfigurationFile(oldArtifactId, "site.config.js", "artifact-default", packageFileContent: null);
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", "overlay-wins", artifactVersion: "0.3.183", relativePath: "site.config.js"),
+            replaceExisting: false,
+            CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(oldArtifactId, HostKey, CancellationToken.None);
+
+        var file = Assert.Single(files);
+        Assert.Equal("site.config.js", file.RelativePath);
+        Assert.Equal("artifact-default", file.FileContent);
+    }
+
+    [Fact]
+    public async Task OverlayWithoutArtifactVersion_AppliesRegardlessOfArtifactVersion()
+    {
+        const int newArtifactId = 45;
+        _database.InsertArtifactForExistingApp(newArtifactId, "web-app", "9.9.9");
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", "overlay-wins"),
+            replaceExisting: false,
+            CancellationToken.None);
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(newArtifactId, HostKey, CancellationToken.None);
+
+        var file = Assert.Single(files);
+        Assert.Equal("overlay-wins", file.FileContent);
+    }
+
+    private static PortableConfigOverlayDocument CreateOverlay(
+        string version,
+        string content,
+        string? artifactVersion = null,
+        string? mergeMode = null,
+        string relativePath = "appsettings.json")
         => new(
             OverlayKey: OverlayKey,
             OverlayVersion: version,
             HostKey: HostKey,
             FormatVersion: 1,
-            OverlayJson: json,
-            OverlaySha256: "sha256:" + json,
+            OverlayJson: content,
+            OverlaySha256: "sha256:" + content,
             ModuleKey: null,
             ModuleDefinitionVersion: null,
             AppKey: null,
             PackageType: null,
             TargetName: null,
-            ArtifactVersion: null,
+            ArtifactVersion: artifactVersion,
             SourceName: "config-overlay-resolution-tests",
             ConfigurationFiles: new[]
             {
-                new PortableConfigOverlayConfigurationFile("appsettings.json", json)
+                new PortableConfigOverlayConfigurationFile(relativePath, content, mergeMode)
             });
 }
