@@ -40,27 +40,36 @@
     powershell.exe -NoProfile -File scripts/omp/run-script-tests.ps1
 #>
 [CmdletBinding()]
-param()
+param(
+    # Test-suite directory; defaults to the repository's tests folder. Exists
+    # so the zero-execution gate itself can be exercised against a directory
+    # whose suites discover no tests (tests/PesterBootstrap.Tests.ps1)
+    # without touching the real suites.
+    [Parameter(Mandatory = $false)]
+    [string] $TestsPath = ''
+)
 
 $ErrorActionPreference = 'Stop'
 
-# Pin Pester 5.9.1 explicitly: the suites use the Pester 5 dialect, and CI
-# images also carry Pester 3.4.0 inbox in the Windows PowerShell module path,
-# so auto-load could silently pick the wrong version and fail every suite with
-# CommandNotFoundException ('Should -Be' does not exist in Pester 3.4). CI
-# installs this exact version before invoking the runner; on a dev machine a
-# missing pin fails loudly here with the install command, rather than
-# drifting to another version.
+# Pin Pester 5.9.1 explicitly: the suites use the Pester 5 dialect, and
+# Windows carries Pester 3.4.0 inbox in the module path, so auto-load could
+# silently pick the wrong version and fail every suite with
+# CommandNotFoundException ('Should -Be' does not exist in Pester 3.4). The
+# pin is satisfied from the repository-local module cache (<repoRoot>/
+# .psmodules, gitignored): pester-bootstrap.ps1 restores the exact version
+# from PSGallery when the cache is empty and prepends the cache to THIS
+# PROCESS's module path only, so neither a missing nor a diverging global
+# Pester installation can affect the run.
 $script:RequiredPesterVersion = '5.9.1'
-if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -eq [Version]$script:RequiredPesterVersion })) {
-    Write-Host "Pester $script:RequiredPesterVersion is not installed for Windows PowerShell 5.1." -ForegroundColor Red
-    Write-Host "Install it (CurrentUser scope): Install-Module Pester -RequiredVersion $script:RequiredPesterVersion -Scope CurrentUser -Force -SkipPublisherCheck" -ForegroundColor Red
-    exit 1
-}
-Import-Module Pester -RequiredVersion $script:RequiredPesterVersion -Force
-
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$testsPath = Join-Path $repoRoot 'tests'
+. (Join-Path $PSScriptRoot 'pester-bootstrap.ps1')
+$pesterModulePath = Ensure-PinnedPester -RequiredVersion $script:RequiredPesterVersion -CacheRoot (Join-Path $repoRoot '.psmodules')
+Import-Module (Join-Path $pesterModulePath 'Pester.psd1') -Force
+
+$testsPath = $TestsPath
+if ([string]::IsNullOrWhiteSpace($testsPath)) {
+    $testsPath = Join-Path $repoRoot 'tests'
+}
 
 $results = Invoke-Pester -Path $testsPath -PassThru
 

@@ -126,24 +126,15 @@ jobs:
         shell: pwsh
         run: .\scripts\omp\run-script-analyzer.ps1
 
-      - name: Install pinned Pester for the script test suites
-        # run-script-tests.ps1 pins Pester 5.9.1 (the suites were migrated off
-        # the Pester 3.4.0 legacy dialect in 2026-09). The windows-latest image
-        # carries 3.4.0 inbox and a floating 5.x, so install the exact pin when
-        # it is missing. Runs under Windows PowerShell on purpose: the module
-        # must land where powershell.exe (not pwsh) can import it.
-        shell: powershell
-        run: |
-          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -eq [Version]'5.9.1' })) {
-            Install-Module Pester -RequiredVersion 5.9.1 -Scope CurrentUser -Force -SkipPublisherCheck
-          }
-
       - name: Run Pester script tests
-        # shell: powershell (Windows PowerShell 5.1) directly, not pwsh wrapping
-        # powershell.exe: the install step above lands the pinned module in the
-        # PS 5.1 CurrentUser path, which a powershell.exe spawned FROM pwsh
-        # would not inherit (pwsh's PSModulePath omits it). One shell, one
-        # module path.
+        # run-script-tests.ps1 pins Pester 5.9.1 (the suites were migrated off
+        # the Pester 3.4.0 legacy dialect in 2026-09) and bootstraps the pin
+        # itself into the repository-local .psmodules cache, restoring it from
+        # PSGallery when missing -- no separate install step. shell: powershell
+        # (Windows PowerShell 5.1) directly, not pwsh wrapping powershell.exe:
+        # the bootstrap prepends the cache to the process PSModulePath, which a
+        # powershell.exe spawned FROM pwsh would not inherit (pwsh's
+        # PSModulePath omits the PS 5.1 paths). One shell, one module path.
         shell: powershell
         run: .\scripts\omp\run-script-tests.ps1
 

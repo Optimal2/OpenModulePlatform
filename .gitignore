@@ -8,6 +8,9 @@
 *.nupkg
 *.snupkg
 TestResults/
+# Repository-local Pester module cache (restored on demand by
+# scripts/omp/pester-bootstrap.ps1; never commit module payloads).
+/.psmodules/
 /artifacts/*
 !/artifacts/
 !/artifacts/README.md
