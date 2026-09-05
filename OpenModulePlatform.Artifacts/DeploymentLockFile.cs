@@ -310,8 +310,10 @@ public static class DeploymentLockFile
     /// deleted -- but the deletion rides this handle: it is armed with
     /// SetFileInformationByHandle while the handle that proved ownership is still held,
     /// and completed by its close. A path-based delete after the release could land on a
-    /// claim that arrived in the microseconds in between, which is exactly the window the
-    /// delete-on-close form does not have.
+    /// claim that arrived in between, which is exactly the window the delete-on-close form
+    /// does not have. How wide that window is has no bound -- UNC round-trips, antivirus
+    /// and filter drivers can stretch it far beyond the microseconds a local disk
+    /// suggests -- so the design closes it rather than betting on its size.
     /// </remarks>
     internal static async Task<string?> TryRewriteHeldContentAsync(Stream stream, string renewedJson)
     {
@@ -350,11 +352,13 @@ public static class DeploymentLockFile
     /// the other side's atomic renewal holds the same kind of handle for milliseconds.
     /// A delete-pending file (marked for deletion on close, not yet unlinked) answers
     /// CreateFile with ERROR_ACCESS_DENIED rather than a sharing violation, so a denial
-    /// that probes as delete-pending is retried on the same bounded budget. A denial
-    /// that does NOT probe as delete-pending is a real permission failure -- wrong
-    /// service account, a read-only file, a missing DELETE right -- which does not
+    /// the probe cannot prove real is retried on the same bounded budget. Only a denial
+    /// whose zero-access probe still OPENS the file is a proven permission failure --
+    /// wrong service account, a read-only file, a missing DELETE right -- which does not
     /// clear inside the budget; it is rethrown so the caller reports it as what it is
-    /// instead of "locked by another process".
+    /// instead of "locked by another process". A file that vanishes between the failed
+    /// open and the probe (TOCTOU) retries like any lost race: the next attempt's
+    /// FileNotFoundException then propagates as the "no lock file" answer.
     /// </summary>
     private static async Task<FileStream?> OpenExclusiveWithRetryAsync(string path, CancellationToken ct)
     {
@@ -372,10 +376,15 @@ public static class DeploymentLockFile
             {
                 throw;
             }
-            catch (UnauthorizedAccessException) when (!FileIsDeletePending(path))
+            catch (UnauthorizedAccessException) when (ProbeDeletePending(path) is DeletePendingProbeResult.Opened)
             {
-                // A real ACL denial, retried and then misreported as a lost race, sent
-                // the operator hunting for a competing deployment that does not exist.
+                // Only a probe that can still OPEN the file proves a real ACL denial.
+                // Anything else -- delete-pending, the file vanishing between the failed
+                // open and the probe (TOCTOU), or an unclassifiable probe error -- falls
+                // through to the bounded retry below and, if it persists, is reported as
+                // indeterminate rather than as a permission failure it was never proven
+                // to be. A real denial, retried and then misreported as a lost race, once
+                // sent the operator hunting for a competing deployment that did not exist.
                 throw;
             }
             catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException)
@@ -426,7 +435,7 @@ public static class DeploymentLockFile
     internal static SafeFileHandle OpenExclusiveHandleWithDeleteAccess(string path)
     {
         var handle = NativeMethods.CreateFile(
-            @"\\?\" + path,
+            ToExtendedPath(path),
             NativeMethods.GenericRead | NativeMethods.GenericWrite | NativeMethods.Delete,
             dwShareMode: 0,
             IntPtr.Zero,
@@ -442,7 +451,79 @@ public static class DeploymentLockFile
     }
 
     /// <summary>
-    /// Distinguishes the two causes of ERROR_ACCESS_DENIED on the lock file, which have
+    /// Maps a lock file path to the extended-length form the native CreateFile opens need.
+    /// The naive "\\?\" + path concatenation is only correct for an ordinary local path:
+    /// a UNC path (\\server\share\...) must become \\?\UNC\server\share\..., and a path
+    /// that already carries a prefix must not be prefixed again -- both wrong forms fail
+    /// every open with ERROR_INVALID_NAME. The extended-length prefix also disables Win32
+    /// path normalisation, so non-normalised input (forward slashes, dot segments, a
+    /// relative form) is resolved through Path.GetFullPath first; production callers all
+    /// reach here through <see cref="GetPath"/>, which already normalises, so this is
+    /// defence in depth for the internal test seams. applicationRoot reaches here from
+    /// operator-configured values (an app instance's InstallPath, the portal's content
+    /// root), and nothing upstream forbids a UNC path, so all three native opens go
+    /// through this one mapping.
+    /// </summary>
+    internal static string ToExtendedPath(string path)
+    {
+        // Already extended-length or device-namespace form: leave it alone.
+        if (path.StartsWith(@"\\?\", StringComparison.Ordinal)
+            || path.StartsWith(@"\\.\", StringComparison.Ordinal))
+        {
+            return path;
+        }
+
+        var fullPath = Path.GetFullPath(path);
+
+        // UNC: \\server\share\... -> \\?\UNC\server\share\...
+        if (fullPath.StartsWith(@"\\", StringComparison.Ordinal))
+        {
+            return @"\\?\UNC\" + fullPath.Substring(2);
+        }
+
+        return @"\\?\" + fullPath;
+    }
+
+    /// <summary>
+    /// What the zero-access metadata probe established about the cause of an
+    /// ERROR_ACCESS_DENIED from one of the native opens.
+    /// </summary>
+    internal enum DeletePendingProbeResult
+    {
+        /// <summary>
+        /// The probe opened the file: it exists and answers a zero-access open, so the
+        /// original denial was a real permission failure -- wrong service account, a
+        /// read-only file, a missing DELETE right.
+        /// </summary>
+        Opened,
+
+        /// <summary>
+        /// The probe itself was refused with ERROR_ACCESS_DENIED: the file is
+        /// delete-pending (marked for deletion on close, not yet unlinked), or an ACL
+        /// exotic enough to refuse even attribute reads -- the two are indistinguishable,
+        /// and the fail-closed answer is the same either way.
+        /// </summary>
+        Denied,
+
+        /// <summary>
+        /// The probe failed with ERROR_FILE_NOT_FOUND or ERROR_PATH_NOT_FOUND: the file
+        /// (or a directory above it) vanished between the failed open and the probe --
+        /// a lost race (TOCTOU), not a permission problem. There is no bound on how wide
+        /// that window is: UNC round-trips, antivirus and filter drivers can all stretch
+        /// it well beyond the microseconds a local disk suggests.
+        /// </summary>
+        Vanished,
+
+        /// <summary>
+        /// The probe failed with any other error: nothing was proven about the cause of
+        /// the original denial. Callers must treat this as indeterminate -- fail closed --
+        /// never as a proven permission failure.
+        /// </summary>
+        Indeterminate
+    }
+
+    /// <summary>
+    /// Distinguishes the causes of ERROR_ACCESS_DENIED on the lock file, which have
     /// opposite meanings here. A file marked for deletion on close (delete-pending --
     /// a lost race whose unlink lands when the last handle closes) refuses EVERY new
     /// open, including this metadata-only probe with zero desired access. A real
@@ -450,22 +531,32 @@ public static class DeploymentLockFile
     /// right -- still answers it, because the probe requests no data access at all.
     /// The probe is the only distinction available: a delete-pending file cannot be
     /// opened for a query either, so no handle-based query can settle it directly.
-    /// A denial even of the probe is treated as delete-pending: an ACL exotic enough
-    /// to refuse attribute reads is indistinguishable from it, and the fail-closed
-    /// answer is the same.
+    /// A denial even of the probe is reported as <see cref="DeletePendingProbeResult.Denied"/>:
+    /// an ACL exotic enough to refuse attribute reads is indistinguishable from
+    /// delete-pending, and the fail-closed answer is the same.
+    /// Internal so tests can pin each probe state directly.
     /// </summary>
-    private static bool FileIsDeletePending(string path)
+    internal static DeletePendingProbeResult ProbeDeletePending(string path)
     {
         using var probe = NativeMethods.CreateFile(
-            @"\\?\" + path,
+            ToExtendedPath(path),
             dwDesiredAccess: 0,
             NativeMethods.FileShareReadWriteDelete,
             IntPtr.Zero,
             NativeMethods.OpenExisting,
             NativeMethods.FileAttributeNormal,
             IntPtr.Zero);
-        return probe.IsInvalid
-            && Marshal.GetLastWin32Error() == NativeMethods.ErrorAccessDenied;
+        if (!probe.IsInvalid)
+        {
+            return DeletePendingProbeResult.Opened;
+        }
+
+        return Marshal.GetLastWin32Error() switch
+        {
+            NativeMethods.ErrorAccessDenied => DeletePendingProbeResult.Denied,
+            NativeMethods.ErrorFileNotFound or NativeMethods.ErrorPathNotFound => DeletePendingProbeResult.Vanished,
+            _ => DeletePendingProbeResult.Indeterminate
+        };
     }
 
     /// <summary>
@@ -698,9 +789,7 @@ public static class DeploymentLockFile
         {
             stream = openClaim(path, NativeMethods.CreateNew);
         }
-        catch (Exception ex) when ((ex is IOException
-            || (ex is UnauthorizedAccessException && FileIsDeletePending(path)))
-            && File.Exists(path))
+        catch (Exception ex) when (IsLostRaceOpenFailure(ex, path))
         {
             // Another claimant got there first -- unless what got there is a zero-byte
             // residue of an interrupted claim or renewal, which can never be a valid
@@ -712,14 +801,20 @@ public static class DeploymentLockFile
             // the file does NOT exist fails the filter above and propagates as before:
             // a full disk or a vanished share is a real failure, not a lost race.
             //
-            // The UnauthorizedAccessException half covers ONLY a delete-pending file:
-            // marked for deletion on close but not yet unlinked, it answers CreateFile
-            // with ERROR_ACCESS_DENIED, and that is a lost race too -- the takeover open
-            // fails the same way and this claim returns false instead of throwing out of
-            // the acquire path. A denial that does not probe as delete-pending is a real
-            // permission failure (wrong service account, read-only file, missing DELETE
-            // right): it fails the filter and propagates, so the operator is told
-            // "access denied" rather than "another deployment claimed the lock first".
+            // The UnauthorizedAccessException half is a lost race in two probe outcomes
+            // only: a delete-pending file (marked for deletion on close but not yet
+            // unlinked) answers CreateFile with ERROR_ACCESS_DENIED while the file still
+            // exists, and the takeover open fails the same way, so this claim returns
+            // false instead of throwing out of the acquire path; and a file that vanished
+            // between the failed CreateNew and the probe (TOCTOU) is a lost race too,
+            // never "access denied". The same denial with NOTHING at the path -- a
+            // directory sitting where the lock file should be -- is a persistent
+            // obstruction, not a race: it fails the filter and propagates as a fault, so
+            // the lease loop's bound can stop the renewal instead of logging a phantom
+            // claimant once per tick forever. A denial the probe CAN prove real -- the
+            // zero-access probe still opens the file -- also propagates, so the operator
+            // is told "access denied" rather than "another deployment claimed the lock
+            // first".
             var takeover = TryOpenZeroByteResidueForTakeover(path);
             if (takeover is null)
             {
@@ -777,6 +872,39 @@ public static class DeploymentLockFile
     }
 
     /// <summary>
+    /// The filter behind the claim path's lost-race branch. An IOException is a lost race
+    /// only while the file actually exists (a full disk or a vanished share raises the same
+    /// exception with no file and must propagate). An UnauthorizedAccessException is a lost
+    /// race in two probe outcomes only: <see cref="DeletePendingProbeResult.Denied"/> while
+    /// the file is still there (a delete-pending file exists until its last handle closes --
+    /// the same denial with nothing at the path is a persistent obstruction, like a
+    /// directory sitting where the lock file should be, and must propagate as a fault so
+    /// the lease loop's bound can react), and <see cref="DeletePendingProbeResult.Vanished"/>
+    /// (the file vanished between the failed CreateNew and the probe -- a TOCTOU lost race,
+    /// never "access denied"). A probe that still OPENS the file proves a real ACL denial,
+    /// and an unclassifiable probe error proves nothing; both propagate.
+    /// </summary>
+    private static bool IsLostRaceOpenFailure(Exception ex, string path)
+    {
+        if (ex is IOException)
+        {
+            return File.Exists(path);
+        }
+
+        if (ex is not UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        return ProbeDeletePending(path) switch
+        {
+            DeletePendingProbeResult.Denied => File.Exists(path),
+            DeletePendingProbeResult.Vanished => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
     /// Opens the lock file for a claim with no sharing and DELETE access, so a failed
     /// claim write can be cleaned up by marking the file for deletion on the close of
     /// the very handle that created it. <see cref="NativeMethods.CreateNew"/> fails with
@@ -804,7 +932,7 @@ public static class DeploymentLockFile
     internal static SafeFileHandle OpenClaimHandleWithDeleteAccess(string path, uint creationDisposition)
     {
         var handle = NativeMethods.CreateFile(
-            @"\\?\" + path,
+            ToExtendedPath(path),
             NativeMethods.GenericRead | NativeMethods.GenericWrite | NativeMethods.Delete,
             dwShareMode: 0,
             IntPtr.Zero,
@@ -844,13 +972,15 @@ public static class DeploymentLockFile
             // the claimant whose CreateNew beat ours: either way the race is lost.
             return null;
         }
-        catch (UnauthorizedAccessException) when (FileIsDeletePending(path))
+        catch (UnauthorizedAccessException) when (ProbeDeletePending(path) is not DeletePendingProbeResult.Opened)
         {
-            // Delete-pending: the race is lost and the unlink lands with the last close.
+            // Delete-pending, or vanished between the failed CreateNew and this open
+            // (TOCTOU): the race is lost and, for the delete-pending case, the unlink
+            // lands with the last close. Only a probe that can still OPEN the file
+            // proves a real ACL denial; that fails the filter and propagates, so the
+            // acquire path reports it as what it is.
             return null;
         }
-        // A denial that does not probe as delete-pending is a real permission failure:
-        // it propagates so the acquire path reports it as what it is.
 
         if (stream.Length != 0)
         {

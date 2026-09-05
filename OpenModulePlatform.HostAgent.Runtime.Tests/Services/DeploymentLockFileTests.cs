@@ -1,4 +1,7 @@
 using System.Globalization;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
@@ -845,9 +848,10 @@ public sealed class DeploymentLockFileTests : IDisposable
 
     /// <summary>
     /// A file marked for deletion on close answers CreateFile with ERROR_ACCESS_DENIED,
-    /// not a sharing violation, for the microseconds until the last handle closes. A
-    /// claim that lands in that window has lost the race: it must return false, never
-    /// throw UnauthorizedAccessException out of the acquire path.
+    /// not a sharing violation, until the last handle closes -- a window with no fixed
+    /// size (UNC round-trips, antivirus and filter drivers can stretch it well beyond
+    /// microseconds). A claim that lands in that window has lost the race: it must
+    /// return false, never throw UnauthorizedAccessException out of the acquire path.
     /// </summary>
     [Fact]
     public async Task TryCreateExclusiveAsync_WhenTheFileIsDeletePending_LosesTheRaceInsteadOfThrowing()
@@ -1087,5 +1091,355 @@ public sealed class DeploymentLockFileTests : IDisposable
 
         var status = DeploymentLockFile.ReadStatus(_root, now);
         Assert.Equal("replacement-owner", status.Document!.Owner);
+    }
+
+    /// <summary>
+    /// The lock file must be reachable through its UNC form too: an app whose root sits on
+    /// a share takes the same lock path as a local one (InstallPath is operator-configured,
+    /// and a rooted UNC path passes straight through Path.GetFullPath, so nothing stops it).
+    /// The naive "\\?\" + path concatenation turns \\server\share\... into
+    /// \\?\\\server\share\..., which is not a valid Win32 path, so every native open fails.
+    /// This test was RED before the extended-path mapping existed: the exclusive open threw
+    /// an IOException (Win32 error 123, ERROR_INVALID_NAME) instead of opening the file.
+    /// </summary>
+    [Fact]
+    public void OpenExclusiveHandleWithDeleteAccess_UncPath_OpensTheFile()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{}", Encoding.UTF8);
+        var uncPath = ToLocalhostUncPath(path);
+        Assert.True(File.Exists(uncPath),
+            $"the localhost admin share form of the temp path is not reachable ({uncPath}) -- this test needs it");
+
+        using var handle = DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(uncPath);
+
+        Assert.False(handle.IsInvalid);
+    }
+
+    /// <summary>
+    /// Same UNC requirement end to end on the claim path: a deployment lock under a UNC
+    /// application root must be claimable and readable back.
+    /// </summary>
+    [Fact]
+    public async Task TryCreateExclusiveAsync_UncApplicationRoot_ClaimsTheLock()
+    {
+        var uncRoot = ToLocalhostUncPath(_root);
+        Directory.CreateDirectory(uncRoot);
+        Assert.True(Directory.Exists(uncRoot),
+            $"the localhost admin share form of the temp root is not reachable ({uncRoot}) -- this test needs it");
+
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("unc-claim-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+
+        Assert.True(await DeploymentLockFile.TryCreateExclusiveAsync(uncRoot, doc, CancellationToken.None));
+        Assert.Equal("unc-claim-id", DeploymentLockFile.ReadStatus(uncRoot, now).Document!.LockId);
+    }
+
+    /// <summary>
+    /// A path that already carries the extended-length prefix must not be prefixed a second
+    /// time: "\\?\" + "\\?\C:\..." is as invalid as the doubled UNC form. This test was RED
+    /// before the mapping existed (Win32 error 123, ERROR_INVALID_NAME).
+    /// </summary>
+    [Fact]
+    public void OpenExclusiveHandleWithDeleteAccess_AlreadyExtendedPath_OpensTheFile()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{}", Encoding.UTF8);
+        var extendedPath = @"\\?\" + path;
+
+        using var handle = DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(extendedPath);
+
+        Assert.False(handle.IsInvalid);
+    }
+
+    /// <summary>
+    /// A local drive-rooted path gets the plain extended-length prefix.
+    /// </summary>
+    [Fact]
+    public void ToExtendedPath_LocalPath_PrependsTheExtendedPrefix()
+    {
+        Assert.Equal(
+            @"\\?\C:\apps\webapp\App_Data\omp-deployment.lock.json",
+            DeploymentLockFile.ToExtendedPath(@"C:\apps\webapp\App_Data\omp-deployment.lock.json"));
+    }
+
+    /// <summary>
+    /// A UNC path must become \\?\UNC\server\share\... -- the naive "\\?\" + path form
+    /// (\\?\\\server\share\...) is not a valid Win32 path and fails every native open
+    /// with ERROR_INVALID_NAME.
+    /// </summary>
+    [Fact]
+    public void ToExtendedPath_UncPath_UsesTheUncPrefixForm()
+    {
+        Assert.Equal(
+            @"\\?\UNC\server\share\app\App_Data\omp-deployment.lock.json",
+            DeploymentLockFile.ToExtendedPath(@"\\server\share\app\App_Data\omp-deployment.lock.json"));
+    }
+
+    /// <summary>
+    /// A path that already carries the extended-length prefix must not be prefixed again.
+    /// </summary>
+    [Fact]
+    public void ToExtendedPath_AlreadyPrefixedPath_IsLeftAlone()
+    {
+        Assert.Equal(@"\\?\C:\apps\webapp", DeploymentLockFile.ToExtendedPath(@"\\?\C:\apps\webapp"));
+        Assert.Equal(@"\\?\UNC\server\share\app", DeploymentLockFile.ToExtendedPath(@"\\?\UNC\server\share\app"));
+    }
+
+    /// <summary>
+    /// A device-namespace path (\\.\...) is not a filesystem path for these purposes and
+    /// must pass through untouched.
+    /// </summary>
+    [Fact]
+    public void ToExtendedPath_DevicePath_IsLeftAlone()
+    {
+        Assert.Equal(@"\\.\PhysicalDrive0", DeploymentLockFile.ToExtendedPath(@"\\.\PhysicalDrive0"));
+    }
+
+    /// <summary>
+    /// Non-normalised input is normalised before prefixing: the extended-length prefix
+    /// disables Win32 path normalisation, so a forward-slash or dot-segment path must be
+    /// resolved to its full normalised form first.
+    /// </summary>
+    [Fact]
+    public void ToExtendedPath_NonNormalisedLocalPath_IsNormalisedBeforePrefixing()
+    {
+        Assert.Equal(
+            @"\\?\C:\apps\webapp",
+            DeploymentLockFile.ToExtendedPath("C:/apps/./webapp"));
+    }
+
+    /// <summary>
+    /// Platform fact the claim filter's Denied branch relies on: whether File.Exists and
+    /// Directory.Exists can still see a delete-pending file (marked for deletion on close,
+    /// not yet unlinked). Pinned so a platform change in either answer is caught loudly --
+    /// the branch treats "denied probe, file still visible" as a lost race and "denied
+    /// probe, nothing visible" as a persistent obstruction.
+    /// </summary>
+    [Fact]
+    public void FileExists_DeletePendingFile_PinsWhatTheFilesystemStillShows()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{}", Encoding.UTF8);
+
+        using (var holder = new FileStream(
+            DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(path), FileAccess.ReadWrite))
+        {
+            Assert.True(DeploymentLockFile.TryArmDeleteOnClose(holder, out _));
+
+            // Pinned observation: on NTFS the name still exists until the last handle
+            // closes, so File.Exists stays true for a delete-pending file.
+            Assert.True(File.Exists(path), "File.Exists no longer sees a delete-pending file -- review IsLostRaceOpenFailure's Denied branch");
+            Assert.False(Directory.Exists(path));
+        }
+
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// Probe state Opened: a file that answers the zero-access probe proves that a denial
+    /// from the real open was a REAL permission failure, never a lost race.
+    /// </summary>
+    [Fact]
+    public void ProbeDeletePending_ExistingFile_ReportsOpened()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{}", Encoding.UTF8);
+
+        Assert.Equal(DeploymentLockFile.DeletePendingProbeResult.Opened, DeploymentLockFile.ProbeDeletePending(path));
+    }
+
+    /// <summary>
+    /// Probe state Denied: a file marked for deletion on close refuses even the
+    /// zero-access probe with ERROR_ACCESS_DENIED.
+    /// </summary>
+    [Fact]
+    public void ProbeDeletePending_DeletePendingFile_ReportsDenied()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{}", Encoding.UTF8);
+
+        using (var holder = new FileStream(
+            DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(path), FileAccess.ReadWrite))
+        {
+            Assert.True(DeploymentLockFile.TryArmDeleteOnClose(holder, out _));
+
+            Assert.Equal(DeploymentLockFile.DeletePendingProbeResult.Denied, DeploymentLockFile.ProbeDeletePending(path));
+        }
+
+        Assert.False(File.Exists(path));
+    }
+
+    /// <summary>
+    /// Probe state Vanished: the file is gone at probe time (ERROR_FILE_NOT_FOUND) -- the
+    /// TOCTOU outcome, which callers must treat as a lost race, never as "access denied".
+    /// </summary>
+    [Fact]
+    public void ProbeDeletePending_MissingFile_ReportsVanished()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        Assert.Equal(DeploymentLockFile.DeletePendingProbeResult.Vanished, DeploymentLockFile.ProbeDeletePending(path));
+    }
+
+    /// <summary>
+    /// Probe state Vanished via the directory half: a missing directory above the lock
+    /// file answers ERROR_PATH_NOT_FOUND, the same lost-race outcome.
+    /// </summary>
+    [Fact]
+    public void ProbeDeletePending_MissingDirectory_ReportsVanished()
+    {
+        var path = Path.Join(_root, "no-such-dir", "omp-deployment.lock.json");
+
+        Assert.Equal(DeploymentLockFile.DeletePendingProbeResult.Vanished, DeploymentLockFile.ProbeDeletePending(path));
+    }
+
+    /// <summary>
+    /// The sharpest form of a real denial: the DELETE right is denied but metadata reads
+    /// are allowed. The exclusive open (which needs DELETE) fails while the zero-access
+    /// probe still opens the file, so the probe must answer Opened -- the caller reports
+    /// a real permission failure, not a lost race.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void ProbeDeletePending_WhenDeleteIsDeniedButMetadataIsReadable_ReportsOpened()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{}", Encoding.UTF8);
+
+        // A file-level deny-Delete alone does NOT block a DELETE-access open: the delete
+        // right can also come from the parent directory's FILE_DELETE_CHILD, which the
+        // temp directory's inherited FullControl grants. Denying the parent's
+        // DeleteSubdirectoriesAndFiles as well is what makes the denial real.
+        WithDeleteDenied(path, () =>
+        {
+            Assert.Equal(DeploymentLockFile.DeletePendingProbeResult.Opened, DeploymentLockFile.ProbeDeletePending(path));
+            Assert.Throws<UnauthorizedAccessException>(
+                () => DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(path).Dispose());
+        });
+    }
+
+    /// <summary>
+    /// The other named ACL shape: an ACL that refuses even attribute reads makes the
+    /// probe itself fail with ERROR_ACCESS_DENIED -- indistinguishable from
+    /// delete-pending, so the probe answers Denied and the fail-closed handling is the
+    /// same as for a lost race.
+    /// </summary>
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public void ProbeDeletePending_WhenEvenAttributeReadsAreDenied_ReportsDenied()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{}", Encoding.UTF8);
+
+        var file = new FileInfo(path);
+        var originalAcl = file.GetAccessControl();
+        var modifiedAcl = file.GetAccessControl();
+        modifiedAcl.AddAccessRule(DenyRule(FileSystemRights.FullControl));
+        file.SetAccessControl(modifiedAcl);
+        try
+        {
+            Assert.Equal(DeploymentLockFile.DeletePendingProbeResult.Denied, DeploymentLockFile.ProbeDeletePending(path));
+        }
+        finally
+        {
+            file.SetAccessControl(originalAcl);
+        }
+    }
+
+    /// <summary>
+    /// A directory sitting where the lock file should be is a persistent obstruction, not
+    /// a lost race: ReadStatus reports no lock (File.Exists is false for a directory), and
+    /// the claim's CreateNew fails with ERROR_ACCESS_DENIED while the zero-access probe is
+    /// denied with NOTHING at the path -- so the denial propagates as a fault (in the
+    /// lease loop that is what counts against the re-assert bound and stops the renewal)
+    /// instead of being misreported as "another deployment claimed the lock first" once
+    /// per tick forever. The directory is left exactly as it was.
+    /// </summary>
+    [Fact]
+    public async Task TryCreateExclusiveAsync_WhenADirectorySitsAtTheLockPath_ThrowsAndLeavesItAlone()
+    {
+        var path = DeploymentLockFile.GetPath(_root);
+        Directory.CreateDirectory(path);
+
+        Assert.False(DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).IsLocked);
+
+        var now = DateTimeOffset.UtcNow;
+        var doc = DeploymentLockFile.Create("claim-id", "app-key", "owner", "reason", now, now.AddMinutes(5));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => DeploymentLockFile.TryCreateExclusiveAsync(_root, doc, CancellationToken.None));
+
+        Assert.True(Directory.Exists(path));
+    }
+
+    /// <summary>
+    /// Denies <paramref name="rights"/> on the file for the current user for the duration
+    /// of <paramref name="body"/>, then restores the original ACL so the fixture cleanup
+    /// can delete the file. Deny ACEs hold for the file's owner too, which is what makes
+    /// the denial deterministic in this test.
+    /// </summary>
+    /// <summary>
+    /// Denies the delete right on the file for the duration of <paramref name="body"/> --
+    /// deny-Delete on the file itself AND deny-DeleteSubdirectoriesAndFiles (FILE_DELETE_CHILD)
+    /// on its parent directory, because the delete right can come from either -- then
+    /// restores both ACLs so the fixture cleanup can delete the tree. Deny ACEs hold for
+    /// the file's owner too, which is what makes the denial deterministic in this test.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void WithDeleteDenied(string filePath, Action body)
+    {
+        var file = new FileInfo(filePath);
+        var directory = file.Directory!;
+        var originalFileAcl = file.GetAccessControl();
+        var originalDirectoryAcl = directory.GetAccessControl();
+
+        var fileAcl = file.GetAccessControl();
+        fileAcl.AddAccessRule(DenyRule(FileSystemRights.Delete));
+        file.SetAccessControl(fileAcl);
+        var directoryAcl = directory.GetAccessControl();
+        directoryAcl.AddAccessRule(DenyRule(FileSystemRights.DeleteSubdirectoriesAndFiles));
+        directory.SetAccessControl(directoryAcl);
+        try
+        {
+            body();
+        }
+        finally
+        {
+            file.SetAccessControl(originalFileAcl);
+            directory.SetAccessControl(originalDirectoryAcl);
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static FileSystemAccessRule DenyRule(FileSystemRights rights)
+        => new(
+            new SecurityIdentifier(WindowsIdentity.GetCurrent().User!.Value),
+            rights,
+            InheritanceFlags.None,
+            PropagationFlags.None,
+            AccessControlType.Deny);
+
+    /// <summary>
+    /// Maps a local absolute path onto the localhost administrative share
+    /// (C:\foo\bar -> \\localhost\C$\foo\bar), giving the tests a real UNC path without
+    /// creating a share. The callers assert the mapped path is actually reachable so an
+    /// environment without administrative shares fails loudly instead of silently proving
+    /// nothing.
+    /// </summary>
+    private static string ToLocalhostUncPath(string localPath)
+    {
+        var fullPath = Path.GetFullPath(localPath);
+        Assert.True(
+            fullPath.Length >= 3 && fullPath[1] == ':' && fullPath[2] == Path.DirectorySeparatorChar,
+            $"test path '{fullPath}' is not a drive-rooted local path and cannot be mapped onto a localhost share");
+        return $@"\\localhost\{fullPath[0]}$\{fullPath.Substring(3)}";
     }
 }
