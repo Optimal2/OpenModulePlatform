@@ -898,7 +898,13 @@ public static class DeploymentLockFile
 
         return ProbeDeletePending(path) switch
         {
-            DeletePendingProbeResult.Denied => File.Exists(path),
+            // The filter has its own TOCTOU window: a delete-pending file can drop out between
+            // the probe and File.Exists, which would have read as a persistent obstruction and
+            // propagated as a fault. Re-probe once -- only a path that now reports Vanished is a
+            // lost race; a directory sitting at the lock's place, or a denial with nothing
+            // visible that is still denied, keeps propagating. (Independent review, 2026-09-05.)
+            DeletePendingProbeResult.Denied => File.Exists(path)
+                || (!Directory.Exists(path) && ProbeDeletePending(path) == DeletePendingProbeResult.Vanished),
             DeletePendingProbeResult.Vanished => true,
             _ => false
         };

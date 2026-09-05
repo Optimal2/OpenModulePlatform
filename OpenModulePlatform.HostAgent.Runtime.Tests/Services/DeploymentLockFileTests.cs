@@ -1354,7 +1354,9 @@ public sealed class DeploymentLockFileTests : IDisposable
         }
         finally
         {
-            file.SetAccessControl(originalAcl);
+            // Each restore on its own: a deny ACE left behind blocks the fixture's recursive
+            // delete and leaks temp directories between runs (independent review, 2026-09-05).
+            RestoreAcl(() => file.SetAccessControl(originalAcl));
         }
     }
 
@@ -1416,8 +1418,9 @@ public sealed class DeploymentLockFileTests : IDisposable
         }
         finally
         {
-            file.SetAccessControl(originalFileAcl);
-            directory.SetAccessControl(originalDirectoryAcl);
+            // Each restore on its own, so a failed file restore never skips the directory's.
+            RestoreAcl(() => file.SetAccessControl(originalFileAcl));
+            RestoreAcl(() => directory.SetAccessControl(originalDirectoryAcl));
         }
     }
 
@@ -1437,6 +1440,24 @@ public sealed class DeploymentLockFileTests : IDisposable
     /// environment without administrative shares fails loudly instead of silently proving
     /// nothing.
     /// </summary>
+    /// <summary>
+    /// Best-effort ACL restore for test teardown. The owner keeps implicit WRITE_DAC even under a
+    /// self-inflicted Deny(FullControl), so this normally succeeds; when it does not (a scanner's
+    /// ACE, a rotated OWNER_RIGHTS policy) the failure must not hide the test's own verdict nor
+    /// skip the next restore.
+    /// </summary>
+    private static void RestoreAcl(Action restore)
+    {
+        try
+        {
+            restore();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"ACL restore failed in test teardown: {ex.Message}");
+        }
+    }
+
     /// <summary>True when the localhost admin share answers for the path's drive (probed, never assumed).</summary>
     private static bool CanReachLocalhostShare(string uncPath)
     {
