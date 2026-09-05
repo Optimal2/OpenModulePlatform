@@ -145,4 +145,29 @@ public sealed class IFrameFrameSourcePolicyTests
             "default-src 'self'; frame-src 'self' https://reports.example.internal; frame-ancestors 'self'",
             rewritten);
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveConfiguredPolicy_MissingOrBlank_FallsBackToTightenedBaseline(string? configured)
+    {
+        // Second-opinion finding (2026-09-05): the warning fired on IsNullOrWhiteSpace while the
+        // fallback only covered null, so an EMPTY Policy key produced a header consisting of the
+        // frame-src directive alone — no script-src, no default-src — i.e. inline scripts allowed
+        // again, under a log line claiming the tightened policy was in use.
+        var resolved = IFrameFrameSourcePolicy.ResolveConfiguredPolicy(configured);
+
+        Assert.Equal(IFrameFrameSourcePolicy.ModulePolicyBaseline, resolved);
+        Assert.Contains("script-src 'self';", resolved);
+        Assert.DoesNotContain("script-src 'self' 'unsafe-inline'", resolved);
+    }
+
+    [Fact]
+    public void ResolveConfiguredPolicy_Configured_IsKeptVerbatim()
+    {
+        const string policy = "default-src 'self'; script-src 'self'; frame-src 'self'";
+
+        Assert.Same(policy, IFrameFrameSourcePolicy.ResolveConfiguredPolicy(policy));
+    }
 }

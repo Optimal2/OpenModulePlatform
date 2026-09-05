@@ -102,6 +102,17 @@ public static partial class IFrameFrameSourcePolicy
     }
 
     /// <summary>
+    /// The policy the middleware rewrites: the configured one, or the module's tightened
+    /// baseline when the key is missing OR blank. Null and blank must be treated alike —
+    /// with a null-only fallback an empty Policy key reached ReplaceFrameSource, whose
+    /// blank-policy shortcut returned the frame-src directive alone (no script-src, no
+    /// default-src: inline scripts allowed again) while the warning above claimed the
+    /// tightened policy was in use (second-opinion finding, 2026-09-05).
+    /// </summary>
+    public static string ResolveConfiguredPolicy(string? configuredPolicy)
+        => string.IsNullOrWhiteSpace(configuredPolicy) ? ModulePolicyBaseline : configuredPolicy;
+
+    /// <summary>
     /// Sets the module's CSP header (report-only or enforcing, following the configured
     /// options) with the DB-derived frame-src allowlist, before the shared security
     /// headers middleware runs — its set-if-missing pattern then keeps this value.
@@ -173,7 +184,7 @@ public static partial class IFrameFrameSourcePolicy
             {
                 Enabled = cspOptions.Enabled,
                 ReportOnly = cspOptions.ReportOnly,
-                Policy = ReplaceFrameSource(cspOptions.Policy ?? ModulePolicyBaseline, directive),
+                Policy = ReplaceFrameSource(ResolveConfiguredPolicy(cspOptions.Policy), directive),
                 ReportPath = cspOptions.ReportPath
             };
 
