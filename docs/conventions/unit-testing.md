@@ -16,6 +16,17 @@
 > seven) — and VajSkrivare has adopted CPM, so **ODVGateway is still the only .NET repo in the
 > family without a `Directory.Packages.props`**.
 >
+> **Test-package pins re-measured 2026-09-06 — the family is uniform, and the per-repo sections
+> below had drifted.** Read from every `Directory.Packages.props` on the same day:
+> `Microsoft.NET.Test.Sdk` **18.9.0**, `xunit` **2.9.3**, `xunit.runner.visualstudio` **4.0.0**,
+> `coverlet.collector` **10.0.1**, `Microsoft.Playwright` **1.62.0**, and where used
+> `Xunit.SkippableFact` **1.5.85** — identical across OpenModulePlatform, IbsPackager, LogSearch,
+> EArkivChecker, Dokumentbibliotek, VajSkrivare and iKrock2. The only variation is that VajSkrivare
+> carries no `coverlet.collector`. Four per-repo bullets below still quoted the 2026-07-15 audit's
+> 18.7.0 / 3.1.5 / 1.4.13 and have been corrected in place.
+> **When these numbers drift again, fix the family-wide line here first** — the per-repo bullets are
+> a snapshot of an audit, and duplicating a version in seven places is what let it go stale.
+>
 > **Pester migration 2026-09-03:** the script suites (`tests/*.Tests.ps1`) were migrated to the
 > **Pester 5** dialect and the runner (`scripts/omp/run-script-tests.ps1`) pins **Pester 5.9.1**;
 > the Pester 3.4.0 legacy dialect (`Should Be`) is gone, and per-suite harness code lives in
@@ -109,7 +120,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `IbsPackager.ChannelTypes.FileDrop.Tests/IbsPackager.ChannelTypes.FileDrop.Tests.csproj:13-15`
 - **Layout/naming:** Test projects at repo root beside source projects, named `<SourceProject>.Tests`; both in `IbsPackager.slnx:8-9`. Naming mismatch: `IbsPackager.Tests` actually tests `IbsPackager.Runtime` (ProjectReference at `IbsPackager.Tests/IbsPackager.Tests.csproj:20`).
 - **Mock library:** None — `NullLogger<T>.Instance` (`IbsPackager.ChannelTypes.FileDrop.Tests/FileDropRoutingTests.cs:124`) and hand-written stubs (`TestConfiguration : IConfiguration`, `NoChangeToken`, `EmptyDisposable` at `IbsPackager.Tests/ReconcileChannelTypeArtifactRequirementsTests.cs:421-496`).
-- **Package pins (CPM, `Directory.Packages.props:3`):** `Microsoft.NET.Test.Sdk` 18.7.0 (`:12`), `xunit` 2.9.3 (`:13`), `xunit.runner.visualstudio` 3.1.5 (`:14`), `coverlet.collector` 10.0.1 (`:15`), `Xunit.SkippableFact` 1.4.13 (`:16`). TargetFramework `net10.0` (line 4 of each test csproj). `global.json` pins the .NET 10 SDK.
+- **Package pins (CPM, `Directory.Packages.props`):** re-measured 2026-09-06 — `Microsoft.NET.Test.Sdk` **18.9.0**, `xunit` 2.9.3, `xunit.runner.visualstudio` **4.0.0**, `coverlet.collector` 10.0.1, `Xunit.SkippableFact` **1.5.85** (`:20`). TargetFramework `net10.0` (line 4 of each test csproj). `global.json` pins the .NET 10 SDK. (The audit's 18.7.0 / 3.1.5 / 1.4.13 were the 2026-07-15 values; see the family-wide note under Status.)
 - **Assertion style:** Plain xUnit `Assert.*`.
   - `IbsPackager.ChannelTypes.FileDrop.Tests/FileDropRoutingTests.cs:23-29` (`Assert.Equal`, `Assert.Throws`)
   - `IbsPackager.ChannelTypes.FileDrop.Tests/FileDropIndexFieldExtractorTests.cs:27-29` (`Assert.Single`, `Assert.DoesNotContain`)
@@ -126,7 +137,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `tests/Skrivarkoppling.Web.Tests/Skrivarkoppling.Web.Tests.csproj:14-15`
 - **Layout/naming:** Top-level `tests/` folder mirroring `src/` (divergent from the sibling-root convention); project named `<SourceProject>.Tests`; included in `Skrivarkoppling.sln:10` under a `tests` solution folder (`Skrivarkoppling.sln:8,51`).
 - **Mock library:** None — hand-written fake `FakeZebraConfigService : IZebraConfigService` (`tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs:38,76-121`).
-- **Package pins:** ~~No CPM (no `Directory.Packages.props`); inline versions in the test csproj: `Microsoft.NET.Test.Sdk` 17.14.0 (`:13`), `xunit` 2.9.3 (`:14`), `xunit.runner.visualstudio` 2.8.2 (`:15`), `Microsoft.AspNetCore.Mvc.Testing` 10.0.0 (`:12`).~~ **SUPERSEDED — VajSkrivare uses CPM.** Verified 2026-08-27 against `Directory.Packages.props` at repo root (`ManagePackageVersionsCentrally=true`, `:3`): `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` 3.1.5, `Microsoft.AspNetCore.Mvc.Testing` 10.0.11, `Xunit.SkippableFact` 1.5.61, `Microsoft.Playwright` 1.62.0; `tests/Skrivarkoppling.Web.Tests/Skrivarkoppling.Web.Tests.csproj` now carries version-less `PackageReference` entries. TargetFramework `net10.0` (`:4`). Still no coverlet, and still no `global.json` (the only repo in the family without an SDK pin).
+- **Package pins:** ~~No CPM (no `Directory.Packages.props`); inline versions in the test csproj: `Microsoft.NET.Test.Sdk` 17.14.0 (`:13`), `xunit` 2.9.3 (`:14`), `xunit.runner.visualstudio` 2.8.2 (`:15`), `Microsoft.AspNetCore.Mvc.Testing` 10.0.0 (`:12`).~~ **SUPERSEDED — VajSkrivare uses CPM.** Verified 2026-08-27 against `Directory.Packages.props` at repo root (`ManagePackageVersionsCentrally=true`, `:3`): `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` **4.0.0** (was 3.1.5 at the 2026-08-27 check; re-measured 2026-09-06), `Microsoft.AspNetCore.Mvc.Testing` 10.0.11, `Xunit.SkippableFact` **1.5.85** (was 1.5.61), `Microsoft.Playwright` 1.62.0; `tests/Skrivarkoppling.Web.Tests/Skrivarkoppling.Web.Tests.csproj` now carries version-less `PackageReference` entries. TargetFramework `net10.0` (`:4`). Still no coverlet, and still no `global.json` (the only repo in the family without an SDK pin).
 - **Assertion style:** Plain xUnit `Assert.*` (`ApiAnonymityTests.cs:53-58,71-73`). No FluentAssertions.
 - **Coverage:** None — no coverlet reference, no `.runsettings`, no CI coverage.
 - **Integration vs unit separation:** None formal. The only tests are integration-style HTTP tests using `WebApplicationFactory<Program>` + `IClassFixture` with in-memory config overrides and `ZebraConfig:Enabled=false` (`ApiAnonymityTests.cs:12-41`, `:32`), so no SQL Server dependency.
@@ -140,7 +151,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
 - **Framework:** xUnit (`iKrock2.Application.Tests/iKrock2.Application.Tests.csproj:13-14`); `global using Xunit;` in `iKrock2.Application.Tests/Usings.cs:1`.
 - **Layout/naming:** Single flat test project beside source projects at repo root; included in `iKrock2.slnx:7`. Test classes named `<Subject>Tests`, methods `Method_Condition_Expectation` (e.g. `iKrock2.Application.Tests/BackendStatusServiceTests.cs:11-12`). Despite the name, the project references Application **and** Backend and Contracts (`iKrock2.Application.Tests.csproj:19-21`).
 - **Mock library:** None. `WorkOrderExecutorTests.cs:11-13` explicitly documents that sealed, SQL-coupled production classes (`DashboardRepository`, `IboSyncService`) block mocking; tests use `Options.Create(...)` hand-wiring instead (`BackendStatusServiceTests.cs:14-28`).
-- **Package pins (CPM, `Directory.Packages.props:3`):** `Microsoft.NET.Test.Sdk` 18.7.0 (`:15`), `xunit` 2.9.3 (`:17`), `xunit.runner.visualstudio` 3.1.5 (`:18`), `coverlet.collector` 10.0.1 (`:7`). TargetFramework `net10.0` (`iKrock2.Application.Tests.csproj:4`); SDK pinned `10.0.200` (`global.json:3`).
+- **Package pins (CPM, `Directory.Packages.props`):** re-measured 2026-09-06 — `Microsoft.NET.Test.Sdk` **18.9.0** (`:15`), `xunit` 2.9.3 (`:18`), `xunit.runner.visualstudio` **4.0.0** (`:19`), `coverlet.collector` 10.0.1 (`:7`), `Microsoft.Playwright` 1.62.0 (`:16`). TargetFramework `net10.0` (`iKrock2.Application.Tests.csproj:4`); SDK pinned `10.0.200` (`global.json:3` — verified, unchanged). (The audit's 18.7.0 / 3.1.5 were the 2026-07-15 values.)
 - **Assertion style:** Plain xUnit `Assert.*` (`CollisionSearchFilterQueryParserTests.cs:17-27,50`; `WorkOrderExecutorTests.cs:38-41`). No FluentAssertions.
 - **Coverage:** `coverlet.collector` referenced (`iKrock2.Application.Tests.csproj:15`) but never invoked; no `.runsettings`, no scripts, no CI upload.
 - **Integration vs unit separation:** None — all tests are pure unit tests. `BackendStatusServiceTests.cs:26-37` constructs real `SqlConnectionFactory` objects but only asserts config flags, never opens a connection.
@@ -164,7 +175,7 @@ Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokume
   - `EArkivChecker.Runtime.Tests/EArkivChecker.Runtime.Tests.csproj:13-15`
 - **Layout/naming:** Sibling `<SourceProject>.Tests` at repo root beside the source projects, included in `EArkivChecker.slnx:3`; Tier C/D suffix on test classes; global `<Using Include="Xunit" />` in the csproj (`:27`). Only `EArkivChecker.Runtime` is referenced/tested (`:23`); Service and Web are thin hosts.
 - **Mock library:** None — hand-written fakes for the FolderScanner and scan-processor decision-logic Tier D tests.
-- **Package pins (CPM, `Directory.Packages.props:3`):** `Microsoft.NET.Test.Sdk` 18.7.0 (`:11`), `xunit` 2.9.3 (`:14`), `xunit.runner.visualstudio` 3.1.5 (`:15`), `coverlet.collector` 10.0.1 (`:6`), `Xunit.SkippableFact` 1.4.13 (`:16`). TargetFramework `net10.0` repo-wide via `Directory.Build.props:3`.
+- **Package pins (CPM, `Directory.Packages.props`):** re-measured 2026-09-06 — `Microsoft.NET.Test.Sdk` **18.9.0**, `xunit` 2.9.3, `xunit.runner.visualstudio` **4.0.0**, `coverlet.collector` 10.0.1, `Xunit.SkippableFact` **1.5.85** (`:17`). TargetFramework `net10.0` repo-wide via `Directory.Build.props:3`. (The audit's 18.7.0 / 3.1.5 / 1.4.13 were the 2026-07-15 values.)
 - **Assertion style:** Plain xUnit `Assert.*` (`EArkivCheckerRepositoryTierCTests.cs:443-446` — `Assert.ThrowsAsync`, `Assert.Equal`). No FluentAssertions.
 - **Coverage:** `coverlet.collector` referenced (PrivateAssets=all) in the test csproj (`:9-12`) — but never invoked: no `.runsettings`, no `--collect` in scripts or CI.
 - **Integration vs unit separation:** The recommended-standard combination — OMP's Tier C/D class naming plus IbsPackager-style gating. Tier D = pure in-memory fakes. Tier C = `[SkippableFact]` over a per-class fixture `EArkivCheckerRepositoryTestDatabase` (`EArkivCheckerRepositoryTierCTests.cs:582`) that honors env var `EARKIVCHECKER_TEST_CONNECTION_STRING` (default `Server=localhost;Integrated Security=true`, `:584-585`), lazily creates a uniquely named database (`EArkivChecker_Tests_<guid>`, `:589-590`), deploys `sql/1-setup-earkiv-checker.sql` plus a minimal core-schema stub (omp schema, `omp.users`, `omp.notifications` — `:737`), drops the database on dispose, and skips cleanly via `SkipException` when no local SQL Server is reachable (`:693`). The alarm methods `SetAlarmSubscriptionAsync`/`CreateAlarmNotificationsAsync` are covered against that stub (`:435-520`).
