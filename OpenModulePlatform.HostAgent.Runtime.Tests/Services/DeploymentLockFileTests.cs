@@ -1102,14 +1102,17 @@ public sealed class DeploymentLockFileTests : IDisposable
     /// This test was RED before the extended-path mapping existed: the exclusive open threw
     /// an IOException (Win32 error 123, ERROR_INVALID_NAME) instead of opening the file.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void OpenExclusiveHandleWithDeleteAccess_UncPath_OpensTheFile()
     {
         var path = DeploymentLockFile.GetPath(_root);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, "{}", Encoding.UTF8);
         var uncPath = ToLocalhostUncPath(path);
-        Assert.True(File.Exists(uncPath),
+        // The proof needs a real UNC path. The localhost admin share is reachable on a developer
+        // box (where this test was RED before the fix) but not necessarily on a CI runner; a
+        // missing share is an environment fact, not a lock-file defect, so skip -- loudly -- there.
+        Skip.IfNot(File.Exists(uncPath),
             $"the localhost admin share form of the temp path is not reachable ({uncPath}) -- this test needs it");
 
         using var handle = DeploymentLockFile.OpenExclusiveHandleWithDeleteAccess(uncPath);
@@ -1121,12 +1124,12 @@ public sealed class DeploymentLockFileTests : IDisposable
     /// Same UNC requirement end to end on the claim path: a deployment lock under a UNC
     /// application root must be claimable and readable back.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task TryCreateExclusiveAsync_UncApplicationRoot_ClaimsTheLock()
     {
         var uncRoot = ToLocalhostUncPath(_root);
-        Directory.CreateDirectory(uncRoot);
-        Assert.True(Directory.Exists(uncRoot),
+        Directory.CreateDirectory(_root);   // the local root first: the share is only probed, never used to create it
+        Skip.IfNot(CanReachLocalhostShare(uncRoot) && Directory.Exists(uncRoot),
             $"the localhost admin share form of the temp root is not reachable ({uncRoot}) -- this test needs it");
 
         var now = DateTimeOffset.UtcNow;
@@ -1434,6 +1437,24 @@ public sealed class DeploymentLockFileTests : IDisposable
     /// environment without administrative shares fails loudly instead of silently proving
     /// nothing.
     /// </summary>
+    /// <summary>True when the localhost admin share answers for the path's drive (probed, never assumed).</summary>
+    private static bool CanReachLocalhostShare(string uncPath)
+    {
+        try
+        {
+            var root = Path.GetPathRoot(uncPath);
+            return root is not null && Directory.Exists(root);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     private static string ToLocalhostUncPath(string localPath)
     {
         var fullPath = Path.GetFullPath(localPath);
