@@ -211,19 +211,41 @@ try {
     }
     else {
         $telemetryTestStatus = if ($failures -contains 'Tests') { 'failed' } else { 'passed' }
+        # test_count is null, never zero, whenever it was not measured: the
+        # helper failed, a TRX file was malformed/unreadable, or no TRX file
+        # exists. Zero is only ever what a readable TRX file actually reports.
+        $unreadableTrxReason = ''
         if (Get-Command Get-LocalCiTrxCounters -ErrorAction SilentlyContinue) {
             try {
                 $suite = Get-LocalCiTrxCounters -ResultsDirectory $localCiTrxRoot -SuiteName 'unit tests (6 projects)'
                 if ($null -ne $suite) { $telemetrySuites += $suite }
             }
             catch {
-                Write-Warning "TRX counters could not be parsed: $($_.Exception.Message)"
+                $unreadableTrxReason = "TRX counters could not be parsed: $($_.Exception.Message)"
+                Write-Warning $unreadableTrxReason
             }
         }
-        if ($telemetrySuites.Count -gt 0 -and $null -eq $telemetryTestCount) {
+        $malformedTrxFiles = 0
+        $seenTrxFiles = 0
+        foreach ($suiteRow in $telemetrySuites) {
+            $malformedTrxFiles += [int]$suiteRow.malformed_files
+            $seenTrxFiles += [int]$suiteRow.trx_files
+        }
+        if ($malformedTrxFiles -gt 0 -and [string]::IsNullOrEmpty($unreadableTrxReason)) {
+            $unreadableTrxReason = "$malformedTrxFiles of $seenTrxFiles TRX file(s) malformed or unreadable"
+        }
+        if (-not [string]::IsNullOrEmpty($unreadableTrxReason)) {
+            $telemetryTestStatus = 'unreadable-trx'
+            $telemetryTestCount = $null
+            $telemetrySkipReason = $unreadableTrxReason
+        }
+        elseif ($telemetrySuites.Count -gt 0) {
             $executedSum = 0
             foreach ($suiteRow in $telemetrySuites) { $executedSum += [int]$suiteRow.executed }
             $telemetryTestCount = $executedSum
+        }
+        else {
+            $telemetrySkipReason = 'no TRX file was written; test_count is unmeasured'
         }
     }
     $telemetryStatus = if ($failures.Count -eq 0) { 'pass' } else { 'fail' }
