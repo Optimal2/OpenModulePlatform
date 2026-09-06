@@ -1449,7 +1449,6 @@ Write-Step 'Copying SQL scripts'
 $sqlFiles = @(
     @{ Source = 'sql\1-setup-openmoduleplatform.sql'; Destination = 'OpenModulePlatform\1-setup-openmoduleplatform.sql' },
     @{ Source = 'sql\2-initialize-openmoduleplatform.sql'; Destination = 'OpenModulePlatform\2-initialize-openmoduleplatform.sql' },
-    @{ Source = 'sql\3-initialize-opendocviewer.sql'; Destination = 'OpenModulePlatform\3-initialize-opendocviewer.sql' },
     @{ Source = 'OpenModulePlatform.Auth\sql\2-initialize-omp-auth.sql'; Destination = 'OpenModulePlatform.Auth\2-initialize-omp-auth.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\1-setup-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\1-setup-omp-portal.sql' },
     @{ Source = 'OpenModulePlatform.Portal\sql\2-initialize-omp-portal.sql'; Destination = 'OpenModulePlatform.Portal\2-initialize-omp-portal.sql' },
@@ -1473,6 +1472,12 @@ $sqlFiles = @(
 foreach ($file in $sqlFiles) {
     Copy-RequiredFile -Source (Join-Path $RepositoryRoot $file.Source) -Destination (Join-Path $sqlRoot $file.Destination)
 }
+
+# The module repository owns its seed SQL. Keep the installer destination stable,
+# and require the current source even when a prebuilt app package is supplied.
+Copy-RequiredFile `
+    -Source (Join-Path $OpenDocViewerRoot 'sql\3-initialize-opendocviewer.sql') `
+    -Destination (Join-Path $sqlRoot 'OpenModulePlatform\3-initialize-opendocviewer.sql')
 
 Write-Step 'Copying module definitions'
 $moduleDefinitionsDestination = $availableModuleDefinitionsRoot
