@@ -43,7 +43,7 @@ try
                     {
                         Check(ModuleDefinitionSqlOwnership.Decode(Text(script, "inlineSql"), Text(script, "content"), Text(script, "contentEncoding")), path, definitionModule, key);
                     }
-                    catch (Exception ex) when (ex is InvalidOperationException or JsonException)
+                    catch (Exception ex) when (IsExpectedValidationFailure(ex))
                     {
                         results.Add(new(path, definitionModule, key, 1, 1, ModuleDefinitionSqlOwnership.RuleId, "<unresolved table>", ex.Message));
                     }
@@ -58,13 +58,13 @@ try
                 Check(sql, path, module, Path.GetFileName(path));
             }
         }
-        catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException or KeyNotFoundException)
+        catch (Exception ex) when (IsExpectedValidationFailure(ex))
         {
             results.Add(new(path, module, "<unresolved script>", 1, 1, ModuleDefinitionSqlOwnership.RuleId, "<unresolved table>", ex.Message));
         }
     }
 }
-catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException or IndexOutOfRangeException or KeyNotFoundException)
+catch (Exception ex) when (IsExpectedValidationFailure(ex))
 {
     results.Add(new("<input>", module, "<unresolved script>", 1, 1, ModuleDefinitionSqlOwnership.RuleId, "<unresolved table>", ex.Message));
 }
@@ -91,6 +91,13 @@ void Check(string sql, string file, string moduleKey, string scriptKey)
 
 static string? Text(JsonElement element, string property)
     => element.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null ? value.GetString() : null;
+
+// The failures the guard reports as diagnostics instead of crashing: unreadable input,
+// malformed JSON or SQL payloads, a manifest or definition missing a required property,
+// and bad command-line usage. One predicate for all three catch sites so the set cannot
+// drift between them; anything else is a real bug and propagates.
+static bool IsExpectedValidationFailure(Exception ex)
+    => ex is IOException or JsonException or InvalidOperationException or KeyNotFoundException or IndexOutOfRangeException;
 
 // An option given as the last argument has no value; say so instead of indexing past the array.
 static string RequireValue(string[] args, ref int index)

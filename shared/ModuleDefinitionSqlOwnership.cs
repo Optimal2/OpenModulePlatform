@@ -78,16 +78,36 @@ internal static class ModuleDefinitionSqlOwnership
         }
     }
 
+    // Dynamic SQL payloads are re-parsed recursively (EXEC of a constant string that
+    // itself EXECs another). Any legitimate payload is a handful of levels deep; a
+    // payload nested deeper than this is treated as unresolvable rather than parsed
+    // without bound, so a self-referencing or adversarial payload cannot exhaust the
+    // stack of the importing process.
+    private const int MaxDynamicSqlNestingDepth = 32;
+
     internal static IReadOnlyList<Violation> Analyze(string sql)
     {
-        var violations = new List<Violation>();
+        var violations = new ViolationList();
         Parse(sql, violations, 0);
-        return violations;
+        return violations.Items;
     }
 
-    private static void Parse(string sql, List<Violation> violations, int depth, TSqlFragment? origin = null)
+    // Violations are reported in discovery order (Validate surfaces the first one) and
+    // deduplicated, so the ordered list is paired with a set for O(1) membership instead
+    // of a linear Contains per Add. Violation is a record: structural equality applies.
+    private sealed class ViolationList
     {
-        if (depth > 32 || string.IsNullOrWhiteSpace(sql))
+        private readonly HashSet<Violation> seen = [];
+        internal List<Violation> Items { get; } = [];
+        internal void Add(Violation violation)
+        {
+            if (seen.Add(violation)) Items.Add(violation);
+        }
+    }
+
+    private static void Parse(string sql, ViolationList violations, int depth, TSqlFragment? origin = null)
+    {
+        if (depth > MaxDynamicSqlNestingDepth || string.IsNullOrWhiteSpace(sql))
         {
             violations.Add(new("<unresolved table>", origin?.StartLine ?? 1, origin?.StartColumn ?? 1,
                 "SQL payload cannot be resolved"));
@@ -127,7 +147,7 @@ internal static class ModuleDefinitionSqlOwnership
         public override void ExplicitVisit(NamedTableReference node) => Tables.Add(node);
     }
 
-    private sealed class OwnershipVisitor(List<Violation> violations, int depth, TSqlFragment? origin) : TSqlFragmentVisitor
+    private sealed class OwnershipVisitor(ViolationList violations, int depth, TSqlFragment? origin) : TSqlFragmentVisitor
     {
         private const string DynamicIdentifier = "__module_sql_identifier__";
         private VariableCollector variables = new();
@@ -211,16 +231,19 @@ internal static class ModuleDefinitionSqlOwnership
         private void Add(string table, TSqlFragment node, string reason = "configuration continuity is owned by the platform")
         {
             var location = origin ?? node;
-            var violation = new Violation(table, location.StartLine, location.StartColumn, reason);
-            if (!violations.Contains(violation)) violations.Add(violation);
+            violations.Add(new Violation(table, location.StartLine, location.StartColumn, reason));
         }
 
         private void CheckName(SchemaObjectName name, TSqlFragment location)
         {
-            if (OwnedTables.TryGetValue(name.BaseIdentifier.Value, out var table)
+            // HashSet.TryGetValue is deliberate, not a Dictionary habit: the set is
+            // case-insensitive, and the out value is the platform's canonical spelling of
+            // the table, so the violation names "omp.ConfigOverlayDocuments" however the
+            // module SQL cased it - and casing variants deduplicate to one violation.
+            if (OwnedTables.TryGetValue(name.BaseIdentifier.Value, out var canonicalTable)
                 && (name.SchemaIdentifier is null || name.SchemaIdentifier.Value.Equals("omp", StringComparison.OrdinalIgnoreCase)))
             {
-                Add("omp." + table, location);
+                Add("omp." + canonicalTable, location);
             }
         }
 

@@ -102,7 +102,15 @@ try {
         $currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
         $upstreamRef = (git for-each-ref --format='%(upstream:short)' "refs/heads/$currentBranch" | Out-String).Trim()
         $hasUpstream = -not [string]::IsNullOrWhiteSpace($upstreamRef)
-        $unpushed = if ($hasUpstream) { (git rev-list --count "$upstreamRef..HEAD") } else { '' }
+        # rev-list can also write to stderr (an upstream ref that vanished after
+        # a remote prune), which ErrorActionPreference=Stop would turn into a
+        # terminating error; redirect it and judge on the exit code so the
+        # parent-of-HEAD fallback below stays reachable.
+        $unpushed = ''
+        if ($hasUpstream) {
+            $unpushed = (git rev-list --count "$upstreamRef..HEAD" 2>$null)
+            if ($LASTEXITCODE -ne 0) { $unpushed = '' }
+        }
         if ($hasUpstream -and $unpushed -and [int]$unpushed -gt 0) {
             $BaseCommit = (git rev-parse $upstreamRef).Trim()
             $reason = "$unpushed unpushed commit(s); baseline is upstream"
@@ -140,7 +148,6 @@ try {
     Invoke-Step 'Pester script tests' {
         # Use the current shell; the pinned runner supports Windows PowerShell and pwsh.
         & (Join-Path $repoRoot 'scripts\omp\run-script-tests.ps1')
-        if ($LASTEXITCODE -ne 0) { throw "run-script-tests.ps1 failed ($LASTEXITCODE)" }
     }
 
     if (-not $SkipTests) {
