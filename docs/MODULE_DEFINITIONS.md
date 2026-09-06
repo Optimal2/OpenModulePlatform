@@ -111,7 +111,9 @@ The rule uses Microsoft ScriptDom syntax trees and decoded identifiers. It
 covers INSERT (including positional/default INSERT), UPDATE, DELETE and MERGE,
 alias targets anywhere in a FROM/JOIN, chained CTE targets, OUTPUT INTO, and
 SELECT INTO. BULK INSERT and the ALTER TABLE family are also checked, including
-both the source and destination of SWITCH. Comments and string values are not
+both the source and destination of SWITCH. Statement-form ENABLE/DISABLE TRIGGER,
+ALTER INDEX, DROP INDEX (including legacy syntax), UPDATE STATISTICS and CREATE
+STATISTICS also check the target table. Comments and string values are not
 table identifiers. GO repeat counts are normalized from SQL tokens, preserving
 source positions. Reads and
 bounded schema maintenance on module-owned tables remain allowed.
@@ -130,6 +132,8 @@ names in a parsed ALTER TABLE DROP CONSTRAINT statement with a fixed table.
 Unknown dynamic DML targets are rejected. Configuration writes in procedure,
 trigger and function definitions are checked too, including definitions in
 constant dynamic SQL. There is no module-key or core-module exemption.
+
+CREATE INDEX (including UNIQUE) is deliberately allowed because core bootstrap creates additive indexes through this same gate; blocking it requires moving bootstrap DDL to the compiled migration path first.
 
 The existing artifact and pointer rules still block writes to `omp.Artifacts`,
 `omp.AppInstances.ArtifactId` and

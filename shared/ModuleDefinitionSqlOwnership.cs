@@ -276,6 +276,51 @@ internal static class ModuleDefinitionSqlOwnership
         public override void ExplicitVisit(AlterTriggerStatement node) => ExplicitVisit((TriggerStatementBody)node);
         public override void ExplicitVisit(CreateOrAlterTriggerStatement node) => ExplicitVisit((TriggerStatementBody)node);
 
+        public override void ExplicitVisit(EnableDisableTriggerStatement node)
+        {
+            if (node.TriggerObject.Name is { } target) CheckName(target, node);
+            base.ExplicitVisit(node);
+        }
+
+        // CreateIndexStatement is deliberately not checked: core bootstrap creates
+        // additive indexes through this same gate. Blocking CREATE INDEX (including
+        // UNIQUE) requires moving bootstrap DDL to the compiled migration path first.
+        public override void ExplicitVisit(AlterIndexStatement node)
+        {
+            CheckName(node.OnName, node);
+            base.ExplicitVisit(node);
+        }
+
+        public override void ExplicitVisit(DropIndexStatement node)
+        {
+            foreach (var clause in node.DropIndexClauses)
+            {
+                switch (clause)
+                {
+                    case DropIndexClause modern:
+                        CheckName(modern.Object, node);
+                        break;
+                    case BackwardsCompatibleDropIndexClause legacy:
+                        // ChildObjectName exposes the table separately from the index.
+                        CheckName(legacy.Index, node);
+                        break;
+                }
+            }
+            base.ExplicitVisit(node);
+        }
+
+        public override void ExplicitVisit(UpdateStatisticsStatement node)
+        {
+            CheckName(node.SchemaObjectName, node);
+            base.ExplicitVisit(node);
+        }
+
+        public override void ExplicitVisit(CreateStatisticsStatement node)
+        {
+            CheckName(node.OnName, node);
+            base.ExplicitVisit(node);
+        }
+
         public override void ExplicitVisit(AlterTableStatement node)
         {
             CheckName(node.SchemaObjectName, node);

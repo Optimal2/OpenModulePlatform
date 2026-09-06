@@ -2,6 +2,74 @@ namespace OpenModulePlatform.Bootstrapper.Tests;
 
 public sealed class ModuleDefinitionSqlSafetyTests
 {
+    private static string? ValidateMaintenanceSql(string sql) => Program.ValidateSafeModuleDefinitionSql(sql);
+
+    // Keep this maintenance matrix identical in all three executor suites.
+    public static IEnumerable<object[]> ConfigurationMaintenanceSql(bool owned)
+    {
+        string[] tables = ["ArtifactConfigurationFiles", "ConfigOverlayDocuments", "ConfigOverlayConfigurationFiles"];
+        string[] statements =
+        [
+            "ENABLE TRIGGER ALL ON {0};",
+            "DISABLE TRIGGER module.ConfigProbe ON {0};",
+            "ALTER INDEX IX_Probe ON {0} DISABLE;",
+            "ALTER INDEX ALL ON {0} REBUILD;",
+            "DROP INDEX IX_Probe ON {0};",
+            "DROP INDEX {0}.IX_Probe;",
+            "DROP INDEX IX_Other ON module.Settings, IX_Probe ON {0};",
+            "UPDATE STATISTICS {0} WITH FULLSCAN;",
+            "CREATE STATISTICS ST_Probe ON {0}(Id);",
+        ];
+        foreach (var table in tables)
+        {
+            string[] names = owned
+                ? [$"omp.{table}", $"[omp].[{table}]", $"\"OMP\".\"{table.ToLowerInvariant()}\"", table, $"localdb.omp.{table}"]
+                : [$"module.{table}", $"omp.Module{table}Log"];
+            foreach (var name in names)
+            foreach (var statement in statements)
+            foreach (var sql in MaintenanceExecutionPaths(statement.Replace("{0}", name)))
+                yield return [sql, table];
+        }
+    }
+
+    private static IEnumerable<string> MaintenanceExecutionPaths(string sql)
+    {
+        yield return sql;
+        yield return $"EXEC(N'{sql.Replace("'", "''")}');";
+        yield return $"EXEC sys.sp_executesql N'{sql.Replace("'", "''")}';";
+        yield return $"CREATE PROCEDURE module.ChangeConfig AS {sql}";
+    }
+
+    [Theory]
+    [MemberData(nameof(ConfigurationMaintenanceSql), true)]
+    public void ConfigurationOwnership_BlocksOwnedTableMaintenance(string sql, string table)
+    {
+        var error = ValidateMaintenanceSql(sql);
+        Assert.NotNull(error);
+        Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", error);
+        Assert.Contains("Module definition SQL must not write omp." + table, error);
+        Assert.Contains("configuration continuity is owned by the platform (line ", error);
+    }
+
+    [Theory]
+    [MemberData(nameof(ConfigurationMaintenanceSql), false)]
+    public void ConfigurationOwnership_AllowsModuleTableMaintenance(string sql, string table)
+    {
+        Assert.Contains(table, sql);
+        Assert.Null(ValidateMaintenanceSql(sql));
+    }
+
+    [Theory]
+    [InlineData("CREATE INDEX IX_Probe ON omp.ConfigOverlayDocuments(Id);")]
+    [InlineData("CREATE UNIQUE INDEX IX_Probe ON omp.ConfigOverlayDocuments(Id);")]
+    public void ConfigurationOwnership_AllowsCreateIndexByBootstrapDecision(string statement)
+    {
+        // CREATE INDEX is deliberately allowed: additive bootstrap DDL uses this gate.
+        // Blocking it requires moving bootstrap DDL to the compiled migration path first.
+        foreach (var sql in MaintenanceExecutionPaths(statement))
+            Assert.Null(ValidateMaintenanceSql(sql));
+    }
+
 
     [Theory]
     [InlineData("EXEC(N'UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;');")]

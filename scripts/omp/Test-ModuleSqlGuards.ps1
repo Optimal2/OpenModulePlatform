@@ -132,6 +132,46 @@ if ($SelfTest) {
             @{ Name = 'legacy-truncate'; Sql = 'TRUNCATE TABLE omp.ArtifactConfigurationFiles;'; Count = 1; Rule = 'OMP-MODULE-SQL-GUARD' }
             @{ Name = 'legacy-drop'; Sql = 'DROP TABLE omp.ArtifactConfigurationFiles;'; Count = 1; Rule = 'OMP-MODULE-SQL-GUARD' }
         )
+        $maintenanceStatements = @(
+            'ENABLE TRIGGER ALL ON {0};'
+            'DISABLE TRIGGER module.ConfigProbe ON {0};'
+            'ALTER INDEX IX_Probe ON {0} DISABLE;'
+            'ALTER INDEX ALL ON {0} REBUILD;'
+            'DROP INDEX IX_Probe ON {0};'
+            'DROP INDEX {0}.IX_Probe;'
+            'DROP INDEX IX_Other ON module.Settings, IX_Probe ON {0};'
+            'UPDATE STATISTICS {0} WITH FULLSCAN;'
+            'CREATE STATISTICS ST_Probe ON {0}(Id);'
+        )
+        function Get-MaintenanceExecutionPaths([string]$Sql) {
+            $Sql
+            "EXEC(N'" + $Sql.Replace("'", "''") + "');"
+            "EXEC sys.sp_executesql N'" + $Sql.Replace("'", "''") + "';"
+            'CREATE PROCEDURE module.ChangeConfig AS ' + $Sql
+        }
+        $separator = [Environment]::NewLine + 'GO' + [Environment]::NewLine
+        for ($statementIndex = 0; $statementIndex -lt $maintenanceStatements.Count; $statementIndex++) {
+            $maintenanceBlocked = @()
+            $maintenanceAllowed = @()
+            foreach ($table in $tables) {
+                $names = @("omp.$table", "[omp].[$table]", ('"OMP"."' + $table.ToLowerInvariant() + '"'), $table, "localdb.omp.$table")
+                foreach ($name in $names) {
+                    $maintenanceBlocked += Get-MaintenanceExecutionPaths $maintenanceStatements[$statementIndex].Replace('{0}', $name)
+                }
+                foreach ($name in @("module.$table", "omp.Module${table}Log")) {
+                    $maintenanceAllowed += Get-MaintenanceExecutionPaths $maintenanceStatements[$statementIndex].Replace('{0}', $name)
+                }
+            }
+            $probes += @{ Name = "maintenance-owned-$statementIndex"; Sql = ($maintenanceBlocked -join $separator); Count = $maintenanceBlocked.Count; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+            $probes += @{ Name = "maintenance-module-$statementIndex"; Sql = ($maintenanceAllowed -join $separator); Count = 0; Rule = '' }
+        }
+        # CREATE INDEX stays allowed for additive bootstrap DDL until that DDL
+        # moves to the compiled migration path. A policy change must change this probe.
+        $createIndexAllowed = @(
+            Get-MaintenanceExecutionPaths 'CREATE INDEX IX_Probe ON omp.ConfigOverlayDocuments(Id);'
+            Get-MaintenanceExecutionPaths 'CREATE UNIQUE INDEX IX_Probe ON omp.ConfigOverlayDocuments(Id);'
+        )
+        $probes += @{ Name = 'create-index-bootstrap-exception'; Sql = ($createIndexAllowed -join $separator); Count = 0; Rule = '' }
         foreach ($probe in $probes) {
             $probePath = Join-Path $probeRoot ($probe.Name + '.sql')
             $probeFiles += $probePath
@@ -145,6 +185,9 @@ if ($SelfTest) {
             }
             foreach ($diagnostic in $result.diagnostics) {
                 if ($diagnostic.RuleId -ne $probe.Rule) { throw "Probe '$($probe.Name)' returned the wrong rule." }
+                if ($probe.Name.StartsWith('maintenance-owned-') -and $diagnostic.Table -notin @($tables | ForEach-Object { 'omp.' + $_ })) {
+                    throw "Probe '$($probe.Name)' did not resolve the owned table."
+                }
                 if ($probe.Name -eq 'owned-writes') {
                     $tableIndex = [int][Math]::Floor(($diagnostic.Line - 1) / (2 * $statements.Count))
                     if ($diagnostic.Table -ne ('omp.' + $tables[$tableIndex])) {
