@@ -819,8 +819,8 @@ a transaction whenever possible.
   `omp-components.json`, rebuild the universal package, and import the new package.
   1. Find the failed package and the error text:
      ```text
-     E:\OMP\ArtifactImports\failed\<package-name>.zip
-     E:\OMP\ArtifactImports\failed\<package-name>.zip.error.txt
+     G:\OMP\ArtifactImports\failed\<package-name>.zip
+     G:\OMP\ArtifactImports\failed\<package-name>.zip.error.txt
      ```
   2. Read the error file to confirm the identity and hash mismatch.
   3. Update the relevant component version in `omp-components.json`, run the build

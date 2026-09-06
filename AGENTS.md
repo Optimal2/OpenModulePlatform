@@ -110,7 +110,7 @@ Default local development paths:
 - `<workspace>` means the local parent folder where these sibling repositories are cloned.
 - OpenModulePlatform repo: `<workspace>\OpenModulePlatform`
 - Optional consumer repos: `<workspace>\<consumer-repo>`
-- Runtime root: `E:\OMP`
+- Runtime root: `G:\OMP` (moved from `E:\OMP` on 2026-09-06; `E:\OMP` remains as a junction to the same directory, so older paths still resolve — write `G:\OMP` in new material)
 - SQL Server: `localhost`
 - Database: `OpenModulePlatform`
 - Portal URL: `http://localhost:8088/`

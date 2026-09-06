@@ -190,7 +190,7 @@ initial Windows service is created with the current artifact version appended
 for example `OMP.HostAgent.0.3.35`. The initial runtime folder follows the same
 versioned convention as later self-upgrades:
 `HostAgent:ServicesRoot\HostAgent-<version>`, for example
-`E:\OMP\Services\HostAgent-0.3.35`. Future HostAgent artifact imports can then
+`G:\OMP\Services\HostAgent-0.3.35`. Future HostAgent artifact imports can then
 update the desired row. The running HostAgent provisions the new artifact,
 creates the next side-by-side versioned service and folder, starts it in
 takeover mode, and the new service removes the previous Windows service after it
