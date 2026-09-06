@@ -200,16 +200,17 @@ Describe 'Bump-Version: repository-only bump' {
             $previousErrorActionPreference = $ErrorActionPreference
             $ErrorActionPreference = 'Continue'
             try {
-                $output = & powershell.exe -NoProfile -File $bumpScriptPath -RepositoryOnly -SkipRepositoryVersion 2>&1 | Out-String
+                $output = @(& powershell.exe -NoProfile -File $bumpScriptPath -RepositoryOnly -SkipRepositoryVersion 2>&1)
                 $exitCode = $LASTEXITCODE
             }
             finally {
                 $ErrorActionPreference = $previousErrorActionPreference
             }
 
-            # Windows PowerShell wraps the error record to the console width when
-            # no console is attached (git hooks), which can split the word; match
-            # with whitespace removed.
+            # Extract native stderr text before formatting: headless PS5.1 emits
+            # separate ErrorRecords for wrapped lines, and Out-String inserts
+            # category/stack metadata between the two halves of a wrapped word.
+            $output = ($output | ForEach-Object { $_.ToString() }) -join ''
             ($output -replace '\s', '') | Should -Match 'RepositoryOnly'
             $exitCode | Should -Be 1
         }

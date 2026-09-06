@@ -2846,6 +2846,7 @@ WHERE ModuleKey = @ModuleKey;";
 
             try
             {
+                await OpenModulePlatform.ModuleDefinitions.PlatformConfigurationMigration.ApplyForDefinitionAsync(conn, definition.DefinitionJson, script.Key, ct);
                 await ExecuteSqlBatchesAsync(conn, sqlText, ct);
                 await CompleteModuleDefinitionSqlExecutionAsync(conn, executionId, "Succeeded", null, ct);
                 executed++;
@@ -5545,6 +5546,7 @@ WHERE AppInstanceId = @Id
 
     private static IReadOnlyList<PortableModuleDefinitionSqlScript> ReadPortableSqlScripts(string definitionJson)
     {
+        OpenModulePlatform.ModuleDefinitions.ModuleDefinitionSqlOwnership.ValidateDocument(definitionJson);
         var root = JsonNode.Parse(definitionJson);
         if (root?["sqlScripts"] is not JsonArray items)
         {
@@ -5840,24 +5842,8 @@ WHERE AppInstanceId = @Id
     }
 
     private static string? ResolvePortableSqlText(PortableModuleDefinitionSqlScript script)
-    {
-        if (!string.IsNullOrWhiteSpace(script.InlineSql))
-        {
-            return script.InlineSql;
-        }
-
-        if (string.IsNullOrWhiteSpace(script.Content))
-        {
-            return null;
-        }
-
-        if (string.Equals(script.ContentEncoding, "base64-utf8", StringComparison.OrdinalIgnoreCase))
-        {
-            return Encoding.UTF8.GetString(Convert.FromBase64String(script.Content));
-        }
-
-        return script.Content;
-    }
+        => OpenModulePlatform.ModuleDefinitions.ModuleDefinitionSqlOwnership.Decode(
+            script.InlineSql, script.Content, script.ContentEncoding);
 
     private static async Task<string> PatchBootstrapPortalAdminPrincipalAsync(
         SqlConnection conn,
@@ -6686,14 +6672,15 @@ WHERE ModuleDefinitionSqlExecutionId = @ModuleDefinitionSqlExecutionId;";
         return buffer.ToString();
     }
 
-    // Early validation, not a security boundary: this is a scanner over SQL text and
-    // cannot see dynamic SQL (literals are blanked), procedure/trigger/function bodies
-    // (exempt by design; the platform's own omp.MaterializeInstanceTemplate writes the
-    // pointer columns), or indirection through views and synonyms. The durable boundary
-    // is a database principal without write permission on the owned tables/columns --
-    // see docs/adr/0005-artifact-ownership-database-principal.md.
+    // Configuration ownership is parsed by the source-linked guard first. The
+    // existing artifact/pointer rules below retain their stored-body exceptions.
+    // See docs/MODULE_DEFINITIONS.md for the ownership model and analysis scope.
     internal static string? ValidateSafeModuleDefinitionSql(string sqlText)
     {
+        // OMP-MODULE-SQL-CONFIG-OWNERSHIP: inspect parsed SQL before blanking literals.
+        var configurationOwnership = OpenModulePlatform.ModuleDefinitions.ModuleDefinitionSqlOwnership.Validate(sqlText);
+        if (configurationOwnership is not null) return configurationOwnership;
+
         sqlText = BlankSqlCommentsAndLiterals(sqlText);
 
         if (Regex.IsMatch(sqlText, @"(?im)^\s*USE\s+(?:\[[^\]]+\]|[A-Za-z0-9_]+)\s*;?\s*$"))

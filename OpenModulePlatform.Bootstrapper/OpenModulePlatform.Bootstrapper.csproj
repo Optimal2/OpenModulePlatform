@@ -19,4 +19,9 @@
     <ProjectReference Include="..\OpenModulePlatform.Artifacts\OpenModulePlatform.Artifacts.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.HostAgent.Runtime\OpenModulePlatform.HostAgent.Runtime.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" />
+    <Compile Include="..\shared\ModuleDefinitionSqlOwnership.cs" Link="ModuleDefinitions\ModuleDefinitionSqlOwnership.cs" />
+    <Compile Include="..\shared\PlatformConfigurationMigration.cs" Link="ModuleDefinitions\PlatformConfigurationMigration.cs" />
+  </ItemGroup>
 </Project>

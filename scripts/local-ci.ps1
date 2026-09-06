@@ -101,6 +101,10 @@ try {
         & (Join-Path $repoRoot 'scripts\omp\validate-module-definitions.ps1')
     }
 
+    Invoke-Step 'Validate module SQL ownership' {
+        & (Join-Path $repoRoot 'scripts\omp\Test-ModuleSqlGuards.ps1')
+    }
+
     # The check that caught every broken push. A shared project changed without
     # its consumers moving fails HERE, not in a mail 90 seconds after the push.
     Invoke-Step 'Validate component versions' {
@@ -112,11 +116,8 @@ try {
     }
 
     Invoke-Step 'Pester script tests' {
-        # Invoke via powershell.exe like pre-push.ps1 and ci.yml do: the suites
-        # intentionally run on Windows PowerShell 5.1 (one suite spawns child
-        # powershell.exe processes as a Windows requirement), and an in-process
-        # & call would run them under whatever engine started local-ci.
-        & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File (Join-Path $repoRoot 'scripts\omp\run-script-tests.ps1')
+        # Use the current shell; the pinned runner supports Windows PowerShell and pwsh.
+        & (Join-Path $repoRoot 'scripts\omp\run-script-tests.ps1')
         if ($LASTEXITCODE -ne 0) { throw "run-script-tests.ps1 failed ($LASTEXITCODE)" }
     }
 

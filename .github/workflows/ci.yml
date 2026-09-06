@@ -118,6 +118,15 @@ jobs:
         shell: pwsh
         run: .\scripts\omp\validate-module-definitions.ps1
 
+      - name: Set up the pinned SDK for SQL validation
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Enforce module SQL ownership
+        shell: pwsh
+        run: .\scripts\omp\Test-ModuleSqlGuards.ps1
+
       - name: Validate component versions
         shell: pwsh
         run: .\scripts\omp\validate-component-versions.ps1 -BaseCommit '${{ steps.base.outputs.sha }}'

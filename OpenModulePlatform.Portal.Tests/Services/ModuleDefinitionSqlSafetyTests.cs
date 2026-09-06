@@ -5,6 +5,149 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 
 public sealed class ModuleDefinitionSqlSafetyTests
 {
+
+    [Theory]
+    [InlineData("EXEC(N'UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;');")]
+    [InlineData("EXEC sys.sp_executesql N'DELETE FROM omp.ConfigOverlayDocuments WHERE Id = 1;';")]
+    [InlineData("DECLARE @sql nvarchar(max) = N'UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;'; EXEC(@sql);")]
+    [InlineData("CREATE PROCEDURE module.ChangeConfig AS UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;")]
+    public void ConfigurationOwnership_BlocksIndirectConfigurationSql(string sql)
+    {
+        Assert.Contains("omp.ConfigOverlayDocuments", OmpAdminRepository.ValidateSafeModuleDefinitionSql(sql)!);
+    }
+
+    [Theory]
+    [InlineData("DECLARE @sql nvarchar(max); EXEC(@sql);")]
+    [InlineData("EXEC sys.sp_executesql @unknown;")]
+    [InlineData("DECLARE @sql nvarchar(max) = N'SELECT 1;'; SET @sql = @unknown; EXEC(@sql);")]
+    [InlineData("DECLARE @sql nvarchar(max) = N'UPDATE omp.' + QUOTENAME(@table) + N' SET Id = 1;'; EXEC(@sql);")]
+    public void ConfigurationOwnership_RejectsUnresolvedDynamicSql(string sql)
+    {
+        Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", OmpAdminRepository.ValidateSafeModuleDefinitionSql(sql)!);
+    }
+
+    [Fact]
+    public void ConfigurationOwnership_AllowsBoundedQuotedConstraintMaintenance()
+    {
+        const string sql = "DECLARE @sql nvarchar(max) = N'ALTER TABLE module.Settings DROP CONSTRAINT ' + QUOTENAME(@constraint); EXEC(@sql);";
+        Assert.Null(OmpAdminRepository.ValidateSafeModuleDefinitionSql(sql));
+    }
+
+    [Theory]
+    [InlineData("example_module")]
+    [InlineData("omp_core")]
+    public void ConfigurationOwnership_DocumentPreflightNamesModuleAndTable(string moduleKey)
+    {
+        const string sql = "UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;";
+        var document = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            moduleKey,
+            sqlScripts = new[] { new { key = "initialize", contentEncoding = "base64-utf8", content = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(sql)) } }
+        });
+        var method = typeof(OmpAdminRepository).GetMethod("ReadPortableSqlScripts",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var error = Assert.Throws<System.Reflection.TargetInvocationException>(() => method.Invoke(null, [document]));
+        Assert.Contains(moduleKey, error.InnerException!.Message);
+        Assert.Contains("omp.ConfigOverlayDocuments", error.InnerException.Message);
+        Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", error.InnerException.Message);
+    }
+
+
+    [Theory]
+    [InlineData(null, "SELECT 1;", "rot13")]
+    [InlineData("SELECT 1;", "SELECT 1;", "rot13")]
+    [InlineData(null, "not-base64!", "base64-utf8")]
+    [InlineData(null, "/w==", "base64-utf8")]
+    [InlineData(null, null, null)]
+    [InlineData("SELECT 1;", "SELECT 2;", "utf-8")]
+    public void ConfigurationOwnership_RejectsUnknownOrInvalidPayload(string? inlineSql, string? content, string? encoding)
+    {
+        Assert.Throws<System.Reflection.TargetInvocationException>(() => ResolvePayload(inlineSql, content, encoding));
+    }
+
+    [Fact]
+    public void ConfigurationOwnership_DecodesBase64BeforeValidation()
+    {
+        const string sql = "UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;";
+        var decoded = ResolvePayload(null, Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(sql)), "base64-utf8");
+        Assert.Equal(sql, decoded);
+        Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", OmpAdminRepository.ValidateSafeModuleDefinitionSql(decoded!)!);
+    }
+
+    private static string? ResolvePayload(string? inlineSql, string? content, string? encoding)
+    {
+        var method = typeof(OmpAdminRepository).GetMethod("ResolvePortableSqlText",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var constructor = method.GetParameters()[0].ParameterType.GetConstructors().Single();
+        var arguments = constructor.GetParameters().Select(parameter => parameter.Name?.ToLowerInvariant() switch
+        {
+            "inlinesql" => inlineSql,
+            "content" => content,
+            "contentencoding" => encoding,
+            _ => parameter.ParameterType.IsValueType ? Activator.CreateInstance(parameter.ParameterType) : null
+        }).ToArray();
+        return (string?)method.Invoke(null, [constructor.Invoke(arguments)]);
+    }
+
+
+    // Identical configuration-ownership regression matrix in all three execution-path suites.
+    public static IEnumerable<object[]> ConfigurationLayerWrites()
+    {
+        string[] tables = ["ArtifactConfigurationFiles", "ConfigOverlayDocuments", "ConfigOverlayConfigurationFiles"];
+        string[] statements =
+        [
+            "INSERT INTO omp.{0}(Id) VALUES(1);",
+            "INSERT omp.{0} VALUES(1);",
+            "UPDATE omp.{0} SET Id = 2 WHERE Id = 1;",
+            "DELETE FROM omp.{0} WHERE Id = 1;",
+            "DELETE c FROM omp.{0} c WHERE c.Id = 1;",
+            "MERGE omp.{0} AS t USING (SELECT 1 AS Id) s ON t.Id = s.Id WHEN MATCHED THEN UPDATE SET Id = s.Id;",
+            "UPDATE c SET Id = 2 FROM omp.{0} AS c WHERE c.Id = 1;",
+            "UPDATE c SET Id = 2 FROM omp.Apps a JOIN omp.{0} c ON c.Id = a.AppId WHERE c.Id = 1;",
+            ";WITH c AS (SELECT Id FROM omp.{0}) UPDATE c SET Id = 2 WHERE Id = 1;",
+            ";WITH c AS (SELECT Id FROM omp.{0}) DELETE c WHERE Id = 1;",
+            ";WITH c AS (SELECT Id FROM omp.{0}), d AS (SELECT Id FROM c) UPDATE d SET Id = 2 WHERE Id = 1;",
+            "UPDATE omp.Apps SET DisplayName = N'x' OUTPUT inserted.AppId INTO omp.{0}(Id) WHERE AppId = 1;",
+            "INSERT INTO [omp] /* ownership */ . [{0}] DEFAULT VALUES;",
+            "UPDATE \"omp\".\"{0}\" SET Id = 2 WHERE Id = 1;",
+            "SELECT AppId INTO omp.{0} FROM omp.Apps;",
+        ];
+        foreach (var table in tables)
+        {
+            foreach (var statement in statements)
+            {
+                yield return [statement.Replace("{0}", table), table];
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(ConfigurationLayerWrites))]
+    public void ConfigurationOwnership_BlocksPlatformConfigurationWrites(string sql, string table)
+    {
+        var error = OmpAdminRepository.ValidateSafeModuleDefinitionSql(sql);
+        Assert.NotNull(error);
+        Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", error);
+        Assert.Contains("omp." + table, error);
+    }
+
+    [Theory]
+    [InlineData("SELECT * FROM omp.ArtifactConfigurationFiles;")]
+    [InlineData("SELECT N'UPDATE omp.ConfigOverlayDocuments SET Id = 1'; -- DELETE FROM omp.ConfigOverlayConfigurationFiles")]
+    [InlineData("UPDATE module.Settings SET Value = N'x' WHERE Id = 1;")]
+    public void ConfigurationOwnership_AllowsReadsLiteralsAndModuleWrites(string sql)
+    {
+        Assert.Null(OmpAdminRepository.ValidateSafeModuleDefinitionSql(sql));
+    }
+
+    [Theory]
+    [InlineData("UPDATE [omp].[ConfigOverlayDocuments SET Id = 1;")]
+    [InlineData("SELECT 'unterminated")]
+    public void ConfigurationOwnership_RejectsUnparseableSql(string sql)
+    {
+        Assert.NotNull(OmpAdminRepository.ValidateSafeModuleDefinitionSql(sql));
+    }
+
     private const string ArtifactWriteMessage =
         "Module definition SQL must not register or mutate omp.Artifacts; artifact registration is owned by the artifact import path.";
 

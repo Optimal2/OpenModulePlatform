@@ -99,7 +99,7 @@ foreach ($name in 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'
     if (Test-Path "Env:$name") { Remove-Item "Env:$name" }
 }
 
-& powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $localCi
+& $localCi
 $code = $LASTEXITCODE
 
 if ($code -ne 0) {

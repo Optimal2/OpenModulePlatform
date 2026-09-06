@@ -95,56 +95,81 @@ only one applier can run a definition version. Portal currently uses
 
 ## Module SQL safety guard
 
-Module-definition SQL is validated by a text-based guard, mirrored identically
-in the bootstrapper, HostAgent, and Portal
-(`ValidateSafeModuleDefinitionSql`). It blocks module SQL from registering or
-mutating `omp.Artifacts` and from writing the artifact pointer columns
-`omp.AppInstances.ArtifactId` and `omp.InstanceTemplateAppInstances.DesiredArtifactId`;
-artifact registration is owned by the artifact import path and artifact
-selection by artifact auto-apply. Module SQL may therefore create app-instance and
-template rows without a pointer; the import re-runs auto-apply for the module after
-the SQL phase and fills them (HostAgent folder import and portal package import).
-Note the order differs per path: those two imports register artifacts BEFORE the
-module SQL, while the Bootstrapper's first install runs the module SQL FIRST and
-registers afterwards - so artifact lookups in module SQL must tolerate NULL on a
-fresh database, and anything that needs an `ArtifactId` (for example
-`omp.HostArtifactRequirements`, which the platform does not seed) must be gated on
-`IS NOT NULL` and filled by a later run of the script.
+Module SQL owns module metadata. Artifact registration, artifact selection, and
+configuration continuity are owned by the platform. The three
+`ValidateSafeModuleDefinitionSql` entry points (HostAgent zip/folder import,
+Portal repair/import, and Bootstrapper) enforce the same configuration rule
+using the source-linked `shared/ModuleDefinitionSqlOwnership.cs`.
 
-**This guard is early validation, not a security boundary.** It exists to give
-module authors a clear error at import/validation time. It is a scanner over
-SQL text and cannot see through indirection. Known holes that remain open by
-design:
+**Rule ID: `OMP-MODULE-SQL-CONFIG-OWNERSHIP`.** Module SQL must not write:
 
-- **Dynamic SQL** (`EXEC(N'...')`, `sp_executesql`): string literals are
-  blanked before scanning, so dynamically built statements are invisible.
-  Blocking `EXEC` is not possible — the platform's own scripts use it as an
-  idiom.
-- **Stored module bodies**: batches defining procedures, triggers, or functions
-  are exempt from the ownership scan because the platform's own
-  `omp.MaterializeInstanceTemplate` legitimately writes the pointer columns.
-  Any procedure body is therefore unscanned space.
-- **Indirection through views, synonyms, or inline TVFs**, `UPDATE`-with-JOIN
-  shapes whose `FROM` starts on another table, and `ALTER TABLE ... SWITCH`.
-- **Row DELETEs against the pointer tables.** The pointer check
-  (`ContainsModuleDefinitionColumnWrite`) requires a SET assignment to fire, and
-  a `DELETE` has none — so a CTE delete against
-  `omp.InstanceTemplateAppInstances` or `omp.AppInstances` passes. Unlike the
-  entries above this one is open by **choice, not by impossibility**: widening
-  the guard to row deletes would also block module SQL that legitimately deletes
-  its own `omp.AppInstances` rows. It is tracked as an open operator question,
-  not as a defect.
+- `omp.ArtifactConfigurationFiles`
+- `omp.ConfigOverlayDocuments`
+- `omp.ConfigOverlayConfigurationFiles`
 
-The regression suites (`ModuleDefinitionSqlSafetyTests` in the Bootstrapper,
-Portal, and HostAgent test projects) run one shared probe batch against all
-three mirrors so any divergence between them fails the build.
+The rule uses Microsoft ScriptDom syntax trees and decoded identifiers. It
+covers INSERT (including positional/default INSERT), UPDATE, DELETE and MERGE,
+alias targets anywhere in a FROM/JOIN, chained CTE targets, OUTPUT INTO, and
+SELECT INTO. Comments and string values are not table identifiers. GO repeat
+counts are normalized from SQL tokens, preserving source positions. Reads and
+bounded schema maintenance remain allowed.
 
-The durable fix for the remaining holes is to execute module SQL under a
-database principal without write permission on the owned tables/columns. The
-decision support for that change — including why the auto-apply path must be
-exempted via `GRANT`, not via text exemptions — is in
-`docs/adr/0005-artifact-ownership-database-principal.md`. The permission change
-itself is operator-gated and not yet implemented.
+Payload validation is fail-closed: unknown content encodings, invalid base64 or
+UTF-8, missing or conflicting payload fields, malformed script entries,
+unparseable SQL and unresolved dynamic SQL are blocked. `base64-utf8` content
+is strictly decoded before analysis. A document is checked before its scripts
+are selected or executed; errors name the module, script, rule, table and SQL
+location when that location can be resolved.
+
+Constant dynamic SQL is parsed recursively, including `sp_executesql`.
+A single-assignment constant SQL variable is supported; reassignments make it
+unresolved. Unknown values may only represent QUOTENAME-protected constraint
+names in a parsed ALTER TABLE DROP CONSTRAINT statement with a fixed table.
+Unknown dynamic DML targets are rejected. Configuration writes in procedure,
+trigger and function definitions are checked too, including definitions in
+constant dynamic SQL. There is no module-key or core-module exemption.
+
+The existing artifact and pointer rules still block writes to `omp.Artifacts`,
+`omp.AppInstances.ArtifactId` and
+`omp.InstanceTemplateAppInstances.DesiredArtifactId`. Their legacy text
+scanner and stored-body exceptions remain separate: for example,
+`omp.MaterializeInstanceTemplate` legitimately writes artifact pointers.
+The import fills artifact pointers through auto-apply. HostAgent and Portal
+register artifacts before module SQL; Bootstrapper first installation registers
+them afterwards, so module-owned metadata must tolerate absent artifact rows.
+
+The offline analyzer does not query database metadata. It cannot discover
+pre-existing views, synonyms or stored procedure implementations outside the
+payload. Direct calls to named procedures retain their existing behavior.
+Module SQL must not use such indirection to write platform-owned configuration.
+Database-principal ownership options are described in
+`docs/adr/0005-artifact-ownership-database-principal.md`.
+
+The core overlay-history migration lives in compiled
+`shared/PlatformConfigurationMigration.cs`, outside portable module SQL.
+Before core schema setup, each executor preserves the highest semantic overlay
+version (then latest update and highest row id), disables duplicate enabled
+siblings, and retains all historical rows. Fresh databases need no row
+migration. The portable setup script then creates the filtered unique index.
+Upgrade the HostAgent, Portal and Bootstrapper together with the new core
+definition; running the schema SQL directly on an old database with duplicate
+enabled overlays requires the platform-owned migration first.
+
+`scripts/omp/Test-ModuleSqlGuards.ps1` runs the production validator through
+`tools/ModuleSqlGuard`. By default it checks every embedded script declared
+in `omp-components.json`; `-Path` accepts SQL or module-definition JSON.
+The SQL source header is normalized exactly as during embedding, while source
+line numbers are preserved. Analysis needs no database, VPN or network; normal
+SDK/NuGet restoration is needed when building the tool on a fresh machine.
+
+This is a mandatory gate beside module-definition and component-version
+validation in `scripts/local-ci.ps1`, the pre-push hook and GitHub CI.
+Universal export and HostAgent-first packaging also run the SQL and version
+validators, including when reusing existing artifacts. The three
+`ModuleDefinitionSqlSafetyTests` suites carry the same configuration matrix;
+an initial run recorded 53 failures and four passing controls in each suite
+before implementation. The PowerShell probe initially accepted a configuration
+UPDATE and now rejects it with `OMP-MODULE-SQL-CONFIG-OWNERSHIP`.
 
 ## JSON Shape
 

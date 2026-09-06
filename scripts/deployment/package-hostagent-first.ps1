@@ -237,6 +237,13 @@ function Copy-ModuleDefinitionsFromManifest {
         return
     }
 
+    & (Join-Path $PSScriptRoot '..\omp\validate-module-definitions.ps1') -RepositoryRoot $RepositoryRoot
+    & (Join-Path $PSScriptRoot '..\omp\Test-ModuleSqlGuards.ps1') -RepositoryRoot $RepositoryRoot
+    $versionValidator = Join-Path $RepositoryRoot 'scripts\omp\validate-component-versions.ps1'
+    if (-not (Test-Path -LiteralPath $versionValidator -PathType Leaf)) { throw 'The owning repository version validator is required for packaging.' }
+    & $versionValidator
+    if ($LASTEXITCODE -ne 0) { throw 'Component version validation failed before packaging.' }
+
     $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach ($definition in @($manifest.moduleDefinitions)) {
         if ($null -eq $definition) {

@@ -587,6 +587,13 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 }
 
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
+# Validate before creating any package objects, including reuse of existing artifacts.
+& (Join-Path $scriptDirectory 'validate-module-definitions.ps1') -RepositoryRoot $repositoryRoot
+& (Join-Path $scriptDirectory 'Test-ModuleSqlGuards.ps1') -RepositoryRoot $repositoryRoot
+$versionValidator = Join-Path $repositoryRoot 'scripts\omp\validate-component-versions.ps1'
+if (-not (Test-Path -LiteralPath $versionValidator -PathType Leaf)) { throw 'The owning repository version validator is required for packaging.' }
+& $versionValidator
+if ($LASTEXITCODE -ne 0) { throw 'Component version validation failed before packaging.' }
 $componentManifestPath = Join-Path $repositoryRoot 'omp-components.json'
 if (-not (Test-Path -LiteralPath $componentManifestPath -PathType Leaf)) {
     throw "Component manifest was not found: $componentManifestPath"
@@ -713,6 +720,9 @@ try {
     # Fail-fast guard (same rule as the import-time validator): no assembled
     # artifact payload may contain runtime configuration files.
     foreach ($file in $files) {
+        if ($file.Kind.Equals('module-definition', [StringComparison]::OrdinalIgnoreCase)) {
+            & (Join-Path $scriptDirectory 'Test-ModuleSqlGuards.ps1') -NoBuild -Path $file.FullName
+        }
         if ($file.Kind.Equals('artifact-package', [StringComparison]::OrdinalIgnoreCase)) {
             Assert-OmpArtifactPackageHasNoRuntimeConfiguration `
                 -ZipPath $file.FullName `

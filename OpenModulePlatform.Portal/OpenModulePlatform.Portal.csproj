@@ -17,4 +17,9 @@
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" />
+    <Compile Include="..\shared\ModuleDefinitionSqlOwnership.cs" Link="ModuleDefinitions\ModuleDefinitionSqlOwnership.cs" />
+    <Compile Include="..\shared\PlatformConfigurationMigration.cs" Link="ModuleDefinitions\PlatformConfigurationMigration.cs" />
+  </ItemGroup>
 </Project>

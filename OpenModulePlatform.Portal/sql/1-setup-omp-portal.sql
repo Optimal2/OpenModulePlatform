@@ -614,7 +614,9 @@ WHERE dc.parent_object_id = OBJECT_ID(N'omp_portal.user_active_widgets')
 
 IF @contentScaleDefaultConstraint IS NOT NULL
 BEGIN
-    EXEC(N'ALTER TABLE omp_portal.user_active_widgets DROP CONSTRAINT [' + @contentScaleDefaultConstraint + N'];');
+    DECLARE @dropContentScaleConstraintSql nvarchar(max) =
+        N'ALTER TABLE omp_portal.user_active_widgets DROP CONSTRAINT ' + QUOTENAME(@contentScaleDefaultConstraint) + N';';
+    EXEC(@dropContentScaleConstraintSql);
 END
 
 IF NOT EXISTS
