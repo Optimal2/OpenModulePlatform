@@ -1,0 +1,93 @@
+# Component-version validator: canonical check list
+
+`scripts/omp/validate-component-versions.ps1` is the version-consistency gate
+that local CI and the pre-push hook run in every OMP-compatible repository.
+Each repository carries its own copy of the validator, but the **check numbers
+are a shared contract**: a given `Check N` means the same check in every
+repository, so an error message crossing a repository boundary is never
+ambiguous. Numbers are never reused for a different check and never renumbered;
+new checks get the next unused number.
+
+## The shared core vs repo-local flow
+
+Two layers, deliberately separated:
+
+- **Shared core (byte-identical everywhere, guarded):**
+  `scripts/omp/validate-component-versions.helpers.ps1` holds the generic
+  helpers (BOM-safe reading, fail-loud git readers, version/SQL/hash
+  utilities, the canonical `-SelfTest`). It is copied verbatim into every
+  OMP-compatible repository and the shared-script drift guard
+  (`validate-shared-scripts.ps1`, wired as Check 15 in consumer validators)
+  compares every copy byte-for-byte against this one. The same guard covers
+  `scripts/omp/bump-version.ps1`. Never edit a copy repo-locally: change the
+  canonical file here and redistribute in the same change.
+- **Repo-local flow (intentionally per repository):** the validator script
+  itself (`scripts/omp/validate-component-versions.ps1`) decides which checks
+  RUN. Repositories legitimately differ: this platform repository owns
+  `sharedProjects` and Web.Shared, consumer repositories own the cross-repo
+  cascade direction, and a repository without module-definition SQL has
+  nothing for the SQL checks to bite on. This is why the canonical copy is
+  **not** a superset and must never be copied blind over a consumer's
+  validator. A check whose guarded artifact kind is absent must still be
+  *present but vacuous* when it shares a number with the contract — absence
+  of a numbered check from a validator that owns the artifact kind is drift,
+  not adaptation.
+
+Repo-local checks that exist in exactly one repository get numbers from the
+shared list too (see 17 and 19 below), so a local addition can never collide
+with a future canonical check. Reserve a number here before using it.
+
+## Canonical checks
+
+| # | Check | Kind | Runs where |
+|---|-------|------|-----------|
+| 1 | Component `projectPath` resolves to a `.csproj` | static | every repository |
+| 2 | `repositoryVersion` presence and format | static | every repository |
+| 3 | Component `version` presence and format | static | every repository |
+| 4 | Module-definition version sync (manifest = definition file) | static | every repository with module definitions |
+| 4b | Worker plugin host-contract (`minWorkerHostVersion` only on worker/worker-plugin) | static | every repository (vacuous without worker components) |
+| 5 | Component-to-module mapping integrity | static | every repository with module definitions |
+| 6 | `minModuleDefinitionVersion` sanity (≤ declared definitionVersion) | static | every repository with module definitions |
+| 7 | Shared-project cascade version bumps | base-diff | repositories that own `sharedProjects` (this platform repository) |
+| 8 | Module-definition SQL diff enforcement (material SQL change ⇒ definitionVersion bump) | base-diff | every repository whose definitions own SQL |
+| 8b | `minModuleDefinitionVersion` must not lag a bumped definitionVersion | base-diff | follows Check 8 |
+| 9 | Transitive ProjectReference lockstep bumps | base-diff | every repository (vacuous without intra-repo references) |
+| 10 | compatibleArtifacts range sanity | static | every repository with compatibleArtifacts |
+| 11 | Web.Shared binary identity (parent vs HEAD, same environment) | base-diff + build | this platform repository only |
+| 12 | Module-definition content diff enforcement (any content change ⇒ definitionVersion bump) | base-diff + worktree | every repository with module definitions |
+| 13 | LOCKSTEP: own project source changed ⇒ component version AND repositoryVersion must move (docs-only `*.md` changes exempt) | base-diff + worktree | every repository |
+| 14 | Cross-repository shared project cascade (calls `validate-shared-dependencies.ps1` here) | cross-repo | consumer repositories with `sharedDependencies`; intentionally absent here and in consumers that reference no shared projects |
+| 15 | Shared-script drift guard (calls `validate-shared-scripts.ps1` here) | cross-repo | consumer validators; this repository is the canonical source and self-skips |
+| 16 | Embedded sqlScripts freshness (embedded content/sha256 = on-disk SQL) | worktree | every repository whose definitions embed SQL |
+| 17 | (repo-local) unconditional artifact-pointer overwrite guard | static SQL scan | exactly one consumer repository |
+| 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | every repository (vacuous without sets) |
+| 19 | (repo-local) runtime cascade-bump | base-diff | exactly one consumer repository |
+
+Checks 7, 8, 9, 12, 13 and 19 diff against `-BaseCommit` (default
+`origin/main`); the diff readers are fail-loud — a git answer that could not
+be read is a validation error, never a silent pass. Check 13 additionally
+scans the working tree and untracked files so an uncommitted own-source edit
+is caught before it is committed.
+
+## Path convention
+
+Every shared omp script — `bump-version.ps1`,
+`validate-component-versions.ps1`,
+`validate-component-versions.helpers.ps1`, the package builders — lives under
+`scripts/omp/` in every repository, including consumers. An earlier layout
+kept the consumer validators at `scripts/`; that difference was accidental
+(the scripts predate the `scripts/omp/` convention) and was removed in the
+same campaign that established this list.
+
+## When the canonical files change
+
+The canonical files ARE the reference; there is no hash list to update.
+Changing `bump-version.ps1` or `validate-component-versions.helpers.ps1`
+here turns Check 15 red in every consumer whose copy is stale — that is the
+guard working. The update path is: change the canonical file, copy it
+verbatim into each consumer repository in the same campaign, and let each
+repository's validator prove the copy landed. `validate-shared-scripts.ps1`
+prints exactly which repositories still need the copy.
+
+When a validator change alters which checks exist or what a number means,
+update this document in the same commit.

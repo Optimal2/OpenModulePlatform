@@ -5,16 +5,18 @@
     from the canonical copy in OpenModulePlatform.
 
 .DESCRIPTION
-    scripts/omp/bump-version.ps1 is copied verbatim into all nine repositories.
-    Keeping the copies identical has so far been a manual act - done on
-    2026-08-25 and again on 2026-08-28 - and nothing held them that way. The next
-    fix to the canonical file recreated the drift the day it landed, and the
-    failure was SILENT: a repository running a stale copy looks green locally,
-    and the difference surfaces only when someone runs a bump that behaves
-    differently from the neighbouring repository. That is typically mid-incident,
-    which is what happened on 2026-08-23. It happened once more on 2026-09-02,
-    when a fix to the canonical file left the other eight behind until somebody
-    noticed by hand.
+    scripts/omp/bump-version.ps1 and
+    scripts/omp/validate-component-versions.helpers.ps1 (the validator family's
+    shared core, see docs/VALIDATOR_CHECKS.md) are copied verbatim into every
+    OMP-compatible repository. Keeping the copies identical has so far been a
+    manual act - done on 2026-08-25 and again on 2026-08-28 - and nothing held
+    them that way. The next fix to a canonical file recreated the drift the day
+    it landed, and the failure was SILENT: a repository running a stale copy
+    looks green locally, and the difference surfaces only when someone runs a
+    bump or a validation that behaves differently from the neighbouring
+    repository. That is typically mid-incident, which is what happened on
+    2026-08-23. It happened once more on 2026-09-02, when a fix to the
+    canonical file left the other eight behind until somebody noticed by hand.
 
     WHY THIS SHAPE. The alternatives considered were (a) a shared canonical
     source the repositories fetch from, (b) a hash recorded in each repository
@@ -76,22 +78,27 @@ $ErrorActionPreference = 'Stop'
 # The scripts that must be byte-identical across the fleet, relative to a
 # repository root. Add to this list only for files that are genuinely shared
 # verbatim; a file with legitimate per-repository differences does not belong
-# here, and forcing it in would turn the guard into noise.
-$sharedScripts = @('scripts/omp/bump-version.ps1')
+# here, and forcing it in would turn the guard into noise. The validator script
+# itself is deliberately NOT listed: its check flow is repo-local by design
+# (docs/VALIDATOR_CHECKS.md); its shared core - the helpers file below - is.
+$sharedScripts = @(
+    'scripts/omp/bump-version.ps1',
+    'scripts/omp/validate-component-versions.helpers.ps1'
+)
 
 function Get-FileSha256 {
     <#
-        Hashar innehallet med radslutsstilen normaliserad bort.
+        Hashes the content with line-ending style normalized away.
 
-        En ra byte-hash sag CRLF och LF som olika filer, och det ar fel har: sex
-        av konsumentrepona har lokal core.autocrlf=true medan plattformens egna
-        utcheckningar kor utan, sa samma git-innehall hamnar med olika
-        radslut pa disk. Det gav ett PERMANENT falskt driftstopp med
-        instruktionen "kopiera den kanoniska filen" - fast filen redan var
-        identisk. Uppmatt i granskning 2026-09-02.
+        A raw byte hash sees CRLF and LF as different files, and that is wrong
+        here: six of the consumer repositories run local core.autocrlf=true
+        while the platform's own checkouts run without it, so the same git
+        content lands with different line endings on disk. That produced a
+        PERMANENT false drift stop instructing "copy the canonical file" when
+        the file was already identical. Measured in review 2026-09-02.
 
-        En SAKNAD eller EXTRA avslutande radbrytning ar daremot fortfarande en
-        skillnad. Det ar innehall, inte stil.
+        A MISSING or EXTRA trailing newline is still a difference, though.
+        That is content, not style.
     #>
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -175,8 +182,7 @@ if ($drift.Count -gt 0) {
     Write-Host "Shared script drift detected against '$platformRoot':"
     foreach ($rad in $drift) {
         Write-Host $rad
-    }
-    Write-Host 'Copy the canonical file(s) from the platform repository into this one and commit them in the same change.'
+    }    Write-Host 'Copy the canonical file(s) from the platform repository into this one and commit them in the same change.'
     Write-Host 'A stale copy looks green locally and only surfaces when a bump behaves differently here than in a neighbouring repository - typically mid-incident.'
     exit 1
 }
