@@ -50,17 +50,17 @@ with a future canonical check. Reserve a number here before using it.
 | 6 | `minModuleDefinitionVersion` sanity (≤ declared definitionVersion) | static | every repository with module definitions |
 | 7 | Shared-project cascade version bumps | base-diff | repositories that own `sharedProjects` (this platform repository) |
 | 8 | Module-definition SQL diff enforcement (material SQL change ⇒ definitionVersion bump) | base-diff | every repository whose definitions own SQL |
-| 8b | `minModuleDefinitionVersion` must not lag a bumped definitionVersion | base-diff | follows Check 8 |
+| 8b | `minModuleDefinitionVersion` must not lag a bumped definitionVersion | base-diff | follows Check 8 (OpenDocViewer runs the stricter variant: must EQUAL — a superset that never passes where the canonical rule fails) |
 | 9 | Transitive ProjectReference lockstep bumps | base-diff | every repository (vacuous without intra-repo references) |
 | 10 | compatibleArtifacts range sanity | static | every repository with compatibleArtifacts |
 | 11 | Web.Shared binary identity (parent vs HEAD, same environment) | base-diff + build | this platform repository only |
 | 12 | Module-definition content diff enforcement (any content change ⇒ definitionVersion bump) | base-diff + worktree | every repository with module definitions |
-| 13 | LOCKSTEP: own project source changed ⇒ component version AND repositoryVersion must move (docs-only `*.md` changes exempt) | base-diff + worktree | every repository |
+| 13 | LOCKSTEP: own project source changed ⇒ component version AND repositoryVersion must move. Docs-only `*.md` changes are exempt EXCEPT under `wwwroot` (dotnet publish copies `wwwroot` verbatim, so such markdown is payload). Out-of-project payload inputs (csproj `Content`/`None`/`Compile` includes that escape the project directory, e.g. `..\tools\…` published into `wwwroot`) are watched too | base-diff + worktree | every repository |
 | 14 | Cross-repository shared project cascade (calls `validate-shared-dependencies.ps1` here) | cross-repo | consumer repositories with `sharedDependencies`; intentionally absent here and in consumers that reference no shared projects |
 | 15 | Shared-script drift guard (calls `validate-shared-scripts.ps1` here) | cross-repo | consumer validators; this repository is the canonical source and self-skips |
 | 16 | Embedded sqlScripts freshness (embedded content/sha256 = on-disk SQL) | worktree | every repository whose definitions embed SQL |
 | 17 | (repo-local) unconditional artifact-pointer overwrite guard | static SQL scan | exactly one consumer repository |
-| 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | every repository (vacuous without sets) |
+| 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | repositories whose module definitions declare `consistentArtifactSets` (currently this platform repository and IbsPackager) |
 | 19 | (repo-local) runtime cascade-bump | base-diff | exactly one consumer repository |
 
 Checks 7, 8, 9, 12, 13 and 19 diff against `-BaseCommit` (default

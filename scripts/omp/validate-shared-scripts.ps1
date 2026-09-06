@@ -99,16 +99,25 @@ function Get-FileSha256 {
 
         A MISSING or EXTRA trailing newline is still a difference, though.
         That is content, not style.
+
+        A UTF-8 BOM difference IS significant too (measured in the
+        2026-09-06 independent review): [IO.File]::ReadAllText auto-detects and
+        silently strips a BOM, which reported a BOM-added copy as "matches the
+        canonical copy". Decoding the raw bytes keeps the BOM as a U+FEFF
+        character that participates in the hash.
     #>
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    $text = [IO.File]::ReadAllText($Path)
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    # UTF8.GetString does NOT consume a leading BOM as a preamble; it decodes
+    # it to U+FEFF, so a BOM difference changes the hash below.
+    $text = [Text.Encoding]::UTF8.GetString($bytes)
     $normaliserad = $text.Replace("`r`n", "`n").Replace("`r", "`n")
 
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
-        $bytes = [Text.Encoding]::UTF8.GetBytes($normaliserad)
-        return ([BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToLowerInvariant()
+        $hashBytes = [Text.Encoding]::UTF8.GetBytes($normaliserad)
+        return ([BitConverter]::ToString($sha.ComputeHash($hashBytes)) -replace '-', '').ToLowerInvariant()
     }
     finally {
         $sha.Dispose()
