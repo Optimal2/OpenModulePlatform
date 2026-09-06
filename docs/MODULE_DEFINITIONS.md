@@ -110,9 +110,11 @@ using the source-linked `shared/ModuleDefinitionSqlOwnership.cs`.
 The rule uses Microsoft ScriptDom syntax trees and decoded identifiers. It
 covers INSERT (including positional/default INSERT), UPDATE, DELETE and MERGE,
 alias targets anywhere in a FROM/JOIN, chained CTE targets, OUTPUT INTO, and
-SELECT INTO. Comments and string values are not table identifiers. GO repeat
-counts are normalized from SQL tokens, preserving source positions. Reads and
-bounded schema maintenance remain allowed.
+SELECT INTO. BULK INSERT and the ALTER TABLE family are also checked, including
+both the source and destination of SWITCH. Comments and string values are not
+table identifiers. GO repeat counts are normalized from SQL tokens, preserving
+source positions. Reads and
+bounded schema maintenance on module-owned tables remain allowed.
 
 Payload validation is fail-closed: unknown content encodings, invalid base64 or
 UTF-8, missing or conflicting payload fields, malformed script entries,
@@ -147,6 +149,9 @@ Database-principal ownership options are described in
 
 The core overlay-history migration lives in compiled
 `shared/PlatformConfigurationMigration.cs`, outside portable module SQL.
+It also adds missing `PackageFileContent` and `MergeMode` columns to existing
+configuration tables without changing their content. Fresh databases create
+these columns directly in the table definitions.
 Before core schema setup, each executor preserves the highest semantic overlay
 version (then latest update and highest row id), disables duplicate enabled
 siblings, and retains all historical rows. Fresh databases need no row

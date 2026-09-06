@@ -21,6 +21,52 @@ public sealed class OmpConfigOverlayActiveUniquenessTests
     }
 
     [Fact]
+    public async Task PlatformMigration_UpgradesOwnedColumnsWithoutChangingContent_OnRepeatedUpgrade()
+    {
+        await using var connection = new SqlConnection(_fixture.ConnectionString);
+        await connection.OpenAsync();
+        // Roll back the entire probe so the collection keeps its original schema and data.
+        await using var begin = new SqlCommand("BEGIN TRANSACTION;", connection);
+        await begin.ExecuteNonQueryAsync();
+        try
+        {
+            const string legacySql = """
+ALTER TABLE omp.ArtifactConfigurationFiles DROP COLUMN PackageFileContent;
+ALTER TABLE omp.ConfigOverlayConfigurationFiles DROP COLUMN MergeMode;
+INSERT INTO omp.ConfigOverlayDocuments
+    (OverlayKey, OverlayVersion, HostKey, OverlayJson, OverlaySha256, IsEnabled)
+VALUES (N'column-upgrade-probe', N'1.0.0', N'column-upgrade-host', N'{}', N'probe', 0);
+INSERT INTO omp.ConfigOverlayConfigurationFiles (ConfigOverlayDocumentId, RelativePath, FileContent)
+VALUES (CONVERT(int, SCOPE_IDENTITY()), N'probe.json', N'operator content');
+""";
+            await using var legacy = new SqlCommand(legacySql, connection);
+            await legacy.ExecuteNonQueryAsync();
+            var migration = typeof(OpenModulePlatform.Portal.Services.OmpAdminRepository).Assembly
+                .GetType("OpenModulePlatform.ModuleDefinitions.PlatformConfigurationMigration")!;
+            var apply = migration.GetMethod("ApplyAsync", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            await (Task)apply.Invoke(null, [connection, CancellationToken.None, 3600])!;
+            await using var columns = new SqlCommand("""
+SELECT CASE WHEN COL_LENGTH(N'omp.ArtifactConfigurationFiles', N'PackageFileContent') = -1
+    AND COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') = 40
+    THEN 1 ELSE 0 END;
+""", connection);
+            Assert.Equal(1, Convert.ToInt32(await columns.ExecuteScalarAsync()));
+            await using var content = new SqlCommand("""
+SELECT FileContent FROM omp.ConfigOverlayConfigurationFiles
+WHERE RelativePath = N'probe.json' AND MergeMode IS NULL;
+""", connection);
+            Assert.Equal("operator content", await content.ExecuteScalarAsync());
+            await (Task)apply.Invoke(null, [connection, CancellationToken.None, 3600])!;
+            Assert.Equal("operator content", await content.ExecuteScalarAsync());
+        }
+        finally
+        {
+            await using var rollback = new SqlCommand("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;", connection);
+            await rollback.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
     public async Task PlatformMigration_PreservesSemanticWinnerAndHistory_OnRepeatedUpgrade()
     {
         const string overlayKey = "overlay-platform-migration";

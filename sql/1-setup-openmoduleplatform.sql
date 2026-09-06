@@ -655,13 +655,6 @@ BEGIN
 END
 GO
 
-IF COL_LENGTH(N'omp.ArtifactConfigurationFiles', N'PackageFileContent') IS NULL
-BEGIN
-    ALTER TABLE omp.ArtifactConfigurationFiles ADD
-        PackageFileContent nvarchar(max) NULL;
-END
-GO
-
 IF OBJECT_ID(N'omp.HostConfigurationDocuments', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostConfigurationDocuments
@@ -739,14 +732,6 @@ BEGIN
         CONSTRAINT UQ_omp_ConfigOverlayConfigurationFiles_Document_Path
             UNIQUE(ConfigOverlayDocumentId, RelativePath)
     );
-END
-GO
-
--- ADR 0006: add MergeMode to databases created before the column existed.
-IF COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') IS NULL
-BEGIN
-    ALTER TABLE omp.ConfigOverlayConfigurationFiles
-    ADD MergeMode nvarchar(20) NULL;
 END
 GO
 

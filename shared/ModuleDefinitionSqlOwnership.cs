@@ -257,6 +257,41 @@ internal static class ModuleDefinitionSqlOwnership
             }
         }
 
+        public override void ExplicitVisit(BulkInsertStatement node)
+        {
+            CheckName(node.To, node);
+            base.ExplicitVisit(node);
+        }
+
+        public override void ExplicitVisit(AlterTableStatement node)
+        {
+            CheckName(node.SchemaObjectName, node);
+            base.ExplicitVisit(node);
+        }
+
+        // ScriptDom dispatches ExplicitVisit to the concrete statement type, not
+        // the abstract ALTER TABLE base. Route every family through one check.
+        public override void ExplicitVisit(AlterTableAddTableElementStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableDropTableElementStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableAlterColumnStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableConstraintModificationStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableTriggerModificationStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableRebuildStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableSetStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableFileTableNamespaceStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableChangeTrackingModificationStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableAlterPartitionStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableAlterIndexStatement node) => ExplicitVisit((AlterTableStatement)node);
+        public override void ExplicitVisit(AlterTableAddClusterByStatement node) => ExplicitVisit((AlterTableStatement)node);
+
+        public override void ExplicitVisit(AlterTableSwitchStatement node)
+        {
+            // SWITCH modifies both tables, including a module-owned source
+            // switched into a platform-owned destination.
+            CheckName(node.TargetTable, node);
+            ExplicitVisit((AlterTableStatement)node);
+        }
+
         public override void ExplicitVisit(InsertStatement node)
         {
             CheckTarget(node.InsertSpecification.Target, null, node.WithCtesAndXmlNamespaces, node);

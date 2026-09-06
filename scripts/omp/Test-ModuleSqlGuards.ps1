@@ -13,12 +13,15 @@ SQL files or module-definition JSON files to validate.
 Repository containing omp-components.json. Defaults to this repository.
 .PARAMETER NoBuild
 Use the Release validator already built by the solution build.
+.PARAMETER SelfTest
+Run ownership regression probes against temporary SQL files before validating inputs.
 #>
 [CmdletBinding()]
 param(
     [string[]]$Path = @(),
     [string]$RepositoryRoot = '',
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -32,6 +35,85 @@ if (-not $NoBuild) {
     if ($LASTEXITCODE -ne 0) { throw "Module SQL validator build failed ($LASTEXITCODE)." }
 }
 if (-not (Test-Path -LiteralPath $validator -PathType Leaf)) { throw 'Module SQL validator is missing. Build it first.' }
+
+if ($SelfTest) {
+    $probeRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('module-sql-guards-' + [Guid]::NewGuid().ToString('N'))
+    [void][System.IO.Directory]::CreateDirectory($probeRoot)
+    $probeFiles = @()
+    try {
+        $tables = @('ArtifactConfigurationFiles', 'ConfigOverlayDocuments', 'ConfigOverlayConfigurationFiles')
+        $statements = @(
+            'BULK INSERT omp.{0} FROM ''ownership-probe.csv'';'
+            'BULK INSERT [omp].[{0}] FROM ''ownership-probe.csv'';'
+            'BULK INSERT "omp"."{0}" FROM ''ownership-probe.csv'';'
+            'BULK INSERT {0} FROM ''ownership-probe.csv'';'
+            'ALTER TABLE omp.{0} DROP COLUMN Content;'
+            'ALTER TABLE [omp].[{0}] ALTER COLUMN Content nvarchar(max) NULL;'
+            'ALTER TABLE "omp"."{0}" ADD Probe int NULL;'
+            'ALTER TABLE {0} ADD CONSTRAINT CK_Probe CHECK (Id > 0);'
+            'ALTER TABLE omp.{0} DROP CONSTRAINT CK_Probe;'
+            'ALTER TABLE omp.{0} NOCHECK CONSTRAINT ALL;'
+            'ALTER TABLE omp.{0} DISABLE TRIGGER ALL;'
+            'ALTER TABLE omp.{0} SWITCH TO module.Settings;'
+            'ALTER TABLE module.Settings SWITCH TO omp.{0};'
+            'ALTER TABLE omp.{0} REBUILD;'
+            'ALTER TABLE omp.{0} SET (LOCK_ESCALATION = TABLE);'
+            'ALTER TABLE omp.{0} DISABLE FILETABLE_NAMESPACE;'
+            'ALTER TABLE omp.{0} ENABLE CHANGE_TRACKING;'
+            'ALTER TABLE omp.{0} SET (FILESTREAM_ON = "default");'
+            'EXEC(N''ALTER TABLE omp.{0} DROP COLUMN Content;'');'
+            'EXEC(N''BULK INSERT omp.{0} FROM ''''ownership-probe.csv'''';'');'
+            'DECLARE @sql nvarchar(max) = N''ALTER TABLE omp.{0} DROP CONSTRAINT '' + QUOTENAME(@constraint); EXEC(@sql);'
+            'CREATE PROCEDURE module.ChangeConfig AS ALTER TABLE omp.{0} DROP COLUMN Content;'
+        )
+        $blocked = @()
+        foreach ($table in $tables) {
+            foreach ($statement in $statements) {
+                $blocked += $statement.Replace('{0}', $table) + [Environment]::NewLine + 'GO'
+            }
+        }
+        $allowed = @(
+            'BULK INSERT omp.ModuleArtifactConfigurationFilesLog FROM ''ownership-probe.csv'';'
+            'ALTER TABLE omp.ModuleArtifactConfigurationFilesLog DROP COLUMN Content;'
+            'BULK INSERT module.ArtifactConfigurationFiles FROM ''ownership-probe.csv'';'
+            'ALTER TABLE module.ArtifactConfigurationFiles ADD Probe int NULL;'
+            'PRINT N''BULK INSERT omp.ArtifactConfigurationFiles FROM ''''ownership-probe.csv'''';'';'
+            'PRINT N''ALTER TABLE omp.ArtifactConfigurationFiles DROP COLUMN Content;'';'
+        )
+        $probes = @(
+            @{ Name = 'owned-writes'; Sql = ($blocked -join [Environment]::NewLine); Count = $blocked.Count; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+            @{ Name = 'allowed'; Sql = ($allowed -join [Environment]::NewLine); Count = 0; Rule = '' }
+            @{ Name = 'legacy-truncate'; Sql = 'TRUNCATE TABLE omp.ArtifactConfigurationFiles;'; Count = 1; Rule = 'OMP-MODULE-SQL-GUARD' }
+            @{ Name = 'legacy-drop'; Sql = 'DROP TABLE omp.ArtifactConfigurationFiles;'; Count = 1; Rule = 'OMP-MODULE-SQL-GUARD' }
+        )
+        foreach ($probe in $probes) {
+            $probePath = Join-Path $probeRoot ($probe.Name + '.sql')
+            $probeFiles += $probePath
+            [System.IO.File]::WriteAllText($probePath, $probe.Sql)
+            $output = & dotnet $validator --json $probePath
+            $probeExit = $LASTEXITCODE
+            $result = $output | ConvertFrom-Json
+            $expectedExit = if ($probe.Count -eq 0) { 0 } else { 1 }
+            if ($probeExit -ne $expectedExit -or @($result.diagnostics).Count -ne $probe.Count) {
+                throw "Probe '$($probe.Name)' failed: exit $probeExit; $(@($result.diagnostics).Count) violations, expected $($probe.Count)."
+            }
+            foreach ($diagnostic in $result.diagnostics) {
+                if ($diagnostic.RuleId -ne $probe.Rule) { throw "Probe '$($probe.Name)' returned the wrong rule." }
+                if ($probe.Name -eq 'owned-writes') {
+                    $tableIndex = [int][Math]::Floor(($diagnostic.Line - 1) / (2 * $statements.Count))
+                    if ($diagnostic.Table -ne ('omp.' + $tables[$tableIndex])) {
+                        throw "Probe '$($probe.Name)' did not resolve the owned table."
+                    }
+                }
+            }
+            Write-Host "PASS: $($probe.Name) ($($probe.Count) violations; exit $probeExit)"
+        }
+    }
+    finally {
+        foreach ($probePath in $probeFiles) { [System.IO.File]::Delete($probePath) }
+        [System.IO.Directory]::Delete($probeRoot)
+    }
+}
 
 $arguments = @()
 if ($Path.Count -gt 0) {

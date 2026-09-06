@@ -31,11 +31,14 @@ public sealed class ModuleDefinitionSqlSafetyTests
     }
 
     [Theory]
-    [InlineData("example_module")]
-    [InlineData("omp_core")]
-    public void ConfigurationOwnership_DocumentPreflightNamesModuleAndTable(string moduleKey)
+    [InlineData("example_module", "UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;")]
+    [InlineData("omp_core", "UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;")]
+    [InlineData("example_module", "BULK INSERT omp.ConfigOverlayDocuments FROM 'ownership-probe.csv';")]
+    [InlineData("omp_core", "BULK INSERT omp.ConfigOverlayDocuments FROM 'ownership-probe.csv';")]
+    [InlineData("example_module", "ALTER TABLE omp.ConfigOverlayDocuments DROP COLUMN Content;")]
+    [InlineData("omp_core", "ALTER TABLE omp.ConfigOverlayDocuments DROP COLUMN Content;")]
+    public void ConfigurationOwnership_DocumentPreflightNamesModuleAndTable(string moduleKey, string sql)
     {
-        const string sql = "UPDATE omp.ConfigOverlayDocuments SET Id = 2 WHERE Id = 1;";
         var document = System.Text.Json.JsonSerializer.Serialize(new
         {
             moduleKey,
@@ -108,6 +111,28 @@ public sealed class ModuleDefinitionSqlSafetyTests
             "INSERT INTO [omp] /* ownership */ . [{0}] DEFAULT VALUES;",
             "UPDATE \"omp\".\"{0}\" SET Id = 2 WHERE Id = 1;",
             "SELECT AppId INTO omp.{0} FROM omp.Apps;",
+            "BULK INSERT omp.{0} FROM 'ownership-probe.csv';",
+            "BULK INSERT [omp].[{0}] FROM 'ownership-probe.csv';",
+            "BULK INSERT \"omp\".\"{0}\" FROM 'ownership-probe.csv';",
+            "BULK INSERT {0} FROM 'ownership-probe.csv';",
+            "ALTER TABLE omp.{0} DROP COLUMN Content;",
+            "ALTER TABLE [omp].[{0}] ALTER COLUMN Content nvarchar(max) NULL;",
+            "ALTER TABLE \"omp\".\"{0}\" ADD Probe int NULL;",
+            "ALTER TABLE {0} ADD CONSTRAINT CK_Probe CHECK (Id > 0);",
+            "ALTER TABLE omp.{0} DROP CONSTRAINT CK_Probe;",
+            "ALTER TABLE omp.{0} NOCHECK CONSTRAINT ALL;",
+            "ALTER TABLE omp.{0} DISABLE TRIGGER ALL;",
+            "ALTER TABLE omp.{0} SWITCH TO module.Settings;",
+            "ALTER TABLE module.Settings SWITCH TO omp.{0};",
+            "ALTER TABLE omp.{0} REBUILD;",
+            "ALTER TABLE omp.{0} SET (LOCK_ESCALATION = TABLE);",
+            "ALTER TABLE omp.{0} DISABLE FILETABLE_NAMESPACE;",
+            "ALTER TABLE omp.{0} ENABLE CHANGE_TRACKING;",
+            "ALTER TABLE omp.{0} SET (FILESTREAM_ON = \"default\");",
+            "EXEC(N'ALTER TABLE omp.{0} DROP COLUMN Content;');",
+            "EXEC(N'BULK INSERT omp.{0} FROM ''ownership-probe.csv'';');",
+            "DECLARE @sql nvarchar(max) = N'ALTER TABLE omp.{0} DROP CONSTRAINT ' + QUOTENAME(@constraint); EXEC(@sql);",
+            "CREATE PROCEDURE module.ChangeConfig AS ALTER TABLE omp.{0} DROP COLUMN Content;",
         ];
         foreach (var table in tables)
         {
@@ -132,6 +157,12 @@ public sealed class ModuleDefinitionSqlSafetyTests
     [InlineData("SELECT * FROM omp.ArtifactConfigurationFiles;")]
     [InlineData("SELECT N'UPDATE omp.ConfigOverlayDocuments SET Id = 1'; -- DELETE FROM omp.ConfigOverlayConfigurationFiles")]
     [InlineData("UPDATE module.Settings SET Value = N'x' WHERE Id = 1;")]
+    [InlineData("BULK INSERT omp.ModuleArtifactConfigurationFilesLog FROM 'ownership-probe.csv';")]
+    [InlineData("ALTER TABLE omp.ModuleArtifactConfigurationFilesLog DROP COLUMN Content;")]
+    [InlineData("BULK INSERT module.ArtifactConfigurationFiles FROM 'ownership-probe.csv';")]
+    [InlineData("ALTER TABLE module.ArtifactConfigurationFiles ADD Probe int NULL;")]
+    [InlineData("PRINT N'BULK INSERT omp.ArtifactConfigurationFiles FROM ''ownership-probe.csv'';';")]
+    [InlineData("PRINT N'ALTER TABLE omp.ArtifactConfigurationFiles DROP COLUMN Content;';")]
     public void ConfigurationOwnership_AllowsReadsLiteralsAndModuleWrites(string sql)
     {
         Assert.Null(Program.ValidateSafeModuleDefinitionSql(sql));
@@ -143,6 +174,16 @@ public sealed class ModuleDefinitionSqlSafetyTests
     public void ConfigurationOwnership_RejectsUnparseableSql(string sql)
     {
         Assert.NotNull(Program.ValidateSafeModuleDefinitionSql(sql));
+    }
+
+    [Theory]
+    [InlineData("TRUNCATE TABLE [omp].[ArtifactConfigurationFiles];", "TRUNCATE TABLE")]
+    [InlineData("DROP TABLE [omp].[ArtifactConfigurationFiles];", "DROP TABLE")]
+    [InlineData("TRUNCATE /* comment */ TABLE omp.ConfigOverlayDocuments;", "TRUNCATE TABLE")]
+    [InlineData("DROP /* comment */ TABLE omp.ConfigOverlayConfigurationFiles;", "DROP TABLE")]
+    public void ConfigurationOwnership_LegacyGuardsBlockDestructiveTableStatements(string sql, string operation)
+    {
+        Assert.Contains(operation, Program.ValidateSafeModuleDefinitionSql(sql)!);
     }
 
     private const string ArtifactWriteMessage =

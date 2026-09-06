@@ -16,6 +16,12 @@ internal static class PlatformConfigurationMigration
 
     internal static async Task ApplyAsync(SqlConnection connection, CancellationToken cancellationToken, int commandTimeoutSeconds)
     {
+        // Upgrade existing owned tables before portable setup. Fresh installations
+        // create these columns directly; schema upgrades must not depend on the
+        // overlay deduplication prerequisites below.
+        await using var schema = new SqlCommand(SchemaMigrationSql, connection) { CommandTimeout = commandTimeoutSeconds };
+        await schema.ExecuteNonQueryAsync(cancellationToken);
+
         const string prerequisiteSql = """
 SELECT CASE WHEN COL_LENGTH(N'omp.ConfigOverlayDocuments', N'OverlayVersion') IS NOT NULL
     AND COL_LENGTH(N'omp.ConfigOverlayDocuments', N'IsEnabled') IS NOT NULL
@@ -30,6 +36,19 @@ SELECT CASE WHEN COL_LENGTH(N'omp.ConfigOverlayDocuments', N'OverlayVersion') IS
         await using var command = new SqlCommand(MigrationSql, connection) { CommandTimeout = commandTimeoutSeconds };
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    internal const string SchemaMigrationSql = """
+IF OBJECT_ID(N'omp.ArtifactConfigurationFiles', N'U') IS NOT NULL
+    AND COL_LENGTH(N'omp.ArtifactConfigurationFiles', N'PackageFileContent') IS NULL
+BEGIN
+    ALTER TABLE omp.ArtifactConfigurationFiles ADD PackageFileContent nvarchar(max) NULL;
+END;
+IF OBJECT_ID(N'omp.ConfigOverlayConfigurationFiles', N'U') IS NOT NULL
+    AND COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') IS NULL
+BEGIN
+    ALTER TABLE omp.ConfigOverlayConfigurationFiles ADD MergeMode nvarchar(20) NULL;
+END;
+""";
 
     // Preserve the runtime winner: highest semantic overlay version, latest update,
     // then highest row id. Existing clean data is unchanged on repeated imports.
