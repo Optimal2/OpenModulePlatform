@@ -15,9 +15,9 @@ try
         switch (args[i])
         {
             case "--json": json = true; break;
-            case "--module": module = args[++i]; break;
+            case "--module": module = RequireValue(args, ref i); break;
             case "--repository":
-                var root = Path.GetFullPath(args[++i]);
+                var root = Path.GetFullPath(RequireValue(args, ref i));
                 using (var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "omp-components.json"))))
                     foreach (var definition in manifest.RootElement.GetProperty("moduleDefinitions").EnumerateArray())
                         paths.Add(Path.Combine(root, definition.GetProperty("path").GetString()!));
@@ -91,5 +91,11 @@ void Check(string sql, string file, string moduleKey, string scriptKey)
 
 static string? Text(JsonElement element, string property)
     => element.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null ? value.GetString() : null;
+
+// An option given as the last argument has no value; say so instead of indexing past the array.
+static string RequireValue(string[] args, ref int index)
+    => index + 1 < args.Length
+        ? args[++index]
+        : throw new InvalidOperationException($"Option '{args[index]}' requires a value.");
 
 internal sealed record Diagnostic(string File, string Module, string Script, int Line, int Column, string RuleId, string Table, string Message);

@@ -72,3 +72,72 @@ Describe 'Module definition setup table union' {
         $result.Output | Should -Match 'sample\.Second'
     }
 }
+
+Describe 'Module definition manifest and embedding checks' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-ModuleDefinitions.TestHelpers.ps1')
+    }
+
+    BeforeEach {
+        $fixtureRoot = Join-Path $TestDrive ([Guid]::NewGuid().ToString('N'))
+    }
+
+    It 'Rejects a manifest module key that differs from the definition' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot -ManifestModuleKey other
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Module key mismatch for 'sample\.module-definition\.json'\. Manifest='other', definition='sample'"
+    }
+
+    It 'Rejects a manifest definition version that differs from the definition' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot -ManifestDefinitionVersion 2.0.0
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Definition version mismatch for 'sample\.module-definition\.json'\. Manifest='2\.0\.0', definition='1\.0\.0'"
+    }
+
+    It 'Rejects a manifest entry whose definition file does not exist' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot -ManifestDefinitionPath 'missing.module-definition.json'
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'Module definition file was not found: missing\.module-definition\.json'
+    }
+
+    It 'Rejects a referenced SQL file that does not exist' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot -OmitSqlFiles
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "SQL script referenced by 'sample\.module-definition\.json' was not found: setup-1\.sql"
+        $result.Output | Should -Match "was not found: setup-2\.sql"
+    }
+
+    It 'Rejects a content encoding other than base64-utf8' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot -ContentEncoding plain
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "SQL script 'setup-first' in 'sample\.module-definition\.json' has contentEncoding 'plain', expected 'base64-utf8'"
+    }
+
+    It 'Rejects embedded content that no longer matches the SQL file' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot -EmbeddedSqlText 'CREATE TABLE [sample].[Stale] (Id int);'
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "SQL script 'setup-first' in 'sample\.module-definition\.json' has embedded content that does not match 'setup-1\.sql'"
+        $result.Output | Should -Match 'embed-module-definition-sql\.ps1'
+    }
+
+    It 'Rejects a stale sha256 even when the embedded content is current' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot -Sha256Override ('0' * 64)
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "SQL script 'setup-first' in 'sample\.module-definition\.json' has sha256 '0{64}', expected '[0-9a-f]{64}'"
+        $result.Output | Should -Not -Match 'embedded content that does not match'
+    }
+
+    It 'Accepts a fixture whose manifest, definition and embedding all agree' {
+        New-ModuleDefinitionFixture -RootPath $fixtureRoot
+        $result = Invoke-ModuleDefinitionValidator -RootPath $fixtureRoot
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Not -Match 'mismatch|not found|does not match|sha256'
+    }
+}

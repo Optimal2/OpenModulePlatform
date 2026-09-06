@@ -173,8 +173,13 @@ public static partial class IFrameFrameSourcePolicy
                 }
                 catch (Exception ex)
                 {
-                    // A database hiccup must not take down every page: fall back to the
-                    // tightest directive ('self' only) for this request and retry next time.
+                    // Catch-all by design (CodeQL cs/catch-of-all-exceptions): this is a
+                    // policy read on the request path, and every failure kind -- SQL
+                    // transport, a missing service registration, a malformed row -- gets
+                    // the same treatment. A database hiccup must not take down every page:
+                    // fall back to the tightest directive ('self' only) for this request
+                    // and retry next time. Narrowing the type would only turn an unknown
+                    // failure into a 500 with a weaker policy, not into a safer one.
                     logger.LogWarning(ex, "Could not load the iFrame frame-src allowlist; falling back to frame-src 'self'.");
                     directive ??= "frame-src 'self'";
                 }

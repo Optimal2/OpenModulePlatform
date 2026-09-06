@@ -1,350 +1,270 @@
 # Unit-testing conventions for OMP+ODV
 
-> **Status 2026-08-27:** this document is a point-in-time audit from **2026-07-15** and parts of it
-> are superseded. On 2026-08-19 the whole family was standardized on **two-tier testing**: xUnit
-> unit tests plus xUnit + Microsoft.Playwright UI tests (`*.UiTests` projects), with shared tooling
-> in `OpenModulePlatform/tests/shared/` (`OmpTestDatabaseProvisioner.cs`,
-> `Ui/PlaywrightSessionFixture.cs`, `Ui/WebAppProcessFixture.cs`, `Ui/UiInvariantScanner.cs`,
-> `Ui/UiTestPaths.cs`). Measured 2026-08-22: **every repo now has automated tests** — LogSearch
-> (`LogSearch.Tests` + `LogSearch.UiTests`), Dokumentbibliotek
-> (`tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`), ODVGateway
-> (`tests/ODVGateway.Tests`) — OpenDocViewer's CI runs `npm test` (`.github/workflows/ci.yml:71`),
-> OpenModulePlatform has grown to **8** test projects — `Bootstrapper.Tests`,
-> `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`,
-> `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`,
-> all eight referenced from `OpenModulePlatform.slnx` (re-counted 2026-09-02; the banner said
-> seven) — and VajSkrivare has adopted CPM, so **ODVGateway is still the only .NET repo in the
-> family without a `Directory.Packages.props`**.
->
-> **Test-package pins re-measured 2026-09-06 — the family is uniform, and the per-repo sections
-> below had drifted.** Read from every `Directory.Packages.props` on the same day:
-> `Microsoft.NET.Test.Sdk` **18.9.0**, `xunit` **2.9.3**, `xunit.runner.visualstudio` **4.0.0**,
-> `coverlet.collector` **10.0.1**, `Microsoft.Playwright` **1.62.0**, and where used
-> `Xunit.SkippableFact` **1.5.85** — identical across OpenModulePlatform, IbsPackager, LogSearch,
-> EArkivChecker, Dokumentbibliotek, VajSkrivare and iKrock2. The only variation is that VajSkrivare
-> carries no `coverlet.collector`. Four per-repo bullets below still quoted the 2026-07-15 audit's
-> 18.7.0 / 3.1.5 / 1.4.13 and have been corrected in place.
-> **When these numbers drift again, fix the family-wide line here first** — the per-repo bullets are
-> a snapshot of an audit, and duplicating a version in seven places is what let it go stale.
->
-> **Pester migration 2026-09-03:** the script suites (`tests/*.Tests.ps1`) were migrated to the
-> **Pester 5** dialect and the runner (`scripts/omp/run-script-tests.ps1`) pins **Pester 5.9.1**;
-> the Pester 3.4.0 legacy dialect (`Should Be`) is gone, and per-suite harness code lives in
-> `tests/*.TestHelpers.ps1` (dot-sourced from each `Describe` block's `BeforeAll`, because Pester 5
-> runs containers in a separate session state). The same change moved the zero-execution TRX gate
-> into the shared `scripts/omp/assert-tests-executed.ps1` (with a per-file `-RequirePerFile` mode)
-> and wired it into both `ci.yml` and `scripts/local-ci.ps1`; consumer repositories call the OMP
-> copy instead of keeping their own.
->
-> **Test-package pins, re-measured 2026-09-02.** The per-repo pin values in sections 1, 2 and 4
-> are the July audit and are historical; do not read them as current. Current family-wide state:
-> `Microsoft.NET.Test.Sdk` **18.9.0 in all eight** .NET repos (ODVGateway was lifted 2026-09-01,
-> so the "18.8.1/18.9.0" split this banner used to describe no longer exists),
-> `xunit` **2.9.3** and `xunit.runner.visualstudio` **4.0.0** in all eight (see the runner
-> baseline section below), `Microsoft.Playwright` **1.62.0** in the seven repos that have a UI
-> tier. Read "Tests exist: No" rows in the audit body as July history. Section 3's conventions
-> remain the standard, extended by the two-tier UI-test standard above.
+This document has one job: say what the current testing state of the OMP+ODV family is and what
+the standard is. Section 1 is the measured state (re-measured 2026-09-06 from `origin/main` of
+every repository), section 2 the standard, section 3 the work that is still open, and section 4
+the dated history of how the document got here. Do not add dated "superseded" layers to sections
+1-3 again; update the numbers in place and add a line to the changelog.
 
-This document records the unit-testing patterns found in the OMP+ODV repositories (audit date 2026-07-15; source code only — `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded from the audit).
+Repos covered: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokumentbibliotek,
+VajSkrivare, iKrock2, ODVGateway (.NET); OpenDocViewer, AgentDocMap (JS/npm).
 
-## Runner/core compatibility baseline (2026-08-31)
+## 1. Current state (measured 2026-09-06)
 
-The supported baseline is a runner-only upgrade:
+### 1.1 Family-wide package pins
 
-- `Microsoft.NET.Test.Sdk` 18.9.0
-- `xunit` 2.9.3 (the latest and final v2 core release)
-- `xunit.runner.visualstudio` 4.0.0
-- `Xunit.SkippableFact` 1.5.85
-- `Microsoft.Playwright` 1.62.0 for `*.UiTests` projects
+Read from every repository's `Directory.Packages.props` on the same day (ODVGateway: inline in
+`tests/ODVGateway.Tests/ODVGateway.Tests.csproj`, because it has no CPM file yet).
 
-The adapter's own package documentation states that version 4.0.0 runs .NET
-projects built with xUnit.net v2 and v3, and its `net8.0` asset has no dependency
-on an xUnit core package. The v2-to-v3 migration guide separately requires
-renaming `xunit` to `xunit.v3`, changing test projects to executables, and
-adopting v3 APIs. Those changes are not prerequisites for runner 4.0.0 and are
-therefore outside this upgrade. Repositories that link `tests/shared/Ui/*.cs`
-should apply the exact package pins above; no shared fixture API changes are
-required.
+| Package | Version | Where |
+|---|---|---|
+| `Microsoft.NET.Test.Sdk` | **18.9.0** | all eight .NET repos |
+| `xunit` | **2.9.3** | all eight (the latest and final v2 core release) |
+| `xunit.runner.visualstudio` | **4.0.0** | all eight |
+| `Xunit.SkippableFact` | **1.5.85** | the seven CPM repos (ODVGateway does not use it) |
+| `Microsoft.Playwright` | **1.62.0** | the seven repos with a `*.UiTests` project (all but ODVGateway) |
+| `coverlet.collector` | **10.0.1** | six repos; **not** VajSkrivare, **not** ODVGateway |
+| `Microsoft.AspNetCore.Mvc.Testing` | 10.0.11 | where web-host tests exist |
+| `vitest` | `^4.1.11` | OpenDocViewer (`package.json`) |
+| `node:test` | built in | AgentDocMap (no test dependencies at all) |
 
-Primary references: [Visual Studio adapter package](https://www.nuget.org/packages/xunit.runner.visualstudio/4.0.0),
-[xUnit.net runner package guidance](https://xunit.net/docs/nuget-packages-v3), and
-[the v2-to-v3 migration guide](https://xunit.net/docs/getting-started/v3/migration).
+`global.json` pins the SDK in every .NET repo except VajSkrivare. When these numbers drift again,
+fix this table first: duplicating a version in seven places is what let the document go stale.
 
-Repos audited: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare, iKrock2, ODVGateway (.NET), OpenDocViewer, AgentDocMap (JS/npm).
+### 1.2 Per-repo state
 
-## 1. Per-repo unit-test map
+"Local gate" is the repository's `scripts/local-ci.ps1` (or root `local-ci.ps1`), run by the
+pre-push hook. "CI" is `.github/workflows/ci.yml`.
 
-> **Point-in-time snapshot (2026-07-15) — read with the status banner at the top of this file.** Rows saying "Tests exist: No", package versions, and CPM claims in this section are historical; the family was standardized on two-tier testing 2026-08-19. Individually superseded claims are struck through inline.
+| Repo | Test projects on `origin/main` | Framework | Pins | Local gate runs tests | CI runs tests |
+|---|---|---|---|---|---|
+| **OpenModulePlatform** | 8 xUnit projects (`Bootstrapper.Tests`, `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`, `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`) + 9 Pester 5 suites in `tests/*.Tests.ps1` | xUnit + Playwright; Pester 5 (5.9.1) | CPM | Yes: `dotnet test` per project, Pester suites, zero-execution TRX gate | Yes: `dotnet test` (Integration, lease and `Category=Ui` excluded by filter), Pester suites, TRX gate |
+| **IbsPackager** | 4 (`IbsPackager.Tests`, `IbsPackager.ChannelTypes.FileDrop.Tests`, `IbsPackager.ChannelTypes.ImageCompose.Tests`, `IbsPackager.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No (build + validate only) |
+| **LogSearch** | 2 (`LogSearch.Tests`, `LogSearch.UiTests`) | xUnit + Playwright | CPM | Yes | No |
+| **EArkivChecker** | 3 (`EArkivChecker.Runtime.Tests`, `EArkivChecker.Web.Tests`, `EArkivChecker.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No |
+| **Dokumentbibliotek** | 2 (`tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests`, `...UiTests`) | xUnit + Playwright | CPM | Yes | No |
+| **VajSkrivare** | 2 (`tests/Skrivarkoppling.Web.Tests`, `tests/Skrivarkoppling.Web.UiTests`) | xUnit + Playwright | CPM; no coverlet; no `global.json` | Yes | No |
+| **iKrock2** | 2 (`iKrock2.Application.Tests`, `iKrock2.UiTests`) | xUnit + Playwright | CPM | Yes (`dotnet test iKrock2.slnx --no-build --filter "Category!=Ui"`) | No |
+| **ODVGateway** | 1 (`tests/ODVGateway.Tests`) + end-to-end smoke script `scripts/smoke-test.ps1` | xUnit | Inline in the test csproj; no CPM; no solution file | Yes (`dotnet test` + smoke) | Smoke script only |
+| **OpenDocViewer** | vitest suite under `src/**/__tests__/` and `public/__tests__/` | vitest | `package.json` + lockfile | `npm test` | Yes (`npm test`, `ci.yml:71`) |
+| **AgentDocMap** | `test/*.test.js` | node:test | engines + lockfile | `npm test` | Yes (`npm run validate`, `ci.yml:42`) |
 
-### OpenModulePlatform
+Family-wide facts that follow from the table:
 
-- **Tests exist:** Yes — 3 test projects, ~56 test files, ~270 test methods (239 `[Fact]` + 31 `[Theory]`).
-  - `OpenModulePlatform.Portal.Tests` (31 files), `OpenModulePlatform.HostAgent.Runtime.Tests` (24 files), `OpenModulePlatform.Web.Shared.Analyzers.Tests` (1 file)
-  - ~~Plus two Pester files: `tests/Bump-Version.Tests.ps1` and `tests/Validate-ComponentVersions.Tests.ps1`~~
-    Superseded 2026-09-04: `tests/` now holds **eight** Pester suites (script tests, not unit tests) —
-    `ArtifactPackageWorkerHostRoundTrip`, `Assert-LegSdk`, `Assert-RunnerSignature`,
-    `Assert-TestsExecuted`, `Bump-Version`, `Get-CiVersionMatrix`, `Validate-ComponentVersions`
-    and `Validate-SharedScripts` (`*.Tests.ps1`), all in the Pester 5 dialect. See the status
-    banner at the top of this file.
-- **Framework:** xUnit.
-  - `Directory.Packages.props` (`xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0)
-  - `OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj:17-18`
-  - Analyzer tests additionally use the Roslyn harness `Microsoft.CodeAnalysis.CSharp.Testing`: `OpenModulePlatform.Web.Shared.Analyzers.Tests/OmpWebDefaultsAnalyzerTests.cs:3-5,41-49`
-- **Layout/naming:** Sibling `<ProjectUnderTest>.Tests/<ProjectUnderTest>.Tests.csproj` beside each source project at repo root (e.g. `OpenModulePlatform.Portal.Tests/`); subfolders mirror source structure (`Services/`, `Models/`, `Security/`, `Configuration/`, `Integration/`). All 3 projects are in `OpenModulePlatform.slnx:8-10`. Method naming `Method_WhenCondition_ExpectedResult` (e.g. `OpenModulePlatform.HostAgent.Runtime.Tests/Services/OmpHostArtifactRepositoryTierCTests.cs:24`). Global `<Using Include="Xunit" />` in csproj (`OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj:39`).
-- **Mock library:** None — hand-written fakes only. No Moq/NSubstitute/FakeItEasy anywhere.
-  - `OpenModulePlatform.HostAgent.Runtime.Tests/Services/FakeOmpHostArtifactRepository.cs:8`
-  - `OpenModulePlatform.HostAgent.Runtime.Tests/Services/FakeOptionsMonitor.cs:5`
-  - `OpenModulePlatform.HostAgent.Runtime.Tests/Services/ManualTimeProvider.cs`
-  - `OpenModulePlatform.Portal.Tests/Integration/TestAuthHandler.cs`
-- **Package pins (CPM, `Directory.Packages.props:3`):** `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0, `coverlet.collector` 10.0.1, `Microsoft.AspNetCore.Mvc.Testing` 10.0.11, `Microsoft.CodeAnalysis.CSharp.Analyzer.Testing` 1.1.4, and `Microsoft.CodeAnalysis.CSharp.Workspaces` 5.9.0. Test projects target `net10.0`.
-- **Assertion style:** Plain xUnit `Assert.*`. No FluentAssertions.
-  - `OpenModulePlatform.Portal.Tests/Services/PushEventTests.cs:19-27,50` (`Assert.Equal`, `Assert.Throws`)
-  - `OpenModulePlatform.HostAgent.Runtime.Tests/Services/HostAgentEngineTierDTests.cs:76-80` (`Assert.Single`, `Assert.True`, `Assert.Contains`)
-- **Coverage:** `coverlet.collector` referenced (PrivateAssets=all) in `OpenModulePlatform.Portal.Tests/OpenModulePlatform.Portal.Tests.csproj:10-13` and `OpenModulePlatform.HostAgent.Runtime.Tests/OpenModulePlatform.HostAgent.Runtime.Tests.csproj:11-14` — but NOT in the Analyzers.Tests project. No `.runsettings`, no `--collect` invocation in CI/scripts, no coverage upload. `.gitignore:29-31` ignores coverage output.
-- **Integration vs unit separation:** Folder-level (`Portal.Tests/Integration/`) plus a Tier C/D naming suffix on HostAgent test classes.
-  - Tier C = real SQL Server: `OpenModulePlatform.HostAgent.Runtime.Tests/Services/OmpHostArtifactRepositoryTierCTests.cs:7`
-  - Tier D = pure in-memory fakes: `OpenModulePlatform.HostAgent.Runtime.Tests/Services/HostAgentEngineTierDTests.cs:9`
-  - DB-backed tests use `IClassFixture` over shared SQL Server fixtures: `OpenModulePlatform.Portal.Tests/Integration/PushEventPipelineIntegrationTests.cs:10` (fixture `PushEventPipelineTestFixture.cs:10-15`, hardcoded `Server=localhost`, creates DB `OpenModulePlatform_PortalTests_PushEvents`); `OpenModulePlatform.Portal.Tests/Services/StaleSchemaHealTests.cs:9`
-  - `OmpHostArtifactRepositoryTestDatabase.cs:857-870` honors env var `OMP_TEST_CONNECTION_STRING`, defaulting to `Server=(local);Integrated Security=true`; creates/drops a unique DB per test class, tags each name with owner machine+PID+process-start ticks so the once-per-process sweep (`:743`) only reclaims databases whose owner process is verifiably dead (or unidentifiable and >24h old), and reports cleanup failures to a log file (`OMP_TEST_CLEANUP_LOG`) that `ci.yml` surfaces as workflow warnings (`:824`)
-  - Web-hosting integration uses `WebApplicationFactory<PortalResource>` + TestServer: `OpenModulePlatform.Portal.Tests/Integration/PortalWebApplicationFactory.cs:18`
-  - No `[Trait]`, no `[Collection]`, no `Skip=` gating, no Testcontainers — DB tests simply fail on a machine without local SQL Server
-- **How tests run:** Locally via the tracked pre-push hook `.githooks/pre-push.ps1` (`dotnet test OpenModulePlatform.slnx -c Release --no-build`) and in GitHub CI: since 2026-08 `ci.yml` provisions LocalDB and runs `dotnet test` with a `--filter` whose exclusions are registered in `docs/TEST_DEBT.md` (kept in sync in the same commit). Since 2026-08 `ci.yml` derives the build/test legs as a .NET version matrix from the repository's own version files (`scripts/omp/get-ci-version-matrix.ps1` reads `global.json` + committed target frameworks): the pinned SDK band and the newest band `rollForward` allows run on every push, and a runtime-floor leg (oldest supported runtime patch, `DOTNET_ROLL_FORWARD=Disable`) runs on the weekly schedule; the derivation step fails the run on any target framework outside the supported major and logs every omitted combination. The Pester suites (`tests/*.Tests.ps1`) run via `scripts/omp/run-script-tests.ps1` — the canonical entry point, wired as a blocking step in both the pre-push hook (via `scripts/local-ci.ps1`) and `ci.yml` ("Run Pester script tests"). Since 2026-09 the suites use the **Pester 5** dialect and the runner pins **Pester 5.9.1**, restored on demand from PSGallery into the repository-local `.psmodules` cache by `scripts/omp/pester-bootstrap.ps1` (process-local `PSModulePath` only, so a missing or divergent global Pester cannot affect the run; no separate install step in `ci.yml`); both gates invoke the runner via `powershell.exe` because one suite spawns child `powershell.exe` processes as a Windows requirement — it is the Pester module version that is pinned, not the engine. Shared per-suite harness code lives in `tests/*.TestHelpers.ps1` and is dot-sourced from each `Describe` block's `BeforeAll` (Pester 5 runs containers in a separate session state). A red suite fails the gate in both environments. Since 2026-09 the **zero-execution TRX gate** `scripts/omp/assert-tests-executed.ps1` is wired after `dotnet test` in both `ci.yml` ("Verify test execution", with `-ShowSkipReasons`) and `scripts/local-ci.ps1` (with `-ShowSkipReasons -RequirePerFile` over the named non-UI test projects, after clearing stale `TestResults/`): VSTest exits 0 even when a filter matches nothing, so the gate parses every `.trx` and fails when `executed == 0` — and with `-RequirePerFile`, when any individual `.trx` shows 0 executed. A `.trx` without a `ResultSummary/Counters` node (truncated/corrupt) fails the gate unconditionally, and `-MinimumTrxFiles` (used by `scripts/local-ci.ps1` with its project count) fails when fewer results files exist than expected. Consumer repositories call this OMP copy rather than keeping their own.
-- **Extra notes:** The analyzer test project uses `CSharpAnalyzerTest<TAnalyzer, DefaultVerifier>` with inline fake source strings (`OmpWebDefaultsAnalyzerTests.cs:11-49`) — a good model for future Roslyn analyzers.
+- Every repository has automated tests and runs them in its local pre-push gate.
+- Framework is uniform: xUnit in every .NET repo (no NUnit/MSTest), vitest for the browser app,
+  node:test for the Node tool. No mock framework anywhere - every repo uses hand-written fakes.
+  No FluentAssertions anywhere.
+- GitHub CI executes tests in OpenModulePlatform, OpenDocViewer and AgentDocMap. The consumer
+  .NET repos keep CI at build + validate (metered minutes, no SQL Server on the runners); their
+  tests run in the local gate.
+- CPM (`Directory.Packages.props`) is present in 7 of 8 .NET repos; ODVGateway is the only one
+  without it.
+- Coverage is decorative: `coverlet.collector` is referenced where present but no `.runsettings`,
+  script or CI step collects it.
 
-### IbsPackager
+### 1.3 OpenModulePlatform test execution in detail
 
-- **Tests exist:** Yes — 2 test projects, 4 test files, ~42 test methods.
-  - `IbsPackager.Tests` (1 file, DB-backed) and `IbsPackager.ChannelTypes.FileDrop.Tests` (3 files, pure unit)
-- **Framework:** xUnit + `Xunit.SkippableFact`.
-  - `IbsPackager.Tests/IbsPackager.Tests.csproj:13-16`
-  - `IbsPackager.ChannelTypes.FileDrop.Tests/IbsPackager.ChannelTypes.FileDrop.Tests.csproj:13-15`
-- **Layout/naming:** Test projects at repo root beside source projects, named `<SourceProject>.Tests`; both in `IbsPackager.slnx:8-9`. Naming mismatch: `IbsPackager.Tests` actually tests `IbsPackager.Runtime` (ProjectReference at `IbsPackager.Tests/IbsPackager.Tests.csproj:20`).
-- **Mock library:** None — `NullLogger<T>.Instance` (`IbsPackager.ChannelTypes.FileDrop.Tests/FileDropRoutingTests.cs:124`) and hand-written stubs (`TestConfiguration : IConfiguration`, `NoChangeToken`, `EmptyDisposable` at `IbsPackager.Tests/ReconcileChannelTypeArtifactRequirementsTests.cs:421-496`).
-- **Package pins (CPM, `Directory.Packages.props`):** re-measured 2026-09-06 — `Microsoft.NET.Test.Sdk` **18.9.0**, `xunit` 2.9.3, `xunit.runner.visualstudio` **4.0.0**, `coverlet.collector` 10.0.1, `Xunit.SkippableFact` **1.5.85** (`:20`). TargetFramework `net10.0` (line 4 of each test csproj). `global.json` pins the .NET 10 SDK. (The audit's 18.7.0 / 3.1.5 / 1.4.13 were the 2026-07-15 values; see the family-wide note under Status.)
-- **Assertion style:** Plain xUnit `Assert.*`.
-  - `IbsPackager.ChannelTypes.FileDrop.Tests/FileDropRoutingTests.cs:23-29` (`Assert.Equal`, `Assert.Throws`)
-  - `IbsPackager.ChannelTypes.FileDrop.Tests/FileDropIndexFieldExtractorTests.cs:27-29` (`Assert.Single`, `Assert.DoesNotContain`)
-- **Coverage:** `coverlet.collector` referenced in both test csprojs (line 15 of each). Nothing invokes it.
-- **Integration vs unit separation:** Informal but present, and the best gating pattern in the ecosystem. DB-backed tests are isolated in `IbsPackager.Tests` and use `[SkippableFact]` with environment gating: connection string from `IBSPACKAGER_TEST_CONNECTION_STRING` (`ReconcileChannelTypeArtifactRequirementsTests.cs:33-34`), `SkipException` when the `omp_ibs_packager` schema is absent (`:113-116`), self-deploys the stored procedure under test from `sql/1-setup-ibspackager.sql` (`:63-107`), GUID-suffixed rows with best-effort cleanup (`:382-419`). `FileDrop.Tests` is pure unit tests. No `[Trait]`/`[Collection]`/Testcontainers.
-- **How tests run:** Nothing automated. `.github/workflows/ci.yml` is `workflow_dispatch`-only and build+validate only (`ci.yml:63-82`); `scripts/local-ci.ps1:59-100` (the documented pre-push gate) likewise only builds and validates component versions. Tests run ad-hoc via `dotnet test` or Visual Studio.
-- **Extra notes:** Consumer repo of OMP — the slnx references sibling OMP projects cross-repo (`IbsPackager.slnx:2-3`) and builds need `/p:OpenModulePlatformRoot=...`. `scripts/run-filedrop-test-cases.ps1` is an end-to-end smoke harness, not a unit-test suite. `docs/ROADMAP.md:51` still lists "automated integration tests against SQL Server" as future work.
+OpenModulePlatform is the reference implementation, so its gates are described here rather than
+in the per-repo table.
 
-### VajSkrivare
+- **Layout:** sibling `<ProjectUnderTest>.Tests/` at repo root, subfolders mirroring the source
+  (`Services/`, `Models/`, `Security/`, `Configuration/`, `Integration/`), all referenced from
+  `OpenModulePlatform.slnx`. Method naming `Method_WhenCondition_ExpectedResult`. Global
+  `<Using Include="Xunit" />` in each csproj.
+- **Fakes:** `OpenModulePlatform.HostAgent.Runtime.Tests/Services/FakeOmpHostArtifactRepository.cs`,
+  `FakeOptionsMonitor.cs`, `ManualTimeProvider.cs`;
+  `OpenModulePlatform.Portal.Tests/Integration/TestAuthHandler.cs`.
+- **Unit vs integration:** Tier suffix on class names - `*TierDTests` = pure in-memory,
+  `*TierCTests` = real SQL Server (`OmpHostArtifactRepositoryTierCTests.cs`,
+  `HostAgentEngineTierDTests.cs`). DB-backed tests use `IClassFixture` over per-class databases:
+  `OmpHostArtifactRepositoryTestDatabase.cs` honors `OMP_TEST_CONNECTION_STRING` (default
+  `Server=(local);Integrated Security=true`), creates a uniquely named database per test class
+  tagged with owner machine + PID + process-start ticks, sweeps only databases whose owner is
+  verifiably dead (or unidentifiable and older than 24 h), and reports cleanup failures to
+  `OMP_TEST_CLEANUP_LOG`, which `ci.yml` surfaces as workflow warnings. Web hosting uses
+  `WebApplicationFactory<PortalResource>` (`Portal.Tests/Integration/PortalWebApplicationFactory.cs`).
+  Tier C tests fail (rather than skip) on a machine without SQL Server.
+- **UI tier:** `OpenModulePlatform.UiTests` (xUnit + Microsoft.Playwright) with the shared fixtures
+  in `tests/shared/` (`OmpTestDatabaseProvisioner.cs`, `Ui/PlaywrightSessionFixture.cs`,
+  `Ui/WebAppProcessFixture.cs`, `Ui/UiInvariantScanner.cs`, `Ui/UiTestPaths.cs`); consumer repos
+  link these files rather than copying them.
+- **Local gate:** `scripts/local-ci.ps1`, run by `.githooks/pre-push.ps1`: module-definition and
+  SQL-ownership validation, component-version validation against the resolved baseline,
+  PSScriptAnalyzer, the Pester suites via `scripts/omp/run-script-tests.ps1`, a Release build,
+  `dotnet test` per project with TRX output, and `scripts/omp/assert-tests-executed.ps1
+  -ShowSkipReasons -RequirePerFile -MinimumTrxFiles <project count>`.
+- **GitHub CI:** `ci.yml` derives its build/test legs as a .NET version matrix from `global.json`
+  and the committed target frameworks (`scripts/omp/get-ci-version-matrix.ps1`): the pinned SDK
+  band and the newest `rollForward` band run on every push; a runtime-floor leg
+  (`DOTNET_ROLL_FORWARD=Disable`) runs weekly. It provisions LocalDB and runs `dotnet test` with a
+  `--filter` whose exclusions are registered in `docs/TEST_DEBT.md`, then the Pester suites, then
+  the zero-execution TRX gate.
+- **Pester:** the suites use the Pester 5 dialect; `run-script-tests.ps1` pins Pester 5.9.1,
+  restored on demand into the repo-local `.psmodules` cache by `scripts/omp/pester-bootstrap.ps1`
+  (process-local `PSModulePath`, so a divergent global Pester cannot affect the run). Per-suite
+  harness code lives in `tests/*.TestHelpers.ps1`, dot-sourced from each `Describe` block's
+  `BeforeAll` because Pester 5 runs containers in a separate session state. Both gates invoke the
+  runner through `powershell.exe` because one suite spawns child `powershell.exe` processes.
+- **Zero-execution gate:** VSTest exits 0 when a filter matches nothing, so
+  `assert-tests-executed.ps1` parses every `.trx` and fails when `executed == 0` (with
+  `-RequirePerFile`, when any single file shows 0), when a `.trx` lacks `ResultSummary/Counters`,
+  or when fewer than `-MinimumTrxFiles` results exist. Consumer repos call the OMP copy.
+- **Analyzer tests:** `OpenModulePlatform.Web.Shared.Analyzers.Tests` uses
+  `CSharpAnalyzerTest<TAnalyzer, DefaultVerifier>` with inline source strings - the model for
+  future Roslyn analyzers.
 
-- **Tests exist:** Yes — 1 test project, 1 test file, 2 `[Fact]` tests.
-  - `tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs:43,61`
-- **Framework:** xUnit.
-  - `tests/Skrivarkoppling.Web.Tests/Skrivarkoppling.Web.Tests.csproj:14-15`
-- **Layout/naming:** Top-level `tests/` folder mirroring `src/` (divergent from the sibling-root convention); project named `<SourceProject>.Tests`; included in `Skrivarkoppling.sln:10` under a `tests` solution folder (`Skrivarkoppling.sln:8,51`).
-- **Mock library:** None — hand-written fake `FakeZebraConfigService : IZebraConfigService` (`tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs:38,76-121`).
-- **Package pins:** ~~No CPM (no `Directory.Packages.props`); inline versions in the test csproj: `Microsoft.NET.Test.Sdk` 17.14.0 (`:13`), `xunit` 2.9.3 (`:14`), `xunit.runner.visualstudio` 2.8.2 (`:15`), `Microsoft.AspNetCore.Mvc.Testing` 10.0.0 (`:12`).~~ **SUPERSEDED — VajSkrivare uses CPM.** Verified 2026-08-27 against `Directory.Packages.props` at repo root (`ManagePackageVersionsCentrally=true`, `:3`): `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` **4.0.0** (was 3.1.5 at the 2026-08-27 check; re-measured 2026-09-06), `Microsoft.AspNetCore.Mvc.Testing` 10.0.11, `Xunit.SkippableFact` **1.5.85** (was 1.5.61), `Microsoft.Playwright` 1.62.0; `tests/Skrivarkoppling.Web.Tests/Skrivarkoppling.Web.Tests.csproj` now carries version-less `PackageReference` entries. TargetFramework `net10.0` (`:4`). Still no coverlet, and still no `global.json` (the only repo in the family without an SDK pin).
-- **Assertion style:** Plain xUnit `Assert.*` (`ApiAnonymityTests.cs:53-58,71-73`). No FluentAssertions.
-- **Coverage:** None — no coverlet reference, no `.runsettings`, no CI coverage.
-- **Integration vs unit separation:** None formal. The only tests are integration-style HTTP tests using `WebApplicationFactory<Program>` + `IClassFixture` with in-memory config overrides and `ZebraConfig:Enabled=false` (`ApiAnonymityTests.cs:12-41`, `:32`), so no SQL Server dependency.
-- **How tests run:** No `dotnet test` invocation anywhere. CI `.github/workflows/ci.yml` is `workflow_dispatch`-only and build+validate only (`:63-82`); `scripts/local-ci.ps1:70-82` has no test step. Tests run via Visual Studio Test Explorer or manual `dotnet test`.
-- **Extra notes:** Test project uses the `Microsoft.NET.Sdk.Web` SDK to match the web app under test. Repo depends on a sibling OpenModulePlatform checkout (`/p:OpenModulePlatformRoot=...`).
+### 1.4 Reference implementations in the consumer repos
 
-### iKrock2
+These are the patterns the standard in section 2 points at; the file references are from the
+2026-07-15 audit and are kept because the patterns have not changed.
 
-- **Tests exist:** Yes — 1 test project, 10 test classes in 11 files, 35 test methods (23 `[Fact]` + 12 `[Theory]`).
-  - `iKrock2.Application.Tests/iKrock2.Application.Tests.csproj`
-- **Framework:** xUnit (`iKrock2.Application.Tests/iKrock2.Application.Tests.csproj:13-14`); `global using Xunit;` in `iKrock2.Application.Tests/Usings.cs:1`.
-- **Layout/naming:** Single flat test project beside source projects at repo root; included in `iKrock2.slnx:7`. Test classes named `<Subject>Tests`, methods `Method_Condition_Expectation` (e.g. `iKrock2.Application.Tests/BackendStatusServiceTests.cs:11-12`). Despite the name, the project references Application **and** Backend and Contracts (`iKrock2.Application.Tests.csproj:19-21`).
-- **Mock library:** None. `WorkOrderExecutorTests.cs:11-13` explicitly documents that sealed, SQL-coupled production classes (`DashboardRepository`, `IboSyncService`) block mocking; tests use `Options.Create(...)` hand-wiring instead (`BackendStatusServiceTests.cs:14-28`).
-- **Package pins (CPM, `Directory.Packages.props`):** re-measured 2026-09-06 — `Microsoft.NET.Test.Sdk` **18.9.0** (`:15`), `xunit` 2.9.3 (`:18`), `xunit.runner.visualstudio` **4.0.0** (`:19`), `coverlet.collector` 10.0.1 (`:7`), `Microsoft.Playwright` 1.62.0 (`:16`). TargetFramework `net10.0` (`iKrock2.Application.Tests.csproj:4`); SDK pinned `10.0.200` (`global.json:3` — verified, unchanged). (The audit's 18.7.0 / 3.1.5 were the 2026-07-15 values.)
-- **Assertion style:** Plain xUnit `Assert.*` (`CollisionSearchFilterQueryParserTests.cs:17-27,50`; `WorkOrderExecutorTests.cs:38-41`). No FluentAssertions.
-- **Coverage:** `coverlet.collector` referenced (`iKrock2.Application.Tests.csproj:15`) but never invoked; no `.runsettings`, no scripts, no CI upload.
-- **Integration vs unit separation:** None — all tests are pure unit tests. `BackendStatusServiceTests.cs:26-37` constructs real `SqlConnectionFactory` objects but only asserts config flags, never opens a connection.
-- **How tests run:** Nothing runs them. Root `local-ci.ps1:40` has a stale TODO (in Swedish) saying "add dotnet test when a test project exists" even though the project now exists; `docs/DEV-SETUP.md:119-120` repeats the stale claim. CI `.github/workflows/ci.yml` is `workflow_dispatch`-only, restore+build only (`:62-68`).
-- **Extra notes:** Two test classes reach **private static production methods via reflection** (`StatusCodeParsingTests.cs:22-36`, `CollisionSearchFilterQueryParserTests.cs:105-113`) — a fragile pattern that breaks silently on renames.
+- **DB-test gating (IbsPackager, EArkivChecker):** `[SkippableFact]` + connection string from an
+  environment variable (`IBSPACKAGER_TEST_CONNECTION_STRING`,
+  `EARKIVCHECKER_TEST_CONNECTION_STRING`) with a localhost default; `SkipException` when the
+  database or schema is absent; the procedure or schema under test is self-deployed from the
+  repo's own `sql/` setup script; GUID-suffixed rows or a uniquely named per-class database with
+  cleanup on dispose. EArkivChecker pairs this with OMP's Tier C/D class naming
+  (`EArkivCheckerRepositoryTierCTests.cs`, `FolderScannerTierDTests.cs`) and is the cleanest Tier C
+  pattern in the family.
+- **Hand-written fakes instead of a mock library:** `NullLogger<T>.Instance` and small stubs
+  (`TestConfiguration : IConfiguration`, `NoChangeToken`) in IbsPackager; `Options.Create(...)`
+  hand-wiring in iKrock2; `FakeZebraConfigService` in VajSkrivare.
+- **Web-host tests without a database:** VajSkrivare's `WebApplicationFactory<Program>` +
+  in-memory configuration overrides (`tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs`).
+- **End-to-end smoke as a gate:** ODVGateway's `scripts/smoke-test.ps1` builds the app, launches
+  the real Kestrel process with an `appsettings.Smoke.json` overlay and checks `/health`,
+  security headers and sanitized error responses, in both the local gate and CI.
+- **JS:** OpenDocViewer keeps tests colocated in `src/<area>/__tests__/*.test.js` against pure
+  config/normalization helpers (one outlier asserts on the shipped `public/web.config`);
+  AgentDocMap keeps a flat `test/` folder with `withTempDir` in `test/testUtils.js` and a
+  committed fixture project.
 
-### LogSearch
+## 2. Recommended standard
 
-- **Tests exist:** **No** at audit time — 0 test projects. *(Superseded 2026-08-19: `LogSearch.Tests` + `LogSearch.UiTests` now exist — see the status note at the top.)*
-- **Framework / mock lib / assertion style:** None. `Directory.Packages.props:6-11` pins only runtime packages.
-- **Layout/naming:** 3 source projects in `LogSearch.slnx:2-4` (`LogSearch.Runtime`, `LogSearch.Service`, `LogSearch.Web`). CPM is enabled (`Directory.Packages.props:2-3`); shared TargetFramework `net10.0` via `Directory.Build.props:3`.
-- **Coverage / integration separation:** None.
-- **How tests run:** They don't. Local gate `scripts/local-ci.ps1:66-102` = build + component-version validation only; `.github/workflows/ci.yml` is `workflow_dispatch`-only with restore/build/validate (`:65,:69,:82`). The README manual-verification checklist (`README.md:112-124`) covers SQL Server-dependent lease/queue behavior by hand.
-- **Natural home for tests:** `LogSearch.Tests/LogSearch.Tests.csproj` beside the source projects (matching the sibling `X.Tests` convention), added to `LogSearch.slnx`, versions pinned in `Directory.Packages.props`. The most testable target is `LogSearch.Runtime` (plain class library) — e.g. the lease/ownership semantics currently verified manually in `README.md:123-124`.
+### 2.1 .NET
 
-### EArkivChecker
+**xUnit + hand-written fakes + plain `Assert.*`, pinned centrally via CPM, in a sibling
+`<ProjectUnderTest>.Tests` project plus a `<Repo>.UiTests` project, executed in the local pre-push
+gate.**
 
-- **Tests exist:** Yes — 1 test project, 3 test files, 44 test methods (24 `[Fact]` Tier D + 20 `[SkippableFact]` Tier C).
-  - `EArkivChecker.Runtime.Tests` — `FolderScannerTierDTests.cs`, `EArkivCheckerScanProcessorTierDTests.cs`, `EArkivCheckerRepositoryTierCTests.cs`
-- **Framework:** xUnit + `Xunit.SkippableFact`.
-  - `EArkivChecker.Runtime.Tests/EArkivChecker.Runtime.Tests.csproj:13-15`
-- **Layout/naming:** Sibling `<SourceProject>.Tests` at repo root beside the source projects, included in `EArkivChecker.slnx:3`; Tier C/D suffix on test classes; global `<Using Include="Xunit" />` in the csproj (`:27`). Only `EArkivChecker.Runtime` is referenced/tested (`:23`); Service and Web are thin hosts.
-- **Mock library:** None — hand-written fakes for the FolderScanner and scan-processor decision-logic Tier D tests.
-- **Package pins (CPM, `Directory.Packages.props`):** re-measured 2026-09-06 — `Microsoft.NET.Test.Sdk` **18.9.0**, `xunit` 2.9.3, `xunit.runner.visualstudio` **4.0.0**, `coverlet.collector` 10.0.1, `Xunit.SkippableFact` **1.5.85** (`:17`). TargetFramework `net10.0` repo-wide via `Directory.Build.props:3`. (The audit's 18.7.0 / 3.1.5 / 1.4.13 were the 2026-07-15 values.)
-- **Assertion style:** Plain xUnit `Assert.*` (`EArkivCheckerRepositoryTierCTests.cs:443-446` — `Assert.ThrowsAsync`, `Assert.Equal`). No FluentAssertions.
-- **Coverage:** `coverlet.collector` referenced (PrivateAssets=all) in the test csproj (`:9-12`) — but never invoked: no `.runsettings`, no `--collect` in scripts or CI.
-- **Integration vs unit separation:** The recommended-standard combination — OMP's Tier C/D class naming plus IbsPackager-style gating. Tier D = pure in-memory fakes. Tier C = `[SkippableFact]` over a per-class fixture `EArkivCheckerRepositoryTestDatabase` (`EArkivCheckerRepositoryTierCTests.cs:582`) that honors env var `EARKIVCHECKER_TEST_CONNECTION_STRING` (default `Server=localhost;Integrated Security=true`, `:584-585`), lazily creates a uniquely named database (`EArkivChecker_Tests_<guid>`, `:589-590`), deploys `sql/1-setup-earkiv-checker.sql` plus a minimal core-schema stub (omp schema, `omp.users`, `omp.notifications` — `:737`), drops the database on dispose, and skips cleanly via `SkipException` when no local SQL Server is reachable (`:693`). The alarm methods `SetAlarmSubscriptionAsync`/`CreateAlarmNotificationsAsync` are covered against that stub (`:435-520`).
-- **How tests run:** `dotnet test EArkivChecker.slnx --no-build` is step 2 of the local gate `scripts/local-ci.ps1:54-55`, which the pre-push hook executes (`.githooks/pre-push.ps1:6,33`). GitHub CI stays `workflow_dispatch`-only build+validate (`.github/workflows/ci.yml:63-82`).
-- **Extra notes:** Adopted the full recommended standard from day one (Tier suffix + SkippableFact + env var + self-deployed schema) — the cleanest Tier C pattern in the ecosystem alongside IbsPackager.
-
-### Dokumentbibliotek
-
-- **Tests exist:** **No** at audit time — 0 test projects. Single web-module project `RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj` in the old-format `OpenModulePlatform.Web.eArkivDokumentbibliotek.sln` (plus a cross-repo reference to OMP `OpenModulePlatform.Web.Shared`). *(Superseded 2026-08-19: `tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests` now exist — see the status note at the top.)*
-- **Framework / mock lib / assertion style:** None. No `Directory.Packages.props` (no CPM) — only `Directory.Build.targets:1-17` wiring the OMP analyzer. Module targets `net10.0` (`RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj:3`).
-- **Coverage / integration separation:** None.
-- **How tests run:** They don't. `.github/workflows/ci.yml` is `workflow_dispatch`-only: restore (`:65`), build (`:69`), component-version validation (`:82`). `scripts/local-ci.ps1:53,75` = build + version validation. `scripts/validate-component-versions.ps1:25` has a `-SelfTest` switch — an ad-hoc script self-check, not a unit test.
-- **Natural home for tests:** A sibling `OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests/` at repo root added to the same sln, referencing the RazorPages project.
-
-### ODVGateway
-
-- **Tests exist:** **No** at audit time — 0 test projects. Single source project `src/ODVGateway/ODVGateway.csproj`; **no `.sln`/`.slnx` at all** (builds target the csproj directly, e.g. `.github/workflows/ci.yml:30`). *(Superseded 2026-08-19: `tests/ODVGateway.Tests` now exists — see the status note at the top.)*
-- **Framework / mock lib / assertion style:** None. No `Directory.Packages.props`. Project targets `net10.0` (`src/ODVGateway/ODVGateway.csproj:3`); `Directory.Build.props:1-7` sets analysis/style props only.
-- **Coverage / integration separation:** None for unit tests.
-- **How tests run:** No unit tests, but the repo has the strongest non-unit verification of the testless repos: an end-to-end PowerShell **smoke test** that builds the app, launches the real Kestrel process with an `appsettings.Smoke.json` overlay, and checks `/health`, security headers, and sanitized error responses (`scripts/smoke-test.ps1:1-21`, checks at `:302-346`). It runs in the local gate `scripts/local-ci.ps1:8-10` (enforced by `.githooks/pre-push:33`) and in `.github/workflows/ci.yml:28-39` / `release.yml:49-66`.
-- **Natural home for tests:** `src/ODVGateway.Tests/ODVGateway.Tests.csproj` beside the source project, plus a new `.slnx` to group them.
-
-### OpenDocViewer
-
-- **Tests exist:** Yes — pure JS repo (no `.csproj` at all), 4 test files.
-  - `src/utils/__tests__/runtimeConfig.test.js`, `src/utils/__tests__/documentLoadingConfig.test.js`, `src/logging/__tests__/systemLogger.test.js`, `public/__tests__/web-headers.test.js`
-- **Framework:** vitest — `"test": "vitest run"` (`package.json:35`), `"test:watch": "vitest"` (`package.json:36`); imports `from 'vitest'` (e.g. `src/utils/__tests__/runtimeConfig.test.js:10`).
-- **Layout/naming:** Colocated `__tests__/` folders beside source modules (`src/<area>/__tests__/*.test.js`); one outlier `public/__tests__/web-headers.test.js` that asserts on the shipped IIS `public/web.config` read from disk (`web-headers.test.js:5-6`). No vitest config anywhere — `vite.config.js` has no `test` key; tests rely on vitest defaults (node environment).
-- **Mock library:** None — no `vi.fn`/`vi.mock`/`vi.spyOn` anywhere; all tests exercise pure functions (plus the one real-file read).
-- **Package pins:** `vitest` `^4.0.0` in devDependencies (`package.json:92`); no `@vitest/coverage-*`. Engines `node ^22.18.0 || >=24.11.0` (`package.json:25-27`); CI pins node 22.18.0 (`.github/workflows/ci.yml:22`). `package-lock.json` present and registry-validated in CI (`ci.yml:27-35`).
-- **Assertion style:** vitest `expect` — `runtimeConfig.test.js:41` (`toEqual`), `systemLogger.test.js:15` (`toBe`), `web-headers.test.js:15` (`toMatch`).
-- **Coverage:** None found — no coverage script, package, or CI step.
-- **Integration vs unit separation:** None — all 4 files are node-environment unit tests (see header comment `runtimeConfig.test.js:5-7`). Two PowerShell helpers exist but are manual smoke tools, not automated tests: `scripts/Test-ODV-IISProxy.ps1`, `scripts/omp/test-cmd-wrappers.ps1`.
-- **How tests run:** Locally via `npm test`. At audit time CI did not run tests. *(Superseded: `.github/workflows/ci.yml:71` now runs `npm test`, verified 2026-08-22.)*
-- **Extra notes:** Tests are deliberately concentrated on pure config/normalization helpers; no component/React tests. New tests naturally belong in `src/<area>/__tests__/<module>.test.js`.
-
-### AgentDocMap
-
-- **Tests exist:** Yes — pure JS repo, 5 test files in top-level `test/` (`concurrency.test.js`, `generate.test.js`, `outputGuard.test.js`, `secretSafety.test.js`, `writers.test.js`), ~26 `test(...)` cases, plus helper `test/testUtils.js` and a committed fixture project `test/fixture-project/`.
-- **Framework:** node:test (built-in runner), no third-party framework. `"test": "node --test test/*.test.js"` (`package.json:16`); `import test from 'node:test'` (`test/generate.test.js:5`).
-- **Layout/naming:** Flat top-level `test/` folder; `*.test.js` named after the source unit (`test/writers.test.js` ↔ `src/lib/writers.js`). Shared helper `withTempDir` at `test/testUtils.js:17`.
-- **Mock library:** None — tests use real temp dirs and the fixture project (`test/testUtils.js:17`).
-- **Package pins:** No test deps to pin (node:test is built-in). Runtime pinned by `engines: node >=22.18.0` (`package.json:11-13`) and CI `node-version: '22.18.0'` (`.github/workflows/ci.yml:31`). `package-lock.json` exists (`lockfileVersion: 3`); CI uses `npm ci` (`ci.yml:38`). No devDependencies at all.
-- **Assertion style:** `node:assert/strict` — `test/generate.test.js:1,19-24` (`assert.equal`, `assert.match`).
-- **Coverage:** None found — `.gitignore:4` lists `coverage/` but nothing produces it.
-- **Integration vs unit separation:** None — all tests are filesystem-backed (temp dirs + fixture project) in one suite; only platform-conditional path selection (`test/outputGuard.test.js:31-37`).
-- **How tests run:** `npm test`; `npm run validate` = test + regenerate the committed OpenDocViewer example packet (`package.json:14-18`). **CI runs the tests** — `.github/workflows/ci.yml:40-42` runs `npm run validate` on ubuntu (the only repo in the ecosystem whose GitHub CI executes tests). Documented in `CONTRIBUTING.md:16-24`.
-- **Extra notes:** The "integration check" is regenerating `examples/opendocviewer-agent-docs/` from a sibling OpenDocViewer checkout (`ci.yml:22-26`). Minor duplication: a local `withTempDir` copy in `test/secretSafety.test.js:9` instead of importing `testUtils.js`.
-
-## 2. Comparison matrix
-
-> **Point-in-time snapshot (2026-07-15) — read with the status banner at the top of this file.** Rows saying "Tests exist: No", package versions, and CPM claims in this section are historical; the family was standardized on two-tier testing 2026-08-19. Individually superseded claims are struck through inline.
-
-| Repo | Tests? | Framework | Mock lib | Test pins | Assertion style | Coverage | Integration gating | Tests run by |
-|---|---|---|---|---|---|---|---|---|
-| **OpenModulePlatform** | Yes — 3 projects, ~270 methods | xUnit 2.9.3 + runner 4.0.0 | None (hand-written fakes) | CPM: Test.Sdk 18.9.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced (2 of 3 projects), never invoked | Tier C/D naming; DB tests fail without local SQL Server | Pre-push hook + CI (`dotnet test`); Pester script tests blocking in both pre-push and CI |
-| **IbsPackager** | Yes — 2 projects, ~42 methods | xUnit 2.9.3 + runner 3.1.5 + SkippableFact 1.4.13 | None (stubs + NullLogger) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | `[SkippableFact]` + env connection string | Nothing automated |
-| **VajSkrivare** | Yes — 1 project, 2 tests _(2026-08-27: 2 projects, `+ Skrivarkoppling.Web.UiTests`)_ | xUnit 2.9.3 + runner ~~2.8.2~~ **3.1.5** | None (hand-written fake) | ~~**Inline (no CPM)**: Test.Sdk **17.14.0**~~ → **CPM**: Test.Sdk **18.9.0**, no coverlet | Plain `Assert.*` | None | None (tests avoid DB via config) | Nothing automated |
-| **iKrock2** | Yes — 1 project, 35 methods | xUnit 2.9.3 + runner 3.1.5 | None (Options.Create) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | None (pure unit tests) | Nothing automated (stale TODO) |
-| **LogSearch** | **No** | — | — | — | — | — | — | — |
-| **EArkivChecker** | Yes — 1 project, 44 methods | xUnit 2.9.3 + runner 3.1.5 + SkippableFact 1.4.13 | None (hand-written fakes) | CPM: Test.Sdk 18.7.0, coverlet.collector 10.0.1 | Plain `Assert.*` | coverlet referenced, never invoked | Tier C/D naming + `[SkippableFact]` + env connection string | `dotnet test` in local-ci/pre-push; CI build-only |
-| **Dokumentbibliotek** | **No** | — | — | — | — | — | — | — |
-| **ODVGateway** | **No** (has e2e smoke script) | — | — | — | — | — | — | Smoke test in local gate + CI |
-| **OpenDocViewer** | Yes — 4 files | vitest ^4.0.0 | None | package.json + lockfile | vitest `expect` | None | None | `npm test` locally only; CI build-only |
-| **AgentDocMap** | Yes — 5 files, ~26 cases | node:test (built-in) | None | engines + lockfile | `node:assert/strict` | None | None | `npm test` + **CI runs `npm run validate`** |
-
-### Key divergences
-
-- ~~**Testless repos:** 3 of 8 .NET repos have zero automated tests — **LogSearch**, **Dokumentbibliotek**, **ODVGateway**.~~ **SUPERSEDED — there are no testless repos left.** Verified 2026-08-27: `LogSearch.Tests` + `LogSearch.UiTests`, `Dokumentbibliotek/tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`, and `ODVGateway/tests/ODVGateway.Tests` all exist. ODVGateway additionally keeps its end-to-end smoke script.
-- **Framework is consistent where tests exist:** xUnit in every .NET repo; vitest in OpenDocViewer; node:test in AgentDocMap. No NUnit/MSTest/jest/mocha anywhere.
-- **No mock framework anywhere:** every repo uses hand-written fakes/stubs. This is a deliberate-looking, ecosystem-wide pattern.
-- ~~**Pin drift in VajSkrivare:** the only repo without CPM pins the older `Microsoft.NET.Test.Sdk` 17.14.0 and `xunit.runner.visualstudio` 2.8.2 (vs 18.7.0 / 3.1.5 everywhere else)~~ **SUPERSEDED — VajSkrivare adopted CPM and is now on Test.Sdk 18.9.0 / runner 3.1.5** (verified 2026-08-27, `Directory.Packages.props`). It still has no coverlet reference, and it remains the only repo without a `global.json` SDK pin. CPM is now present in 7 of 8 .NET repos; **ODVGateway** is the only one left without a `Directory.Packages.props`.
-- **Coverage is decorative:** `coverlet.collector` is referenced in OMP (2 of 3 test projects), IbsPackager, iKrock2, and EArkivChecker, but no `.runsettings`, script, or CI step ever collects coverage.
-- **CI gap:** only **AgentDocMap** runs tests in GitHub CI. OMP runs tests in the local pre-push hook; all other repos' CI/local-ci gates are build-only.
-- **DB-test gating split:** IbsPackager and EArkivChecker skip cleanly without SQL Server (`[SkippableFact]` + env var); OMP's Tier C tests hard-fail without local SQL Server. No `[Trait]`/`[Collection]`/Testcontainers anywhere.
-- **Layout outliers:** VajSkrivare uses a top-level `tests/` folder instead of sibling `X.Tests/`; `IbsPackager.Tests` is named after the repo, not its actual target (`IbsPackager.Runtime`); ODVGateway has no solution file at all.
-- **Fragile patterns:** iKrock2 tests reach private statics via reflection; iKrock2's `local-ci.ps1:40` and `docs/DEV-SETUP.md:119` still claim no test project exists (stale, Swedish TODO).
-
-## 3. Recommended standard
-
-### .NET ecosystem
-
-**xUnit + hand-written fakes + plain `Assert.*`, pinned centrally via CPM, in a sibling `<ProjectUnderTest>.Tests` project, executed in the local pre-push gate.**
-
-This is already the de-facto standard: OMP, IbsPackager, and iKrock2 use identical frameworks and pins, and no repo uses a mock framework or FluentAssertions.
-
-- **Project layout:** `<ProjectUnderTest>.Tests/<ProjectUnderTest>.Tests.csproj` at repo root beside the source project, included in the `.slnx`; test subfolders mirror the source structure. Test classes `<Subject>Tests`; methods `Method_WhenCondition_ExpectedResult`. Add `<Using Include="Xunit" />` (or a `Usings.cs`) instead of per-file usings.
-- **Pins (in `Directory.Packages.props`, CPM):** `Microsoft.NET.Test.Sdk` **18.7.0**, `xunit` **2.9.3**, `xunit.runner.visualstudio` **3.1.5**, `coverlet.collector` **10.0.1**. TargetFramework `net10.0`. Add `Microsoft.AspNetCore.Mvc.Testing` (currently 10.0.x) for web-host tests and `Xunit.SkippableFact` **1.4.13** for DB-gated tests.
-- **Mocking:** keep the no-mock-framework rule. Write small hand-written fakes (see `FakeOmpHostArtifactRepository`, `FakeOptionsMonitor`, `ManualTimeProvider` in OMP). When a production class is hard to fake (sealed, SQL-coupled), refactor it behind an interface rather than introducing Moq or testing private members via reflection.
+- **Project layout:** `<ProjectUnderTest>.Tests/<ProjectUnderTest>.Tests.csproj` at repo root
+  beside the source project, included in the `.slnx`; test subfolders mirror the source structure.
+  Test classes `<Subject>Tests`; methods `Method_WhenCondition_ExpectedResult`. Add
+  `<Using Include="Xunit" />` (or a `Usings.cs`) instead of per-file usings.
+- **Pins (in `Directory.Packages.props`, CPM):** `Microsoft.NET.Test.Sdk` **18.9.0**, `xunit`
+  **2.9.3**, `xunit.runner.visualstudio` **4.0.0**, `coverlet.collector` **10.0.1**. TargetFramework
+  `net10.0`, SDK pinned in `global.json`. Add `Microsoft.AspNetCore.Mvc.Testing` (currently 10.0.x)
+  for web-host tests, `Xunit.SkippableFact` **1.5.85** for DB-gated tests and `Microsoft.Playwright`
+  **1.62.0** for the UI tier.
+- **Runner baseline rationale (decided 2026-08-31):** the supported baseline is a runner-only
+  upgrade. The adapter's package documentation states that `xunit.runner.visualstudio` 4.0.0 runs
+  projects built with xUnit.net v2 and v3, and its `net8.0` asset has no dependency on an xUnit
+  core package. The v2-to-v3 migration (renaming `xunit` to `xunit.v3`, executable test projects,
+  v3 APIs) is a separate step and not a prerequisite for runner 4.0.0; it is outside this baseline.
+  Repositories that link `tests/shared/Ui/*.cs` apply the exact pins above; no shared fixture API
+  changes are required. References: the
+  [Visual Studio adapter package](https://www.nuget.org/packages/xunit.runner.visualstudio/4.0.0),
+  [xUnit.net runner package guidance](https://xunit.net/docs/nuget-packages-v3) and
+  [the v2-to-v3 migration guide](https://xunit.net/docs/getting-started/v3/migration).
+- **Mocking:** keep the no-mock-framework rule. Write small hand-written fakes (see section 1.3 and
+  1.4). When a production class is hard to fake (sealed, SQL-coupled), refactor it behind an
+  interface rather than introducing Moq or testing private members via reflection.
 - **Assertions:** plain xUnit `Assert.*`. Do not add FluentAssertions.
-- **Unit vs integration:** adopt OMP's Tier suffix naming — `*TierDTests` for pure in-memory tests, `*TierCTests` for tests needing real SQL Server — **combined with** IbsPackager's gating: `[SkippableFact]` + connection string from an env var (e.g. `<REPO>_TEST_CONNECTION_STRING`) with a localhost default, skipping cleanly when the database/schema is absent. DB tests must create/drop their own uniquely named database or GUID-suffixed rows and never touch shared data. Tier D tests must pass on any machine with only the .NET SDK.
-- **Execution:** wire `dotnet test` into the repo's local pre-push gate (`scripts/local-ci.ps1` / `.githooks/pre-push.ps1`), the OMP `pre-push.ps1:88-89` pattern. GitHub CI may stay build-only (metered minutes, no SQL Server on runners), but repos whose tests are all Tier D should consider adding a CI `dotnet test` step.
-- **Coverage:** keep `coverlet.collector` in every test project (it is harmless), and document the manual invocation `dotnet test --collect:"XPlat Code Coverage"`. No CI coverage upload is required today.
+- **Unit vs integration:** OMP's Tier suffix naming - `*TierDTests` for pure in-memory tests,
+  `*TierCTests` for tests needing real SQL Server - **combined with** IbsPackager's gating:
+  `[SkippableFact]` + connection string from `<REPO>_TEST_CONNECTION_STRING` with a localhost
+  default, skipping cleanly when the database/schema is absent. DB tests create/drop their own
+  uniquely named database or GUID-suffixed rows and never touch shared data. Tier D tests must
+  pass on any machine with only the .NET SDK.
+- **UI tier:** `*.UiTests` on xUnit + Microsoft.Playwright, linking the shared fixtures from
+  `OpenModulePlatform/tests/shared/Ui/`, tagged `Category=Ui` so gates can exclude them where no
+  browser is available.
+- **Execution:** `dotnet test` in the repo's local pre-push gate (`scripts/local-ci.ps1` /
+  `.githooks/pre-push.ps1`), followed by the OMP zero-execution gate
+  `scripts/omp/assert-tests-executed.ps1`. GitHub CI may stay build-only for consumer repos
+  (metered minutes, no SQL Server on runners); repos whose tests are all Tier D should consider a
+  CI `dotnet test` step.
+- **Coverage:** keep `coverlet.collector` in every test project (it is harmless) and document the
+  manual invocation `dotnet test --collect:"XPlat Code Coverage"`. No CI coverage upload is
+  required today.
 
-### JS/npm ecosystem
+### 2.2 JS/npm
 
-**vitest for browser/front-end apps, node:test for pure Node tooling; no mock library by default; tests must run in CI.**
+**vitest for browser/front-end apps, node:test for pure Node tooling; no mock library by default;
+tests must run in CI.**
 
-- **Framework choice:** follow the existing split — OpenDocViewer's vitest (`^4.0.0`) for anything DOM/React-adjacent or Vite-based; AgentDocMap's `node --test` for dependency-free Node CLI/library code. Do not introduce jest or mocha.
-- **Layout:** colocated `src/<area>/__tests__/*.test.js` for app code (OpenDocViewer pattern); top-level `test/*.test.js` mirroring `src/lib/` units for CLI tools (AgentDocMap pattern).
-- **Mocking:** start without mocks against pure functions (the dominant pattern); reach for `vi.fn()`/`vi.spyOn()` (vitest) or `node:test`'s built-in `mock` only when a boundary genuinely requires it. Do not add sinon or similar.
-- **Assertions:** vitest `expect` / `node:assert/strict` respectively — keep using each runner's native style.
-- **Execution:** `npm test` must exist and must be wired into CI (AgentDocMap's `npm run validate` in `ci.yml:40-42` is the model). Coverage is optional; if wanted, use `@vitest/coverage-v8` or `node --test` with its built-in coverage.
+- **Framework choice:** OpenDocViewer's vitest for anything DOM/React-adjacent or Vite-based;
+  AgentDocMap's `node --test` for dependency-free Node CLI/library code. Do not introduce jest or
+  mocha.
+- **Layout:** colocated `src/<area>/__tests__/*.test.js` for app code; top-level `test/*.test.js`
+  mirroring `src/lib/` units for CLI tools.
+- **Mocking:** start without mocks against pure functions; reach for `vi.fn()`/`vi.spyOn()`
+  (vitest) or `node:test`'s built-in `mock` only when a boundary genuinely requires it. Do not add
+  sinon or similar.
+- **Assertions:** vitest `expect` / `node:assert/strict` respectively.
+- **Execution:** `npm test` must exist and must be wired into CI (both JS repos already are).
+  Coverage is optional; if wanted, use `@vitest/coverage-v8` or `node --test`'s built-in coverage.
 
-## 4. Migration notes per diverging/testless repo
+## 3. Open work
 
-> **Point-in-time snapshot (2026-07-15) — read with the status banner at the top of this file.** Rows saying "Tests exist: No", package versions, and CPM claims in this section are historical; the family was standardized on two-tier testing 2026-08-19. Individually superseded claims are struck through inline.
+Only items that are still open on 2026-09-06; everything else from the original migration plan is
+done and recorded in the changelog.
 
-### LogSearch (testless)
+| Repo | Remaining | Priority |
+|---|---|---|
+| VajSkrivare | Add `coverlet.collector` 10.0.1 to `Directory.Packages.props`; add a `global.json` SDK pin (the only repo without one, so it floats to the build host's SDK). Keep the `tests/` folder layout - renaming is low-value churn. | Low |
+| ODVGateway | Introduce `Directory.Packages.props` (the only .NET repo without CPM) and a `.slnx` grouping `src/ODVGateway` and `tests/ODVGateway.Tests`; keep the smoke script as the e2e gate. | Low-Medium |
+| OpenModulePlatform | Adopt `[SkippableFact]` + env-var gating for Tier C tests so `dotnet test` passes on machines without SQL Server (CI currently sidesteps this with a `--filter`, tracked in `docs/TEST_DEBT.md`). Confirm `coverlet.collector` is referenced by every test project. | Low |
+| iKrock2 | Replace the two test classes that reach private static production methods via reflection (`StatusCodeParsingTests.cs`, `CollisionSearchFilterQueryParserTests.cs`, noted in the 2026-07-15 audit; not re-measured) with public-API tests. | Low |
+| IbsPackager | Optionally rename `IbsPackager.Tests` to `IbsPackager.Runtime.Tests` to match the `<ProjectUnderTest>.Tests` convention (it tests `IbsPackager.Runtime`). | Very low |
+| AgentDocMap | Deduplicate the local `withTempDir` copy in `test/secretSafety.test.js` by importing `test/testUtils.js`. | Very low |
+| Consumer .NET repos | GitHub CI is build + validate only; tests run in the local gate. Consider a Tier D-only `dotnet test` step. | Low |
 
-- **Current state:** No automated tests; manual SQL Server verification checklist in `README.md:112-124`. CPM and `net10.0` already in place.
-- **Migration:** Add `LogSearch.Tests/LogSearch.Tests.csproj` beside the source projects with the standard xUnit pins in `Directory.Packages.props`, add it to `LogSearch.slnx`, and start with Tier D tests of `LogSearch.Runtime` lease/ownership semantics (currently verified manually). Wire `dotnet test` into `scripts/local-ci.ps1`. DB-dependent behavior gets Tier C tests with the SkippableFact + env-var pattern.
-- **Priority:** **High** — core queue/lease logic currently has only manual verification.
+## 4. Changelog
 
-### EArkivChecker (aligned)
+Newest first. Earlier versions of this document carried these entries as struck-through text and
+dated banners inside the audit body; they were consolidated into sections 1-3 on 2026-09-06.
 
-- **Current state:** Matches the recommended standard: `EArkivChecker.Runtime.Tests` (24 Tier D + 20 Tier C tests) with standard CPM pins, Tier C/D naming, `[SkippableFact]` + `EARKIVCHECKER_TEST_CONNECTION_STRING` gating over self-deployed per-class databases (including a core-schema stub covering the alarm subscription/notification methods), and `dotnet test` wired into `scripts/local-ci.ps1` / the pre-push gate. Only `EArkivChecker.Runtime` is covered; Service and Web are thin hosts.
-- **Migration:** None required for Runtime. If Service or Web grow real logic, extend the suite along the same pattern.
-- **Priority:** **Done** — reference implementation for Tier C gating alongside IbsPackager.
-
-### Dokumentbibliotek (testless)
-
-- **Current state:** No automated tests; old-format `.sln`; no CPM.
-- **Migration:** Add a sibling `OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests/` project at repo root referencing the RazorPages project. Either introduce `Directory.Packages.props` (preferred, matches the ecosystem) or accept inline pins at the standard versions. Add `dotnet test` to `scripts/local-ci.ps1`. Form/image service logic is the natural first target.
-- **Priority:** **Medium** — module logic is thinner, but document/form handling would benefit from regression tests.
-
-### ODVGateway (testless, has e2e smoke)
-
-- **Current state:** No unit tests, but a solid end-to-end smoke script (`scripts/smoke-test.ps1`) runs in the local gate and CI. No solution file; no CPM.
-- **Migration:** Keep the smoke script as the e2e gate. Add `src/ODVGateway.Tests/` + a new `.slnx`, and unit-test the session-store capacity and security-header logic that today is only covered end-to-end (fast feedback without launching Kestrel). Standard pins.
-- **Priority:** **Medium** — the smoke test already catches integration regressions, so this is about fast, focused feedback.
-
-### VajSkrivare (diverging pins/layout)
-
-- **Current state (updated 2026-08-27):** xUnit on **CPM** (`Directory.Packages.props`, Test.Sdk 18.9.0 / runner 3.1.5), no coverlet, no `global.json`, top-level `tests/` layout, `Skrivarkoppling.Web.Tests` (2 tests) + `Skrivarkoppling.Web.UiTests`. ~~pinned inline (no CPM) at older versions (Test.Sdk 17.14.0, runner 2.8.2)~~ — that July finding is superseded.
-- **Migration (remaining):** ~~Introduce `Directory.Packages.props` and move test pins to the standard versions~~ **— done.** Remaining: add `coverlet.collector` 10.0.1, add a `global.json` SDK pin (VajSkrivare is the family's only repo without one, so it floats to the build host's SDK). Keep the `tests/` folder (renaming is low-value churn) but grow the suite — `WebApplicationFactory` + config overrides with no DB is a good pattern to extend. Add `dotnet test` to `scripts/local-ci.ps1`.
-- **Priority:** **Low–Medium** — aligned in spirit, drifted in pins and coverage.
-
-### iKrock2 (mostly aligned)
-
-- **Current state:** Standard xUnit/CPM stack, but nothing runs the tests; stale Swedish TODO in `local-ci.ps1:40` and stale claim in `docs/DEV-SETUP.md:119`; two test classes use reflection into private statics.
-- **Migration:** Wire `dotnet test` into `local-ci.ps1` and delete the stale TODO/docs lines (keeping comments in English per repo convention). Replace the reflection-based tests with public-API tests, refactoring production code behind interfaces where needed (the sealed SQL-coupled classes noted in `WorkOrderExecutorTests.cs:11-13`).
-- **Priority:** **Low** — small cleanup, no new infrastructure.
-
-### IbsPackager (aligned, minor naming note)
-
-- **Current state:** Standard stack with the ecosystem's best DB-test gating.
-- **Migration:** Optionally rename `IbsPackager.Tests` → `IbsPackager.Runtime.Tests` to match the `<ProjectUnderTest>.Tests` convention. Add `dotnet test` to `scripts/local-ci.ps1`. Otherwise the reference model for DB-backed tests.
-- **Priority:** **Low**.
-
-### OpenModulePlatform (reference implementation)
-
-- **Current state:** The de-facto standard; tests run in the pre-push hook but not CI; Tier C DB tests hard-fail without local SQL Server; Analyzers.Tests lacks coverlet.
-- **Migration:** Adopt IbsPackager's `[SkippableFact]` + env-var gating for Tier C tests so `dotnet test` passes on machines without SQL Server. Add `coverlet.collector` to the Analyzers.Tests project for consistency. Consider a CI step that runs Tier D tests only.
-- **Priority:** **Low**.
-
-### OpenDocViewer (CI gap)
-
-- **Current state:** vitest suite exists but CI runs lint+build only (`ci.yml:67-74`).
-- **Migration:** Add an `npm test` step to `.github/workflows/ci.yml` (and release workflow if desired). Optionally add `@vitest/coverage-v8` and a `test:coverage` script. Grow tests along the existing `__tests__/` pattern when touching config/logging code.
-- **Priority:** **Medium** — the suite exists; it just isn't enforced.
-
-### AgentDocMap (aligned)
-
-- **Current state:** Follows the JS standard fully, including CI execution.
-- **Migration:** None required. Optional cleanup: deduplicate the `withTempDir` copy in `test/secretSafety.test.js:9`.
-- **Priority:** **Very low**.
-
-### Repos already aligned
-
-- **.NET:** OpenModulePlatform (reference), IbsPackager, iKrock2, EArkivChecker — identical xUnit/CPM pins and conventions (IbsPackager and EArkivChecker additionally pair Tier C/D naming with SkippableFact gating).
-- **JS:** AgentDocMap — node:test, lockfile, CI-enforced.
+- **2026-09-06** - Consolidated the document: one measured state table, standard, open work,
+  changelog. Re-measured every `Directory.Packages.props` on `origin/main`: family-wide
+  `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0,
+  `coverlet.collector` 10.0.1, `Microsoft.Playwright` 1.62.0, `Xunit.SkippableFact` 1.5.85; the
+  comparison matrix and the recommended-standard pins had still quoted the July values
+  (18.7.0 / 3.1.5 / 1.4.13). Measured test-project counts per repo (IbsPackager 4, EArkivChecker 3,
+  every other .NET repo 2, ODVGateway 1) and that every local gate runs `dotnet test`.
+- **2026-09-04** - `tests/` holds eight Pester suites (`ArtifactPackageWorkerHostRoundTrip`,
+  `Assert-LegSdk`, `Assert-RunnerSignature`, `Assert-TestsExecuted`, `Bump-Version`,
+  `Get-CiVersionMatrix`, `Validate-ComponentVersions`, `Validate-SharedScripts`);
+  `Validate-ModuleDefinitions` followed on 2026-09-06, making nine.
+- **2026-09-03** - Pester migration: script suites moved to the Pester 5 dialect,
+  `run-script-tests.ps1` pins Pester 5.9.1, the 3.4.0 dialect (`Should Be`) is gone, per-suite
+  harness code moved to `tests/*.TestHelpers.ps1`. The zero-execution TRX gate moved into the
+  shared `scripts/omp/assert-tests-executed.ps1` (with `-RequirePerFile`) and was wired into both
+  `ci.yml` and `scripts/local-ci.ps1`; consumer repos call the OMP copy.
+- **2026-09-02** - OpenModulePlatform counted at 8 test projects (the banner had said seven). Pins
+  re-measured: 18.9.0 in all eight .NET repos (the earlier "18.8.1/18.9.0" split was gone),
+  runner 4.0.0 everywhere. `ci.yml` derives its build/test legs as a .NET version matrix via
+  `scripts/omp/get-ci-version-matrix.ps1`.
+- **2026-09-01** - ODVGateway lifted to `Microsoft.NET.Test.Sdk` 18.9.0.
+- **2026-08-31** - Runner/core compatibility baseline decided: runner-only upgrade to
+  `xunit.runner.visualstudio` 4.0.0 on `xunit` 2.9.3, `Xunit.SkippableFact` 1.5.85,
+  `Microsoft.Playwright` 1.62.0 (rationale in section 2.1).
+- **2026-08-27** - VajSkrivare adopted CPM (`Directory.Packages.props`, Test.Sdk 18.9.0, runner
+  3.1.5 at the time) and added `Skrivarkoppling.Web.UiTests`; no testless repos left. ODVGateway
+  became the only .NET repo without CPM. First status banner added to this document.
+- **2026-08-22** - Every repo has automated tests: `LogSearch.Tests` + `LogSearch.UiTests`,
+  `tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`,
+  `tests/ODVGateway.Tests`. OpenDocViewer's CI runs `npm test`.
+- **2026-08-19** - The family standardized on two-tier testing: xUnit unit tests plus xUnit +
+  Microsoft.Playwright UI tests (`*.UiTests`), with shared tooling in
+  `OpenModulePlatform/tests/shared/`.
+- **2026-08** - OpenModulePlatform `ci.yml` provisions LocalDB and runs `dotnet test` with a
+  `--filter` whose exclusions are registered in `docs/TEST_DEBT.md`.
+- **2026-07-15** - Original audit (source code only; `bin/`, `obj/`, `artifacts/`, `node_modules/`,
+  `dist/` excluded). Findings at the time: OpenModulePlatform had 3 test projects (~270 methods)
+  plus two Pester files; LogSearch, Dokumentbibliotek and ODVGateway had no tests; family pins were
+  `Microsoft.NET.Test.Sdk` 18.7.0, `xunit.runner.visualstudio` 3.1.5, `Xunit.SkippableFact`
+  1.4.13; VajSkrivare pinned inline (no CPM) at Test.Sdk 17.14.0 / runner 2.8.2; only AgentDocMap
+  ran tests in GitHub CI; iKrock2's `local-ci.ps1` carried a stale Swedish TODO instead of
+  `dotnet test`. The audit also established the standard in section 2, which has held.

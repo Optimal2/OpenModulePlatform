@@ -1515,7 +1515,9 @@ BEGIN
         -- st.dbid is populated for statements inside modules but NULL for ad hoc and
         -- prepared plans -- measured on this platform's server: 190 of 207 cached plans
         -- had NULL there -- so the plan's own dbid attribute carries the rest. Measured
-        -- coverage of that attribute: 132 of 131 cached plans, i.e. every one.
+        -- coverage of that attribute on 2026-08-16: every cached plan (at least 131 of
+        -- them) carried it. An earlier revision of this comment said "132 of 131",
+        -- a transcription slip; the raw measurement was not kept.
         WHERE COALESCE(st.dbid, plan_db.PlanDatabaseId) = @databaseId
           -- Never snapshot the snapshot: the capture is itself one of the heavier
           -- statements it would otherwise find.
@@ -3252,6 +3254,9 @@ BEGIN
     SET @HostKey = NULLIF(LTRIM(RTRIM(@HostKey)), N'');
     SET @RequestedBy = NULLIF(LTRIM(RTRIM(@RequestedBy)), N'');
 
+    -- ActionName receives MERGE's $action, whose only values are 'INSERT',
+    -- 'UPDATE' and 'DELETE' (six characters at most); nvarchar(10) is sized for
+    -- exactly that and is not meant for any other value.
     DECLARE @ModuleActions TABLE(ActionName nvarchar(10) NOT NULL);
     DECLARE @AppActions TABLE(ActionName nvarchar(10) NOT NULL);
     DECLARE @ModuleDisableChanges int = 0;
@@ -4532,6 +4537,13 @@ GO
 -- Note: LOWER() folds by the database collation, which differs from the
 -- invariant-culture fold only outside ASCII; ASCII user names -- the
 -- expected case -- fold identically.
+-- Why Latin1_General_100_BIN2 specifically: the comparison must be binary
+-- (see above), and this is the code-point-order binary collation that exists
+-- on every supported SQL Server version regardless of the server or database
+-- collation. The older *_BIN variants compare the first character by code
+-- point and the rest by byte order, which is why Microsoft steers new work to
+-- BIN2; and the same collation is what the application pins for its own
+-- canonical lookups, so this migration matches exactly what the code matches.
 UPDATE target
 SET user_name = LOWER(LTRIM(RTRIM(target.user_name)))
 FROM omp.auth_provider_lpwd target

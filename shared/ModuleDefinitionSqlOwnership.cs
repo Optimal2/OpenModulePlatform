@@ -101,9 +101,9 @@ internal static class ModuleDefinitionSqlOwnership
         var tokens = parser.GetTokenStream(tokenReader, out _);
         var normalized = sql.ToCharArray();
         TSqlParserToken? previous = null;
-        foreach (var token in tokens)
+        foreach (var token in tokens.Where(static token =>
+                     token.TokenType is not (TSqlTokenType.WhiteSpace or TSqlTokenType.SingleLineComment or TSqlTokenType.MultilineComment)))
         {
-            if (token.TokenType is TSqlTokenType.WhiteSpace or TSqlTokenType.SingleLineComment or TSqlTokenType.MultilineComment) continue;
             if (previous?.TokenType == TSqlTokenType.Go && token.TokenType == TSqlTokenType.Integer && previous.Line == token.Line)
                 Array.Fill(normalized, ' ', token.Offset, token.Text.Length);
             previous = token;

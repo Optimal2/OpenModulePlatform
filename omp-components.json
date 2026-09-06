@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.644",
+  "repositoryVersion": "0.3.646",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.190",
+      "definitionVersion": "0.3.192",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.209",
+      "definitionVersion": "0.3.210",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -116,7 +116,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.658",
+      "version": "0.3.659",
       "minModuleDefinitionVersion": "0.3.209",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -155,8 +155,8 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.255",
-      "minModuleDefinitionVersion": "0.3.190",
+      "version": "0.3.256",
+      "minModuleDefinitionVersion": "0.3.191",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
@@ -172,7 +172,7 @@
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
-      "minModuleDefinitionVersion": "0.3.190"
+      "minModuleDefinitionVersion": "0.3.191"
     },
     {
       "componentKey": "omp-workerprocesshost",
@@ -185,7 +185,7 @@
       "projectPath": "OpenModulePlatform.WorkerProcessHost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerProcessHost.zip",
-      "minModuleDefinitionVersion": "0.3.190"
+      "minModuleDefinitionVersion": "0.3.191"
     },
     {
       "componentKey": "content-webapp",

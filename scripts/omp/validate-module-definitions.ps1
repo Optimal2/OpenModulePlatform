@@ -123,7 +123,7 @@ if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
 }
 
 $jsonDepth = 100
-$errors = [System.Collections.Generic.List[string]]::new()
+$validationErrors = [System.Collections.Generic.List[string]]::new()
 $manifestText = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
 $manifest = ConvertFrom-JsonDocument -Json $manifestText -Depth $jsonDepth
 
@@ -137,13 +137,13 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
     $relativeDefinitionPath = [string](Get-OptionalPropertyValue -Object $manifestDefinition -Name 'path')
 
     if ([string]::IsNullOrWhiteSpace($relativeDefinitionPath)) {
-        Add-ValidationError -Errors $errors -Message 'A module definition entry in omp-components.json is missing path.'
+        Add-ValidationError -Errors $validationErrors -Message 'A module definition entry in omp-components.json is missing path.'
         continue
     }
 
     $definitionPath = Resolve-RepositoryPath -Path $relativeDefinitionPath -BasePath $repositoryRootPath
     if (-not (Test-Path -LiteralPath $definitionPath -PathType Leaf)) {
-        Add-ValidationError -Errors $errors -Message "Module definition file was not found: $relativeDefinitionPath"
+        Add-ValidationError -Errors $validationErrors -Message "Module definition file was not found: $relativeDefinitionPath"
         continue
     }
 
@@ -152,12 +152,12 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
 
     $actualModuleKey = [string](Get-OptionalPropertyValue -Object $definition -Name 'moduleKey')
     if (-not [string]::Equals($manifestModuleKey, $actualModuleKey, [StringComparison]::Ordinal)) {
-        Add-ValidationError -Errors $errors -Message "Module key mismatch for '$relativeDefinitionPath'. Manifest='$manifestModuleKey', definition='$actualModuleKey'."
+        Add-ValidationError -Errors $validationErrors -Message "Module key mismatch for '$relativeDefinitionPath'. Manifest='$manifestModuleKey', definition='$actualModuleKey'."
     }
 
     $actualDefinitionVersion = [string](Get-OptionalPropertyValue -Object $definition -Name 'definitionVersion')
     if (-not [string]::Equals($manifestDefinitionVersion, $actualDefinitionVersion, [StringComparison]::Ordinal)) {
-        Add-ValidationError -Errors $errors -Message "Definition version mismatch for '$relativeDefinitionPath'. Manifest='$manifestDefinitionVersion', definition='$actualDefinitionVersion'."
+        Add-ValidationError -Errors $validationErrors -Message "Definition version mismatch for '$relativeDefinitionPath'. Manifest='$manifestDefinitionVersion', definition='$actualDefinitionVersion'."
     }
 
     $createdTables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -176,7 +176,7 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
 
         $sqlPath = Resolve-RepositoryPath -Path $scriptPathValue -BasePath $repositoryRootPath
         if (-not (Test-Path -LiteralPath $sqlPath -PathType Leaf)) {
-            Add-ValidationError -Errors $errors -Message "SQL script referenced by '$relativeDefinitionPath' was not found: $scriptPathValue"
+            Add-ValidationError -Errors $validationErrors -Message "SQL script referenced by '$relativeDefinitionPath' was not found: $scriptPathValue"
             continue
         }
 
@@ -195,15 +195,15 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         }
 
         if (-not [string]::Equals($actualEncoding, $expectedEncoding, [StringComparison]::Ordinal)) {
-            Add-ValidationError -Errors $errors -Message "SQL script '$scriptKey' in '$relativeDefinitionPath' has contentEncoding '$actualEncoding', expected '$expectedEncoding'."
+            Add-ValidationError -Errors $validationErrors -Message "SQL script '$scriptKey' in '$relativeDefinitionPath' has contentEncoding '$actualEncoding', expected '$expectedEncoding'."
         }
 
         if (-not [string]::Equals($actualContent, $expectedContent, [StringComparison]::Ordinal)) {
-            Add-ValidationError -Errors $errors -Message "SQL script '$scriptKey' in '$relativeDefinitionPath' has embedded content that does not match '$scriptPathValue'. Run scripts/dev/embed-module-definition-sql.ps1."
+            Add-ValidationError -Errors $validationErrors -Message "SQL script '$scriptKey' in '$relativeDefinitionPath' has embedded content that does not match '$scriptPathValue'. Run scripts/dev/embed-module-definition-sql.ps1."
         }
 
         if (-not [string]::Equals($actualSha256, $expectedSha256, [StringComparison]::OrdinalIgnoreCase)) {
-            Add-ValidationError -Errors $errors -Message "SQL script '$scriptKey' in '$relativeDefinitionPath' has sha256 '$actualSha256', expected '$expectedSha256'. Run scripts/dev/embed-module-definition-sql.ps1."
+            Add-ValidationError -Errors $validationErrors -Message "SQL script '$scriptKey' in '$relativeDefinitionPath' has sha256 '$actualSha256', expected '$expectedSha256'. Run scripts/dev/embed-module-definition-sql.ps1."
         }
 
         # A module may split setup across several files. Collect the union before
@@ -243,19 +243,19 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         $undeclared = @($createdTables | Where-Object { -not $declaredTables.Contains($_) } | Sort-Object)
         if ($undeclared.Count -gt 0) {
             $undeclaredSources = @($undeclared | ForEach-Object { "$_ (created in '$($tableSources[$_] -join "', '")')" })
-            Add-ValidationError -Errors $errors -Message "'$relativeDefinitionPath' creates $($undeclared.Count) table(s) that integrity.requiredTables does not declare, so the import path cannot notice they are missing: $($undeclaredSources -join ', ')."
+            Add-ValidationError -Errors $validationErrors -Message "'$relativeDefinitionPath' creates $($undeclared.Count) table(s) that integrity.requiredTables does not declare, so the import path cannot notice they are missing: $($undeclaredSources -join ', ')."
         }
 
         $phantom = @($declaredTables | Where-Object { -not $createdTables.Contains($_) } | Sort-Object)
         if ($phantom.Count -gt 0) {
-            Add-ValidationError -Errors $errors -Message "'$relativeDefinitionPath' declares $($phantom.Count) table(s) in integrity.requiredTables that no setup file creates (checked '$($setupPaths -join "', '")'): $($phantom -join ', ')."
+            Add-ValidationError -Errors $validationErrors -Message "'$relativeDefinitionPath' declares $($phantom.Count) table(s) in integrity.requiredTables that no setup file creates (checked '$($setupPaths -join "', '")'): $($phantom -join ', ')."
         }
     }
 }
 
-if ($errors.Count -gt 0) {
+if ($validationErrors.Count -gt 0) {
     Write-Host 'Module definition validation failed:'
-    foreach ($errorMessage in $errors) {
+    foreach ($errorMessage in $validationErrors) {
         Write-Host " - $errorMessage"
     }
 
