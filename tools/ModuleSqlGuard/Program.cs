@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using OpenModulePlatform.HostAgent.Runtime.Services;
 using OpenModulePlatform.ModuleDefinitions;
 
@@ -51,10 +50,8 @@ try
             }
             else
             {
-                // Match the portable embedding transform, preserving source line numbers.
-                var sql = Regex.Replace(File.ReadAllText(path),
-                    @"(?im)^\s*USE\s+\[OpenModulePlatform\]\s*;\s*\r?\n\s*GO\s*(?:--.*)?\s*(?:\r?\n)?",
-                    match => new string(match.Value.Select(c => c is '\r' or '\n' ? c : ' ').ToArray()));
+                // Shared text handling preserves source positions; Analyze normalizes GO.
+                var sql = ModuleDefinitionSqlText.RemovePortableDatabaseHeader(File.ReadAllText(path));
                 Check(sql, path, module, Path.GetFileName(path));
             }
         }

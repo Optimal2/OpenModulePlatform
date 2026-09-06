@@ -46,9 +46,8 @@ public sealed class ModuleDefinitionSqlSafetyTests
     [InlineData("eXeCuTe [dbo].[Sp_CreateStats];")]
     public void ConfigurationOwnership_BlocksGlobalStatisticsMaintenance(string statement)
     {
-        foreach (var sql in MaintenanceExecutionPaths(statement))
+        foreach (var error in MaintenanceExecutionPaths(statement).Select(ValidateMaintenanceSql))
         {
-            var error = ValidateMaintenanceSql(sql);
             Assert.NotNull(error);
             Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", error);
             Assert.Contains("global statistics maintenance affects platform-owned tables", error);
@@ -66,9 +65,8 @@ public sealed class ModuleDefinitionSqlSafetyTests
     [InlineData("DBCC CHECKTABLE(N'[unterminated');")]
     public void ConfigurationOwnership_RejectsUnresolvedDbccTarget(string statement)
     {
-        foreach (var sql in MaintenanceExecutionPaths(statement))
+        foreach (var error in MaintenanceExecutionPaths(statement).Select(ValidateMaintenanceSql))
         {
-            var error = ValidateMaintenanceSql(sql);
             Assert.NotNull(error);
             Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", error);
             Assert.Contains("dynamic SQL payload cannot be resolved", error);

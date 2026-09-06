@@ -114,21 +114,7 @@ internal static class ModuleDefinitionSqlOwnership
             return;
         }
 
-        // ScriptDom recognizes GO but not sqlcmd's repeat count. Tokenize first so
-        // only batch separators are normalized, never strings or comments.
-        var parser = new TSql170Parser(initialQuotedIdentifiers: true);
-        using var tokenReader = new StringReader(sql);
-        var tokens = parser.GetTokenStream(tokenReader, out _);
-        var normalized = sql.ToCharArray();
-        TSqlParserToken? previous = null;
-        foreach (var token in tokens.Where(static token =>
-                     token.TokenType is not (TSqlTokenType.WhiteSpace or TSqlTokenType.SingleLineComment or TSqlTokenType.MultilineComment)))
-        {
-            if (previous?.TokenType == TSqlTokenType.Go && token.TokenType == TSqlTokenType.Integer && previous.Line == token.Line)
-                Array.Fill(normalized, ' ', token.Offset, token.Text.Length);
-            previous = token;
-        }
-        using var reader = new StringReader(new string(normalized));
+        using var reader = new StringReader(ModuleDefinitionSqlText.NormalizeBatchSeparators(sql));
         var fragment = new TSql170Parser(initialQuotedIdentifiers: true).Parse(reader, out var errors);
         if (errors.Count != 0)
         {

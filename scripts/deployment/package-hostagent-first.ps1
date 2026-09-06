@@ -226,6 +226,47 @@ function Copy-RequiredFile {
     Copy-Item -LiteralPath $Source -Destination $Destination -Force
 }
 
+function Test-ModuleDefinitionSources {
+    param([Parameter(Mandatory = $true)][string[]]$RepositoryRoots)
+
+    $definitionPaths = [System.Collections.Generic.List[string]]::new()
+    foreach ($sourceRoot in $RepositoryRoots) {
+        $manifestPath = Join-Path $sourceRoot 'omp-components.json'
+        if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { continue }
+
+        $global:LASTEXITCODE = 0
+        & (Join-Path $PSScriptRoot '..\omp\validate-module-definitions.ps1') -RepositoryRoot $sourceRoot
+        if ($LASTEXITCODE -ne 0) { throw "Module definition validation failed for '$sourceRoot' ($LASTEXITCODE)." }
+
+        # Each owner may implement its own version contract; retain that check.
+        $versionValidator = Join-Path $sourceRoot 'scripts\omp\validate-component-versions.ps1'
+        if (-not (Test-Path -LiteralPath $versionValidator -PathType Leaf)) { throw 'The owning repository version validator is required for packaging.' }
+        $global:LASTEXITCODE = 0
+        & $versionValidator
+        if ($LASTEXITCODE -ne 0) { throw "Component version validation failed for '$sourceRoot' before packaging ($LASTEXITCODE)." }
+
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $sourceDefinitionCount = $definitionPaths.Count
+        foreach ($definition in @($manifest.moduleDefinitions)) {
+            if ($null -eq $definition) { continue }
+            if ([string]::IsNullOrWhiteSpace([string]$definition.path)) {
+                throw "Module definition entry in '$manifestPath' is missing path."
+            }
+            $definitionPaths.Add((Resolve-DeploymentPath -Path ([string]$definition.path) -BasePath $sourceRoot))
+        }
+        if ($definitionPaths.Count -eq $sourceDefinitionCount) {
+            throw "No module SQL inputs selected for '$sourceRoot'."
+        }
+    }
+
+    # Build and run the production SQL guard once for all sources, before copying.
+    if ($definitionPaths.Count -gt 0) {
+        $global:LASTEXITCODE = 0
+        & (Join-Path $PSScriptRoot '..\omp\Test-ModuleSqlGuards.ps1') -Path $definitionPaths.ToArray()
+        if ($LASTEXITCODE -ne 0) { throw "Module SQL guard validation failed before packaging ($LASTEXITCODE)." }
+    }
+}
+
 function Copy-ModuleDefinitionsFromManifest {
     param(
         [Parameter(Mandatory = $true)][string]$ManifestPath,
@@ -236,13 +277,6 @@ function Copy-ModuleDefinitionsFromManifest {
     if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
         return
     }
-
-    & (Join-Path $PSScriptRoot '..\omp\validate-module-definitions.ps1') -RepositoryRoot $RepositoryRoot
-    & (Join-Path $PSScriptRoot '..\omp\Test-ModuleSqlGuards.ps1') -RepositoryRoot $RepositoryRoot
-    $versionValidator = Join-Path $RepositoryRoot 'scripts\omp\validate-component-versions.ps1'
-    if (-not (Test-Path -LiteralPath $versionValidator -PathType Leaf)) { throw 'The owning repository version validator is required for packaging.' }
-    & $versionValidator
-    if ($LASTEXITCODE -ne 0) { throw 'Component version validation failed before packaging.' }
 
     $manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach ($definition in @($manifest.moduleDefinitions)) {
@@ -933,6 +967,9 @@ function Get-ProjectNameFromComponent {
         return [System.IO.Path]::GetFileNameWithoutExtension($projectPath)
     }
 
+    if (-not (Test-Path -LiteralPath $projectPath -PathType Container)) {
+        throw "Component '$($Component.componentKey)' project file was not found below $projectPath."
+    }
     $project = Get-ChildItem -LiteralPath $projectPath -Filter '*.csproj' -File | Select-Object -First 1
     if ($null -eq $project) {
         throw "Component '$($Component.componentKey)' project file was not found below $projectPath."
@@ -1099,12 +1136,11 @@ $developerSourceRoots = Get-DeveloperSourceRoots `
 # E:\OMP is the documented local HostAgent-first default. Real installer packages
 # should set RuntimeRoot in their private package configuration or bootstrap profile.
 $defaultRuntimeRoot = 'E:\OMP'
-$runtimeRootForArtifactArchive = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue $defaultRuntimeRoot)
-$runtimeRootForArtifactArchive = Resolve-DeploymentPath -Path $runtimeRootForArtifactArchive -BasePath $configDirectory
+$runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue $defaultRuntimeRoot)
 $artifactArchiveRoots = Get-ArtifactArchiveRoots `
     -ConfiguredRoots @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AvailableArtifactArchiveRoots' -DefaultValue @())) `
     -ConfigDirectory $configDirectory `
-    -RuntimeRoot $runtimeRootForArtifactArchive `
+    -RuntimeRoot (Resolve-DeploymentPath -Path $runtimeRoot -BasePath $configDirectory) `
     -SourceRoots $developerSourceRoots
 
 $componentManifestPath = Join-Path $RepositoryRoot 'omp-components.json'
@@ -1482,9 +1518,10 @@ Copy-RequiredFile `
 Write-Step 'Copying module definitions'
 $moduleDefinitionsDestination = $availableModuleDefinitionsRoot
 New-Item -ItemType Directory -Path $moduleDefinitionsDestination -Force | Out-Null
-Copy-ModuleDefinitionsFromManifest -ManifestPath $componentManifestPath -RepositoryRoot $RepositoryRoot -Destination $moduleDefinitionsDestination
-Copy-ModuleDefinitionsFromManifest -ManifestPath (Join-Path $OpenDocViewerRoot 'omp-components.json') -RepositoryRoot $OpenDocViewerRoot -Destination $moduleDefinitionsDestination
-foreach ($sourceRoot in $developerSourceRoots) {
+$moduleDefinitionSourceRoots = @(@($RepositoryRoot, $OpenDocViewerRoot) + @($developerSourceRoots) |
+    ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd('\', '/') } | Select-Object -Unique)
+Test-ModuleDefinitionSources -RepositoryRoots $moduleDefinitionSourceRoots
+foreach ($sourceRoot in $moduleDefinitionSourceRoots) {
     Copy-ModuleDefinitionsFromManifest `
         -ManifestPath (Join-Path $sourceRoot 'omp-components.json') `
         -RepositoryRoot $sourceRoot `
@@ -1699,7 +1736,6 @@ Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'ex
 Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -VariableName 'WebArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-web' } | Select-Object -First 1).version)
 Add-VersionVariableOverride -Overrides $versionVariableOverrides -ScriptPath 'examples/WorkerAppModule/2-initialize-example-workerapp.sql' -VariableName 'WorkerArtifactVersion' -Version ([string]($components | Where-Object { $_.componentKey -eq 'example-workerapp-worker' } | Select-Object -First 1).version)
 
-$runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue $defaultRuntimeRoot)
 $webRoot = [string](Get-ConfigValue -Config $config -Name 'WebRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'Sites'))
 $webAppsRoot = [string](Get-ConfigValue -Config $config -Name 'WebAppsRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'WebApps'))
 $servicesRoot = [string](Get-ConfigValue -Config $config -Name 'ServicesRoot' -DefaultValue (Join-DeploymentPath -Root $runtimeRoot -Child 'Services'))
