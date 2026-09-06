@@ -1,8 +1,8 @@
 # Configuration conventions for OMP+ODV
 
 > **Status 2026-08-27 - read this first.** Sections 1, 2 and 4 are a
-> point-in-time audit from **2026-07-16** (`b0b5d887`, refreshed for
-> EArkivChecker in `93076552`). Two things about it have gone stale:
+> point-in-time audit from **2026-07-16** (`1aebc6be`, refreshed for
+> EArkivChecker in `8bd8de5d`). Two things about it have gone stale:
 >
 > 1. **The `file.cs:NN` line anchors are no longer reliable.** They were correct
 >    on 2026-07-16 and a great many of them have since drifted - spot-checked

@@ -141,7 +141,7 @@ that HostAgent will overwrite on the next deployment.
 **A new artifact version does not inherit configuration automatically - it is
 copied, and only under one narrow condition.** The Bootstrapper's
 `CopyMissingArtifactConfigurationFilesFromPreviousVersionAsync`
-(`OpenModulePlatform.Bootstrapper/Program.cs:4525`, current `main` `b181adad`)
+(`OpenModulePlatform.Bootstrapper/Program.cs:4525`, current `main` `16e72bbc`)
 behaves as follows:
 
 1. It runs **only if the target artifact has zero configuration files**. If the

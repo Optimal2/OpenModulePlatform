@@ -7,7 +7,7 @@ operator-gated and is intentionally not implemented here.**
 
 ## Context
 
-Commit `edf72d49` ("Guard module SQL artifact ownership") added a text-based
+Commit `c3558c36` ("Guard module SQL artifact ownership") added a text-based
 guard, mirrored in three places
 (`OpenModulePlatform.Bootstrapper/Program.cs`,
 `OpenModulePlatform.HostAgent.Runtime/Services/OmpHostArtifactRepository.cs`,

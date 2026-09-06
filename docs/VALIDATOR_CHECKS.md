@@ -45,10 +45,10 @@ with a future canonical check. Reserve a number here before using it.
 | 2 | `repositoryVersion` presence and format | static | every repository |
 | 3 | Component `version` presence and format | static | every repository |
 | 4 | Module-definition version sync (manifest = definition file) | static | every repository with module definitions |
-| 4b | Worker plugin host-contract (`minWorkerHostVersion` only on worker/worker-plugin) | static | every repository (vacuous without worker components) |
+| 4b | Worker plugin host-contract (`minWorkerHostVersion` only on worker/worker-plugin) | static | **measured 2026-09-07: this platform repository and IbsPackager only** — exactly the two manifests that declare `minWorkerHostVersion`. See "Present-but-vacuous is not applied uniformly" below. |
 | 5 | Component-to-module mapping integrity | static | every repository with module definitions |
 | 6 | `minModuleDefinitionVersion` sanity (≤ declared definitionVersion) | static | every repository with module definitions |
-| 7 | Shared-project cascade version bumps | base-diff | repositories that own `sharedProjects` (this platform repository) |
+| 7 | Shared-project cascade version bumps | base-diff | **bites** only where `sharedProjects` is declared (measured 2026-09-07: this platform repository alone). **Present but vacuous** in seven consumers; **absent by design** in IbsPackager only. See below. |
 | 8 | Module-definition SQL diff enforcement (material SQL change ⇒ definitionVersion bump) | base-diff | every repository whose definitions own SQL |
 | 8b | `minModuleDefinitionVersion` must not lag a bumped definitionVersion | base-diff | follows Check 8 (OpenDocViewer runs the stricter variant: must EQUAL — a superset that never passes where the canonical rule fails) |
 | 9 | Transitive ProjectReference lockstep bumps | base-diff | every repository (vacuous without intra-repo references) |
@@ -69,6 +69,32 @@ be read is a validation error, never a silent pass. Check 13 additionally
 scans the working tree and untracked files so an uncommitted own-source edit
 is caught before it is committed.
 
+## Present-but-vacuous is not applied uniformly (measured 2026-09-07)
+
+The rule above says a numbered check "must still be *present but vacuous*" where its guarded
+artifact kind is absent. Measuring the nine OMP-compatible validators shows the family does not
+follow that rule consistently — and the two exceptions point in **opposite** directions:
+
+| | Declares the artifact | Check present in validator | Check absent |
+|---|---|---|---|
+| **Check 7** (`sharedProjects`) | OpenModulePlatform only | OpenModulePlatform + 7 consumers (vacuous) | **IbsPackager only** — explicitly "Absent by design" in its own header |
+| **Check 4b** (`minWorkerHostVersion`) | OpenModulePlatform + IbsPackager | exactly those two | **the other 7 consumers** |
+
+So Check 7 is kept present-and-vacuous almost everywhere, while Check 4b is dropped wherever it
+would be vacuous. Both patterns are defensible on their own; having both at once means the phrase
+"present but vacuous" does not currently describe the family.
+
+**This is a validator question, not a documentation question** — the table above records what the
+scripts do today, deliberately without changing them. Deciding which pattern is the contract (and
+making the nine validators agree) needs a campaign; until then, read "Runs where" as *measured*,
+not as *specified*.
+
+Method, so this is reproducible: `grep -oE "Check [0-9]+[a-b]?"` over each
+`scripts/omp/validate-component-versions.ps1`, then confirming each hit is executable code rather
+than a comment (Check 14 appears in this repository's validator only inside comments that hand the
+check to the consumer's jurisdiction — it is genuinely absent here, as the table states), and
+`grep -c` for the guarding key in each `omp-components.json`.
+
 ## Path convention
 
 Every shared omp script — `bump-version.ps1`,
@@ -80,6 +106,12 @@ kept the consumer validators at `scripts/`; that difference was accidental
 same campaign that established this list.
 
 ## When the canonical files change
+
+Verified 2026-09-07: both canonical files are byte-identical across all nine OMP-compatible
+repositories — `validate-component-versions.helpers.ps1` at md5 `af9e9dcc…` and
+`bump-version.ps1` at md5 `9b5abf18…` (1 039 lines) in every one of them. (AgentDocMap carries no
+validator at all; it is a Node/JS documentation tool, not an OMP component.) Deliberately recorded
+as a *measurement with a date*, not as a hash list to maintain — see the paragraph below.
 
 The canonical files ARE the reference; there is no hash list to update.
 Changing `bump-version.ps1` or `validate-component-versions.helpers.ps1`
