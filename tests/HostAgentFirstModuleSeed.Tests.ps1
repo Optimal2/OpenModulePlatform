@@ -52,7 +52,11 @@ Describe 'HostAgent-first module seed source' {
         [System.IO.File]::WriteAllText($seedSource, 'SELECT N''current module seed'';')
         . $checkModuleRoot
         . $copySqlScripts
-        (Get-FileHash -LiteralPath $seedDestination).Hash | Should -Be (Get-FileHash -LiteralPath $seedSource).Hash
+        # Compare bytes via .NET rather than Get-FileHash: on a workstation whose PSModulePath also
+        # lists PowerShell 7 module folders, Windows PowerShell 5.1 loads a hybrid Utility module
+        # without Get-FileHash, and the gate then fails for an environmental reason.
+        [Convert]::ToBase64String([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($seedDestination))) |
+            Should -Be ([Convert]::ToBase64String([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($seedSource))))
         @($sqlFiles | Where-Object { $_.Source -eq $seedRelativePath }).Count | Should -Be 0
     }
 
