@@ -34,6 +34,28 @@ if ([string]::IsNullOrWhiteSpace($repoRoot)) {
     $repoRoot = (Resolve-Path (Join-Path (Get-Location) '..')).Path
 }
 Push-Location $repoRoot
+# --- Local-ci telemetry (best-effort; never changes the gate's exit code) ----
+# One compact JSONL line per run under
+# %APPDATA%\@private\ai-orchestrator\local-ci-telemetry\OpenModulePlatform.jsonl.
+$localCiTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$buildDurationMs = $null
+$telemetrySuites = @()
+$telemetryTestStatus = 'not-run'
+$telemetryTestCount = $null
+$telemetrySkipReason = ''
+$localCiTrxRoot = Join-Path $repoRoot 'TestResults\local-ci'
+$telemetryHelperPath = Join-Path $repoRoot 'scripts\local-ci-telemetry.ps1'
+if (Test-Path -LiteralPath $telemetryHelperPath -PathType Leaf) {
+    try {
+        . $telemetryHelperPath
+    }
+    catch {
+        Write-Warning "Local-ci telemetry helper for OpenModulePlatform could not be loaded: $($_.Exception.Message)"
+    }
+}
+else {
+    Write-Warning 'Local-ci telemetry helper not found (scripts\local-ci-telemetry.ps1); this run writes no telemetry.'
+}
 
 $failures = New-Object System.Collections.Generic.List[string]
 
@@ -122,9 +144,12 @@ try {
     }
 
     if (-not $SkipTests) {
+        $buildStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         Invoke-Step 'Build solution' {
             dotnet build (Join-Path $repoRoot 'OpenModulePlatform.slnx') --configuration Release --nologo -v q
         }
+        $buildStopwatch.Stop()
+        $buildDurationMs = $buildStopwatch.ElapsedMilliseconds
 
         Invoke-Step 'Tests' {
             $projects = @(
@@ -137,7 +162,9 @@ try {
             )
             # Remove stale TRX files so the zero-execution gate below only sees
             # the current run; old files would mask a run that produced nothing.
-            $testResultsDirectory = Join-Path $repoRoot 'TestResults'
+            # Deterministic TRX location owned by local-ci: telemetry reads
+            # Counters from exactly this run; nothing else lives here.
+            $testResultsDirectory = $localCiTrxRoot
             if (Test-Path -LiteralPath $testResultsDirectory) {
                 Remove-Item -LiteralPath $testResultsDirectory -Recurse -Force
             }
@@ -172,6 +199,45 @@ try {
     else {
         Write-Host ""
         Write-Host "SKIPPED: build and tests (-SkipTests). Not a substitute for the gate."
+    }
+
+    # --- Telemetry: one compact JSONL line per run. Written AFTER the gate
+    # result is decided, in its own try/catch: a failure here is a visible
+    # Write-Warning and can never change the exit code. ---
+    $localCiTimer.Stop()
+    if ($SkipTests) {
+        $telemetryTestStatus = 'skipped'
+        $telemetrySkipReason = '-SkipTests: build and tests not run'
+    }
+    else {
+        $telemetryTestStatus = if ($failures -contains 'Tests') { 'failed' } else { 'passed' }
+        if (Get-Command Get-LocalCiTrxCounters -ErrorAction SilentlyContinue) {
+            try {
+                $suite = Get-LocalCiTrxCounters -ResultsDirectory $localCiTrxRoot -SuiteName 'unit tests (6 projects)'
+                if ($null -ne $suite) { $telemetrySuites += $suite }
+            }
+            catch {
+                Write-Warning "TRX counters could not be parsed: $($_.Exception.Message)"
+            }
+        }
+        if ($telemetrySuites.Count -gt 0 -and $null -eq $telemetryTestCount) {
+            $executedSum = 0
+            foreach ($suiteRow in $telemetrySuites) { $executedSum += [int]$suiteRow.executed }
+            $telemetryTestCount = $executedSum
+        }
+    }
+    $telemetryStatus = if ($failures.Count -eq 0) { 'pass' } else { 'fail' }
+    try {
+        if (Get-Command Write-LocalCiTelemetry -ErrorAction SilentlyContinue) {
+            Write-LocalCiTelemetry -Repo 'OpenModulePlatform' -RepositoryRoot $repoRoot -Status $telemetryStatus -DurationMs $localCiTimer.ElapsedMilliseconds -BuildDurationMs $buildDurationMs -TestStatus $telemetryTestStatus -TestCount $telemetryTestCount -TestSkipReason $telemetrySkipReason -Suites $telemetrySuites
+        }
+    }
+    catch {
+        $telemetryTarget = '(unknown: APPDATA not set)'
+        if (-not [string]::IsNullOrWhiteSpace($env:APPDATA)) {
+            $telemetryTarget = Join-Path $env:APPDATA '@private\ai-orchestrator\local-ci-telemetry\OpenModulePlatform.jsonl'
+        }
+        Write-Warning "Local-ci telemetry failed for OpenModulePlatform (target: $telemetryTarget): $($_.Exception.Message)"
     }
 
     Write-Host ""
