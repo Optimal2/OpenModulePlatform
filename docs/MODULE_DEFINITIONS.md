@@ -113,7 +113,16 @@ alias targets anywhere in a FROM/JOIN, chained CTE targets, OUTPUT INTO, and
 SELECT INTO. BULK INSERT and the ALTER TABLE family are also checked, including
 both the source and destination of SWITCH. Statement-form ENABLE/DISABLE TRIGGER,
 ALTER INDEX, DROP INDEX (including legacy syntax), UPDATE STATISTICS and CREATE
-STATISTICS also check the target table. Comments and string values are not
+STATISTICS also check the target table. DBCC DBREINDEX, CLEANTABLE, CHECKTABLE,
+CHECKCONSTRAINTS and SHOW_STATISTICS check their literal table argument using the
+same identifier rules. Nonliteral targets (including variables and numeric object
+IDs) are rejected as unresolved dynamic SQL, as with sp_rename. DBCC CHECKDB and
+SHRINKFILE remain outside this object-ownership rule because they have no table
+target. EXEC/EXECUTE sp_updatestats and sp_createstats are blocked because their
+global statistics maintenance affects platform-owned tables; qualified, delimited
+and mixed-case procedure names are checked too. These checks also apply inside
+constant EXEC strings, sp_executesql and stored procedure bodies.
+Comments and ordinary string values are not
 table identifiers. GO repeat counts are normalized from SQL tokens, preserving
 source positions. Reads and
 bounded schema maintenance on module-owned tables remain allowed.

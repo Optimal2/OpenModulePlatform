@@ -2335,6 +2335,7 @@ WHERE ModuleDefinitionSqlExecutionId = @executionId;";
     }
 
     // Configuration ownership is parsed by the source-linked guard first. The
+    // guard includes table-targeted DBCC and global sp_updatestats/sp_createstats.
     // existing artifact/pointer rules below retain their stored-body exceptions.
     // See docs/MODULE_DEFINITIONS.md for the ownership model and analysis scope.
     internal static string? ValidateSafeModuleDefinitionSql(string sqlText)

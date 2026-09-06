@@ -19,6 +19,11 @@ public sealed class ModuleDefinitionSqlSafetyTests
             "DROP INDEX IX_Other ON module.Settings, IX_Probe ON {0};",
             "UPDATE STATISTICS {0} WITH FULLSCAN;",
             "CREATE STATISTICS ST_Probe ON {0}(Id);",
+            "DBCC DBREINDEX('{0}', '', 80);",
+            "DBCC CLEANTABLE(localdb, '{0}', 100);",
+            "DBCC CHECKTABLE('{0}');",
+            "DBCC CHECKCONSTRAINTS('{0}');",
+            "DBCC SHOW_STATISTICS('{0}', IX_Probe);",
         ];
         foreach (var table in tables)
         {
@@ -30,6 +35,57 @@ public sealed class ModuleDefinitionSqlSafetyTests
             foreach (var sql in MaintenanceExecutionPaths(statement.Replace("{0}", name)))
                 yield return [sql, table];
         }
+    }
+
+    [Theory]
+    [InlineData("EXEC sp_updatestats;")]
+    [InlineData("EXECUTE dbo.sp_updatestats;")]
+    [InlineData("eXeCuTe [dbo].[Sp_UpdateStats];")]
+    [InlineData("EXEC sp_createstats;")]
+    [InlineData("EXECUTE dbo.sp_createstats;")]
+    [InlineData("eXeCuTe [dbo].[Sp_CreateStats];")]
+    public void ConfigurationOwnership_BlocksGlobalStatisticsMaintenance(string statement)
+    {
+        foreach (var sql in MaintenanceExecutionPaths(statement))
+        {
+            var error = ValidateMaintenanceSql(sql);
+            Assert.NotNull(error);
+            Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", error);
+            Assert.Contains("global statistics maintenance affects platform-owned tables", error);
+        }
+    }
+
+    [Theory]
+    [InlineData("DBCC DBREINDEX(@target);")]
+    [InlineData("DBCC CLEANTABLE(localdb, @target);")]
+    [InlineData("DBCC CHECKTABLE(@target);")]
+    [InlineData("DBCC CHECKCONSTRAINTS(@target);")]
+    [InlineData("DBCC SHOW_STATISTICS(@target, IX_Probe);")]
+    [InlineData("DECLARE @target sysname = N'module.Settings'; DBCC CHECKTABLE(@target);")]
+    [InlineData("DBCC CHECKTABLE(123);")]
+    [InlineData("DBCC CHECKTABLE(N'[unterminated');")]
+    public void ConfigurationOwnership_RejectsUnresolvedDbccTarget(string statement)
+    {
+        foreach (var sql in MaintenanceExecutionPaths(statement))
+        {
+            var error = ValidateMaintenanceSql(sql);
+            Assert.NotNull(error);
+            Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", error);
+            Assert.Contains("dynamic SQL payload cannot be resolved", error);
+        }
+    }
+
+    [Theory]
+    [InlineData("DBCC CHECKDB;")]
+    [InlineData("DBCC CHECKDB(localdb);")]
+    [InlineData("DBCC SHRINKFILE(module_data, 10);")]
+    [InlineData("EXEC module.sp_updatestats_log;")]
+    [InlineData("EXEC module.sp_createstats_log;")]
+    [InlineData("PRINT N'EXEC sp_updatestats; DBCC CHECKTABLE(''omp.ConfigOverlayDocuments'');';")]
+    public void ConfigurationOwnership_AllowsNonTableDbccAndStatisticsLookalikes(string statement)
+    {
+        foreach (var sql in MaintenanceExecutionPaths(statement))
+            Assert.Null(ValidateMaintenanceSql(sql));
     }
 
     private static IEnumerable<string> MaintenanceExecutionPaths(string sql)

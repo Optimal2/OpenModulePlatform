@@ -332,6 +332,39 @@ internal static class ModuleDefinitionSqlOwnership
             base.ExplicitVisit(node);
         }
 
+        public override void ExplicitVisit(DbccStatement node)
+        {
+            var targetIndex = node.Command switch
+            {
+                DbccCommand.CleanTable => 1,
+                DbccCommand.DBReindex or DbccCommand.CheckTable
+                    or DbccCommand.CheckConstraints or DbccCommand.ShowStatistics => 0,
+                // ScriptDom 180 also represents CHECKCONSTRAINTS as a free-form
+                // command; its arguments still use the normal literal collection.
+                DbccCommand.Free when string.Equals(node.DllName, "CHECKCONSTRAINTS", StringComparison.OrdinalIgnoreCase) => 0,
+                _ => -1
+            };
+            // DBCC commands without a table target (such as CHECKDB and SHRINKFILE)
+            // stay outside this object-ownership rule; it is not a general DBCC ban.
+            if (targetIndex >= 0)
+            {
+                // As with sp_rename, only a literal object name is bounded. Even
+                // initialized variables and numeric object IDs cannot resolve a table here.
+                if (node.Literals.ElementAtOrDefault(targetIndex)?.Value is not StringLiteral literal)
+                    CheckDynamic(null, node);
+                else
+                {
+                    using var reader = new StringReader(literal.Value);
+                    var name = new TSql170Parser(true).ParseSchemaObjectName(reader, out var errors);
+                    if (errors.Count != 0 || name?.BaseIdentifier is null)
+                        CheckDynamic(null, node);
+                    else
+                        CheckName(name, node);
+                }
+            }
+            base.ExplicitVisit(node);
+        }
+
         public override void ExplicitVisit(UpdateStatisticsStatement node)
         {
             CheckName(node.SchemaObjectName, node);
@@ -460,6 +493,9 @@ internal static class ModuleDefinitionSqlOwnership
                 }
                 else if (name.BaseIdentifier.Value.Equals("sp_rename", StringComparison.OrdinalIgnoreCase))
                     CheckRename(procedure, node);
+                else if (name.BaseIdentifier.Value.Equals("sp_updatestats", StringComparison.OrdinalIgnoreCase)
+                    || name.BaseIdentifier.Value.Equals("sp_createstats", StringComparison.OrdinalIgnoreCase))
+                    Add("<platform-owned tables>", node, "global statistics maintenance affects platform-owned tables");
             }
             else
                 Add("<unresolved table>", node, "executable payload cannot be resolved");

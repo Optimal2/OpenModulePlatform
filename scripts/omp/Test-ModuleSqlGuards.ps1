@@ -142,6 +142,11 @@ if ($SelfTest) {
             'DROP INDEX IX_Other ON module.Settings, IX_Probe ON {0};'
             'UPDATE STATISTICS {0} WITH FULLSCAN;'
             'CREATE STATISTICS ST_Probe ON {0}(Id);'
+            'DBCC DBREINDEX(''{0}'', '''', 80);'
+            'DBCC CLEANTABLE(localdb, ''{0}'', 100);'
+            'DBCC CHECKTABLE(''{0}'');'
+            'DBCC CHECKCONSTRAINTS(''{0}'');'
+            'DBCC SHOW_STATISTICS(''{0}'', IX_Probe);'
         )
         function Get-MaintenanceExecutionPaths([string]$Sql) {
             $Sql
@@ -165,6 +170,38 @@ if ($SelfTest) {
             $probes += @{ Name = "maintenance-owned-$statementIndex"; Sql = ($maintenanceBlocked -join $separator); Count = $maintenanceBlocked.Count; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
             $probes += @{ Name = "maintenance-module-$statementIndex"; Sql = ($maintenanceAllowed -join $separator); Count = 0; Rule = '' }
         }
+        $globalStatistics = @(
+            'EXEC sp_updatestats;'
+            'EXECUTE dbo.sp_updatestats;'
+            'eXeCuTe [dbo].[Sp_UpdateStats];'
+            'EXEC sp_createstats;'
+            'EXECUTE dbo.sp_createstats;'
+            'eXeCuTe [dbo].[Sp_CreateStats];'
+        )
+        $globalStatisticsBlocked = @($globalStatistics | ForEach-Object { Get-MaintenanceExecutionPaths $_ })
+        $probes += @{ Name = 'global-statistics'; Sql = ($globalStatisticsBlocked -join $separator); Count = $globalStatisticsBlocked.Count; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+        $unresolvedDbcc = @(
+            'DBCC DBREINDEX(@target);'
+            'DBCC CLEANTABLE(localdb, @target);'
+            'DBCC CHECKTABLE(@target);'
+            'DBCC CHECKCONSTRAINTS(@target);'
+            'DBCC SHOW_STATISTICS(@target, IX_Probe);'
+            'DECLARE @target sysname = N''module.Settings''; DBCC CHECKTABLE(@target);'
+            'DBCC CHECKTABLE(123);'
+            'DBCC CHECKTABLE(N''[unterminated'');'
+        )
+        $unresolvedDbccBlocked = @($unresolvedDbcc | ForEach-Object { Get-MaintenanceExecutionPaths $_ })
+        $probes += @{ Name = 'unresolved-dbcc'; Sql = ($unresolvedDbccBlocked -join $separator); Count = $unresolvedDbccBlocked.Count; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+        $nonTableMaintenance = @(
+            'DBCC CHECKDB;'
+            'DBCC CHECKDB(localdb);'
+            'DBCC SHRINKFILE(module_data, 10);'
+            'EXEC module.sp_updatestats_log;'
+            'EXEC module.sp_createstats_log;'
+            'PRINT N''EXEC sp_updatestats; DBCC CHECKTABLE(''''omp.ConfigOverlayDocuments'''');'';'
+        )
+        $nonTableAllowed = @($nonTableMaintenance | ForEach-Object { Get-MaintenanceExecutionPaths $_ })
+        $probes += @{ Name = 'non-table-maintenance'; Sql = ($nonTableAllowed -join $separator); Count = 0; Rule = '' }
         # CREATE INDEX stays allowed for additive bootstrap DDL until that DDL
         # moves to the compiled migration path. A policy change must change this probe.
         $createIndexAllowed = @(
@@ -184,6 +221,12 @@ if ($SelfTest) {
                 throw "Probe '$($probe.Name)' failed: exit $probeExit; $(@($result.diagnostics).Count) violations, expected $($probe.Count)."
             }
             foreach ($diagnostic in $result.diagnostics) {
+                if ($probe.Name -eq 'global-statistics' -and $diagnostic.Message -notlike '*global statistics maintenance affects platform-owned tables*') {
+                    throw "Probe '$($probe.Name)' did not explain its global impact."
+                }
+                if ($probe.Name -eq 'unresolved-dbcc' -and $diagnostic.Message -notlike '*dynamic SQL payload cannot be resolved*') {
+                    throw "Probe '$($probe.Name)' did not reject unbounded dynamics."
+                }
                 if ($diagnostic.RuleId -ne $probe.Rule) { throw "Probe '$($probe.Name)' returned the wrong rule." }
                 if ($probe.Name.StartsWith('maintenance-owned-') -and $diagnostic.Table -notin @($tables | ForEach-Object { 'omp.' + $_ })) {
                     throw "Probe '$($probe.Name)' did not resolve the owned table."
