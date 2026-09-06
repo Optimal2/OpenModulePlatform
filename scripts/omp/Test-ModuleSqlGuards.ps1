@@ -47,6 +47,31 @@ if ($SelfTest) {
             'BULK INSERT [omp].[{0}] FROM ''ownership-probe.csv'';'
             'BULK INSERT "omp"."{0}" FROM ''ownership-probe.csv'';'
             'BULK INSERT {0} FROM ''ownership-probe.csv'';'
+            'INSERT BULK omp.{0} (Id int);'
+            'INSERT BULK [omp].[{0}] (Id int);'
+            'INSERT BULK "omp"."{0}" (Id int);'
+            'INSERT BULK {0} (Id int);'
+            'EXEC(N''INSERT BULK omp.{0} (Id int);'');'
+            'CREATE PROCEDURE module.ChangeConfig AS INSERT BULK omp.{0} (Id int);'
+            'EXEC sp_rename ''omp.{0}'', ''Renamed'';'
+            'EXECUTE sys.sp_rename N''[omp].[{0}]'', N''Renamed'';'
+            'EXEC dbo.sp_rename ''"omp"."{0}"'', ''Renamed'';'
+            'eXeCuTe [sys].[Sp_ReNaMe] N''OMP.{0}'', N''Renamed'';'
+            'EXEC sp_rename ''{0}'', ''Renamed'';'
+            'EXEC sp_rename ''omp.{0}.Content'', ''Renamed'', ''COLUMN'';'
+            'EXEC sp_rename ''{0}.Content'', ''Renamed'', ''COLUMN'';'
+            'EXEC sp_rename ''[omp].[{0}].[Content.With.Dot]'', ''Renamed'', ''COLUMN'';'
+            'EXEC sp_rename ''localdb.omp.{0}.Content'', ''Renamed'', ''COLUMN'';'
+            'EXEC sys.sp_rename @newname = N''Renamed'', @objname = N''omp.{0}'', @objtype = N''OBJECT'';'
+            'EXEC sp_rename @OBJNAME = N''omp.{0}.Content'', @NEWNAME = N''Renamed'', @OBJTYPE = N''COLUMN'';'
+            'CREATE PROCEDURE module.ChangeConfig AS EXEC sp_rename ''omp.{0}'', ''Renamed'';'
+            'CREATE PROCEDURE module.ChangeConfig AS EXEC sp_rename ''omp.{0}.Content'', ''Renamed'', ''COLUMN'';'
+            'EXEC(N''EXEC sp_rename ''''omp.{0}'''', ''''Renamed'''';'');'
+            'CREATE TRIGGER module.ConfigProbe ON omp.{0} AFTER INSERT AS SELECT 1;'
+            'ALTER TRIGGER module.ConfigProbe ON [omp].[{0}] AFTER UPDATE AS SELECT 1;'
+            'CREATE OR ALTER TRIGGER module.ConfigProbe ON "omp"."{0}" INSTEAD OF DELETE AS SELECT 1;'
+            'CREATE TRIGGER module.ConfigProbe ON {0} AFTER INSERT AS SELECT 1;'
+            'EXEC(N''CREATE TRIGGER module.ConfigProbe ON omp.{0} AFTER INSERT AS SELECT 1;'');'
             'ALTER TABLE omp.{0} DROP COLUMN Content;'
             'ALTER TABLE [omp].[{0}] ALTER COLUMN Content nvarchar(max) NULL;'
             'ALTER TABLE "omp"."{0}" ADD Probe int NULL;'
@@ -73,6 +98,21 @@ if ($SelfTest) {
             }
         }
         $allowed = @(
+            'INSERT BULK omp.ModuleArtifactConfigurationFilesLog (Id int);'
+            'INSERT BULK module.ArtifactConfigurationFiles (Id int);'
+            'EXEC sp_rename ''omp.ModuleArtifactConfigurationFilesLog'', ''Renamed'';'
+            'EXEC sp_rename ''module.ArtifactConfigurationFiles'', ''Renamed'';'
+            'EXEC sp_rename ''module.ArtifactConfigurationFiles.Content'', ''Renamed'', ''COLUMN'';'
+            'EXEC sp_rename ''[module].[Settings].[ArtifactConfigurationFiles]'', ''Renamed'', ''COLUMN'';'
+            'EXEC sp_rename ''module.Settings'', ''ArtifactConfigurationFiles'';'
+            'EXEC module.sp_rename_log ''omp.ArtifactConfigurationFiles'', ''Renamed'';'
+            'CREATE TRIGGER module.ConfigProbe ON module.ArtifactConfigurationFiles AFTER INSERT AS SELECT 1;'
+            'ALTER TRIGGER module.ConfigProbe ON omp.ModuleArtifactConfigurationFilesLog AFTER INSERT AS SELECT 1;'
+            'CREATE OR ALTER TRIGGER module.ConfigProbe ON module.Settings AFTER INSERT AS SELECT 1;'
+            'CREATE TRIGGER module.DdlProbe ON DATABASE FOR CREATE_TABLE AS SELECT 1;'
+            'PRINT N''INSERT BULK omp.ArtifactConfigurationFiles (Id int);'';'
+            'PRINT N''EXEC sp_rename ''''omp.ArtifactConfigurationFiles'''', ''''Renamed'''';'';'
+            'PRINT N''CREATE TRIGGER module.ConfigProbe ON omp.ArtifactConfigurationFiles AFTER INSERT AS SELECT 1;'';'
             'BULK INSERT omp.ModuleArtifactConfigurationFilesLog FROM ''ownership-probe.csv'';'
             'ALTER TABLE omp.ModuleArtifactConfigurationFilesLog DROP COLUMN Content;'
             'BULK INSERT module.ArtifactConfigurationFiles FROM ''ownership-probe.csv'';'
@@ -81,8 +121,14 @@ if ($SelfTest) {
             'PRINT N''ALTER TABLE omp.ArtifactConfigurationFiles DROP COLUMN Content;'';'
         )
         $probes = @(
+            @{ Name = 'unresolved-rename-0'; Sql = 'EXEC sp_rename @unknown, ''Renamed'';'; Count = 1; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+            @{ Name = 'unresolved-rename-1'; Sql = 'DECLARE @name nvarchar(128) = N''module.Settings''; EXEC sys.sp_rename @name, ''Renamed'';'; Count = 1; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+            @{ Name = 'unresolved-rename-2'; Sql = 'EXEC sp_rename @newname = N''Renamed'', @objname = @unknown;'; Count = 1; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+            @{ Name = 'unresolved-rename-3'; Sql = 'CREATE PROCEDURE module.ChangeConfig @name sysname AS EXEC sp_rename @name, ''Renamed'';'; Count = 1; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+            @{ Name = 'unresolved-rename-4'; Sql = 'EXEC sp_rename;'; Count = 1; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
+            @{ Name = 'unresolved-rename-5'; Sql = 'EXEC sp_rename N''[unterminated'', ''Renamed'';'; Count = 1; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
             @{ Name = 'owned-writes'; Sql = ($blocked -join [Environment]::NewLine); Count = $blocked.Count; Rule = 'OMP-MODULE-SQL-CONFIG-OWNERSHIP' }
-            @{ Name = 'allowed'; Sql = ($allowed -join [Environment]::NewLine); Count = 0; Rule = '' }
+            @{ Name = 'allowed'; Sql = ($allowed -join ([Environment]::NewLine + 'GO' + [Environment]::NewLine)); Count = 0; Rule = '' }
             @{ Name = 'legacy-truncate'; Sql = 'TRUNCATE TABLE omp.ArtifactConfigurationFiles;'; Count = 1; Rule = 'OMP-MODULE-SQL-GUARD' }
             @{ Name = 'legacy-drop'; Sql = 'DROP TABLE omp.ArtifactConfigurationFiles;'; Count = 1; Rule = 'OMP-MODULE-SQL-GUARD' }
         )

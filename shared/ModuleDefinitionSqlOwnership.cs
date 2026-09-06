@@ -257,11 +257,24 @@ internal static class ModuleDefinitionSqlOwnership
             }
         }
 
-        public override void ExplicitVisit(BulkInsertStatement node)
+        public override void ExplicitVisit(BulkInsertBase node)
         {
             CheckName(node.To, node);
             base.ExplicitVisit(node);
         }
+
+        public override void ExplicitVisit(BulkInsertStatement node) => ExplicitVisit((BulkInsertBase)node);
+        public override void ExplicitVisit(InsertBulkStatement node) => ExplicitVisit((BulkInsertBase)node);
+
+        public override void ExplicitVisit(TriggerStatementBody node)
+        {
+            if (node.TriggerObject.Name is { } target) CheckName(target, node);
+            base.ExplicitVisit(node);
+        }
+
+        public override void ExplicitVisit(CreateTriggerStatement node) => ExplicitVisit((TriggerStatementBody)node);
+        public override void ExplicitVisit(AlterTriggerStatement node) => ExplicitVisit((TriggerStatementBody)node);
+        public override void ExplicitVisit(CreateOrAlterTriggerStatement node) => ExplicitVisit((TriggerStatementBody)node);
 
         public override void ExplicitVisit(AlterTableStatement node)
         {
@@ -328,6 +341,36 @@ internal static class ModuleDefinitionSqlOwnership
             base.ExplicitVisit(node);
         }
 
+        private void CheckRename(ExecutableProcedureReference procedure, TSqlFragment location)
+        {
+            var argument = procedure.Parameters.FirstOrDefault(p => p.Variable?.Name.Equals("@objname", StringComparison.OrdinalIgnoreCase) == true)
+                ?? procedure.Parameters.FirstOrDefault(p => p.Variable is null);
+            // Object names passed to sp_rename are identifiers inside a literal,
+            // not executable SQL. Variables remain unbounded even if initialized.
+            if (argument?.ParameterValue is not StringLiteral literal)
+            {
+                CheckDynamic(null, location);
+                return;
+            }
+
+            using var reader = new StringReader(literal.Value);
+            var name = new TSql170Parser(true).ParseSchemaObjectName(reader, out var errors);
+            if (errors.Count != 0 || name?.BaseIdentifier is null)
+            {
+                CheckDynamic(null, location);
+                return;
+            }
+
+            CheckName(name, location);
+            if (name.Identifiers.Count > 1)
+            {
+                // A column (or index) name adds one identifier after the table.
+                // Let ScriptDom preserve quoted dots and escaped delimiters.
+                name.Identifiers.RemoveAt(name.Identifiers.Count - 1);
+                CheckName(name, location);
+            }
+        }
+
         public override void ExplicitVisit(ExecuteStatement node)
         {
             var executable = node.ExecuteSpecification.ExecutableEntity;
@@ -347,6 +390,8 @@ internal static class ModuleDefinitionSqlOwnership
                         ?? procedure.Parameters.FirstOrDefault();
                     CheckDynamic(statement is null ? null : ConstantSql(statement.ParameterValue, new(StringComparer.OrdinalIgnoreCase)), node);
                 }
+                else if (name.BaseIdentifier.Value.Equals("sp_rename", StringComparison.OrdinalIgnoreCase))
+                    CheckRename(procedure, node);
             }
             else
                 Add("<unresolved table>", node, "executable payload cannot be resolved");

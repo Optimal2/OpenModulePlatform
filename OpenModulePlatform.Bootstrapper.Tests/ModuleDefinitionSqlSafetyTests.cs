@@ -18,6 +18,12 @@ public sealed class ModuleDefinitionSqlSafetyTests
     [InlineData("EXEC sys.sp_executesql @unknown;")]
     [InlineData("DECLARE @sql nvarchar(max) = N'SELECT 1;'; SET @sql = @unknown; EXEC(@sql);")]
     [InlineData("DECLARE @sql nvarchar(max) = N'UPDATE omp.' + QUOTENAME(@table) + N' SET Id = 1;'; EXEC(@sql);")]
+    [InlineData("EXEC sp_rename @unknown, 'Renamed';")]
+    [InlineData("DECLARE @name nvarchar(128) = N'module.Settings'; EXEC sys.sp_rename @name, 'Renamed';")]
+    [InlineData("EXEC sp_rename @newname = N'Renamed', @objname = @unknown;")]
+    [InlineData("CREATE PROCEDURE module.ChangeConfig @name sysname AS EXEC sp_rename @name, 'Renamed';")]
+    [InlineData("EXEC sp_rename;")]
+    [InlineData("EXEC sp_rename N'[unterminated', 'Renamed';")]
     public void ConfigurationOwnership_RejectsUnresolvedDynamicSql(string sql)
     {
         Assert.Contains("OMP-MODULE-SQL-CONFIG-OWNERSHIP", Program.ValidateSafeModuleDefinitionSql(sql)!);
@@ -37,6 +43,14 @@ public sealed class ModuleDefinitionSqlSafetyTests
     [InlineData("omp_core", "BULK INSERT omp.ConfigOverlayDocuments FROM 'ownership-probe.csv';")]
     [InlineData("example_module", "ALTER TABLE omp.ConfigOverlayDocuments DROP COLUMN Content;")]
     [InlineData("omp_core", "ALTER TABLE omp.ConfigOverlayDocuments DROP COLUMN Content;")]
+    [InlineData("example_module", "INSERT BULK omp.ConfigOverlayDocuments (Id int);")]
+    [InlineData("omp_core", "INSERT BULK omp.ConfigOverlayDocuments (Id int);")]
+    [InlineData("example_module", "EXEC sp_rename 'omp.ConfigOverlayDocuments', 'Renamed';")]
+    [InlineData("omp_core", "EXEC sp_rename 'omp.ConfigOverlayDocuments', 'Renamed';")]
+    [InlineData("example_module", "EXEC sp_rename 'omp.ConfigOverlayDocuments.Content', 'Renamed', 'COLUMN';")]
+    [InlineData("omp_core", "EXEC sp_rename 'omp.ConfigOverlayDocuments.Content', 'Renamed', 'COLUMN';")]
+    [InlineData("example_module", "CREATE TRIGGER module.ConfigProbe ON omp.ConfigOverlayDocuments AFTER INSERT AS SELECT 1;")]
+    [InlineData("omp_core", "CREATE TRIGGER module.ConfigProbe ON omp.ConfigOverlayDocuments AFTER INSERT AS SELECT 1;")]
     public void ConfigurationOwnership_DocumentPreflightNamesModuleAndTable(string moduleKey, string sql)
     {
         var document = System.Text.Json.JsonSerializer.Serialize(new
@@ -115,6 +129,31 @@ public sealed class ModuleDefinitionSqlSafetyTests
             "BULK INSERT [omp].[{0}] FROM 'ownership-probe.csv';",
             "BULK INSERT \"omp\".\"{0}\" FROM 'ownership-probe.csv';",
             "BULK INSERT {0} FROM 'ownership-probe.csv';",
+            "INSERT BULK omp.{0} (Id int);",
+            "INSERT BULK [omp].[{0}] (Id int);",
+            "INSERT BULK \"omp\".\"{0}\" (Id int);",
+            "INSERT BULK {0} (Id int);",
+            "EXEC(N'INSERT BULK omp.{0} (Id int);');",
+            "CREATE PROCEDURE module.ChangeConfig AS INSERT BULK omp.{0} (Id int);",
+            "EXEC sp_rename 'omp.{0}', 'Renamed';",
+            "EXECUTE sys.sp_rename N'[omp].[{0}]', N'Renamed';",
+            "EXEC dbo.sp_rename '\"omp\".\"{0}\"', 'Renamed';",
+            "eXeCuTe [sys].[Sp_ReNaMe] N'OMP.{0}', N'Renamed';",
+            "EXEC sp_rename '{0}', 'Renamed';",
+            "EXEC sp_rename 'omp.{0}.Content', 'Renamed', 'COLUMN';",
+            "EXEC sp_rename '{0}.Content', 'Renamed', 'COLUMN';",
+            "EXEC sp_rename '[omp].[{0}].[Content.With.Dot]', 'Renamed', 'COLUMN';",
+            "EXEC sp_rename 'localdb.omp.{0}.Content', 'Renamed', 'COLUMN';",
+            "EXEC sys.sp_rename @newname = N'Renamed', @objname = N'omp.{0}', @objtype = N'OBJECT';",
+            "EXEC sp_rename @OBJNAME = N'omp.{0}.Content', @NEWNAME = N'Renamed', @OBJTYPE = N'COLUMN';",
+            "CREATE PROCEDURE module.ChangeConfig AS EXEC sp_rename 'omp.{0}', 'Renamed';",
+            "CREATE PROCEDURE module.ChangeConfig AS EXEC sp_rename 'omp.{0}.Content', 'Renamed', 'COLUMN';",
+            "EXEC(N'EXEC sp_rename ''omp.{0}'', ''Renamed'';');",
+            "CREATE TRIGGER module.ConfigProbe ON omp.{0} AFTER INSERT AS SELECT 1;",
+            "ALTER TRIGGER module.ConfigProbe ON [omp].[{0}] AFTER UPDATE AS SELECT 1;",
+            "CREATE OR ALTER TRIGGER module.ConfigProbe ON \"omp\".\"{0}\" INSTEAD OF DELETE AS SELECT 1;",
+            "CREATE TRIGGER module.ConfigProbe ON {0} AFTER INSERT AS SELECT 1;",
+            "EXEC(N'CREATE TRIGGER module.ConfigProbe ON omp.{0} AFTER INSERT AS SELECT 1;');",
             "ALTER TABLE omp.{0} DROP COLUMN Content;",
             "ALTER TABLE [omp].[{0}] ALTER COLUMN Content nvarchar(max) NULL;",
             "ALTER TABLE \"omp\".\"{0}\" ADD Probe int NULL;",
@@ -163,6 +202,21 @@ public sealed class ModuleDefinitionSqlSafetyTests
     [InlineData("ALTER TABLE module.ArtifactConfigurationFiles ADD Probe int NULL;")]
     [InlineData("PRINT N'BULK INSERT omp.ArtifactConfigurationFiles FROM ''ownership-probe.csv'';';")]
     [InlineData("PRINT N'ALTER TABLE omp.ArtifactConfigurationFiles DROP COLUMN Content;';")]
+    [InlineData("INSERT BULK omp.ModuleArtifactConfigurationFilesLog (Id int);")]
+    [InlineData("INSERT BULK module.ArtifactConfigurationFiles (Id int);")]
+    [InlineData("EXEC sp_rename 'omp.ModuleArtifactConfigurationFilesLog', 'Renamed';")]
+    [InlineData("EXEC sp_rename 'module.ArtifactConfigurationFiles', 'Renamed';")]
+    [InlineData("EXEC sp_rename 'module.ArtifactConfigurationFiles.Content', 'Renamed', 'COLUMN';")]
+    [InlineData("EXEC sp_rename '[module].[Settings].[ArtifactConfigurationFiles]', 'Renamed', 'COLUMN';")]
+    [InlineData("EXEC sp_rename 'module.Settings', 'ArtifactConfigurationFiles';")]
+    [InlineData("EXEC module.sp_rename_log 'omp.ArtifactConfigurationFiles', 'Renamed';")]
+    [InlineData("CREATE TRIGGER module.ConfigProbe ON module.ArtifactConfigurationFiles AFTER INSERT AS SELECT 1;")]
+    [InlineData("ALTER TRIGGER module.ConfigProbe ON omp.ModuleArtifactConfigurationFilesLog AFTER INSERT AS SELECT 1;")]
+    [InlineData("CREATE OR ALTER TRIGGER module.ConfigProbe ON module.Settings AFTER INSERT AS SELECT 1;")]
+    [InlineData("CREATE TRIGGER module.DdlProbe ON DATABASE FOR CREATE_TABLE AS SELECT 1;")]
+    [InlineData("PRINT N'INSERT BULK omp.ArtifactConfigurationFiles (Id int);';")]
+    [InlineData("PRINT N'EXEC sp_rename ''omp.ArtifactConfigurationFiles'', ''Renamed'';';")]
+    [InlineData("PRINT N'CREATE TRIGGER module.ConfigProbe ON omp.ArtifactConfigurationFiles AFTER INSERT AS SELECT 1;';")]
     public void ConfigurationOwnership_AllowsReadsLiteralsAndModuleWrites(string sql)
     {
         Assert.Null(Program.ValidateSafeModuleDefinitionSql(sql));
