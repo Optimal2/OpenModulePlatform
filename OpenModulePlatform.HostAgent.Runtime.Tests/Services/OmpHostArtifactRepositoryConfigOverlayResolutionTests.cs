@@ -67,6 +67,61 @@ public sealed class OmpHostArtifactRepositoryConfigOverlayResolutionTests : IDis
     }
 
     [Fact]
+    public async Task OverlayTableWithoutMergeModeColumn_StillResolvesConfigurationFiles()
+    {
+        // Customer incident 2026-09-07: an installation whose overlay tables predate ADR 0006
+        // has no MergeMode column, and HostAgent 0.3.263 failed every cycle with
+        // "Invalid column name 'MergeMode'" because SQL Server compiles the whole batch,
+        // IF COL_LENGTH guard or not. The query must resolve files on that schema too.
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", "overlay-wins", relativePath: "site.config.js"),
+            replaceExisting: false,
+            CancellationToken.None);
+        _database.DropOverlayMergeModeColumn();
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, HostKey, CancellationToken.None);
+
+        var file = Assert.Single(files);
+        Assert.Equal("site.config.js", file.RelativePath);
+        Assert.Equal("overlay-wins", file.FileContent);
+        // The platform owns the overlay tables, so the HostAgent adds the column itself
+        // (the core setup script may not ALTER these tables under the ownership rule).
+        Assert.True(_database.OverlayMergeModeColumnExists(), "the HostAgent should have migrated the overlay table");
+    }
+
+    [Fact]
+    public async Task ConfigurationFilesSqlWithoutMergeMode_CompilesAgainstThePreAdr0006Table()
+    {
+        // A login without ALTER rights cannot migrate; the query it then runs must compile on
+        // the old table shape. The shipped 0.3.263 batch did not (compile-time column check),
+        // which is the customer failure. This executes the fallback SQL text directly.
+        await _repository.SaveImportedConfigOverlayAsync(
+            CreateOverlay("1.0.0", "overlay-wins", relativePath: "site.config.js"),
+            replaceExisting: false,
+            CancellationToken.None);
+        _database.DropOverlayMergeModeColumn();
+
+        var fallback = OmpHostArtifactRepository.BuildConfigurationFilesSql(hasMergeModeColumn: false);
+        Assert.DoesNotContain("overlayFile.MergeMode", fallback, StringComparison.Ordinal);
+        Assert.Contains("overlayFile.MergeMode", OmpHostArtifactRepository.BuildConfigurationFilesSql(hasMergeModeColumn: true), StringComparison.Ordinal);
+
+        await using var conn = _database.CreateFactory().Create();
+        await conn.OpenAsync();
+        await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(fallback, conn);
+        cmd.Parameters.AddWithValue("@artifactId", ArtifactId);
+        cmd.Parameters.AddWithValue("@hostKey", HostKey);
+        var rows = 0;
+        await using var rdr = await cmd.ExecuteReaderAsync();
+        while (await rdr.ReadAsync())
+        {
+            rows++;
+            Assert.True(rdr.IsDBNull(7), "MergeMode must read as NULL on the pre-ADR-0006 table");
+        }
+
+        Assert.Equal(1, rows);
+    }
+
+    [Fact]
     public async Task OverlayPinnedToOlderMinimum_AppliesToNewerArtifactVersion()
     {
         // ADR 0006: artifactVersion is a minimum. An overlay pinned to 0.3.183

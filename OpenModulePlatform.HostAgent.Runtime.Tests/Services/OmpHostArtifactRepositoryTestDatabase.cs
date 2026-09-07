@@ -272,6 +272,25 @@ CREATE TABLE omp.ConfigOverlayConfigurationFiles
 );");
     }
 
+    /// <summary>
+    /// Turns the overlay file table into its pre-ADR-0006 shape (no MergeMode column), the
+    /// shape an installation created before 2026-09 still has until the setup script adds it.
+    /// </summary>
+    public void DropOverlayMergeModeColumn()
+    {
+        Execute("ALTER TABLE omp.ConfigOverlayConfigurationFiles DROP COLUMN MergeMode;");
+    }
+
+    public bool OverlayMergeModeColumnExists()
+    {
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "SELECT CASE WHEN COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') IS NULL THEN 0 ELSE 1 END;",
+            conn);
+        return (int)cmd.ExecuteScalar()! == 1;
+    }
+
     public IReadOnlyList<(string RelativePath, string FileContent, string? MergeMode)> GetOverlayConfigurationFiles(int documentId)
     {
         var rows = new List<(string, string, string?)>();

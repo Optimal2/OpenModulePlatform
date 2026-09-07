@@ -3304,12 +3304,14 @@ WHERE ar.ArtifactId = @artifactId
         };
     }
 
-    public async Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
-        int artifactId,
-        string hostKey,
-        CancellationToken ct)
-    {
-        const string sql = @"
+    /// <summary>
+    /// SQL Server compiles a batch as a whole: a reference to a column that is missing from an
+    /// EXISTING table fails at compile time even inside an IF branch that is never taken
+    /// (deferred name resolution only covers missing tables). The overlay query therefore
+    /// decides in C# whether MergeMode may be referenced. Customer incident 2026-09-07:
+    /// HostAgent 0.3.263 failed every cycle on a pre-ADR-0006 overlay table.
+    /// </summary>
+    private const string ConfigurationFilesSqlTemplate = @"
 IF OBJECT_ID(N'omp.ArtifactConfigurationFiles', N'U') IS NULL
 BEGIN
     SELECT TOP (0)
@@ -3363,45 +3365,6 @@ END;
 -- ordering cannot express numeric version order. The pin is returned as
 -- OverlayArtifactVersion and filtered by the caller.
 
-IF COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') IS NULL
-BEGIN
-    SELECT ArtifactConfigurationFileId,
-           ArtifactId,
-           RelativePath,
-           FileContent,
-           CAST(0 AS int) AS SourcePriority,
-           UpdatedUtc AS SourceUpdatedUtc,
-           CAST(NULL AS nvarchar(50)) AS SourceOverlayVersion,
-           CAST(NULL AS nvarchar(20)) AS MergeMode,
-           CAST(NULL AS nvarchar(50)) AS OverlayArtifactVersion
-    FROM omp.ArtifactConfigurationFiles
-    WHERE ArtifactId = @artifactId
-      AND IsEnabled = 1
-
-    UNION ALL
-
-    SELECT overlayFile.ConfigOverlayConfigurationFileId AS ArtifactConfigurationFileId,
-           @artifactId AS ArtifactId,
-           overlayFile.RelativePath,
-           overlayFile.FileContent,
-           CAST(1 AS int) AS SourcePriority,
-           overlay.UpdatedUtc AS SourceUpdatedUtc,
-           overlay.OverlayVersion AS SourceOverlayVersion,
-           CAST(NULL AS nvarchar(20)) AS MergeMode,
-           overlay.ArtifactVersion AS OverlayArtifactVersion
-    FROM omp.ConfigOverlayDocuments overlay
-    INNER JOIN omp.ConfigOverlayConfigurationFiles overlayFile
-        ON overlayFile.ConfigOverlayDocumentId = overlay.ConfigOverlayDocumentId
-    WHERE overlay.IsEnabled = 1
-      AND overlayFile.IsEnabled = 1
-      AND overlay.HostKey = @hostKey
-      AND (overlay.ModuleKey IS NULL OR overlay.ModuleKey = @ModuleKey)
-      AND (overlay.AppKey IS NULL OR overlay.AppKey = @AppKey)
-      AND (overlay.PackageType IS NULL OR overlay.PackageType = @PackageType)
-      AND (overlay.TargetName IS NULL OR overlay.TargetName = @TargetName)
-    ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;
-    RETURN;
-END;
 
 SELECT ArtifactConfigurationFileId,
        ArtifactId,
@@ -3425,7 +3388,7 @@ SELECT overlayFile.ConfigOverlayConfigurationFileId AS ArtifactConfigurationFile
        CAST(1 AS int) AS SourcePriority,
        overlay.UpdatedUtc AS SourceUpdatedUtc,
        overlay.OverlayVersion AS SourceOverlayVersion,
-       overlayFile.MergeMode,
+       __MERGE_MODE__ AS MergeMode,
        overlay.ArtifactVersion AS OverlayArtifactVersion
 FROM omp.ConfigOverlayDocuments overlay
 INNER JOIN omp.ConfigOverlayConfigurationFiles overlayFile
@@ -3439,11 +3402,72 @@ WHERE overlay.IsEnabled = 1
   AND (overlay.TargetName IS NULL OR overlay.TargetName = @TargetName)
 ORDER BY RelativePath, SourcePriority, SourceUpdatedUtc, ArtifactConfigurationFileId;";
 
+    /// <summary>The configuration-files query for a database with or without the ADR 0006 MergeMode column.</summary>
+    internal static string BuildConfigurationFilesSql(bool hasMergeModeColumn)
+        => ConfigurationFilesSqlTemplate.Replace(
+            "__MERGE_MODE__",
+            hasMergeModeColumn ? "overlayFile.MergeMode" : "CAST(NULL AS nvarchar(20))",
+            StringComparison.Ordinal);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> s_mergeModeMigrationAttempted = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Adds the ADR 0006 MergeMode column to an overlay file table that predates it and
+    /// reports whether the column exists afterwards. The platform owns these tables
+    /// (OMP-MODULE-SQL-CONFIG-OWNERSHIP forbids ALTER TABLE on them in module SQL, so the
+    /// core setup script cannot migrate existing installations); the HostAgent does it once
+    /// per process. A login without ALTER rights keeps working on the delivered schema.
+    /// </summary>
+    internal static async Task<bool> EnsureConfigOverlayMergeModeColumnAsync(SqlConnection conn, CancellationToken ct)
+    {
+        if (await ColumnExistsAsync(conn, "omp", "ConfigOverlayConfigurationFiles", "MergeMode", ct))
+        {
+            return true;
+        }
+
+        // One migration attempt per database and process: a login without ALTER rights must
+        // not retry the DDL for every artifact on every cycle.
+        var databaseKey = conn.DataSource + "|" + conn.Database;
+        if (!s_mergeModeMigrationAttempted.TryAdd(databaseKey, true))
+        {
+            return false;
+        }
+
+        try
+        {
+            await using var alter = new SqlCommand(
+                @"
+IF OBJECT_ID(N'omp.ConfigOverlayConfigurationFiles', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp.ConfigOverlayConfigurationFiles', N'MergeMode') IS NULL
+BEGIN
+    ALTER TABLE omp.ConfigOverlayConfigurationFiles ADD MergeMode nvarchar(20) NULL;
+END;",
+                conn);
+            await alter.ExecuteNonQueryAsync(ct);
+        }
+        catch (SqlException)
+        {
+            // No ALTER permission or a concurrent migration: the query below runs without
+            // the column, exactly as before ADR 0006, and the next process start retries.
+            return false;
+        }
+
+        return await ColumnExistsAsync(conn, "omp", "ConfigOverlayConfigurationFiles", "MergeMode", ct);
+    }
+
+    public async Task<IReadOnlyList<ArtifactConfigurationFileDescriptor>> GetArtifactConfigurationFilesAsync(
+        int artifactId,
+        string hostKey,
+        CancellationToken ct)
+    {
+
         var rows = new Dictionary<string, List<ResolvedConfigurationFile>>(StringComparer.OrdinalIgnoreCase);
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
 
         var artifactVersion = await GetArtifactVersionAsync(conn, artifactId, ct);
+        var hasMergeModeColumn = await EnsureConfigOverlayMergeModeColumnAsync(conn, ct);
+        var sql = BuildConfigurationFilesSql(hasMergeModeColumn);
 
         await using var cmd = new SqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("@artifactId", artifactId);
