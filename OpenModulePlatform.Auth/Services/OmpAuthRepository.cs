@@ -199,7 +199,21 @@ public sealed class OmpAuthRepository
             return null;
         }
 
-        var principals = BuildOidcRolePrincipals(oidcClaims);
+        // Same contract as the Windows path: only groups that map to a role principal are
+        // kept. Every group claim used to become an ADGroup claim in the sign-in cookie, and a
+        // directory user with a few hundred groups then exceeded the request-header limit of
+        // the web server (HTTP 400) on every request after signing in.
+        var mappedOidcGroupPrincipals = await GetMappedAdGroupPrincipalsAsync(
+            conn,
+            oidcClaims.Groups,
+            ct);
+
+        _log.LogDebug(
+            "Resolved {MappedCount} matching AD group role principals from {TotalCount} OIDC group claims.",
+            mappedOidcGroupPrincipals.Count,
+            oidcClaims.Groups.Count);
+
+        var principals = BuildOidcRolePrincipals(oidcClaims, mappedOidcGroupPrincipals);
         var suppressAutoProvisioning = false;
 
         if (linkedUser is null &&
@@ -1025,6 +1039,16 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
 
     internal static List<(string PrincipalType, string Principal)> BuildOidcRolePrincipals(
         OmpOidcResolvedClaims oidcClaims)
+        => BuildOidcRolePrincipals(oidcClaims, oidcClaims.Groups);
+
+    /// <summary>
+    /// Builds the role principals for an OIDC sign-in. <paramref name="groupPrincipals"/> is the
+    /// list of group values that may become ADGroup principals; the sign-in path passes the
+    /// role-mapped subset so the persisted cookie never grows with the directory's group count.
+    /// </summary>
+    internal static List<(string PrincipalType, string Principal)> BuildOidcRolePrincipals(
+        OmpOidcResolvedClaims oidcClaims,
+        IEnumerable<string> groupPrincipals)
     {
         var principals = new List<(string PrincipalType, string Principal)>();
 
@@ -1038,7 +1062,7 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
         AddPrincipal(principals, "OIDCUser", oidcClaims.ProviderUserKey);
         AddPrincipal(principals, "OIDCSubject", oidcClaims.Subject);
 
-        foreach (var group in oidcClaims.Groups)
+        foreach (var group in groupPrincipals)
         {
             AddPrincipal(principals, "ADGroup", group);
         }

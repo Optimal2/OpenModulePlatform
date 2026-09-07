@@ -214,6 +214,36 @@ public sealed class OmpOidcPrincipalFormTests
         Assert.Contains("CONTOSO", domains);
     }
 
+    [Fact]
+    public void SignInPrincipals_CarryOnlyRoleMappedGroups()
+    {
+        // Campaign adfs-grupper-bara-rollmatchade-i-kakan: every OIDC group claim used to become
+        // an ADGroup claim in the sign-in cookie, so a directory user with a few hundred groups
+        // exceeded the web server's request-header limit on every request after signing in.
+        // The sign-in path now passes the role-mapped subset, like the Windows path.
+        var principal = CreatePrincipal(
+            new Claim("sub", "pairwise-subject-1"),
+            new Claim("unique_name", @"CONTOSO\anna"),
+            new Claim("groups", @"CONTOSO\archive-writers"),
+            new Claim("groups", @"CONTOSO\everyone"),
+            new Claim("groups", @"CONTOSO\printer-users"));
+
+        var resolved = OmpOidcClaimResolver.Resolve(principal, BrokenSamAccountNameOptions());
+        Assert.NotNull(resolved);
+        Assert.Equal(3, resolved.Groups.Count);
+
+        var rolePrincipals = OmpAuthRepository.BuildOidcRolePrincipals(
+            resolved, new[] { @"CONTOSO\archive-writers" });
+
+        Assert.Equal(
+            [@"CONTOSO\archive-writers"],
+            rolePrincipals.Where(p => p.PrincipalType == "ADGroup").Select(p => p.Principal).ToList());
+        Assert.Contains(("ADUser", @"CONTOSO\anna"), rolePrincipals);
+        // The unfiltered overload still exposes every group, which is what the callers that
+        // inspect the raw claim set rely on.
+        Assert.Equal(3, OmpAuthRepository.BuildOidcRolePrincipals(resolved).Count(p => p.PrincipalType == "ADGroup"));
+    }
+
     private static OmpOidcOptions BrokenSamAccountNameOptions()
         => new()
         {
