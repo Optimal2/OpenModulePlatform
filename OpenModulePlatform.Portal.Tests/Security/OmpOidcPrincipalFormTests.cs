@@ -180,7 +180,7 @@ public sealed class OmpOidcPrincipalFormTests
             principal, BrokenSamAccountNameOptions(), translator);
         Assert.NotNull(resolved);
 
-        var rolePrincipals = OmpAuthRepository.BuildOidcRolePrincipals(resolved);
+        var rolePrincipals = OmpAuthRepository.BuildOidcRolePrincipals(resolved, resolved.Groups);
 
         Assert.Contains(("ADUser", @"CONTOSO\anna"), rolePrincipals);
     }
@@ -206,7 +206,7 @@ public sealed class OmpOidcPrincipalFormTests
             DisplayName = resolved.DisplayName,
             Provider = resolved.ProviderName,
             ProviderUserKey = resolved.ProviderUserKey,
-            RolePrincipals = OmpAuthRepository.BuildOidcRolePrincipals(resolved)
+            RolePrincipals = OmpAuthRepository.BuildOidcRolePrincipals(resolved, resolved.Groups)
         };
 
         var domains = RbacService.GetWindowsAccountDomains(ompUser.ToClaimsPrincipal()).ToList();
@@ -239,9 +239,9 @@ public sealed class OmpOidcPrincipalFormTests
             [@"CONTOSO\archive-writers"],
             rolePrincipals.Where(p => p.PrincipalType == "ADGroup").Select(p => p.Principal).ToList());
         Assert.Contains(("ADUser", @"CONTOSO\anna"), rolePrincipals);
-        // The unfiltered overload still exposes every group, which is what the callers that
-        // inspect the raw claim set rely on.
-        Assert.Equal(3, OmpAuthRepository.BuildOidcRolePrincipals(resolved).Count(p => p.PrincipalType == "ADGroup"));
+        // Passing the raw claim set is what filled the cookie; it is still the caller's choice,
+        // and the sign-in path is covered by the database-backed test in AuthResolutionDatabaseTests.
+        Assert.Equal(3, OmpAuthRepository.BuildOidcRolePrincipals(resolved, resolved.Groups).Count(p => p.PrincipalType == "ADGroup"));
     }
 
     private static OmpOidcOptions BrokenSamAccountNameOptions()

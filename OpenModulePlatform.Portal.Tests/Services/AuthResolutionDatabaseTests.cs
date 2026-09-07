@@ -18,6 +18,38 @@ public sealed class AuthResolutionDatabaseTests(AuthResolutionTestFixture fixtur
     : IClassFixture<AuthResolutionTestFixture>
 {
     [Fact]
+    public async Task ResolveOidcAsync_KeepsOnlyRoleMappedGroupsInTheSignInPrincipals()
+    {
+        // Campaign adfs-grupper-bara-rollmatchade-i-kakan. The unit test on
+        // BuildOidcRolePrincipals pins the overload; this pins the wiring: the sign-in path
+        // must hand it the role-mapped subset, not every group claim. Before the fix every
+        // group became an ADGroup claim in the cookie and a directory user with a few hundred
+        // groups exceeded the web server's request-header limit after signing in.
+        await fixture.InsertRolePrincipalAsync("adfs-group-filter-role", "ADGroup", @"CONTOSO\archive-writers");
+
+        var claims = new OmpOidcResolvedClaims
+        {
+            ProviderName = "ADFS",
+            Subject = "adfs-group-filter-subject",
+            Issuer = "https://idp.example.invalid/adfs",
+            ProviderUserKey = "adfs-group-filter-subject",
+            ProviderUserKeyCandidates = ["adfs-group-filter-subject"],
+            UserName = @"CONTOSO\group-filter-user",
+            DisplayName = "Group Filter User",
+            UserPrincipalCandidates = [@"CONTOSO\group-filter-user"],
+            Groups = [@"CONTOSO\archive-writers", @"CONTOSO\everyone", @"CONTOSO\printer-users"]
+        };
+
+        var user = await fixture.CreateAuthRepository().ResolveOidcAsync(claims, CancellationToken.None);
+
+        Assert.NotNull(user);
+        Assert.Equal(
+            [@"CONTOSO\archive-writers"],
+            user.RolePrincipals.Where(p => p.PrincipalType == "ADGroup").Select(p => p.Principal).ToList());
+        Assert.Contains(("ADUser", @"CONTOSO\group-filter-user"), user.RolePrincipals);
+    }
+
+    [Fact]
     public async Task ResolveLocalPasswordAsync_WhenStoredNameIsNotCanonical_DoesNotMatch()
     {
         // R7-F12. A legacy row written before the shared normalization rule

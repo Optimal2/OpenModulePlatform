@@ -146,6 +146,21 @@ OMP Auth can optionally expose a server-side OpenID Connect provider for AD FS
 or another OIDC identity provider. It is disabled by default and is configured
 under `OmpAuth:Oidc`.
 
+Group claims from the identity provider are filtered the same way as Windows
+group memberships: only groups (SID or translated `DOMAIN\Group` name) that
+already exist in `omp.RolePrincipals` become `ADGroup` principals in the cookie.
+Earlier versions wrote every group claim into the cookie, and a directory user
+with a few hundred groups then exceeded the web server's request-header limit
+(HTTP 400) on every request after signing in. Two consequences to plan for:
+
+- The identity provider should still issue only the groups the platform uses
+  (an issuance rule filtered on the relevant group names); the token itself is
+  not shortened by this filter.
+- A role mapping added to `omp.RolePrincipals` after an OIDC sign-in takes
+  effect at the user's next sign-in, because the cookie is built once and is
+  not rebuilt during its lifetime. Removing a mapping takes effect at once, as
+  before. The Windows provider has always behaved this way.
+
 Supported settings include:
 
 - `Enabled`

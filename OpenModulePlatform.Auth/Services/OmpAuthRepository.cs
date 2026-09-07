@@ -1037,14 +1037,12 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             .ToList();
     }
 
-    internal static List<(string PrincipalType, string Principal)> BuildOidcRolePrincipals(
-        OmpOidcResolvedClaims oidcClaims)
-        => BuildOidcRolePrincipals(oidcClaims, oidcClaims.Groups);
-
     /// <summary>
     /// Builds the role principals for an OIDC sign-in. <paramref name="groupPrincipals"/> is the
     /// list of group values that may become ADGroup principals; the sign-in path passes the
     /// role-mapped subset so the persisted cookie never grows with the directory's group count.
+    /// There is deliberately no overload that takes every group from the claims: that was the
+    /// shape that put a directory user's whole group list into the cookie.
     /// </summary>
     internal static List<(string PrincipalType, string Principal)> BuildOidcRolePrincipals(
         OmpOidcResolvedClaims oidcClaims,

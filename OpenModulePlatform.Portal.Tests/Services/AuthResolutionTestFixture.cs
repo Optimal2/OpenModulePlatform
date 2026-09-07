@@ -358,8 +358,54 @@ CREATE TABLE omp.config_settings
     ConfigRole int NULL,
     ConfigPriority int NOT NULL CONSTRAINT DF_omp_config_settings_ConfigPriority DEFAULT(0),
     ConfigScopeRank tinyint NOT NULL CONSTRAINT DF_omp_config_settings_ConfigScopeRank DEFAULT(0)
+);
+
+IF OBJECT_ID(N'omp.Roles', N'U') IS NULL
+CREATE TABLE omp.Roles
+(
+    RoleId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    Name nvarchar(200) NOT NULL,
+    Description nvarchar(500) NULL,
+    CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Roles_CreatedUtc DEFAULT SYSUTCDATETIME(),
+    UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_Roles_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_omp_Roles_Name UNIQUE(Name)
+);
+
+IF OBJECT_ID(N'omp.RolePrincipals', N'U') IS NULL
+CREATE TABLE omp.RolePrincipals
+(
+    RoleId int NOT NULL,
+    PrincipalType nvarchar(50) NOT NULL,
+    Principal nvarchar(256) NOT NULL,
+    CONSTRAINT PK_omp_RolePrincipals PRIMARY KEY(RoleId, PrincipalType, Principal),
+    CONSTRAINT FK_omp_RolePrincipals_Role FOREIGN KEY(RoleId) REFERENCES omp.Roles(RoleId)
 );",
             conn);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Seeds one role with one principal so the group filter in the OIDC and Windows sign-in
+    /// paths has something to match against (the same tables the real RBAC join reads).
+    /// </summary>
+    public async Task InsertRolePrincipalAsync(string roleName, string principalType, string principal)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(
+            @"
+IF NOT EXISTS (SELECT 1 FROM omp.Roles WHERE Name = @name)
+    INSERT INTO omp.Roles(Name) VALUES(@name);
+
+INSERT INTO omp.RolePrincipals(RoleId, PrincipalType, Principal)
+SELECT r.RoleId, @principal_type, @principal
+FROM omp.Roles r
+WHERE r.Name = @name;",
+            conn);
+        cmd.Parameters.AddWithValue("@name", roleName);
+        cmd.Parameters.AddWithValue("@principal_type", principalType);
+        cmd.Parameters.AddWithValue("@principal", principal);
         await cmd.ExecuteNonQueryAsync();
     }
 }
