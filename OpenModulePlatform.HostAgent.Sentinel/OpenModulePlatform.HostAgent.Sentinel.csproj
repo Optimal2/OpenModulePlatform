@@ -6,11 +6,15 @@
     <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
     <IsPackable>false</IsPackable>
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.1.0</FileVersion>
-    <InformationalVersion>1.0.1</InformationalVersion>
+    <FileVersion>1.0.2.0</FileVersion>
+    <InformationalVersion>1.0.2</InformationalVersion>
   </PropertyGroup>
+  <!-- The published payload zip must be installable on its own: ship the installer with the exe. -->
+  <ItemGroup>
+    <None Include="..\scripts\omp\Install-HostAgentSentinel.ps1" Link="Install-HostAgentSentinel.ps1" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <!-- Only inbox .NET Framework assemblies. Building requires the 4.8 targeting pack. -->
   <ItemGroup>
     <Reference Include="System.Configuration" />

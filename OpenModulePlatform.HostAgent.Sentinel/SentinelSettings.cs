@@ -12,6 +12,13 @@ namespace OpenModulePlatform.HostAgent.Sentinel
         public bool CheckDatabaseHeartbeat { get; private set; }
         public int HeartbeatStaleMinutes { get; private set; }
         public string DatabaseConnectionString { get; private set; }
+        // A fault seen this soon after Sentinel started is held, never reported: at boot
+        // Sentinel usually starts before HostAgent has reached Running.
+        public int StartupGraceSeconds { get; private set; }
+        // A fault is reported only after this many consecutive samples agree; samples
+        // taken FaultRecheckSeconds apart. Faults already reported are repeated at once.
+        public int FaultConfirmations { get; private set; }
+        public int FaultRecheckSeconds { get; private set; }
 
         public static SentinelSettings Read(NameValueCollection values)
         {
@@ -22,7 +29,10 @@ namespace OpenModulePlatform.HostAgent.Sentinel
                 StopSelfWhenHostAgentDown = Boolean(values, "StopSelfWhenHostAgentDown", true),
                 CheckDatabaseHeartbeat = Boolean(values, "CheckDatabaseHeartbeat", false),
                 HeartbeatStaleMinutes = Number(values, "HeartbeatStaleMinutes", 15, 1, 10080),
-                DatabaseConnectionString = (values["DatabaseConnectionString"] ?? "").Trim()
+                DatabaseConnectionString = (values["DatabaseConnectionString"] ?? "").Trim(),
+                StartupGraceSeconds = Number(values, "StartupGraceSeconds", 120, 0, 3600),
+                FaultConfirmations = Number(values, "FaultConfirmations", 2, 1, 10),
+                FaultRecheckSeconds = Number(values, "FaultRecheckSeconds", 10, 1, 3600)
             };
         }
 

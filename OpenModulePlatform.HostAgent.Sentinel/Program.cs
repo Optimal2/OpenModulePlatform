@@ -51,26 +51,32 @@ namespace OpenModulePlatform.HostAgent.Sentinel
             {
                 var settings = SentinelSettings.Read(ConfigurationManager.AppSettings);
                 var connectionString = ValidateConnection(settings);
-                var state = new SentinelState(File.Exists(stateFile));
+                var state = new SentinelState(File.Exists(stateFile), DateTime.UtcNow,
+                    settings.StartupGraceSeconds, settings.FaultConfirmations);
                 do
                 {
                     var observation = ReadAgent();
                     if (observation.EventId == 0 && settings.DatabaseEnabled)
                         observation = ReadDatabase(connectionString, settings.HeartbeatStaleMinutes) ?? observation;
                     var events = state.Apply(observation, DateTime.UtcNow, settings.OkHeartbeatMinutes);
-                    if (state.Faulted && !File.Exists(stateFile)) File.WriteAllText(stateFile, observation.EventId.ToString());
+                    var stop = SentinelState.ShouldStop(state.ReportedEventId, settings.StopSelfWhenHostAgentDown);
+                    if (state.Faulted && !File.Exists(stateFile)) File.WriteAllText(stateFile, state.ReportedEventId.ToString());
                     foreach (var eventId in events)
-                        WriteEvent(eventId, (eventId == 1 ? "Recovered. " : "") + observation.Message);
+                        WriteEvent(eventId, (eventId == 1 ? "Recovered. " : "") + observation.Message + (stop
+                            ? " Sentinel now stops with SCM exit code " + eventId + " so that the configured recovery"
+                              + " restarts it; the System log (7023) renders that code as an unrelated Win32 text."
+                            : ""));
                     if (!state.Faulted && File.Exists(stateFile)) File.Delete(stateFile);
-                    if (SentinelState.ShouldStop(observation.EventId, settings.StopSelfWhenHostAgentDown))
+                    if (stop)
                     {
                         // ServiceBase exposes the SCM Win32 exit code. Nonzero plus failureflag=1
                         // enables recovery for this orderly, intentional alarm stop.
-                        ExitCode = observation.EventId;
+                        ExitCode = state.ReportedEventId;
                         Stop();
                         return;
                     }
-                } while (!stopping.WaitOne(TimeSpan.FromSeconds(settings.PollIntervalSeconds)));
+                } while (!stopping.WaitOne(TimeSpan.FromSeconds(
+                    state.Pending ? settings.FaultRecheckSeconds : settings.PollIntervalSeconds)));
             }
             catch (Exception ex)
             {

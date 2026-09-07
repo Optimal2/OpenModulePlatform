@@ -190,7 +190,10 @@ $projects = @(
     'OpenModulePlatform.WorkerManager.WindowsService/OpenModulePlatform.WorkerManager.WindowsService.csproj',
     'OpenModulePlatform.HostAgent.WindowsService/OpenModulePlatform.HostAgent.WindowsService.csproj',
     'OpenModulePlatform.WorkerProcessHost/OpenModulePlatform.WorkerProcessHost.csproj',
-    'OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.csproj'
+    'OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.csproj',
+    # Standalone .NET Framework 4.8 alarm service: omp-components.json declares its
+    # payload zip, so package-hostagent-first.ps1 expects this publish folder.
+    'OpenModulePlatform.HostAgent.Sentinel/OpenModulePlatform.HostAgent.Sentinel.csproj'
 )
 
 $publishItems = foreach ($project in $projects) {
@@ -204,6 +207,9 @@ $publishItems = foreach ($project in $projects) {
     $logPath = Join-Path $outputRootPath ($projectName + '.publish.log')
     $projectFramework = if ($projectName -eq 'OpenModulePlatform.Bootstrapper' -and $Framework -eq 'net10.0') {
         'net10.0-windows'
+    }
+    elseif ($projectName -eq 'OpenModulePlatform.HostAgent.Sentinel') {
+        'net48'
     }
     else {
         $Framework

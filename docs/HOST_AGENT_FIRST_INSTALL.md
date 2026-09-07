@@ -24,7 +24,7 @@ HostAgent Sentinel provides the fixed Windows service name `OMP.HostAgent.Sentin
 and display name `OMP HostAgent Sentinel`. Its executable stays in
 `<OMP-root>\Services\HostAgentSentinel`; HostAgent upgrades do not rename it.
 Sentinel has its own `omp-hostagent-sentinel` component version (initial shipment
-1.0.1), independent of `omp-hostagent-service`. Its runtime dependencies are
+1.0.2), independent of `omp-hostagent-service`. Its runtime dependencies are
 **Windows + .NET Framework 4.8, nothing else**: no NuGet packages, modern .NET
 runtime, PowerShell worker, OMP libraries or network dependency in the default mode.
 The optional DB mode also needs an available OMP SQL database and Windows access.
@@ -45,9 +45,15 @@ dotnet build OpenModulePlatform.HostAgent.Sentinel -c Release
 & ".\scripts\omp\Install-HostAgentSentinel.ps1" -OmpRoot "G:\OMP"
 ```
 
-For distribution, copy the Release `net48` executable, its `.exe.config`, and
-`scripts/omp/Install-HostAgentSentinel.ps1` to a standalone folder. Install with
-`-SourceDir` pointing to that folder; no SDK is needed on the receiving machine.
+For distribution, use the published payload: `publish-all.ps1` publishes the
+Sentinel project as `net48` next to the other components, and
+`package-hostagent-first.ps1` copies it into the installer package as
+`payload/OpenModulePlatform.HostAgent.Sentinel.zip` (executable, `.exe.config`
+and `Install-HostAgentSentinel.ps1`, which the project copies into its publish
+output). The bootstrapper never installs it: the zip is not a manifest artifact,
+so it does not appear in the bootstrap manifest or in desired state. Extract the
+zip to a standalone folder on the target server and install with `-SourceDir`
+pointing to that folder; no SDK is needed on the receiving machine.
 Use this standalone installer, not a normal version-named HostAgent service-app
 deployment. No module definition, desired-state registration, SQL migration or
 universal-package import is needed for Sentinel itself.
@@ -80,6 +86,7 @@ Configure event 200 as an alarm on Sentinel's own ability to monitor.
 | ID | Level | Meaning and action |
 | --- | --- | --- |
 | 100 | Error | One HostAgent exists but is not Running, or its SCM/WMI process is not alive. Sentinel stops by default. |
+| | | Faults 100–103 are reported only after `FaultConfirmations` agreeing samples, and never within `StartupGraceSeconds` of Sentinel's start (see below). |
 | 101 | Error | Multiple versioned HostAgent services, including stopped/orphaned ones. Sentinel keeps running; resolve the duplicate through normal HostAgent maintenance. |
 | 102 | Error | No service matches the versioned HostAgent identity. Sentinel stops by default. |
 | 103 | Error | Optional database heartbeat is stale/missing, or the query failed. Sentinel keeps running. |
@@ -97,8 +104,17 @@ Configure event 200 as an alarm on Sentinel's own ability to monitor.
 | `CheckDatabaseHeartbeat` | `false` | Enables optional SQL check only when the connection string is also nonempty. |
 | `HeartbeatStaleMinutes` | `15` | 1–10080 minutes; strictly older than this limit is stale. |
 | `DatabaseConnectionString` | empty | Integrated Security only, with an explicit database; no username/password or attached database allowed. |
+| `StartupGraceSeconds` | `120` | 0–3600 seconds; a fault first seen within this time after Sentinel started is held, not reported. Covers boot, where Sentinel usually reaches Running before HostAgent. A healthy sample clears the hold; a fault that persists past the grace is reported at the next sample. |
+| `FaultConfirmations` | `2` | 1–10 consecutive samples that must report the same fault before it is logged (and, for 100/102, before Sentinel stops). `1` restores single-sample reporting. |
+| `FaultRecheckSeconds` | `10` | 1–3600 seconds between samples while a fault is unconfirmed, instead of `PollIntervalSeconds`. With the defaults a real fault is reported about 10 seconds after it is first seen, at most 40 seconds after it occurred. |
 
-Restart Sentinel after changing configuration. Matching is strictly
+Debouncing applies to fresh faults only. A fault that has already been reported,
+including one remembered in `fault.state` when SCM restarts Sentinel after a
+self-stop, is repeated on every sample without grace or confirmation, so the
+five-minute recovery rhythm is unchanged while HostAgent stays down. A HostAgent
+self-upgrade (a few seconds with two services, then one) therefore no longer
+logs 101 unless the overlap outlasts two samples, and a HostAgent restart shorter
+than `FaultRecheckSeconds` is not reported at all. Restart Sentinel after changing configuration. Matching is strictly
 `^OMP\.HostAgent\.\d+\.\d+\.\d+$` (case-insensitive SCM names); Sentinel itself
 and unversioned/custom-named agents are excluded. Healthy means exactly one match,
 Running, and a live PID. Process start time is used for the OK message; SCM does
@@ -117,6 +133,13 @@ alarm interval, but continuous polling pauses during that interval. A poll-based
 alarm system should sample more frequently than five minutes. Setting
 `StopSelfWhenHostAgentDown=false` leaves event monitoring responsible for all
 HostAgent alarms; configuration/monitoring failures still stop Sentinel.
+The self-stop exit code is the Windows service exit code, which SCM renders in
+the System log as a Win32 error text: event 7023 shows "Cannot create another
+system semaphore" for code 100, "The semaphore timeout period has expired" for
+102, and a 7031 "terminated unexpectedly" precedes the recovery restart. Those
+texts carry no meaning here; the Application event from source
+`OMP.HostAgent.Sentinel` (which names the exit code) and the service state are
+the alarm sources, and the stop is intentional.
 Recovery state is retained in `%ProgramData%\OMP\HostAgentSentinel\fault.state`,
 so a real fault is remembered across Sentinel restarts. Only the installer
 registers the event source; the running service never creates one.
@@ -136,8 +159,11 @@ När du verifierar hos kunden kör du själv detta under ett godkänt servicefö
 återställ alltid HostAgent och Sentinel efter provet.
 
 1. Record `Get-CimInstance Win32_Service` for the exact current HostAgent name.
-2. Stop that HostAgent. Within one default 30-second check (allow 60 seconds),
-   verify Application event 100 and Sentinel Stopped with SCM exit code 100.
+2. Stop that HostAgent at least `StartupGraceSeconds` (default two minutes)
+   after Sentinel started. With default settings the fault is confirmed by a
+   second sample 10 seconds after the first, so within about 40 seconds (allow
+   90 seconds) verify Application event 100 and Sentinel Stopped with SCM exit
+   code 100.
 3. Start HostAgent, then Sentinel (or wait for the configured recovery action).
    Verify event 1 followed by 10, and both services Running.
 4. Read evidence with `Get-WinEvent -FilterHashtable @{LogName='Application';

@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.655",
+  "repositoryVersion": "0.3.656",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -167,7 +167,7 @@
       "registrationMode": "bootstrap",
       "packageType": "service-app",
       "targetName": "omp-hostagent-sentinel",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "projectPath": "OpenModulePlatform.HostAgent.Sentinel",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.Sentinel.zip"
     },

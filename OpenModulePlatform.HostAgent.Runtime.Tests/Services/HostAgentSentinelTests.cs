@@ -76,6 +76,68 @@ public sealed class HostAgentSentinelTests
         Assert.Empty(state.Apply(ok, Now.AddSeconds(30), 10));
     }
 
+    [Fact]
+    public void FreshFaultIsHeldDuringStartupGraceAndClearedByOk()
+    {
+        var state = new SentinelState(false, Now, 120, 2);
+        var down = new Observation(100, "down");
+        Assert.Empty(state.Apply(down, Now.AddSeconds(5), 10));
+        Assert.True(state.Pending);
+        Assert.Equal(0, state.ReportedEventId);
+        Assert.False(state.Faulted);
+        Assert.Empty(state.Apply(down, Now.AddSeconds(15), 10));
+        Assert.Empty(state.Apply(down, Now.AddSeconds(119), 10));
+        Assert.False(state.Faulted);
+        Assert.Equal([10], state.Apply(SentinelPolicy.Evaluate([Agent()]), Now.AddSeconds(30), 10));
+        Assert.False(state.Pending);
+        Assert.False(SentinelState.ShouldStop(state.ReportedEventId, true));
+    }
+
+    [Fact]
+    public void PersistentFaultIsReportedWhenGraceExpires()
+    {
+        var state = new SentinelState(false, Now, 60, 2);
+        var missing = new Observation(102, "missing");
+        Assert.Empty(state.Apply(missing, Now.AddSeconds(10), 10));
+        Assert.Empty(state.Apply(missing, Now.AddSeconds(50), 10));
+        Assert.Equal([102], state.Apply(missing, Now.AddSeconds(60), 10));
+        Assert.Equal(102, state.ReportedEventId);
+        Assert.True(state.Faulted);
+        Assert.False(state.Pending);
+    }
+
+    [Fact]
+    public void FreshFaultNeedsConsecutiveAgreeingSamples()
+    {
+        var state = new SentinelState(false, Now, 0, 2);
+        Assert.Empty(state.Apply(new Observation(100, "down"), Now, 10));
+        Assert.True(state.Pending);
+        // A different fault restarts the count: 100 then 102 is not a confirmation.
+        Assert.Empty(state.Apply(new Observation(102, "missing"), Now.AddSeconds(10), 10));
+        Assert.Equal([102], state.Apply(new Observation(102, "missing"), Now.AddSeconds(20), 10));
+        Assert.True(SentinelState.ShouldStop(state.ReportedEventId, true));
+        // Once reported, the fault repeats on every sample without further debounce.
+        Assert.Equal([102], state.Apply(new Observation(102, "missing"), Now.AddSeconds(30), 10));
+        Assert.Equal([1, 10], state.Apply(SentinelPolicy.Evaluate([Agent()]), Now.AddSeconds(40), 10));
+        // After recovery a new fault is debounced again.
+        Assert.Empty(state.Apply(new Observation(100, "down"), Now.AddSeconds(50), 10));
+    }
+
+    [Fact]
+    public void FaultRestoredFromStateFileIsRepeatedImmediately()
+    {
+        var state = new SentinelState(true, Now, 120, 2);
+        Assert.Equal([100], state.Apply(new Observation(100, "down"), Now, 10));
+        Assert.Equal(100, state.ReportedEventId);
+    }
+
+    [Fact]
+    public void LegacyConstructorReportsOnFirstSample()
+    {
+        var state = new SentinelState(false);
+        Assert.Equal([100], state.Apply(new Observation(100, "down"), Now, 10));
+    }
+
     [Theory]
     [InlineData(100, true)]
     [InlineData(102, true)]
@@ -111,6 +173,9 @@ public sealed class HostAgentSentinelTests
             Assert.True(config.StopSelfWhenHostAgentDown);
             Assert.False(config.CheckDatabaseHeartbeat);
             Assert.False(config.DatabaseEnabled);
+            Assert.Equal(120, config.StartupGraceSeconds);
+            Assert.Equal(2, config.FaultConfirmations);
+            Assert.Equal(10, config.FaultRecheckSeconds);
         }
     }
 
@@ -120,6 +185,11 @@ public sealed class HostAgentSentinelTests
     [InlineData("PollIntervalSeconds", "2147483648")]
     [InlineData("OkHeartbeatMinutes", "-1")]
     [InlineData("HeartbeatStaleMinutes", "no")]
+    [InlineData("StartupGraceSeconds", "-1")]
+    [InlineData("StartupGraceSeconds", "3601")]
+    [InlineData("FaultConfirmations", "0")]
+    [InlineData("FaultConfirmations", "11")]
+    [InlineData("FaultRecheckSeconds", "0")]
     [InlineData("StopSelfWhenHostAgentDown", "1")]
     [InlineData("CheckDatabaseHeartbeat", "")]
     public void InvalidConfigurationIsRejected(string key, string value)
@@ -132,12 +202,16 @@ public sealed class HostAgentSentinelTests
         {
             { "PollIntervalSeconds", "5" }, { "OkHeartbeatMinutes", "2" },
             { "HeartbeatStaleMinutes", "3" }, { "StopSelfWhenHostAgentDown", "false" },
-            { "CheckDatabaseHeartbeat", "true" }, { "DatabaseConnectionString", " " }
+            { "CheckDatabaseHeartbeat", "true" }, { "DatabaseConnectionString", " " },
+            { "StartupGraceSeconds", "0" }, { "FaultConfirmations", "1" }, { "FaultRecheckSeconds", "1" }
         };
         var config = SentinelSettings.Read(values);
         Assert.Equal(5, config.PollIntervalSeconds);
         Assert.Equal(2, config.OkHeartbeatMinutes);
         Assert.Equal(3, config.HeartbeatStaleMinutes);
+        Assert.Equal(0, config.StartupGraceSeconds);
+        Assert.Equal(1, config.FaultConfirmations);
+        Assert.Equal(1, config.FaultRecheckSeconds);
         Assert.False(config.StopSelfWhenHostAgentDown);
         Assert.False(config.DatabaseEnabled);
         values["DatabaseConnectionString"] = "Server=localhost;Database=example;Integrated Security=true";
