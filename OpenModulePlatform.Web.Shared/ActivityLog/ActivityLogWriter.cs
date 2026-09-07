@@ -60,8 +60,12 @@ public sealed class ActivityLogWriter
     public Task WriteAsync(ActivityEntry entry, ClaimsPrincipal? user, CancellationToken ct = default)
     {
         var userId = OmpUserIdentity.TryGetOmpUserId(user);
+        // A signed-in person is a user even when the omp:user_id claim is missing
+        // (the identity of record is then null, which the row shows as such);
+        // only an absent or anonymous principal is a system actor.
+        var isPerson = user?.Identity?.IsAuthenticated == true;
         var actor = entry.Actor ?? new ActivityActor(
-            userId.HasValue ? ActivityActorKinds.User : ActivityActorKinds.System,
+            isPerson ? ActivityActorKinds.User : ActivityActorKinds.System,
             OmpUserIdentity.TryGetDisplayName(user));
         return WriteAsync(entry with { Actor = actor }, userId, ct);
     }

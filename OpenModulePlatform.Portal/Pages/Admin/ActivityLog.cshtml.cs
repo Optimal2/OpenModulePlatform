@@ -66,10 +66,9 @@ public sealed class ActivityLogModel : OmpPortalPageModel
         }
 
         SetTitles("Activity log");
-        if (Take <= 0)
-        {
-            Take = DefaultTake;
-        }
+        // The repository caps the read; the page shows the same number so the
+        // note and the Rows select never claim more than is fetched.
+        Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxActivityLogTake);
 
         AvailableModules = await _repo.GetActivityLogModulesAsync(ct);
         Users = await _repo.GetActivityLogUsersAsync(ct);

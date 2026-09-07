@@ -43,7 +43,7 @@ public sealed class ActivityLogRow
 
 public sealed partial class OmpAdminRepository
 {
-    private const int MaxActivityLogTake = 1000;
+    public const int MaxActivityLogTake = 1000;
 
     /// <summary>
     /// Every enabled module whose schema has an ActivityLog table. Modules opt in
@@ -119,6 +119,15 @@ ORDER BY u.display_name, u.user_id;";
         if (selected.Count == 0)
         {
             return [];
+        }
+
+        // The schema names come from omp.Modules through GetActivityLogModulesAsync,
+        // which already drops anything but plain identifiers; checked again here so
+        // the query builder's safety does not depend on who built the module list.
+        var badSchema = selected.FirstOrDefault(m => !IsPlainIdentifier(m.SchemaName));
+        if (badSchema is not null)
+        {
+            throw new ArgumentException($"Module '{badSchema.ModuleKey}' has a schema name that is not a plain identifier.", nameof(modules));
         }
 
         var take = Math.Clamp(filter.Take, 1, MaxActivityLogTake);
