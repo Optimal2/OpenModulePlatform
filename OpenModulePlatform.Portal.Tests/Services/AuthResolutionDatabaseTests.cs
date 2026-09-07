@@ -49,6 +49,46 @@ public sealed class AuthResolutionDatabaseTests(AuthResolutionTestFixture fixtur
         Assert.Contains(("ADUser", @"CONTOSO\group-filter-user"), user.RolePrincipals);
     }
 
+    [Theory]
+    [InlineData("AutoIfAuthenticated", "CONTOSO")]
+    [InlineData("AutoIfAuthenticated", "")]
+    [InlineData("AutoIfRole", "CONTOSO")]
+    public async Task ResolveOidcAsync_FirstSignInWithoutOmpUser_IsProvisionedLikeWindows(string mode, string allowedDomains)
+    {
+        // Operator report 2026-09-07: a first ADFS sign-in without an OMP account looked like
+        // an error, while a first Windows sign-in was provisioned. This drives the OIDC path
+        // with the claim shape a real AD FS delivers (UPN as user name, unique_name as the
+        // DOMAIN\name candidate, no objectsid, bare group names) under both automatic modes.
+        var suffix = mode + (allowedDomains.Length == 0 ? "-any" : "-listed");
+        await fixture.SetGlobalSettingAsync(OmpAuthDefaults.ConfigurationCategory, OmpAuthDefaults.ExternalUserProvisioningModeSetting, mode);
+        await fixture.SetGlobalSettingAsync(OmpRbacDefaults.ConfigurationCategory, OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting, allowedDomains);
+        await fixture.InsertRolePrincipalAsync("first-signin-role-" + suffix, "ADGroup", "first-signin-readers-" + suffix);
+
+        var claims = new OmpOidcResolvedClaims
+        {
+            ProviderName = "ADFS",
+            Subject = "pairwise-first-" + suffix,
+            Issuer = "https://idp.example.invalid/adfs",
+            ProviderUserKey = "pairwise-first-" + suffix,
+            ProviderUserKeyCandidates = ["pairwise-first-" + suffix, "sub:pairwise-first-" + suffix, "upn:first." + suffix + "@contoso.example"],
+            UserName = "first." + suffix + "@contoso.example",
+            DisplayName = "First " + suffix,
+            UserPrincipalCandidates = [@"CONTOSO\first." + suffix, "first." + suffix + "@contoso.example"],
+            Groups = ["first-signin-readers-" + suffix, "unrelated-group"]
+        };
+
+        var user = await fixture.CreateAuthRepository().ResolveOidcAsync(claims, CancellationToken.None);
+
+        Assert.NotNull(user);
+        Assert.True(user.UserId.HasValue, "the first OIDC sign-in must create an OMP user like the Windows path does");
+        Assert.Contains(user.RolePrincipals, p => p.PrincipalType == "OmpUser");
+        Assert.Equal("First " + suffix, user.DisplayName);
+
+        // The second sign-in resolves the same user through the stored auth link.
+        var again = await fixture.CreateAuthRepository().ResolveOidcAsync(claims, CancellationToken.None);
+        Assert.Equal(user.UserId, again?.UserId);
+    }
+
     [Fact]
     public async Task ResolveOidcAsync_MatchesRoleRowsInEitherGroupForm()
     {
