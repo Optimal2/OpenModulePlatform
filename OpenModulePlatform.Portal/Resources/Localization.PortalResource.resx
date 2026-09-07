@@ -3204,4 +3204,27 @@
   <data name="After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins." xml:space="preserve"><value>After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins.</value></data>
   <data name="Click to show the full message" xml:space="preserve"><value>Click to show the full message</value></data>
   <data name="Show details" xml:space="preserve"><value>Show details</value></data>
+  <data name="Activity log" xml:space="preserve"><value>Activity log</value></data>
+  <data name="Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules." xml:space="preserve"><value>Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules.</value></data>
+  <data name="Any user" xml:space="preserve"><value>Any user</value></data>
+  <data name="From date" xml:space="preserve"><value>From date</value></data>
+  <data name="To date" xml:space="preserve"><value>To date</value></data>
+  <data name="Text in summary or event" xml:space="preserve"><value>Text in summary or event</value></data>
+  <data name="e.g. manual_review or a job id" xml:space="preserve"><value>e.g. manual_review or a job id</value></data>
+  <data name="Rows" xml:space="preserve"><value>Rows</value></data>
+  <data name="Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="No enabled module has an activity log table yet." xml:space="preserve"><value>No enabled module has an activity log table yet.</value></data>
+  <data name="No activity matches the current filters." xml:space="preserve"><value>No activity matches the current filters.</value></data>
+  <data name="No activity has been logged yet." xml:space="preserve"><value>No activity has been logged yet.</value></data>
+  <data name="Newest first, at most {0} rows per module." xml:space="preserve"><value>Newest first, at most {0} rows per module.</value></data>
+  <data name="Time UTC" xml:space="preserve"><value>Time UTC</value></data>
+  <data name="Event" xml:space="preserve"><value>Event</value></data>
+  <data name="Unknown user" xml:space="preserve"><value>Unknown user</value></data>
+  <data name="Unreadable entry" xml:space="preserve"><value>Unreadable entry</value></data>
+  <data name="Subject" xml:space="preserve"><value>Subject</value></data>
+  <data name="Actor" xml:space="preserve"><value>Actor</value></data>
+  <data name="Correlation" xml:space="preserve"><value>Correlation</value></data>
+  <data name="Data" xml:space="preserve"><value>Data</value></data>
+  <data name="This entry uses an envelope version this viewer does not understand. The stored text is shown as is." xml:space="preserve"><value>This entry uses an envelope version this viewer does not understand. The stored text is shown as is.</value></data>
+  <data name="Raw entry" xml:space="preserve"><value>Raw entry</value></data>
 </root>

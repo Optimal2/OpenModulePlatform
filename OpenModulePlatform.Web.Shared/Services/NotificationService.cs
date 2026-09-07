@@ -37,13 +37,7 @@ public sealed class NotificationService
     }
 
     public static int? TryGetOmpUserId(ClaimsPrincipal user)
-    {
-        var claimValue = user.FindFirstValue(OmpAuthDefaults.UserIdClaimType);
-        return int.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var userId)
-            && userId > 0
-            ? userId
-            : null;
-    }
+        => OmpUserIdentity.TryGetOmpUserId(user);
 
     public async Task<long> CreateForUserAsync(
         int userId,

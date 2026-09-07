@@ -3326,4 +3326,27 @@
   <data name="After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins." xml:space="preserve"><value>Efter flytten följer rollen OMP-användaren: den gäller även användarens andra aktiverade inloggningsvägar, till exempel lokalt lösenord eller en annan OIDC-provider, inte bara AD-/ADFS-inloggningar.</value></data>
   <data name="Click to show the full message" xml:space="preserve"><value>Klicka för att visa hela meddelandet</value></data>
   <data name="Show details" xml:space="preserve"><value>Visa detaljer</value></data>
+  <data name="Activity log" xml:space="preserve"><value>Aktivitetslogg</value></data>
+  <data name="Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules." xml:space="preserve"><value>Händelser som en människa orsakat, från varje modul som för aktivitetslogg, knutna till den OMP-användare som utförde dem. Välj en användare för att följa en person över modulerna.</value></data>
+  <data name="Any user" xml:space="preserve"><value>Alla användare</value></data>
+  <data name="From date" xml:space="preserve"><value>Från och med</value></data>
+  <data name="To date" xml:space="preserve"><value>Till och med</value></data>
+  <data name="Text in summary or event" xml:space="preserve"><value>Text i sammanfattning eller händelse</value></data>
+  <data name="e.g. manual_review or a job id" xml:space="preserve"><value>t.ex. manual_review eller ett jobb-id</value></data>
+  <data name="Rows" xml:space="preserve"><value>Rader</value></data>
+  <data name="Apply" xml:space="preserve"><value>Använd</value></data>
+  <data name="No enabled module has an activity log table yet." xml:space="preserve"><value>Ingen aktiverad modul har någon aktivitetsloggtabell ännu.</value></data>
+  <data name="No activity matches the current filters." xml:space="preserve"><value>Ingen aktivitet matchar de aktuella filtren.</value></data>
+  <data name="No activity has been logged yet." xml:space="preserve"><value>Ingen aktivitet har loggats ännu.</value></data>
+  <data name="Newest first, at most {0} rows per module." xml:space="preserve"><value>Nyast först, högst {0} rader per modul.</value></data>
+  <data name="Time UTC" xml:space="preserve"><value>Tid UTC</value></data>
+  <data name="Event" xml:space="preserve"><value>Händelse</value></data>
+  <data name="Unknown user" xml:space="preserve"><value>Okänd användare</value></data>
+  <data name="Unreadable entry" xml:space="preserve"><value>Oläsbar post</value></data>
+  <data name="Subject" xml:space="preserve"><value>Objekt</value></data>
+  <data name="Actor" xml:space="preserve"><value>Aktör</value></data>
+  <data name="Correlation" xml:space="preserve"><value>Korrelation</value></data>
+  <data name="Data" xml:space="preserve"><value>Data</value></data>
+  <data name="This entry uses an envelope version this viewer does not understand. The stored text is shown as is." xml:space="preserve"><value>Posten använder en kuvertversion som den här granskaren inte förstår. Den lagrade texten visas som den är.</value></data>
+  <data name="Raw entry" xml:space="preserve"><value>Rå post</value></data>
 </root>

@@ -1,0 +1,206 @@
+@page "/admin/activitylog"
+@using System.Globalization
+@using OpenModulePlatform.Web.Shared.ActivityLog
+@model OpenModulePlatform.Portal.Pages.Admin.ActivityLogModel
+
+<section class="page-header">
+    <div>
+        <div class="eyebrow">@L["System"]</div>
+        <h2>
+            @L["Activity log"]
+            <span class="info-badge"
+                  tabindex="0"
+                  role="img"
+                  title="@L["Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules."]"
+                  aria-label="@L["Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules."]">i</span>
+        </h2>
+    </div>
+</section>
+
+<section class="card top-gap">
+    <form method="get" class="activity-filter" data-enhance="false">
+        <div class="activity-filter__grid">
+            <div class="form-field">
+                <label for="activity-user">@L["User"]</label>
+                <select id="activity-user" name="UserId">
+                    <option value="">@L["Any user"]</option>
+                    @foreach (var user in Model.Users)
+                    {
+                        <option value="@user.UserId" selected="@(Model.UserId == user.UserId)">@user.DisplayName (@user.UserId)</option>
+                    }
+                </select>
+            </div>
+            <div class="form-field">
+                <label for="activity-from">@L["From date"]</label>
+                <input id="activity-from" type="date" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+            </div>
+            <div class="form-field">
+                <label for="activity-to">@L["To date"]</label>
+                <input id="activity-to" type="date" name="To" value="@(Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+            </div>
+            <div class="form-field activity-filter__text">
+                <label for="activity-q">@L["Text in summary or event"]</label>
+                <input id="activity-q" type="search" name="Q" value="@Model.Q" placeholder="@L["e.g. manual_review or a job id"]" />
+            </div>
+            <div class="form-field">
+                <label for="activity-take">@L["Rows"]</label>
+                <select id="activity-take" name="Take">
+                    @foreach (var take in new[] { 50, 200, 500, 1000 })
+                    {
+                        <option value="@take" selected="@(Model.Take == take)">@take</option>
+                    }
+                </select>
+            </div>
+        </div>
+        @if (Model.AvailableModules.Count > 0)
+        {
+            <fieldset class="activity-filter__modules">
+                <legend>@L["Modules"]</legend>
+                @foreach (var module in Model.AvailableModules)
+                {
+                    <label class="activity-filter__module">
+                        <input type="checkbox" name="Modules" value="@module.ModuleKey" checked="@Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase)" />
+                        @module.DisplayName
+                    </label>
+                }
+            </fieldset>
+        }
+        <div class="toolbar">
+            <button type="submit" class="btn btn-primary">@L["Apply"]</button>
+            <a class="btn btn-ghost" href="@Url.Content("~/admin/activitylog")">@L["Clear filters"]</a>
+        </div>
+    </form>
+</section>
+
+<section class="card top-gap">
+    @if (Model.AvailableModules.Count == 0)
+    {
+        <div class="empty-state">@L["No enabled module has an activity log table yet."]</div>
+    }
+    else if (Model.Entries.Count == 0)
+    {
+        <div class="empty-state">@(Model.HasFilter ? L["No activity matches the current filters."] : L["No activity has been logged yet."])</div>
+    }
+    else
+    {
+        <div class="toolbar">
+            <input type="search" class="list-search" data-list-search="activity-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
+            <span class="list-count" data-list-count="activity-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+        </div>
+        <p class="muted activity-list__note">@L["Newest first, at most {0} rows per module.", Model.Take]</p>
+        <div class="empty-state" data-list-empty="activity-list" hidden>@L["No rows match the current filters."]</div>
+        <div class="table-scroll">
+            <table id="activity-list" class="grid activity-grid sortable-list" data-sortable-list data-list-fit>
+                <colgroup>
+                    <col class="activity-grid__time" />
+                    <col class="activity-grid__user" />
+                    <col class="activity-grid__module" />
+                    <col class="activity-grid__event" />
+                    <col class="activity-grid__outcome" />
+                    <col class="activity-grid__summary" />
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Time UTC"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["User"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Event"]</button></th>
+                        <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Outcome"]</button></th>
+                        <th scope="col">@L["Summary"]</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var entry in Model.Entries)
+                {
+                    var row = entry.Row;
+                    var detailId = $"activity-detail-{row.ModuleKey}-{row.ActivityLogId}";
+                    <tr data-activity-row data-search="@row.Entry">
+                        <td data-sort-value="@row.LoggedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)">
+                            <code>@ActivityLogModel.FormatUtc(row.LoggedUtc)</code>
+                        </td>
+                        <td data-sort-value="@(row.UserDisplayName ?? string.Empty)">
+                            @if (row.OmpUserId.HasValue)
+                            {
+                                <div>@(row.UserDisplayName ?? L["Unknown user"].Value)</div>
+                                <div class="muted">#@row.OmpUserId</div>
+                            }
+                            else
+                            {
+                                <span class="muted">@L["System"]</span>
+                            }
+                        </td>
+                        <td data-sort-value="@row.ModuleDisplayName">
+                            <div>@row.ModuleDisplayName</div>
+                            <div class="muted"><code>@row.ModuleKey</code></div>
+                        </td>
+                        <td data-sort-value="@entry.Event">
+                            @if (entry.IsUnreadable)
+                            {
+                                <span class="pill pill-warning">@L["Unreadable entry"]</span>
+                            }
+                            else
+                            {
+                                <code>@entry.Event</code>
+                            }
+                        </td>
+                        <td data-sort-value="@entry.Outcome">
+                            @if (!entry.IsUnreadable)
+                            {
+                                <span class="pill @(entry.Outcome == ActivityOutcomes.Ok ? "" : "pill-warning")">@entry.Outcome</span>
+                            }
+                        </td>
+                        <td>
+                            <div>@entry.Summary</div>
+                            <button type="button" class="activity-row__hint muted" aria-expanded="false" aria-controls="@detailId">@L["Show details"]</button>
+                        </td>
+                    </tr>
+                    <tr class="activity-detail" id="@detailId" data-list-follow>
+                        <td colspan="6">
+                            @if (entry.Envelope is { } envelope)
+                            {
+                                <dl class="activity-detail__fields">
+                                    @if (envelope.Subject is { } subject)
+                                    {
+                                        <dt>@L["Subject"]</dt>
+                                        <dd><code>@subject.Type</code> @subject.Id @if (!string.IsNullOrWhiteSpace(subject.Label)) { <span class="muted">(@subject.Label)</span> }</dd>
+                                    }
+                                    @if (envelope.Actor is { } actor)
+                                    {
+                                        <dt>@L["Actor"]</dt>
+                                        <dd>@actor.Name <span class="muted">(@actor.Kind)</span></dd>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(envelope.App))
+                                    {
+                                        <dt>@L["App"]</dt>
+                                        <dd><code>@envelope.App</code></dd>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(envelope.Correlation))
+                                    {
+                                        <dt>@L["Correlation"]</dt>
+                                        <dd><code>@envelope.Correlation</code></dd>
+                                    }
+                                    @if (envelope.Data is { } data)
+                                    {
+                                        <dt>@L["Data"]</dt>
+                                        <dd><pre class="activity-detail__json">@ActivityLogModel.Pretty(data)</pre></dd>
+                                    }
+                                </dl>
+                            }
+                            else
+                            {
+                                <p class="muted">@L["This entry uses an envelope version this viewer does not understand. The stored text is shown as is."]</p>
+                            }
+                            <details class="activity-detail__raw">
+                                <summary>@L["Raw entry"]</summary>
+                                <pre class="activity-detail__json">@row.Entry</pre>
+                            </details>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<script src="~/js/admin-activitylog.js"></script>

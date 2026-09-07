@@ -7063,3 +7063,160 @@ tr.linkbox-editor-row--dragging {
 .hostagent-jobs-grid__completed {
     width: 12%;
 }
+
+/* Activity log viewer: the filter card, the fixed-column list, and detail
+   follow rows that open on row click (same pattern as the maintenance
+   findings, including the [hidden] rule that lets the shared list's
+   filtering win over the open class). */
+.activity-filter__grid {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.2fr) 150px 150px minmax(200px, 2fr) 100px;
+    gap: 12px;
+    align-items: end;
+}
+
+.activity-filter__grid .form-field {
+    margin: 0;
+}
+
+.activity-filter__modules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.activity-filter__modules legend {
+    padding: 0 4px;
+    font-weight: 600;
+}
+
+.activity-filter__module {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.activity-list__note {
+    margin: 8px 0 0;
+}
+
+.activity-grid {
+    table-layout: fixed;
+    font-size: 0.85rem;
+}
+
+.activity-grid th,
+.activity-grid td {
+    padding: 8px 9px;
+}
+
+.activity-grid code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.activity-grid__time {
+    width: 13%;
+}
+
+.activity-grid__user {
+    width: 14%;
+}
+
+.activity-grid__module {
+    width: 13%;
+}
+
+.activity-grid__event {
+    width: 16%;
+}
+
+.activity-grid__outcome {
+    width: 8%;
+}
+
+.activity-grid tr[data-activity-row] {
+    cursor: pointer;
+}
+
+.activity-row__hint {
+    display: block;
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.activity-row__hint::before {
+    content: "\25B8 ";
+}
+
+.activity-row--open .activity-row__hint::before {
+    content: "\25BE ";
+}
+
+.activity-row__hint:hover,
+.activity-row__hint:focus-visible {
+    color: var(--link-hover);
+    text-decoration: underline dotted;
+}
+
+.activity-detail {
+    display: none;
+}
+
+.activity-detail.activity-detail--open {
+    display: table-row;
+}
+
+.activity-detail[hidden] {
+    display: none;
+}
+
+.activity-detail > td {
+    padding: 4px 14px 14px 32px;
+    background: var(--surface-muted);
+}
+
+.activity-detail__fields {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 16px;
+    margin: 0 0 8px;
+}
+
+.activity-detail__fields dt {
+    font-weight: 600;
+}
+
+.activity-detail__fields dd {
+    margin: 0;
+    min-width: 0;
+}
+
+.activity-detail__json {
+    margin: 0;
+    max-width: 100%;
+    overflow: auto;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.activity-detail__raw > summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+@media (max-width: 900px) {
+    .activity-filter__grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}

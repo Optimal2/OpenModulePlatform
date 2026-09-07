@@ -301,6 +301,7 @@ BEGIN
         (N'portal.admin-quicklinks', N'Artifacts', N'/admin/artifacts', N'modules', 14),
         (N'portal.admin-quicklinks', N'Portal entries', N'/admin/portalentries', N'portal', 15),
         (N'portal.admin-quicklinks', N'Banners', N'/admin/banners', N'portal', 16),
-        (N'portal.admin-quicklinks', N'Config settings', N'/admin/configsettings', N'portal', 17);
+        (N'portal.admin-quicklinks', N'Config settings', N'/admin/configsettings', N'portal', 17),
+        (N'portal.admin-quicklinks', N'Activity log', N'/admin/activitylog', N'operations', 18);
 END
 GO
