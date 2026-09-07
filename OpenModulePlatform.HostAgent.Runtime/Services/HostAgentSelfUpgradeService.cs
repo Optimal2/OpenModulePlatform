@@ -1207,7 +1207,10 @@ public sealed class HostAgentSelfUpgradeService
         => IsHostAgentServiceName(serviceName, serviceNamePrefixes);
 
     private static bool IsHostAgentServiceName(string serviceName, IEnumerable<string> serviceNamePrefixes)
-        => serviceNamePrefixes.Any(prefix =>
+        // The independent alarm service shares the prefix but must never participate
+        // in takeover, retirement or superseded-service cleanup.
+        => !string.Equals(serviceName, "OMP.HostAgent.Sentinel", StringComparison.OrdinalIgnoreCase)
+            && serviceNamePrefixes.Any(prefix =>
             string.Equals(serviceName, prefix, StringComparison.OrdinalIgnoreCase)
             || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
 

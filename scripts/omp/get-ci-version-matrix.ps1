@@ -124,6 +124,10 @@ foreach ($relativePath in $csprojFiles) {
                 } else {
                     if (-not $frameworkMajors.Contains($tfmMajor)) { $frameworkMajors.Add($tfmMajor) }
                 }
+            } elseif ($tfm -eq 'net48' -and $relativePath -eq 'OpenModulePlatform.HostAgent.Sentinel/OpenModulePlatform.HostAgent.Sentinel.csproj') {
+                # Standalone Windows alarm service; the hosted Windows image supplies the
+                # 4.8 targeting pack. It deliberately has no modern .NET runtime dependency.
+                $exemptFrameworks.Add("$relativePath targets '$tfm' (standalone Windows Sentinel)")
             } elseif ($tfm -match '^netstandard') {
                 $exemptFrameworks.Add("$relativePath targets '$tfm'")
             } else {
@@ -137,7 +141,7 @@ Write-Host "Repository version truth:"
 Write-Host "  global.json pins SDK $sdkVersion (rollForward: $rollForward)"
 Write-Host "  target frameworks claim .NET major(s): $($frameworkMajors -join ', ')"
 foreach ($exempt in $exemptFrameworks) {
-    Write-Host "  exempt (analyzer, compiler-loaded): $exempt"
+    Write-Host "  exempt (independent framework target): $exempt"
 }
 
 if ($unsupportedFrameworks.Count -gt 0) {

@@ -27,6 +27,9 @@ own `version`, and that value is the version that belongs in
   emitted as a standard artifact package when it has `moduleKey` and `appKey`;
   Auth uses this so HostAgent can deploy it as the `/auth` web app while the
   installer still treats it as bootstrap-required.
+  The independent HostAgent Sentinel omits `moduleKey`/`appKey` deliberately:
+  its version is tracked here, but its fixed-name service is installed using
+  `Install-HostAgentSentinel.ps1`, not emitted as a managed OMP service artifact.
 - `relativePathTemplate` describes the artifact-store path. Replace
   `{version}` with the component version.
 - `packageFileTemplate` describes the expected package payload path when a

@@ -34,6 +34,12 @@
     <Compile Include="..\tests\shared\OmpTestDatabaseNames.cs" Link="TestSupport\OmpTestDatabaseNames.cs" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Exercise the dependency-free Sentinel policy without adding packages to the service. -->
+    <Compile Include="..\OpenModulePlatform.HostAgent.Sentinel\SentinelPolicy.cs" Link="Sentinel\SentinelPolicy.cs" />
+    <Compile Include="..\OpenModulePlatform.HostAgent.Sentinel\SentinelSettings.cs" Link="Sentinel\SentinelSettings.cs" />
+    <None Include="..\OpenModulePlatform.HostAgent.Sentinel\App.config" Link="Sentinel.config" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

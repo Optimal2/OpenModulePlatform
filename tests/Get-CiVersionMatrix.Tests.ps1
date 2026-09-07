@@ -104,6 +104,21 @@ Describe 'get-ci-version-matrix: unsupported-version gate' {
         . (Join-Path $PSScriptRoot 'Get-CiVersionMatrix.TestHelpers.ps1')
     }
 
+    It 'Allows net48 only for the independent Sentinel project' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $scriptPath = New-TemporaryMatrixRepository -RootPath $repoRoot -TargetFrameworks @('net10.0', 'net48')
+            (Invoke-MatrixScript -ScriptPath $scriptPath).Threw | Should -Be $true
+            $sentinelDir = Join-Path $repoRoot 'OpenModulePlatform.HostAgent.Sentinel'
+            $null = New-Item -ItemType Directory -Path $sentinelDir
+            Move-Item -LiteralPath (Join-Path $repoRoot 'App2\App2.csproj') -Destination (Join-Path $sentinelDir 'OpenModulePlatform.HostAgent.Sentinel.csproj')
+            & git -C $repoRoot add -A
+            if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
+            (Invoke-MatrixScript -ScriptPath $scriptPath).Threw | Should -Be $false
+        }
+        finally { Remove-TemporaryMatrixRepository -RootPath $repoRoot }
+    }
+
     It 'Fails when a project targets a major the pinned SDK does not support' {
         $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
         try {

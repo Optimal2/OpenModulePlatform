@@ -18,6 +18,134 @@ by HostAgent itself:
 This keeps normal application deployment in the database/template model instead
 of in one-off PowerShell installation logic.
 
+## Larmpunkt: HostAgent Sentinel
+
+HostAgent Sentinel provides the fixed Windows service name `OMP.HostAgent.Sentinel`
+and display name `OMP HostAgent Sentinel`. Its executable stays in
+`<OMP-root>\Services\HostAgentSentinel`; HostAgent upgrades do not rename it.
+Sentinel has its own `omp-hostagent-sentinel` component version (initial shipment
+1.0.1), independent of `omp-hostagent-service`. Its runtime dependencies are
+**Windows + .NET Framework 4.8, nothing else**: no NuGet packages, modern .NET
+runtime, PowerShell worker, OMP libraries or network dependency in the default mode.
+The optional DB mode also needs an available OMP SQL database and Windows access.
+
+**Upgrade HostAgent to 0.3.263 or later before installing Sentinel.** Earlier
+HostAgent cleanup treats every `OMP.HostAgent.*` service as a HostAgent candidate
+and can stop/delete Sentinel. The compatibility fix excludes the fixed Sentinel
+identity from takeover and retirement. This is a one-time HostAgent prerequisite,
+not a requirement to upgrade Sentinel alongside future HostAgent versions.
+
+### Build and install
+
+Build on Windows with the repository SDK and the .NET Framework 4.8 targeting
+pack (also available on the Windows CI image):
+
+```powershell
+dotnet build OpenModulePlatform.HostAgent.Sentinel -c Release
+& ".\scripts\omp\Install-HostAgentSentinel.ps1" -OmpRoot "G:\OMP"
+```
+
+For distribution, copy the Release `net48` executable, its `.exe.config`, and
+`scripts/omp/Install-HostAgentSentinel.ps1` to a standalone folder. Install with
+`-SourceDir` pointing to that folder; no SDK is needed on the receiving machine.
+Use this standalone installer, not a normal version-named HostAgent service-app
+deployment. No module definition, desired-state registration, SQL migration or
+universal-package import is needed for Sentinel itself.
+
+När du installerar hos kunden kör du följande på den aktuella servern:
+
+```powershell
+& ".\Install-HostAgentSentinel.ps1" -SourceDir "." -OmpRoot "D:\OMP"
+```
+
+The script requests elevation when necessary, infers the root from exactly one
+HostAgent when `-OmpRoot`/`OMP_ROOT`/`-InstallDir` is omitted, and installs as
+LocalSystem with Automatic startup. LocalSystem avoids additional credentials
+and can inspect SCM/WMI/processes. The installer restricts the executable/config
+and state directories to LocalSystem and Administrators. It registers the
+Application event source and verifies a fresh event 10 within two minutes.
+Existing configuration is preserved on reinstall. Uninstall removes the service
+and event source, retaining payload/configuration/state for inspection:
+
+```powershell
+& ".\Install-HostAgentSentinel.ps1" -Uninstall -OmpRoot "D:\OMP"
+```
+
+### Alarm contract and configuration
+
+Hos kunden larmar du på tjänsten `OMP.HostAgent.Sentinel` när den inte är Running.
+I Application-loggen larmar du även på källan `OMP.HostAgent.Sentinel`, ID 100–103.
+Configure event 200 as an alarm on Sentinel's own ability to monitor.
+
+| ID | Level | Meaning and action |
+| --- | --- | --- |
+| 100 | Error | One HostAgent exists but is not Running, or its SCM/WMI process is not alive. Sentinel stops by default. |
+| 101 | Error | Multiple versioned HostAgent services, including stopped/orphaned ones. Sentinel keeps running; resolve the duplicate through normal HostAgent maintenance. |
+| 102 | Error | No service matches the versioned HostAgent identity. Sentinel stops by default. |
+| 103 | Error | Optional database heartbeat is stale/missing, or the query failed. Sentinel keeps running. |
+| 1 | Information | Recovered from a fault to healthy; emitted once per recovery, including after Sentinel restarts. |
+| 10 | Information | Immediate healthy startup/recovery, then periodic OK; includes HostAgent name and process start time in UTC. |
+| 200 | Error | Invalid configuration or inability to monitor (for example WMI/state-directory failure). Sentinel stops with code 200. |
+
+`OpenModulePlatform.HostAgent.Sentinel.exe.config` accepts:
+
+| Setting | Default | Range/behavior |
+| --- | --- | --- |
+| `PollIntervalSeconds` | `30` | 1–3600 seconds; check runs immediately on startup, then this delay after each check. |
+| `OkHeartbeatMinutes` | `10` | 1–1440 minutes; evaluated on each polling cycle. |
+| `StopSelfWhenHostAgentDown` | `true` | Stop with SCM exit code 100/102 after logging that condition. Set `false` to keep running and alarm only on events. |
+| `CheckDatabaseHeartbeat` | `false` | Enables optional SQL check only when the connection string is also nonempty. |
+| `HeartbeatStaleMinutes` | `15` | 1–10080 minutes; strictly older than this limit is stale. |
+| `DatabaseConnectionString` | empty | Integrated Security only, with an explicit database; no username/password or attached database allowed. |
+
+Restart Sentinel after changing configuration. Matching is strictly
+`^OMP\.HostAgent\.\d+\.\d+\.\d+$` (case-insensitive SCM names); Sentinel itself
+and unversioned/custom-named agents are excluded. Healthy means exactly one match,
+Running, and a live PID. Process start time is used for the OK message; SCM does
+not supply a historical Running-transition timestamp. Default checks detect
+service/process loss, **not a hung HostAgent loop**. During an upgrade, a temporary
+duplicate produces 101 and a gap can produce 102; coordinate alarm maintenance
+windows as appropriate. Repeated faults are logged on every check.
+
+The installer sets `sc.exe failure` to restart after 300 seconds for the first,
+second and subsequent failures, with the failure count reset after 86400 seconds.
+Windows repeats the last configured action after the third failure. It also sets
+`failureflag 1`, so an orderly nonzero stop triggers recovery. See
+[Windows non-crash recovery semantics](https://learn.microsoft.com/en-us/windows/win32/api/winsvc/ns-winsvc-service_failure_actions_flag).
+The tradeoff is deliberate: generic service monitoring sees a clear five-minute
+alarm interval, but continuous polling pauses during that interval. A poll-based
+alarm system should sample more frequently than five minutes. Setting
+`StopSelfWhenHostAgentDown=false` leaves event monitoring responsible for all
+HostAgent alarms; configuration/monitoring failures still stop Sentinel.
+Recovery state is retained in `%ProgramData%\OMP\HostAgentSentinel\fault.state`,
+so a real fault is remembered across Sentinel restarts. Only the installer
+registers the event source; the running service never creates one.
+
+The optional SQL query reads `omp.Hosts.LastSeenUtc WHERE HostKey = @hostKey`, with
+`@hostKey = Environment.MachineName`. It uses inbox `System.Data.SqlClient`, a
+parameterized read, and five-second connect/command timeouts. A custom HostAgent
+HostKey is outside this optional check's contract. LocalSystem connects locally
+as SYSTEM and, on a domain-joined machine, remotely using the machine account.
+An operator must grant that existing identity least-privilege SELECT access; the
+installer never grants SQL permissions or obtains credentials. Do not enable it
+unless that identity is already suitable. Never include secrets in this config.
+
+### Operator acceptance test
+
+När du verifierar hos kunden kör du själv detta under ett godkänt servicefönster;
+återställ alltid HostAgent och Sentinel efter provet.
+
+1. Record `Get-CimInstance Win32_Service` for the exact current HostAgent name.
+2. Stop that HostAgent. Within one default 30-second check (allow 60 seconds),
+   verify Application event 100 and Sentinel Stopped with SCM exit code 100.
+3. Start HostAgent, then Sentinel (or wait for the configured recovery action).
+   Verify event 1 followed by 10, and both services Running.
+4. Read evidence with `Get-WinEvent -FilterHashtable @{LogName='Application';
+   ProviderName='OMP.HostAgent.Sentinel'; Id=1,10,100,101,102,103,200}`.
+
+If endpoint protection blocks the new executable/service, stop and have the
+operator resolve the block. Do not silently change the fixed name/path.
+
 ## Package Layout
 
 Developer checkouts can use the shorter runner layout below. This is the layout
