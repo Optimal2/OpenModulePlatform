@@ -257,17 +257,16 @@ public sealed class OmpOidcPrincipalFormTests
             [@"CONTOSO\archive-writers", "archive-writers", "printer-users", @"CONTOSO\printer-users", @"OTHERDOM\secret", GroupSid, "user@contoso.example"],
             expanded);
 
-        // No restriction configured: qualified names are stripped, bare names cannot gain a
-        // domain, and well-known local authorities are never stripped (a bare role row
-        // "Administrators" must not match BUILTIN\Administrators).
+        // No restriction configured (empty or *): nothing is added in either direction, so a
+        // bare role row never matches a same-named group from an arbitrary domain, and
+        // BUILTIN\Administrators never collapses to "Administrators".
         Assert.Equal(
-            [@"OTHERDOM\secret", "secret", "plain", @"BUILTIN\Administrators", @"NT AUTHORITY\Authenticated Users"],
-            OmpAuthRepository.ExpandGroupPrincipalForms(
-                [@"OTHERDOM\secret", "plain", @"BUILTIN\Administrators", @"NT AUTHORITY\Authenticated Users"], ["*"]));
+            [@"OTHERDOM\secret", "plain", @"BUILTIN\Administrators"],
+            OmpAuthRepository.ExpandGroupPrincipalForms([@"OTHERDOM\secret", "plain", @"BUILTIN\Administrators"], ["*"]));
         Assert.Equal(
-            [@"OTHERDOM\secret", "secret", "plain"],
+            [@"OTHERDOM\secret", "plain"],
             OmpAuthRepository.ExpandGroupPrincipalForms([@"OTHERDOM\secret", "plain"], []));
-        // An explicitly listed authority is stripped even when it is a local one.
+        // Only an explicitly listed authority is stripped, local ones included.
         Assert.Equal(
             [@"BUILTIN\Users", "Users"],
             OmpAuthRepository.ExpandGroupPrincipalForms([@"BUILTIN\Users"], ["BUILTIN"]));

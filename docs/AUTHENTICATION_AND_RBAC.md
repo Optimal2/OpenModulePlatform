@@ -139,12 +139,12 @@ The AD provider emits role principals for:
 A role row may hold the group as `DOMAIN\Group` or as the bare `Group` name: both
 spellings are tried for every delivered group, on the Windows and the OIDC path
 alike, so the same row matches regardless of how the user signed in. The domain
-is only added or removed when it is listed in the RBAC setting
-`authenticatedUsersWindowsDomains` (an empty list or `*` means no restriction,
-and then only the removal direction applies since no domain is known). Local
-authorities such as `BUILTIN` and `NT AUTHORITY` are never stripped unless listed
-explicitly, so a bare role row never matches a local machine group by accident.
-Group SIDs are matched as delivered.
+is added or removed only when it is listed explicitly in the RBAC setting
+`authenticatedUsersWindowsDomains`; with an empty list or `*` no conversion
+happens in either direction, so a bare role row never matches a same-named
+group from an arbitrary domain or a local authority such as `BUILTIN`. Set the
+directory's NetBIOS domain name in that setting to get the conversion. Group
+SIDs are matched as delivered.
 
 If an enabled `omp.user_auth` row links the AD provider identity to an active `omp.users` row, the cookie also includes the OMP user id.
 

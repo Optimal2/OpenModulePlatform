@@ -921,10 +921,11 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
     /// <summary>
     /// Adds the other spelling of each group so a role row matches whichever form the
     /// sign-in path delivers: Windows sign-in yields <c>DOMAIN\Group</c>, an OIDC provider
-    /// may send the bare <c>Group</c>. <c>DOMAIN\Group</c> also yields <c>Group</c> when the
-    /// domain is in <paramref name="allowedDomains"/> (or no restriction is configured), and
-    /// <c>Group</c> yields <c>DOMAIN\Group</c> for every listed domain. SIDs are left alone.
-    /// A null allowlist (configuration unreadable) adds nothing.
+    /// may send the bare <c>Group</c>. <c>DOMAIN\Group</c> also yields <c>Group</c> only when
+    /// the domain is listed explicitly in <paramref name="allowedDomains"/>, and <c>Group</c>
+    /// yields <c>DOMAIN\Group</c> for every listed domain. An empty list or <c>*</c> adds
+    /// nothing: a bare role row must never match a same-named group from an arbitrary domain
+    /// (review finding 2026-09-07). SIDs are left alone; a null list (unreadable) adds nothing.
     /// </summary>
     internal static IReadOnlyList<string> ExpandGroupPrincipalForms(
         IEnumerable<string> groups,
@@ -940,11 +941,6 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             }
         }
 
-        var unrestricted = allowedDomains is not null &&
-            (allowedDomains.Count == 0 || allowedDomains.Contains("*"));
-        // Well-known local authorities are never stripped: a bare role row "Administrators"
-        // must not start matching BUILTIN\Administrators just because no domain list is set.
-        var localAuthorities = new[] { "BUILTIN", "NT AUTHORITY", "NT SERVICE", "IIS APPPOOL", Environment.MachineName };
         var domains = allowedDomains?
             .Where(domain => domain != "*" && !string.IsNullOrWhiteSpace(domain))
             .ToArray() ?? [];
@@ -961,9 +957,7 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
             if (slashIndex > 0 && slashIndex < group.Length - 1)
             {
                 var domain = group[..slashIndex];
-                var isLocalAuthority = localAuthorities.Contains(domain, StringComparer.OrdinalIgnoreCase);
-                if (domains.Contains(domain, StringComparer.OrdinalIgnoreCase) ||
-                    (unrestricted && !isLocalAuthority))
+                if (domains.Contains(domain, StringComparer.OrdinalIgnoreCase))
                 {
                     Add(group[(slashIndex + 1)..]);
                 }
