@@ -1121,3 +1121,34 @@ BEGIN
     VALUES(@AdminOverviewWidgetId, @PortalAdminPermissionId, NULL);
 END
 GO
+
+-- Activity log: one row per human-attributable event (who did what to which
+-- object), stored as the versioned JSON envelope defined in
+-- OpenModulePlatform.Web.Shared.ActivityLog. The Portal's activity viewer reads
+-- every module's ActivityLog table with one reader; keep the shape identical
+-- across modules (ActivityLogSql.CreateTableStatement is the canonical text).
+IF OBJECT_ID(N'omp_portal.ActivityLog', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_portal.ActivityLog
+    (
+        ActivityLogId bigint IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_portal_ActivityLog PRIMARY KEY CLUSTERED,
+        LoggedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_ActivityLog_LoggedUtc DEFAULT (SYSUTCDATETIME()),
+        OmpUserId int NULL,
+        Entry nvarchar(max) NOT NULL CONSTRAINT CK_omp_portal_ActivityLog_Entry CHECK (ISJSON(Entry) = 1)
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_omp_portal_ActivityLog_LoggedUtc' AND object_id = OBJECT_ID(N'omp_portal.ActivityLog'))
+BEGIN
+    CREATE INDEX IX_omp_portal_ActivityLog_LoggedUtc
+    ON omp_portal.ActivityLog(LoggedUtc DESC, ActivityLogId DESC);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_omp_portal_ActivityLog_OmpUserId' AND object_id = OBJECT_ID(N'omp_portal.ActivityLog'))
+BEGIN
+    CREATE INDEX IX_omp_portal_ActivityLog_OmpUserId
+    ON omp_portal.ActivityLog(OmpUserId, LoggedUtc DESC, ActivityLogId DESC);
+END
+GO

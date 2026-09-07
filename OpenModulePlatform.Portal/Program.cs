@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.Features;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
@@ -27,6 +28,15 @@ builder.AddOmpPushEventDispatcher();
 builder.Services.AddScoped<AppCatalogService>();
 builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddScoped<OmpAdminRepository>();
+// The Portal's own activity log: admin events (maintenance, roles, package
+// imports, host actions) go to omp_portal.ActivityLog in the shared envelope
+// and show up in the activity viewer next to every module's entries.
+builder.Services.AddOmpActivityLog(new ActivityLogOptions
+{
+    SchemaName = "omp_portal",
+    ModuleKey = "omp_portal",
+    AppKey = "omp-portal-web"
+});
 builder.Services.AddScoped<LinkBoxRepository>();
 builder.Services.AddScoped<OmpConfigSettingsAdminRepository>();
 builder.Services.AddScoped<OmpUserAdminRepository>();

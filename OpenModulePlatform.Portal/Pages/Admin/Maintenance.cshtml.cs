@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
@@ -15,14 +16,17 @@ public sealed class MaintenanceModel : OmpPortalPageModel
     private const int DefaultRecentHostAgentJobLimit = 25;
 
     private readonly OmpAdminRepository _repo;
+    private readonly ActivityLogWriter _activityLog;
 
     public MaintenanceModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        OmpAdminRepository repo)
+        OmpAdminRepository repo,
+        ActivityLogWriter activityLog)
         : base(options, rbac)
     {
         _repo = repo;
+        _activityLog = activityLog;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -103,6 +107,18 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             Input.MaxVersionsToKeep,
             User.Identity?.Name,
             ct);
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "artifact_retention.cleanup_queued",
+            Summary = $"Queued artifact retention cleanup job {jobId} (keep {Input.MaxVersionsToKeep} versions, {Preview.DeletableCandidateCount} deletable of {Preview.CandidateCount} candidates)",
+            Subject = new ActivitySubject("hostagent_job", jobId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            Data = new Dictionary<string, object?>
+            {
+                ["maxVersionsToKeep"] = Input.MaxVersionsToKeep,
+                ["deletableCandidates"] = Preview.DeletableCandidateCount,
+                ["candidates"] = Preview.CandidateCount
+            }
+        }, User, ct);
 
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
@@ -124,6 +140,12 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         }
 
         var result = await _repo.QueueMaintenanceScanAsync(User.Identity?.Name, ct);
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "maintenance_scan.queued",
+            Summary = $"Queued {result.TotalJobCount} maintenance scan job(s) ({result.HostJobCount} per host)",
+            Data = new Dictionary<string, object?> { ["totalJobs"] = result.TotalJobCount, ["hostJobs"] = result.HostJobCount }
+        }, User, ct);
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
             T("Queued {0} maintenance scan job(s): one global scan and {1} host scan job(s). Findings appear on this page as HostAgents report back."),
@@ -152,6 +174,17 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             SelectedMaintenanceFindingIds,
             User.Identity?.Name,
             ct);
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "maintenance_findings.cleanup_queued",
+            Summary = $"Queued cleanup for {result.QueuedFindingCount} of {result.SelectedFindingCount} selected maintenance finding(s) across {result.QueuedJobCount} job(s)",
+            Data = new Dictionary<string, object?>
+            {
+                ["findingIds"] = SelectedMaintenanceFindingIds,
+                ["queuedFindings"] = result.QueuedFindingCount,
+                ["queuedJobs"] = result.QueuedJobCount
+            }
+        }, User, ct);
 
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
@@ -182,6 +215,12 @@ public sealed class MaintenanceModel : OmpPortalPageModel
             SelectedMaintenanceFindingIds,
             User.Identity?.Name,
             ct);
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "maintenance_findings.ignored",
+            Summary = $"Ignored {ignoredCount} maintenance finding(s)",
+            Data = new Dictionary<string, object?> { ["findingIds"] = SelectedMaintenanceFindingIds, ["ignored"] = ignoredCount }
+        }, User, ct);
 
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,

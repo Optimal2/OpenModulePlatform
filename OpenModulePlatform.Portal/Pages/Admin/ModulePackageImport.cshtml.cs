@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 
@@ -51,6 +52,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
     private readonly PortalDeploymentLockService _deploymentLocks;
     private readonly IMemoryCache _cache;
     private readonly IStringLocalizer<PortalResource> _portalLocalizer;
+    private readonly ActivityLogWriter _activityLog;
 
     public ModulePackageImportModel(
         IOptions<WebAppOptions> options,
@@ -61,7 +63,8 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         ConfigOverlayObjectService configObjects,
         PortalDeploymentLockService deploymentLocks,
         IMemoryCache cache,
-        IStringLocalizer<PortalResource> portalLocalizer)
+        IStringLocalizer<PortalResource> portalLocalizer,
+        ActivityLogWriter activityLog)
         : base(options, rbac)
     {
         _repo = repo;
@@ -71,6 +74,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         _deploymentLocks = deploymentLocks;
         _cache = cache;
         _portalLocalizer = portalLocalizer;
+        _activityLog = activityLog;
     }
 
     [BindProperty]
@@ -258,6 +262,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                     !UniversalUploadInput.QuickImport && UniversalUploadInput.ReplaceExistingConfigObjects,
                     ct);
                 results.Add(result);
+                await WriteUniversalImportEventAsync(result, ct);
             }
 
             return ShowUniversalImportResults(results, UniversalUploadInput.QuickImport);
@@ -310,6 +315,25 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
     }
 
+    private Task WriteUniversalImportEventAsync(UniversalPackageImportResult result, CancellationToken ct)
+        => _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "universal_package.imported",
+            Outcome = result.FailedCount > 0 ? ActivityOutcomes.Failed : ActivityOutcomes.Ok,
+            Summary = $"Imported universal package '{result.SourceName}': {result.ImportedCount} imported, {result.SkippedCount} skipped, {result.FailedCount} failed",
+            Subject = new ActivitySubject("universal_package", result.PackageKey ?? result.SourceName, result.PackageVersion),
+            Data = new Dictionary<string, object?>
+            {
+                ["packageKey"] = result.PackageKey,
+                ["packageVersion"] = result.PackageVersion,
+                ["targetHostProfile"] = result.TargetHostProfile,
+                ["items"] = result.Items.Count,
+                ["imported"] = result.ImportedCount,
+                ["skipped"] = result.SkippedCount,
+                ["failed"] = result.FailedCount
+            }
+        }, User, ct);
+
     public async Task<IActionResult> OnPostImportStagedUniversal(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -332,6 +356,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 !UniversalStagedInput.QuickImport && UniversalStagedInput.ReplaceExistingConfigObjects,
                 ct);
 
+            await WriteUniversalImportEventAsync(result, ct);
             return ShowUniversalImportResults([result], UniversalStagedInput.QuickImport);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)

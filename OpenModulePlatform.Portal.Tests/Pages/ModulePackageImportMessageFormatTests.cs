@@ -84,7 +84,8 @@ public sealed class ModulePackageImportMessageFormatTests
             configObjects: null!,
             deploymentLocks: null!,
             cache: null!,
-            portalLocalizer: new MarkingStringLocalizer());
+            portalLocalizer: new MarkingStringLocalizer(),
+            activityLog: null!);
 
     /// <summary>
     /// Pass-through localizer that prefixes every lookup, so a test can tell a string

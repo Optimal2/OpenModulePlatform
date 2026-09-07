@@ -5,6 +5,7 @@ using OpenModulePlatform.Portal.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
@@ -29,14 +30,17 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly RbacAdminRepository _repo;
+    private readonly ActivityLogWriter _activityLog;
 
     public RoleModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        RbacAdminRepository repo)
+        RbacAdminRepository repo,
+        ActivityLogWriter activityLog)
         : base(options, rbac)
     {
         _repo = repo;
+        _activityLog = activityLog;
     }
 
     [BindProperty]
@@ -133,6 +137,12 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 },
                 ct);
 
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = IsCreate ? "role.created" : "role.updated",
+                Summary = $"{(IsCreate ? "Created" : "Updated")} role '{Input.Name.Trim()}' (#{roleId})",
+                Subject = new ActivitySubject("role", roleId.ToString(System.Globalization.CultureInfo.InvariantCulture), Input.Name.Trim())
+            }, User, ct);
             StatusMessage = IsCreate ? T("Role created.") : T("Role updated.");
             return RedirectAfterSave(roleId);
         }
@@ -170,6 +180,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.AddPermissionToRoleAsync(Input.RoleId, permissionId, ct);
+        await WriteRoleEventAsync("role.permission_added", $"Added permission #{permissionId} to role #{Input.RoleId}", new Dictionary<string, object?> { ["permissionId"] = permissionId }, ct);
         StatusMessage = T("Permission added to role.");
         return RedirectToSecurityRole(Input.RoleId);
     }
@@ -188,6 +199,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.RemovePermissionFromRoleAsync(Input.RoleId, permissionId, ct);
+        await WriteRoleEventAsync("role.permission_removed", $"Removed permission #{permissionId} from role #{Input.RoleId}", new Dictionary<string, object?> { ["permissionId"] = permissionId }, ct);
         StatusMessage = T("Permission removed from role.");
         return RedirectToSecurityRole(Input.RoleId);
     }
@@ -222,6 +234,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         var result = await AddPrincipalCandidatesAsync(candidates, ct);
+        if (result.Added > 0)
+        {
+            await WriteRoleEventAsync("role.principals_added", $"Added {result.Added} principal(s) of type '{principalType}' to role #{Input.RoleId}", new Dictionary<string, object?> { ["principalType"] = principalType, ["added"] = result.Added, ["candidates"] = candidates.Count }, ct);
+        }
         StatusMessage = BuildPrincipalBatchStatusMessage(result);
         return RedirectToSecurityRole(Input.RoleId);
     }
@@ -240,6 +256,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.RemovePrincipalFromRoleAsync(Input.RoleId, principalType, principal, ct);
+        await WriteRoleEventAsync("role.principal_removed", $"Removed principal '{principal}' ({principalType}) from role #{Input.RoleId}", new Dictionary<string, object?> { ["principalType"] = principalType, ["principal"] = principal }, ct);
         StatusMessage = T("Principal removed from role.");
         return RedirectToSecurityRole(Input.RoleId);
     }
@@ -279,6 +296,15 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         return new JsonResult(Array.Empty<PrincipalSuggestion>());
     }
 
+    private Task WriteRoleEventAsync(string eventKey, string summary, Dictionary<string, object?>? data, CancellationToken ct)
+        => _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = eventKey,
+            Summary = summary,
+            Subject = new ActivitySubject("role", Input.RoleId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            Data = data
+        }, User, ct);
+
     public async Task<IActionResult> OnPostDelete(CancellationToken ct)
     {
         var guard = await RequirePortalAdminAsync(ct);
@@ -295,6 +321,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         try
         {
             await _repo.DeleteRoleAsync(Input.RoleId, ct);
+            await WriteRoleEventAsync("role.deleted", $"Deleted role #{Input.RoleId}", null, ct);
             StatusMessage = T("Role deleted.");
             return RedirectToSecurityRoles();
         }

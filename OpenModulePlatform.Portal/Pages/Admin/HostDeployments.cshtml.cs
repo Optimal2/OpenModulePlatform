@@ -5,6 +5,7 @@ using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -23,19 +24,23 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     private readonly IStringLocalizer<PortalResource> _portalLocalizer;
     private readonly ILogger<HostDeploymentsModel> _logger;
 
+    private readonly ActivityLogWriter _activityLog;
+
     public HostDeploymentsModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
         OmpAdminRepository repo,
         IStringLocalizer<PortalResource> portalLocalizer,
         IHostEnvironment environment,
-        ILogger<HostDeploymentsModel> logger)
+        ILogger<HostDeploymentsModel> logger,
+        ActivityLogWriter activityLog)
         : base(options, rbac)
     {
         _environment = environment;
         _repo = repo;
         _portalLocalizer = portalLocalizer;
         _logger = logger;
+        _activityLog = activityLog;
     }
 
     public IReadOnlyList<HostAppDeploymentStateRow> AppDeploymentStates { get; private set; } = [];
@@ -135,6 +140,16 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         }
 
         var changedRows = await _repo.RequestHostAgentUpgradeAsync(hostId, artifactId, ct);
+        if (changedRows > 0)
+        {
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "hostagent.upgrade_requested",
+                Summary = $"Requested HostAgent upgrade to artifact #{artifactId} on host {hostId:N}",
+                Subject = new ActivitySubject("host", hostId.ToString("N")),
+                Data = new Dictionary<string, object?> { ["artifactId"] = artifactId }
+            }, User, ct);
+        }
         await TryWriteAuditLogAsync(
             "RequestHostAgentUpgrade",
             "HostAgentDesiredState",
@@ -227,6 +242,13 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             appPoolName,
             User.Identity?.Name,
             ct);
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "web_app.app_pool_recycle_queued",
+            Summary = $"Queued application-pool recycle job {jobId} for '{NormalizeHealthKey(healthKey)}' on host {hostId:N}",
+            Subject = new ActivitySubject("hostagent_job", jobId.ToString(System.Globalization.CultureInfo.InvariantCulture), NormalizeHealthKey(healthKey)),
+            Data = new Dictionary<string, object?> { ["hostId"] = hostId.ToString("N"), ["healthKey"] = NormalizeHealthKey(healthKey), ["appPoolName"] = NormalizeOptionalValue(appPoolName) }
+        }, User, ct);
         await TryWriteAuditLogAsync(
             "QueueWebAppAppPoolRecycle",
             "HostAgentJob",

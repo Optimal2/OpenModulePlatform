@@ -19,7 +19,8 @@ DECLARE @Missing int = 0;
         (N'omp_portal', N'user_active_widget_data'),
         (N'omp_portal', N'widget_data'),
         (N'omp_portal', N'widget_binary_data'),
-        (N'omp_portal', N'user_dashboard_preferences')
+        (N'omp_portal', N'user_dashboard_preferences'),
+        (N'omp_portal', N'ActivityLog')
     ) AS v(SchemaName, TableName)
 )
 SELECT @Missing = @Missing + COUNT(1)
@@ -69,7 +70,11 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_portal', N'user_dashboard_preferences', N'user_id'),
         (N'omp_portal', N'user_dashboard_preferences', N'align_to_grid'),
         (N'omp_portal', N'user_dashboard_preferences', N'expanded_canvas'),
-        (N'omp_portal', N'user_dashboard_preferences', N'has_custom_dashboard_layout')
+        (N'omp_portal', N'user_dashboard_preferences', N'has_custom_dashboard_layout'),
+        (N'omp_portal', N'ActivityLog', N'ActivityLogId'),
+        (N'omp_portal', N'ActivityLog', N'LoggedUtc'),
+        (N'omp_portal', N'ActivityLog', N'OmpUserId'),
+        (N'omp_portal', N'ActivityLog', N'Entry')
     ) AS v(SchemaName, TableName, ColumnName)
 )
 SELECT @Missing = @Missing + COUNT(1)
