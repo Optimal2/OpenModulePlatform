@@ -147,10 +147,10 @@ Repositories can also build their own portable objects without a full installer
 refresh:
 
 ```powershell
-.\scripts\omp\build-repository-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -AllComponents
-.\scripts\omp\build-repository-objects.ps1 -OutputRoot E:\OMP\ObjectBuild -ComponentKey content-webapp -BuildArtifacts
+.\scripts\omp\build-repository-objects.ps1 -OutputRoot G:\OMP\ObjectBuild -AllComponents
+.\scripts\omp\build-repository-objects.ps1 -OutputRoot G:\OMP\ObjectBuild -ComponentKey content-webapp -BuildArtifacts
 .\scripts\omp\build-repository-objects.ps1 `
-  -OutputRoot E:\OMP\ObjectBuild `
+  -OutputRoot G:\OMP\ObjectBuild `
   -ComponentKey opendocviewer-web `
   -BuildArtifacts `
   -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'

@@ -179,8 +179,8 @@ The local development equivalent uses the same layout with ordinary local
 folders, for example:
 
 ```text
-E:\OMP\Data\ContentReports -> E:\OMP\WebApps\content\App_Data\ContentReports
-E:\OMP\Data\ContentPages   -> E:\OMP\WebApps\content\App_Data\ContentPages
+G:\OMP\Data\ContentReports -> G:\OMP\WebApps\content\App_Data\ContentReports
+G:\OMP\Data\ContentPages   -> G:\OMP\WebApps\content\App_Data\ContentPages
 ```
 
 Another developer machine should use its own equivalent runtime root and Windows
@@ -205,7 +205,7 @@ For a repeatable end-to-end check of an already running local installation,
 use:
 
 ```powershell
-.\scripts\dev\test-content-webapp-local-install.ps1 -RuntimeRoot E:\OMP
+.\scripts\dev\test-content-webapp-local-install.ps1 -RuntimeRoot G:\OMP
 ```
 
 This test does not require stopping HostAgent. It writes a unique marker into

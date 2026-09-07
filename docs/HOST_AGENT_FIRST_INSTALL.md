@@ -18,6 +18,14 @@ by HostAgent itself:
 This keeps normal application deployment in the database/template model instead
 of in one-off PowerShell installation logic.
 
+**Installation is one-time work.** Once an environment is set up, routine change
+is made with artifact packages, the Portal and HostAgent — not by running the
+installer again. Re-running the installer is reserved for the deliberate cases
+named further down (repair, a full reconfiguration pass, or uninstall), and it
+is an operator decision each time, never a routine step and never an automated
+one. Where neither a package nor the Portal can express the change, the
+remaining path is manual SQL run by the operator, not an installer re-run.
+
 ## Larmpunkt: HostAgent Sentinel
 
 HostAgent Sentinel provides the fixed Windows service name `OMP.HostAgent.Sentinel`

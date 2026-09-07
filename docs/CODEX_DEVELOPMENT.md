@@ -147,7 +147,7 @@ Default local paths and endpoints:
 ```text
 OpenModulePlatform repo: <workspace>\OpenModulePlatform
 Optional consumer repos: <workspace>\<consumer-repo>
-Runtime root:            E:\OMP
+Runtime root:            G:\OMP
 SQL Server:              localhost
 Database:                OpenModulePlatform
 Portal URL:              http://localhost:8088/
@@ -169,7 +169,7 @@ sample installer:
 For a publish-only pass:
 
 ```powershell
-.\publish-all.ps1 -Configuration Release -OutputRoot "E:\OMP\Publish\OMP" -Restore -CleanOutput
+.\publish-all.ps1 -Configuration Release -OutputRoot "G:\OMP\Publish\OMP" -Restore -CleanOutput
 ```
 
 Use destructive options such as `-DropDatabase`, `-ClearDatabaseObjects`, or

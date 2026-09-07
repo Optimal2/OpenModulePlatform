@@ -35,22 +35,22 @@ Excluded on purpose:
 Run the script from the repo root:
 
 ```powershell
-.\publish-all.ps1 -Configuration Release -OutputRoot "E:\OMP\Publish\OMP" -Restore -CleanOutput
+.\publish-all.ps1 -Configuration Release -OutputRoot "G:\OMP\Publish\OMP" -Restore -CleanOutput
 ```
 
 For the standard local runtime layout, copy or deploy these published folders:
 
 ```text
-OpenModulePlatform.Portal                 -> E:\OMP\Sites\Portal
-OpenModulePlatform.Auth                   -> E:\OMP\WebApps\auth
-OpenModulePlatform.Web.ContentWebAppModule -> E:\OMP\WebApps\content
-OpenModulePlatform.Web.iFrameWebAppModule -> E:\OMP\WebApps\iFrameWebAppModule
-OpenModulePlatform.HostAgent.WindowsService -> E:\OMP\Services\HostAgent
-OpenModulePlatform.WorkerManager.WindowsService -> E:\OMP\Services\WorkerManager
-OpenModulePlatform.WorkerProcessHost      -> E:\OMP\Services\WorkerProcessHost
+OpenModulePlatform.Portal                 -> G:\OMP\Sites\Portal
+OpenModulePlatform.Auth                   -> G:\OMP\WebApps\auth
+OpenModulePlatform.Web.ContentWebAppModule -> G:\OMP\WebApps\content
+OpenModulePlatform.Web.iFrameWebAppModule -> G:\OMP\WebApps\iFrameWebAppModule
+OpenModulePlatform.HostAgent.WindowsService -> G:\OMP\Services\HostAgent
+OpenModulePlatform.WorkerManager.WindowsService -> G:\OMP\Services\WorkerManager
+OpenModulePlatform.WorkerProcessHost      -> G:\OMP\Services\WorkerProcessHost
 ```
 
-The Portal IIS application can then point to `E:\OMP\Sites\Portal`; the Windows services should point to their corresponding service folders.
+The Portal IIS application can then point to `G:\OMP\Sites\Portal`; the Windows services should point to their corresponding service folders.
 
 ## Local Windows service names
 
@@ -152,7 +152,7 @@ OMP.WorkerManager
 The WorkerManager runtime config must point to:
 
 ```text
-E:\OMP\Services\WorkerProcessHost\OpenModulePlatform.WorkerProcessHost.exe
+G:\OMP\Services\WorkerProcessHost\OpenModulePlatform.WorkerProcessHost.exe
 ```
 
 and normally uses database catalog mode:

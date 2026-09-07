@@ -8,6 +8,16 @@ repository, so an error message crossing a repository boundary is never
 ambiguous. Numbers are never reused for a different check and never renumbered;
 new checks get the next unused number.
 
+That numbering contract is upheld by this document and by review — **no guard
+enforces it**. Check 15 byte-compares only `validate-component-versions.helpers.ps1`
+and `bump-version.ps1`; `validate-component-versions.ps1` itself is deliberately
+repo-local (see the next section), so nothing would mechanically catch a repository
+that gave `Check 20` a different meaning. Verified 2026-09-08 by extracting every
+`Check N` declaration from all nine validators: checks 1–10, 12, 13, 15 and 16 do
+carry the same meaning everywhere they appear. What differs between repositories is
+which checks are *present*, not what a number *means* — that difference is measured
+in "Present-but-vacuous is not applied uniformly" below.
+
 ## The shared core vs repo-local flow
 
 Two layers, deliberately separated:

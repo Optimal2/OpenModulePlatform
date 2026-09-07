@@ -9,7 +9,7 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 - **Library:** NLog (via `NLog.Extensions.Hosting` / `NLog.Web.AspNetCore`) bridged through `Microsoft.Extensions.Logging` / `ILogger<T>`.
   - `OpenModulePlatform.Web.Shared/Extensions/OmpWebLoggingExtensions.cs:2`
   - `OpenModulePlatform.HostAgent.WindowsService/Program.cs:5`
-  - `Directory.Packages.props:27-28`
+  - `Directory.Packages.props:45-46`
 - **Configuration:** JSON-only. Each executable host has an `"NLog"` section in `appsettings.json`.
   - `OpenModulePlatform.HostAgent.WindowsService/appsettings.json:73-109`
   - `OpenModulePlatform.Portal/appsettings.json:52-88`
@@ -123,7 +123,7 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 ### iKrock2
 
 - **Library:** NLog + MEL/ILogger.
-  - `Directory.Packages.props:16` pins `NLog.Web.AspNetCore` `6.1.4`
+  - `Directory.Packages.props:17` pins `NLog.Web.AspNetCore` `6.2.0`
   - `iKrock2.Backend/Program.cs:14-18` wires NLog
   - `iKrock2.Web/Program.cs:17` uses `AddOmpWebDefaults<IKrock2Resource>`
 - **Configuration:** NLog sections in backend and web `appsettings.json`.
@@ -217,7 +217,7 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 
 **Use NLog as the provider and `Microsoft.Extensions.Logging` (`ILogger<T>`) as the abstraction, configured entirely in `appsettings.json`.**
 
-- NLog is already the dominant provider across OMP services and web apps, pinned centrally in `OpenModulePlatform/Directory.Packages.props:27-28` (`NLog.Extensions.Hosting` and `NLog.Web.AspNetCore` `6.1.4`).
+- NLog is already the dominant provider across OMP services and web apps, pinned centrally in `OpenModulePlatform/Directory.Packages.props:45-46` (`NLog.Extensions.Hosting` and `NLog.Web.AspNetCore` `6.2.0`). ODVGateway is the one repository still on `6.1.4` (`src/ODVGateway/ODVGateway.csproj:15`, measured 2026-09-08); it pins the package directly rather than through central package management.
 - Web apps should continue to inherit NLog through `OpenModulePlatform.Web.Shared/Extensions/OmpWebLoggingExtensions.cs:12-23` (`ClearProviders()` + `UseNLog(...)`).
 - Service/worker hosts should call `logging.ClearProviders(); logging.AddNLog();` (or equivalent host setup) and keep the NLog section in `appsettings.json`.
 - Use MEL log levels (`Debug`/`Information`/`Warning`/`Error`/`Critical`) in code; map them to NLog rules using `minLevel`/`maxLevel`.
