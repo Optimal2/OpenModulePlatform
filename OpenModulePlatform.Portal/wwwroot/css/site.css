@@ -1825,6 +1825,9 @@ input[type=text],
 input[type=number],
 input[type=password],
 input[type=url],
+input[type=date],
+input[type=datetime-local],
+input[type=search]:not(.list-search),
 textarea,
 select {
     width: 100%;
