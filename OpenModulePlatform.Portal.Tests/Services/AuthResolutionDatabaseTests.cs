@@ -50,6 +50,41 @@ public sealed class AuthResolutionDatabaseTests(AuthResolutionTestFixture fixtur
     }
 
     [Fact]
+    public async Task ResolveOidcAsync_MatchesRoleRowsInEitherGroupForm()
+    {
+        // Campaign ad-grupper-samma-form-windows-och-adfs. Windows sign-in delivers
+        // DOMAIN\Group, an OIDC provider may deliver the bare Group; a role row written in
+        // either form must match from both paths when the domain is allowlisted.
+        await fixture.SetGlobalSettingAsync(
+            OmpRbacDefaults.ConfigurationCategory, OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting, "CONTOSO");
+        await fixture.InsertRolePrincipalAsync("group-form-qualified-role", "ADGroup", @"CONTOSO\form-qualified");
+        await fixture.InsertRolePrincipalAsync("group-form-bare-role", "ADGroup", "form-bare");
+        await fixture.InsertRolePrincipalAsync("group-form-foreign-role", "ADGroup", "form-foreign");
+
+        var claims = new OmpOidcResolvedClaims
+        {
+            ProviderName = "ADFS",
+            Subject = "group-form-subject",
+            Issuer = "https://idp.example.invalid/adfs",
+            ProviderUserKey = "group-form-subject",
+            ProviderUserKeyCandidates = ["group-form-subject"],
+            UserName = @"CONTOSO\group-form-user",
+            DisplayName = "Group Form User",
+            UserPrincipalCandidates = [@"CONTOSO\group-form-user"],
+            // Bare form as an IdP sends it, qualified form as Windows delivers it, and a
+            // qualified group from a domain outside the allowlist that must not be stripped.
+            Groups = ["form-qualified", @"CONTOSO\form-bare", @"OTHERDOM\form-foreign"]
+        };
+
+        var user = await fixture.CreateAuthRepository().ResolveOidcAsync(claims, CancellationToken.None);
+
+        Assert.NotNull(user);
+        Assert.Equal(
+            [@"CONTOSO\form-qualified", "form-bare"],
+            user.RolePrincipals.Where(p => p.PrincipalType == "ADGroup").Select(p => p.Principal).OrderBy(p => p).ToList());
+    }
+
+    [Fact]
     public async Task ResolveLocalPasswordAsync_WhenStoredNameIsNotCanonical_DoesNotMatch()
     {
         // R7-F12. A legacy row written before the shared normalization rule

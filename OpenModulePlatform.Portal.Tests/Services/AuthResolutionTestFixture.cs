@@ -231,6 +231,51 @@ END",
     }
 
     /// <summary>
+    /// Writes one global configuration value (definition + value row) the way the seeds
+    /// do, so tests can set e.g. the rbac/authenticatedUsersWindowsDomains allowlist.
+    /// </summary>
+    public async Task SetGlobalSettingAsync(string category, string setting, string? value)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+
+        await using var cmd = new SqlCommand(
+            @"
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM omp.config_setting_definitions
+    WHERE ConfigCategory = @category
+      AND ConfigSetting = @setting
+)
+BEGIN
+    INSERT INTO omp.config_setting_definitions(ConfigCategory, ConfigSetting)
+    VALUES(@category, @setting);
+END
+
+DELETE cs
+FROM omp.config_settings cs
+INNER JOIN omp.config_setting_definitions def
+    ON def.ConfigSettingId = cs.ConfigSettingId
+WHERE def.ConfigCategory = @category
+  AND def.ConfigSetting = @setting;
+
+IF @value IS NOT NULL
+BEGIN
+    INSERT INTO omp.config_settings(ConfigSettingId, ConfigValue)
+    SELECT def.ConfigSettingId, @value
+    FROM omp.config_setting_definitions def
+    WHERE def.ConfigCategory = @category
+      AND def.ConfigSetting = @setting;
+END",
+            conn);
+        cmd.Parameters.AddWithValue("@category", category);
+        cmd.Parameters.AddWithValue("@setting", setting);
+        cmd.Parameters.AddWithValue("@value", value is null ? DBNull.Value : value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
     /// Writes the global auth/selfRegistrationEnabled value the way the omp_auth
     /// seed does, so registration tests can turn the feature on deliberately.
     /// </summary>

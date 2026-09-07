@@ -107,7 +107,7 @@ public sealed class OmpAuthRepository
         var windowsGroupPrincipals = _windows.GetGroupPrincipals(windowsPrincipal);
         var mappedAdGroupPrincipals = await GetMappedAdGroupPrincipalsAsync(
             conn,
-            windowsGroupPrincipals,
+            ExpandGroupPrincipalForms(windowsGroupPrincipals, await ReadAllowedGroupDomainsAsync(ct)),
             ct);
 
         _log.LogDebug(
@@ -205,7 +205,7 @@ public sealed class OmpAuthRepository
         // the web server (HTTP 400) on every request after signing in.
         var mappedOidcGroupPrincipals = await GetMappedAdGroupPrincipalsAsync(
             conn,
-            oidcClaims.Groups,
+            ExpandGroupPrincipalForms(oidcClaims.Groups, await ReadAllowedGroupDomainsAsync(ct)),
             ct);
 
         _log.LogDebug(
@@ -896,6 +896,89 @@ WHERE r.Name NOT IN (@everyoneRoleName, @authenticatedUsersRoleName)
         => string.Equals(principalType, "ADUser", StringComparison.OrdinalIgnoreCase)
            || string.Equals(principalType, "ADGroup", StringComparison.OrdinalIgnoreCase)
            || string.Equals(principalType, "User", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The AuthenticatedUsers domain allowlist reused for group-form expansion. Null means
+    /// the value could not be read: callers then match the raw group forms only, so a
+    /// database hiccup narrows matching instead of widening it.
+    /// </summary>
+    private async Task<HashSet<string>?> ReadAllowedGroupDomainsAsync(CancellationToken ct)
+    {
+        var read = await _configuration.ReadGlobalStringAsync(
+            OmpRbacDefaults.ConfigurationCategory,
+            OmpRbacDefaults.AuthenticatedUsersWindowsDomainsSetting,
+            ct);
+        if (read.Failed)
+        {
+            _log.LogWarning(
+                "The AuthenticatedUsers domain allowlist could not be read; AD group principals are matched in their delivered form only for this sign-in.");
+            return null;
+        }
+
+        return SplitDomainList(read.Value);
+    }
+
+    /// <summary>
+    /// Adds the other spelling of each group so a role row matches whichever form the
+    /// sign-in path delivers: Windows sign-in yields <c>DOMAIN\Group</c>, an OIDC provider
+    /// may send the bare <c>Group</c>. <c>DOMAIN\Group</c> also yields <c>Group</c> when the
+    /// domain is in <paramref name="allowedDomains"/> (or no restriction is configured), and
+    /// <c>Group</c> yields <c>DOMAIN\Group</c> for every listed domain. SIDs are left alone.
+    /// A null allowlist (configuration unreadable) adds nothing.
+    /// </summary>
+    internal static IReadOnlyList<string> ExpandGroupPrincipalForms(
+        IEnumerable<string> groups,
+        IReadOnlyCollection<string>? allowedDomains)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value) && seen.Add(value.Trim()))
+            {
+                result.Add(value.Trim());
+            }
+        }
+
+        var unrestricted = allowedDomains is not null &&
+            (allowedDomains.Count == 0 || allowedDomains.Contains("*"));
+        // Well-known local authorities are never stripped: a bare role row "Administrators"
+        // must not start matching BUILTIN\Administrators just because no domain list is set.
+        var localAuthorities = new[] { "BUILTIN", "NT AUTHORITY", "NT SERVICE", "IIS APPPOOL", Environment.MachineName };
+        var domains = allowedDomains?
+            .Where(domain => domain != "*" && !string.IsNullOrWhiteSpace(domain))
+            .ToArray() ?? [];
+
+        foreach (var group in groups.Where(group => !string.IsNullOrWhiteSpace(group)).Select(group => group.Trim()))
+        {
+            Add(group);
+            if (allowedDomains is null || group.StartsWith("S-1-", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var slashIndex = group.IndexOf('\\', StringComparison.Ordinal);
+            if (slashIndex > 0 && slashIndex < group.Length - 1)
+            {
+                var domain = group[..slashIndex];
+                var isLocalAuthority = localAuthorities.Contains(domain, StringComparer.OrdinalIgnoreCase);
+                if (domains.Contains(domain, StringComparer.OrdinalIgnoreCase) ||
+                    (unrestricted && !isLocalAuthority))
+                {
+                    Add(group[(slashIndex + 1)..]);
+                }
+            }
+            else if (slashIndex < 0 && !group.Contains('@', StringComparison.Ordinal))
+            {
+                foreach (var domain in domains)
+                {
+                    Add(domain + "\\" + group);
+                }
+            }
+        }
+
+        return result;
+    }
 
     private static HashSet<string> SplitDomainList(string? value)
     {

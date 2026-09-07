@@ -244,6 +244,40 @@ public sealed class OmpOidcPrincipalFormTests
         Assert.Equal(3, OmpAuthRepository.BuildOidcRolePrincipals(resolved, resolved.Groups).Count(p => p.PrincipalType == "ADGroup"));
     }
 
+    [Fact]
+    public void ExpandGroupPrincipalForms_AddsTheOtherSpellingOnlyForAllowedDomains()
+    {
+        // Campaign ad-grupper-samma-form-windows-och-adfs: the same role row must match
+        // whether the group arrives as DOMAIN\Group (Windows) or bare Group (an IdP).
+        var expanded = OmpAuthRepository.ExpandGroupPrincipalForms(
+            [@"CONTOSO\archive-writers", "printer-users", @"OTHERDOM\secret", GroupSid, "user@contoso.example", " "],
+            ["CONTOSO"]);
+
+        Assert.Equal(
+            [@"CONTOSO\archive-writers", "archive-writers", "printer-users", @"CONTOSO\printer-users", @"OTHERDOM\secret", GroupSid, "user@contoso.example"],
+            expanded);
+
+        // No restriction configured: qualified names are stripped, bare names cannot gain a
+        // domain, and well-known local authorities are never stripped (a bare role row
+        // "Administrators" must not match BUILTIN\Administrators).
+        Assert.Equal(
+            [@"OTHERDOM\secret", "secret", "plain", @"BUILTIN\Administrators", @"NT AUTHORITY\Authenticated Users"],
+            OmpAuthRepository.ExpandGroupPrincipalForms(
+                [@"OTHERDOM\secret", "plain", @"BUILTIN\Administrators", @"NT AUTHORITY\Authenticated Users"], ["*"]));
+        Assert.Equal(
+            [@"OTHERDOM\secret", "secret", "plain"],
+            OmpAuthRepository.ExpandGroupPrincipalForms([@"OTHERDOM\secret", "plain"], []));
+        // An explicitly listed authority is stripped even when it is a local one.
+        Assert.Equal(
+            [@"BUILTIN\Users", "Users"],
+            OmpAuthRepository.ExpandGroupPrincipalForms([@"BUILTIN\Users"], ["BUILTIN"]));
+
+        // Allowlist unreadable: nothing is added, matching stays on the delivered form.
+        Assert.Equal(
+            [@"CONTOSO\archive-writers", "plain"],
+            OmpAuthRepository.ExpandGroupPrincipalForms([@"CONTOSO\archive-writers", "plain"], null));
+    }
+
     private static OmpOidcOptions BrokenSamAccountNameOptions()
         => new()
         {

@@ -136,6 +136,16 @@ The AD provider emits role principals for:
 - `ADUser` with the user SID when available
 - `ADGroup` only for group SIDs or translated `DOMAIN\Group` names that already exist in `omp.RolePrincipals`
 
+A role row may hold the group as `DOMAIN\Group` or as the bare `Group` name: both
+spellings are tried for every delivered group, on the Windows and the OIDC path
+alike, so the same row matches regardless of how the user signed in. The domain
+is only added or removed when it is listed in the RBAC setting
+`authenticatedUsersWindowsDomains` (an empty list or `*` means no restriction,
+and then only the removal direction applies since no domain is known). Local
+authorities such as `BUILTIN` and `NT AUTHORITY` are never stripped unless listed
+explicitly, so a bare role row never matches a local machine group by accident.
+Group SIDs are matched as delivered.
+
 If an enabled `omp.user_auth` row links the AD provider identity to an active `omp.users` row, the cookie also includes the OMP user id.
 
 The AD provider intentionally filters Windows group memberships before issuing the shared OMP cookie. A Windows identity can contain hundreds or thousands of AD groups, and writing all of them into the cookie can exceed IIS/HTTP header limits. The provider still enumerates the Windows groups during sign-in, but only persists the groups that are actually used by RBAC.
