@@ -6342,10 +6342,10 @@ body.dashboard-widget-picker-open {
     gap: 12px;
 }
 
+/* The cards span their section: the user picker is a full table now and a
+   centred 1180 px band left visible gutters on wide screens. */
 .role-principal-add--wide {
     width: 100%;
-    max-width: 1180px;
-    margin-inline: auto;
 }
 
 .role-principal-add-grid {
