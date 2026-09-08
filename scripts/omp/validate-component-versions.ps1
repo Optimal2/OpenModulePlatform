@@ -863,10 +863,12 @@ else {
         $isNewFile = [string]::IsNullOrWhiteSpace($baseText)
 
         $headNormalized = ConvertTo-NormalizedSql -SqlText $headText
-        $baseNormalized = ConvertTo-NormalizedSql -SqlText $baseText
+        # A file that does not exist at the base ref has no text to normalize or
+        # hash; the mandatory string parameters below reject an empty string.
+        $baseNormalized = if ($isNewFile) { '' } else { ConvertTo-NormalizedSql -SqlText $baseText }
 
         $headHash = Get-Sha256Hex -Text $headNormalized
-        $baseHash = Get-Sha256Hex -Text $baseNormalized
+        $baseHash = if ($isNewFile) { '' } else { Get-Sha256Hex -Text $baseNormalized }
 
         if (-not $isNewFile -and $headHash -eq $baseHash) {
             $sqlFilesPassed++
