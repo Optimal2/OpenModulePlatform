@@ -1035,4 +1035,8 @@
   <data name="Data" xml:space="preserve"><value>Data</value></data>
   <data name="This entry uses an envelope version this viewer does not understand. The stored text is shown as is." xml:space="preserve"><value>This entry uses an envelope version this viewer does not understand. The stored text is shown as is.</value></data>
   <data name="Raw entry" xml:space="preserve"><value>Raw entry</value></data>
+  <data name="Select all shown OMP users" xml:space="preserve"><value>Select all shown OMP users</value></data>
+  <data name="Select OMP user {0}" xml:space="preserve"><value>Select OMP user {0}</value></data>
+  <data name="AD account" xml:space="preserve"><value>AD account</value></data>
+  <data name="Search and tick OMP users in the list, or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Search and tick OMP users in the list, or paste AD users/groups as newline-separated text.</value></data>
 </root>

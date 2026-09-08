@@ -6373,7 +6373,19 @@ body.dashboard-widget-picker-open {
 }
 
 .role-principal-picker__list {
-    max-height: 320px;
+    max-height: 360px;
+    overflow-y: auto;
+}
+
+/* The picker's submit keeps the full-width button of its sibling cards; the
+   selected count sits as a small line above it. */
+.role-principal-add-card .list-selection-actions {
+    display: grid;
+    gap: 6px;
+}
+
+.role-principal-add-card .list-selection-actions .list-selected-count {
+    text-align: right;
 }
 
 .role-principal-add-card .actions {

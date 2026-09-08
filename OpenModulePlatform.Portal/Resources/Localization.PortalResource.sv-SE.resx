@@ -3349,4 +3349,8 @@
   <data name="Data" xml:space="preserve"><value>Data</value></data>
   <data name="This entry uses an envelope version this viewer does not understand. The stored text is shown as is." xml:space="preserve"><value>Posten använder en kuvertversion som den här granskaren inte förstår. Den lagrade texten visas som den är.</value></data>
   <data name="Raw entry" xml:space="preserve"><value>Rå post</value></data>
+  <data name="Select all shown OMP users" xml:space="preserve"><value>Markera alla visade OMP-användare</value></data>
+  <data name="Select OMP user {0}" xml:space="preserve"><value>Markera OMP-användaren {0}</value></data>
+  <data name="AD account" xml:space="preserve"><value>AD-konto</value></data>
+  <data name="Search and tick OMP users in the list, or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Sök och markera OMP-användare i listan, eller klistra in AD-användare/-grupper som radbruten text.</value></data>
 </root>

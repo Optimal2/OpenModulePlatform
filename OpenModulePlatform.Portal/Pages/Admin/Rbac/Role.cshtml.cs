@@ -67,7 +67,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
 
     public IReadOnlyList<OptionItem> AvailablePermissionOptions { get; private set; } = [];
 
-    public IReadOnlyList<PrincipalSuggestion> OmpUserOptions { get; private set; } = [];
+    public IReadOnlyList<OmpUserPrincipalOption> OmpUserOptions { get; private set; } = [];
 
     public IReadOnlyList<PrincipalTypeOptionItem> PrincipalTypeOptions =>
     [

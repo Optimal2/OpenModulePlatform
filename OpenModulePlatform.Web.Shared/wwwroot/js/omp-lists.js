@@ -427,21 +427,33 @@
                 const row = checkbox.closest('tr');
                 return !checkbox.disabled && !!row && !row.hidden;
             };
+            // Bulk-action lists (the default) act on what the user can see, so a
+            // row the search or a filter hides drops out of the selection. A
+            // picker (data-list-selection-keep-hidden) is the opposite: the user
+            // searches for one person, ticks them, searches for the next, and
+            // every tick must survive until the form is submitted. Select-all
+            // still means "all shown rows" in both modes.
+            const keepHidden = table.hasAttribute('data-list-selection-keep-hidden');
 
             const refreshSelection = () => {
                 const checkboxes = rowCheckboxes();
                 checkboxes
                     .filter((checkbox) => !isSelectable(checkbox))
                     .forEach((checkbox) => {
-                        checkbox.checked = false;
+                        if (!keepHidden || checkbox.disabled) {
+                            checkbox.checked = false;
+                        }
                     });
 
                 const selectable = checkboxes.filter(isSelectable);
-                const selected = selectable.filter((checkbox) => checkbox.checked);
+                const selectedShown = selectable.filter((checkbox) => checkbox.checked);
+                const selected = keepHidden
+                    ? checkboxes.filter((checkbox) => checkbox.checked && !checkbox.disabled)
+                    : selectedShown;
 
                 selectAll.disabled = selectable.length === 0;
-                selectAll.checked = selectable.length > 0 && selected.length === selectable.length;
-                selectAll.indeterminate = selected.length > 0 && selected.length < selectable.length;
+                selectAll.checked = selectable.length > 0 && selectedShown.length === selectable.length;
+                selectAll.indeterminate = selectedShown.length > 0 && selectedShown.length < selectable.length;
 
                 checkboxes.forEach((checkbox) => {
                     checkbox.closest('tr')?.classList.toggle('list-row-selected', checkbox.checked);
@@ -458,7 +470,11 @@
 
                 table.dispatchEvent(new CustomEvent('sortable-list:selection-changed', {
                     bubbles: true,
-                    detail: { selectedCount: selected.length, totalCount: selectable.length }
+                    detail: {
+                        selectedCount: selected.length,
+                        totalCount: selectable.length,
+                        hiddenSelectedCount: selected.length - selectedShown.length
+                    }
                 }));
             };
 

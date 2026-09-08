@@ -194,7 +194,7 @@
     <section id="@AddPrincipalsSectionId" class="card section-card role-principal-add-section bottom-gap section-navigator-target">
         <div class="eyebrow">@L["Principals"]</div>
         <h3>@L["Add principals"]</h3>
-        <p class="muted">@ompBranding.ApplyPlatformName(L["Choose OMP users from the checklist or paste AD users/groups as newline-separated text."].Value)</p>
+        <p class="muted">@ompBranding.ApplyPlatformName(L["Search and tick OMP users in the list, or paste AD users/groups as newline-separated text."].Value)</p>
 
         <div class="role-principal-add role-principal-add--wide">
             <div class="role-principal-add-grid">
@@ -203,27 +203,72 @@
                     <input type="hidden" name="principalType" value="OmpUser" />
 
                     <div class="form-field">
-                        <label>@L["OMP users"]</label>
+                        <label id="role-omp-users-label">@L["OMP users"]</label>
                         @if (Model.OmpUserOptions.Count == 0)
                         {
                             <div class="empty-state">@L["No available OMP users found."]</div>
                         }
                         else
                         {
-                            <div class="checkbox-list role-principal-picker__list">
-                                @foreach (var option in Model.OmpUserOptions)
-                                {
-                                    <label class="checkbox-row">
-                                        <input type="checkbox" name="selectedOmpUserIds" value="@option.Value" />
-                                        <span>@option.Label</span>
-                                    </label>
-                                }
+                            <div class="list-toolbar">
+                                <input type="search"
+                                       class="list-search"
+                                       data-list-search="role-omp-users-list"
+                                       placeholder="@L["Search users"]"
+                                       aria-label="@L["Search users"]" />
+                                <span class="list-count" data-list-count="role-omp-users-list" data-template="@L["Showing {0} of {1} rows."]"></span>
+                            </div>
+                            <div class="empty-state" data-list-empty="role-omp-users-list" hidden>@L["No rows match the current filters."]</div>
+                            <div class="table-scroll role-principal-picker__list">
+                                @* A picker, not a bulk-action list: a user ticked and then searched
+                                   away stays ticked (data-list-selection-keep-hidden) so several
+                                   people can be found one at a time and added together. *@
+                                <table id="role-omp-users-list"
+                                       class="grid compact-grid sortable-list"
+                                       data-sortable-list
+                                       data-list-fit
+                                       data-list-selection="role-omp-users-list"
+                                       data-list-selection-keep-hidden
+                                       data-page-size="50"
+                                       aria-labelledby="role-omp-users-label">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col" class="list-selection-cell">
+                                                <input type="checkbox" data-list-select-all aria-label="@L["Select all shown OMP users"]" />
+                                            </th>
+                                            <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Name"]</button></th>
+                                            <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["AD account"]</button></th>
+                                            <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["User ID"]</button></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var option in Model.OmpUserOptions)
+                                        {
+                                            <tr>
+                                                <td class="list-selection-cell">
+                                                    <input type="checkbox"
+                                                           name="selectedOmpUserIds"
+                                                           value="@option.UserId"
+                                                           data-list-select-row
+                                                           aria-label="@L["Select OMP user {0}", option.DisplayName]" />
+                                                </td>
+                                                <td>@option.DisplayName</td>
+                                                <td>@(string.IsNullOrWhiteSpace(option.AdAccount) ? "-" : option.AdAccount)</td>
+                                                <td data-sort-value="@option.UserId">@option.UserId</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="list-show-more">
+                                <button type="button" class="btn btn-ghost btn-sm" data-list-show-more="role-omp-users-list" hidden>@L["Show more"]</button>
                             </div>
                         }
                     </div>
 
-                    <div class="form-field actions">
-                        <button type="submit">@L["Add selected OMP users"]</button>
+                    <div class="form-field actions list-selection-actions" data-list-selection-actions="role-omp-users-list">
+                        <span class="list-selected-count" data-list-selected-count data-template="@L["{0} selected"]"></span>
+                        <button type="submit" data-list-selection-action disabled="@(Model.OmpUserOptions.Count == 0 ? "disabled" : null)">@L["Add selected OMP users"]</button>
                     </div>
                 </form>
 

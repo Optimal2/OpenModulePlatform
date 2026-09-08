@@ -308,14 +308,28 @@ ORDER BY display_name,
     /// <summary>
     /// Returns active OMP users that are not already linked to the role.
     /// </summary>
-    public async Task<IReadOnlyList<PrincipalSuggestion>> GetAvailableOmpUserPrincipalOptionsAsync(
+    public async Task<IReadOnlyList<OmpUserPrincipalOption>> GetAvailableOmpUserPrincipalOptionsAsync(
         int roleId,
         CancellationToken ct)
     {
+        // The linked AD account is shown so an admin can tell two users with the
+        // same display name apart; the first enabled AD link wins when there are
+        // several (the picker is a display aid, the role stores the OMP user id).
         const string sql = @"
-SELECT user_id,
-       display_name
+SELECT u.user_id,
+       u.display_name,
+       ad.provider_user_key AS ad_account
 FROM omp.users u
+OUTER APPLY
+(
+    SELECT TOP (1) ua.provider_user_key
+    FROM omp.user_auth ua
+    INNER JOIN omp.auth_providers ap ON ap.provider_id = ua.provider_id
+    WHERE ua.user_id = u.user_id
+      AND ap.display_name = N'AD'
+      AND ua.auth_status = N'enabled'
+    ORDER BY ua.user_auth_id
+) ad
 WHERE u.account_status = 1
   AND NOT EXISTS
   (
@@ -337,10 +351,10 @@ WHERE u.account_status = 1
         AND ua.auth_status = N'enabled'
         AND ua.user_id = u.user_id
   )
-ORDER BY display_name,
-         user_id;";
+ORDER BY u.display_name,
+         u.user_id;";
 
-        var rows = new List<PrincipalSuggestion>();
+        var rows = new List<OmpUserPrincipalOption>();
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -350,11 +364,10 @@ ORDER BY display_name,
         await using var rdr = await cmd.ExecuteReaderAsync(ct);
         while (await rdr.ReadAsync(ct))
         {
-            var userId = rdr.GetInt32(0);
-            var displayName = rdr.GetString(1);
-            rows.Add(new PrincipalSuggestion(
-                userId.ToString(CultureInfo.InvariantCulture),
-                $"{displayName} (id: {userId.ToString(CultureInfo.InvariantCulture)})"));
+            rows.Add(new OmpUserPrincipalOption(
+                rdr.GetInt32(0),
+                rdr.GetString(1),
+                rdr.IsDBNull(2) ? null : rdr.GetString(2)));
         }
 
         return rows;
@@ -983,6 +996,9 @@ public sealed class RolePrincipalRow
 }
 
 public sealed record PrincipalSuggestion(string Value, string Label);
+
+/// <summary>An active OMP user a role does not have yet, as shown in the role page's user picker.</summary>
+public sealed record OmpUserPrincipalOption(int UserId, string DisplayName, string? AdAccount);
 
 /// <summary>
 /// The result of resolving an AD user principal to actively linked OMP users.
