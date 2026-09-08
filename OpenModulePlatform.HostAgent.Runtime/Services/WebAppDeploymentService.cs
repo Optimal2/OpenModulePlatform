@@ -323,6 +323,8 @@ public sealed class WebAppDeploymentService
                         DeploymentLockFile.GetPath(targetPath),
                         null,
                         "Deployment lock became active before HostAgent could begin deployment.");
+                await deploymentCycle.SkipAppAsync("local deployment lock became active");
+                enteredDeployment = false;
                 var message = activeLock.ToDeploymentSkippedMessage("Web app");
                 _logger.LogInformation(
                     "Web app deployment skipped because a deployment lock became active before HostAgent acquired its deployment lease. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, LockPath={LockPath}",
@@ -451,7 +453,9 @@ public sealed class WebAppDeploymentService
         }
         finally
         {
-            if (enteredDeployment || deploymentFailure is not null)
+            // Only an entered app affects the lease: a failure before entering (continuity
+            // gate, provisioning) never touched the app and must not abort a host sweep.
+            if (enteredDeployment)
                 await deploymentCycle.CompleteAppAsync(deploymentHealthy ? null : deploymentFailure ?? "Deployment interrupted before health confirmation.");
         }
     }

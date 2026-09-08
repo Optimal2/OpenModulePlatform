@@ -11,7 +11,6 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class ServiceAppDeploymentService
 {
-    private const int ScAccessDeniedExitCode = 5;
     private const int MaxConsecutiveStartAttempts = 3;
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
@@ -293,6 +292,28 @@ public sealed class ServiceAppDeploymentService
             {
                 EnsureWindowsService(deployment, serviceName, targetExecutablePath);
 
+                // Identity repair stops and restarts the service, so it is a change like any
+                // other deployment and must hold the cross-host lease first. A busy lease
+                // skips the repair this cycle WITHOUT degrading the row out of the
+                // already-applied fast path -- a Warning here would trigger a full redeploy
+                // (see the comment below); the wait is surfaced as a diagnostic warning.
+                if (IdentityRepairWouldApply(settings, deployment, serviceName, serviceIdentity))
+                {
+                    if (!await deploymentCycle.EnterAsync(deployment.HostId,
+                        string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
+                    {
+                        await _repository.PublishAppDeploymentResultAsync(
+                            deployment,
+                            WithDeploySetWarning(
+                                AppDeploymentResult.Succeeded(targetPath, serviceName, applied: false)
+                                    .WithDiagnosticWarning(deploymentCycle.WaitingMessage)),
+                            cancellationToken);
+                        return;
+                    }
+
+                    enteredDeployment = true;
+                }
+
                 var identityCheck = await EnsureServiceIdentityAsync(
                     settings,
                     deployment,
@@ -322,6 +343,8 @@ public sealed class ServiceAppDeploymentService
                     cancellationToken);
                 if (reconcileRunningResult is not null)
                 {
+                    deploymentFailure = reconcileRunningResult.ErrorMessage
+                        ?? "Service app was not confirmed Running after identity repair.";
                     await _repository.PublishAppDeploymentResultAsync(
                         deployment,
                         WithDeploySetWarning(
@@ -332,6 +355,7 @@ public sealed class ServiceAppDeploymentService
                     return;
                 }
 
+                deploymentHealthy = true;
                 await _repository.PublishAppDeploymentResultAsync(
                     deployment,
                     WithDeploySetWarning(
@@ -386,6 +410,8 @@ public sealed class ServiceAppDeploymentService
                         DeploymentLockFile.GetPath(targetPath),
                         null,
                         "Deployment lock became active before HostAgent could begin deployment.");
+                await deploymentCycle.SkipAppAsync("local deployment lock became active");
+                enteredDeployment = false;
                 var message = activeLock.ToDeploymentSkippedMessage("Service app");
                 _logger.LogInformation(
                     "Service app deployment skipped because a deployment lock became active before HostAgent acquired its deployment lease. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, LockPath={LockPath}",
@@ -612,7 +638,9 @@ public sealed class ServiceAppDeploymentService
         }
         finally
         {
-            if (enteredDeployment || deploymentFailure is not null)
+            // Only an entered app affects the lease: a failure before entering (gate,
+            // provisioning) never touched the service and must not abort a host sweep.
+            if (enteredDeployment)
                 await deploymentCycle.CompleteAppAsync(deploymentHealthy ? null : deploymentFailure ?? "Deployment interrupted before health confirmation.");
         }
     }
@@ -1141,6 +1169,34 @@ public sealed class ServiceAppDeploymentService
             : $"OMP {displayName}";
     }
 
+    /// <summary>
+    /// True when <see cref="EnsureServiceIdentityAsync"/> would change the service logon
+    /// account on this cycle: a configured desired identity, an existing service whose
+    /// account differs, and an automation mode that allows the repair.
+    /// </summary>
+    private bool IdentityRepairWouldApply(
+        HostAgentSettings settings,
+        ServiceAppDeploymentDescriptor deployment,
+        string serviceName,
+        ServiceAppIdentityResolution desiredIdentity)
+    {
+        if (!desiredIdentity.IsConfigured)
+        {
+            return false;
+        }
+
+        var actualIdentity = _serviceControl.GetServiceStartName(serviceName);
+        if (actualIdentity is null || AccountsEqual(actualIdentity, desiredIdentity.UserName))
+        {
+            return false;
+        }
+
+        var automationMode = NormalizeAutomationMode(settings.CredentialStore.AutomationMode);
+        return string.Equals(automationMode, HostAgentCredentialAutomationModes.Full, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(automationMode, HostAgentCredentialAutomationModes.PortalAdminApproved, StringComparison.OrdinalIgnoreCase)
+                && deployment.IdentityRepairRequestedUtc.HasValue);
+    }
+
     private async Task<ServiceIdentityCheckResult> EnsureServiceIdentityAsync(
         HostAgentSettings settings,
         ServiceAppDeploymentDescriptor deployment,
@@ -1154,14 +1210,14 @@ public sealed class ServiceAppDeploymentService
             return new ServiceIdentityCheckResult(
                 automationMode,
                 null,
-                GetServiceStartNameIfExists(serviceName),
+                _serviceControl.GetServiceStartName(serviceName),
                 HostAppIdentityCheckStatuses.NotApplicable,
                 null,
                 Applied: false,
                 ClearRepairRequest: false);
         }
 
-        var actualIdentity = GetServiceStartNameIfExists(serviceName);
+        var actualIdentity = _serviceControl.GetServiceStartName(serviceName);
         if (actualIdentity is null)
         {
             return new ServiceIdentityCheckResult(
@@ -1459,7 +1515,7 @@ public sealed class ServiceAppDeploymentService
         string serviceName,
         ServiceAppIdentityResolution desiredIdentity)
     {
-        var actualIdentity = GetServiceStartNameIfExists(serviceName);
+        var actualIdentity = _serviceControl.GetServiceStartName(serviceName);
         if (actualIdentity is null || AccountsEqual(actualIdentity, desiredIdentity.UserName))
         {
             return;
@@ -1475,7 +1531,7 @@ public sealed class ServiceAppDeploymentService
         var serviceStartPassword = RequiresPassword(desiredIdentity.UserName)
             ? desiredIdentity.Password
             : null;
-        ChangeServiceStartAccount(serviceName, serviceStartName, serviceStartPassword);
+        _serviceControl.ChangeServiceStartAccount(serviceName, serviceStartName, serviceStartPassword);
 
         if (wasRunning)
         {
@@ -1574,162 +1630,9 @@ public sealed class ServiceAppDeploymentService
         }
     }
 
-    [SupportedOSPlatform("windows")]
-    private static void ChangeServiceStartAccount(
-        string serviceName,
-        string startName,
-        string? startPassword)
-    {
-        using var service = GetWindowsServiceManagementObject(serviceName);
-        using var parameters = service.GetMethodParameters("Change");
-        parameters["StartName"] = startName;
-        parameters["StartPassword"] = startPassword;
-
-        using var result = service.InvokeMethod("Change", parameters, null);
-        var returnValue = Convert.ToUInt32(result?["ReturnValue"] ?? 0, CultureInfo.InvariantCulture);
-        if (returnValue != 0)
-        {
-            throw new InvalidOperationException(
-                $"Win32_Service.Change failed with return value {returnValue} for Windows service '{serviceName}'.");
-        }
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static ManagementObject GetWindowsServiceManagementObject(string serviceName)
-    {
-        using var searcher = new ManagementObjectSearcher(
-            "SELECT * FROM Win32_Service WHERE Name = " + QuoteWqlString(serviceName));
-
-        foreach (ManagementObject service in searcher.Get())
-        {
-            return service;
-        }
-
-        throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
-    }
-
-    private static string QuoteWqlString(string value)
-        => "'" + value
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("'", "\\'", StringComparison.Ordinal) + "'";
-
-    private static string? GetServiceStartNameIfExists(string serviceName)
-    {
-        var result = RunSc("qc", serviceName);
-        if (result.ExitCode != 0)
-        {
-            if (result.IsServiceNotFound())
-            {
-                return null;
-            }
-
-            throw new InvalidOperationException(CreateScFailureMessage(
-                result.ExitCode,
-                result.Output,
-                result.Error,
-                "query configuration for",
-                serviceName));
-        }
-
-        return ParseServiceStartName(serviceName, result.Output);
-    }
-
-    private static string GetServiceStartName(string serviceName)
-        => GetServiceStartNameIfExists(serviceName)
+    private string GetServiceStartName(string serviceName)
+        => _serviceControl.GetServiceStartName(serviceName)
             ?? throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
-
-    private static string ParseServiceStartName(string serviceName, string output)
-    {
-        foreach (var line in output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var nameIndex = line.IndexOf("SERVICE_START_NAME", StringComparison.OrdinalIgnoreCase);
-            if (nameIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', nameIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            var startName = line[(separatorIndex + 1)..].Trim();
-            if (!string.IsNullOrWhiteSpace(startName))
-            {
-                return startName;
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Could not determine logon account for Windows service '{serviceName}'. sc.exe did not return SERVICE_START_NAME.");
-    }
-
-    private static ScCommandResult RunSc(params string[] arguments)
-    {
-        var result = HostAgentProcessRunner.Run(GetScPath(), arguments);
-        return new ScCommandResult(result.ExitCode, result.StdOut, result.StdErr);
-    }
-
-    private static void RunScChecked(params string[] arguments)
-    {
-        var result = RunSc(arguments);
-        if (result.ExitCode != 0)
-        {
-            var operation = arguments.Length > 0 ? arguments[0] : "unknown";
-            var serviceName = arguments.Length > 1 ? arguments[1] : null;
-            throw new InvalidOperationException(CreateScFailureMessage(
-                result.ExitCode,
-                result.Output,
-                result.Error,
-                operation,
-                serviceName));
-        }
-    }
-
-    private static string CreateScFailureMessage(
-        int exitCode,
-        string output,
-        string error,
-        string operation,
-        string? serviceName)
-    {
-        var message = string.IsNullOrWhiteSpace(error) ? output : error;
-        var trimmed = message.Trim();
-        var result = $"sc.exe failed with exit code {exitCode}";
-        if (!string.IsNullOrWhiteSpace(operation))
-        {
-            result += $" while trying to {operation} Windows service";
-        }
-
-        if (!string.IsNullOrWhiteSpace(serviceName))
-        {
-            result += $" '{serviceName}'";
-        }
-
-        result += $": {trimmed}";
-
-        if (exitCode == ScAccessDeniedExitCode
-            || trimmed.Contains("Access is denied", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("OpenSCManager", StringComparison.OrdinalIgnoreCase))
-        {
-            result += " HostAgent cannot safely deploy service apps without Windows service-control rights. Run the HostAgent service as an account with permission to query, stop, configure, and start the target service before retrying.";
-        }
-
-        return result;
-    }
-
-    private static string GetScPath()
-    {
-        var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var scPath = Path.Join(windowsDirectory, "System32", "sc.exe");
-        if (!File.Exists(scPath))
-        {
-            throw new FileNotFoundException($"Windows sc.exe was not found: '{scPath}'.", scPath);
-        }
-
-        return scPath;
-    }
 
     private static bool AccountsEqual(string actual, string desired)
     {

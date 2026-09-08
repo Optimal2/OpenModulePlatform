@@ -35,4 +35,15 @@ public interface IWindowsServiceControl
     /// Throws <see cref="InvalidOperationException"/> if deletion fails.
     /// </summary>
     void DeleteService(string serviceName);
+    /// <summary>
+    /// Returns the logon account the service is registered with (sc.exe qc
+    /// SERVICE_START_NAME), or <see langword="null"/> when the service is missing.
+    /// </summary>
+    string? GetServiceStartName(string serviceName);
+
+    /// <summary>
+    /// Changes the service logon account (Win32_Service.Change). The caller stops and
+    /// restarts the service around the change when it is running.
+    /// </summary>
+    void ChangeServiceStartAccount(string serviceName, string startName, string? startPassword);
 }

@@ -99,6 +99,44 @@ public sealed class AppDeploymentLeaseCycleTests
         Assert.False(cycle.IsCoordinated);
         Assert.Equal(0, _repository.AppLeaseCalls);
         Assert.Empty(_repository.ReleasedAppLeases);
+        Assert.Equal(0, _repository.HostAgentLeaseCalls); // the per-host agent lease is a different mechanism
+    }
+
+    [Fact]
+    public async Task HostCountUnavailableKeepsConfiguredCoordinationAndLogs()
+    {
+        _repository.EnabledHostCountException = new InvalidOperationException("Database unavailable");
+        await using var cycle = await Cycle("host");
+        Assert.True(cycle.IsCoordinated);
+        Assert.True(await cycle.EnterAsync(_first, "portal", default));
+        Assert.Contains("host:*", _repository.AppLeases.Keys);
+        Assert.Contains(_logger.Messages, x => x.Contains("host count", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(0, _repository.HostAgentLeaseCalls);
+    }
+
+    [Fact]
+    public async Task App_SkipReleasesLeaseWithSkipReasonAndKeepsCycleUsable()
+    {
+        await using var cycle = await Cycle();
+        Assert.True(await cycle.EnterAsync(_first, "portal", default));
+        await cycle.SkipAppAsync("local deployment lock became active");
+        var release = Assert.Single(_repository.ReleasedAppLeases);
+        Assert.StartsWith("Skipped", release.Reason);
+        Assert.DoesNotContain("interrupted", release.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.True(await cycle.EnterAsync(_first, "auth", default));
+    }
+
+    [Fact]
+    public async Task Host_SkipKeepsSweepLeaseAndDoesNotStopRemainingChanges()
+    {
+        var cycle = await Cycle("host");
+        Assert.True(await cycle.EnterAsync(_first, "portal", default));
+        await cycle.SkipAppAsync("local deployment lock became active");
+        Assert.Empty(_repository.ReleasedAppLeases);
+        Assert.True(await cycle.EnterAsync(_first, "auth", default));
+        await cycle.CompleteAppAsync();
+        await cycle.DisposeAsync();
+        Assert.Null(Assert.Single(_repository.ReleasedAppLeases).Reason);
     }
 
     [Fact]

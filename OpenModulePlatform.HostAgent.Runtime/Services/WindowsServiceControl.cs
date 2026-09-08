@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Management;
 using System.Runtime.Versioning;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -252,6 +254,89 @@ public sealed class WindowsServiceControl : IWindowsServiceControl
             serviceName));
     }
 
+    public string? GetServiceStartName(string serviceName)
+    {
+        var result = RunSc("qc", serviceName);
+        if (result.ExitCode != 0)
+        {
+            if (result.IsServiceNotFound())
+            {
+                return null;
+            }
+
+            throw new InvalidOperationException(CreateScFailureMessage(
+                result.ExitCode,
+                result.Output,
+                result.Error,
+                "query configuration for",
+                serviceName));
+        }
+
+        return ParseServiceStartName(serviceName, result.Output);
+    }
+
+    [SupportedOSPlatform("windows")]
+    public void ChangeServiceStartAccount(string serviceName, string startName, string? startPassword)
+    {
+        using var service = GetWindowsServiceManagementObject(serviceName);
+        using var parameters = service.GetMethodParameters("Change");
+        parameters["StartName"] = startName;
+        parameters["StartPassword"] = startPassword;
+
+        using var result = service.InvokeMethod("Change", parameters, null);
+        var returnValue = Convert.ToUInt32(result?["ReturnValue"] ?? 0, CultureInfo.InvariantCulture);
+        if (returnValue != 0)
+        {
+            throw new InvalidOperationException(
+                $"Win32_Service.Change failed with return value {returnValue} for Windows service '{serviceName}'.");
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static ManagementObject GetWindowsServiceManagementObject(string serviceName)
+    {
+        using var searcher = new ManagementObjectSearcher(
+            "SELECT * FROM Win32_Service WHERE Name = " + QuoteWqlString(serviceName));
+
+        foreach (ManagementObject service in searcher.Get())
+        {
+            return service;
+        }
+
+        throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
+    }
+
+    private static string QuoteWqlString(string value)
+        => "'" + value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal) + "'";
+
+    private static string ParseServiceStartName(string serviceName, string output)
+    {
+        foreach (var line in output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var nameIndex = line.IndexOf("SERVICE_START_NAME", StringComparison.OrdinalIgnoreCase);
+            if (nameIndex < 0)
+            {
+                continue;
+            }
+
+            var separatorIndex = line.IndexOf(':', nameIndex);
+            if (separatorIndex < 0)
+            {
+                continue;
+            }
+
+            var startName = line[(separatorIndex + 1)..].Trim();
+            if (!string.IsNullOrWhiteSpace(startName))
+            {
+                return startName;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Could not determine logon account for Windows service '{serviceName}'. sc.exe did not return SERVICE_START_NAME.");
+    }
     private void WaitForServiceState(string serviceName, string desiredState, int timeoutSeconds)
     {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);

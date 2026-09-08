@@ -278,6 +278,17 @@ still running. Agents already in a sweep retain their configuration snapshot
 until that sweep ends. Active host and app leases conflict across mode changes;
 switching to `off` intentionally bypasses all cross-host coordination.
 
+Identity repair of an already-applied service app (changing the service logon
+account stops and restarts the service) also runs under the lease; a busy lease
+defers the repair to a later cycle and reports the wait as a diagnostic warning
+while the row stays already-applied. An app that was entered but not changed
+(for example because a local deployment lock became active) is a skip, not a
+failure: app scope releases with `Skipped: ...`, host scope keeps the sweep
+lease and continues. Failures before the lease is entered (continuity gate,
+provisioning) never touched the app and do not abort a host sweep. When the
+enabled host count cannot be read, the agent assumes a multi-host installation
+and keeps coordinating.
+
 A busy lease skips the app without stopping its pool/service or writing its
 deployment directory. The deployment warning and Information log say
 `Waiting for lease app:<AppKey> held by host <HostKey> until <timestamp> UTC`.

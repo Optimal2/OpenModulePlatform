@@ -89,7 +89,12 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         bool forceTakeover,
         int leaseSeconds,
         CancellationToken ct)
-        => Task.FromResult(new HostAgentLeaseResult(true, Guid.NewGuid(), Guid.NewGuid(), serviceName));
+    {
+        HostAgentLeaseCalls++;
+        return Task.FromResult(new HostAgentLeaseResult(true, Guid.NewGuid(), Guid.NewGuid(), serviceName));
+    }
+
+    public int HostAgentLeaseCalls { get; private set; }
 
     public Task ReleaseHostAgentLeaseAsync(Guid hostId, string serviceName, Guid? leaseToken, CancellationToken ct)
         => Task.CompletedTask;
@@ -130,9 +135,12 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
 
     public int EnabledHostCount { get; set; } = 1;
 
+    public Exception? EnabledHostCountException { get; set; }
+
     public Task<int> GetEnabledHostCountAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        if (EnabledHostCountException is not null) throw EnabledHostCountException;
         return Task.FromResult(EnabledHostCount);
     }
 

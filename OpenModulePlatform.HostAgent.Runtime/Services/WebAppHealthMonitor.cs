@@ -26,7 +26,13 @@ public sealed class WebAppHealthMonitor
             if (!string.IsNullOrWhiteSpace(hostHeader)) request.Headers.Host = hostHeader;
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             if (!response.IsSuccessStatusCode)
-                throw new InvalidOperationException($"Deployment readiness probe failed: HTTP {(int)response.StatusCode}.");
+            {
+                var status = (int)response.StatusCode;
+                var hint = status is (>= 300 and < 400) or 401 or 403
+                    ? " The readiness URL must answer 2xx without authentication; a redirect or challenge to a login page is not ready."
+                    : string.Empty;
+                throw new InvalidOperationException($"Deployment readiness probe failed: HTTP {status}.{hint}");
+            }
         }
         catch (Exception ex) when (!ct.IsCancellationRequested && ex is HttpRequestException or TaskCanceledException)
         {

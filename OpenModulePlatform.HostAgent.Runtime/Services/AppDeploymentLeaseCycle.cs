@@ -47,7 +47,17 @@ public sealed class AppDeploymentLeaseCycle : IAsyncDisposable
         logger.LogInformation("DeploymentLockScope={Scope} ({ScopeSource}), DeploymentLeaseSeconds={Seconds} ({SecondsSource}).",
             scope, validScope ? "database" : "HostAgentSettings fallback", seconds,
             validSeconds ? "database" : "HostAgentSettings fallback");
-        if (await repository.GetEnabledHostCountAsync(ct) <= 1) scope = "off";
+        try
+        {
+            if (await repository.GetEnabledHostCountAsync(ct) <= 1) scope = "off";
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or TimeoutException)
+        {
+            // Unknown host count must not fail a sweep that used to work: assume a multi-host
+            // installation and keep coordinating. If the database is down, acquisition fails
+            // per app with its own reason instead of aborting the whole sweep up front.
+            logger.LogInformation(ex, "Enabled host count unavailable; assuming a multi-host installation and keeping DeploymentLockScope={Scope}.", scope);
+        }
         return new(repository, logger, new(scope, seconds));
     }
 
@@ -78,6 +88,18 @@ public sealed class AppDeploymentLeaseCycle : IAsyncDisposable
         _logger.LogInformation("Acquired deployment lease {ScopeKey} until {LeaseUntilUtc:O}; expired lease takeover={ExpiredTakeover}.",
             _scopeKey, lease.LeaseUntilUtc, lease.TookOverExpiredLease);
         return true;
+    }
+
+    /// <summary>
+    /// The app was entered but nothing was changed (for example a local deployment lock
+    /// became active). Not a failure: app scope releases with the skip reason, host scope
+    /// keeps the sweep lease and continues with the remaining apps.
+    /// </summary>
+    public async Task SkipAppAsync(string reason)
+    {
+        _appInProgress = false;
+        if (_lease is not null && _settings.Scope == "app")
+            await ReleaseAsync("Skipped: " + reason);
     }
 
     public async Task CompleteAppAsync(string? failureReason = null)

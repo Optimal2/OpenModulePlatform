@@ -997,10 +997,67 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.True(control.IsServiceRunning("TestService"));
     }
 
+    [Fact]
+    public async Task DeploymentLease_IdentityRepairOnConvergedServiceWaitsForBusyLeaseWithoutStopping()
+    {
+        // Identity repair on an already-applied service stops and restarts it, so it is a
+        // deployment change like any other: the cross-host lease must be held first, and a
+        // busy lease must not degrade the row out of the already-applied fast path.
+        var (service, repository, control, deployment, _) = CreateScenario(configure: ConfigureLocalServiceIdentityRepair);
+        repository.EnabledHostCount = 2;
+        control.SetState("TestService", "RUNNING");
+        control.SetStartName("TestService", @"NT AUTHORITY\NetworkService");
+        await repository.AcquireAppDeploymentLeaseAsync("app:" + deployment.AppKey, Guid.NewGuid(), "Other host", 600, default);
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+        Assert.Empty(control.StopAttempts);
+        Assert.Empty(control.StartAccountChanges);
+        Assert.True(control.IsServiceRunning("TestService"));
+        var result = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Succeeded, result.State);
+        Assert.Contains("Waiting for lease", result.DiagnosticWarningMessage);
+    }
+
+    [Fact]
+    public async Task DeploymentLease_IdentityRepairOnConvergedServiceRunsUnderLeaseAndReleasesHealthy()
+    {
+        var (service, repository, control, deployment, _) = CreateScenario(configure: ConfigureLocalServiceIdentityRepair);
+        repository.EnabledHostCount = 2;
+        control.SetState("TestService", "RUNNING");
+        control.SetStartName("TestService", @"NT AUTHORITY\NetworkService");
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+        Assert.Single(control.StopAttempts);
+        Assert.Contains("LocalService", Assert.Single(control.StartAccountChanges).StartName);
+        Assert.True(control.IsServiceRunning("TestService"));
+        Assert.Equal(1, repository.AppLeaseCalls);
+        Assert.Empty(repository.AppLeases);
+        Assert.Null(Assert.Single(repository.ReleasedAppLeases).Reason);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedServiceAppResults.Last().Result.State);
+        Assert.Equal(0, repository.HostAgentLeaseCalls);
+    }
+
+    [Fact]
+    public async Task DeploymentLease_CompliantIdentityOnConvergedServiceTakesNoLease()
+    {
+        var (service, repository, control, deployment, _) = CreateScenario(configure: ConfigureLocalServiceIdentityRepair);
+        repository.EnabledHostCount = 2;
+        control.SetState("TestService", "RUNNING");
+        control.SetStartName("TestService", @"NT AUTHORITY\LocalService");
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+        Assert.Empty(control.StopAttempts);
+        Assert.Equal(0, repository.AppLeaseCalls);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedServiceAppResults.Last().Result.State);
+    }
+
+    private static void ConfigureLocalServiceIdentityRepair(HostAgentSettings settings)
+    {
+        settings.ServiceAppUserName = @"NT AUTHORITY\LocalService";
+        settings.CredentialStore.AutomationMode = HostAgentCredentialAutomationModes.Full;
+    }
     private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateScenario(
         bool startAfterDeployment = true,
         string? contentSha256 = null,
-        string? deployedContentSha256 = null)
+        string? deployedContentSha256 = null,
+        Action<HostAgentSettings>? configure = null)
     {
         var settings = new HostAgentSettings
         {
@@ -1013,6 +1070,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             ServiceAppStopTimeoutSeconds = 1,
             ServiceAppStartTimeoutSeconds = 1
         };
+        configure?.Invoke(settings);
         var optionsMonitor = new FakeOptionsMonitor<HostAgentSettings> { CurrentValue = settings };
         var repository = new FakeOmpHostArtifactRepository();
         var control = new FakeWindowsServiceControl();
@@ -1109,6 +1167,28 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         public List<string> StopAttempts { get; } = [];
 
         public List<string> DeletedServices { get; } = [];
+
+        private readonly Dictionary<string, string> _startNames = new(StringComparer.OrdinalIgnoreCase);
+
+        public List<(string ServiceName, string StartName)> StartAccountChanges { get; } = [];
+
+        public void SetStartName(string serviceName, string startName)
+            => _startNames[serviceName] = startName;
+
+        public string? GetServiceStartName(string serviceName)
+            => GetServiceState(serviceName) is null ? null
+                : _startNames.TryGetValue(serviceName, out var startName) ? startName : "LocalSystem";
+
+        public void ChangeServiceStartAccount(string serviceName, string startName, string? startPassword)
+        {
+            if (GetServiceState(serviceName) is null)
+            {
+                throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
+            }
+
+            _startNames[serviceName] = startName;
+            StartAccountChanges.Add((serviceName, startName));
+        }
 
         public bool StartChangesStateToRunning { get; set; } = true;
 
