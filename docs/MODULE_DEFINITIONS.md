@@ -5,6 +5,8 @@ change OMP metadata, module-owned schemas, user-setting definitions, portal
 entries, permissions, or other database state. Those database changes belong to
 a versioned module definition document.
 
+Modules with channel types must follow the [channel-type reconciliation contract](CHANNEL_TYPE_RECONCILE.md), including its module-definition integrity checklist.
+
 ## Purpose
 
 A module definition document describes the database and metadata contract that a

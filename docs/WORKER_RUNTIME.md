@@ -4,6 +4,8 @@ This document summarizes the current state of the additive worker runtime track 
 
 The worker-runtime projects are now aligned on `.NET 10` together with the rest of the repository.
 
+Workers with channel types must follow the [channel-type reconciliation contract](CHANNEL_TYPE_RECONCILE.md), including its startup, version-recovery and artifact-requirement call sites.
+
 ## Implemented projects
 
 ### OpenModulePlatform.WorkerManager.WindowsService

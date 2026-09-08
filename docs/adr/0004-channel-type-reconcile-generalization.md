@@ -290,6 +290,8 @@ an emergency path for worker processes that need an artifact before starting
 
 ## Decision
 
+The [channel-type reconciliation contract and template](../CHANNEL_TYPE_RECONCILE.md) records the pinned source evidence, current call-site distinctions and module parity checklist for this decision.
+
 Decided by the owner on 2026-09-08. The guiding requirement was stability and sameness:
 the next channel-type module must not end up with a different mechanism than the first.
 
