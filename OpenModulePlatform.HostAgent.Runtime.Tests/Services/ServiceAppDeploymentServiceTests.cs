@@ -1048,6 +1048,27 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedServiceAppResults.Last().Result.State);
     }
 
+    [Theory]
+    [InlineData("app")]
+    [InlineData("host")]
+    public async Task DeploymentLease_IdentityRepairOnStoppedServiceReleasesHealthyWhenReconcileStartsIt(string scope)
+    {
+        // The service was stopped, so the repair changes the account without a restart and
+        // reconcile starts it afterwards. Reconcile reports that start as a diagnostic
+        // warning; the lease outcome must follow the service state (Running), not the
+        // presence of that report -- otherwise a host sweep aborts after a healthy start.
+        var (service, repository, control, deployment, _) = CreateScenario(configure: ConfigureLocalServiceIdentityRepair);
+        repository.EnabledHostCount = 2;
+        repository.DeploymentSettings["DeploymentLockScope"] = scope;
+        control.SetState("TestService", "STOPPED");
+        control.SetStartName("TestService", @"NT AUTHORITY\NetworkService");
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+        Assert.True(control.IsServiceRunning("TestService"));
+        Assert.Contains("LocalService", Assert.Single(control.StartAccountChanges).StartName);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedServiceAppResults.Last().Result.State);
+        Assert.Null(Assert.Single(repository.ReleasedAppLeases).Reason);
+    }
+
     private static void ConfigureLocalServiceIdentityRepair(HostAgentSettings settings)
     {
         settings.ServiceAppUserName = @"NT AUTHORITY\LocalService";

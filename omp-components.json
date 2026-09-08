@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.679",
+  "repositoryVersion": "0.3.680",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.202",
+      "definitionVersion": "0.3.204",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -155,8 +155,8 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.266",
-      "minModuleDefinitionVersion": "0.3.202",
+      "version": "0.3.267",
+      "minModuleDefinitionVersion": "0.3.204",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
@@ -182,7 +182,7 @@
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
-      "minModuleDefinitionVersion": "0.3.202"
+      "minModuleDefinitionVersion": "0.3.204"
     },
     {
       "componentKey": "omp-workerprocesshost",
@@ -195,7 +195,7 @@
       "projectPath": "OpenModulePlatform.WorkerProcessHost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerProcessHost.zip",
-      "minModuleDefinitionVersion": "0.3.202"
+      "minModuleDefinitionVersion": "0.3.204"
     },
     {
       "componentKey": "content-webapp",

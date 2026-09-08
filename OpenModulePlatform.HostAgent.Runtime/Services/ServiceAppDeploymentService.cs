@@ -343,8 +343,20 @@ public sealed class ServiceAppDeploymentService
                     cancellationToken);
                 if (reconcileRunningResult is not null)
                 {
-                    deploymentFailure = reconcileRunningResult.ErrorMessage
-                        ?? "Service app was not confirmed Running after identity repair.";
+                    // Reconcile reports a start attempt (successful or not) as a diagnostic
+                    // warning on a Succeeded result, so the lease outcome must follow the
+                    // service state rather than the presence of that report.
+                    if (IsServiceRunning(serviceName))
+                    {
+                        deploymentHealthy = true;
+                    }
+                    else
+                    {
+                        deploymentFailure = reconcileRunningResult.DiagnosticWarningMessage
+                            ?? reconcileRunningResult.ErrorMessage
+                            ?? "Service app was not confirmed Running after identity repair.";
+                    }
+
                     await _repository.PublishAppDeploymentResultAsync(
                         deployment,
                         WithDeploySetWarning(
