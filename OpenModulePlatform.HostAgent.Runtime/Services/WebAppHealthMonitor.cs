@@ -11,6 +11,29 @@ public sealed class WebAppHealthMonitor
 
     public const string PortalHealthAllowInvalidTlsHttpClientName = "PortalHealthAllowInvalidTls";
 
+    internal static async Task ProbeDeploymentAsync(Uri url, int timeoutSeconds, CancellationToken ct,
+        HttpMessageHandler? handler = null, string? hostHeader = null)
+    {
+        if (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps)
+            throw new InvalidOperationException("Deployment readiness URL must use HTTP or HTTPS.");
+        using var client = handler is null
+            ? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+            : new HttpClient(handler, disposeHandler: false);
+        client.Timeout = TimeSpan.FromSeconds(Math.Clamp(timeoutSeconds, 1, 120));
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(hostHeader)) request.Headers.Host = hostHeader;
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException($"Deployment readiness probe failed: HTTP {(int)response.StatusCode}.");
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested && ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new InvalidOperationException("Deployment readiness probe failed: " + ex.Message, ex);
+        }
+    }
+
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly OmpHostArtifactRepository _repository;
@@ -264,7 +287,7 @@ public sealed class WebAppHealthMonitor
         return result.LastActionUtc.Value <= DateTime.UtcNow.AddMinutes(-healthSettings.AutoRecycleCooldownMinutes);
     }
 
-    private static Uri BuildPortalHealthUrl(HostAgentSettings settings)
+    internal static Uri BuildPortalHealthUrl(HostAgentSettings settings)
     {
         var healthSettings = settings.PortalHealthCheck;
         var scheme = string.IsNullOrWhiteSpace(healthSettings.Scheme)

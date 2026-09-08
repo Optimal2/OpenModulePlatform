@@ -7,6 +7,54 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 
 public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
 {
+    public Dictionary<string, string?> DeploymentSettings { get; } = [];
+    public Exception? DeploymentSettingsException { get; set; }
+    public int DeploymentSettingsReads { get; private set; }
+    public int AppLeaseCalls { get; private set; }
+    public DateTime LeaseNowUtc { get; set; } = DateTime.UtcNow;
+    public Dictionary<string, AppDeploymentLeaseResult> AppLeases { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<(string ScopeKey, string? Reason)> ReleasedAppLeases { get; } = [];
+
+    public Task<IReadOnlyDictionary<string, string?>> ReadDeploymentLockSettingsAsync(CancellationToken ct)
+    {
+        DeploymentSettingsReads++;
+        if (DeploymentSettingsException is not null) throw DeploymentSettingsException;
+        return Task.FromResult<IReadOnlyDictionary<string, string?>>(DeploymentSettings);
+    }
+
+    public Task<AppDeploymentLeaseResult> AcquireAppDeploymentLeaseAsync(
+        string scopeKey, Guid hostId, string reason, int leaseSeconds, CancellationToken ct)
+    {
+        lock (AppLeases)
+        {
+            AppLeaseCalls++;
+            var blocker = AppLeases.FirstOrDefault(pair => pair.Value.HostId != hostId
+                && pair.Value.LeaseUntilUtc > LeaseNowUtc
+                && (pair.Key == scopeKey || pair.Key == "host:*" || scopeKey == "host:*")).Value;
+            if (blocker is not null) return Task.FromResult(blocker with { Acquired = false });
+            AppLeases.TryGetValue(scopeKey, out var existing);
+            if (existing is not null && existing.HostId != hostId && existing.LeaseUntilUtc > LeaseNowUtc)
+                return Task.FromResult(existing with { Acquired = false });
+            var lease = new AppDeploymentLeaseResult(true, hostId, hostId.ToString(), Guid.NewGuid(),
+                LeaseNowUtc.AddSeconds(leaseSeconds), existing is not null && existing.LeaseUntilUtc <= LeaseNowUtc);
+            AppLeases[scopeKey] = lease;
+            return Task.FromResult(lease);
+        }
+    }
+
+    public Task ReleaseAppDeploymentLeaseAsync(string scopeKey, Guid leaseToken, string? reason, CancellationToken ct)
+    {
+        lock (AppLeases)
+        {
+            if (AppLeases.TryGetValue(scopeKey, out var lease) && lease.LeaseToken == leaseToken)
+            {
+                AppLeases.Remove(scopeKey);
+                ReleasedAppLeases.Add((scopeKey, reason));
+            }
+        }
+        return Task.CompletedTask;
+    }
+
     public HostDeploymentWorkItem? NextDeployment { get; set; }
 
     public TemplateMaterializationResult MaterializeResult { get; set; } = new(0, 0);

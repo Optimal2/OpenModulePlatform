@@ -24,17 +24,20 @@ public sealed class WebAppDeploymentService
     private readonly IOmpHostArtifactRepository _repository;
     private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<WebAppDeploymentService> _logger;
+    private readonly Func<HostAgentSettings, WebAppDeploymentDescriptor, string?, CancellationToken, Task> _deploymentHealthCheck;
 
     public WebAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
         IOmpHostArtifactRepository repository,
         HostAgentCredentialStoreService credentialStore,
-        ILogger<WebAppDeploymentService> logger)
+        ILogger<WebAppDeploymentService> logger,
+        Func<HostAgentSettings, WebAppDeploymentDescriptor, string?, CancellationToken, Task>? deploymentHealthCheck = null)
     {
         _settings = settings;
         _repository = repository;
         _credentialStore = credentialStore;
         _logger = logger;
+        _deploymentHealthCheck = deploymentHealthCheck ?? VerifyDeploymentHealthAsync;
     }
 
     public async Task DeployDesiredWebAppsAsync(string hostKey, CancellationToken cancellationToken)
@@ -50,7 +53,8 @@ public sealed class WebAppDeploymentService
         string hostKey,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         IReadOnlySet<string>? blockedModuleInstanceKeys,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AppDeploymentLeaseCycle? deploymentCycle = null)
     {
         var settings = _settings.CurrentValue;
         if (!settings.DeployWebApps)
@@ -80,10 +84,15 @@ public sealed class WebAppDeploymentService
         var isMultiHost = deployments.Count > 0
             && await _repository.GetEnabledHostCountAsync(cancellationToken) > 1;
 
+        await using var ownedCycle = deploymentCycle is null
+            ? await AppDeploymentLeaseCycle.CreateAsync(_repository, settings, _logger, cancellationToken)
+            : null;
+        deploymentCycle ??= ownedCycle!;
+
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, isMultiHost, cancellationToken);
+            await DeployAsync(settings, deployment, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, isMultiHost, deploymentCycle, cancellationToken);
         }
     }
 
@@ -93,12 +102,16 @@ public sealed class WebAppDeploymentService
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         IReadOnlySet<string>? blockedModuleInstanceKeys,
         bool isMultiHost,
+        AppDeploymentLeaseCycle deploymentCycle,
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
         string? runtimeName = null;
         var appPoolStopped = false;
         var stopMarkerWritten = false;
+        var enteredDeployment = false;
+        var deploymentHealthy = false;
+        string? deploymentFailure = null;
         string? diagnosticWarning = null;
         OmpAuthValidationResult? ompAuthValidation = null;
         string? deploySetWarning = null;
@@ -241,6 +254,7 @@ public sealed class WebAppDeploymentService
                 configurationVariables);
             if (continuityViolation is not null)
             {
+                deploymentFailure = continuityViolation;
                 _logger.LogWarning(
                     "Web app deployment failed the configuration continuity gate. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Violation={Violation}",
                     deployment.AppInstanceId,
@@ -284,6 +298,16 @@ public sealed class WebAppDeploymentService
                     cancellationToken);
                 return;
             }
+
+            if (!await deploymentCycle.EnterAsync(deployment.HostId,
+                string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
+            {
+                await _repository.PublishAppDeploymentResultAsync(deployment,
+                    WithExtractedOmpAuth(AppDeploymentResult.Warning(targetPath, runtimeName, deploymentCycle.WaitingMessage!)
+                        .WithDiagnosticWarning(deploymentCycle.WaitingMessage)), cancellationToken);
+                return;
+            }
+            enteredDeployment = true;
 
             var deploymentLock = await HostAgentDeploymentLockLease.TryAcquireAsync(
                 targetPath,
@@ -373,6 +397,10 @@ public sealed class WebAppDeploymentService
                 }
             }
 
+            if (deploymentCycle.IsCoordinated)
+                await _deploymentHealthCheck(settings, deployment, runtimeName, cancellationToken);
+            deploymentHealthy = true;
+
             await _repository.PublishAppDeploymentResultAsync(
                 deployment,
                 WithExtractedOmpAuth(
@@ -390,6 +418,7 @@ public sealed class WebAppDeploymentService
         }
         catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
         {
+            deploymentFailure = ex.Message;
             _logger.LogError(
                 ex,
                 "Web app deployment failed. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}",
@@ -413,8 +442,46 @@ public sealed class WebAppDeploymentService
                 WithExtractedOmpAuth(
                     AppDeploymentResult.Failed(targetPath, runtimeName, ex.Message)
                         .WithDiagnosticWarning(diagnosticWarning)),
-                cancellationToken);
+                    cancellationToken);
         }
+        catch (Exception ex)
+        {
+            deploymentFailure = ex.Message;
+            throw;
+        }
+        finally
+        {
+            if (enteredDeployment || deploymentFailure is not null)
+                await deploymentCycle.CompleteAppAsync(deploymentHealthy ? null : deploymentFailure ?? "Deployment interrupted before health confirmation.");
+        }
+    }
+
+    internal static async Task VerifyDeploymentHealthAsync(HostAgentSettings settings,
+        WebAppDeploymentDescriptor deployment, string? runtimeName, CancellationToken ct)
+    {
+        var appKey = string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey;
+        if (settings.DeploymentHealthUrls.TryGetValue(appKey, out var url) && !string.IsNullOrWhiteSpace(url))
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                throw new InvalidOperationException("Deployment readiness URL must be absolute.");
+            await WebAppHealthMonitor.ProbeDeploymentAsync(uri,
+                settings.PortalHealthCheck.TimeoutSeconds, ct);
+            return;
+        }
+        if (settings.PortalHealthCheck.Enabled && string.Equals(deployment.RoutePath, "/", StringComparison.Ordinal))
+        {
+            await WebAppHealthMonitor.ProbeDeploymentAsync(WebAppHealthMonitor.BuildPortalHealthUrl(settings),
+                settings.PortalHealthCheck.TimeoutSeconds, ct, hostHeader: settings.PortalHealthCheck.HostHeader);
+            return;
+        }
+        var poolName = settings.EnsureIisSite || UseAppCmdAppPoolControl(settings)
+            ? runtimeName
+            : GetIisAppPoolName(ResolveIisAppName(settings, deployment));
+        if (string.IsNullOrWhiteSpace(poolName)
+            || !string.Equals(GetAppPoolState(poolName), "Started", StringComparison.OrdinalIgnoreCase)
+            || !RunAppCmd("list", "site", $"/name:{settings.IisSiteName}", "/text:state")
+                .Any(line => string.Equals(line.Trim(), "Started", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Deployment health check failed: IIS application pool and site must both be Started.");
     }
 
     private async Task MirrorWebAppAsync(

@@ -4221,7 +4221,8 @@ SELECT TOP (@maxDeployments)
     hds.TargetPath AS DeployedTargetPath,
     hds.RuntimeName AS DeployedRuntimeName,
     mi.ModuleInstanceKey,
-    hds.ContentSha256 AS DeployedContentSha256
+    hds.ContentSha256 AS DeployedContentSha256,
+    (SELECT AppKey FROM omp.Apps WHERE AppId = ar.AppId) AS AppKey
 FROM omp.AppInstances ai
 INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
@@ -4294,6 +4295,7 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
                 DeployedTargetPath = rdr.IsDBNull(16) ? null : rdr.GetString(16),
                 DeployedRuntimeName = rdr.IsDBNull(17) ? null : rdr.GetString(17),
                 ModuleInstanceKey = rdr.GetString(18),
+                AppKey = rdr.GetString(20),
                 DeployedContentSha256 = rdr.IsDBNull(19) ? null : rdr.GetString(19)
             });
         }
@@ -4369,7 +4371,8 @@ SELECT TOP (@maxDeployments)
     hds.IdentityRepairRequestedUtc,
     hds.IdentityRepairRequestedBy,
     mi.ModuleInstanceKey,
-    hds.ContentSha256 AS DeployedContentSha256
+    hds.ContentSha256 AS DeployedContentSha256,
+    (SELECT AppKey FROM omp.Apps WHERE AppId = ar.AppId) AS AppKey
 FROM omp.AppInstances ai
 INNER JOIN omp.ModuleInstances mi ON mi.ModuleInstanceId = ai.ModuleInstanceId
 INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
@@ -4441,6 +4444,7 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
                 IdentityRepairRequestedUtc = rdr.IsDBNull(18) ? null : rdr.GetDateTime(18),
                 IdentityRepairRequestedBy = rdr.IsDBNull(19) ? null : rdr.GetString(19),
                 ModuleInstanceKey = rdr.GetString(20),
+                AppKey = rdr.GetString(22),
                 DeployedContentSha256 = rdr.IsDBNull(21) ? null : rdr.GetString(21)
             });
         }

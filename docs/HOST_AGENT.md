@@ -48,6 +48,7 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - `omp.HostAgentDesiredStates`
 - `omp.HostAgentRuntimeStates`
 - `omp.HostAgentLeases`
+- `omp.AppDeploymentLeases`
 - `omp.HostAgentJobs`
 - `omp.MaintenanceFindings`
 - `omp.WebAppHealthStates`
@@ -237,6 +238,82 @@ HostAgent also clears the IIS Anonymous Authentication username and password for
 managed sites and applications. That makes anonymous requests execute as the app
 pool identity instead of the machine-level IUSR account, which keeps static
 apps and ASP.NET apps on the same filesystem permission model.
+
+## Rolling upgrades in multi-host installations
+
+Cross-host deployment coordination is controlled by the global configuration
+definitions in category `HostAgent`, editable in Portal configuration administration:
+
+- `DeploymentLockScope = app` (default): agents can deploy different apps in
+  parallel. Only one host can change the same app at a time, using `app:<AppKey>`.
+  AppKey comes from the artifact's app definition, so host-specific instance
+  names do not split the lock. Legacy descriptors without AppKey use ModuleInstanceKey.
+- `DeploymentLockScope = host`: one host holds `host:*` for its combined web
+  and service deployment sweep. Acquisition is lazy, immediately before the
+  first actual change. Empty, already-applied and blocked sweeps acquire nothing.
+- `DeploymentLockScope = off`: the previous behavior, without cross-host
+  coordination.
+
+With at most one enabled host (`GetEnabledHostCountAsync <= 1`), no deployment
+lease is acquired or released, regardless of scope. The existing per-HostId
+`omp.HostAgentLeases`, local deployment files and sequential engine loop remain
+unchanged. Recovery and disabled-service cleanup retain their existing behavior;
+these leases coordinate desired-artifact upgrades.
+
+`DeploymentLeaseSeconds` defaults to 600 (valid range 1-86400). The agent reads
+both database settings once per sweep. Missing, invalid or unavailable database
+values fall back independently to `HostAgent:DeploymentLockScope` and
+`HostAgent:DeploymentLeaseSeconds`; Information logs identify the effective
+values and their source. Invalid local fallback values use `app` and 600.
+
+Acquisition is atomic. An expired lease can be taken over and the takeover is
+logged. Releases match the lease token, so an old host cannot release its
+successor's lease. Release expires the row and retains the final `Reason` for
+diagnosis. Removing a host also removes its deployment lease rows, preserving
+the existing host-removal workflow. A crashed host blocks others for at most the remaining lease time.
+Leases are not renewed: size the lifetime above the longest complete deployment
+sweep in host mode, or app deployment in app mode, including readiness checks.
+Expiry can admit another host while an unusually slow original deployment is
+still running. Agents already in a sweep retain their configuration snapshot
+until that sweep ends. Active host and app leases conflict across mode changes;
+switching to `off` intentionally bypasses all cross-host coordination.
+
+A busy lease skips the app without stopping its pool/service or writing its
+deployment directory. The deployment warning and Information log say
+`Waiting for lease app:<AppKey> held by host <HostKey> until <timestamp> UTC`.
+The next `RefreshSeconds` cycle retries. In host mode a busy or failed sweep
+does not acquire again for subsequent apps that cycle.
+
+After a coordinated web deployment, the agent probes the host-local readiness
+URL configured in `HostAgent:DeploymentHealthUrls`, keyed by AppKey. For the
+site-root Portal, its enabled `PortalHealthCheck` URL and HostHeader are used
+when no app-specific URL is present. Use a local node address, never the
+load-balancer URL: a healthy peer must not mask a failed deployment. Readiness
+must return HTTP 2xx; redirects and failures do not fall back to IIS state.
+Without a readiness URL, both the app pool and IIS site must be `Started`.
+Service apps must be `Running`. Checks occur before release. In host mode the
+lease remains held across healthy apps and is released at the end of the sweep.
+Failure or cancellation releases promptly with a reason; the remaining host
+sweep changes are skipped after failure. Failed deployments still release as
+requested, so serialization alone does not guarantee application availability.
+
+Example local configuration (database settings take precedence for the two lock settings):
+
+```json
+{
+  "HostAgent": {
+    "DeploymentLockScope": "app",
+    "DeploymentLeaseSeconds": 600,
+    "DeploymentHealthUrls": {
+      "example_app": "http://localhost:8088/example/health/ready"
+    }
+  }
+}
+```
+
+Apply the updated core module definition before activating the new HostAgent
+artifact on every participating host. Older agents do not honor these leases.
+Package building, import and HostAgent restart are operator activation steps.
 
 ## Portal health monitoring
 

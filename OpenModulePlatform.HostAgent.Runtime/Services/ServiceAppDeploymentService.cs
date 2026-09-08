@@ -51,7 +51,8 @@ public sealed class ServiceAppDeploymentService
         string hostKey,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         IReadOnlySet<string>? blockedModuleInstanceKeys,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AppDeploymentLeaseCycle? deploymentCycle = null)
     {
         var settings = _settings.CurrentValue;
         if (!settings.DeployServiceApps)
@@ -111,10 +112,15 @@ public sealed class ServiceAppDeploymentService
         // be complete or the guard is decorative (R7-D4).
         var hostRuntimeFootprints = await _repository.GetHostRuntimeFootprintsAsync(hostKey, cancellationToken);
 
+        await using var ownedCycle = deploymentCycle is null
+            ? await AppDeploymentLeaseCycle.CreateAsync(_repository, settings, _logger, cancellationToken)
+            : null;
+        deploymentCycle ??= ownedCycle!;
+
         foreach (var deployment in deployments)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await DeployAsync(settings, deployment, resolvedServiceNames, hostRuntimeFootprints, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, cancellationToken);
+            await DeployAsync(settings, deployment, resolvedServiceNames, hostRuntimeFootprints, deploySetWarningsByModuleInstanceKey, blockedModuleInstanceKeys, deploymentCycle, cancellationToken);
         }
 
         // Instances that have been switched off are absent from the desired set above, so
@@ -138,12 +144,16 @@ public sealed class ServiceAppDeploymentService
         IReadOnlyList<HostRuntimeFootprint> hostRuntimeFootprints,
         IReadOnlyDictionary<string, string>? deploySetWarningsByModuleInstanceKey,
         IReadOnlySet<string>? blockedModuleInstanceKeys,
+        AppDeploymentLeaseCycle deploymentCycle,
         CancellationToken cancellationToken)
     {
         string? targetPath = null;
         string? serviceName = null;
         var serviceStopped = false;
         var stopMarkerWritten = false;
+        var enteredDeployment = false;
+        var deploymentHealthy = false;
+        string? deploymentFailure = null;
         string? deploySetWarning = null;
         if (deploySetWarningsByModuleInstanceKey is not null
             && deploySetWarningsByModuleInstanceKey.TryGetValue(deployment.ModuleInstanceKey, out var foundDeploySetWarning))
@@ -352,6 +362,16 @@ public sealed class ServiceAppDeploymentService
                 return;
             }
 
+            if (!await deploymentCycle.EnterAsync(deployment.HostId,
+                string.IsNullOrWhiteSpace(deployment.AppKey) ? deployment.ModuleInstanceKey : deployment.AppKey, cancellationToken))
+            {
+                await _repository.PublishAppDeploymentResultAsync(deployment,
+                    WithDeploySetWarning(AppDeploymentResult.Warning(targetPath, serviceName, deploymentCycle.WaitingMessage!)
+                        .WithDiagnosticWarning(deploymentCycle.WaitingMessage)), cancellationToken);
+                return;
+            }
+            enteredDeployment = true;
+
             var deploymentLock = await HostAgentDeploymentLockLease.TryAcquireAsync(
                 targetPath,
                 deployment.AppInstanceKey,
@@ -451,6 +471,7 @@ public sealed class ServiceAppDeploymentService
                 }
                 catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
                 {
+                    deploymentFailure = ex.Message;
                     _logger.LogWarning(
                         ex,
                         "Failed to clean up renamed service app runtime; aborting deployment cycle to retry on next tick. AppInstanceId={AppInstanceId}, OldServiceName={OldServiceName}, OldTargetPath={OldTargetPath}",
@@ -517,6 +538,10 @@ public sealed class ServiceAppDeploymentService
                 }
             }
 
+            if (deploymentCycle.IsCoordinated && !IsServiceRunning(serviceName))
+                throw new InvalidOperationException($"Deployment health check failed: service '{serviceName}' is not Running.");
+            deploymentHealthy = true;
+
             if (!string.IsNullOrWhiteSpace(postDeployIdentityCheck.WarningMessage))
             {
                 // The deployment itself completed here -- only the runtime IDENTITY
@@ -557,6 +582,7 @@ public sealed class ServiceAppDeploymentService
         }
         catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
         {
+            deploymentFailure = ex.Message;
             _logger.LogError(
                 ex,
                 "Service app deployment failed. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}",
@@ -578,6 +604,16 @@ public sealed class ServiceAppDeploymentService
                 deployment,
                 WithDeploySetWarning(AppDeploymentResult.Failed(targetPath, serviceName, ex.Message)),
                 cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            deploymentFailure = ex.Message;
+            throw;
+        }
+        finally
+        {
+            if (enteredDeployment || deploymentFailure is not null)
+                await deploymentCycle.CompleteAppAsync(deploymentHealthy ? null : deploymentFailure ?? "Deployment interrupted before health confirmation.");
         }
     }
 

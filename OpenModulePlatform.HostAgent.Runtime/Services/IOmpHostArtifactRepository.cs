@@ -11,6 +11,13 @@ public interface IOmpHostArtifactRepository
 {
     string GetConfiguredConnectionString();
 
+    Task<IReadOnlyDictionary<string, string?>> ReadDeploymentLockSettingsAsync(CancellationToken ct);
+
+    Task<AppDeploymentLeaseResult> AcquireAppDeploymentLeaseAsync(
+        string scopeKey, Guid hostId, string reason, int leaseSeconds, CancellationToken ct);
+
+    Task ReleaseAppDeploymentLeaseAsync(string scopeKey, Guid leaseToken, string? reason, CancellationToken ct);
+
     Task<HostAgentLeaseResult> TryAcquireHostAgentLeaseAsync(
         string hostKey,
         string serviceName,

@@ -268,7 +268,85 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
             """
         };
 
-    private (WebAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, HostAgentSettings Settings) CreateServiceWithFakeRepository()
+    [Theory]
+    [InlineData("app")]
+    [InlineData("host")]
+    public async Task DeploymentLease_BusyLeavesWebFilesUntouched(string scope)
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        repository.EnabledHostCount = 2;
+        repository.DeploymentSettings["DeploymentLockScope"] = scope;
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        var scopeKey = scope == "host" ? "host:*" : "app:" + descriptor.AppKey;
+        var owner = Guid.NewGuid();
+        await repository.AcquireAppDeploymentLeaseAsync(scopeKey, owner, "Other host", 600, default);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, default);
+
+        Assert.Empty(Directory.GetFiles(descriptor.InstallPath!));
+        var result = Assert.Single(repository.PublishedWebAppResults).Result;
+        Assert.Equal(HostDeploymentStatuses.Warning, result.State);
+        Assert.Contains(scopeKey, result.DiagnosticWarningMessage);
+        Assert.Empty(repository.ReleasedAppLeases);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeploymentLease_IsHeldDuringWebHealthAndReleasedWithOutcome(bool failHealth)
+    {
+        FakeOmpHostArtifactRepository? observedRepository = null;
+        var (service, repository, _) = CreateServiceWithFakeRepository((_, deployment, _, _) =>
+        {
+            Assert.Equal(deployment.HostId, observedRepository!.AppLeases["app:" + deployment.AppKey].HostId);
+            Assert.Empty(observedRepository.ReleasedAppLeases);
+            if (failHealth) throw new InvalidOperationException("Simulated readiness failure");
+            return Task.CompletedTask;
+        });
+        observedRepository = repository;
+        repository.EnabledHostCount = 2;
+        repository.DesiredWebAppDeployments.Add(CreateWebAppDeploymentDescriptor(out _));
+        await service.DeployDesiredWebAppsAsync("test-host", default);
+        Assert.Empty(repository.AppLeases);
+        var release = Assert.Single(repository.ReleasedAppLeases);
+        Assert.Equal(failHealth ? "Simulated readiness failure" : null, release.Reason);
+        Assert.Equal(failHealth ? HostDeploymentStatuses.Failed : HostDeploymentStatuses.Succeeded,
+            repository.PublishedWebAppResults.Last().Result.State);
+    }
+
+    [Theory]
+    [InlineData("app")]
+    [InlineData("host")]
+    [InlineData("off")]
+    public async Task DeploymentLease_SingleHostUsesOriginalWebPath(string scope)
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository((_, _, _, _) =>
+            throw new InvalidOperationException("Single-host deployment must not add a readiness gate"));
+        settings.DeploymentLockScope = scope;
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, default);
+        Assert.Equal(0, repository.AppLeaseCalls);
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedWebAppResults.Last().Result.State);
+        Assert.Equal("content", File.ReadAllText(Path.Join(descriptor.InstallPath!, "app.txt")));
+    }
+
+    [Fact]
+    public async Task DeploymentLease_AlreadyAppliedHostSweepDoesNotAcquire()
+    {
+        var (service, repository, settings) = CreateServiceWithFakeRepository();
+        settings.DeploymentLockScope = "host";
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, default);
+        repository.EnabledHostCount = 2;
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, default);
+        Assert.Equal(0, repository.AppLeaseCalls);
+    }
+
+    private (WebAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, HostAgentSettings Settings) CreateServiceWithFakeRepository(
+        Func<HostAgentSettings, WebAppDeploymentDescriptor, string?, CancellationToken, Task>? health = null)
     {
         var repository = new FakeOmpHostArtifactRepository();
         var settings = CreateTestSettings();
@@ -278,7 +356,8 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
             optionsMonitor,
             repository,
             credentialStore: null!,
-            NullLogger<WebAppDeploymentService>.Instance);
+            NullLogger<WebAppDeploymentService>.Instance,
+            health ?? ((_, _, _, _) => Task.CompletedTask));
 
         return (service, repository, settings);
     }
@@ -329,6 +408,7 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
             HostKey = "test-host",
             AppInstanceId = Guid.NewGuid(),
             AppInstanceKey = "test-app",
+            AppKey = "test-app",
             ModuleInstanceKey = moduleInstanceKey,
             DisplayName = "Test App",
             ArtifactId = 1,

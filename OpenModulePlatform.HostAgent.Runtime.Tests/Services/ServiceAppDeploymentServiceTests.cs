@@ -943,6 +943,60 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("app")]
+    [InlineData("host")]
+    public async Task DeploymentLease_BusyDoesNotStopServiceOrReplaceFiles(string scope)
+    {
+        var (service, repository, control, deployment, targetPath) = CreateScenario(contentSha256: "new", deployedContentSha256: "old");
+        repository.EnabledHostCount = 2;
+        repository.DeploymentSettings["DeploymentLockScope"] = scope;
+        control.SetState("TestService", "RUNNING");
+        var marker = Path.Join(targetPath, "unchanged.txt");
+        File.WriteAllText(marker, "original");
+        await repository.AcquireAppDeploymentLeaseAsync(scope == "host" ? "host:*" : "app:" + deployment.AppKey,
+            Guid.NewGuid(), "Other host", 600, default);
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+        Assert.True(control.IsServiceRunning("TestService"));
+        Assert.Empty(control.StopAttempts);
+        Assert.Empty(control.StartAttempts);
+        Assert.Equal("original", File.ReadAllText(marker));
+        Assert.Contains("Waiting for lease", repository.PublishedServiceAppResults.Last().Result.DiagnosticWarningMessage);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeploymentLease_ServiceRunningHealthDeterminesReleaseReason(bool failHealth)
+    {
+        var (service, repository, control, deployment, _) = CreateScenario(contentSha256: "new", deployedContentSha256: "old");
+        repository.EnabledHostCount = 2;
+        control.SetState("TestService", "RUNNING");
+        control.StartChangesStateToRunning = !failHealth;
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+        Assert.Empty(repository.AppLeases);
+        var release = Assert.Single(repository.ReleasedAppLeases);
+        if (failHealth) Assert.Contains("not Running", release.Reason);
+        else Assert.Null(release.Reason);
+        Assert.Equal(failHealth ? HostDeploymentStatuses.Failed : HostDeploymentStatuses.Succeeded,
+            repository.PublishedServiceAppResults.Last().Result.State);
+    }
+
+    [Theory]
+    [InlineData("app")]
+    [InlineData("host")]
+    [InlineData("off")]
+    public async Task DeploymentLease_SingleHostUsesOriginalServicePath(string scope)
+    {
+        var (service, repository, control, deployment, _) = CreateScenario(contentSha256: "new", deployedContentSha256: "old");
+        repository.DeploymentSettings["DeploymentLockScope"] = scope;
+        control.SetState("TestService", "RUNNING");
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+        Assert.Equal(0, repository.AppLeaseCalls);
+        Assert.Single(control.StopAttempts);
+        Assert.True(control.IsServiceRunning("TestService"));
+    }
+
     private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateScenario(
         bool startAfterDeployment = true,
         string? contentSha256 = null,
@@ -1028,6 +1082,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             AppInstanceId = appInstanceId,
             AppInstanceKey = appInstanceKey,
             ModuleInstanceKey = $"module-{appInstanceId:N}",
+            AppKey = "test-service",
             DisplayName = serviceName,
             ArtifactId = 42,
             Version = "1.0.0",
@@ -1051,6 +1106,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         private readonly Dictionary<string, string> _executablePaths = new(StringComparer.OrdinalIgnoreCase);
 
         public List<string> StartAttempts { get; } = [];
+        public List<string> StopAttempts { get; } = [];
 
         public List<string> DeletedServices { get; } = [];
 
@@ -1089,6 +1145,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
 
         public bool StopServiceIfRunning(string serviceName, int timeoutSeconds)
         {
+            StopAttempts.Add(serviceName);
             if (!IsServiceRunning(serviceName))
             {
                 return false;

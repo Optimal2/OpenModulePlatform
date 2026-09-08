@@ -1862,6 +1862,23 @@ BEGIN
 END
 GO
 
+-- Cross-host deployment coordination; independent of the host-local agent lease.
+IF OBJECT_ID(N'omp.AppDeploymentLeases', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.AppDeploymentLeases
+    (
+        LeaseScopeKey nvarchar(200) NOT NULL CONSTRAINT PK_omp_AppDeploymentLeases PRIMARY KEY,
+        HostId uniqueidentifier NOT NULL,
+        LeaseToken uniqueidentifier NOT NULL,
+        Reason nvarchar(400) NULL,
+        LeaseUntilUtc datetime2(3) NOT NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppDeploymentLeases_CreatedUtc DEFAULT SYSUTCDATETIME(),
+        UpdatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_AppDeploymentLeases_UpdatedUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_omp_AppDeploymentLeases_Host FOREIGN KEY(HostId) REFERENCES omp.Hosts(HostId) ON DELETE CASCADE
+    );
+END
+GO
+
 IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NULL
 BEGIN
     CREATE TABLE omp.HostAgentJobs
@@ -4817,6 +4834,19 @@ IF COL_LENGTH(N'omp.config_settings', N'ConfigSettingId') IS NULL
 BEGIN
     ALTER TABLE omp.config_settings ADD ConfigSettingId int NULL;
 END
+GO
+
+INSERT INTO omp.config_setting_definitions
+    (ConfigCategory, ConfigSetting, Description, ValidationRegex, ExampleValues, SortOrder, IsEnabled)
+SELECT N'HostAgent', seed.Setting, seed.Description, seed.ValidationRegex, seed.ExampleValues, seed.SortOrder, 1
+FROM (VALUES
+    (N'DeploymentLockScope', N'Cross-host deployment coordination: app (default), host (one host per sweep), or off. Single-host installations never acquire deployment leases.', N'^(app|host|off)$', N'app|host|off', 100),
+    (N'DeploymentLeaseSeconds', N'Deployment lease lifetime in seconds (1-86400); default 600. Expired leases can be taken over.', N'^([1-9][0-9]{0,3}|[1-7][0-9]{4}|8[0-5][0-9]{3}|86[0-3][0-9]{2}|86400)$', N'600', 101)
+) seed(Setting, Description, ValidationRegex, ExampleValues, SortOrder)
+WHERE NOT EXISTS (
+    SELECT 1 FROM omp.config_setting_definitions existing
+    WHERE existing.ConfigCategory = N'HostAgent' AND existing.ConfigSetting = seed.Setting
+);
 GO
 
 IF COL_LENGTH(N'omp.config_settings', N'ConfigCategory') IS NOT NULL

@@ -18,6 +18,13 @@ public sealed class HostAgentSettings
 
     public int RefreshSeconds { get; set; } = 30;
 
+    public string DeploymentLockScope { get; set; } = "app";
+
+    public int DeploymentLeaseSeconds { get; set; } = 600;
+
+    // AppKey -> host-local readiness URL. Do not use a load-balancer address.
+    public Dictionary<string, string> DeploymentHealthUrls { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public string CentralArtifactRoot { get; set; } = string.Empty;
 
     public string LocalArtifactCacheRoot { get; set; } = string.Empty;

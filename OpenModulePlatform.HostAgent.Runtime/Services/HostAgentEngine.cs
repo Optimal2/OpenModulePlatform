@@ -259,20 +259,26 @@ public sealed class HostAgentEngine
                 await EnsureAndPublishAsync(artifact, leaseRenewalCancellation.Token);
             }
 
-            await _webAppDeploymentService.DeployDesiredWebAppsAsync(
-                hostKey,
-                deploySetWarningsByModuleInstanceKey,
-                blockedModuleInstanceKeys,
-                leaseRenewalCancellation.Token);
-            await _webAppHealthMonitor.ProbePortalAsync(
-                lease.HostId.Value,
-                recycleIfUnhealthy: false,
-                leaseRenewalCancellation.Token);
-            await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(
-                hostKey,
-                deploySetWarningsByModuleInstanceKey,
-                blockedModuleInstanceKeys,
-                leaseRenewalCancellation.Token);
+            await using (var deploymentCycle = await AppDeploymentLeaseCycle.CreateAsync(
+                _repository, settings, _logger, leaseRenewalCancellation.Token))
+            {
+                await _webAppDeploymentService.DeployDesiredWebAppsAsync(
+                    hostKey,
+                    deploySetWarningsByModuleInstanceKey,
+                    blockedModuleInstanceKeys,
+                    leaseRenewalCancellation.Token,
+                    deploymentCycle);
+                await _webAppHealthMonitor.ProbePortalAsync(
+                    lease.HostId.Value,
+                    recycleIfUnhealthy: false,
+                    leaseRenewalCancellation.Token);
+                await _serviceAppDeploymentService.DeployDesiredServiceAppsAsync(
+                    hostKey,
+                    deploySetWarningsByModuleInstanceKey,
+                    blockedModuleInstanceKeys,
+                    leaseRenewalCancellation.Token,
+                    deploymentCycle);
+            }
             await _selfUpgradeService.CheckAndPrepareUpgradeAsync(hostKey, lease.HostId.Value, desiredUpgrade, leaseRenewalCancellation.Token);
             await _fileMirrorService.MirrorConfiguredFilesAsync(leaseRenewalCancellation.Token);
 
