@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed (2026-07-14)
+**Accepted (2026-09-08).** Proposed 2026-07-14. Owner decision: **(a) Option A2** and
+**(b) Option B2** — see "Decision" at the end. The next module that needs the pattern
+(LogSearch, moving from a service app to a worker with channel types) must implement it
+**the same way IbsPackager does**, so the two modules never carry different solutions
+for the same problem; a documented contract/template extracted from IbsPackager is the
+deliverable that makes "the same way" checkable.
 
 ## Context
 
@@ -285,4 +290,24 @@ an emergency path for worker processes that need an artifact before starting
 
 ## Decision
 
-TBD pending owner decisions on **(a)** and **(b)** above.
+Decided by the owner on 2026-09-08. The guiding requirement was stability and sameness:
+the next channel-type module must not end up with a different mechanism than the first.
+
+**(a) Option A2 — keep the reconcile seam per module, with a documented contract/template.**
+Each module with channel types owns its reconcile stored procedure in its own schema
+(as `omp_ibs_packager.usp_ReconcileChannelTypeArtifactRequirements` does today), keeps the
+`RequirementKey` prefix convention `<module>.channeltype:<channel-id>`, and runs reconcile
+at the same call sites (channel save/enable/disable/delete, channel-type version changes,
+the Portal reconcile action, and worker start). OMP core is not changed. The contract and
+template are extracted from IbsPackager into `docs/CHANNEL_TYPE_RECONCILE.md` (table shape,
+key convention, call sites, disable semantics, the integration-test scenarios that must be
+duplicated per module) so that a second module is a copy of a known-good pattern rather than
+a reinterpretation. Option A3 is reconsidered only when two or three modules carry nearly
+identical procedures.
+
+**(b) Option B2 — defer the host-neutral RPC.** No new HostAgent RPC is built. The gap is
+recorded here; the existing `ensureArtifact` RPC remains the emergency path. A host-neutral
+channel design, when one is actually proposed, must be additive to the host-bound flow.
+
+Consequence for the next module: its campaign carries the template as a prerequisite and
+"identical to IbsPackager per `docs/CHANNEL_TYPE_RECONCILE.md`" as an acceptance criterion.
