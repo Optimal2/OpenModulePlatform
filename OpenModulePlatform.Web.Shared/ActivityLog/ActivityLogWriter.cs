@@ -26,14 +26,19 @@ public sealed class ActivityLogOptions
 
 /// <summary>
 /// Appends activity entries to the module's ActivityLog table as the versioned JSON
-/// envelope. One row per entry: when it happened, which OMP user (null for system
-/// actions), and the envelope.
+/// envelope. One row per entry: when it happened, which OMP user, and the envelope.
 /// </summary>
 /// <remarks>
 /// A failed write is logged as an error and does not fail the business action: the
 /// activity log is a record of what happened, and refusing the action because the
 /// record could not be written would change what happened. That trade-off is
 /// deliberate for version 1 and is the reason every failure is logged at error level.
+/// <para>
+/// This is a user log: every entry is something a signed-in person did with a
+/// click, never something the system did on its own schedule. A row without an
+/// OMP user id is therefore a defect in the caller, not a "system action"; the
+/// writer still stores it (losing the record would hide the defect) and warns.
+/// </para>
 /// </remarks>
 public sealed class ActivityLogWriter
 {
@@ -60,20 +65,24 @@ public sealed class ActivityLogWriter
     public Task WriteAsync(ActivityEntry entry, ClaimsPrincipal? user, CancellationToken ct = default)
     {
         var userId = OmpUserIdentity.TryGetOmpUserId(user);
-        // A signed-in person is a user even when the omp:user_id claim is missing
-        // (the identity of record is then null, which the row shows as such);
-        // only an absent or anonymous principal is a system actor.
-        var isPerson = user?.Identity?.IsAuthenticated == true;
-        var actor = entry.Actor ?? new ActivityActor(
-            isPerson ? ActivityActorKinds.User : ActivityActorKinds.System,
-            OmpUserIdentity.TryGetDisplayName(user));
+        var actor = entry.Actor ?? new ActivityActor(ActivityActorKinds.User, OmpUserIdentity.TryGetDisplayName(user));
         return WriteAsync(entry with { Actor = actor }, userId, ct);
     }
 
-    /// <summary>Writes an entry with an explicit user id (null for system actions).</summary>
+    /// <summary>
+    /// Writes an entry with an explicit OMP user id. Null is accepted so no record is
+    /// lost, but it is logged as a warning: an activity entry always belongs to a person.
+    /// </summary>
     public async Task WriteAsync(ActivityEntry entry, int? ompUserId, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        if (ompUserId is null)
+        {
+            _logger.LogWarning(
+                "Activity log entry for {Module}/{App} event {Event} has no OMP user id; the activity log is a user log and every entry should name the person who acted: {Summary}",
+                _options.ModuleKey, _options.AppKey, entry.Event, entry.Summary);
+        }
+
         if (string.IsNullOrWhiteSpace(entry.Event))
         {
             throw new ArgumentException("An activity entry needs an event key.", nameof(entry));

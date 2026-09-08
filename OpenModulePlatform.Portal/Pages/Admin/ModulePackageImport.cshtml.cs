@@ -241,6 +241,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
 
         SetTitles("Import/export");
+        string? sourceName = null;
         try
         {
             var files = GetSelectedPackageFiles();
@@ -256,6 +257,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             var results = new List<UniversalPackageImportResult>(files.Count);
             foreach (var file in files)
             {
+                sourceName = file.FileName;
                 var result = await _packages.ImportUniversalPackageUploadAsync(
                     file,
                     CreateOptions(UniversalUploadInput),
@@ -269,6 +271,12 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
+            if (sourceName is not null)
+            {
+                // Only an attempt on an actual file is an event; "no file selected" is not.
+                await WriteUniversalImportFailedEventAsync(sourceName, ex, ct);
+            }
+
             ActivePanel = "import-universal";
             ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             await LoadAsync(ct);
@@ -314,6 +322,23 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
             return Page();
         }
     }
+
+    /// <summary>
+    /// An import that threw before producing a result still gets an entry: the admin
+    /// clicked Import, so the attempt and its failure belong in the activity log.
+    /// </summary>
+    private Task WriteUniversalImportFailedEventAsync(string? sourceName, Exception exception, CancellationToken ct)
+        => _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "universal_package.imported",
+            Outcome = ActivityOutcomes.Failed,
+            Summary = $"Import of universal package '{sourceName ?? "(staged package)"}' failed: {exception.Message}",
+            Subject = sourceName is null ? null : new ActivitySubject("universal_package", sourceName),
+            Data = new Dictionary<string, object?>
+            {
+                ["error"] = exception.GetType().Name
+            }
+        }, User, ct);
 
     private Task WriteUniversalImportEventAsync(UniversalPackageImportResult result, CancellationToken ct)
         => _activityLog.WriteAsync(new ActivityEntry
@@ -361,6 +386,7 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or InvalidOperationException or JsonException or SqlException or UnauthorizedAccessException)
         {
+            await WriteUniversalImportFailedEventAsync(null, ex, ct);
             ActivePanel = "import-universal";
             ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             await LoadAsync(ct);

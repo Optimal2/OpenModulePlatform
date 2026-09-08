@@ -236,7 +236,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         var result = await AddPrincipalCandidatesAsync(candidates, ct);
         if (result.Added > 0)
         {
-            await WriteRoleEventAsync("role.principals_added", $"Added {result.Added} principal(s) of type '{principalType}' to role #{Input.RoleId}", new Dictionary<string, object?> { ["principalType"] = principalType, ["added"] = result.Added, ["candidates"] = candidates.Count }, ct);
+            await WriteRoleEventAsync("role.principals_added", $"Added {result.Added} principal(s) of type '{principalType}' to role #{Input.RoleId}", new Dictionary<string, object?> { ["principalType"] = principalType, ["added"] = result.Added, ["candidates"] = candidates.Count, ["principals"] = result.AddedPrincipals.ToArray() }, ct);
         }
         StatusMessage = BuildPrincipalBatchStatusMessage(result);
         return RedirectToSecurityRole(Input.RoleId);
@@ -579,6 +579,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
                 if (added)
                 {
                     result.Added++;
+                    result.AddedPrincipals.Add($"{normalized.PrincipalType}:{normalized.Principal}");
                 }
                 else
                 {
@@ -793,6 +794,9 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         public int Added { get; set; }
 
         public int Skipped { get; set; }
+
+        /// <summary>The principals actually stored, as "type:principal", for the activity log.</summary>
+        public List<string> AddedPrincipals { get; } = [];
 
         public List<(string FromPrincipal, string ToPrincipal)> Rewrites { get; } = [];
 

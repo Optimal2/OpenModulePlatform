@@ -91,7 +91,9 @@ WHERE COL_LENGTH(required.SchemaName + N'.' + required.TableName, required.Colum
         (N'omp_portal.widget_permissions', N'IX_omp_portal_widget_permissions_widget'),
         (N'omp_portal.user_active_widgets', N'IX_omp_portal_user_active_widgets_user_order'),
         (N'omp_portal.widget_binary_data', N'IX_omp_portal_widget_binary_data_owner'),
-        (N'omp_portal.widget_binary_data', N'IX_omp_portal_widget_binary_data_hash')
+        (N'omp_portal.widget_binary_data', N'IX_omp_portal_widget_binary_data_hash'),
+        (N'omp_portal.ActivityLog', N'IX_omp_portal_ActivityLog_LoggedUtc'),
+        (N'omp_portal.ActivityLog', N'IX_omp_portal_ActivityLog_OmpUserId')
     ) AS v(ObjectName, IndexName)
 )
 SELECT @Missing = @Missing + COUNT(1)

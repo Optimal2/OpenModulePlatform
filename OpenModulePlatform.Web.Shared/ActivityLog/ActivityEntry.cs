@@ -34,9 +34,9 @@ public sealed record ActivityEntry
     public ActivitySubject? Subject { get; init; }
 
     /// <summary>
-    /// Who acted. Left null for web requests: the writer fills it from the signed-in
-    /// principal (kind "user", the display name as a snapshot). Background services
-    /// set kind "system" with the service name.
+    /// Who acted. Leave it null: the writer fills it from the signed-in principal
+    /// (kind "user", the display name as a snapshot). The identity of record is the
+    /// OmpUserId column, never this snapshot.
     /// </summary>
     public ActivityActor? Actor { get; init; }
 
@@ -73,12 +73,19 @@ public static class ActivityOutcomes
     public const string Denied = "denied";
 }
 
-/// <summary>Well-known values for <see cref="ActivityActor.Kind"/>.</summary>
+/// <summary>
+/// Well-known values for <see cref="ActivityActor.Kind"/>. The activity log is a
+/// user log (what a person did with a click, never that a job ran), so every entry
+/// written today is <see cref="User"/>.
+/// </summary>
 public static class ActivityActorKinds
 {
     /// <summary>A signed-in OMP user; the OmpUserId column carries the identity of record.</summary>
     public const string User = "user";
 
-    /// <summary>A background service or worker acting on its own schedule.</summary>
+    /// <summary>
+    /// Reserved in envelope version 1 and not written by <see cref="ActivityLogWriter"/>.
+    /// The viewer accepts it for forward compatibility only.
+    /// </summary>
     public const string System = "system";
 }

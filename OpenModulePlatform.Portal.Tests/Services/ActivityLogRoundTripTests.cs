@@ -47,7 +47,7 @@ public sealed class ActivityLogRoundTripTests : IClassFixture<ActivityLogTestFix
         {
             Event = "thing.deleted",
             Summary = "Deleted thing 1",
-            Actor = new ActivityActor(ActivityActorKinds.System, "sweeper")
+            Actor = new ActivityActor(ActivityActorKinds.User, "Unlinked Tester")
         }, ompUserId: null);
 
         var modules = await repo.GetActivityLogModulesAsync(CancellationToken.None);
