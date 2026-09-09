@@ -3237,4 +3237,5 @@
   <data name="Today" xml:space="preserve"><value>Today</value></data>
   <data name="Last {0} days" xml:space="preserve"><value>Last {0} days</value></data>
   <data name="Clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="Formatted entry" xml:space="preserve"><value>Formatted entry</value></data>
 </root>

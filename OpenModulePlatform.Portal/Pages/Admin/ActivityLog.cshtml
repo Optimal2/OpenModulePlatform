@@ -164,44 +164,56 @@
                     </tr>
                     <tr class="activity-detail" id="@detailId" data-list-follow>
                         <td colspan="6">
-                            @if (entry.Envelope is { } envelope)
-                            {
-                                <dl class="activity-detail__fields">
-                                    @if (envelope.Subject is { } subject)
-                                    {
-                                        <dt>@L["Subject"]</dt>
-                                        <dd><code>@subject.Type</code> @subject.Id @if (!string.IsNullOrWhiteSpace(subject.Label)) { <span class="muted">(@subject.Label)</span> }</dd>
-                                    }
-                                    @if (envelope.Actor is { } actor)
-                                    {
-                                        <dt>@L["Actor"]</dt>
-                                        <dd>@actor.Name <span class="muted">(@actor.Kind)</span></dd>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(envelope.App))
-                                    {
-                                        <dt>@L["App"]</dt>
-                                        <dd><code>@envelope.App</code></dd>
-                                    }
-                                    @if (!string.IsNullOrWhiteSpace(envelope.Correlation))
-                                    {
-                                        <dt>@L["Correlation"]</dt>
-                                        <dd><code>@envelope.Correlation</code></dd>
-                                    }
-                                    @if (envelope.Data is { } data)
-                                    {
-                                        <dt>@L["Data"]</dt>
-                                        <dd><pre class="activity-detail__json">@ActivityLogModel.Pretty(data)</pre></dd>
-                                    }
-                                </dl>
-                            }
-                            else
-                            {
-                                <p class="muted">@L["This entry uses an envelope version this viewer does not understand. The stored text is shown as is."]</p>
-                            }
-                            <details class="activity-detail__raw">
-                                <summary>@L["Raw entry"]</summary>
+                            @* Two views of the same entry: the formatted fields and the
+                               stored JSON. A toggle swaps them; the formatted view is the
+                               default, so the raw text is one click away instead of a fold. *@
+                            <div class="activity-detail__head">
+                                <button type="button"
+                                        class="btn btn-secondary btn-sm activity-detail__toggle"
+                                        aria-pressed="false"
+                                        data-activity-raw-toggle
+                                        data-label-raw="@L["Raw entry"]"
+                                        data-label-formatted="@L["Formatted entry"]">@L["Raw entry"]</button>
+                            </div>
+                            <div class="activity-detail__formatted">
+                                @if (entry.Envelope is { } envelope)
+                                {
+                                    <dl class="activity-detail__fields">
+                                        @if (envelope.Subject is { } subject)
+                                        {
+                                            <dt>@L["Subject"]</dt>
+                                            <dd><code>@subject.Type</code> @subject.Id @if (!string.IsNullOrWhiteSpace(subject.Label)) { <span class="muted">(@subject.Label)</span> }</dd>
+                                        }
+                                        @if (envelope.Actor is { } actor)
+                                        {
+                                            <dt>@L["Actor"]</dt>
+                                            <dd>@actor.Name <span class="muted">(@actor.Kind)</span></dd>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(envelope.App))
+                                        {
+                                            <dt>@L["App"]</dt>
+                                            <dd><code>@envelope.App</code></dd>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(envelope.Correlation))
+                                        {
+                                            <dt>@L["Correlation"]</dt>
+                                            <dd><code>@envelope.Correlation</code></dd>
+                                        }
+                                        @if (envelope.Data is { } data)
+                                        {
+                                            <dt>@L["Data"]</dt>
+                                            <dd><pre class="activity-detail__json">@ActivityLogModel.Pretty(data)</pre></dd>
+                                        }
+                                    </dl>
+                                }
+                                else
+                                {
+                                    <p class="muted">@L["This entry uses an envelope version this viewer does not understand. The stored text is shown as is."]</p>
+                                }
+                            </div>
+                            <div class="activity-detail__rawpanel" hidden>
                                 <pre class="activity-detail__json">@row.Entry</pre>
-                            </details>
+                            </div>
                         </td>
                     </tr>
                 }

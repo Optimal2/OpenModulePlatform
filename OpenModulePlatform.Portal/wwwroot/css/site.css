@@ -7252,8 +7252,14 @@ tr.linkbox-editor-row--dragging {
     overflow-wrap: anywhere;
 }
 
-.activity-detail__raw > summary {
-    cursor: pointer;
-    font-size: 0.85rem;
+.activity-detail__head {
+    display: flex;
+    justify-content: flex-end;
+    margin: 6px 0 8px;
+}
+
+.activity-detail__toggle[aria-pressed="true"] {
+    border-color: var(--link);
+    color: var(--link-hover);
 }
 

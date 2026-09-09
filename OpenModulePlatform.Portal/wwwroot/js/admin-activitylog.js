@@ -20,6 +20,17 @@
     };
 
     document.addEventListener('click', (event) => {
+        const rawToggle = event.target.closest('[data-activity-raw-toggle]');
+        if (rawToggle) {
+            const cell = rawToggle.closest('td');
+            const raw = rawToggle.getAttribute('aria-pressed') !== 'true';
+            rawToggle.setAttribute('aria-pressed', raw ? 'true' : 'false');
+            rawToggle.textContent = raw ? rawToggle.dataset.labelFormatted : rawToggle.dataset.labelRaw;
+            cell.querySelector('.activity-detail__formatted').hidden = raw;
+            cell.querySelector('.activity-detail__rawpanel').hidden = !raw;
+            return;
+        }
+
         const hint = event.target.closest('.activity-row__hint');
         if (hint) {
             const row = hint.closest('tr[data-activity-row]');
