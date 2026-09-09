@@ -47,18 +47,81 @@
     // Only files reach here: an image copied as a bitmap arrives as a PNG,
     // so animation survives only when the clipboard holds the GIF file itself.
     const fileInput = form.querySelector('input[type="file"]');
-    const attachButton = form.querySelector('.portal-message-thread__composer-button--attach');
-    const updateAttachCount = () => {
-        if (!fileInput || !attachButton) {
+    const pendingTray = form.querySelector('[data-message-thread-pending]');
+    let pendingUrls = [];
+    const formatSize = (bytes) => bytes >= 1024 * 1024
+        ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+        : `${Math.max(1, Math.round(bytes / 1024))} kB`;
+    // The tray mirrors the file input: one chip per waiting file with a
+    // thumbnail (object URL for images, the attachments glyph otherwise), the
+    // name, the size and a remove button. Removing rebuilds the FileList
+    // without that file, so the input stays the single source of truth.
+    const renderPending = () => {
+        if (!pendingTray || !fileInput) {
             return;
         }
-        const count = fileInput.files ? fileInput.files.length : 0;
-        attachButton.classList.toggle('has-files', count > 0);
-        attachButton.dataset.count = count > 0 ? String(count) : '';
+        pendingUrls.forEach((url) => URL.revokeObjectURL(url));
+        pendingUrls = [];
+        pendingTray.replaceChildren();
+        const files = Array.from(fileInput.files || []);
+        pendingTray.hidden = files.length === 0;
+        files.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'portal-message-thread__pending-item';
+            if (file.type.startsWith('image/')) {
+                const url = URL.createObjectURL(file);
+                pendingUrls.push(url);
+                const thumb = document.createElement('img');
+                thumb.className = 'portal-message-thread__pending-thumb';
+                thumb.src = url;
+                thumb.alt = '';
+                item.appendChild(thumb);
+            } else {
+                const glyph = document.createElement('span');
+                glyph.className = 'portal-message-thread__pending-glyph';
+                glyph.setAttribute('aria-hidden', 'true');
+                item.appendChild(glyph);
+            }
+            const text = document.createElement('span');
+            text.className = 'portal-message-thread__pending-text';
+            const name = document.createElement('span');
+            name.className = 'portal-message-thread__pending-name';
+            name.textContent = file.name;
+            name.title = file.name;
+            const size = document.createElement('span');
+            size.className = 'portal-message-thread__pending-size';
+            size.textContent = formatSize(file.size);
+            text.append(name, size);
+            item.appendChild(text);
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'portal-message-thread__pending-remove';
+            remove.dataset.pendingRemove = String(index);
+            remove.title = pendingTray.dataset.removeText || 'Remove';
+            remove.setAttribute('aria-label', `${pendingTray.dataset.removeText || 'Remove'}: ${file.name}`);
+            item.appendChild(remove);
+            pendingTray.appendChild(item);
+        });
     };
+    const updateAttachCount = () => renderPending();
     if (fileInput && typeof DataTransfer === 'function') {
         fileInput.addEventListener('change', updateAttachCount);
         form.addEventListener('reset', () => window.setTimeout(updateAttachCount, 0));
+        pendingTray?.addEventListener('click', (event) => {
+            const remove = event.target.closest('[data-pending-remove]');
+            if (!remove) {
+                return;
+            }
+            const skip = Number.parseInt(remove.dataset.pendingRemove || '', 10);
+            const transfer = new DataTransfer();
+            Array.from(fileInput.files || []).forEach((file, index) => {
+                if (index !== skip) {
+                    transfer.items.add(file);
+                }
+            });
+            fileInput.files = transfer.files;
+            renderPending();
+        });
         form.addEventListener('paste', (event) => {
             const pasted = Array.from(event.clipboardData?.files || [])
                 .filter((file) => file.type.startsWith('image/'));

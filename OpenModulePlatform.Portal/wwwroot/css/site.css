@@ -493,24 +493,103 @@
     color: #fff;
 }
 
-/* Files added by pasting (or picking) show as a count on the attach button,
-   so a pasted image is visibly waiting to be sent. */
-.portal-message-thread__composer-button--attach.has-files::after {
-    content: attr(data-count);
+/* Files waiting to be sent: a row of chips above the composer, each with a
+   thumbnail (images) or the attachments glyph, the name, the size and a
+   remove button, the way a pasted screenshot shows up in a chat app. */
+.portal-message-thread__pending {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 8px;
+}
+
+.portal-message-thread__pending[hidden] {
+    display: none;
+}
+
+.portal-message-thread__pending-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 260px;
+    padding: 4px 6px 4px 4px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-muted);
+    font-size: 0.8rem;
+}
+
+.portal-message-thread__pending-thumb {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: var(--surface);
+}
+
+.portal-message-thread__pending-glyph {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: var(--surface);
+    position: relative;
+}
+
+.portal-message-thread__pending-glyph::before {
+    content: "";
     position: absolute;
-    top: -6px;
-    right: -6px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+    inset: 8px;
+    background: var(--text-muted);
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/attachments.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/attachments.svg") center / contain no-repeat;
+}
+
+.portal-message-thread__pending-text {
+    display: grid;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.portal-message-thread__pending-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.portal-message-thread__pending-size {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.portal-message-thread__pending-remove {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
     border-radius: 999px;
-    background: #0284c7;
-    color: #fff;
-    font-size: 0.7rem;
-    font-weight: 700;
-    line-height: 18px;
-    text-align: center;
-    box-sizing: border-box;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    position: relative;
+}
+
+.portal-message-thread__pending-remove::before {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+}
+
+.portal-message-thread__pending-remove:hover,
+.portal-message-thread__pending-remove:focus-visible {
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
 }
 
 .portal-message-thread__composer-button--attach input {

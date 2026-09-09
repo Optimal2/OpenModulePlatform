@@ -65,6 +65,9 @@ else
                   data-send-error-text="@L["The message could not be sent."]"
                   data-enhance="false">
                 <input asp-for="RestoreScrollTop" type="hidden" data-message-thread-scroll-input />
+                @* Files picked or pasted wait here, each with a thumbnail, its name and
+                   a remove button, until the message is sent. Filled by the page script. *@
+                <div class="portal-message-thread__pending" data-message-thread-pending data-remove-text="@L["Remove"]" hidden></div>
                 <div class="portal-message-thread__composer-row">
                     <label class="portal-message-thread__message-field">
                         <span class="visually-hidden">@L["Message"]</span>
