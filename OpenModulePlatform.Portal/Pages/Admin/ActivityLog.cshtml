@@ -18,57 +18,69 @@
 </section>
 
 <section class="card top-gap">
-    <form method="get" class="activity-filter" data-enhance="false">
-        <div class="activity-filter__grid">
-            <div class="form-field">
-                <label for="activity-user">@L["User"]</label>
-                <select id="activity-user" name="UserId">
-                    <option value="">@L["Any user"]</option>
-                    @foreach (var user in Model.Users)
-                    {
-                        <option value="@user.UserId" selected="@(Model.UserId == user.UserId)">@user.DisplayName (@user.UserId)</option>
-                    }
-                </select>
-            </div>
-            <div class="form-field">
-                <label for="activity-from">@L["From date"]</label>
-                <input id="activity-from" type="date" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
-            </div>
-            <div class="form-field">
-                <label for="activity-to">@L["To date"]</label>
-                <input id="activity-to" type="date" name="To" value="@(Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
-            </div>
-            <div class="form-field activity-filter__text">
-                <label for="activity-q">@L["Text in summary or event"]</label>
-                <input id="activity-q" type="search" name="Q" value="@Model.Q" placeholder="@L["e.g. manual_review or a job id"]" />
-            </div>
-            <div class="form-field">
-                <label for="activity-take">@L["Rows"]</label>
-                <select id="activity-take" name="Take">
-                    @foreach (var take in new[] { 50, 200, 500, 1000 })
-                    {
-                        <option value="@take" selected="@(Model.Take == take)">@take</option>
-                    }
-                </select>
-            </div>
-        </div>
+    @* One row: row search, user, modules, period, then Clear and Rows on the
+       right. Every choice applies as soon as it is made (the page script
+       submits the GET form), so there is no Apply button. The row search is
+       the list component's own search over the loaded rows; Enter runs the
+       same text as a server-side search across everything the filters allow. *@
+    <form method="get" class="activity-bar" id="activity-filter-form" data-enhance="false">
+        <input type="search"
+               class="list-search activity-bar__search"
+               name="Q"
+               value="@Model.Q"
+               data-list-search="activity-list"
+               placeholder="@L["Row search"]"
+               aria-label="@L["Row search"]"
+               title="@L["Filters the loaded rows as you type; Enter searches the summary and event of everything the filters allow."]" />
+        <select name="UserId" class="activity-bar__field" aria-label="@L["User"]" data-activity-submit>
+            <option value="">@L["Any user"]</option>
+            @foreach (var user in Model.Users)
+            {
+                <option value="@user.UserId" selected="@(Model.UserId == user.UserId)">@user.DisplayName (@user.UserId)</option>
+            }
+        </select>
         @if (Model.AvailableModules.Count > 0)
         {
-            <fieldset class="activity-filter__modules">
-                <legend>@L["Modules"]</legend>
-                @foreach (var module in Model.AvailableModules)
-                {
-                    <label class="activity-filter__module">
-                        <input type="checkbox" name="Modules" value="@module.ModuleKey" checked="@Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase)" />
-                        @module.DisplayName
-                    </label>
-                }
-            </fieldset>
+            <details class="list-filter activity-bar__modules @(Model.Modules.Length > 0 ? "list-filter--active" : null)">
+                <summary class="btn btn-ghost">@L["Module"]<span class="list-filter__count" hidden="@(Model.Modules.Length == 0 ? "hidden" : null)">@Model.Modules.Length</span></summary>
+                <div class="list-filter__menu">
+                    @foreach (var module in Model.AvailableModules)
+                    {
+                        <label class="list-filter__option">
+                            <input type="checkbox" name="Modules" value="@module.ModuleKey" checked="@Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase)" data-activity-submit />
+                            @module.DisplayName
+                        </label>
+                    }
+                </div>
+            </details>
         }
-        <div class="toolbar">
-            <button type="submit" class="btn btn-primary">@L["Apply"]</button>
-            <a class="btn btn-ghost" href="@Url.Content("~/admin/activitylog")">@L["Clear filters"]</a>
-        </div>
+        @{
+            var presetToday = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+            var presetTodayIso = presetToday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+        <span data-omp-daterange data-range-name="Range" data-from-name="From" data-to-name="To"
+              data-field-class="activity-bar__field" data-max="today"
+              data-from-text="@L["From date"]" data-to-text="@L["To date"]" data-apply-text="@L["Apply"]">
+            <input type="hidden" name="Range" value="@Model.Range" />
+            <input type="hidden" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+            <input type="hidden" name="To" value="@(Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+            <span data-omp-daterange-preset="all" data-to="@presetTodayIso">@L["Since the start"]</span>
+            <span data-omp-daterange-preset="today" data-from="@presetTodayIso" data-to="@presetTodayIso">@L["Today"]</span>
+            <span data-omp-daterange-preset="7d" data-from="@presetToday.AddDays(-6).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 7]</span>
+            <span data-omp-daterange-preset="30d" data-from="@presetToday.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 30]</span>
+            <span data-omp-daterange-preset="90d" data-from="@presetToday.AddDays(-89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 90]</span>
+        </span>
+        <span class="activity-bar__spacer"></span>
+        <a class="btn btn-ghost" href="@Url.Content("~/admin/activitylog")">@L["Clear"]</a>
+        <label class="activity-bar__rows">
+            <span>@L["Rows"]</span>
+            <select name="Take" class="activity-bar__field" aria-label="@L["Rows"]" data-activity-submit>
+                @foreach (var take in new[] { 50, 200, 500, 1000 })
+                {
+                    <option value="@take" selected="@(Model.Take == take)">@take</option>
+                }
+            </select>
+        </label>
     </form>
 </section>
 
@@ -84,7 +96,6 @@
     else
     {
         <div class="toolbar">
-            <input type="search" class="list-search" data-list-search="activity-list" placeholder="@L["Search rows"]" aria-label="@L["Search rows"]" />
             <span class="list-count" data-list-count="activity-list" data-template="@L["Showing {0} of {1} rows."]"></span>
         </div>
         <p class="muted activity-list__note">@L["Newest first, at most {0} rows per module.", Model.Take]</p>
@@ -126,7 +137,8 @@
                             }
                             else
                             {
-                                <span class="muted">@L["System"]</span>
+                                @* A user log entry always belongs to a person; a row without an id is a defect in the writer, not a system action. *@
+                                <span class="muted">@L["Unknown user"]</span>
                             }
                         </td>
                         <td data-sort-value="@row.ModuleDisplayName">

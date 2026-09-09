@@ -7083,36 +7083,47 @@ tr.linkbox-editor-row--dragging {
    follow rows that open on row click (same pattern as the maintenance
    findings, including the [hidden] rule that lets the shared list's
    filtering win over the open class). */
-.activity-filter__grid {
-    display: grid;
-    grid-template-columns: minmax(180px, 1.2fr) 150px 150px minmax(200px, 2fr) 100px;
-    gap: 12px;
-    align-items: end;
-}
-
-.activity-filter__grid .form-field {
-    margin: 0;
-}
-
-.activity-filter__modules {
+/* User log filter bar: one row, fields left, Clear and Rows pushed right;
+   wraps on narrow screens. The period control is a button dressed as a
+   field (data-field-class) so it matches the selects beside it. */
+.activity-bar {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 16px;
-    margin: 12px 0 0;
-    padding: 10px 12px;
+    align-items: center;
+    gap: 8px;
+}
+
+.activity-bar__search {
+    flex: 1 1 220px;
+    max-width: 320px;
+}
+
+.activity-bar__field,
+.activity-bar select {
+    width: auto;
+    min-height: 36px;
+    padding: 6px 10px;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
 }
 
-.activity-filter__modules legend {
-    padding: 0 4px;
-    font-weight: 600;
+.activity-bar__modules .list-filter__menu {
+    z-index: 5;
 }
 
-.activity-filter__module {
+.activity-bar__spacer {
+    flex: 1 1 auto;
+}
+
+.activity-bar__rows {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    margin: 0;
+    font-weight: 600;
 }
 
 .activity-list__note {

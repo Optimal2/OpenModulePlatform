@@ -45,6 +45,10 @@ public sealed class ActivityLogModel : OmpPortalPageModel
     [BindProperty(SupportsGet = true)]
     public string? Q { get; set; }
 
+    /// <summary>The period preset key the range control chose (its dates travel as From/To); display only.</summary>
+    [BindProperty(SupportsGet = true)]
+    public string? Range { get; set; }
+
     [BindProperty(SupportsGet = true)]
     public int Take { get; set; } = DefaultTake;
 
@@ -53,6 +57,29 @@ public sealed class ActivityLogModel : OmpPortalPageModel
     public IReadOnlyList<ActivityLogUser> Users { get; private set; } = [];
 
     public IReadOnlyList<ActivityLogEntryView> Entries { get; private set; } = [];
+
+    /// <summary>
+    /// The range control sends a preset key with empty dates; the page resolves the
+    /// key to From/To (UTC days) so the query and the control agree. Explicit dates
+    /// win over a stale key, and an unknown key means no period.
+    /// </summary>
+    private void ApplyRangePreset()
+    {
+        if (From.HasValue || To.HasValue || string.IsNullOrWhiteSpace(Range))
+        {
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        (From, To) = Range switch
+        {
+            "today" => (today, today),
+            "7d" => (today.AddDays(-6), today),
+            "30d" => (today.AddDays(-29), today),
+            "90d" => (today.AddDays(-89), today),
+            _ => ((DateOnly?)null, (DateOnly?)null)
+        };
+    }
 
     /// <summary>True when the page was opened with any filter, so an empty result reads as "no match" rather than "nothing logged".</summary>
     public bool HasFilter => UserId.HasValue || Modules.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
@@ -69,6 +96,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
         // The repository caps the read; the page shows the same number so the
         // note and the Rows select never claim more than is fetched.
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxActivityLogTake);
+        ApplyRangePreset();
 
         AvailableModules = await _repo.GetActivityLogModulesAsync(ct);
         Users = await _repo.GetActivityLogUsersAsync(ct);

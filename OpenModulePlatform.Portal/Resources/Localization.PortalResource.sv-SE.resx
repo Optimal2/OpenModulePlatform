@@ -3353,4 +3353,10 @@
   <data name="Select OMP user {0}" xml:space="preserve"><value>Markera OMP-användaren {0}</value></data>
   <data name="AD account" xml:space="preserve"><value>AD-konto</value></data>
   <data name="Search and tick OMP users in the list, or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Sök och markera OMP-användare i listan, eller klistra in AD-användare/-grupper som radbruten text.</value></data>
+  <data name="Row search" xml:space="preserve"><value>Radsök</value></data>
+  <data name="Filters the loaded rows as you type; Enter searches the summary and event of everything the filters allow." xml:space="preserve"><value>Filtrerar de laddade raderna medan du skriver; Enter söker i sammanfattning och händelse i allt som filtren tillåter.</value></data>
+  <data name="Since the start" xml:space="preserve"><value>Sedan start</value></data>
+  <data name="Today" xml:space="preserve"><value>I dag</value></data>
+  <data name="Last {0} days" xml:space="preserve"><value>Senaste {0} dagarna</value></data>
+  <data name="Clear" xml:space="preserve"><value>Rensa</value></data>
 </root>

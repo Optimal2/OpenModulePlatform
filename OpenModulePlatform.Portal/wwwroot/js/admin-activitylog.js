@@ -45,3 +45,39 @@
         toggleEntry(row);
     });
 })();
+
+// The filter bar applies every choice at once: selects, module checkboxes and
+// the period control submit the GET form (no Apply button). Enter in the row
+// search submits too, as the server-side text search; typing only filters the
+// loaded rows through the list component's own search.
+(() => {
+    'use strict';
+
+    const form = document.getElementById('activity-filter-form');
+    if (!form) {
+        return;
+    }
+
+    const submit = () => {
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+        } else {
+            form.submit();
+        }
+    };
+
+    form.querySelectorAll('[data-activity-submit]').forEach((field) => {
+        field.addEventListener('change', submit);
+    });
+    form.addEventListener('omp-daterange-change', submit);
+
+    const search = form.querySelector('.activity-bar__search');
+    if (search) {
+        search.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submit();
+            }
+        });
+    }
+})();
