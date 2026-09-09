@@ -7114,6 +7114,16 @@ tr.linkbox-editor-row--dragging {
     z-index: 5;
 }
 
+/* One height for everything in the row: the search field, the selects, the
+   period button and the two ghost buttons. */
+.activity-bar__search,
+.activity-bar .btn {
+    box-sizing: border-box;
+    min-height: 36px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
 .activity-bar__spacer {
     flex: 1 1 auto;
 }
@@ -7241,8 +7251,3 @@ tr.linkbox-editor-row--dragging {
     font-size: 0.85rem;
 }
 
-@media (max-width: 900px) {
-    .activity-filter__grid {
-        grid-template-columns: 1fr 1fr;
-    }
-}

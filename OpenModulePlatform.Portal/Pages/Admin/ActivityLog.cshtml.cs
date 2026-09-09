@@ -59,26 +59,38 @@ public sealed class ActivityLogModel : OmpPortalPageModel
     public IReadOnlyList<ActivityLogEntryView> Entries { get; private set; } = [];
 
     /// <summary>
-    /// The range control sends a preset key with empty dates; the page resolves the
-    /// key to From/To (UTC days) so the query and the control agree. Explicit dates
-    /// win over a stale key, and an unknown key means no period.
+    /// The range control sends a preset key; the page resolves the key to From/To
+    /// (UTC days) so the query and the control agree. A known key always wins over
+    /// the dates that travel with it: those are yesterday's resolution once the
+    /// page is reloaded the next day, and "last 7 days" must keep rolling. The
+    /// control writes an empty key for custom dates, and an unknown key is ignored.
     /// </summary>
     private void ApplyRangePreset()
     {
-        if (From.HasValue || To.HasValue || string.IsNullOrWhiteSpace(Range))
+        if (string.IsNullOrWhiteSpace(Range))
         {
             return;
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-        (From, To) = Range switch
+        switch (Range)
         {
-            "today" => (today, today),
-            "7d" => (today.AddDays(-6), today),
-            "30d" => (today.AddDays(-29), today),
-            "90d" => (today.AddDays(-89), today),
-            _ => ((DateOnly?)null, (DateOnly?)null)
-        };
+            case "all":
+                (From, To) = (null, null);
+                break;
+            case "today":
+                (From, To) = (today, today);
+                break;
+            case "7d":
+                (From, To) = (today.AddDays(-6), today);
+                break;
+            case "30d":
+                (From, To) = (today.AddDays(-29), today);
+                break;
+            case "90d":
+                (From, To) = (today.AddDays(-89), today);
+                break;
+        }
     }
 
     /// <summary>True when the page was opened with any filter, so an empty result reads as "no match" rather than "nothing logged".</summary>
