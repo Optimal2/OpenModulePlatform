@@ -42,7 +42,7 @@
         @if (Model.AvailableModules.Count > 0)
         {
             <details class="list-filter activity-bar__modules @(Model.Modules.Length > 0 ? "list-filter--active" : null)">
-                <summary class="btn btn-ghost">@L["Module"]<span class="list-filter__count" hidden="@(Model.Modules.Length == 0 ? "hidden" : null)">@Model.Modules.Length</span></summary>
+                <summary class="btn btn-secondary">@L["Module"]<span class="list-filter__count" hidden="@(Model.Modules.Length == 0 ? "hidden" : null)">@Model.Modules.Length</span></summary>
                 <div class="list-filter__menu">
                     @foreach (var module in Model.AvailableModules)
                     {
@@ -71,7 +71,7 @@
             <span data-omp-daterange-preset="90d" data-from="@presetToday.AddDays(-89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 90]</span>
         </span>
         <span class="activity-bar__spacer"></span>
-        <a class="btn btn-ghost" href="@Url.Content("~/admin/activitylog")">@L["Clear"]</a>
+        <a class="btn btn-danger" href="@Url.Content("~/admin/activitylog")">@L["Clear"]</a>
         <label class="activity-bar__rows">
             <span>@L["Rows"]</span>
             <select name="Take" class="activity-bar__field" aria-label="@L["Rows"]" data-activity-submit>
