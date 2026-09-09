@@ -41,6 +41,44 @@
 
     form?.addEventListener('submit', syncScrollInput);
 
+    // Pasting an image (a screenshot, an image copied from a page) into the
+    // composer attaches it, the same way picking it with the attach button
+    // would. Both paths end in the file input, so the send path is unchanged.
+    // Only files reach here: an image copied as a bitmap arrives as a PNG,
+    // so animation survives only when the clipboard holds the GIF file itself.
+    const fileInput = form.querySelector('input[type="file"]');
+    const attachButton = form.querySelector('.portal-message-thread__composer-button--attach');
+    const updateAttachCount = () => {
+        if (!fileInput || !attachButton) {
+            return;
+        }
+        const count = fileInput.files ? fileInput.files.length : 0;
+        attachButton.classList.toggle('has-files', count > 0);
+        attachButton.dataset.count = count > 0 ? String(count) : '';
+    };
+    if (fileInput && typeof DataTransfer === 'function') {
+        fileInput.addEventListener('change', updateAttachCount);
+        form.addEventListener('reset', () => window.setTimeout(updateAttachCount, 0));
+        form.addEventListener('paste', (event) => {
+            const pasted = Array.from(event.clipboardData?.files || [])
+                .filter((file) => file.type.startsWith('image/'));
+            if (pasted.length === 0) {
+                return;
+            }
+            event.preventDefault();
+            const transfer = new DataTransfer();
+            Array.from(fileInput.files || []).forEach((file) => transfer.items.add(file));
+            pasted.forEach((file, index) => {
+                const extension = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+                const name = file.name && file.name !== 'image.png' ? file.name : `pasted-${Date.now()}-${index + 1}.${extension}`;
+                transfer.items.add(new File([file], name, { type: file.type }));
+            });
+            fileInput.files = transfer.files;
+            updateAttachCount();
+        });
+        updateAttachCount();
+    }
+
     if (scrollContainer.dataset.liveDisabled === 'true') {
         return;
     }

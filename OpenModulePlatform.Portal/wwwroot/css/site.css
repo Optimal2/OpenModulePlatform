@@ -308,6 +308,10 @@
     align-items: flex-end;
     gap: 8px;
     justify-content: flex-start;
+    /* A grid item's automatic minimum is its content, so one long token
+       (a URL, a hash) used to widen the row past the thread and give the
+       page a horizontal scrollbar. Zero it; the bubble wraps instead. */
+    min-width: 0;
 }
 
 .portal-message-thread__message.is-own {
@@ -339,7 +343,9 @@
 .portal-message-thread__bubble {
     display: grid;
     gap: 6px;
+    min-width: 0;
     max-width: min(72ch, 82%);
+    overflow-wrap: anywhere;
     padding: 10px 12px;
     border: 1px solid var(--portal-message-sender-border, rgba(148, 163, 184, 0.24));
     border-radius: 12px;
@@ -354,6 +360,7 @@
 .portal-message-thread__bubble p {
     margin: 0;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .portal-message-thread__meta {
@@ -373,7 +380,9 @@
 .portal-message-thread__attachment {
     display: grid;
     gap: 4px;
+    min-width: 0;
     max-width: 180px;
+    overflow-wrap: anywhere;
     padding: 6px;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.72);
@@ -475,6 +484,26 @@
 .portal-message-thread__composer-button--send:focus-visible {
     background: #0369a1;
     color: #fff;
+}
+
+/* Files added by pasting (or picking) show as a count on the attach button,
+   so a pasted image is visibly waiting to be sent. */
+.portal-message-thread__composer-button--attach.has-files::after {
+    content: attr(data-count);
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #0284c7;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    box-sizing: border-box;
 }
 
 .portal-message-thread__composer-button--attach input {
