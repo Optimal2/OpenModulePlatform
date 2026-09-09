@@ -169,6 +169,12 @@
                                default, so the raw text is one click away instead of a fold. *@
                             <div class="activity-detail__head">
                                 <button type="button"
+                                        class="btn btn-secondary btn-sm btn-leading-icon btn-leading-icon--copy activity-detail__copy"
+                                        data-activity-copy
+                                        data-label-copy="@L["Copy"]"
+                                        data-label-copied="@L["Copied"]"
+                                        hidden>@L["Copy"]</button>
+                                <button type="button"
                                         class="btn btn-secondary btn-sm activity-detail__toggle"
                                         aria-pressed="false"
                                         data-activity-raw-toggle

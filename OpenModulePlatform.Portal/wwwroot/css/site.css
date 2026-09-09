@@ -2479,6 +2479,14 @@ button {
     --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/cancel.svg");
 }
 
+.btn-leading-icon--copy {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/copy.svg");
+}
+
+.btn-leading-icon--copy.is-copied {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+}
+
 .btn-leading-icon--delete {
     --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/delete.svg");
 }
@@ -7257,6 +7265,8 @@ tr.linkbox-editor-row--dragging {
    below it, and the button stops costing a row of its own. */
 .activity-detail__head {
     float: right;
+    display: flex;
+    gap: 8px;
     margin: 6px 0 6px 16px;
 }
 

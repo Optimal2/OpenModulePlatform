@@ -3360,4 +3360,6 @@
   <data name="Last {0} days" xml:space="preserve"><value>Senaste {0} dagarna</value></data>
   <data name="Clear" xml:space="preserve"><value>Rensa</value></data>
   <data name="Formatted entry" xml:space="preserve"><value>Formaterad post</value></data>
+  <data name="Copy" xml:space="preserve"><value>Kopiera</value></data>
+  <data name="Copied" xml:space="preserve"><value>Kopierat</value></data>
 </root>

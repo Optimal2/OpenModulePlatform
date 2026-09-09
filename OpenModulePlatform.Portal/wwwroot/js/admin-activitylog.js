@@ -28,6 +28,33 @@
             rawToggle.textContent = raw ? rawToggle.dataset.labelFormatted : rawToggle.dataset.labelRaw;
             cell.querySelector('.activity-detail__formatted').hidden = raw;
             cell.querySelector('.activity-detail__rawpanel').hidden = !raw;
+            const copy = cell.querySelector('[data-activity-copy]');
+            if (copy) {
+                copy.hidden = !raw;
+            }
+            return;
+        }
+
+        const copyButton = event.target.closest('[data-activity-copy]');
+        if (copyButton) {
+            const text = copyButton.closest('td').querySelector('.activity-detail__rawpanel pre')?.textContent ?? '';
+            const done = () => {
+                copyButton.classList.add('is-copied');
+                copyButton.textContent = copyButton.dataset.labelCopied;
+                window.setTimeout(() => {
+                    copyButton.classList.remove('is-copied');
+                    copyButton.textContent = copyButton.dataset.labelCopy;
+                }, 1200);
+            };
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text).then(done, () => { /* the browser said no; nothing to show */ });
+            } else {
+                const scratch = document.createElement('textarea');
+                scratch.value = text;
+                document.body.appendChild(scratch);
+                scratch.select();
+                try { document.execCommand('copy'); done(); } finally { scratch.remove(); }
+            }
             return;
         }
 

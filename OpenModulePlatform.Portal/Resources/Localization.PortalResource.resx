@@ -3238,4 +3238,6 @@
   <data name="Last {0} days" xml:space="preserve"><value>Last {0} days</value></data>
   <data name="Clear" xml:space="preserve"><value>Clear</value></data>
   <data name="Formatted entry" xml:space="preserve"><value>Formatted entry</value></data>
+  <data name="Copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="Copied" xml:space="preserve"><value>Copied</value></data>
 </root>
