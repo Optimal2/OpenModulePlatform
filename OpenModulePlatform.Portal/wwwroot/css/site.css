@@ -7252,10 +7252,25 @@ tr.linkbox-editor-row--dragging {
     overflow-wrap: anywhere;
 }
 
+/* The toggle floats top-right; the field grid and the raw panel are block
+   formatting contexts, so they sit beside it on the same line instead of
+   below it, and the button stops costing a row of its own. */
 .activity-detail__head {
-    display: flex;
-    justify-content: flex-end;
-    margin: 6px 0 8px;
+    float: right;
+    margin: 6px 0 6px 16px;
+}
+
+.activity-detail__formatted,
+.activity-detail__rawpanel {
+    display: flow-root;
+    padding-top: 8px;
+}
+
+/* An author display beats the UA [hidden] rule; the panel the toggle hides
+   must stay hidden. */
+.activity-detail__formatted[hidden],
+.activity-detail__rawpanel[hidden] {
+    display: none;
 }
 
 .activity-detail__toggle[aria-pressed="true"] {
