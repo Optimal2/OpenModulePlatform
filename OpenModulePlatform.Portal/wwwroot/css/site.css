@@ -7093,9 +7093,18 @@ tr.linkbox-editor-row--dragging {
     gap: 8px;
 }
 
+/* The row search starts compact and widens while it has focus or text, so
+   the bar reads as controls first and the field grows only when it is in use. */
 .activity-bar__search {
-    flex: 1 1 220px;
-    max-width: 320px;
+    flex: 0 1 180px;
+    width: 180px;
+    transition: width 120ms ease, flex-basis 120ms ease;
+}
+
+.activity-bar__search:focus,
+.activity-bar__search:not(:placeholder-shown) {
+    flex-basis: 320px;
+    width: 320px;
 }
 
 .activity-bar__field,
@@ -7136,9 +7145,6 @@ tr.linkbox-editor-row--dragging {
     font-weight: 600;
 }
 
-.activity-list__note {
-    margin: 8px 0 0;
-}
 
 .activity-grid {
     table-layout: fixed;
