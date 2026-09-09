@@ -325,14 +325,16 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
 
     /// <summary>
     /// An import that threw before producing a result still gets an entry: the admin
-    /// clicked Import, so the attempt and its failure belong in the activity log.
+    /// clicked Import, so the attempt and its failure belong in the user log. The
+    /// exception text stays in the application log; the user log records that the
+    /// attempt failed, not why (it is an audit trail, not an error log).
     /// </summary>
     private Task WriteUniversalImportFailedEventAsync(string? sourceName, Exception exception, CancellationToken ct)
         => _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "universal_package.imported",
             Outcome = ActivityOutcomes.Failed,
-            Summary = $"Import of universal package '{sourceName ?? "(staged package)"}' failed: {exception.Message}",
+            Summary = $"Import of universal package '{sourceName ?? "(staged package)"}' failed",
             Subject = sourceName is null ? null : new ActivitySubject("universal_package", sourceName),
             Data = new Dictionary<string, object?>
             {

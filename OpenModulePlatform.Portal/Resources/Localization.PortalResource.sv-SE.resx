@@ -3326,8 +3326,8 @@
   <data name="After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins." xml:space="preserve"><value>Efter flytten följer rollen OMP-användaren: den gäller även användarens andra aktiverade inloggningsvägar, till exempel lokalt lösenord eller en annan OIDC-provider, inte bara AD-/ADFS-inloggningar.</value></data>
   <data name="Click to show the full message" xml:space="preserve"><value>Klicka för att visa hela meddelandet</value></data>
   <data name="Show details" xml:space="preserve"><value>Visa detaljer</value></data>
-  <data name="Activity log" xml:space="preserve"><value>Aktivitetslogg</value></data>
-  <data name="Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules." xml:space="preserve"><value>Händelser som en människa orsakat, från varje modul som för aktivitetslogg, knutna till den OMP-användare som utförde dem. Välj en användare för att följa en person över modulerna.</value></data>
+  <data name="User log" xml:space="preserve"><value>Användarlogg</value></data>
+  <data name="What people did in every module that keeps a user log, attributed to the OMP user who did it. This is an audit trail of user actions, not an error log." xml:space="preserve"><value>Vad människor gjort i varje modul som för användarlogg, kopplat till den OMP-användare som gjorde det. Det är ett revisionsspår över användaråtgärder, inte en fellogg.</value></data>
   <data name="Any user" xml:space="preserve"><value>Alla användare</value></data>
   <data name="From date" xml:space="preserve"><value>Från och med</value></data>
   <data name="To date" xml:space="preserve"><value>Till och med</value></data>

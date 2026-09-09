@@ -100,5 +100,5 @@
   <data name="The {0} field is not a valid phone number." xml:space="preserve"><value>Fältet {0} är inte ett giltigt telefonnummer.</value></data>
   <data name="The {0} field is not a valid fully-qualified http, https, or ftp URL." xml:space="preserve"><value>Fältet {0} är inte en giltig webbadress.</value></data>
   <data name="'{0}' and '{1}' do not match." xml:space="preserve"><value>'{0}' och '{1}' stämmer inte överens.</value></data>
-  <data name="Activity log" xml:space="preserve"><value>Aktivitetslogg</value></data>
+  <data name="User log" xml:space="preserve"><value>Användarlogg</value></data>
 </root>

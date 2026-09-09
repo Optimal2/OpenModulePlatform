@@ -3204,8 +3204,8 @@
   <data name="After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins." xml:space="preserve"><value>After the move, the role follows the OMP user: it also applies to that user's other enabled sign-in paths, such as local password or another OIDC provider, not only AD/ADFS sign-ins.</value></data>
   <data name="Click to show the full message" xml:space="preserve"><value>Click to show the full message</value></data>
   <data name="Show details" xml:space="preserve"><value>Show details</value></data>
-  <data name="Activity log" xml:space="preserve"><value>Activity log</value></data>
-  <data name="Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules." xml:space="preserve"><value>Human-attributable events from every module that keeps an activity log, attributed to the OMP user who performed them. Pick a user to follow one person across modules.</value></data>
+  <data name="User log" xml:space="preserve"><value>User log</value></data>
+  <data name="What people did in every module that keeps a user log, attributed to the OMP user who did it. This is an audit trail of user actions, not an error log." xml:space="preserve"><value>What people did in every module that keeps a user log, attributed to the OMP user who did it. This is an audit trail of user actions, not an error log.</value></data>
   <data name="Any user" xml:space="preserve"><value>Any user</value></data>
   <data name="From date" xml:space="preserve"><value>From date</value></data>
   <data name="To date" xml:space="preserve"><value>To date</value></data>

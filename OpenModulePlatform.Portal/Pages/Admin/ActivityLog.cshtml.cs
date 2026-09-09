@@ -65,7 +65,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
             return guard;
         }
 
-        SetTitles("Activity log");
+        SetTitles("User log");
         // The repository caps the read; the page shows the same number so the
         // note and the Rows select never claim more than is fetched.
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxActivityLogTake);
