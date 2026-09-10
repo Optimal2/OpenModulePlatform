@@ -98,8 +98,9 @@
 // with the new query and swaps the results card in place, then rebinds the
 // row search to the new table and writes the query to the address bar so a
 // reload or a bookmark keeps the filters. A failed fetch falls back to the
-// plain submit. Typing in the row search never fetches: it filters the loaded
-// rows through the list component's own search, and Enter does nothing.
+// plain submit. The row search is client-side only: typing filters the loaded
+// rows through the list component's own search, nothing is sent to the
+// server, and Enter does nothing.
 (() => {
     'use strict';
 
@@ -109,15 +110,13 @@
         return;
     }
 
-    const submit = () => {
-        if (typeof form.requestSubmit === 'function') {
-            form.requestSubmit();
-        } else {
-            form.submit();
-        }
-    };
+    // The fallback is a plain navigation: form.submit() fires no submit event,
+    // so nothing below can swallow it.
+    const submit = () => form.submit();
 
-    const search = form.querySelector('.activity-bar__search');
+    // The row search input is replaced by a clone after every swap (see
+    // rebindSearch), so it is always looked up live, never held in a variable.
+    const currentSearch = () => form.querySelector('.activity-bar__search');
     const clear = form.querySelector('[data-activity-clear]');
     const modules = form.querySelector('.activity-bar__modules');
 
@@ -133,7 +132,7 @@
         if (!clear) {
             return;
         }
-        const disabled = serverClearDisabled() && !(search?.value.trim());
+        const disabled = serverClearDisabled() && !(currentSearch()?.value.trim());
         if (disabled) {
             clear.setAttribute('aria-disabled', 'true');
             clear.setAttribute('tabindex', '-1');
@@ -162,13 +161,19 @@
     // fresh clone (which drops the old listener) and the component binds it
     // again; the current text is then re-applied.
     const rebindSearch = () => {
-        const current = form.querySelector('.activity-bar__search');
+        const current = currentSearch();
         if (!current || !window.ompLists?.init) {
             return;
         }
         const clone = current.cloneNode(true);
+        // cloneNode copies the value attribute, not the text the user typed.
+        clone.value = current.value;
         delete clone.dataset.listSearchInitialized;
+        const hadFocus = document.activeElement === current;
         current.replaceWith(clone);
+        if (hadFocus) {
+            clone.focus();
+        }
         clone.addEventListener('input', syncClear);
         clone.addEventListener('keydown', blockEnter);
         window.ompLists.init();
@@ -240,21 +245,17 @@
         field.addEventListener('change', refresh);
     });
     form.addEventListener('omp-daterange-change', refresh);
-    // The form is never submitted by a key: with fetch in place, a real submit
-    // is only the fallback, and Enter in the row search must not reload.
+    // Enter in the row search must not submit the form: the text only filters
+    // the loaded rows.
     const blockEnter = (event) => {
         if (event.key === 'Enter') {
             event.preventDefault();
         }
     };
-    form.addEventListener('submit', (event) => {
-        if (event.submitter === null && document.activeElement?.classList.contains('activity-bar__search')) {
-            event.preventDefault();
-        }
-    });
-    if (search) {
-        search.addEventListener('input', syncClear);
-        search.addEventListener('keydown', blockEnter);
+    const initialSearch = currentSearch();
+    if (initialSearch) {
+        initialSearch.addEventListener('input', syncClear);
+        initialSearch.addEventListener('keydown', blockEnter);
     }
     if (clear) {
         clear.addEventListener('click', (event) => {

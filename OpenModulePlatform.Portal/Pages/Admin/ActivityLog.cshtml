@@ -22,13 +22,12 @@
        right. Every choice applies as soon as it is made: the page script
        fetches the page with the new query and swaps the results in place, so
        nothing reloads visibly (a plain GET submit is the fallback). The row
-       search is the list component's own search over the loaded rows; its
-       text also travels with the next fetch as the server-side text search. *@
+       search is the list component's own search over the loaded rows and
+       nothing else: it has no name, so it never reaches the server, and the
+       rows it hid come back as soon as it is emptied. *@
     <form method="get" class="activity-bar" id="activity-filter-form" data-enhance="false">
         <input type="search"
                class="list-search activity-bar__search"
-               name="Q"
-               value="@Model.Q"
                data-list-search="activity-list"
                placeholder="@L["Row search"]"
                aria-label="@L["Row search"]"

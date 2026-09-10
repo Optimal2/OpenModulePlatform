@@ -1236,6 +1236,14 @@
     }
 
     function initAll() {
+        // A page that swaps a list's markup in place (the user log's filter
+        // bar does) leaves the old table's controller behind; drop those so a
+        // long session of filter changes does not keep every past table alive.
+        listControllers.forEach((controller, table) => {
+            if (!table.isConnected) {
+                listControllers.delete(table);
+            }
+        });
         initSortableLists(document);
         initListFilters(document);
         initListEnhancements(document);
