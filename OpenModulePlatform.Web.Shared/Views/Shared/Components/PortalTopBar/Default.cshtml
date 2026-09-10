@@ -168,7 +168,7 @@
                 <a class="portal-topbar__portal-link" href="@Model.PortalLink.Href">@Model.PortalLink.TextKey</a>
             }
 
-            @if (Model.IsPortalAdmin && Model.PortalAdminSections.Count > 0)
+            @if (Model.PortalAdminSections.Count > 0)
             {
                 <details class="portal-topbar__admin" data-portal-topbar-overlay data-portal-topbar-hover-menu>
                     <summary title="@L[Model.PortalAdminToggleTextKey]" aria-label="@L[Model.PortalAdminToggleTextKey]">

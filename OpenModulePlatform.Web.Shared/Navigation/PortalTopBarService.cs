@@ -21,7 +21,7 @@ namespace OpenModulePlatform.Web.Shared.Navigation;
 /// </summary>
 public sealed class PortalTopBarService
 {
-    private const string PortalAdminPermission = "OMP.Portal.Admin";
+    private const string PortalAdminPermission = PortalAdminNavigation.AdminPermission;
     private const string ContentManagePermission = "ContentWebAppModule.Manage";
     private const string PortalSettingCategory = "Portal";
     private const string TopbarDropdownsOpenOnHoverSetting = "TopbarDropdownsOpenOnHover";
@@ -325,6 +325,7 @@ public sealed class PortalTopBarService
                 currentUserProfileImageUrl,
                 roleContext,
                 isPortalAdmin,
+                permissions,
                 moduleLinks: Array.Empty<PortalTopBarLink>(),
                 navigationGroups,
                 BuildFavoriteEntries(navigationEntries),
@@ -383,7 +384,7 @@ public sealed class PortalTopBarService
         var portalBasePath = GetPortalBasePath(options);
         if (IsPortalAdminPath(normalizedPath, portalBasePath))
         {
-            return permissions.Contains(PortalAdminPermission);
+            return PortalAdminNavigation.CanAccess(GetPortalRelativePath(normalizedPath, portalBasePath), permissions);
         }
 
         var apps = await GetEnabledWebAppsAsync(ct);
@@ -517,6 +518,7 @@ public sealed class PortalTopBarService
             null,
             UserRoleContext.Empty,
             isPortalAdmin: false,
+            permissions: new HashSet<string>(),
             moduleLinks: Array.Empty<PortalTopBarLink>(),
             navigationGroups: Array.Empty<PortalTopBarNavigationGroup>(),
             favoriteEntries: Array.Empty<PortalTopBarNavigationEntry>(),
@@ -583,6 +585,7 @@ public sealed class PortalTopBarService
         string? currentUserProfileImageUrl,
         UserRoleContext roleContext,
         bool isPortalAdmin,
+        IReadOnlySet<string> permissions,
         IReadOnlyList<PortalTopBarLink> moduleLinks,
         IReadOnlyList<PortalTopBarNavigationGroup> navigationGroups,
         IReadOnlyList<PortalTopBarNavigationEntry> favoriteEntries,
@@ -609,9 +612,11 @@ public sealed class PortalTopBarService
         string logoutUrl,
         string loginUrl)
     {
-        var portalAdminSections = isPortalAdmin
-            ? PortalAdminNavigation.CreateSections(relativePath => PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, relativePath))
-            : Array.Empty<PortalAdminMenuSection>();
+        // A user with one page-specific admin permission (the user log) gets an
+        // admin menu holding just that page; IsPortalAdmin stays the full right.
+        var portalAdminSections = PortalAdminNavigation.CreateSections(
+            relativePath => PortalTopBarModelFactory.CombinePortalHref(topBarOptions.PortalBaseUrl, relativePath),
+            permissions);
 
         return new()
         {
@@ -879,7 +884,7 @@ public sealed class PortalTopBarService
         var normalizedPath = NormalizeAbsolutePath(path);
         if (IsPortalAdminPath(normalizedPath, portalBasePath))
         {
-            return permissions.Contains(PortalAdminPermission);
+            return PortalAdminNavigation.CanAccess(GetPortalRelativePath(normalizedPath, portalBasePath), permissions);
         }
 
         var app = FindBestMatchingApp(apps, normalizedPath);
@@ -1199,6 +1204,25 @@ WHERE user_id = @user_id
 
     private static bool IsPortalAdminPath(string normalizedPath, string portalBasePath)
         => IsPathMatch(normalizedPath, CombineRelativePath(portalBasePath, "admin"));
+
+    /// <summary>The path below the portal base ("/admin/activitylog" for "/portal/admin/activitylog").</summary>
+    private static string GetPortalRelativePath(string normalizedPath, string portalBasePath)
+    {
+        var basePath = NormalizeAbsolutePath(portalBasePath);
+        if (string.Equals(basePath, "/", StringComparison.Ordinal))
+        {
+            return normalizedPath;
+        }
+
+        if (string.Equals(normalizedPath, basePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return "/";
+        }
+
+        return normalizedPath.StartsWith($"{basePath}/", StringComparison.OrdinalIgnoreCase)
+            ? normalizedPath[basePath.Length..]
+            : normalizedPath;
+    }
 
     private static bool IsPortalRelativePath(string normalizedPath, string portalBasePath)
         => IsPortalRootPath(normalizedPath, portalBasePath)

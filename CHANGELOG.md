@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **`OMP.Portal.UserLog.View`: read access to the Portal user log on its own.**
+  The user log (`/admin/activitylog`) now opens for a Portal administrator or
+  for a holder of the new permission, so an auditor can be given the audit
+  trail without the rest of the admin area. Seeded by the Portal initialize
+  SQL and granted to `PortalAdmins`; the Portal probe demands the row, so an
+  upgraded installation gets it on the next import. The shared admin menu
+  (portal navbar, dashboard navbar and module top bar), the login return-URL
+  check and the favourites filter all read one table in
+  `PortalAdminNavigation` that says which permission opens which admin page,
+  so a user-log-only user sees an admin menu holding just that page.
+
 - **X.509 certificate key-ring protection for ASP.NET Core Data Protection**, as
   a second encryption-at-rest mode alongside the AD-backed DPAPI-NG descriptor,
   for web farms without Active Directory. Configured with

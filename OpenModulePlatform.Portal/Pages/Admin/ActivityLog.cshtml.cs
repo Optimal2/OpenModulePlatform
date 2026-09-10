@@ -98,7 +98,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
-        var guard = await RequirePortalAdminAsync(ct);
+        var guard = await RequireUserLogReaderAsync(ct);
         if (guard is not null)
         {
             return guard;

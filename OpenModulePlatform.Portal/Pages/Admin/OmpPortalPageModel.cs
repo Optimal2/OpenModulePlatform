@@ -45,4 +45,29 @@ public abstract class OmpPortalPageModel : OmpSecurePageModel<PortalResource>
         ViewData["IsPortalAdmin"] = result is null;
         return result;
     }
+
+    /// <summary>
+    /// Guards the user log: a Portal administrator or a holder of the dedicated user log
+    /// permission may read it. The layout gets the caller's permissions so its admin menu
+    /// lists only the pages they can open (just the user log for a pure auditor).
+    /// </summary>
+    protected async Task<IActionResult?> RequireUserLogReaderAsync(CancellationToken ct)
+    {
+        var result = await RequireAnyAsync(ct, OmpPortalPermissions.Admin, OmpPortalPermissions.UserLogView);
+        if (result is not null)
+        {
+            return result;
+        }
+
+        if (WebAppOptions.AllowAnonymous)
+        {
+            ViewData["IsPortalAdmin"] = true;
+            return null;
+        }
+
+        var permissions = await GetUserPermissionsAsync(ct);
+        ViewData["IsPortalAdmin"] = permissions.Contains(OmpPortalPermissions.Admin);
+        ViewData["PortalPermissions"] = permissions;
+        return null;
+    }
 }

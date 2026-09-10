@@ -652,6 +652,18 @@ administrators can move direct `ADUser` role assignments for linked AD keys to
 the OMP user from `/admin/users/edit/{userId}`. This migration does not move
 `ADGroup` assignments.
 
+### User log access
+
+The Portal user log at `/admin/activitylog` (the audit trail across every
+module with an `ActivityLog` table) opens for `OMP.Portal.Admin` or for
+`OMP.Portal.UserLog.View`. The second permission exists so an auditor or
+reviewer can read the log without getting the rest of the admin area: a user
+holding only it sees an admin menu with just "User log", and every other
+`/admin` path stays closed. `PortalAdmins` is granted both by the Portal
+initialize SQL, so an administrator never loses the page. Grant
+`OMP.Portal.UserLog.View` to a role from `/admin/security`; the user also
+needs `OMP.Portal.View` to open the Portal at all.
+
 ### Bulk AD-to-OMP principal move
 
 For moving many rows at once there is a separate admin view at

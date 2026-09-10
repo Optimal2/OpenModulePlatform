@@ -123,10 +123,16 @@
         </a>
         <nav class="nav nav--primary">
             <a href="~/">@L["Home"]</a>
-            @if (ViewData["IsPortalAdmin"] is bool isPortalAdmin && isPortalAdmin)
+            @{
+                Func<string, string> adminHref = relativePath => Url.Content($"~{relativePath}");
+                var adminSections = ViewData["PortalPermissions"] is IReadOnlySet<string> portalPermissions
+                    ? PortalAdminNavigation.CreateSections(adminHref, portalPermissions)
+                    : ViewData["IsPortalAdmin"] is bool isPortalAdmin && isPortalAdmin
+                        ? PortalAdminNavigation.CreateSections(adminHref)
+                        : Array.Empty<PortalAdminMenuSection>();
+            }
+            @if (adminSections.Count > 0)
             {
-                var adminSections = PortalAdminNavigation.CreateSections(relativePath => Url.Content($"~{relativePath}"));
-
                 foreach (var section in adminSections)
                 {
                     <details class="nav-dropdown">

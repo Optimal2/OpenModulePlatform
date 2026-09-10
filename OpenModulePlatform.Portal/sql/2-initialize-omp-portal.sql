@@ -30,6 +30,7 @@ DECLARE @PortalModuleId int;
 DECLARE @PortalAppId int;
 DECLARE @PortalViewPermissionId int;
 DECLARE @PortalAdminPermissionId int;
+DECLARE @PortalUserLogPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
@@ -54,8 +55,15 @@ IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.View')
 IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.Admin')
     INSERT INTO omp.Permissions(Name, Description) VALUES(N'OMP.Portal.Admin', N'Administrative access to the OMP Portal');
 
+-- Read access to the user log (the audit trail) on its own, for auditors and
+-- reviewers who must not get the rest of the admin area. PortalAdmins hold it
+-- too, so the page never disappears for an administrator.
+IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.UserLog.View')
+    INSERT INTO omp.Permissions(Name, Description) VALUES(N'OMP.Portal.UserLog.View', N'Read access to the OMP Portal user log (audit trail) without other Portal admin rights');
+
 SELECT @PortalViewPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'OMP.Portal.View';
 SELECT @PortalAdminPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'OMP.Portal.Admin';
+SELECT @PortalUserLogPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'OMP.Portal.UserLog.View';
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 
 IF @PortalAdminsRoleId IS NOT NULL
@@ -65,6 +73,10 @@ IF @PortalAdminsRoleId IS NOT NULL
 IF @PortalAdminsRoleId IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @PortalAdminPermissionId)
     INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @PortalAdminPermissionId);
+
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @PortalUserLogPermissionId)
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @PortalUserLogPermissionId);
 
 /*
 Bootstrap portal administrator rows.

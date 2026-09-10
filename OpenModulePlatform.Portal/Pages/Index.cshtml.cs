@@ -391,7 +391,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         var roleIds = roleContext.EffectiveRoleIds.ToHashSet();
         IsPortalAdmin = permissions.Contains(OmpPortalPermissions.Admin);
         ViewData["IsPortalAdmin"] = IsPortalAdmin;
-        DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
+        DashboardNavbarSections = BuildDashboardNavbarSections(permissions);
         DashboardRoles = roleContext.AvailableRoles
             .Select(role => new DashboardRoleOption(
                 role.RoleId,
@@ -445,7 +445,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             AvailableWidgets = [];
             AllPortalEntries = await _portalEntries.GetEntriesAsync(Request, userId: null, permissions, includeHidden: false, ct);
             FavoritePortalEntries = [];
-            DashboardNavbarSections = BuildDashboardNavbarSections(IsPortalAdmin);
+            DashboardNavbarSections = BuildDashboardNavbarSections(permissions);
             ContentPages = await _dashboard.GetReadableContentPagesAsync(Request, roleIds, permissions, ct);
             DashboardNotifications = [];
             DashboardMessageConversations = [];
@@ -491,15 +491,12 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             .ToArray();
     }
 
-    private IReadOnlyList<DashboardNavbarSection> BuildDashboardNavbarSections(bool isPortalAdmin)
+    private IReadOnlyList<DashboardNavbarSection> BuildDashboardNavbarSections(IReadOnlySet<string> permissions)
     {
-        if (!isPortalAdmin)
-        {
-            return [];
-        }
-
+        // Everything for an admin, only the pages a page-specific permission opens
+        // (the user log) otherwise, nothing for a plain user.
         return PortalAdminNavigation
-            .CreateSections(relativePath => Url.Content($"~{relativePath}"))
+            .CreateSections(relativePath => Url.Content($"~{relativePath}"), permissions)
             .Select(section => new DashboardNavbarSection(
                 section.TextKey,
                 section.Items

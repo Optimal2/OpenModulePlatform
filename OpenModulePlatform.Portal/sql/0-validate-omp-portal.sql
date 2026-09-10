@@ -149,6 +149,15 @@ BEGIN
         THEN 0 ELSE 1 END;
 END;
 
+IF OBJECT_ID(N'omp.Permissions', N'U') IS NOT NULL
+BEGIN
+    -- The user log permission is seeded by 2-initialize; an installation from
+    -- before it exists is unhealthy until the initialize scripts have run again.
+    SELECT @Missing = @Missing + CASE
+        WHEN EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.UserLog.View')
+        THEN 0 ELSE 1 END;
+END;
+
 SELECT
     CAST(CASE WHEN @Missing = 0 THEN 1 ELSE 0 END AS bit) AS IsHealthy,
     CASE
