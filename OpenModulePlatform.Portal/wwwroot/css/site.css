@@ -1714,6 +1714,12 @@ button[aria-disabled=true]:hover,
     color: var(--text-muted);
 }
 
+/* A link styled as a button has no disabled attribute; aria-disabled greys it
+   out above and this keeps it from navigating. */
+a.btn[aria-disabled=true] {
+    pointer-events: none;
+}
+
 .link-list {
     display: flex;
     flex-direction: column;
@@ -2600,6 +2606,16 @@ button {
 
 .btn-leading-icon--copy.is-copied {
     --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
+}
+
+/* The user log detail toggle: braces for the raw JSON, a document for the
+   formatted fields (Material Symbols data_object and article). */
+.btn-leading-icon--data-object {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/data-object.svg");
+}
+
+.btn-leading-icon--article {
+    --btn-leading-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/article.svg");
 }
 
 .btn-leading-icon--delete {
@@ -7260,6 +7276,16 @@ tr.linkbox-editor-row--dragging {
     flex: 1 1 auto;
 }
 
+/* The results card fades slightly while a filter change is being fetched, so
+   the swap reads as a quiet update rather than a page load. */
+.activity-results {
+    transition: opacity 150ms ease;
+}
+
+.activity-results[aria-busy="true"] {
+    opacity: 0.6;
+}
+
 .activity-bar__rows {
     display: inline-flex;
     align-items: center;
@@ -7383,6 +7409,13 @@ tr.linkbox-editor-row--dragging {
     display: flex;
     gap: 8px;
     margin: 6px 0 6px 16px;
+}
+
+/* Icon-only copy button, the same height as the small toggle next to it. */
+.activity-detail__copy {
+    width: 32px;
+    min-width: 32px;
+    min-height: 30px;
 }
 
 .activity-detail__formatted,

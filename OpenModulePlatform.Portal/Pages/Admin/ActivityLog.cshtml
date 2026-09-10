@@ -19,10 +19,11 @@
 
 <section class="card top-gap">
     @* One row: row search, user, modules, period, then Clear and Rows on the
-       right. Every choice applies as soon as it is made (the page script
-       submits the GET form), so there is no Apply button. The row search is
-       the list component's own search over the loaded rows; Enter runs the
-       same text as a server-side search across everything the filters allow. *@
+       right. Every choice applies as soon as it is made: the page script
+       fetches the page with the new query and swaps the results in place, so
+       nothing reloads visibly (a plain GET submit is the fallback). The row
+       search is the list component's own search over the loaded rows; its
+       text also travels with the next fetch as the server-side text search. *@
     <form method="get" class="activity-bar" id="activity-filter-form" data-enhance="false">
         <input type="search"
                class="list-search activity-bar__search"
@@ -31,7 +32,7 @@
                data-list-search="activity-list"
                placeholder="@L["Row search"]"
                aria-label="@L["Row search"]"
-               title="@L["Filters the loaded rows as you type; Enter searches the summary and event of everything the filters allow."]" />
+               title="@L["Filters the loaded rows as you type."]" />
         <select name="UserId" class="activity-bar__field" aria-label="@L["User"]" data-activity-submit>
             <option value="">@L["Any user"]</option>
             @foreach (var user in Model.Users)
@@ -71,7 +72,14 @@
             <span data-omp-daterange-preset="90d" data-from="@presetToday.AddDays(-89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 90]</span>
         </span>
         <span class="activity-bar__spacer"></span>
-        <a class="btn btn-danger" href="@Url.Content("~/admin/activitylog")">@L["Clear"]</a>
+        @* Clear is a plain link back to the unfiltered page; it is greyed out
+           while there is nothing to clear (the script also enables it as soon
+           as the row search holds text). *@
+        <a class="btn btn-danger activity-bar__clear"
+           href="@Url.Content("~/admin/activitylog")"
+           data-activity-clear
+           aria-disabled="@(Model.HasFilter ? null : "true")"
+           tabindex="@(Model.HasFilter ? null : "-1")">@L["Clear"]</a>
         <label class="activity-bar__rows">
             <span>@L["Rows"]</span>
             <select name="Take" class="activity-bar__field" aria-label="@L["Rows"]" data-activity-submit>
@@ -84,7 +92,7 @@
     </form>
 </section>
 
-<section class="card top-gap">
+<section class="card top-gap activity-results" id="activity-results" data-activity-results>
     @if (Model.AvailableModules.Count == 0)
     {
         <div class="empty-state">@L["No enabled module has an activity log table yet."]</div>
@@ -166,16 +174,22 @@
                         <td colspan="6">
                             @* Two views of the same entry: the formatted fields and the
                                stored JSON. A toggle swaps them; the formatted view is the
-                               default, so the raw text is one click away instead of a fold. *@
+                               default, so the raw text is one click away instead of a fold.
+                               The toggle names the view it leads to, with the matching
+                               icon: braces for the raw JSON, a document for the
+                               formatted fields. Copy is icon-only; its tooltip carries
+                               the word and turns into "Copied" for a moment. *@
                             <div class="activity-detail__head">
                                 <button type="button"
-                                        class="btn btn-secondary btn-sm btn-leading-icon btn-leading-icon--copy activity-detail__copy"
+                                        class="btn btn-secondary btn-sm btn-icon btn-leading-icon btn-leading-icon--copy activity-detail__copy"
                                         data-activity-copy
                                         data-label-copy="@L["Copy"]"
                                         data-label-copied="@L["Copied"]"
-                                        hidden>@L["Copy"]</button>
+                                        title="@L["Copy"]"
+                                        aria-label="@L["Copy"]"
+                                        hidden></button>
                                 <button type="button"
-                                        class="btn btn-secondary btn-sm activity-detail__toggle"
+                                        class="btn btn-secondary btn-sm btn-leading-icon btn-leading-icon--data-object activity-detail__toggle"
                                         aria-pressed="false"
                                         data-activity-raw-toggle
                                         data-label-raw="@L["Raw entry"]"

@@ -1040,7 +1040,7 @@
   <data name="AD account" xml:space="preserve"><value>AD account</value></data>
   <data name="Search and tick OMP users in the list, or paste AD users/groups as newline-separated text." xml:space="preserve"><value>Search and tick OMP users in the list, or paste AD users/groups as newline-separated text.</value></data>
   <data name="Row search" xml:space="preserve"><value>Row search</value></data>
-  <data name="Filters the loaded rows as you type; Enter searches the summary and event of everything the filters allow." xml:space="preserve"><value>Filters the loaded rows as you type; Enter searches the summary and event of everything the filters allow.</value></data>
+  <data name="Filters the loaded rows as you type." xml:space="preserve"><value>Filters the loaded rows as you type.</value></data>
   <data name="Module" xml:space="preserve"><value>Module</value></data>
   <data name="Since the start" xml:space="preserve"><value>Since the start</value></data>
   <data name="Today" xml:space="preserve"><value>Today</value></data>
