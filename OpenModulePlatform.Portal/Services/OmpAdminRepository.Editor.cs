@@ -3047,10 +3047,10 @@ WHERE ArtifactId = @ArtifactId;
 
 SELECT ar.ArtifactId,
        ar.Version,
-       CASE WHEN EXISTS (
+       CAST(CASE WHEN EXISTS (
            SELECT 1 FROM omp.InstanceTemplateAppInstances tai
            WHERE tai.DesiredArtifactId = ar.ArtifactId AND tai.IsEnabled = 1
-       ) THEN 1 ELSE 0 END AS IsDesired
+       ) THEN 1 ELSE 0 END AS bit) AS IsDesired
 FROM omp.Artifacts ar
 WHERE ar.AppId = @AppId
   AND ar.PackageType = @PackageType

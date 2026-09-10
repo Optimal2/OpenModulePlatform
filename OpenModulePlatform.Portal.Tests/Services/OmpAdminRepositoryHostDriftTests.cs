@@ -85,4 +85,25 @@ public sealed class OmpAdminRepositoryHostDriftTests : IClassFixture<HostDriftTe
         Assert.Equal(0, summary.FailedAppCount);
         Assert.Equal(0, summary.WarningAppCount);
     }
+
+    /// <summary>
+    /// The version banner on the artifact configuration editor (R5-F10) asks whether
+    /// the edited artifact is the desired one. The query answered with an int column
+    /// while the reader asked for a bit, so every GET of
+    /// /admin/artifactconfigfileedit threw InvalidCastException -- a blank 500 at the
+    /// customer from 2026-08-20 until it was caught in a file log on 2026-09-10.
+    /// </summary>
+    [Fact]
+    public async Task GetArtifactConfigVersionStatusAsync_ReportsDesiredVersionWithoutThrowing()
+    {
+        await _fixture.SeedHostWithDesiredArtifactProvisioningStateAsync(2, null);
+        var repo = _fixture.CreatePortalRepository();
+
+        var status = await repo.GetArtifactConfigVersionStatusAsync(_fixture.DesiredArtifactId, CancellationToken.None);
+
+        Assert.True(status.IsDesiredVersion);
+        Assert.Equal("1.0.0", status.LatestVersion);
+        Assert.False(status.HasNewerVersion);
+        Assert.Null(status.DesiredVersion);
+    }
 }
