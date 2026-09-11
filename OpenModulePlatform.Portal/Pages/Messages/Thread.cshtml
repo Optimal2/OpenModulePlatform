@@ -33,6 +33,9 @@ else if (Model.Conversation is null)
 }
 else
 {
+    @* Feedback from a removal ("X was removed from the group") or a refused
+       change; the thread's own validation summary lives inside the scroll area. *@
+    @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage, includeValidationSummary = false })
     <section class="portal-message-thread-layout top-gap">
         <aside class="portal-message-thread__side portal-message-thread__side--identity">
             <div class="eyebrow">@L["Messages"]</div>

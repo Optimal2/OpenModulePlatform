@@ -29,6 +29,10 @@ public sealed class IndexModel : OmpSecurePageModel<PortalResource>
 
     public bool MessagesDisabled { get; private set; }
 
+    /// <summary>Set by the thread page when the user leaves a group, shown once here.</summary>
+    [TempData]
+    public string? StatusMessage { get; set; }
+
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
         SetTitles("Messages");

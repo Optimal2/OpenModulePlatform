@@ -572,9 +572,13 @@ WHERE m.message_id = @message_id
                 throw new UnauthorizedAccessException("Only conversation participants can change the group.");
             }
 
+            // UPDLOCK on the conversation row serialises every membership change
+            // for this conversation from the start of the transaction, so two
+            // concurrent leaves cannot hand the admin seat to someone who has just
+            // left: the second one waits, then sees the first one's left_at.
             const string conversationSql = @"
 SELECT c.conversation_type, c.created_by_user_id
-FROM omp.conversations c
+FROM omp.conversations c WITH (UPDLOCK, HOLDLOCK)
 WHERE c.conversation_id = @conversation_id;";
             string conversationType;
             int createdByUserId;
@@ -1180,7 +1184,7 @@ WHERE cp.user_id = @user_id
 
     private static async Task<IReadOnlyList<int>> GetConversationParticipantUserIdsAsync(
         SqlConnection conn,
-        SqlTransaction tx,
+        SqlTransaction? tx,
         long conversationId,
         int excludedUserId,
         CancellationToken ct)
@@ -1366,9 +1370,11 @@ ORDER BY display_name,
                 conversationId,
                 messageId
             }),
+            // One key per occurrence: an edit is a new event each time, and a
+            // deterministic key would let the publisher's dedup drop a second edit.
             deduplicationKey: string.Create(
                 CultureInfo.InvariantCulture,
-                $"message:edited:{messageId}:user:{userId}:{DateTime.UtcNow.Ticks}"),
+                $"message:edited:{messageId}:user:{userId}:{Guid.NewGuid():N}"),
             correlationKey: string.Create(
                 CultureInfo.InvariantCulture,
                 $"conversation:{conversationId}"));
@@ -1385,7 +1391,7 @@ ORDER BY display_name,
             }),
             deduplicationKey: string.Create(
                 CultureInfo.InvariantCulture,
-                $"conversation:membership:{conversationId}:user:{userId}:{DateTime.UtcNow.Ticks}"),
+                $"conversation:membership:{conversationId}:user:{userId}:{Guid.NewGuid():N}"),
             correlationKey: string.Create(
                 CultureInfo.InvariantCulture,
                 $"conversation:{conversationId}"));
