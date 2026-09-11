@@ -140,8 +140,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
             await _activityLog.WriteAsync(new ActivityEntry
             {
                 Event = IsCreate ? "role.created" : "role.updated",
+                MessageKey = IsCreate ? "role.created" : "role.updated",
                 Summary = $"{(IsCreate ? "Created" : "Updated")} role '{Input.Name.Trim()}' (#{roleId})",
-                Subject = new ActivitySubject("role", roleId.ToString(System.Globalization.CultureInfo.InvariantCulture), Input.Name.Trim())
+                Subject = new ActivitySubject("role", roleId.ToString(System.Globalization.CultureInfo.InvariantCulture), Input.Name.Trim()),
+                Args = new Dictionary<string, object?> { ["name"] = Input.Name.Trim(), ["roleId"] = roleId }
             }, User, ct);
             StatusMessage = IsCreate ? T("Role created.") : T("Role updated.");
             return RedirectAfterSave(roleId);
@@ -296,14 +298,21 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         return new JsonResult(Array.Empty<PrincipalSuggestion>());
     }
 
+    // The Portal pilots envelope version 2: every role event carries its event
+    // key as the message key and the values in its summary as arguments.
     private Task WriteRoleEventAsync(string eventKey, string summary, Dictionary<string, object?>? data, CancellationToken ct)
-        => _activityLog.WriteAsync(new ActivityEntry
+    {
+        var args = new Dictionary<string, object?>(data ?? new Dictionary<string, object?>()) { ["roleId"] = Input.RoleId };
+        return _activityLog.WriteAsync(new ActivityEntry
         {
             Event = eventKey,
+            MessageKey = eventKey,
             Summary = summary,
             Subject = new ActivitySubject("role", Input.RoleId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            Data = data
+            Data = data,
+            Args = args
         }, User, ct);
+    }
 
     public async Task<IActionResult> OnPostDelete(CancellationToken ct)
     {

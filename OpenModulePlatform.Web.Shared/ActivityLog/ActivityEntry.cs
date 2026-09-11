@@ -52,6 +52,20 @@ public sealed record ActivityEntry
     /// flat and free of customer content.
     /// </summary>
     public IReadOnlyDictionary<string, object?>? Data { get; init; }
+
+    /// <summary>
+    /// Envelope version 2, optional. The key of the message template the summary was
+    /// built from: the event key by convention, with a suffix for a variant of the
+    /// same event (<c>universal_package.imported.failed</c>). With a key the entry is
+    /// stored as version 2 together with <see cref="Args"/>; without one it is stored
+    /// as version 1, exactly as before. No translation exists yet: the key and the
+    /// arguments are recorded so the line can be rendered in another language once
+    /// a catalogue does.
+    /// </summary>
+    public string? MessageKey { get; init; }
+
+    /// <summary>The values that filled the template, by name. Same rules as <see cref="Data"/>.</summary>
+    public IReadOnlyDictionary<string, object?>? Args { get; init; }
 }
 
 /// <summary>The object an <see cref="ActivityEntry"/> is about.</summary>

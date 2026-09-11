@@ -8,6 +8,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **User log envelope version 2: a message key and arguments beside the
+  summary.** `ActivityEntry` gains optional `MessageKey` and `Args`; an entry
+  that carries them is stored as `v: 2` with `messageKey` and `args`, one
+  without stays `v: 1` byte for byte. The reader now accepts every version
+  from 1 up, newer ones included, because versions only add fields; only a
+  version below 1, malformed JSON or a missing event or summary falls back to
+  the raw text. The Portal pilots version 2 on its own events (roles, host
+  deployments, maintenance, package import), and the user log's detail view
+  shows the version, the key and the arguments. No translation reads the key
+  yet; it is recorded so the line can be rendered in another language once a
+  catalogue exists.
+
 - **`OMP.Portal.UserLog.View`: read access to the Portal user log on its own.**
   The user log (`/admin/activitylog`) now opens for a Portal administrator or
   for a holder of the new permission, so an auditor can be given the audit

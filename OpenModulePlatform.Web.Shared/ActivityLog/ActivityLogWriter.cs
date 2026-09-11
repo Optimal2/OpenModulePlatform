@@ -93,7 +93,7 @@ public sealed class ActivityLogWriter
             throw new ArgumentException("An activity entry needs a summary.", nameof(entry));
         }
 
-        var envelope = ToEnvelope(entry);
+        var envelope = ToEnvelope(entry, _options);
         var json = ActivityLogJson.Serialize(envelope);
 
         try
@@ -113,28 +113,38 @@ public sealed class ActivityLogWriter
         }
     }
 
-    private ActivityEnvelope ToEnvelope(ActivityEntry entry)
+    /// <summary>
+    /// The stored shape of an entry. An entry with a message key is version 2 (key
+    /// and arguments included); one without is version 1, byte for byte what the
+    /// writer stored before version 2 existed.
+    /// </summary>
+    public static ActivityEnvelope ToEnvelope(ActivityEntry entry, ActivityLogOptions options)
     {
-        JsonElement? data = null;
-        if (entry.Data is { Count: > 0 })
-        {
-            data = JsonSerializer.SerializeToElement(entry.Data, ActivityLogJson.Options);
-        }
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(options);
 
+        var messageKey = string.IsNullOrWhiteSpace(entry.MessageKey) ? null : entry.MessageKey.Trim();
         return new ActivityEnvelope
         {
-            V = ActivityEnvelope.CurrentVersion,
+            V = messageKey is null ? 1 : 2,
             Event = entry.Event.Trim(),
-            Module = _options.ModuleKey,
-            App = _options.AppKey,
+            Module = options.ModuleKey,
+            App = options.AppKey,
             Outcome = string.IsNullOrWhiteSpace(entry.Outcome) ? ActivityOutcomes.Ok : entry.Outcome,
             Summary = entry.Summary.Trim(),
             Subject = entry.Subject,
             Actor = entry.Actor,
             Correlation = string.IsNullOrWhiteSpace(entry.Correlation) ? null : entry.Correlation,
-            Data = data
+            Data = ToElement(entry.Data),
+            MessageKey = messageKey,
+            Args = messageKey is null ? null : ToElement(entry.Args)
         };
     }
+
+    private static JsonElement? ToElement(IReadOnlyDictionary<string, object?>? values)
+        => values is { Count: > 0 }
+            ? JsonSerializer.SerializeToElement(values, ActivityLogJson.Options)
+            : null;
 }
 
 /// <summary>

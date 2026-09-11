@@ -333,19 +333,23 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
         => _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "universal_package.imported",
+            // A variant of the same event gets its own template key.
+            MessageKey = "universal_package.imported.failed",
             Outcome = ActivityOutcomes.Failed,
             Summary = $"Import of universal package '{sourceName ?? "(staged package)"}' failed",
             Subject = sourceName is null ? null : new ActivitySubject("universal_package", sourceName),
             Data = new Dictionary<string, object?>
             {
                 ["error"] = exception.GetType().Name
-            }
+            },
+            Args = new Dictionary<string, object?> { ["sourceName"] = sourceName ?? "(staged package)" }
         }, User, ct);
 
     private Task WriteUniversalImportEventAsync(UniversalPackageImportResult result, CancellationToken ct)
         => _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "universal_package.imported",
+            MessageKey = "universal_package.imported",
             Outcome = result.FailedCount > 0 ? ActivityOutcomes.Failed : ActivityOutcomes.Ok,
             Summary = $"Imported universal package '{result.SourceName}': {result.ImportedCount} imported, {result.SkippedCount} skipped, {result.FailedCount} failed",
             Subject = new ActivitySubject("universal_package", result.PackageKey ?? result.SourceName, result.PackageVersion),
@@ -355,6 +359,13 @@ public sealed class ModulePackageImportModel : OmpPortalPageModel
                 ["packageVersion"] = result.PackageVersion,
                 ["targetHostProfile"] = result.TargetHostProfile,
                 ["items"] = result.Items.Count,
+                ["imported"] = result.ImportedCount,
+                ["skipped"] = result.SkippedCount,
+                ["failed"] = result.FailedCount
+            },
+            Args = new Dictionary<string, object?>
+            {
+                ["sourceName"] = result.SourceName,
                 ["imported"] = result.ImportedCount,
                 ["skipped"] = result.SkippedCount,
                 ["failed"] = result.FailedCount

@@ -110,10 +110,18 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "artifact_retention.cleanup_queued",
+            MessageKey = "artifact_retention.cleanup_queued",
             Summary = $"Queued artifact retention cleanup job {jobId} (keep {Input.MaxVersionsToKeep} versions, {Preview.DeletableCandidateCount} deletable of {Preview.CandidateCount} candidates)",
             Subject = new ActivitySubject("hostagent_job", jobId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
             Data = new Dictionary<string, object?>
             {
+                ["maxVersionsToKeep"] = Input.MaxVersionsToKeep,
+                ["deletableCandidates"] = Preview.DeletableCandidateCount,
+                ["candidates"] = Preview.CandidateCount
+            },
+            Args = new Dictionary<string, object?>
+            {
+                ["jobId"] = jobId,
                 ["maxVersionsToKeep"] = Input.MaxVersionsToKeep,
                 ["deletableCandidates"] = Preview.DeletableCandidateCount,
                 ["candidates"] = Preview.CandidateCount
@@ -143,8 +151,10 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "maintenance_scan.queued",
+            MessageKey = "maintenance_scan.queued",
             Summary = $"Queued {result.TotalJobCount} maintenance scan job(s) ({result.HostJobCount} per host)",
-            Data = new Dictionary<string, object?> { ["totalJobs"] = result.TotalJobCount, ["hostJobs"] = result.HostJobCount }
+            Data = new Dictionary<string, object?> { ["totalJobs"] = result.TotalJobCount, ["hostJobs"] = result.HostJobCount },
+            Args = new Dictionary<string, object?> { ["totalJobs"] = result.TotalJobCount, ["hostJobs"] = result.HostJobCount }
         }, User, ct);
         StatusMessage = string.Format(
             System.Globalization.CultureInfo.CurrentCulture,
@@ -177,11 +187,18 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "maintenance_findings.cleanup_queued",
+            MessageKey = "maintenance_findings.cleanup_queued",
             Summary = $"Queued cleanup for {result.QueuedFindingCount} of {result.SelectedFindingCount} selected maintenance finding(s) across {result.QueuedJobCount} job(s)",
             Data = new Dictionary<string, object?>
             {
                 ["findingIds"] = SelectedMaintenanceFindingIds,
                 ["queuedFindings"] = result.QueuedFindingCount,
+                ["queuedJobs"] = result.QueuedJobCount
+            },
+            Args = new Dictionary<string, object?>
+            {
+                ["queuedFindings"] = result.QueuedFindingCount,
+                ["selectedFindings"] = result.SelectedFindingCount,
                 ["queuedJobs"] = result.QueuedJobCount
             }
         }, User, ct);
@@ -218,8 +235,10 @@ public sealed class MaintenanceModel : OmpPortalPageModel
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "maintenance_findings.ignored",
+            MessageKey = "maintenance_findings.ignored",
             Summary = $"Ignored {ignoredCount} maintenance finding(s)",
-            Data = new Dictionary<string, object?> { ["findingIds"] = SelectedMaintenanceFindingIds, ["ignored"] = ignoredCount }
+            Data = new Dictionary<string, object?> { ["findingIds"] = SelectedMaintenanceFindingIds, ["ignored"] = ignoredCount },
+            Args = new Dictionary<string, object?> { ["ignored"] = ignoredCount }
         }, User, ct);
 
         StatusMessage = string.Format(

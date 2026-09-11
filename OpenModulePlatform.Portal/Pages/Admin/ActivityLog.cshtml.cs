@@ -145,7 +145,7 @@ public sealed class ActivityLogEntryView
 {
     public required ActivityLogRow Row { get; init; }
 
-    /// <summary>The parsed version-1 envelope, or null when the reader could not read it.</summary>
+    /// <summary>The parsed envelope (any version the reader accepts), or null when it could not be read.</summary>
     public ActivityEnvelope? Envelope { get; init; }
 
     public required string Event { get; init; }

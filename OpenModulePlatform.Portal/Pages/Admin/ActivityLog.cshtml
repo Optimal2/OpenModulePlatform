@@ -223,6 +223,22 @@
                                             <dt>@L["Data"]</dt>
                                             <dd><pre class="activity-detail__json">@ActivityLogModel.Pretty(data)</pre></dd>
                                         }
+                                        @* Envelope version 2 records which message template the
+                                           summary came from and the values that filled it. No
+                                           translation reads them yet; they are shown so the pilot
+                                           can be checked, and so an auditor sees what is stored. *@
+                                        @if (!string.IsNullOrWhiteSpace(envelope.MessageKey))
+                                        {
+                                            <dt>@L["Message key"]</dt>
+                                            <dd><code>@envelope.MessageKey</code></dd>
+                                        }
+                                        @if (envelope.Args is { } args)
+                                        {
+                                            <dt>@L["Arguments"]</dt>
+                                            <dd><pre class="activity-detail__json">@ActivityLogModel.Pretty(args)</pre></dd>
+                                        }
+                                        <dt>@L["Envelope version"]</dt>
+                                        <dd>@envelope.V</dd>
                                     </dl>
                                 }
                                 else

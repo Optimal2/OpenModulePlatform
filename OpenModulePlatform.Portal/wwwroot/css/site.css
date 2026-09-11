@@ -7418,6 +7418,12 @@ tr.linkbox-editor-row--dragging {
     min-height: 30px;
 }
 
+/* .btn sets display, which beats the UA rule for [hidden]; the copy button
+   must stay out of sight until the raw view is showing. */
+.activity-detail__copy[hidden] {
+    display: none;
+}
+
 .activity-detail__formatted,
 .activity-detail__rawpanel {
     display: flow-root;

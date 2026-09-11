@@ -145,9 +145,11 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
             await _activityLog.WriteAsync(new ActivityEntry
             {
                 Event = "hostagent.upgrade_requested",
+                MessageKey = "hostagent.upgrade_requested",
                 Summary = $"Requested HostAgent upgrade to artifact #{artifactId} on host {hostId:N}",
                 Subject = new ActivitySubject("host", hostId.ToString("N")),
-                Data = new Dictionary<string, object?> { ["artifactId"] = artifactId }
+                Data = new Dictionary<string, object?> { ["artifactId"] = artifactId },
+                Args = new Dictionary<string, object?> { ["artifactId"] = artifactId, ["hostId"] = hostId.ToString("N") }
             }, User, ct);
         }
         await TryWriteAuditLogAsync(
@@ -245,9 +247,11 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "web_app.app_pool_recycle_queued",
+            MessageKey = "web_app.app_pool_recycle_queued",
             Summary = $"Queued application-pool recycle job {jobId} for '{NormalizeHealthKey(healthKey)}' on host {hostId:N}",
             Subject = new ActivitySubject("hostagent_job", jobId.ToString(System.Globalization.CultureInfo.InvariantCulture), NormalizeHealthKey(healthKey)),
-            Data = new Dictionary<string, object?> { ["hostId"] = hostId.ToString("N"), ["healthKey"] = NormalizeHealthKey(healthKey), ["appPoolName"] = NormalizeOptionalValue(appPoolName) }
+            Data = new Dictionary<string, object?> { ["hostId"] = hostId.ToString("N"), ["healthKey"] = NormalizeHealthKey(healthKey), ["appPoolName"] = NormalizeOptionalValue(appPoolName) },
+            Args = new Dictionary<string, object?> { ["jobId"] = jobId, ["healthKey"] = NormalizeHealthKey(healthKey), ["hostId"] = hostId.ToString("N") }
         }, User, ct);
         await TryWriteAuditLogAsync(
             "QueueWebAppAppPoolRecycle",

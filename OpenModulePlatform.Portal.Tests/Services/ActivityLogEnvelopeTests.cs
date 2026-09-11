@@ -7,9 +7,10 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 
 /// <summary>
 /// The activity log envelope is the contract between every module's writer and the
-/// Portal's viewer. These pin the stored shape (version 1) and the reader's rules:
-/// additions within a version are fine, unknown versions fall back to the raw text,
-/// and event plus summary are always required.
+/// Portal's viewer. These pin the stored shapes (version 1, and version 2 with its
+/// message key and arguments) and the reader's rules: versions are additive, so any
+/// version from 1 up is read, newer ones included; anything below 1, malformed JSON
+/// or a missing event or summary falls back to the raw text.
 /// </summary>
 public sealed class ActivityLogEnvelopeTests
 {
@@ -63,14 +64,71 @@ public sealed class ActivityLogEnvelopeTests
         Assert.NotNull(ActivityLogJson.TryParse(json));
     }
 
+    [Fact]
+    public void TryParse_reads_version_two_with_its_message_key_and_arguments()
+    {
+        const string json = """
+            {"v":2,"event":"role.created","summary":"Created role 'Auditors' (#7)","messageKey":"role.created","args":{"name":"Auditors","roleId":7}}
+            """;
+
+        var envelope = ActivityLogJson.TryParse(json);
+
+        Assert.NotNull(envelope);
+        Assert.Equal(2, envelope!.V);
+        Assert.Equal("role.created", envelope.MessageKey);
+        Assert.Equal(7, envelope.Args!.Value.GetProperty("roleId").GetInt32());
+    }
+
     [Theory]
-    [InlineData("""{"v":2,"event":"x.y","summary":"from the future"}""")]
+    [InlineData("""{"v":1,"event":"x.y","summary":"s"}""", 1)]
+    [InlineData("""{"v":2,"event":"x.y","summary":"s"}""", 2)]
+    [InlineData("""{"v":3,"event":"x.y","summary":"s","laterField":[1,2,3]}""", 3)]
+    [InlineData("""{"v":40,"event":"x.y","summary":"s"}""", 40)]
+    [InlineData("""{"event":"x.y","summary":"no v means version 1, as it always has"}""", 1)]
+    public void TryParse_reads_every_version_from_one_up_because_versions_only_add(string json, int expectedVersion)
+    {
+        var envelope = ActivityLogJson.TryParse(json);
+
+        Assert.NotNull(envelope);
+        Assert.Equal(expectedVersion, envelope!.V);
+        Assert.Null(envelope.MessageKey);
+    }
+
+    [Theory]
+    [InlineData("""{"v":0,"event":"x.y","summary":"before the first version"}""")]
     [InlineData("""{"v":1,"event":"","summary":"no event"}""")]
-    [InlineData("""{"v":1,"event":"x.y"}""")]
+    [InlineData("""{"v":2,"event":"x.y"}""")]
     [InlineData("not json at all")]
-    public void TryParse_returns_null_for_unknown_versions_and_incomplete_entries(string json)
+    public void TryParse_returns_null_below_the_first_version_and_for_incomplete_entries(string json)
     {
         Assert.Null(ActivityLogJson.TryParse(json));
+    }
+
+    [Fact]
+    public void Writer_stores_version_one_without_a_message_key_and_version_two_with_one()
+    {
+        var options = new ActivityLogOptions { SchemaName = "omp_portal", ModuleKey = "omp_portal", AppKey = "omp-portal-web" };
+
+        var plain = ActivityLogWriter.ToEnvelope(new ActivityEntry { Event = "role.deleted", Summary = "Deleted role #3" }, options);
+        var keyed = ActivityLogWriter.ToEnvelope(new ActivityEntry
+        {
+            Event = "role.created",
+            Summary = "Created role 'Auditors' (#7)",
+            MessageKey = " role.created ",
+            Args = new Dictionary<string, object?> { ["name"] = "Auditors", ["roleId"] = 7 }
+        }, options);
+
+        Assert.Equal(1, plain.V);
+        Assert.Null(plain.MessageKey);
+        Assert.Null(plain.Args);
+        Assert.DoesNotContain("messageKey", ActivityLogJson.Serialize(plain));
+
+        Assert.Equal(2, keyed.V);
+        Assert.Equal("role.created", keyed.MessageKey);
+        Assert.Equal("Auditors", keyed.Args!.Value.GetProperty("name").GetString());
+        var json = ActivityLogJson.Serialize(keyed);
+        Assert.Contains("\"v\":2", json);
+        Assert.Contains("\"messageKey\":\"role.created\"", json);
     }
 
     [Fact]

@@ -1049,4 +1049,7 @@
   <data name="Formatted entry" xml:space="preserve"><value>Formatted entry</value></data>
   <data name="Copy" xml:space="preserve"><value>Copy</value></data>
   <data name="Copied" xml:space="preserve"><value>Copied</value></data>
+  <data name="Envelope version" xml:space="preserve"><value>Envelope version</value></data>
+  <data name="Message key" xml:space="preserve"><value>Message key</value></data>
+  <data name="Arguments" xml:space="preserve"><value>Arguments</value></data>
 </root>
