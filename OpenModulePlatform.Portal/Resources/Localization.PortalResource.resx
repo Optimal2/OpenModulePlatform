@@ -3225,7 +3225,7 @@
   <data name="Actor" xml:space="preserve"><value>Actor</value></data>
   <data name="Correlation" xml:space="preserve"><value>Correlation</value></data>
   <data name="Data" xml:space="preserve"><value>Data</value></data>
-  <data name="This entry uses an envelope version this viewer does not understand. The stored text is shown as is." xml:space="preserve"><value>This entry uses an envelope version this viewer does not understand. The stored text is shown as is.</value></data>
+  <data name="This entry could not be read as a user log envelope. The stored text is shown as is." xml:space="preserve"><value>This entry could not be read as a user log envelope. The stored text is shown as is.</value></data>
   <data name="Raw entry" xml:space="preserve"><value>Raw entry</value></data>
   <data name="Select all shown OMP users" xml:space="preserve"><value>Select all shown OMP users</value></data>
   <data name="Select OMP user {0}" xml:space="preserve"><value>Select OMP user {0}</value></data>

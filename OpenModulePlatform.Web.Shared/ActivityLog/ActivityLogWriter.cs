@@ -126,7 +126,7 @@ public sealed class ActivityLogWriter
         var messageKey = string.IsNullOrWhiteSpace(entry.MessageKey) ? null : entry.MessageKey.Trim();
         return new ActivityEnvelope
         {
-            V = messageKey is null ? 1 : 2,
+            V = messageKey is null ? ActivityEnvelope.MinVersion : ActivityEnvelope.CurrentVersion,
             Event = entry.Event.Trim(),
             Module = options.ModuleKey,
             App = options.AppKey,

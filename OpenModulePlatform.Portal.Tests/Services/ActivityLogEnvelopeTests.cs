@@ -140,6 +140,36 @@ public sealed class ActivityLogEnvelopeTests
     }
 
     [Fact]
+    public void Writer_omits_empty_arguments_and_drops_arguments_without_a_message_key()
+    {
+        var options = new ActivityLogOptions { SchemaName = "omp_portal", ModuleKey = "omp_portal", AppKey = "omp-portal-web" };
+
+        var keyedWithoutArgs = ActivityLogWriter.ToEnvelope(new ActivityEntry
+        {
+            Event = "maintenance_scan.queued",
+            Summary = "Queued a scan",
+            MessageKey = "maintenance_scan.queued",
+            Args = new Dictionary<string, object?>()
+        }, options);
+        var argsWithoutKey = ActivityLogWriter.ToEnvelope(new ActivityEntry
+        {
+            Event = "maintenance_scan.queued",
+            Summary = "Queued a scan",
+            Args = new Dictionary<string, object?> { ["totalJobs"] = 3 }
+        }, options);
+
+        // A key with nothing to fill it is still version 2, with no args field at all.
+        Assert.Equal(2, keyedWithoutArgs.V);
+        Assert.Null(keyedWithoutArgs.Args);
+        Assert.DoesNotContain("args", ActivityLogJson.Serialize(keyedWithoutArgs));
+
+        // The key is the gate: arguments without one are not stored, and the entry is version 1.
+        Assert.Equal(1, argsWithoutKey.V);
+        Assert.Null(argsWithoutKey.MessageKey);
+        Assert.Null(argsWithoutKey.Args);
+    }
+
+    [Fact]
     public void CreateTableStatement_is_idempotent_and_refuses_odd_identifiers()
     {
         var ddl = ActivityLogSql.CreateTableStatement("omp_ibs_packager");

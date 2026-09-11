@@ -182,7 +182,9 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.AddPermissionToRoleAsync(Input.RoleId, permissionId, ct);
-        await WriteRoleEventAsync("role.permission_added", $"Added permission #{permissionId} to role #{Input.RoleId}", new Dictionary<string, object?> { ["permissionId"] = permissionId }, ct);
+        await WriteRoleEventAsync("role.permission_added", $"Added permission #{permissionId} to role #{Input.RoleId}",
+            data: new Dictionary<string, object?> { ["permissionId"] = permissionId },
+            args: new Dictionary<string, object?> { ["permissionId"] = permissionId }, ct);
         StatusMessage = T("Permission added to role.");
         return RedirectToSecurityRole(Input.RoleId);
     }
@@ -201,7 +203,9 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.RemovePermissionFromRoleAsync(Input.RoleId, permissionId, ct);
-        await WriteRoleEventAsync("role.permission_removed", $"Removed permission #{permissionId} from role #{Input.RoleId}", new Dictionary<string, object?> { ["permissionId"] = permissionId }, ct);
+        await WriteRoleEventAsync("role.permission_removed", $"Removed permission #{permissionId} from role #{Input.RoleId}",
+            data: new Dictionary<string, object?> { ["permissionId"] = permissionId },
+            args: new Dictionary<string, object?> { ["permissionId"] = permissionId }, ct);
         StatusMessage = T("Permission removed from role.");
         return RedirectToSecurityRole(Input.RoleId);
     }
@@ -238,7 +242,10 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         var result = await AddPrincipalCandidatesAsync(candidates, ct);
         if (result.Added > 0)
         {
-            await WriteRoleEventAsync("role.principals_added", $"Added {result.Added} principal(s) of type '{principalType}' to role #{Input.RoleId}", new Dictionary<string, object?> { ["principalType"] = principalType, ["added"] = result.Added, ["candidates"] = candidates.Count, ["principals"] = result.AddedPrincipals.ToArray() }, ct);
+            // The principal list is audit detail (data); the template only needs the count and the type.
+            await WriteRoleEventAsync("role.principals_added", $"Added {result.Added} principal(s) of type '{principalType}' to role #{Input.RoleId}",
+                data: new Dictionary<string, object?> { ["principalType"] = principalType, ["added"] = result.Added, ["candidates"] = candidates.Count, ["principals"] = result.AddedPrincipals.ToArray() },
+                args: new Dictionary<string, object?> { ["added"] = result.Added, ["principalType"] = principalType }, ct);
         }
         StatusMessage = BuildPrincipalBatchStatusMessage(result);
         return RedirectToSecurityRole(Input.RoleId);
@@ -258,7 +265,9 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         }
 
         await _repo.RemovePrincipalFromRoleAsync(Input.RoleId, principalType, principal, ct);
-        await WriteRoleEventAsync("role.principal_removed", $"Removed principal '{principal}' ({principalType}) from role #{Input.RoleId}", new Dictionary<string, object?> { ["principalType"] = principalType, ["principal"] = principal }, ct);
+        await WriteRoleEventAsync("role.principal_removed", $"Removed principal '{principal}' ({principalType}) from role #{Input.RoleId}",
+            data: new Dictionary<string, object?> { ["principalType"] = principalType, ["principal"] = principal },
+            args: new Dictionary<string, object?> { ["principal"] = principal, ["principalType"] = principalType }, ct);
         StatusMessage = T("Principal removed from role.");
         return RedirectToSecurityRole(Input.RoleId);
     }
@@ -299,10 +308,11 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
     }
 
     // The Portal pilots envelope version 2: every role event carries its event
-    // key as the message key and the values in its summary as arguments.
-    private Task WriteRoleEventAsync(string eventKey, string summary, Dictionary<string, object?>? data, CancellationToken ct)
+    // key as the message key and exactly the values in its summary as arguments
+    // (plus the role id every summary names). Data stays the audit detail.
+    private Task WriteRoleEventAsync(string eventKey, string summary, Dictionary<string, object?>? data, Dictionary<string, object?>? args, CancellationToken ct)
     {
-        var args = new Dictionary<string, object?>(data ?? new Dictionary<string, object?>()) { ["roleId"] = Input.RoleId };
+        args = new Dictionary<string, object?>(args ?? new Dictionary<string, object?>()) { ["roleId"] = Input.RoleId };
         return _activityLog.WriteAsync(new ActivityEntry
         {
             Event = eventKey,
@@ -330,7 +340,7 @@ public sealed class RoleModel : Pages.Admin.OmpPortalPageModel
         try
         {
             await _repo.DeleteRoleAsync(Input.RoleId, ct);
-            await WriteRoleEventAsync("role.deleted", $"Deleted role #{Input.RoleId}", null, ct);
+            await WriteRoleEventAsync("role.deleted", $"Deleted role #{Input.RoleId}", data: null, args: null, ct);
             StatusMessage = T("Role deleted.");
             return RedirectToSecurityRoles();
         }
