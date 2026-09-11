@@ -234,6 +234,75 @@
     line-height: 1.35;
 }
 
+/* Group members in the identity column: name, an admin pill for the creator,
+   and (for the admin) a small cross that removes the member. */
+.portal-message-thread__participants {
+    display: grid;
+    gap: 4px;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.portal-message-thread__participant {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px 6px;
+    min-width: 0;
+}
+
+/* Names wrap between words, never inside one: the column is narrow, and the
+   identity column's own "anywhere" rule would otherwise stack the letters. */
+.portal-message-thread__participant-name {
+    min-width: 0;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.portal-message-thread__participant-admin {
+    font-size: 0.7rem;
+}
+
+.portal-message-thread__participant-remove {
+    display: inline-flex;
+    margin: 0;
+}
+
+.portal-message-thread__participant-remove-button {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.portal-message-thread__participant-remove-button::before {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/close.svg") center / contain no-repeat;
+}
+
+.portal-message-thread__participant-remove-button:hover,
+.portal-message-thread__participant-remove-button:focus-visible {
+    background: var(--surface-muted);
+    color: #b91c1c;
+    outline: none;
+}
+
+.portal-message-thread__side--actions .toolbar form {
+    margin: 0;
+}
+
 .portal-message-thread__side--actions .toolbar {
     display: grid;
     justify-items: center;
@@ -361,6 +430,84 @@
     margin: 0;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+/* A system line: what happened in the group, centred and quiet. */
+.portal-message-thread__system {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+.portal-message-thread__edited {
+    font-style: italic;
+}
+
+/* The pencil on the sender's own messages: out of the way until the bubble is
+   hovered or the button focused. */
+.portal-message-thread__edit {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.portal-message-thread__edit::before {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/edit.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/edit.svg") center / contain no-repeat;
+}
+
+.portal-message-thread__bubble:hover .portal-message-thread__edit,
+.portal-message-thread__edit:focus-visible,
+.portal-message-thread__message.is-editing .portal-message-thread__edit {
+    opacity: 1;
+}
+
+.portal-message-thread__edit:hover,
+.portal-message-thread__edit:focus-visible {
+    color: var(--link-hover);
+    outline: none;
+}
+
+.portal-message-thread__message.is-editing .portal-message-thread__bubble {
+    outline: 2px solid var(--link);
+    outline-offset: 1px;
+}
+
+/* The strip above the composer while a message is being edited. */
+.portal-message-thread__editing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--link);
+    border-radius: 10px;
+    background: var(--surface-muted);
+    font-size: 0.8rem;
+    color: var(--text);
+}
+
+.portal-message-thread__editing[hidden],
+.portal-message-thread__composer-button--attach[hidden] {
+    display: none;
 }
 
 .portal-message-thread__meta {

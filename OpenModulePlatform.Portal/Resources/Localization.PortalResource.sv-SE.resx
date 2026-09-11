@@ -3365,4 +3365,20 @@
   <data name="Envelope version" xml:space="preserve"><value>Kuvertversion</value></data>
   <data name="Message key" xml:space="preserve"><value>Meddelandenyckel</value></data>
   <data name="Arguments" xml:space="preserve"><value>Argument</value></data>
+  <data name="Edit message" xml:space="preserve"><value>Redigera meddelande</value></data>
+  <data name="Edited" xml:space="preserve"><value>Redigerat</value></data>
+  <data name="Editing message" xml:space="preserve"><value>Redigerar meddelande</value></data>
+  <data name="Group admin" xml:space="preserve"><value>Gruppadmin</value></data>
+  <data name="Remove from group" xml:space="preserve"><value>Ta bort ur gruppen</value></data>
+  <data name="Remove {0} from the group" xml:space="preserve"><value>Ta bort {0} ur gruppen</value></data>
+  <data name="Remove {0} from the group?" xml:space="preserve"><value>Ta bort {0} ur gruppen?</value></data>
+  <data name="Leave group" xml:space="preserve"><value>Lämna gruppen</value></data>
+  <data name="Leave this group?" xml:space="preserve"><value>Lämna den här gruppen?</value></data>
+  <data name="You left the group." xml:space="preserve"><value>Du lämnade gruppen.</value></data>
+  <data name="{0} was removed from the group." xml:space="preserve"><value>{0} togs bort ur gruppen.</value></data>
+  <data name="An edited message must still contain text." xml:space="preserve"><value>Ett redigerat meddelande måste fortfarande innehålla text.</value></data>
+  <data name="Only the sender can edit a text message." xml:space="preserve"><value>Bara avsändaren kan redigera ett textmeddelande.</value></data>
+  <data name="Only group conversations have participants to remove." xml:space="preserve"><value>Bara gruppkonversationer har deltagare som kan tas bort.</value></data>
+  <data name="Only the group's creator can remove other participants." xml:space="preserve"><value>Bara gruppens skapare kan ta bort andra deltagare.</value></data>
+  <data name="The participant is not part of this conversation." xml:space="preserve"><value>Deltagaren är inte med i den här konversationen.</value></data>
 </root>

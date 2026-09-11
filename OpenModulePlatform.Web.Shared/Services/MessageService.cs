@@ -358,7 +358,8 @@ SELECT c.conversation_id,
        other_user.user_id,
        other_user.display_name,
        other_user.profile_image_storage_key,
-       participants.participant_names
+       participants.participant_names,
+       c.created_by_user_id
 FROM omp.conversations c
 OUTER APPLY
 (
@@ -384,32 +385,337 @@ OUTER APPLY
 ) participants
 WHERE c.conversation_id = @conversation_id;";
 
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
-        cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
-
-        await using var rdr = await cmd.ExecuteReaderAsync(ct);
-        if (!await rdr.ReadAsync(ct))
+        MessageConversationDetail detail;
+        await using (var cmd = new SqlCommand(sql, conn))
         {
-            return null;
+            cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+            await using var rdr = await cmd.ExecuteReaderAsync(ct);
+            if (!await rdr.ReadAsync(ct))
+            {
+                return null;
+            }
+
+            var conversationType = rdr.GetString(1);
+            var title = rdr.IsDBNull(2) ? null : rdr.GetString(2);
+            var otherUserId = rdr.IsDBNull(3) ? (int?)null : rdr.GetInt32(3);
+            var otherDisplayName = rdr.IsDBNull(4) ? null : rdr.GetString(4);
+            var otherProfileImageStorageKey = rdr.IsDBNull(5) ? null : rdr.GetString(5);
+            var participantNames = rdr.IsDBNull(6) ? null : rdr.GetString(6);
+
+            detail = new MessageConversationDetail(
+                rdr.GetInt64(0),
+                conversationType,
+                title,
+                otherUserId,
+                otherDisplayName,
+                otherProfileImageStorageKey,
+                BuildConversationTitle(conversationType, title, otherDisplayName, participantNames),
+                participantNames,
+                rdr.GetInt32(7));
         }
 
-        var conversationType = rdr.GetString(1);
-        var title = rdr.IsDBNull(2) ? null : rdr.GetString(2);
-        var otherUserId = rdr.IsDBNull(3) ? (int?)null : rdr.GetInt32(3);
-        var otherDisplayName = rdr.IsDBNull(4) ? null : rdr.GetString(4);
-        var otherProfileImageStorageKey = rdr.IsDBNull(5) ? null : rdr.GetString(5);
-        var participantNames = rdr.IsDBNull(6) ? null : rdr.GetString(6);
+        return detail with { Participants = await GetParticipantsAsync(conn, conversationId, detail.CreatedByUserId, ct) };
+    }
 
-        return new MessageConversationDetail(
-            rdr.GetInt64(0),
-            conversationType,
-            title,
-            otherUserId,
-            otherDisplayName,
-            otherProfileImageStorageKey,
-            BuildConversationTitle(conversationType, title, otherDisplayName, participantNames),
-            participantNames);
+    private static async Task<IReadOnlyList<MessageParticipant>> GetParticipantsAsync(
+        SqlConnection conn,
+        long conversationId,
+        int createdByUserId,
+        CancellationToken ct)
+    {
+        const string sql = @"
+SELECT cp.user_id,
+       u.display_name,
+       cp.joined_at
+FROM omp.conversation_participants cp
+INNER JOIN omp.users u ON u.user_id = cp.user_id
+WHERE cp.conversation_id = @conversation_id
+  AND cp.left_at IS NULL
+ORDER BY cp.joined_at, cp.user_id;";
+
+        var rows = new List<MessageParticipant>();
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        while (await rdr.ReadAsync(ct))
+        {
+            var participantUserId = rdr.GetInt32(0);
+            rows.Add(new MessageParticipant(participantUserId, rdr.GetString(1), rdr.GetDateTime(2), participantUserId == createdByUserId));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Rewrites the text of the caller's own text message. Only the sender may
+    /// edit, only text messages (never system lines), and the new text may not be
+    /// empty: a message that should say nothing is a deletion, which is a
+    /// different action. Attachments are left as they are. Every participant gets
+    /// a push so open threads pick up the new text.
+    /// </summary>
+    /// <returns>The conversation the message belongs to.</returns>
+    public async Task<long> EditMessageAsync(int userId, long messageId, string? content, CancellationToken ct)
+    {
+        if (userId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(userId));
+        }
+
+        if (messageId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(messageId));
+        }
+
+        await RequireEnabledAsync(ct);
+        var cleanedContent = CleanOptional(content, maxLength: 4000);
+        if (string.IsNullOrWhiteSpace(cleanedContent))
+        {
+            throw new ArgumentException("An edited message must still contain text.", nameof(content));
+        }
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            throw new InvalidOperationException("OMP messages tables are not installed.");
+        }
+
+        // The update itself carries every rule: the sender, a text message, not
+        // deleted, and the sender still in the conversation. Zero rows means the
+        // caller may not edit this message, whatever the reason.
+        const string sql = @"
+UPDATE m
+SET m.content = @content,
+    m.edited_at = SYSUTCDATETIME()
+OUTPUT INSERTED.conversation_id
+FROM omp.messages m
+INNER JOIN omp.conversation_participants cp
+        ON cp.conversation_id = m.conversation_id
+       AND cp.user_id = @user_id
+       AND cp.left_at IS NULL
+WHERE m.message_id = @message_id
+  AND m.sender_user_id = @user_id
+  AND m.message_type = N'text'
+  AND m.deleted_at IS NULL;";
+
+        long conversationId;
+        await using (var cmd = new SqlCommand(sql, conn))
+        {
+            cmd.Parameters.Add("@content", SqlDbType.NVarChar, -1).Value = cleanedContent;
+            cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@message_id", SqlDbType.BigInt).Value = messageId;
+            var result = await cmd.ExecuteScalarAsync(ct);
+            if (result is null || result is DBNull)
+            {
+                throw new UnauthorizedAccessException("Only the sender can edit a text message.");
+            }
+
+            conversationId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+        }
+
+        var participantUserIds = await GetConversationParticipantUserIdsAsync(conn, tx: null, conversationId, excludedUserId: 0, ct);
+        foreach (var participantUserId in participantUserIds)
+        {
+            await PublishPushEventBestEffortAsync(
+                CreateMessageEditedPushEvent(participantUserId, conversationId, messageId),
+                ct);
+        }
+
+        return conversationId;
+    }
+
+    /// <summary>
+    /// Takes a participant out of a group conversation. A participant may take
+    /// themselves out (leave); only the group's creator, its admin, may take
+    /// someone else out. When the creator leaves, the participant who joined
+    /// earliest after them becomes the new admin, so the group is never left
+    /// without one while it has members. Each change is told to the group as a
+    /// system line, and everyone involved gets a push.
+    /// </summary>
+    public async Task<MessageParticipantRemoval> RemoveParticipantAsync(
+        int actorUserId,
+        long conversationId,
+        int targetUserId,
+        CancellationToken ct)
+    {
+        if (actorUserId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(actorUserId));
+        }
+
+        if (targetUserId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetUserId));
+        }
+
+        if (conversationId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(conversationId));
+        }
+
+        await RequireEnabledAsync(ct);
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            throw new InvalidOperationException("OMP messages tables are not installed.");
+        }
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        MessageParticipantRemoval removal;
+        IReadOnlyList<int> remainingUserIds;
+        try
+        {
+            if (!await UserCanAccessConversationAsync(conn, tx, actorUserId, conversationId, ct))
+            {
+                throw new UnauthorizedAccessException("Only conversation participants can change the group.");
+            }
+
+            const string conversationSql = @"
+SELECT c.conversation_type, c.created_by_user_id
+FROM omp.conversations c
+WHERE c.conversation_id = @conversation_id;";
+            string conversationType;
+            int createdByUserId;
+            await using (var cmd = new SqlCommand(conversationSql, conn, tx))
+            {
+                cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                if (!await rdr.ReadAsync(ct))
+                {
+                    throw new InvalidOperationException("The conversation was not found.");
+                }
+
+                conversationType = rdr.GetString(0);
+                createdByUserId = rdr.GetInt32(1);
+            }
+
+            if (!string.Equals(conversationType, "group", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Only group conversations have participants to remove.");
+            }
+
+            var isLeaving = actorUserId == targetUserId;
+            if (!isLeaving && actorUserId != createdByUserId)
+            {
+                throw new UnauthorizedAccessException("Only the group's creator can remove other participants.");
+            }
+
+            // Stamp left_at; zero rows means the target was not an active participant.
+            const string leaveSql = @"
+UPDATE cp
+SET cp.left_at = SYSUTCDATETIME()
+OUTPUT INSERTED.user_id, u.display_name
+FROM omp.conversation_participants cp
+INNER JOIN omp.users u ON u.user_id = cp.user_id
+WHERE cp.conversation_id = @conversation_id
+  AND cp.user_id = @user_id
+  AND cp.left_at IS NULL;";
+            string targetDisplayName;
+            await using (var cmd = new SqlCommand(leaveSql, conn, tx))
+            {
+                cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = targetUserId;
+                await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                if (!await rdr.ReadAsync(ct))
+                {
+                    throw new InvalidOperationException("The participant is not part of this conversation.");
+                }
+
+                targetDisplayName = rdr.GetString(1);
+            }
+
+            // The system line reads "<actor> left the group" / "<actor> removed X
+            // from the group": the sender is the actor and the text the predicate,
+            // so previews that prefix the sender name read naturally too.
+            await InsertSystemMessageAsync(conn, tx, conversationId, actorUserId,
+                isLeaving ? "left the group" : $"removed {targetDisplayName} from the group", ct);
+
+            int? newAdminUserId = null;
+            string? newAdminDisplayName = null;
+            if (targetUserId == createdByUserId)
+            {
+                const string successorSql = @"
+SELECT TOP (1) cp.user_id, u.display_name
+FROM omp.conversation_participants cp
+INNER JOIN omp.users u ON u.user_id = cp.user_id
+WHERE cp.conversation_id = @conversation_id
+  AND cp.left_at IS NULL
+ORDER BY cp.joined_at, cp.user_id;";
+                await using (var cmd = new SqlCommand(successorSql, conn, tx))
+                {
+                    cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                    await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                    if (await rdr.ReadAsync(ct))
+                    {
+                        newAdminUserId = rdr.GetInt32(0);
+                        newAdminDisplayName = rdr.GetString(1);
+                    }
+                }
+
+                if (newAdminUserId is int successorId)
+                {
+                    const string transferSql = @"
+UPDATE omp.conversations
+SET created_by_user_id = @user_id
+WHERE conversation_id = @conversation_id;";
+                    await using (var cmd = new SqlCommand(transferSql, conn, tx))
+                    {
+                        cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                        cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = successorId;
+                        await cmd.ExecuteNonQueryAsync(ct);
+                    }
+
+                    await InsertSystemMessageAsync(conn, tx, conversationId, successorId, "is now the group admin", ct);
+                }
+            }
+
+            remainingUserIds = await GetConversationParticipantUserIdsAsync(conn, tx, conversationId, excludedUserId: 0, ct);
+            removal = new MessageParticipantRemoval(conversationId, targetUserId, targetDisplayName, isLeaving, newAdminUserId, newAdminDisplayName);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        // Everyone still in the group refreshes; the one who left gets a push too,
+        // so an open thread page learns it is no longer theirs and the top bar
+        // recounts.
+        foreach (var participantUserId in remainingUserIds.Append(targetUserId).Distinct())
+        {
+            var unreadCount = await GetUnreadMessageCountAsync(conn, participantUserId, ct);
+            await PublishPushEventBestEffortAsync(
+                CreateMembershipChangedPushEvent(participantUserId, conversationId, unreadCount),
+                ct);
+        }
+
+        return removal;
+    }
+
+    /// <summary>A system line: what happened in the group, told by the participant it is about.</summary>
+    private static async Task InsertSystemMessageAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        long conversationId,
+        int senderUserId,
+        string content,
+        CancellationToken ct)
+    {
+        const string messageSql = @"
+INSERT INTO omp.messages(conversation_id, sender_user_id, content, message_type)
+VALUES(@conversation_id, @sender_user_id, @content, N'system');
+UPDATE omp.conversations
+SET updated_at = SYSUTCDATETIME(),
+    last_message_at = SYSUTCDATETIME()
+WHERE conversation_id = @conversation_id;";
+        await using var cmd = new SqlCommand(messageSql, conn, tx);
+        cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+        cmd.Parameters.Add("@sender_user_id", SqlDbType.Int).Value = senderUserId;
+        cmd.Parameters.Add("@content", SqlDbType.NVarChar, -1).Value = content;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<long> GetOrCreateDirectConversationAsync(
@@ -582,7 +888,8 @@ SELECT TOP (@limit)
        u.profile_image_storage_key,
        m.content,
        m.message_type,
-       m.created_at
+       m.created_at,
+       m.edited_at
 FROM omp.messages m
 INNER JOIN omp.users u ON u.user_id = m.sender_user_id
 WHERE m.conversation_id = @conversation_id
@@ -612,7 +919,8 @@ ORDER BY m.message_id DESC;";
                     rdr.GetString(5),
                     rdr.GetDateTime(6),
                     rdr.GetInt32(1) == userId,
-                    []));
+                    [],
+                    rdr.IsDBNull(7) ? null : rdr.GetDateTime(7)));
             }
         }
 
@@ -1044,6 +1352,40 @@ ORDER BY display_name,
             deduplicationKey: string.Create(
                 CultureInfo.InvariantCulture,
                 $"message:sent:{messageId}:user:{userId}"),
+            correlationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"conversation:{conversationId}"));
+
+    internal static PushEvent CreateMessageEditedPushEvent(int userId, long conversationId, long messageId)
+        => PushEvent.ForUser(
+            userId,
+            PushEventCategory.TopBarMessageStateChanged,
+            JsonSerializer.Serialize(new
+            {
+                action = "edited",
+                conversationId,
+                messageId
+            }),
+            deduplicationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"message:edited:{messageId}:user:{userId}:{DateTime.UtcNow.Ticks}"),
+            correlationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"conversation:{conversationId}"));
+
+    internal static PushEvent CreateMembershipChangedPushEvent(int userId, long conversationId, int? unreadMessageCount = null)
+        => PushEvent.ForUser(
+            userId,
+            PushEventCategory.TopBarMessageStateChanged,
+            JsonSerializer.Serialize(new
+            {
+                action = "membership",
+                conversationId,
+                unreadMessageCount
+            }),
+            deduplicationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"conversation:membership:{conversationId}:user:{userId}:{DateTime.UtcNow.Ticks}"),
             correlationKey: string.Create(
                 CultureInfo.InvariantCulture,
                 $"conversation:{conversationId}"));
@@ -1589,7 +1931,26 @@ public sealed record MessageConversationDetail(
     string? OtherDisplayName,
     string? OtherProfileImageStorageKey,
     string DisplayTitle,
-    string? ParticipantNames);
+    string? ParticipantNames,
+    int CreatedByUserId = 0)
+{
+    /// <summary>Active participants, earliest joined first. The creator is the group's admin.</summary>
+    public IReadOnlyList<MessageParticipant> Participants { get; init; } = [];
+
+    public bool IsGroup => string.Equals(ConversationType, "group", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <param name="IsAdmin">True for the conversation's creator, who may remove other participants.</param>
+public sealed record MessageParticipant(int UserId, string DisplayName, DateTime JoinedAt, bool IsAdmin);
+
+/// <summary>What <see cref="MessageService.RemoveParticipantAsync"/> did.</summary>
+public sealed record MessageParticipantRemoval(
+    long ConversationId,
+    int RemovedUserId,
+    string RemovedDisplayName,
+    bool WasLeaving,
+    int? NewAdminUserId,
+    string? NewAdminDisplayName);
 
 public sealed record MessageRow(
     long MessageId,
@@ -1601,7 +1962,14 @@ public sealed record MessageRow(
     string MessageType,
     DateTime CreatedAt,
     bool IsOwnMessage,
-    IReadOnlyList<MessageAttachmentRow> Attachments);
+    IReadOnlyList<MessageAttachmentRow> Attachments,
+    DateTime? EditedAt = null)
+{
+    public bool IsSystem => string.Equals(MessageType, "system", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A text message of the caller's own, with text to change: the only thing that can be edited.</summary>
+    public bool CanEdit => IsOwnMessage && !IsSystem && !string.IsNullOrWhiteSpace(Content);
+}
 
 public sealed record MessageAttachmentRow(
     long AttachmentId,

@@ -1099,4 +1099,20 @@
   <data name="Envelope version" xml:space="preserve"><value>Envelope version</value></data>
   <data name="Message key" xml:space="preserve"><value>Message key</value></data>
   <data name="Arguments" xml:space="preserve"><value>Arguments</value></data>
+  <data name="Edit message" xml:space="preserve"><value>Edit message</value></data>
+  <data name="Edited" xml:space="preserve"><value>Edited</value></data>
+  <data name="Editing message" xml:space="preserve"><value>Editing message</value></data>
+  <data name="Group admin" xml:space="preserve"><value>Group admin</value></data>
+  <data name="Remove from group" xml:space="preserve"><value>Remove from group</value></data>
+  <data name="Remove {0} from the group" xml:space="preserve"><value>Remove {0} from the group</value></data>
+  <data name="Remove {0} from the group?" xml:space="preserve"><value>Remove {0} from the group?</value></data>
+  <data name="Leave group" xml:space="preserve"><value>Leave group</value></data>
+  <data name="Leave this group?" xml:space="preserve"><value>Leave this group?</value></data>
+  <data name="You left the group." xml:space="preserve"><value>You left the group.</value></data>
+  <data name="{0} was removed from the group." xml:space="preserve"><value>{0} was removed from the group.</value></data>
+  <data name="An edited message must still contain text." xml:space="preserve"><value>An edited message must still contain text.</value></data>
+  <data name="Only the sender can edit a text message." xml:space="preserve"><value>Only the sender can edit a text message.</value></data>
+  <data name="Only group conversations have participants to remove." xml:space="preserve"><value>Only group conversations have participants to remove.</value></data>
+  <data name="Only the group's creator can remove other participants." xml:space="preserve"><value>Only the group's creator can remove other participants.</value></data>
+  <data name="The participant is not part of this conversation." xml:space="preserve"><value>The participant is not part of this conversation.</value></data>
 </root>

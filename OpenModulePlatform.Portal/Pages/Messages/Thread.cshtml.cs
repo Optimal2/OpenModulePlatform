@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Localization;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
@@ -16,15 +17,23 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
     private const string MessagesPartialName = "_ThreadMessages";
 
     private readonly MessageService _messages;
+    private readonly ActivityLogWriter _activityLog;
 
     public ThreadModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
-        MessageService messages)
+        MessageService messages,
+        ActivityLogWriter activityLog)
         : base(options, rbac)
     {
         _messages = messages;
+        _activityLog = activityLog;
     }
+
+    public int CurrentUserId { get; private set; }
+
+    /// <summary>The signed-in user created this group and may remove other participants.</summary>
+    public bool IsGroupAdmin => Conversation is { IsGroup: true } && Conversation.CreatedByUserId == CurrentUserId;
 
     public MessageConversationDetail? Conversation { get; private set; }
 
@@ -147,6 +156,159 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         }
     }
 
+    /// <summary>
+    /// Rewrites one of the caller's own messages. The composer posts here in edit
+    /// mode with the new text; the answer is the refreshed thread, like a send.
+    /// </summary>
+    public async Task<IActionResult> OnPostEdit(long conversationId, long messageId, CancellationToken ct)
+    {
+        SetTitles("Messages");
+        var isAjaxRequest = IsAjaxRequest();
+
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            await _messages.EditMessageAsync(userId, messageId, MessageContent, ct);
+            // The user log records that a message was changed, never its text.
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "message.edited",
+                MessageKey = "message.edited",
+                Summary = $"Edited message {messageId} in conversation {conversationId}",
+                Subject = new ActivitySubject("message", messageId.ToString(CultureInfo.InvariantCulture)),
+                Data = new Dictionary<string, object?> { ["conversationId"] = conversationId },
+                Args = new Dictionary<string, object?> { ["messageId"] = messageId, ["conversationId"] = conversationId }
+            }, User, ct);
+
+            if (isAjaxRequest)
+            {
+                await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: true, ct);
+                Response.Headers.CacheControl = "no-store";
+                return Partial(MessagesPartialName, this);
+            }
+
+            return RedirectToPage("/Messages/Thread", new { conversationId, restoreScrollTop = RestoreScrollTop });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(Localizer, ex.Message));
+            CanUseMessages = true;
+            await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: false, ct);
+            if (isAjaxRequest)
+            {
+                return new BadRequestObjectResult(new { errors = GetModelStateErrors() });
+            }
+
+            return Page();
+        }
+    }
+
+    /// <summary>The group's admin takes another participant out of the group.</summary>
+    public async Task<IActionResult> OnPostRemoveParticipant(long conversationId, int userId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var actorUserId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct) || userId == actorUserId)
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            var removal = await _messages.RemoveParticipantAsync(actorUserId, conversationId, userId, ct);
+            await WriteMembershipChangedAsync(removal, ct);
+            StatusMessage = string.Format(CultureInfo.CurrentCulture, T("{0} was removed from the group."), removal.RemovedDisplayName);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = PortalTextLocalizer.Display(Localizer, ex.Message);
+        }
+
+        return RedirectToPage("/Messages/Thread", new { conversationId });
+    }
+
+    /// <summary>The signed-in user leaves the group; the creator's seat passes to the earliest joiner.</summary>
+    public async Task<IActionResult> OnPostLeave(long conversationId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            var removal = await _messages.RemoveParticipantAsync(userId, conversationId, userId, ct);
+            await WriteMembershipChangedAsync(removal, ct);
+            StatusMessage = T("You left the group.");
+            return RedirectToPage("/Messages/Index");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusMessage = PortalTextLocalizer.Display(Localizer, ex.Message);
+            return RedirectToPage("/Messages/Thread", new { conversationId });
+        }
+    }
+
+    private async Task WriteMembershipChangedAsync(MessageParticipantRemoval removal, CancellationToken ct)
+    {
+        var conversationId = removal.ConversationId.ToString(CultureInfo.InvariantCulture);
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = removal.WasLeaving ? "conversation.left" : "conversation.participant_removed",
+            MessageKey = removal.WasLeaving ? "conversation.left" : "conversation.participant_removed",
+            Summary = removal.WasLeaving
+                ? $"Left group conversation {conversationId}"
+                : $"Removed {removal.RemovedDisplayName} (#{removal.RemovedUserId}) from group conversation {conversationId}",
+            Subject = new ActivitySubject("conversation", conversationId),
+            Data = new Dictionary<string, object?> { ["removedUserId"] = removal.RemovedUserId, ["newAdminUserId"] = removal.NewAdminUserId },
+            Args = removal.WasLeaving
+                ? new Dictionary<string, object?> { ["conversationId"] = removal.ConversationId }
+                : new Dictionary<string, object?> { ["name"] = removal.RemovedDisplayName, ["userId"] = removal.RemovedUserId, ["conversationId"] = removal.ConversationId }
+        }, User, ct);
+
+        if (removal.NewAdminUserId is int newAdminUserId)
+        {
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "conversation.admin_transferred",
+                MessageKey = "conversation.admin_transferred",
+                Summary = $"Group conversation {conversationId} is now administered by {removal.NewAdminDisplayName} (#{newAdminUserId})",
+                Subject = new ActivitySubject("conversation", conversationId),
+                Data = new Dictionary<string, object?> { ["newAdminUserId"] = newAdminUserId },
+                Args = new Dictionary<string, object?> { ["conversationId"] = removal.ConversationId, ["name"] = removal.NewAdminDisplayName, ["userId"] = newAdminUserId }
+            }, User, ct);
+        }
+    }
+
     public async Task<IActionResult> OnGetAttachment(long conversationId, long attachmentId, CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -175,6 +337,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         bool markRead,
         CancellationToken ct)
     {
+        CurrentUserId = userId;
         Conversation = await _messages.GetConversationAsync(userId, conversationId, ct);
         if (Conversation is null)
         {

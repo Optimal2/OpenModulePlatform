@@ -37,7 +37,39 @@ else
         <aside class="portal-message-thread__side portal-message-thread__side--identity">
             <div class="eyebrow">@L["Messages"]</div>
             <h2>@Model.Conversation.DisplayTitle</h2>
-            @if (!string.IsNullOrWhiteSpace(Model.Conversation.ParticipantNames))
+            @if (Model.Conversation.IsGroup)
+            {
+                @* The group's members, earliest joined first. The creator is the
+                   admin and the only one who can remove others; everyone can leave. *@
+                <ul class="portal-message-thread__participants" aria-label="@L["Participants"]">
+                    @foreach (var participant in Model.Conversation.Participants)
+                    {
+                        <li class="portal-message-thread__participant">
+                            <span class="portal-message-thread__participant-name">@participant.DisplayName</span>
+                            @if (participant.IsAdmin)
+                            {
+                                <span class="pill portal-message-thread__participant-admin">@L["Group admin"]</span>
+                            }
+                            @if (Model.IsGroupAdmin && participant.UserId != Model.CurrentUserId)
+                            {
+                                <form method="post"
+                                      asp-page-handler="RemoveParticipant"
+                                      asp-route-conversationId="@Model.Conversation.ConversationId"
+                                      asp-route-userId="@participant.UserId"
+                                      class="portal-message-thread__participant-remove"
+                                      data-enhance="false">
+                                    <button type="submit"
+                                            class="portal-message-thread__participant-remove-button"
+                                            title="@L["Remove from group"]"
+                                            aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["Remove {0} from the group"].Value, participant.DisplayName)"
+                                            data-confirm="@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["Remove {0} from the group?"].Value, participant.DisplayName)"></button>
+                                </form>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.Conversation.ParticipantNames))
             {
                 <p>@Model.Conversation.ParticipantNames</p>
             }
@@ -63,8 +95,17 @@ else
                   data-refresh-url="@Url.Page("/Messages/Thread", "Messages", new { conversationId = Model.Conversation.ConversationId })"
                   data-updated-text="@L["Conversation updated"]"
                   data-send-error-text="@L["The message could not be sent."]"
+                  data-edit-url-template="@Url.Page("/Messages/Thread", "Edit", new { conversationId = Model.Conversation.ConversationId, messageId = 0 })"
+                  data-removed-url="@Url.Page("/Messages/Index")"
                   data-enhance="false">
                 <input asp-for="RestoreScrollTop" type="hidden" data-message-thread-scroll-input />
+                @* Edit mode: the composer rewrites one of the sender's own messages.
+                   The page script fills the field, points the form at the Edit
+                   handler and shows this strip with a way out. *@
+                <div class="portal-message-thread__editing" data-message-thread-editing hidden>
+                    <span>@L["Editing message"]</span>
+                    <button type="button" class="btn btn-secondary btn-sm" data-message-thread-edit-cancel>@L["Cancel"]</button>
+                </div>
                 @* Files picked or pasted wait here, each with a thumbnail, its name and
                    a remove button, until the message is sent. Filled by the page script. *@
                 <div class="portal-message-thread__pending" data-message-thread-pending data-remove-text="@L["Remove"]" hidden></div>
@@ -95,6 +136,15 @@ else
             <div class="toolbar">
                 <a class="action-link" asp-page="/Messages/Index">@L["Messages"]</a>
                 <a class="action-link" asp-page="/Messages/New">@L["New conversation"]</a>
+                @if (Model.Conversation.IsGroup)
+                {
+                    <form method="post"
+                          asp-page-handler="Leave"
+                          asp-route-conversationId="@Model.Conversation.ConversationId"
+                          data-enhance="false">
+                        <button type="submit" class="btn btn-danger btn-sm" data-confirm="@L["Leave this group?"]">@L["Leave group"]</button>
+                    </form>
+                }
             </div>
         </aside>
     </section>

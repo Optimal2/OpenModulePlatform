@@ -45,6 +45,17 @@
         <div class="portal-message-thread__messages">
             @foreach (var message in Model.Rows)
             {
+                if (message.IsSystem)
+                {
+                    @* What happened in the group, told as "<name> <predicate>": the
+                       sender is the participant the line is about. *@
+                    <div class="portal-message-thread__system" data-message-id="@message.MessageId">
+                        <span>@message.SenderDisplayName @message.Content</span>
+                        <time>@message.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)</time>
+                    </div>
+                    continue;
+                }
+
                 var avatarUrl = OmpAvatarHelper.BuildUserAvatarPath(message.SenderUserId, message.SenderProfileImageStorageKey);
                 var avatarInitials = OmpAvatarHelper.GetInitials(message.SenderDisplayName);
                 <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)"
@@ -67,6 +78,19 @@
                         <div class="portal-message-thread__meta">
                             <strong>@message.SenderDisplayName</strong>
                             <span>@message.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)</span>
+                            @if (message.EditedAt is { } editedAt)
+                            {
+                                <span class="portal-message-thread__edited" title="@editedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)">@L["Edited"]</span>
+                            }
+                            @if (message.CanEdit)
+                            {
+                                <button type="button"
+                                        class="portal-message-thread__edit"
+                                        title="@L["Edit message"]"
+                                        aria-label="@L["Edit message"]"
+                                        data-message-edit="@message.MessageId"
+                                        data-message-content="@message.Content"></button>
+                            }
                         </div>
                         @if (!string.IsNullOrWhiteSpace(message.Content))
                         {

@@ -8,6 +8,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Messages: edit your own message, leave a group, and (as the group's
+  creator) remove a participant.** A pencil on the sender's own text messages
+  puts the text in the composer; sending rewrites the message and marks it
+  "Edited" with the time in a tooltip (attachments stay as they are, an
+  empty text is refused). A group's creator is its admin: the identity column
+  lists the members with an admin pill, and the admin can remove any other
+  member. Everyone can leave; when the creator leaves, the member who joined
+  earliest becomes the new admin. Each change is told to the group as a quiet
+  system line, every participant gets a push, and a member who was removed
+  while reading the thread is sent back to the list. The Portal's user log
+  records message.edited (never the text), conversation.left,
+  conversation.participant_removed and conversation.admin_transferred.
+
 - **User log envelope version 2: a message key and arguments beside the
   summary.** `ActivityEntry` gains optional `MessageKey` and `Args`; an entry
   that carries them is stored as `v: 2` with `messageKey` and `args`, one

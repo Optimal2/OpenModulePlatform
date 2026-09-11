@@ -142,6 +142,87 @@
         updateAttachCount();
     }
 
+    // Edit mode: clicking the pencil on one of the user's own messages puts its
+    // text in the composer, points the form at the Edit handler and shows a
+    // strip with Cancel. Sending then rewrites the message; Escape or Cancel
+    // returns to composing a new one. Attachments cannot be added to an edit.
+    const sendAction = form.getAttribute('action') || '';
+    const editUrlTemplate = form.dataset.editUrlTemplate || '';
+    const editingStrip = form.querySelector('[data-message-thread-editing]');
+    const textInput = form.querySelector('input[name="MessageContent"]');
+    const attachButton = form.querySelector('.portal-message-thread__composer-button--attach');
+
+    const exitEditMode = () => {
+        if (!form.dataset.editingMessageId) {
+            return;
+        }
+        delete form.dataset.editingMessageId;
+        form.setAttribute('action', sendAction);
+        if (editingStrip) {
+            editingStrip.hidden = true;
+        }
+        if (attachButton) {
+            attachButton.hidden = false;
+        }
+        if (textInput) {
+            textInput.value = '';
+        }
+        scrollContainer.querySelectorAll('.portal-message-thread__message.is-editing')
+            .forEach((message) => message.classList.remove('is-editing'));
+    };
+
+    const enterEditMode = (messageId, content) => {
+        if (!editUrlTemplate || !textInput) {
+            return;
+        }
+        exitEditMode();
+        form.dataset.editingMessageId = String(messageId);
+        form.setAttribute('action', editUrlTemplate.replace(/messageId=0/i, `messageId=${encodeURIComponent(messageId)}`));
+        if (editingStrip) {
+            editingStrip.hidden = false;
+        }
+        if (attachButton) {
+            attachButton.hidden = true;
+        }
+        const attachInput = form.querySelector('input[type="file"]');
+        if (attachInput) {
+            attachInput.value = '';
+            attachInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        textInput.value = content;
+        scrollContainer.querySelector(`[data-message-id="${CSS.escape(String(messageId))}"]`)?.classList.add('is-editing');
+        textInput.focus();
+        textInput.setSelectionRange(textInput.value.length, textInput.value.length);
+    };
+
+    scrollContainer.addEventListener('click', (event) => {
+        const edit = event.target.closest('[data-message-edit]');
+        if (!edit) {
+            return;
+        }
+        enterEditMode(edit.dataset.messageEdit, edit.dataset.messageContent || '');
+    });
+    form.querySelector('[data-message-thread-edit-cancel]')?.addEventListener('click', exitEditMode);
+    textInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && form.dataset.editingMessageId) {
+            event.preventDefault();
+            exitEditMode();
+        }
+    });
+
+    // Remove and leave are plain forms; a confirm keeps a stray click from
+    // taking someone out of the group.
+    document.querySelectorAll('button[data-confirm]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+            if (!window.confirm(button.dataset.confirm)) {
+                event.preventDefault();
+            }
+        });
+    });
+
+    // Everything below is the live part (refresh, fetch send, push); the
+    // history view has none of it, but editing and the confirm guards above
+    // work there too through a plain form post.
     if (scrollContainer.dataset.liveDisabled === 'true') {
         return;
     }
@@ -314,6 +395,13 @@
             });
 
             if (response.status === 401 || response.status === 403) {
+                // A refresh that is refused after the page loaded means the user
+                // is no longer in the conversation (removed from the group, or
+                // left it in another tab): back to the list.
+                const removedUrl = form.dataset.removedUrl;
+                if (response.status === 403 && removedUrl) {
+                    window.location.assign(removedUrl);
+                }
                 return;
             }
 
@@ -378,6 +466,7 @@
             }
 
             form.reset();
+            exitEditMode();
             if (scrollInput) {
                 scrollInput.value = '';
             }
