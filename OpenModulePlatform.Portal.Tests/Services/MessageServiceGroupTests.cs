@@ -105,10 +105,38 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
         var lines = await service.GetMessagesAsync(cecilia, conversationId, 10, null, CancellationToken.None);
         Assert.Equal(["Anna left the group", "Bertil is now the group admin"], lines.Select(l => $"{l.SenderDisplayName} {l.Content}"));
 
-        // The new admin may now remove; the last one out leaves an empty group, not a crash.
+        // The new admin may now remove; the last one out takes the conversation
+        // with them: no rows remain, in any of the tables.
         await service.RemoveParticipantAsync(bertil, conversationId, cecilia, CancellationToken.None);
         var last = await service.RemoveParticipantAsync(bertil, conversationId, bertil, CancellationToken.None);
+        Assert.True(last.ConversationDeleted);
         Assert.Null(last.NewAdminUserId);
+        Assert.Equal(0, await _fixture.CountRowsAsync("omp.conversations", conversationId));
+        Assert.Equal(0, await _fixture.CountRowsAsync("omp.messages", conversationId));
+        Assert.Equal(0, await _fixture.CountRowsAsync("omp.conversation_participants", conversationId));
+        Assert.Null(await service.GetConversationAsync(bertil, conversationId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_last_member_leaving_deletes_the_attachments_too()
+    {
+        var (service, _) = _fixture.CreateService();
+        var anna = await _fixture.InsertUserAsync("Anna");
+        var bertil = await _fixture.InsertUserAsync("Bertil");
+        var conversationId = await service.CreateGroupConversationAsync(anna, [bertil], "Attachment test", CancellationToken.None);
+        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31 }), 0, 6, "Attachments", "note.txt")
+        {
+            Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
+            ContentType = "text/plain"
+        };
+        var messageId = await service.SendMessageAsync(anna, conversationId, "with a file", [file], CancellationToken.None);
+        Assert.Equal(1, await _fixture.CountAttachmentsAsync(messageId));
+
+        await service.RemoveParticipantAsync(anna, conversationId, anna, CancellationToken.None);
+        var last = await service.RemoveParticipantAsync(bertil, conversationId, bertil, CancellationToken.None);
+
+        Assert.True(last.ConversationDeleted);
+        Assert.Equal(0, await _fixture.CountAttachmentsAsync(messageId));
     }
 
     [Fact]
@@ -151,6 +179,24 @@ public sealed class MessageServiceTestFixture : IAsyncLifetime
             master.ConnectionString,
             $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];");
         await CoreSetupScript.ApplyAsync(ConnectionString);
+    }
+
+    public async Task<int> CountRowsAsync(string table, long conversationId)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand($"SELECT COUNT(1) FROM {table} WHERE conversation_id = @id;", conn);
+        cmd.Parameters.AddWithValue("@id", conversationId);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    public async Task<int> CountAttachmentsAsync(long messageId)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand("SELECT COUNT(1) FROM omp.message_attachments WHERE message_id = @id;", conn);
+        cmd.Parameters.AddWithValue("@id", messageId);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync());
     }
 
     public async Task<int> InsertUserAsync(string displayName)

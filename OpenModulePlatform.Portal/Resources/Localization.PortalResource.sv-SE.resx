@@ -3381,4 +3381,5 @@
   <data name="Only group conversations have participants to remove." xml:space="preserve"><value>Bara gruppkonversationer har deltagare som kan tas bort.</value></data>
   <data name="Only the group's creator can remove other participants." xml:space="preserve"><value>Bara gruppens skapare kan ta bort andra deltagare.</value></data>
   <data name="The participant is not part of this conversation." xml:space="preserve"><value>Deltagaren är inte med i den här konversationen.</value></data>
+  <data name="You left the group, and it was removed since no one remained." xml:space="preserve"><value>Du lämnade gruppen, och den togs bort eftersom ingen var kvar.</value></data>
 </root>

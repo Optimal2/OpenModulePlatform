@@ -3259,4 +3259,5 @@
   <data name="Only group conversations have participants to remove." xml:space="preserve"><value>Only group conversations have participants to remove.</value></data>
   <data name="Only the group's creator can remove other participants." xml:space="preserve"><value>Only the group's creator can remove other participants.</value></data>
   <data name="The participant is not part of this conversation." xml:space="preserve"><value>The participant is not part of this conversation.</value></data>
+  <data name="You left the group, and it was removed since no one remained." xml:space="preserve"><value>You left the group, and it was removed since no one remained.</value></data>
 </root>

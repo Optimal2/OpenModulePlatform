@@ -264,7 +264,9 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         {
             var removal = await _messages.RemoveParticipantAsync(userId, conversationId, userId, ct);
             await WriteMembershipChangedAsync(removal, ct);
-            StatusMessage = T("You left the group.");
+            StatusMessage = removal.ConversationDeleted
+                ? T("You left the group, and it was removed since no one remained.")
+                : T("You left the group.");
             return RedirectToPage("/Messages/Index");
         }
         catch (UnauthorizedAccessException)
@@ -294,6 +296,18 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
                 ? new Dictionary<string, object?> { ["conversationId"] = removal.ConversationId }
                 : new Dictionary<string, object?> { ["name"] = removal.RemovedDisplayName, ["userId"] = removal.RemovedUserId, ["conversationId"] = removal.ConversationId }
         }, User, ct);
+
+        if (removal.ConversationDeleted)
+        {
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "conversation.deleted",
+                MessageKey = "conversation.deleted",
+                Summary = $"Group conversation {conversationId} was deleted when its last member left",
+                Subject = new ActivitySubject("conversation", conversationId),
+                Args = new Dictionary<string, object?> { ["conversationId"] = removal.ConversationId }
+            }, User, ct);
+        }
 
         if (removal.NewAdminUserId is int newAdminUserId)
         {

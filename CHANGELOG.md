@@ -17,9 +17,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   member. Everyone can leave; when the creator leaves, the member who joined
   earliest becomes the new admin. Each change is told to the group as a quiet
   system line, every participant gets a push, and a member who was removed
-  while reading the thread is sent back to the list. The Portal's user log
-  records message.edited (never the text), conversation.left,
-  conversation.participant_removed and conversation.admin_transferred.
+  while reading the thread is sent back to the list. When the last member
+  leaves, the conversation is deleted with its messages and attachments,
+  since nobody could ever see it again. The Portal's user log records
+  message.edited (never the text), conversation.left,
+  conversation.participant_removed, conversation.admin_transferred and
+  conversation.deleted.
 
 - **User log envelope version 2: a message key and arguments beside the
   summary.** `ActivityEntry` gains optional `MessageKey` and `Args`; an entry

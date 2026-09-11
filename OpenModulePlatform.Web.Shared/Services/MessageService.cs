@@ -531,7 +531,9 @@ WHERE m.message_id = @message_id
     /// someone else out. When the creator leaves, the participant who joined
     /// earliest after them becomes the new admin, so the group is never left
     /// without one while it has members. Each change is told to the group as a
-    /// system line, and everyone involved gets a push.
+    /// system line, and everyone involved gets a push. When the last member
+    /// leaves, the conversation is deleted with its messages and attachments:
+    /// nobody could ever see it again, and the attachments are what take space.
     /// </summary>
     public async Task<MessageParticipantRemoval> RemoveParticipantAsync(
         int actorUserId,
@@ -630,6 +632,28 @@ WHERE cp.conversation_id = @conversation_id
                 targetDisplayName = rdr.GetString(1);
             }
 
+            remainingUserIds = await GetConversationParticipantUserIdsAsync(conn, tx, conversationId, excludedUserId: 0, ct);
+            if (remainingUserIds.Count == 0)
+            {
+                // Nobody is left to read it: the conversation goes, and the
+                // cascades take its messages, attachments and participant rows.
+                const string deleteSql = @"
+DELETE FROM omp.conversations
+WHERE conversation_id = @conversation_id;";
+                await using (var cmd = new SqlCommand(deleteSql, conn, tx))
+                {
+                    cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                    await cmd.ExecuteNonQueryAsync(ct);
+                }
+
+                removal = new MessageParticipantRemoval(conversationId, targetUserId, targetDisplayName, isLeaving, null, null, ConversationDeleted: true);
+                await tx.CommitAsync(ct);
+                await PublishPushEventBestEffortAsync(
+                    CreateMembershipChangedPushEvent(targetUserId, conversationId, await GetUnreadMessageCountAsync(conn, targetUserId, ct)),
+                    ct);
+                return removal;
+            }
+
             // The system line reads "<actor> left the group" / "<actor> removed X
             // from the group": the sender is the actor and the text the predicate,
             // so previews that prefix the sender name read naturally too.
@@ -675,7 +699,6 @@ WHERE conversation_id = @conversation_id;";
                 }
             }
 
-            remainingUserIds = await GetConversationParticipantUserIdsAsync(conn, tx, conversationId, excludedUserId: 0, ct);
             removal = new MessageParticipantRemoval(conversationId, targetUserId, targetDisplayName, isLeaving, newAdminUserId, newAdminDisplayName);
             await tx.CommitAsync(ct);
         }
@@ -1950,13 +1973,15 @@ public sealed record MessageConversationDetail(
 public sealed record MessageParticipant(int UserId, string DisplayName, DateTime JoinedAt, bool IsAdmin);
 
 /// <summary>What <see cref="MessageService.RemoveParticipantAsync"/> did.</summary>
+/// <param name="ConversationDeleted">True when the removed participant was the last one and the conversation was deleted with them.</param>
 public sealed record MessageParticipantRemoval(
     long ConversationId,
     int RemovedUserId,
     string RemovedDisplayName,
     bool WasLeaving,
     int? NewAdminUserId,
-    string? NewAdminDisplayName);
+    string? NewAdminDisplayName,
+    bool ConversationDeleted = false);
 
 public sealed record MessageRow(
     long MessageId,
