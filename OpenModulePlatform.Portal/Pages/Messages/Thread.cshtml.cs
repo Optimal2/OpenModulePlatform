@@ -216,6 +216,66 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         }
     }
 
+    /// <summary>
+    /// The sender takes one of their own messages back. The thread then shows
+    /// a "deleted" placeholder where it was; the user log records that a
+    /// message was deleted, never what it said.
+    /// </summary>
+    public async Task<IActionResult> OnPostDelete(long conversationId, long messageId, CancellationToken ct)
+    {
+        SetTitles("Messages");
+        var isAjaxRequest = IsAjaxRequest();
+
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            await _messages.DeleteMessageAsync(userId, messageId, ct);
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "message.deleted",
+                MessageKey = "message.deleted",
+                Summary = $"Deleted message {messageId} in conversation {conversationId}",
+                Subject = new ActivitySubject("message", messageId.ToString(CultureInfo.InvariantCulture)),
+                Data = new Dictionary<string, object?> { ["conversationId"] = conversationId },
+                Args = new Dictionary<string, object?> { ["messageId"] = messageId, ["conversationId"] = conversationId }
+            }, User, ct);
+
+            if (isAjaxRequest)
+            {
+                await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: true, ct);
+                Response.Headers.CacheControl = "no-store";
+                return Partial(MessagesPartialName, this);
+            }
+
+            return RedirectToPage("/Messages/Thread", new { conversationId, restoreScrollTop = RestoreScrollTop });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (InvalidOperationException ex)
+        {
+            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(Localizer, ex.Message));
+            CanUseMessages = true;
+            await LoadAsync(userId, conversationId, beforeMessageId: null, markRead: false, ct);
+            if (isAjaxRequest)
+            {
+                return new BadRequestObjectResult(new { errors = GetModelStateErrors() });
+            }
+
+            return Page();
+        }
+    }
+
     /// <summary>The group's admin takes another participant out of the group.</summary>
     public async Task<IActionResult> OnPostRemoveParticipant(long conversationId, int userId, CancellationToken ct)
     {

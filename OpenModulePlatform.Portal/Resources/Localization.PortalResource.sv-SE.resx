@@ -3368,6 +3368,10 @@
   <data name="Edit message" xml:space="preserve"><value>Redigera meddelande</value></data>
   <data name="Edited" xml:space="preserve"><value>Redigerat</value></data>
   <data name="Editing message" xml:space="preserve"><value>Redigerar meddelande</value></data>
+  <data name="Delete message" xml:space="preserve"><value>Ta bort meddelande</value></data>
+  <data name="Delete this message?" xml:space="preserve"><value>Ta bort det här meddelandet?</value></data>
+  <data name="This message was deleted" xml:space="preserve"><value>Meddelandet togs bort</value></data>
+  <data name="The message could not be deleted." xml:space="preserve"><value>Meddelandet kunde inte tas bort.</value></data>
   <data name="Group admin" xml:space="preserve"><value>Gruppadmin</value></data>
   <data name="Remove from group" xml:space="preserve"><value>Ta bort ur gruppen</value></data>
   <data name="Remove {0} from the group" xml:space="preserve"><value>Ta bort {0} ur gruppen</value></data>

@@ -1055,6 +1055,10 @@
   <data name="Edit message" xml:space="preserve"><value>Edit message</value></data>
   <data name="Edited" xml:space="preserve"><value>Edited</value></data>
   <data name="Editing message" xml:space="preserve"><value>Editing message</value></data>
+  <data name="Delete message" xml:space="preserve"><value>Delete message</value></data>
+  <data name="Delete this message?" xml:space="preserve"><value>Delete this message?</value></data>
+  <data name="This message was deleted" xml:space="preserve"><value>This message was deleted</value></data>
+  <data name="The message could not be deleted." xml:space="preserve"><value>The message could not be deleted.</value></data>
   <data name="Group admin" xml:space="preserve"><value>Group admin</value></data>
   <data name="Remove from group" xml:space="preserve"><value>Remove from group</value></data>
   <data name="Remove {0} from the group" xml:space="preserve"><value>Remove {0} from the group</value></data>

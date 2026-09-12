@@ -8,6 +8,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Messages: delete your own message.** A bin next to the pencil on the
+  sender's own messages asks for confirmation and then takes the message
+  back: its text is wiped and its attachments removed, and the thread shows
+  a placeholder in its place, a dashed, unfilled bubble with a bin icon and
+  the italic text "This message was deleted", so nobody mistakes it for a
+  message that merely says so. Deleted messages no longer count as unread
+  or appear as a conversation's preview. Every participant gets a push, the
+  history view deletes through a plain form post, and the Portal's user log
+  records message.deleted (never the text). Also: a pasted image is ignored
+  while a message is being edited, and no other message can be opened for
+  editing while the composer is submitting.
+
 - **Content and iFrame modules in the user log.** The Content module writes
   `content_page.created`, `content_page.updated`, `content_page.enabled`,
   `content_page.disabled`, `content_page.deleted` (a slug conflict is a

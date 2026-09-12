@@ -58,7 +58,7 @@
 
                 var avatarUrl = OmpAvatarHelper.BuildUserAvatarPath(message.SenderUserId, message.SenderProfileImageStorageKey);
                 var avatarInitials = OmpAvatarHelper.GetInitials(message.SenderDisplayName);
-                <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)"
+                <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)@(message.IsDeleted ? " is-deleted" : string.Empty)"
                          style="@SenderBubbleStyle(message)"
                          data-message-id="@message.MessageId">
                     @if (!message.IsOwnMessage)
@@ -91,8 +91,36 @@
                                         data-message-edit="@message.MessageId"
                                         data-message-content="@message.Content"></button>
                             }
+                            @if (message.CanDelete)
+                            {
+                                @* A plain form, so deleting works in the history view too; the
+                                   live page intercepts it and swaps the list without a reload. *@
+                                <form method="post"
+                                      asp-page-handler="Delete"
+                                      asp-route-conversationId="@Model.Conversation?.ConversationId"
+                                      asp-route-messageId="@message.MessageId"
+                                      class="portal-message-thread__delete-form"
+                                      data-message-delete="@message.MessageId"
+                                      data-enhance="false">
+                                    <button type="submit"
+                                            class="portal-message-thread__delete"
+                                            title="@L["Delete message"]"
+                                            aria-label="@L["Delete message"]"
+                                            data-confirm="@L["Delete this message?"]"></button>
+                                </form>
+                            }
                         </div>
-                        @if (!string.IsNullOrWhiteSpace(message.Content))
+                        @if (message.IsDeleted)
+                        {
+                            @* Not text anyone wrote: an icon, italics and a muted dashed bubble
+                               (see the CSS) tell it apart from a message that says "deleted". *@
+                            <p class="portal-message-thread__deleted"
+                               title="@message.DeletedAt!.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)">
+                                <span class="portal-message-thread__deleted-icon" aria-hidden="true"></span>
+                                @L["This message was deleted"]
+                            </p>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(message.Content))
                         {
                             <p>@message.Content</p>
                         }

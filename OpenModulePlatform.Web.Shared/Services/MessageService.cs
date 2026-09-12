@@ -526,6 +526,84 @@ WHERE m.message_id = @message_id
     }
 
     /// <summary>
+    /// The sender takes a message back. The row stays, marked deleted with its
+    /// text wiped, so the thread can show "deleted" where it was; the
+    /// attachments are removed outright, since they are what takes space and
+    /// nobody may open them again. Only the sender may delete, only a text
+    /// message (system lines belong to the group), only once, and only while
+    /// still in the conversation; zero rows updated means no, whatever the
+    /// reason. Everyone in the conversation gets a push so their thread
+    /// swaps the message for the placeholder.
+    /// </summary>
+    public async Task<long> DeleteMessageAsync(int userId, long messageId, CancellationToken ct)
+    {
+        if (userId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(userId));
+        }
+
+        if (messageId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(messageId));
+        }
+
+        await RequireEnabledAsync(ct);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            throw new InvalidOperationException("OMP messages tables are not installed.");
+        }
+
+        const string sql = @"
+UPDATE m
+SET m.content = NULL,
+    m.deleted_at = SYSUTCDATETIME()
+OUTPUT INSERTED.conversation_id
+FROM omp.messages m
+INNER JOIN omp.conversation_participants cp
+        ON cp.conversation_id = m.conversation_id
+       AND cp.user_id = @user_id
+       AND cp.left_at IS NULL
+WHERE m.message_id = @message_id
+  AND m.sender_user_id = @user_id
+  AND m.message_type = N'text'
+  AND m.deleted_at IS NULL;
+
+DELETE FROM omp.message_attachments
+WHERE message_id = @message_id
+  AND EXISTS (SELECT 1 FROM omp.messages m WHERE m.message_id = @message_id AND m.deleted_at IS NOT NULL);";
+
+        long conversationId;
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        await using (var cmd = new SqlCommand(sql, conn, tx))
+        {
+            cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+            cmd.Parameters.Add("@message_id", SqlDbType.BigInt).Value = messageId;
+            var result = await cmd.ExecuteScalarAsync(ct);
+            if (result is null || result is DBNull)
+            {
+                throw new UnauthorizedAccessException("Only the sender can delete a text message.");
+            }
+
+            conversationId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+        }
+
+        await tx.CommitAsync(ct);
+
+        var participantUserIds = await GetConversationParticipantUserIdsAsync(conn, tx: null, conversationId, excludedUserId: 0, ct);
+        foreach (var participantUserId in participantUserIds)
+        {
+            await PublishPushEventBestEffortAsync(
+                CreateMessageDeletedPushEvent(participantUserId, conversationId, messageId),
+                ct);
+        }
+
+        return conversationId;
+    }
+
+    /// <summary>
     /// Takes a participant out of a group conversation. A participant may take
     /// themselves out (leave); only the group's creator, its admin, may take
     /// someone else out. When the creator leaves, the participant who joined
@@ -916,11 +994,11 @@ SELECT TOP (@limit)
        m.content,
        m.message_type,
        m.created_at,
-       m.edited_at
+       m.edited_at,
+       m.deleted_at
 FROM omp.messages m
 INNER JOIN omp.users u ON u.user_id = m.sender_user_id
 WHERE m.conversation_id = @conversation_id
-  AND m.deleted_at IS NULL
   AND (@before_message_id IS NULL OR m.message_id < @before_message_id)
 ORDER BY m.message_id DESC;";
 
@@ -947,7 +1025,8 @@ ORDER BY m.message_id DESC;";
                     rdr.GetDateTime(6),
                     rdr.GetInt32(1) == userId,
                     [],
-                    rdr.IsDBNull(7) ? null : rdr.GetDateTime(7)));
+                    rdr.IsDBNull(7) ? null : rdr.GetDateTime(7),
+                    rdr.IsDBNull(8) ? null : rdr.GetDateTime(8)));
             }
         }
 
@@ -1382,6 +1461,20 @@ ORDER BY display_name,
             correlationKey: string.Create(
                 CultureInfo.InvariantCulture,
                 $"conversation:{conversationId}"));
+
+    internal static PushEvent CreateMessageDeletedPushEvent(int userId, long conversationId, long messageId)
+        => PushEvent.ForUser(
+            userId,
+            PushEventCategory.TopBarMessageStateChanged,
+            JsonSerializer.Serialize(new
+            {
+                action = "deleted",
+                conversationId,
+                messageId
+            }),
+            deduplicationKey: string.Create(
+                CultureInfo.InvariantCulture,
+                $"message:deleted:{messageId}:user:{userId}"));
 
     internal static PushEvent CreateMessageEditedPushEvent(int userId, long conversationId, long messageId)
         => PushEvent.ForUser(
@@ -1994,12 +2087,23 @@ public sealed record MessageRow(
     DateTime CreatedAt,
     bool IsOwnMessage,
     IReadOnlyList<MessageAttachmentRow> Attachments,
-    DateTime? EditedAt = null)
+    DateTime? EditedAt = null,
+    DateTime? DeletedAt = null)
 {
     public bool IsSystem => string.Equals(MessageType, "system", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The sender took the message back: its text and attachments are gone
+    /// and the thread shows a placeholder in its place, so the others can see
+    /// that something was said and withdrawn rather than a hole.
+    /// </summary>
+    public bool IsDeleted => DeletedAt is not null;
+
     /// <summary>A text message of the caller's own, with text to change: the only thing that can be edited.</summary>
-    public bool CanEdit => IsOwnMessage && !IsSystem && !string.IsNullOrWhiteSpace(Content);
+    public bool CanEdit => IsOwnMessage && !IsSystem && !IsDeleted && !string.IsNullOrWhiteSpace(Content);
+
+    /// <summary>The sender's own message, not a system line and not already deleted.</summary>
+    public bool CanDelete => IsOwnMessage && !IsSystem && !IsDeleted;
 }
 
 public sealed record MessageAttachmentRow(

@@ -49,6 +49,45 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
     }
 
     [Fact]
+    public async Task Only_the_sender_deletes_and_a_placeholder_without_text_or_files_remains()
+    {
+        var (service, pushes) = _fixture.CreateService();
+        var anna = await _fixture.InsertUserAsync("Anna");
+        var bertil = await _fixture.InsertUserAsync("Bertil");
+        var conversationId = await service.CreateGroupConversationAsync(anna, [bertil], "Delete test", CancellationToken.None);
+        var file = new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D, 0x31 }), 0, 6, "Attachments", "note.txt")
+        {
+            Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
+            ContentType = "text/plain"
+        };
+        var messageId = await service.SendMessageAsync(anna, conversationId, "take this back", [file], CancellationToken.None);
+        var keptId = await service.SendMessageAsync(bertil, conversationId, "still here", [], CancellationToken.None);
+        pushes.Clear();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.DeleteMessageAsync(bertil, messageId, CancellationToken.None));
+        Assert.Equal(1, await _fixture.CountAttachmentsAsync(messageId));
+
+        var deleted = await service.DeleteMessageAsync(anna, messageId, CancellationToken.None);
+
+        Assert.Equal(conversationId, deleted);
+        Assert.Equal(0, await _fixture.CountAttachmentsAsync(messageId));
+        var rows = await service.GetMessagesAsync(bertil, conversationId, 10, null, CancellationToken.None);
+        Assert.Equal(2, rows.Count);
+        var placeholder = rows.Single(row => row.MessageId == messageId);
+        Assert.True(placeholder.IsDeleted);
+        Assert.Null(placeholder.Content);
+        Assert.Empty(placeholder.Attachments);
+        Assert.False(placeholder.CanEdit);
+        Assert.False(placeholder.CanDelete);
+        Assert.Equal("still here", rows.Single(row => row.MessageId == keptId).Content);
+        Assert.Equal(2, pushes.Count(p => p.PayloadJson!.Contains("\"action\":\"deleted\"", StringComparison.Ordinal)));
+
+        // Once is enough: a second delete, or an edit of the placeholder, is refused.
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.DeleteMessageAsync(anna, messageId, CancellationToken.None));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.EditMessageAsync(anna, messageId, "resurrected", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Only_the_creator_removes_others_and_the_group_hears_about_it()
     {
         var (service, pushes) = _fixture.CreateService();

@@ -123,6 +123,11 @@
             renderPending();
         });
         form.addEventListener('paste', (event) => {
+            // An edit cannot take attachments, so a pasted image is ignored
+            // while one is under way, the same as the hidden attach button.
+            if (form.dataset.editingMessageId) {
+                return;
+            }
             const pasted = Array.from(event.clipboardData?.files || [])
                 .filter((file) => file.type.startsWith('image/'));
             if (pasted.length === 0) {
@@ -163,7 +168,7 @@
         }
         if (typeof DataTransfer === 'function') {
             const transfer = new DataTransfer();
-            files.forEach((file) => transfer.items.add(file));
+            Array.from(files ?? []).forEach((file) => transfer.items.add(file));
             attachInput.files = transfer.files;
         } else {
             attachInput.value = '';
@@ -217,7 +222,7 @@
 
     scrollContainer.addEventListener('click', (event) => {
         const edit = event.target.closest('[data-message-edit]');
-        if (!edit) {
+        if (!edit || form.dataset.messageThreadSubmitting === 'true') {
             return;
         }
         enterEditMode(edit.dataset.messageEdit, edit.dataset.messageContent || '');
@@ -230,14 +235,15 @@
         }
     });
 
-    // Remove and leave are plain forms; a confirm keeps a stray click from
-    // taking someone out of the group.
-    document.querySelectorAll('button[data-confirm]').forEach((button) => {
-        button.addEventListener('click', (event) => {
-            if (!window.confirm(button.dataset.confirm)) {
-                event.preventDefault();
-            }
-        });
+    // Remove, leave and delete-message are plain forms; a confirm keeps a stray
+    // click from taking someone out of the group or a message out of the
+    // thread. Delegated: the message list is replaced on every refresh, so a
+    // listener bound per button would be gone within a minute.
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-confirm]');
+        if (button && !window.confirm(button.dataset.confirm)) {
+            event.preventDefault();
+        }
     });
 
     // Everything below is the live part (refresh, fetch send, push); the
@@ -442,6 +448,61 @@
             }
         }
     };
+
+    // Deleting a message: the per-message form is posted in the background
+    // and the returned list swapped in, the same as sending. If the message
+    // was being edited, the edit is abandoned and the draft put back.
+    const submitDelete = async (event) => {
+        const deleteForm = event.target;
+        if (!(deleteForm instanceof HTMLFormElement) || !deleteForm.hasAttribute('data-message-delete')) {
+            return;
+        }
+        event.preventDefault();
+        if (deleteForm.dataset.messageThreadSubmitting === 'true' || form.dataset.messageThreadSubmitting === 'true') {
+            return;
+        }
+
+        deleteForm.dataset.messageThreadSubmitting = 'true';
+        setComposerErrors([]);
+        try {
+            const response = await fetch(deleteForm.action, {
+                method: 'POST',
+                body: new FormData(deleteForm),
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {
+                    'Accept': 'text/html',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (response.status === 401 || response.status === 403 || response.redirected) {
+                setComposerErrors([form.dataset.deleteErrorText || 'The message could not be deleted.']);
+                return;
+            }
+
+            if (!response.ok) {
+                setComposerErrors(await readSubmitErrors(response));
+                return;
+            }
+
+            if (form.dataset.editingMessageId === deleteForm.dataset.messageDelete) {
+                exitEditMode();
+            }
+
+            if (!replaceMessages(await response.text(), { suppressSound: true })) {
+                setComposerErrors([form.dataset.deleteErrorText || 'The message could not be deleted.']);
+            }
+        } catch (error) {
+            setComposerErrors([form.dataset.deleteErrorText || 'The message could not be deleted.']);
+            if (window.console && typeof window.console.warn === 'function') {
+                window.console.warn('OMP message delete failed.', error);
+            }
+        } finally {
+            delete deleteForm.dataset.messageThreadSubmitting;
+        }
+    };
+    scrollContainer.addEventListener('submit', submitDelete);
 
     const submitMessage = async (event) => {
         event.preventDefault();

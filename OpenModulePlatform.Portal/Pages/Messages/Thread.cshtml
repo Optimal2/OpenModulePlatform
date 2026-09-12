@@ -98,6 +98,7 @@ else
                   data-refresh-url="@Url.Page("/Messages/Thread", "Messages", new { conversationId = Model.Conversation.ConversationId })"
                   data-updated-text="@L["Conversation updated"]"
                   data-send-error-text="@L["The message could not be sent."]"
+                  data-delete-error-text="@L["The message could not be deleted."]"
                   data-edit-url-template="@Url.Page("/Messages/Thread", "Edit", new { conversationId = Model.Conversation.ConversationId, messageId = 0 })"
                   data-removed-url="@Url.Page("/Messages/Index")"
                   data-enhance="false">
