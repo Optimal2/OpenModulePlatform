@@ -539,16 +539,29 @@
    for a message that merely says "deleted". */
 .portal-message-thread__message.is-deleted .portal-message-thread__bubble,
 .portal-message-thread__message.is-own.is-deleted .portal-message-thread__bubble {
+    /* One compact row: who and when, then the placeholder, wrapping only
+       when the thread is narrow. */
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    padding: 6px 12px;
     border: 1px dashed rgba(148, 163, 184, 0.7);
     background: transparent;
 }
 
-.portal-message-thread__deleted {
+/* Outranks the bubble's own paragraph rule, which keeps line breaks. */
+.portal-message-thread__bubble .portal-message-thread__deleted {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     color: var(--text-muted);
+    font-size: 0.86rem;
     font-style: italic;
+    line-height: 1.3;
+    /* The bubble's paragraphs keep line breaks; this one must not, or the
+       view file's indentation opens a gap between the icon and the text. */
+    white-space: normal;
 }
 
 .portal-message-thread__deleted-icon {
