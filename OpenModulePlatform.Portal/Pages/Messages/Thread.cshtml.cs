@@ -238,7 +238,10 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 
         try
         {
-            await _messages.DeleteMessageAsync(userId, messageId, ct);
+            // The service says which conversation the message belongs to; the
+            // posted id is only a hint, and the user log is written from the
+            // verified value.
+            conversationId = await _messages.DeleteMessageAsync(userId, messageId, ct);
             await _activityLog.WriteAsync(new ActivityEntry
             {
                 Event = "message.deleted",
@@ -262,7 +265,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         {
             return Forbid();
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(Localizer, ex.Message));
             CanUseMessages = true;

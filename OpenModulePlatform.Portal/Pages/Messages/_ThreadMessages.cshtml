@@ -78,7 +78,7 @@
                         <div class="portal-message-thread__meta">
                             <strong>@message.SenderDisplayName</strong>
                             <span>@message.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)</span>
-                            @if (message.EditedAt is { } editedAt)
+                            @if (!message.IsDeleted && message.EditedAt is { } editedAt)
                             {
                                 <span class="portal-message-thread__edited" title="@editedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)">@L["Edited"]</span>
                             }

@@ -20,7 +20,9 @@ public static class IFrameActivityLog
     /// configuration, not something the user typed, so the entry names the row
     /// by its id and display name and leaves the URL out. A principal without
     /// an OMP user id (a Windows or AD identity without an account row, or the
-    /// anonymous mode) is not a person the log can name, so nothing is written.
+    /// anonymous mode) is not a person the log can name, so an ordinary open
+    /// is not written for them; a refused open is, since a denial is worth a
+    /// record even without a name (the writer keeps it with a null user id).
     /// </summary>
     public static Task WriteOpenedAsync(
         ActivityLogWriter activityLog,
@@ -31,7 +33,7 @@ public static class IFrameActivityLog
         bool standalone,
         string outcome)
     {
-        if (OmpUserIdentity.TryGetOmpUserId(user) is null)
+        if (outcome == ActivityOutcomes.Ok && OmpUserIdentity.TryGetOmpUserId(user) is null)
         {
             return Task.CompletedTask;
         }

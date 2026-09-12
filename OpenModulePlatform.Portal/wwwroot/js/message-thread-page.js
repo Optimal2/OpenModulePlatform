@@ -379,8 +379,7 @@
         errorBanner.classList.toggle('validation-summary-valid', list.length === 0);
     };
 
-    const readSubmitErrors = async (response) => {
-        const fallback = form.dataset.sendErrorText || 'The message could not be sent.';
+    const readSubmitErrors = async (response, fallback = form.dataset.sendErrorText || 'The message could not be sent.') => {
         const contentType = response.headers.get('content-type') || '';
         if (contentType.includes('application/json')) {
             try {
@@ -482,7 +481,7 @@
             }
 
             if (!response.ok) {
-                setComposerErrors(await readSubmitErrors(response));
+                setComposerErrors(await readSubmitErrors(response, form.dataset.deleteErrorText || 'The message could not be deleted.'));
                 return;
             }
 
