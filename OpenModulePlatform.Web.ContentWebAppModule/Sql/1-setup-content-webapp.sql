@@ -180,3 +180,33 @@ BEGIN
       );
 END
 GO
+
+-- User log. Written by the module through the shared writer in
+-- OpenModulePlatform.Web.Shared.ActivityLog. The Portal's user log reads every
+-- module's ActivityLog table with one reader; keep the shape identical across
+-- modules (ActivityLogSql.CreateTableStatement is the canonical text).
+IF OBJECT_ID(N'omp_content.ActivityLog', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_content.ActivityLog
+    (
+        ActivityLogId bigint IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_content_ActivityLog PRIMARY KEY CLUSTERED,
+        LoggedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_content_ActivityLog_LoggedUtc DEFAULT (SYSUTCDATETIME()),
+        OmpUserId int NULL,
+        Entry nvarchar(max) NOT NULL CONSTRAINT CK_omp_content_ActivityLog_Entry CHECK (ISJSON(Entry) = 1)
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_omp_content_ActivityLog_LoggedUtc' AND object_id = OBJECT_ID(N'omp_content.ActivityLog'))
+BEGIN
+    CREATE INDEX IX_omp_content_ActivityLog_LoggedUtc
+    ON omp_content.ActivityLog(LoggedUtc DESC, ActivityLogId DESC);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE [name] = N'IX_omp_content_ActivityLog_OmpUserId' AND object_id = OBJECT_ID(N'omp_content.ActivityLog'))
+BEGIN
+    CREATE INDEX IX_omp_content_ActivityLog_OmpUserId
+    ON omp_content.ActivityLog(OmpUserId, LoggedUtc DESC, ActivityLogId DESC);
+END
+GO

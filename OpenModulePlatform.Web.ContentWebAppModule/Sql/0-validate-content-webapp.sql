@@ -7,7 +7,8 @@ DECLARE @Missing int = 0;
     SELECT v.SchemaName, v.TableName
     FROM (VALUES
         (N'omp_content', N'contents'),
-        (N'omp_content', N'content_role_access')
+        (N'omp_content', N'content_role_access'),
+        (N'omp_content', N'ActivityLog')
     ) AS v(SchemaName, TableName)
 )
 SELECT @Missing = @Missing + COUNT(1)
@@ -34,7 +35,11 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_content', N'content_role_access', N'content_id'),
         (N'omp_content', N'content_role_access', N'role_id'),
         (N'omp_content', N'content_role_access', N'can_read'),
-        (N'omp_content', N'content_role_access', N'can_write')
+        (N'omp_content', N'content_role_access', N'can_write'),
+        (N'omp_content', N'ActivityLog', N'ActivityLogId'),
+        (N'omp_content', N'ActivityLog', N'LoggedUtc'),
+        (N'omp_content', N'ActivityLog', N'OmpUserId'),
+        (N'omp_content', N'ActivityLog', N'Entry')
     ) AS v(SchemaName, TableName, ColumnName)
 )
 SELECT @Missing = @Missing + COUNT(1)
@@ -47,7 +52,9 @@ WHERE COL_LENGTH(required.SchemaName + N'.' + required.TableName, required.Colum
     FROM (VALUES
         (N'omp_content.contents', N'UX_omp_content_contents_app_instance_slug'),
         (N'omp_content.contents', N'IX_omp_content_contents_app_instance_enabled'),
-        (N'omp_content.content_role_access', N'IX_omp_content_content_role_access_role')
+        (N'omp_content.content_role_access', N'IX_omp_content_content_role_access_role'),
+        (N'omp_content.ActivityLog', N'IX_omp_content_ActivityLog_LoggedUtc'),
+        (N'omp_content.ActivityLog', N'IX_omp_content_ActivityLog_OmpUserId')
     ) AS v(ObjectName, IndexName)
 )
 SELECT @Missing = @Missing + COUNT(1)

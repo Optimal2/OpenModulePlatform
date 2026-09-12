@@ -5,6 +5,7 @@ using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using OpenModulePlatform.Web.ContentWebAppModule.Options;
 using OpenModulePlatform.Web.ContentWebAppModule.Pages;
 using OpenModulePlatform.Web.ContentWebAppModule.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 
@@ -15,6 +16,7 @@ public sealed class IndexModel : ContentWebAppModulePageModel
     private readonly ContentPageRepository _repo;
     private readonly HtmlContentFileLoader _htmlFileLoader;
     private readonly ServerReportDefinitionLoader _serverReportLoader;
+    private readonly ActivityLogWriter _activityLog;
 
     public IndexModel(
         IOptions<WebAppOptions> options,
@@ -22,12 +24,14 @@ public sealed class IndexModel : ContentWebAppModulePageModel
         RbacService rbac,
         ContentPageRepository repo,
         HtmlContentFileLoader htmlFileLoader,
-        ServerReportDefinitionLoader serverReportLoader)
+        ServerReportDefinitionLoader serverReportLoader,
+        ActivityLogWriter activityLog)
         : base(options, contentOptions, rbac)
     {
         _repo = repo;
         _htmlFileLoader = htmlFileLoader;
         _serverReportLoader = serverReportLoader;
+        _activityLog = activityLog;
     }
 
     public IReadOnlyList<ContentPageListRow> Rows { get; private set; } = [];
@@ -90,6 +94,17 @@ public sealed class IndexModel : ContentWebAppModulePageModel
             _serverReportLoader.ListReportKeys(),
             CurrentUserName(),
             ct);
+
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "content_files.loaded",
+            Summary = $"Loaded content files: {result.HtmlPagesAdded} HTML page(s) and {result.ServerReportPagesAdded} report page(s) added",
+            Data = new Dictionary<string, object?>
+            {
+                ["htmlPagesAdded"] = result.HtmlPagesAdded,
+                ["reportPagesAdded"] = result.ServerReportPagesAdded
+            }
+        }, User, ct);
 
         return RedirectToPage(
             "/Admin/Index",

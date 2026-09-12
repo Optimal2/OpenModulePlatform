@@ -6,6 +6,7 @@ using OpenModulePlatform.Web.ContentWebAppModule.Models;
 using OpenModulePlatform.Web.ContentWebAppModule.Options;
 using OpenModulePlatform.Web.ContentWebAppModule.Pages;
 using OpenModulePlatform.Web.ContentWebAppModule.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using System.ComponentModel.DataAnnotations;
@@ -17,6 +18,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
     private readonly ContentPageRepository _repo;
     private readonly HtmlContentFileLoader _htmlFileLoader;
     private readonly ServerReportDefinitionLoader _serverReportLoader;
+    private readonly ActivityLogWriter _activityLog;
 
     public EditModel(
         IOptions<WebAppOptions> options,
@@ -24,12 +26,14 @@ public sealed class EditModel : ContentWebAppModulePageModel
         RbacService rbac,
         ContentPageRepository repo,
         HtmlContentFileLoader htmlFileLoader,
-        ServerReportDefinitionLoader serverReportLoader)
+        ServerReportDefinitionLoader serverReportLoader,
+        ActivityLogWriter activityLog)
         : base(options, contentOptions, rbac)
     {
         _repo = repo;
         _htmlFileLoader = htmlFileLoader;
         _serverReportLoader = serverReportLoader;
+        _activityLog = activityLog;
     }
 
     [BindProperty]
@@ -141,13 +145,31 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return Page();
         }
 
+        var isCreate = Input.ContentId == Guid.Empty;
         try
         {
             var contentId = await _repo.SavePageAsync(AppInstanceId, ToSaveRequest(), CurrentUserName(), ct);
+            await WritePageEntryAsync(
+                isCreate ? "content_page.created" : "content_page.updated",
+                isCreate ? $"Created content page \"{Input.Title}\"" : $"Updated content page \"{Input.Title}\"",
+                contentId,
+                Input.Title,
+                Input.Slug,
+                ct);
             return RedirectToPage("/Admin/Edit", new { contentId, saved = "1" });
         }
         catch (InvalidOperationException ex)
         {
+            // A slug conflict or similar rule; the reason is shown to the user,
+            // never written to the log.
+            await WritePageEntryAsync(
+                isCreate ? "content_page.created" : "content_page.updated",
+                isCreate ? $"Could not create content page \"{Input.Title}\"" : $"Could not update content page \"{Input.Title}\"",
+                Input.ContentId,
+                Input.Title,
+                Input.Slug,
+                ct,
+                ActivityOutcomes.Failed);
             ModelState.AddModelError("Input.Slug", ContentWebAppTextLocalizer.Display(Localizer, ex.Message));
             return Page();
         }
@@ -162,6 +184,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
         }
 
         await _repo.SetEnabledAsync(AppInstanceId, Input.ContentId, isEnabled: true, CurrentUserName(), ct);
+        await WritePageEntryAsync("content_page.enabled", $"Enabled content page \"{Input.Title}\"", Input.ContentId, Input.Title, Input.Slug, ct);
         return RedirectToPage("/Admin/Edit", new { contentId = Input.ContentId, saved = "enabled" });
     }
 
@@ -174,6 +197,7 @@ public sealed class EditModel : ContentWebAppModulePageModel
         }
 
         await _repo.SetEnabledAsync(AppInstanceId, Input.ContentId, isEnabled: false, CurrentUserName(), ct);
+        await WritePageEntryAsync("content_page.disabled", $"Disabled content page \"{Input.Title}\"", Input.ContentId, Input.Title, Input.Slug, ct);
         return RedirectToPage("/Admin/Edit", new { contentId = Input.ContentId, saved = "disabled" });
     }
 
@@ -185,9 +209,40 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return guard;
         }
 
+        // The delete form posts only the id; the title and slug are read before
+        // the row is gone so the log can say which page it was.
+        var accessContext = await GetContentAccessContextAsync(ct);
+        var deletedRow = await _repo.GetPageForEditAsync(AppInstanceId, Input.ContentId, accessContext.RoleIds, accessContext.CanManageAll, ct);
         await _repo.DeletePageAsync(AppInstanceId, Input.ContentId, ct);
+        await WritePageEntryAsync(
+            "content_page.deleted",
+            deletedRow is null ? "Deleted content page" : $"Deleted content page \"{deletedRow.Title}\"",
+            Input.ContentId,
+            deletedRow?.Title,
+            deletedRow?.Slug,
+            ct);
         return RedirectToPage("/Admin/Index", new { saved = "deleted" });
     }
+
+    private Task WritePageEntryAsync(
+        string eventName,
+        string summary,
+        Guid contentId,
+        string? title,
+        string? slug,
+        CancellationToken ct,
+        string outcome = ActivityOutcomes.Ok)
+        => _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = eventName,
+            Summary = summary,
+            Outcome = outcome,
+            Subject = new ActivitySubject("content_page", contentId.ToString("D"), string.IsNullOrWhiteSpace(title) ? null : title),
+            Data = new Dictionary<string, object?>
+            {
+                ["slug"] = string.IsNullOrWhiteSpace(slug) ? null : slug
+            }
+        }, User, ct);
 
     private async Task<IActionResult?> PrepareAsync(string title, CancellationToken ct)
     {

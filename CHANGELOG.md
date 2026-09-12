@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Content and iFrame modules in the user log.** The Content module writes
+  `content_page.created`, `content_page.updated`, `content_page.enabled`,
+  `content_page.disabled`, `content_page.deleted` (a slug conflict is a
+  `failed` entry, without the reason text) and `content_files.loaded` to a new
+  `omp_content.ActivityLog`. The iFrame module writes `iframe_url.opened` to
+  `omp_iframe.ActivityLog` when a configured target is shown, embedded or
+  standalone, and a `denied` entry when the active role may not open it; the
+  entry names the target by its id and display name and leaves the address
+  out. Both probes demand the table, so existing installations get it on the
+  next import.
+
 - **Sign-in and sign-out in the user log.** The Auth app writes
   `session.signed_in` (naming the provider), `session.signed_out` and
   `user.registered` to a new `omp_auth.ActivityLog`, read by the Portal's user

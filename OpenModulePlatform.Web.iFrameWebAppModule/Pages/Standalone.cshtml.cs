@@ -1,5 +1,6 @@
 using OpenModulePlatform.Web.iFrameWebAppModule.Services;
 using OpenModulePlatform.Web.iFrameWebAppModule.ViewModels;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
 using OpenModulePlatform.Web.Shared.Web;
@@ -15,17 +16,20 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
     private readonly IFrameWebAppModuleRepository _repo;
     private readonly RbacService _rbac;
     private readonly ILogger<StandaloneModel> _logger;
+    private readonly ActivityLogWriter _activityLog;
 
     public StandaloneModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
         IFrameWebAppModuleRepository repo,
-        ILogger<StandaloneModel> logger)
+        ILogger<StandaloneModel> logger,
+        ActivityLogWriter activityLog)
         : base(options, rbac)
     {
         _repo = repo;
         _rbac = rbac;
         _logger = logger;
+        _activityLog = activityLog;
     }
 
     public string? SelectedUrl { get; private set; }
@@ -70,6 +74,7 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
         {
             SelectedError = T("The selected URL is not allowed for the active role.");
             Response.StatusCode = StatusCodes.Status403Forbidden;
+            await IndexModel.WriteOpenedAsync(_activityLog, User, urlId, selectedRow.DisplayName, setKey: null, standalone: true, ActivityOutcomes.Denied, ct);
             return Page();
         }
 
@@ -85,6 +90,7 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
 
         SelectedUrl = safeUrl;
         SelectedDisplayName = selectedRow.DisplayName;
+        await IndexModel.WriteOpenedAsync(_activityLog, User, urlId, selectedRow.DisplayName, setKey: null, standalone: true, ActivityOutcomes.Ok, ct);
         return Page();
     }
 }

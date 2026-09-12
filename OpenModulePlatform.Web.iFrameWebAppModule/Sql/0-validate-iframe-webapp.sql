@@ -8,7 +8,8 @@ DECLARE @Missing int = 0;
     FROM (VALUES
         (N'omp_iframe', N'urls'),
         (N'omp_iframe', N'url_sets'),
-        (N'omp_iframe', N'url_set_urls')
+        (N'omp_iframe', N'url_set_urls'),
+        (N'omp_iframe', N'ActivityLog')
     ) AS v(SchemaName, TableName)
 )
 SELECT @Missing = @Missing + COUNT(1)
@@ -30,7 +31,11 @@ WHERE OBJECT_ID(required.SchemaName + N'.' + required.TableName, N'U') IS NULL;
         (N'omp_iframe', N'url_sets', N'enabled'),
         (N'omp_iframe', N'url_set_urls', N'url_set_id'),
         (N'omp_iframe', N'url_set_urls', N'url_id'),
-        (N'omp_iframe', N'url_set_urls', N'sort_order')
+        (N'omp_iframe', N'url_set_urls', N'sort_order'),
+        (N'omp_iframe', N'ActivityLog', N'ActivityLogId'),
+        (N'omp_iframe', N'ActivityLog', N'LoggedUtc'),
+        (N'omp_iframe', N'ActivityLog', N'OmpUserId'),
+        (N'omp_iframe', N'ActivityLog', N'Entry')
     ) AS v(SchemaName, TableName, ColumnName)
 )
 SELECT @Missing = @Missing + COUNT(1)
@@ -42,7 +47,9 @@ WHERE COL_LENGTH(required.SchemaName + N'.' + required.TableName, required.Colum
     SELECT v.ObjectName, v.IndexName
     FROM (VALUES
         (N'omp_iframe.url_sets', N'UQ_omp_iframe_url_sets_set_key'),
-        (N'omp_iframe.url_set_urls', N'PK_omp_iframe_url_set_urls')
+        (N'omp_iframe.url_set_urls', N'PK_omp_iframe_url_set_urls'),
+        (N'omp_iframe.ActivityLog', N'IX_omp_iframe_ActivityLog_LoggedUtc'),
+        (N'omp_iframe.ActivityLog', N'IX_omp_iframe_ActivityLog_OmpUserId')
     ) AS v(ObjectName, IndexName)
 )
 SELECT @Missing = @Missing + COUNT(1)

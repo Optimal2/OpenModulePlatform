@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.717",
+  "repositoryVersion": "0.3.719",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -20,12 +20,12 @@
     },
     {
       "moduleKey": "iframe_webapp",
-      "definitionVersion": "0.3.90",
+      "definitionVersion": "0.3.92",
       "path": "OpenModulePlatform.Web.iFrameWebAppModule/iframe_webapp.module-definition.json"
     },
     {
       "moduleKey": "content_webapp",
-      "definitionVersion": "0.3.97",
+      "definitionVersion": "0.3.99",
       "path": "OpenModulePlatform.Web.ContentWebAppModule/content_webapp.module-definition.json"
     },
     {
@@ -204,7 +204,7 @@
       "appKey": "content_webapp_webapp",
       "packageType": "web-app",
       "targetName": "content-webapp",
-      "version": "0.3.253",
+      "version": "0.3.254",
       "projectPath": "OpenModulePlatform.Web.ContentWebAppModule",
       "relativePathTemplate": "content-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ContentWebAppModule.zip",
@@ -214,7 +214,7 @@
           "sourcePath": "OpenModulePlatform.Web.ContentWebAppModule/Packaging/appsettings.json"
         }
       ],
-      "minModuleDefinitionVersion": "0.3.68"
+      "minModuleDefinitionVersion": "0.3.99"
     },
     {
       "componentKey": "iframe-webapp",
@@ -223,11 +223,11 @@
       "appKey": "iframe_webapp_webapp",
       "packageType": "web-app",
       "targetName": "iframe-webapp",
-      "version": "0.3.245",
+      "version": "0.3.246",
       "projectPath": "OpenModulePlatform.Web.iFrameWebAppModule",
       "relativePathTemplate": "iframe-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.iFrameWebAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.59"
+      "minModuleDefinitionVersion": "0.3.92"
     },
     {
       "componentKey": "example-webapp",
