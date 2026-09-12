@@ -74,7 +74,7 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
         {
             SelectedError = T("The selected URL is not allowed for the active role.");
             Response.StatusCode = StatusCodes.Status403Forbidden;
-            await IndexModel.WriteOpenedAsync(_activityLog, User, urlId, selectedRow.DisplayName, setKey: null, standalone: true, ActivityOutcomes.Denied, ct);
+            await IFrameActivityLog.WriteOpenedAsync(_activityLog, User, urlId, selectedRow.DisplayName, setKey: null, standalone: true, ActivityOutcomes.Denied);
             return Page();
         }
 
@@ -90,7 +90,7 @@ public sealed class StandaloneModel : iFrameWebAppModulePageModel
 
         SelectedUrl = safeUrl;
         SelectedDisplayName = selectedRow.DisplayName;
-        await IndexModel.WriteOpenedAsync(_activityLog, User, urlId, selectedRow.DisplayName, setKey: null, standalone: true, ActivityOutcomes.Ok, ct);
+        await IFrameActivityLog.WriteOpenedAsync(_activityLog, User, urlId, selectedRow.DisplayName, setKey: null, standalone: true, ActivityOutcomes.Ok);
         return Page();
     }
 }

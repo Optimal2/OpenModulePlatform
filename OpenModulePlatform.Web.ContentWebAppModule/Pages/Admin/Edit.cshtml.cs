@@ -154,21 +154,20 @@ public sealed class EditModel : ContentWebAppModulePageModel
                 isCreate ? $"Created content page \"{Input.Title}\"" : $"Updated content page \"{Input.Title}\"",
                 contentId,
                 Input.Title,
-                Input.Slug,
-                ct);
+                Input.Slug);
             return RedirectToPage("/Admin/Edit", new { contentId, saved = "1" });
         }
         catch (InvalidOperationException ex)
         {
             // A slug conflict or similar rule; the reason is shown to the user,
-            // never written to the log.
+            // never written to the log. A page that was never created has no
+            // id to name, so the entry carries no subject then.
             await WritePageEntryAsync(
                 isCreate ? "content_page.created" : "content_page.updated",
                 isCreate ? $"Could not create content page \"{Input.Title}\"" : $"Could not update content page \"{Input.Title}\"",
-                Input.ContentId,
+                isCreate ? null : Input.ContentId,
                 Input.Title,
                 Input.Slug,
-                ct,
                 ActivityOutcomes.Failed);
             ModelState.AddModelError("Input.Slug", ContentWebAppTextLocalizer.Display(Localizer, ex.Message));
             return Page();
@@ -183,8 +182,15 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return guard;
         }
 
+        // The row's own title and slug, not the unsaved form text; no row, no
+        // entry, since the update then changed nothing.
+        var row = await FindPageAsync(ct);
         await _repo.SetEnabledAsync(AppInstanceId, Input.ContentId, isEnabled: true, CurrentUserName(), ct);
-        await WritePageEntryAsync("content_page.enabled", $"Enabled content page \"{Input.Title}\"", Input.ContentId, Input.Title, Input.Slug, ct);
+        if (row is not null)
+        {
+            await WritePageEntryAsync("content_page.enabled", $"Enabled content page \"{row.Title}\"", Input.ContentId, row.Title, row.Slug);
+        }
+
         return RedirectToPage("/Admin/Edit", new { contentId = Input.ContentId, saved = "enabled" });
     }
 
@@ -196,8 +202,13 @@ public sealed class EditModel : ContentWebAppModulePageModel
             return guard;
         }
 
+        var row = await FindPageAsync(ct);
         await _repo.SetEnabledAsync(AppInstanceId, Input.ContentId, isEnabled: false, CurrentUserName(), ct);
-        await WritePageEntryAsync("content_page.disabled", $"Disabled content page \"{Input.Title}\"", Input.ContentId, Input.Title, Input.Slug, ct);
+        if (row is not null)
+        {
+            await WritePageEntryAsync("content_page.disabled", $"Disabled content page \"{row.Title}\"", Input.ContentId, row.Title, row.Slug);
+        }
+
         return RedirectToPage("/Admin/Edit", new { contentId = Input.ContentId, saved = "disabled" });
     }
 
@@ -210,39 +221,51 @@ public sealed class EditModel : ContentWebAppModulePageModel
         }
 
         // The delete form posts only the id; the title and slug are read before
-        // the row is gone so the log can say which page it was.
-        var accessContext = await GetContentAccessContextAsync(ct);
-        var deletedRow = await _repo.GetPageForEditAsync(AppInstanceId, Input.ContentId, accessContext.RoleIds, accessContext.CanManageAll, ct);
+        // the row is gone so the log can say which page it was. No row (a stale
+        // form, another admin first) means nothing was deleted, and nothing is
+        // logged.
+        var deletedRow = await FindPageAsync(ct);
         await _repo.DeletePageAsync(AppInstanceId, Input.ContentId, ct);
-        await WritePageEntryAsync(
-            "content_page.deleted",
-            deletedRow is null ? "Deleted content page" : $"Deleted content page \"{deletedRow.Title}\"",
-            Input.ContentId,
-            deletedRow?.Title,
-            deletedRow?.Slug,
-            ct);
+        if (deletedRow is not null)
+        {
+            await WritePageEntryAsync("content_page.deleted", $"Deleted content page \"{deletedRow.Title}\"", Input.ContentId, deletedRow.Title, deletedRow.Slug);
+        }
+
         return RedirectToPage("/Admin/Index", new { saved = "deleted" });
     }
 
+    /// <summary>The page the posted id names, as the caller may see it; null when there is no such row.</summary>
+    private async Task<ContentPageEditRow?> FindPageAsync(CancellationToken ct)
+    {
+        var accessContext = await GetContentAccessContextAsync(ct);
+        return await _repo.GetPageForEditAsync(AppInstanceId, Input.ContentId, accessContext.RoleIds, accessContext.CanManageAll, ct);
+    }
+
+    /// <summary>
+    /// One user log entry for a content page. Written after the change has
+    /// been committed, so no cancellation token: an aborted request must not
+    /// turn a saved change into an error for the admin.
+    /// </summary>
     private Task WritePageEntryAsync(
         string eventName,
         string summary,
-        Guid contentId,
+        Guid? contentId,
         string? title,
         string? slug,
-        CancellationToken ct,
         string outcome = ActivityOutcomes.Ok)
         => _activityLog.WriteAsync(new ActivityEntry
         {
             Event = eventName,
             Summary = summary,
             Outcome = outcome,
-            Subject = new ActivitySubject("content_page", contentId.ToString("D"), string.IsNullOrWhiteSpace(title) ? null : title),
+            Subject = contentId is { } id
+                ? new ActivitySubject("content_page", id.ToString("D"), string.IsNullOrWhiteSpace(title) ? null : title)
+                : null,
             Data = new Dictionary<string, object?>
             {
                 ["slug"] = string.IsNullOrWhiteSpace(slug) ? null : slug
             }
-        }, User, ct);
+        }, User, CancellationToken.None);
 
     private async Task<IActionResult?> PrepareAsync(string title, CancellationToken ct)
     {

@@ -102,7 +102,7 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
         if (!IsAllowedForRole(selectedRow.AllowedRoles, roleContext.ActiveRoleName))
         {
             SelectedError = T("The selected URL is not allowed for the active role.");
-            await WriteOpenedAsync(_activityLog, User, selectedRow.Id, selectedRow.DisplayName, CurrentSetKey, standalone: false, ActivityOutcomes.Denied, ct);
+            await IFrameActivityLog.WriteOpenedAsync(_activityLog, User, selectedRow.Id, selectedRow.DisplayName, CurrentSetKey, standalone: false, ActivityOutcomes.Denied);
             return Page();
         }
 
@@ -118,39 +118,9 @@ public sealed class IndexModel : iFrameWebAppModulePageModel
 
         SelectedUrl = safeUrl;
         SelectedDisplayName = selectedRow.DisplayName;
-        await WriteOpenedAsync(_activityLog, User, selectedRow.Id, selectedRow.DisplayName, CurrentSetKey, standalone: false, ActivityOutcomes.Ok, ct);
+        await IFrameActivityLog.WriteOpenedAsync(_activityLog, User, selectedRow.Id, selectedRow.DisplayName, CurrentSetKey, standalone: false, ActivityOutcomes.Ok);
         return Page();
     }
-
-    /// <summary>
-    /// One user log entry per opened target: which configured URL the user saw,
-    /// or that the active role was not allowed to see it. The address itself is
-    /// configuration, not something the user typed, so the log names the row by
-    /// its id and display name and leaves the URL out.
-    /// </summary>
-    internal static Task WriteOpenedAsync(
-        ActivityLogWriter activityLog,
-        System.Security.Claims.ClaimsPrincipal user,
-        int urlId,
-        string displayName,
-        string? setKey,
-        bool standalone,
-        string outcome,
-        CancellationToken ct)
-        => activityLog.WriteAsync(new ActivityEntry
-        {
-            Event = "iframe_url.opened",
-            Summary = outcome == ActivityOutcomes.Ok
-                ? $"Opened \"{displayName}\""
-                : $"Was not allowed to open \"{displayName}\"",
-            Outcome = outcome,
-            Subject = new ActivitySubject("iframe_url", urlId.ToString(System.Globalization.CultureInfo.InvariantCulture), displayName),
-            Data = new Dictionary<string, object?>
-            {
-                ["setKey"] = setKey,
-                ["standalone"] = standalone
-            }
-        }, user, ct);
 
     internal static bool IsAllowedForRole(string? allowedRoles, string? activeRoleName)
     {

@@ -104,7 +104,7 @@ public sealed class IndexModel : ContentWebAppModulePageModel
                 ["htmlPagesAdded"] = result.HtmlPagesAdded,
                 ["reportPagesAdded"] = result.ServerReportPagesAdded
             }
-        }, User, ct);
+        }, User, CancellationToken.None);
 
         return RedirectToPage(
             "/Admin/Index",
