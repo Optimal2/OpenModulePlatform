@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using OpenModulePlatform.Auth.Localization;
 using OpenModulePlatform.Auth.Models;
 using OpenModulePlatform.Auth.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
 using System.Globalization;
@@ -33,6 +34,7 @@ public sealed class LoginModel : PageModel
     private readonly IOptions<RequestLocalizationOptions> _localizationOptions;
 
     private readonly OpenModulePlatform.Auth.Services.LoginThrottleService _loginThrottle;
+    private readonly ActivityLogWriter _activityLog;
 
     public LoginModel(
         OmpAuthRepository repository,
@@ -43,8 +45,10 @@ public sealed class LoginModel : PageModel
         OmpAuthenticationPropertiesFactory authenticationPropertiesFactory,
         OpenModulePlatform.Auth.Services.LoginThrottleService loginThrottle,
         IStringLocalizer<AuthResource> localizer,
-        IOptions<RequestLocalizationOptions> localizationOptions)
+        IOptions<RequestLocalizationOptions> localizationOptions,
+        ActivityLogWriter activityLog)
     {
+        _activityLog = activityLog;
         _repository = repository;
         _brandingService = brandingService;
         _configuration = configuration;
@@ -230,6 +234,14 @@ public sealed class LoginModel : PageModel
         }
 
         _loginThrottle.RecordSuccess(registerThrottleKey);
+        // Self-registration created the account; the sign-in that follows is logged by SignInAsync.
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "user.registered",
+            Summary = $"Registered a local account ({result.User.Provider})",
+            Subject = SubjectFor(result.User),
+            Data = new Dictionary<string, object?> { ["provider"] = result.User.Provider }
+        }, result.User.UserId, ct);
         await SignInAsync(result.User, ct);
         return RedirectToSafeReturnUrl();
     }
@@ -307,7 +319,26 @@ public sealed class LoginModel : PageModel
             OmpAuthDefaults.AuthenticationScheme,
             user.ToClaimsPrincipal(),
             properties);
+        await WriteSignedInAsync(_activityLog, user, ct);
     }
+
+    /// <summary>
+    /// One user log entry per sign-in, whatever the provider; the entry belongs
+    /// to the user who signed in and says which provider let them in.
+    /// </summary>
+    internal static Task WriteSignedInAsync(ActivityLogWriter activityLog, OmpAuthenticatedUser user, CancellationToken ct)
+        => activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "session.signed_in",
+            Summary = $"Signed in via {user.Provider}",
+            Subject = SubjectFor(user),
+            Data = new Dictionary<string, object?> { ["provider"] = user.Provider }
+        }, user.UserId, ct);
+
+    internal static ActivitySubject? SubjectFor(OmpAuthenticatedUser user)
+        => user.UserId is int userId
+            ? new ActivitySubject("user", userId.ToString(CultureInfo.InvariantCulture), user.DisplayName)
+            : null;
 
     private IActionResult RedirectToSafeReturnUrl()
         => LocalRedirect(ResolveSafeReturnUrl());

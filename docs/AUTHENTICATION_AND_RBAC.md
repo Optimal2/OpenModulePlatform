@@ -652,6 +652,16 @@ administrators can move direct `ADUser` role assignments for linked AD keys to
 the OMP user from `/admin/users/edit/{userId}`. This migration does not move
 `ADGroup` assignments.
 
+### Sign-in and sign-out in the user log
+
+The Auth app writes `session.signed_in` (with the provider that let the user
+in: local password, Windows, OIDC) and `session.signed_out` to
+`omp_auth.ActivityLog`, and `user.registered` when self-registration creates
+an account. Every entry belongs to the OMP user it concerns. A failed sign-in
+is not written: it has no user to attribute, and attempts are already
+throttled and logged by the application log. The `omp_auth` schema exists
+only for this table; the Auth app's own tables stay in the core `omp` schema.
+
 ### User log access
 
 The Portal user log at `/admin/activitylog` (the audit trail across every

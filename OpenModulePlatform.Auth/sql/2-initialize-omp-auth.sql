@@ -6,9 +6,15 @@ The Auth app is platform infrastructure rather than a user-facing module menu
 entry. HostAgent still needs a normal web-app artifact and app instance so it
 can deploy the /auth IIS application in HostAgent-first installations.
 
+The module's schema is omp_auth: its tables (users, providers, sessions) stay
+in the core omp schema, and omp_auth holds the user log the Portal reads. A
+module row must name a schema of its own, or the Portal's user log would list
+the core schema once per module that shares it.
+
 Prerequisites:
 - Run ../../sql/1-setup-openmoduleplatform.sql
 - Run ../../sql/2-initialize-openmoduleplatform.sql
+- Run 1-setup-omp-auth.sql
 */
 USE [OpenModulePlatform];
 GO
@@ -44,7 +50,7 @@ BEGIN
     UPDATE omp.Modules
     SET DisplayName = N'OMP Auth',
         ModuleType = N'WebAppModule',
-        SchemaName = N'omp',
+        SchemaName = N'omp_auth',
         Description = N'Shared OpenModulePlatform authentication web application',
         IsEnabled = 1,
         SortOrder = 90,
@@ -54,7 +60,7 @@ END
 ELSE
 BEGIN
     INSERT INTO omp.Modules(ModuleKey, DisplayName, ModuleType, SchemaName, Description, IsEnabled, SortOrder)
-    VALUES(N'omp_auth', N'OMP Auth', N'WebAppModule', N'omp', N'Shared OpenModulePlatform authentication web application', 1, 90);
+    VALUES(N'omp_auth', N'OMP Auth', N'WebAppModule', N'omp_auth', N'Shared OpenModulePlatform authentication web application', 1, 90);
 END
 
 SELECT @AuthModuleId = ModuleId FROM omp.Modules WHERE ModuleKey = N'omp_auth';

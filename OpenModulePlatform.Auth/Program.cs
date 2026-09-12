@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Auth.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
@@ -70,6 +71,15 @@ builder.Services.AddSingleton<WindowsPrincipalReader>();
 builder.Services.AddSingleton<WindowsPasswordAuthenticator>();
 builder.Services.AddScoped<OmpAuthRepository>();
 builder.Services.AddScoped<OmpAuthenticationPropertiesFactory>();
+// User log: every sign-in and sign-out goes to omp_auth.ActivityLog in the
+// shared envelope, read by the Portal's user log across modules. Only events
+// with a known OMP user are written: a failed sign-in has no user to attribute.
+builder.Services.AddOmpActivityLog(new ActivityLogOptions
+{
+    SchemaName = "omp_auth",
+    ModuleKey = "omp_auth",
+    AppKey = "omp-auth-web"
+});
 builder.Services.AddOmpCookieAuthentication(builder.Configuration);
 var oidcProviderStatus = builder.Services.AddOmpOidcAuthentication(builder.Configuration);
 var runningUnderIis = !string.IsNullOrWhiteSpace(
@@ -209,6 +219,18 @@ app.MapPost("/logout", async (
         context.User,
         authOptions.Value,
         currentOidcProviderStatus);
+
+    // Logged before the cookie goes, while the principal still names the user.
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var provider = context.User.FindFirst(OmpAuthDefaults.ProviderClaimType)?.Value;
+        await context.RequestServices.GetRequiredService<ActivityLogWriter>().WriteAsync(new ActivityEntry
+        {
+            Event = "session.signed_out",
+            Summary = string.IsNullOrWhiteSpace(provider) ? "Signed out" : $"Signed out ({provider})",
+            Data = new Dictionary<string, object?> { ["provider"] = provider, ["oidcSignOut"] = decision.SignOutOidc }
+        }, context.User, context.RequestAborted);
+    }
 
     await context.SignOutAsync(OmpAuthDefaults.AuthenticationScheme);
 

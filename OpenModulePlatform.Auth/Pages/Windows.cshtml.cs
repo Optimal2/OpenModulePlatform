@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Server.IISIntegration;
 using OpenModulePlatform.Auth.Models;
 using OpenModulePlatform.Auth.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Security;
 using System.Security.Claims;
 
@@ -16,13 +17,16 @@ public sealed class WindowsModel : PageModel
 {
     private readonly OmpAuthRepository _repository;
     private readonly OmpAuthenticationPropertiesFactory _authenticationPropertiesFactory;
+    private readonly ActivityLogWriter _activityLog;
 
     public WindowsModel(
         OmpAuthRepository repository,
-        OmpAuthenticationPropertiesFactory authenticationPropertiesFactory)
+        OmpAuthenticationPropertiesFactory authenticationPropertiesFactory,
+        ActivityLogWriter activityLog)
     {
         _repository = repository;
         _authenticationPropertiesFactory = authenticationPropertiesFactory;
+        _activityLog = activityLog;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -87,6 +91,7 @@ public sealed class WindowsModel : PageModel
             OmpAuthDefaults.AuthenticationScheme,
             user.ToClaimsPrincipal(),
             properties);
+        await LoginModel.WriteSignedInAsync(_activityLog, user, ct);
     }
 
     private IActionResult RedirectToSafeReturnUrl()

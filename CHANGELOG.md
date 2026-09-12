@@ -8,6 +8,15 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Sign-in and sign-out in the user log.** The Auth app writes
+  `session.signed_in` (naming the provider), `session.signed_out` and
+  `user.registered` to a new `omp_auth.ActivityLog`, read by the Portal's user
+  log like every other module's. The Auth module gets its own schema
+  `omp_auth` for the purpose (its tables stay in the core `omp` schema): a
+  module row must name a schema of its own, or the user log would list the
+  core schema once per module sharing it. The probe demands the table, so an
+  existing installation gets it on the next import.
+
 - **Messages: edit your own message, leave a group, and (as the group's
   creator) remove a participant.** A pencil on the sender's own text messages
   puts the text in the composer; sending rewrites the message and marks it
