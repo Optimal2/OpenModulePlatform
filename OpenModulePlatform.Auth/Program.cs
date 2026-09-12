@@ -229,7 +229,7 @@ app.MapPost("/logout", async (
             Event = "session.signed_out",
             Summary = string.IsNullOrWhiteSpace(provider) ? "Signed out" : $"Signed out ({provider})",
             Data = new Dictionary<string, object?> { ["provider"] = provider, ["oidcSignOut"] = decision.SignOutOidc }
-        }, context.User, context.RequestAborted);
+        }, context.User, CancellationToken.None);
     }
 
     await context.SignOutAsync(OmpAuthDefaults.AuthenticationScheme);

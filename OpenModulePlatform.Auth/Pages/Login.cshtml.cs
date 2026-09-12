@@ -234,14 +234,7 @@ public sealed class LoginModel : PageModel
         }
 
         _loginThrottle.RecordSuccess(registerThrottleKey);
-        // Self-registration created the account; the sign-in that follows is logged by SignInAsync.
-        await _activityLog.WriteAsync(new ActivityEntry
-        {
-            Event = "user.registered",
-            Summary = $"Registered a local account ({result.User.Provider})",
-            Subject = SubjectFor(result.User),
-            Data = new Dictionary<string, object?> { ["provider"] = result.User.Provider }
-        }, result.User.UserId, ct);
+        await SignInActivityLog.WriteRegisteredAsync(_activityLog, result.User);
         await SignInAsync(result.User, ct);
         return RedirectToSafeReturnUrl();
     }
@@ -319,26 +312,8 @@ public sealed class LoginModel : PageModel
             OmpAuthDefaults.AuthenticationScheme,
             user.ToClaimsPrincipal(),
             properties);
-        await WriteSignedInAsync(_activityLog, user, ct);
+        await SignInActivityLog.WriteSignedInAsync(_activityLog, user);
     }
-
-    /// <summary>
-    /// One user log entry per sign-in, whatever the provider; the entry belongs
-    /// to the user who signed in and says which provider let them in.
-    /// </summary>
-    internal static Task WriteSignedInAsync(ActivityLogWriter activityLog, OmpAuthenticatedUser user, CancellationToken ct)
-        => activityLog.WriteAsync(new ActivityEntry
-        {
-            Event = "session.signed_in",
-            Summary = $"Signed in via {user.Provider}",
-            Subject = SubjectFor(user),
-            Data = new Dictionary<string, object?> { ["provider"] = user.Provider }
-        }, user.UserId, ct);
-
-    internal static ActivitySubject? SubjectFor(OmpAuthenticatedUser user)
-        => user.UserId is int userId
-            ? new ActivitySubject("user", userId.ToString(CultureInfo.InvariantCulture), user.DisplayName)
-            : null;
 
     private IActionResult RedirectToSafeReturnUrl()
         => LocalRedirect(ResolveSafeReturnUrl());

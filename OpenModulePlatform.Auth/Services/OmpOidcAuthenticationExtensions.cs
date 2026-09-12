@@ -151,10 +151,9 @@ public static class OmpOidcAuthenticationExtensions
                             context.Properties,
                             user,
                             context.HttpContext.RequestAborted);
-                        await Pages.LoginModel.WriteSignedInAsync(
+                        await SignInActivityLog.WriteSignedInAsync(
                             context.HttpContext.RequestServices.GetRequiredService<OpenModulePlatform.Web.Shared.ActivityLog.ActivityLogWriter>(),
-                            user,
-                            context.HttpContext.RequestAborted);
+                            user);
                     },
                     OnAuthenticationFailed = context =>
                     {

@@ -91,7 +91,7 @@ public sealed class WindowsModel : PageModel
             OmpAuthDefaults.AuthenticationScheme,
             user.ToClaimsPrincipal(),
             properties);
-        await LoginModel.WriteSignedInAsync(_activityLog, user, ct);
+        await SignInActivityLog.WriteSignedInAsync(_activityLog, user);
     }
 
     private IActionResult RedirectToSafeReturnUrl()
