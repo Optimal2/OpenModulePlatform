@@ -151,6 +151,25 @@
     const editingStrip = form.querySelector('[data-message-thread-editing]');
     const textInput = form.querySelector('input[name="MessageContent"]');
     const attachButton = form.querySelector('.portal-message-thread__composer-button--attach');
+    const attachInput = form.querySelector('input[type="file"]');
+
+    // What the user had typed (and attached) before the pencil was pressed: put
+    // aside while a message is edited, and put back when the edit is saved or
+    // abandoned, so a half-written new message is never lost to an edit.
+    let draft = null;
+    const setAttachedFiles = (files) => {
+        if (!attachInput) {
+            return;
+        }
+        if (typeof DataTransfer === 'function') {
+            const transfer = new DataTransfer();
+            files.forEach((file) => transfer.items.add(file));
+            attachInput.files = transfer.files;
+        } else {
+            attachInput.value = '';
+        }
+        attachInput.dispatchEvent(new Event('change', { bubbles: true }));
+    };
 
     const exitEditMode = () => {
         if (!form.dataset.editingMessageId) {
@@ -165,8 +184,10 @@
             attachButton.hidden = false;
         }
         if (textInput) {
-            textInput.value = '';
+            textInput.value = draft?.text ?? '';
         }
+        setAttachedFiles(draft?.files ?? []);
+        draft = null;
         scrollContainer.querySelectorAll('.portal-message-thread__message.is-editing')
             .forEach((message) => message.classList.remove('is-editing'));
     };
@@ -175,7 +196,10 @@
         if (!editUrlTemplate || !textInput) {
             return;
         }
+        // Leaving a previous edit first puts its draft back, so the draft taken
+        // here is always the user's own text, never another message's.
         exitEditMode();
+        draft = { text: textInput.value, files: Array.from(attachInput?.files ?? []) };
         form.dataset.editingMessageId = String(messageId);
         form.setAttribute('action', editUrlTemplate.replace(/messageId=0/i, `messageId=${encodeURIComponent(messageId)}`));
         if (editingStrip) {
@@ -184,11 +208,7 @@
         if (attachButton) {
             attachButton.hidden = true;
         }
-        const attachInput = form.querySelector('input[type="file"]');
-        if (attachInput) {
-            attachInput.value = '';
-            attachInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        setAttachedFiles([]);
         textInput.value = content;
         scrollContainer.querySelector(`[data-message-id="${CSS.escape(String(messageId))}"]`)?.classList.add('is-editing');
         textInput.focus();
