@@ -3186,4 +3186,21 @@
   <data name="Only the group's creator can remove other participants." xml:space="preserve"><value>Bara gruppens skapare kan ta bort andra deltagare.</value></data>
   <data name="The participant is not part of this conversation." xml:space="preserve"><value>Deltagaren är inte med i den här konversationen.</value></data>
   <data name="You left the group, and it was removed since no one remained." xml:space="preserve"><value>Du lämnade gruppen, och den togs bort eftersom ingen var kvar.</value></data>
+  <data name="Manage group" xml:space="preserve"><value>Hantera grupp</value></data>
+  <data name="Group name" xml:space="preserve"><value>Gruppnamn</value></data>
+  <data name="Save name" xml:space="preserve"><value>Spara namn</value></data>
+  <data name="The group was renamed." xml:space="preserve"><value>Gruppen har fått ett nytt namn.</value></data>
+  <data name="Add participants" xml:space="preserve"><value>Lägg till deltagare</value></data>
+  <data name="Add to group" xml:space="preserve"><value>Lägg till i gruppen</value></data>
+  <data name="No users to add." xml:space="preserve"><value>Inga användare att lägga till.</value></data>
+  <data name="{0} was added to the group." xml:space="preserve"><value>{0} lades till i gruppen.</value></data>
+  <data name="Everyone selected is already in the group." xml:space="preserve"><value>Alla valda är redan med i gruppen.</value></data>
+  <data name="Make group admin" xml:space="preserve"><value>Gör till gruppadmin</value></data>
+  <data name="Make {0} the group admin" xml:space="preserve"><value>Gör {0} till gruppadmin</value></data>
+  <data name="Make {0} the group admin? You will no longer be the admin yourself." xml:space="preserve"><value>Gör {0} till gruppadmin? Du är då inte längre admin själv.</value></data>
+  <data name="{0} is now the group admin." xml:space="preserve"><value>{0} är nu gruppadmin.</value></data>
+  <data name="The conversation was not found." xml:space="preserve"><value>Konversationen hittades inte.</value></data>
+  <data name="Only group conversations can be changed." xml:space="preserve"><value>Bara gruppkonversationer kan ändras.</value></data>
+  <data name="The new admin must be a participant of the group." xml:space="preserve"><value>Den nya adminen måste vara deltagare i gruppen.</value></data>
+  <data name="You are already the group admin." xml:space="preserve"><value>Du är redan gruppadmin.</value></data>
 </root>

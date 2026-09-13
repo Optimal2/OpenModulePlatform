@@ -62,6 +62,21 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
     [TempData]
     public string? StatusMessage { get; set; }
 
+    /// <summary>Narrows the users the admin can add; a GET parameter so the search reloads the page.</summary>
+    [BindProperty(SupportsGet = true)]
+    [StringLength(100)]
+    public string? MemberQuery { get; set; }
+
+    [BindProperty]
+    [StringLength(200)]
+    public string? GroupTitle { get; set; }
+
+    [BindProperty]
+    public int[] AddUserIds { get; set; } = [];
+
+    /// <summary>Active OMP users not in the group, for the admin's add form.</summary>
+    public IReadOnlyList<MessageUserOption> MemberCandidates { get; private set; } = [];
+
     public async Task<IActionResult> OnGet(long conversationId, long? beforeMessageId, CancellationToken ct)
     {
         SetTitles("Messages");
@@ -84,6 +99,15 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         if (!loaded)
         {
             return Forbid();
+        }
+
+        if (IsGroupAdmin && !IsHistoryView)
+        {
+            GroupTitle = Conversation!.Title;
+            var inGroup = Conversation.Participants.Select(participant => participant.UserId).ToHashSet();
+            MemberCandidates = (await _messages.SearchUsersAsync(userId, MemberQuery, 50, ct))
+                .Where(user => !inGroup.Contains(user.UserId))
+                .ToArray();
         }
 
         return Page();
@@ -277,6 +301,141 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 
             return Page();
         }
+    }
+
+    /// <summary>The group's creator gives the group a new name, or takes it away.</summary>
+    public async Task<IActionResult> OnPostRename(long conversationId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            var title = await _messages.RenameGroupAsync(userId, conversationId, GroupTitle, ct);
+            var id = conversationId.ToString(CultureInfo.InvariantCulture);
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "conversation.renamed",
+                MessageKey = "conversation.renamed",
+                Summary = title is null
+                    ? $"Removed the name of group conversation {id}"
+                    : $"Renamed group conversation {id} to \"{title}\"",
+                Subject = new ActivitySubject("conversation", id, title),
+                Args = new Dictionary<string, object?> { ["conversationId"] = conversationId, ["title"] = title }
+            }, User, CancellationToken.None);
+            StatusMessage = T("The group was renamed.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            StatusMessage = PortalTextLocalizer.Display(Localizer, ex.Message);
+        }
+
+        return RedirectToPage("/Messages/Thread", new { conversationId });
+    }
+
+    /// <summary>The group's creator brings more users into the group.</summary>
+    public async Task<IActionResult> OnPostAddParticipants(long conversationId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
+        if (AddUserIds.Length == 0)
+        {
+            StatusMessage = T("Select users.");
+            return RedirectToPage("/Messages/Thread", new { conversationId });
+        }
+
+        try
+        {
+            var added = await _messages.AddParticipantsAsync(userId, conversationId, AddUserIds, ct);
+            if (added.Count == 0)
+            {
+                StatusMessage = T("Everyone selected is already in the group.");
+            }
+            else
+            {
+                var names = string.Join(", ", added.Select(participant => participant.DisplayName));
+                var id = conversationId.ToString(CultureInfo.InvariantCulture);
+                await _activityLog.WriteAsync(new ActivityEntry
+                {
+                    Event = "conversation.participants_added",
+                    MessageKey = "conversation.participants_added",
+                    Summary = $"Added {names} to group conversation {id}",
+                    Subject = new ActivitySubject("conversation", id),
+                    Data = new Dictionary<string, object?> { ["addedUserIds"] = added.Select(participant => participant.UserId).ToArray() },
+                    Args = new Dictionary<string, object?> { ["names"] = names, ["conversationId"] = conversationId }
+                }, User, CancellationToken.None);
+                StatusMessage = string.Format(CultureInfo.CurrentCulture, T("{0} was added to the group."), names);
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            StatusMessage = PortalTextLocalizer.Display(Localizer, ex.Message);
+        }
+
+        return RedirectToPage("/Messages/Thread", new { conversationId });
+    }
+
+    /// <summary>The group's creator hands the admin seat to another member, and keeps only an ordinary seat.</summary>
+    public async Task<IActionResult> OnPostTransferAdmin(long conversationId, int userId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var actorUserId))
+        {
+            return Forbid();
+        }
+
+        if (!await _messages.IsEnabledAsync(ct))
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            var name = await _messages.TransferGroupAdminAsync(actorUserId, conversationId, userId, ct);
+            var id = conversationId.ToString(CultureInfo.InvariantCulture);
+            await _activityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "conversation.admin_transferred",
+                MessageKey = "conversation.admin_transferred",
+                Summary = $"Group conversation {id} is now administered by {name} (#{userId})",
+                Subject = new ActivitySubject("conversation", id),
+                Data = new Dictionary<string, object?> { ["newAdminUserId"] = userId, ["handedOver"] = true },
+                Args = new Dictionary<string, object?> { ["conversationId"] = conversationId, ["name"] = name, ["userId"] = userId }
+            }, User, CancellationToken.None);
+            StatusMessage = string.Format(CultureInfo.CurrentCulture, T("{0} is now the group admin."), name);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            StatusMessage = PortalTextLocalizer.Display(Localizer, ex.Message);
+        }
+
+        return RedirectToPage("/Messages/Thread", new { conversationId });
     }
 
     /// <summary>The group's admin takes another participant out of the group.</summary>

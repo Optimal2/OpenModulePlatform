@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_auth",
-  "definitionVersion": "0.3.101",
+  "definitionVersion": "0.3.102",
   "module": {
     "displayName": "OMP Auth",
     "moduleType": "WebAppModule",
@@ -27,7 +27,7 @@
       "targetName": "omp-auth",
       "relativePathTemplate": "omp-auth/web/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.260"
+      "maxVersion": "0.3.261"
     }
   ],
   "artifactConfigurationFiles": [

@@ -202,7 +202,9 @@
     --portal-message-thread-max-height: calc(100vh - var(--app-header-height, 0px) - 60px);
     --portal-message-thread-max-height: calc(100dvh - var(--app-header-height, 0px) - 60px);
     display: grid;
-    grid-template-columns: minmax(96px, 1fr) minmax(480px, 8fr) minmax(96px, 1fr);
+    /* The identity column gets a little more room than the actions column:
+       it carries the member list and, for the group's creator, the tools. */
+    grid-template-columns: minmax(120px, 1.5fr) minmax(480px, 7.5fr) minmax(96px, 1fr);
     align-items: start;
     gap: 16px;
     min-height: var(--portal-message-thread-height);
@@ -297,6 +299,80 @@
     background: var(--surface-muted);
     color: #b91c1c;
     outline: none;
+}
+
+/* Hand over the admin seat: the badge next to the cross on each other member. */
+.portal-message-thread__participant-admin-button {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.portal-message-thread__participant-admin-button::before {
+    content: "";
+    position: absolute;
+    inset: 4px;
+    background: currentColor;
+    -webkit-mask: url("/_content/OpenModulePlatform.Web.Shared/icons/badge.svg") center / contain no-repeat;
+    mask: url("/_content/OpenModulePlatform.Web.Shared/icons/badge.svg") center / contain no-repeat;
+}
+
+.portal-message-thread__participant-admin-button:hover,
+.portal-message-thread__participant-admin-button:focus-visible {
+    background: var(--surface-muted);
+    color: var(--link-hover);
+    outline: none;
+}
+
+/* The creator's tools under the member list: rename, and add members. */
+.portal-message-thread__manage {
+    width: 100%;
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+.portal-message-thread__manage summary {
+    cursor: pointer;
+    text-align: center;
+    font-weight: 600;
+}
+
+.portal-message-thread__manage-form {
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.portal-message-thread__manage-form label {
+    display: grid;
+    gap: 4px;
+}
+
+.portal-message-thread__manage-form input {
+    min-width: 0;
+    width: 100%;
+}
+
+.portal-message-thread__manage-users {
+    max-height: 160px;
+}
+
+.portal-message-thread__manage-users label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+}
+
+.portal-message-thread__manage-users input {
+    flex: 0 0 auto;
+    width: auto;
 }
 
 .portal-message-thread__side--actions .toolbar form {

@@ -67,10 +67,74 @@ else
                                             aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["Remove {0} from the group"].Value, participant.DisplayName)"
                                             data-confirm="@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["Remove {0} from the group?"].Value, participant.DisplayName)"></button>
                                 </form>
+                                @* Handing over the admin seat: the confirm says plainly that the
+                                   creator's own rights go with it. *@
+                                <form method="post"
+                                      asp-page-handler="TransferAdmin"
+                                      asp-route-conversationId="@Model.Conversation.ConversationId"
+                                      asp-route-userId="@participant.UserId"
+                                      class="portal-message-thread__participant-remove"
+                                      data-enhance="false">
+                                    <button type="submit"
+                                            class="portal-message-thread__participant-admin-button"
+                                            title="@L["Make group admin"]"
+                                            aria-label="@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["Make {0} the group admin"].Value, participant.DisplayName)"
+                                            data-confirm="@string.Format(System.Globalization.CultureInfo.CurrentCulture, L["Make {0} the group admin? You will no longer be the admin yourself."].Value, participant.DisplayName)"></button>
+                                </form>
                             }
                         </li>
                     }
                 </ul>
+                @if (Model.IsGroupAdmin && !Model.IsHistoryView)
+                {
+                    @* The creator's tools: a new name, and more members. Plain forms;
+                       the page reloads with a status line. Open when a search just
+                       ran, so the results are not hidden behind the summary. *@
+                    <details class="portal-message-thread__manage" open="@(!string.IsNullOrWhiteSpace(Model.MemberQuery))">
+                        <summary>@L["Manage group"]</summary>
+                        <form method="post"
+                              asp-page-handler="Rename"
+                              asp-route-conversationId="@Model.Conversation.ConversationId"
+                              class="portal-message-thread__manage-form"
+                              data-enhance="false">
+                            <label>
+                                <span>@L["Group name"]</span>
+                                <input asp-for="GroupTitle" maxlength="200" autocomplete="off" />
+                            </label>
+                            <button type="submit" class="btn btn-sm">@L["Save name"]</button>
+                        </form>
+                        <form method="get" class="portal-message-thread__manage-form">
+                            <label>
+                                <span>@L["Add participants"]</span>
+                                <input asp-for="MemberQuery" type="search" placeholder="@L["Search users"]" autocomplete="off" />
+                            </label>
+                            <button type="submit" class="btn btn-sm">@L["Search"]</button>
+                        </form>
+                        <form method="post"
+                              asp-page-handler="AddParticipants"
+                              asp-route-conversationId="@Model.Conversation.ConversationId"
+                              class="portal-message-thread__manage-form"
+                              data-enhance="false">
+                            @if (Model.MemberCandidates.Count == 0)
+                            {
+                                <div class="empty-state">@L["No users to add."]</div>
+                            }
+                            else
+                            {
+                                <div class="checkbox-list portal-message-thread__manage-users">
+                                    @foreach (var user in Model.MemberCandidates)
+                                    {
+                                        <label>
+                                            <input type="checkbox" name="AddUserIds" value="@user.UserId" />
+                                            <span>@user.DisplayName</span>
+                                        </label>
+                                    }
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm">@L["Add to group"]</button>
+                            }
+                        </form>
+                    </details>
+                }
             }
             else if (!string.IsNullOrWhiteSpace(Model.Conversation.ParticipantNames))
             {

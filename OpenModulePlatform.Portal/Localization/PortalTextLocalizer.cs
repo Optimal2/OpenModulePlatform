@@ -72,6 +72,14 @@ public static partial class PortalTextLocalizer
             "OMP messages are disabled." => localizer["OMP messages are disabled."],
             "OMP user does not exist or is not active." => localizer["OMP user does not exist or is not active."],
             "Attachment content type is not allowed." => localizer["Attachment content type is not allowed."],
+            "An edited message must still contain text." => localizer["An edited message must still contain text."],
+            "Only group conversations have participants to remove." => localizer["Only group conversations have participants to remove."],
+            "The participant is not part of this conversation." => localizer["The participant is not part of this conversation."],
+            "The conversation was not found." => localizer["The conversation was not found."],
+            "Only group conversations can be changed." => localizer["Only group conversations can be changed."],
+            "The new admin must be a participant of the group." => localizer["The new admin must be a participant of the group."],
+            "You are already the group admin." => localizer["You are already the group admin."],
+            "Select users." => localizer["Select users."],
             // Dashboard widget upload service exception texts (music player
             // and blank widget JSON handlers on the dashboard).
             "Upload one MP3 file." => localizer["Upload one MP3 file."],

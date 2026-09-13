@@ -179,6 +179,106 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
     }
 
     [Fact]
+    public async Task Only_the_creator_renames_the_group_and_the_group_hears_about_it()
+    {
+        var (service, pushes) = _fixture.CreateService();
+        var anna = await _fixture.InsertUserAsync("Anna");
+        var bertil = await _fixture.InsertUserAsync("Bertil");
+        var conversationId = await service.CreateGroupConversationAsync(anna, [bertil], "Old name", CancellationToken.None);
+        pushes.Clear();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.RenameGroupAsync(bertil, conversationId, "Not mine", CancellationToken.None));
+
+        Assert.Equal("New name", await service.RenameGroupAsync(anna, conversationId, "  New name ", CancellationToken.None));
+
+        var detail = await service.GetConversationAsync(bertil, conversationId, CancellationToken.None);
+        Assert.Equal("New name", detail!.Title);
+        Assert.Equal("New name", detail.DisplayTitle);
+        var line = Assert.Single(await service.GetMessagesAsync(bertil, conversationId, 10, null, CancellationToken.None));
+        Assert.True(line.IsSystem);
+        Assert.Equal(anna, line.SenderUserId);
+        Assert.Equal("renamed the group to \"New name\"", line.Content);
+        Assert.Equal(2, pushes.Count(p => p.PayloadJson!.Contains("\"action\":\"membership\"", StringComparison.Ordinal)));
+
+        // An empty name takes the name away; the group is shown by its members again.
+        Assert.Null(await service.RenameGroupAsync(anna, conversationId, "   ", CancellationToken.None));
+        detail = await service.GetConversationAsync(bertil, conversationId, CancellationToken.None);
+        Assert.Null(detail!.Title);
+        Assert.Contains("Anna", detail.DisplayTitle, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Only_the_creator_adds_participants_and_a_returning_member_starts_at_the_end()
+    {
+        var (service, pushes) = _fixture.CreateService();
+        var anna = await _fixture.InsertUserAsync("Anna");
+        var bertil = await _fixture.InsertUserAsync("Bertil");
+        var cecilia = await _fixture.InsertUserAsync("Cecilia");
+        var conversationId = await service.CreateGroupConversationAsync(anna, [bertil], "Add test", CancellationToken.None);
+        await service.SendMessageAsync(anna, conversationId, "before Cecilia", [], CancellationToken.None);
+        pushes.Clear();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.AddParticipantsAsync(bertil, conversationId, [cecilia], CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.AddParticipantsAsync(anna, conversationId, [], CancellationToken.None));
+
+        // Bertil is already in: only Cecilia joins, and only she is announced.
+        var added = await service.AddParticipantsAsync(anna, conversationId, [cecilia, bertil], CancellationToken.None);
+        var newcomer = Assert.Single(added);
+        Assert.Equal(cecilia, newcomer.UserId);
+        Assert.Equal("Cecilia", newcomer.DisplayName);
+        Assert.False(newcomer.IsAdmin);
+
+        var detail = await service.GetConversationAsync(cecilia, conversationId, CancellationToken.None);
+        Assert.Equal(3, detail!.Participants.Count);
+        var rows = await service.GetMessagesAsync(cecilia, conversationId, 10, null, CancellationToken.None);
+        Assert.Equal("added Cecilia to the group", Assert.Single(rows, row => row.IsSystem).Content);
+        // The message from before she joined is not unread for her; the line announcing her is.
+        Assert.Equal(1, await service.GetUnreadMessageCountAsync(cecilia, CancellationToken.None));
+        Assert.Equal(3, pushes.Count(p => p.PayloadJson!.Contains("\"action\":\"membership\"", StringComparison.Ordinal)));
+
+        // Leaving and being added again reopens her row rather than adding a second one.
+        await service.RemoveParticipantAsync(cecilia, conversationId, cecilia, CancellationToken.None);
+        Assert.Single(await service.AddParticipantsAsync(anna, conversationId, [cecilia], CancellationToken.None));
+        detail = await service.GetConversationAsync(cecilia, conversationId, CancellationToken.None);
+        Assert.Equal(3, detail!.Participants.Count);
+        Assert.Single(detail.Participants, participant => participant.UserId == cecilia);
+
+        // Adding only members already in the group changes nothing.
+        Assert.Empty(await service.AddParticipantsAsync(anna, conversationId, [cecilia, bertil], CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_creator_hands_the_admin_seat_to_another_member()
+    {
+        var (service, _) = _fixture.CreateService();
+        var anna = await _fixture.InsertUserAsync("Anna");
+        var bertil = await _fixture.InsertUserAsync("Bertil");
+        var cecilia = await _fixture.InsertUserAsync("Cecilia");
+        var outsider = await _fixture.InsertUserAsync("David");
+        var conversationId = await service.CreateGroupConversationAsync(anna, [bertil, cecilia], "Transfer test", CancellationToken.None);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.TransferGroupAdminAsync(bertil, conversationId, cecilia, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.TransferGroupAdminAsync(anna, conversationId, outsider, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.TransferGroupAdminAsync(anna, conversationId, anna, CancellationToken.None));
+
+        Assert.Equal("Bertil", await service.TransferGroupAdminAsync(anna, conversationId, bertil, CancellationToken.None));
+
+        var detail = await service.GetConversationAsync(anna, conversationId, CancellationToken.None);
+        Assert.Equal(bertil, detail!.CreatedByUserId);
+        Assert.True(detail.Participants.Single(participant => participant.UserId == bertil).IsAdmin);
+        Assert.False(detail.Participants.Single(participant => participant.UserId == anna).IsAdmin);
+        var line = Assert.Single(await service.GetMessagesAsync(anna, conversationId, 10, null, CancellationToken.None));
+        Assert.True(line.IsSystem);
+        Assert.Equal(bertil, line.SenderUserId);
+        Assert.Equal("is now the group admin", line.Content);
+
+        // The seat went with the rights: Anna can no longer remove others, Bertil can.
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.RemoveParticipantAsync(anna, conversationId, cecilia, CancellationToken.None));
+        var removal = await service.RemoveParticipantAsync(bertil, conversationId, cecilia, CancellationToken.None);
+        Assert.Equal(cecilia, removal.RemovedUserId);
+    }
+
+    [Fact]
     public async Task A_direct_conversation_has_no_one_to_remove()
     {
         var (service, _) = _fixture.CreateService();

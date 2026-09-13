@@ -800,6 +800,321 @@ WHERE conversation_id = @conversation_id;";
         return removal;
     }
 
+    /// <summary>
+    /// Gives the group a new name, or takes its name away: an empty name means
+    /// the group is shown by its members' names again. Only the group's creator
+    /// may. The group is told with a system line, and everyone gets a push.
+    /// </summary>
+    /// <returns>The name as stored, null when the group has none.</returns>
+    public async Task<string?> RenameGroupAsync(int actorUserId, long conversationId, string? title, CancellationToken ct)
+    {
+        if (actorUserId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(actorUserId));
+        }
+
+        if (conversationId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(conversationId));
+        }
+
+        await RequireEnabledAsync(ct);
+        var cleanedTitle = CleanOptional(title, 200);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            throw new InvalidOperationException("OMP messages tables are not installed.");
+        }
+
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await LockGroupForCreatorAsync(conn, tx, actorUserId, conversationId, "Only the group's creator can rename the group.", ct);
+
+            const string renameSql = @"
+UPDATE omp.conversations
+SET title = @title,
+    updated_at = SYSUTCDATETIME()
+WHERE conversation_id = @conversation_id;";
+            await using (var cmd = new SqlCommand(renameSql, conn, tx))
+            {
+                cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                cmd.Parameters.Add("@title", SqlDbType.NVarChar, 200).Value = ToDbValue(cleanedTitle);
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await InsertSystemMessageAsync(conn, tx, conversationId, actorUserId,
+                cleanedTitle is null ? "removed the group's name" : $"renamed the group to \"{cleanedTitle}\"", ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        await PushMembershipChangedToAllAsync(conn, conversationId, ct);
+        return cleanedTitle;
+    }
+
+    /// <summary>
+    /// Brings more OMP users into the group. Only the group's creator may. A
+    /// user who is already in the group is skipped; one who left earlier has
+    /// their row reopened rather than a second one, and starts at the current
+    /// end of the thread so the old messages do not come back as unread. Each
+    /// newcomer is announced with a system line, and everyone, newcomers
+    /// included, gets a push.
+    /// </summary>
+    /// <returns>The users who actually joined, in the order given.</returns>
+    public async Task<IReadOnlyList<MessageParticipant>> AddParticipantsAsync(
+        int actorUserId,
+        long conversationId,
+        IEnumerable<int> userIds,
+        CancellationToken ct)
+    {
+        if (actorUserId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(actorUserId));
+        }
+
+        if (conversationId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(conversationId));
+        }
+
+        var wanted = userIds.Where(userId => userId > 0).Distinct().ToArray();
+        if (wanted.Length == 0)
+        {
+            throw new ArgumentException("Select users.", nameof(userIds));
+        }
+
+        await RequireEnabledAsync(ct);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            throw new InvalidOperationException("OMP messages tables are not installed.");
+        }
+
+        var added = new List<MessageParticipant>();
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await LockGroupForCreatorAsync(conn, tx, actorUserId, conversationId, "Only the group's creator can add participants.", ct);
+
+            const string joinSql = @"
+DECLARE @now datetime2(3) = SYSUTCDATETIME();
+DECLARE @latest bigint = (SELECT MAX(message_id) FROM omp.messages WHERE conversation_id = @conversation_id);
+IF EXISTS (SELECT 1 FROM omp.conversation_participants WHERE conversation_id = @conversation_id AND user_id = @user_id AND left_at IS NULL)
+    SELECT CAST(0 AS bit), u.display_name, @now FROM omp.users u WHERE u.user_id = @user_id;
+ELSE
+BEGIN
+    IF EXISTS (SELECT 1 FROM omp.conversation_participants WHERE conversation_id = @conversation_id AND user_id = @user_id)
+        UPDATE omp.conversation_participants
+        SET left_at = NULL,
+            joined_at = @now,
+            last_read_message_id = @latest
+        WHERE conversation_id = @conversation_id
+          AND user_id = @user_id;
+    ELSE
+        INSERT INTO omp.conversation_participants(conversation_id, user_id, joined_at, last_read_message_id)
+        VALUES(@conversation_id, @user_id, @now, @latest);
+    SELECT CAST(1 AS bit), u.display_name, @now FROM omp.users u WHERE u.user_id = @user_id;
+END";
+            foreach (var userId in wanted)
+            {
+                await RequireActiveUserAsync(conn, tx, userId, ct);
+
+                bool joined;
+                string displayName;
+                DateTime joinedAt;
+                await using (var cmd = new SqlCommand(joinSql, conn, tx))
+                {
+                    cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                    cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
+                    await using var rdr = await cmd.ExecuteReaderAsync(ct);
+                    if (!await rdr.ReadAsync(ct))
+                    {
+                        throw new InvalidOperationException("OMP user does not exist or is not active.");
+                    }
+
+                    joined = rdr.GetBoolean(0);
+                    displayName = rdr.GetString(1);
+                    joinedAt = rdr.GetDateTime(2);
+                }
+
+                if (!joined)
+                {
+                    continue;
+                }
+
+                await InsertSystemMessageAsync(conn, tx, conversationId, actorUserId, $"added {displayName} to the group", ct);
+                added.Add(new MessageParticipant(userId, displayName, joinedAt, IsAdmin: false));
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        if (added.Count > 0)
+        {
+            await PushMembershipChangedToAllAsync(conn, conversationId, ct);
+        }
+
+        return added;
+    }
+
+    /// <summary>
+    /// The creator hands the admin seat to another member and becomes an
+    /// ordinary member. Only the group's creator may, and only to someone who
+    /// is in the group. The group hears "X is now the group admin", and
+    /// everyone gets a push.
+    /// </summary>
+    /// <returns>The new admin's display name.</returns>
+    public async Task<string> TransferGroupAdminAsync(int actorUserId, long conversationId, int newAdminUserId, CancellationToken ct)
+    {
+        if (actorUserId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(actorUserId));
+        }
+
+        if (conversationId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(conversationId));
+        }
+
+        if (newAdminUserId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(newAdminUserId));
+        }
+
+        if (newAdminUserId == actorUserId)
+        {
+            throw new InvalidOperationException("You are already the group admin.");
+        }
+
+        await RequireEnabledAsync(ct);
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        if (!await MessagesTablesExistAsync(conn, ct))
+        {
+            throw new InvalidOperationException("OMP messages tables are not installed.");
+        }
+
+        string displayName;
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
+        try
+        {
+            await LockGroupForCreatorAsync(conn, tx, actorUserId, conversationId, "Only the group's creator can hand over the admin role.", ct);
+
+            const string memberSql = @"
+SELECT u.display_name
+FROM omp.conversation_participants cp
+INNER JOIN omp.users u ON u.user_id = cp.user_id
+WHERE cp.conversation_id = @conversation_id
+  AND cp.user_id = @user_id
+  AND cp.left_at IS NULL;";
+            await using (var cmd = new SqlCommand(memberSql, conn, tx))
+            {
+                cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = newAdminUserId;
+                var result = await cmd.ExecuteScalarAsync(ct);
+                if (result is null || result is DBNull)
+                {
+                    throw new InvalidOperationException("The new admin must be a participant of the group.");
+                }
+
+                displayName = (string)result;
+            }
+
+            const string transferSql = @"
+UPDATE omp.conversations
+SET created_by_user_id = @user_id,
+    updated_at = SYSUTCDATETIME()
+WHERE conversation_id = @conversation_id;";
+            await using (var cmd = new SqlCommand(transferSql, conn, tx))
+            {
+                cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = newAdminUserId;
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await InsertSystemMessageAsync(conn, tx, conversationId, newAdminUserId, "is now the group admin", ct);
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        await PushMembershipChangedToAllAsync(conn, conversationId, ct);
+        return displayName;
+    }
+
+    /// <summary>
+    /// The checks every creator-only change starts with: the actor is in the
+    /// conversation, it exists, it is a group, and the actor created it. The
+    /// conversation row is read with UPDLOCK so concurrent changes to the same
+    /// group queue up behind each other (see <see cref="RemoveParticipantAsync"/>).
+    /// </summary>
+    private static async Task LockGroupForCreatorAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        int actorUserId,
+        long conversationId,
+        string creatorOnlyMessage,
+        CancellationToken ct)
+    {
+        if (!await UserCanAccessConversationAsync(conn, tx, actorUserId, conversationId, ct))
+        {
+            throw new UnauthorizedAccessException("Only conversation participants can change the group.");
+        }
+
+        const string sql = @"
+SELECT c.conversation_type, c.created_by_user_id
+FROM omp.conversations c WITH (UPDLOCK, HOLDLOCK)
+WHERE c.conversation_id = @conversation_id;";
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+        await using var rdr = await cmd.ExecuteReaderAsync(ct);
+        if (!await rdr.ReadAsync(ct))
+        {
+            throw new InvalidOperationException("The conversation was not found.");
+        }
+
+        if (!string.Equals(rdr.GetString(0), "group", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Only group conversations can be changed.");
+        }
+
+        if (rdr.GetInt32(1) != actorUserId)
+        {
+            throw new UnauthorizedAccessException(creatorOnlyMessage);
+        }
+    }
+
+    /// <summary>Everyone in the group refreshes their list and thread, and the top bar recounts.</summary>
+    private async Task PushMembershipChangedToAllAsync(SqlConnection conn, long conversationId, CancellationToken ct)
+    {
+        var participantUserIds = await GetConversationParticipantUserIdsAsync(conn, tx: null, conversationId, excludedUserId: 0, ct);
+        foreach (var participantUserId in participantUserIds)
+        {
+            var unreadCount = await GetUnreadMessageCountAsync(conn, participantUserId, ct);
+            await PublishPushEventBestEffortAsync(
+                CreateMembershipChangedPushEvent(participantUserId, conversationId, unreadCount),
+                ct);
+        }
+    }
+
     /// <summary>A system line: what happened in the group, told by the participant it is about.</summary>
     private static async Task InsertSystemMessageAsync(
         SqlConnection conn,
