@@ -1125,6 +1125,7 @@
   <data name="Save name" xml:space="preserve"><value>Save name</value></data>
   <data name="The group was renamed." xml:space="preserve"><value>The group was renamed.</value></data>
   <data name="The group already has that name." xml:space="preserve"><value>The group already has that name.</value></data>
+  <data name="The group has no name to remove." xml:space="preserve"><value>The group has no name to remove.</value></data>
   <data name="The group's name was removed." xml:space="preserve"><value>The group's name was removed.</value></data>
   <data name="Add participants" xml:space="preserve"><value>Add participants</value></data>
   <data name="Add to group" xml:space="preserve"><value>Add to group</value></data>

@@ -326,7 +326,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
             {
                 // The field comes prefilled with the current name, so "Save name"
                 // without an edit is common: nothing happened, nothing is logged.
-                StatusMessage = T("The group already has that name.");
+                StatusMessage = rename.Title is null ? T("The group has no name to remove.") : T("The group already has that name.");
                 return RedirectToPage("/Messages/Thread", new { conversationId });
             }
 

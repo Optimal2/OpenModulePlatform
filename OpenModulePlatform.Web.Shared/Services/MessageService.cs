@@ -606,10 +606,12 @@ WHERE message_id = @message_id
     /// <summary>
     /// Takes a participant out of a group conversation. A participant may take
     /// themselves out (leave); only the group's creator, its admin, may take
-    /// someone else out. When the creator leaves, the participant who joined
-    /// earliest after them becomes the new admin, so the group is never left
-    /// without one while it has members. Each change is told to the group as a
-    /// system line, and everyone involved gets a push. When the last member
+    /// someone else out. When the creator leaves, the participant with an
+    /// active account who joined earliest after them becomes the new admin. A
+    /// group whose remaining members are all disabled keeps no admin: nobody
+    /// could have used the seat, and a member reactivated later can still read
+    /// and write, only not change the group. Each change is told to the group
+    /// as a system line, and everyone involved gets a push. When the last member
     /// leaves, the conversation is deleted with its messages and attachments:
     /// nobody could ever see it again, and the attachments are what take space.
     /// </summary>
@@ -811,6 +813,7 @@ WHERE conversation_id = @conversation_id;";
     /// saving the name it already has changes nothing and tells nobody, since
     /// system lines cannot be taken back.
     /// </summary>
+    /// <returns>The name as stored and whether it changed.</returns>
     public async Task<MessageGroupRename> RenameGroupAsync(int actorUserId, long conversationId, string? title, CancellationToken ct)
     {
         if (actorUserId <= 0)

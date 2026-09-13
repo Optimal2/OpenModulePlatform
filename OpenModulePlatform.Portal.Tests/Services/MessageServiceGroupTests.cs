@@ -287,6 +287,17 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
         Assert.Equal(cecilia, removal.NewAdminUserId);
         var detail = await service.GetConversationAsync(cecilia, conversationId, CancellationToken.None);
         Assert.Equal(cecilia, detail!.CreatedByUserId);
+
+        // With nobody active left to take the seat, the group keeps none: the
+        // row stays and nobody is announced as admin.
+        await _fixture.SetAccountStatusAsync(cecilia, 1);
+        var last = await service.RemoveParticipantAsync(cecilia, conversationId, cecilia, CancellationToken.None);
+        Assert.Null(last.NewAdminUserId);
+        Assert.False(last.ConversationDeleted);
+        await _fixture.SetAccountStatusAsync(bertil, 1);
+        detail = await service.GetConversationAsync(bertil, conversationId, CancellationToken.None);
+        Assert.Equal(cecilia, detail!.CreatedByUserId);
+        Assert.DoesNotContain(detail.Participants, participant => participant.IsAdmin);
     }
 
     [Fact]
