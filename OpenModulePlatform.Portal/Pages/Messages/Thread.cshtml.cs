@@ -321,7 +321,16 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 
         try
         {
-            var title = await _messages.RenameGroupAsync(userId, conversationId, GroupTitle, ct);
+            var rename = await _messages.RenameGroupAsync(userId, conversationId, GroupTitle, ct);
+            if (!rename.Changed)
+            {
+                // The field comes prefilled with the current name, so "Save name"
+                // without an edit is common: nothing happened, nothing is logged.
+                StatusMessage = T("The group already has that name.");
+                return RedirectToPage("/Messages/Thread", new { conversationId });
+            }
+
+            var title = rename.Title;
             var id = conversationId.ToString(CultureInfo.InvariantCulture);
             await _activityLog.WriteAsync(new ActivityEntry
             {
@@ -426,7 +435,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
                 MessageKey = "conversation.admin_transferred",
                 Summary = $"Group conversation {id} is now administered by {name} (#{userId})",
                 Subject = new ActivitySubject("conversation", id),
-                Data = new Dictionary<string, object?> { ["newAdminUserId"] = userId, ["handedOver"] = true },
+                Data = new Dictionary<string, object?> { ["newAdminUserId"] = userId },
                 Args = new Dictionary<string, object?> { ["conversationId"] = conversationId, ["name"] = name, ["userId"] = userId }
             }, User, CancellationToken.None);
             StatusMessage = string.Format(CultureInfo.CurrentCulture, T("{0} is now the group admin."), name);
@@ -544,7 +553,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
                 MessageKey = "conversation.admin_transferred",
                 Summary = $"Group conversation {conversationId} is now administered by {removal.NewAdminDisplayName} (#{newAdminUserId})",
                 Subject = new ActivitySubject("conversation", conversationId),
-                Data = new Dictionary<string, object?> { ["newAdminUserId"] = newAdminUserId, ["handedOver"] = false },
+                Data = new Dictionary<string, object?> { ["newAdminUserId"] = newAdminUserId },
                 Args = new Dictionary<string, object?> { ["conversationId"] = removal.ConversationId, ["name"] = removal.NewAdminDisplayName, ["userId"] = newAdminUserId }
             }, User, ct);
         }

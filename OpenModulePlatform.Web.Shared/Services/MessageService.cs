@@ -742,16 +742,20 @@ WHERE conversation_id = @conversation_id;";
             string? newAdminDisplayName = null;
             if (targetUserId == createdByUserId)
             {
+                // The seat goes to the earliest joiner whose account is active: a
+                // disabled account could neither use it nor give it back.
                 const string successorSql = @"
 SELECT TOP (1) cp.user_id, u.display_name
 FROM omp.conversation_participants cp
 INNER JOIN omp.users u ON u.user_id = cp.user_id
 WHERE cp.conversation_id = @conversation_id
   AND cp.left_at IS NULL
+  AND u.account_status = @active_status
 ORDER BY cp.joined_at, cp.user_id;";
                 await using (var cmd = new SqlCommand(successorSql, conn, tx))
                 {
                     cmd.Parameters.Add("@conversation_id", SqlDbType.BigInt).Value = conversationId;
+                    cmd.Parameters.Add("@active_status", SqlDbType.Int).Value = ActiveAccountStatus;
                     await using var rdr = await cmd.ExecuteReaderAsync(ct);
                     if (await rdr.ReadAsync(ct))
                     {
@@ -807,8 +811,7 @@ WHERE conversation_id = @conversation_id;";
     /// saving the name it already has changes nothing and tells nobody, since
     /// system lines cannot be taken back.
     /// </summary>
-    /// <returns>The name as stored, null when the group has none.</returns>
-    public async Task<string?> RenameGroupAsync(int actorUserId, long conversationId, string? title, CancellationToken ct)
+    public async Task<MessageGroupRename> RenameGroupAsync(int actorUserId, long conversationId, string? title, CancellationToken ct)
     {
         if (actorUserId <= 0)
         {
@@ -830,7 +833,6 @@ WHERE conversation_id = @conversation_id;";
             throw new InvalidOperationException("OMP messages tables are not installed.");
         }
 
-        var changed = false;
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
@@ -838,10 +840,9 @@ WHERE conversation_id = @conversation_id;";
             if (string.Equals(currentTitle, cleanedTitle, StringComparison.Ordinal))
             {
                 await tx.CommitAsync(ct);
-                return cleanedTitle;
+                return new MessageGroupRename(cleanedTitle, Changed: false);
             }
 
-            changed = true;
             const string renameSql = @"
 UPDATE omp.conversations
 SET title = @title,
@@ -864,12 +865,8 @@ WHERE conversation_id = @conversation_id;";
             throw;
         }
 
-        if (changed)
-        {
-            await PushMembershipChangedToAllAsync(conn, conversationId, ct);
-        }
-
-        return cleanedTitle;
+        await PushMembershipChangedToAllAsync(conn, conversationId, ct);
+        return new MessageGroupRename(cleanedTitle, Changed: true);
     }
 
     /// <summary>
@@ -2400,6 +2397,11 @@ public sealed record MessageConversationDetail(
 
 /// <param name="IsAdmin">True for the conversation's creator, who may remove other participants.</param>
 public sealed record MessageParticipant(int UserId, string DisplayName, DateTime JoinedAt, bool IsAdmin);
+
+/// <summary>What <see cref="MessageService.RenameGroupAsync"/> did.</summary>
+/// <param name="Title">The name as stored, null when the group has none.</param>
+/// <param name="Changed">False when the group already had that name and nothing was written or announced.</param>
+public sealed record MessageGroupRename(string? Title, bool Changed);
 
 /// <summary>What <see cref="MessageService.RemoveParticipantAsync"/> did.</summary>
 /// <param name="ConversationDeleted">True when the removed participant was the last one and the conversation was deleted with them.</param>

@@ -189,7 +189,9 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.RenameGroupAsync(bertil, conversationId, "Not mine", CancellationToken.None));
 
-        Assert.Equal("New name", await service.RenameGroupAsync(anna, conversationId, "  New name ", CancellationToken.None));
+        var rename = await service.RenameGroupAsync(anna, conversationId, "  New name ", CancellationToken.None);
+        Assert.Equal("New name", rename.Title);
+        Assert.True(rename.Changed);
 
         var detail = await service.GetConversationAsync(bertil, conversationId, CancellationToken.None);
         Assert.Equal("New name", detail!.Title);
@@ -202,15 +204,25 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
 
         // Saving the name it already has is a no-op: no line, no push.
         pushes.Clear();
-        Assert.Equal("New name", await service.RenameGroupAsync(anna, conversationId, "New name", CancellationToken.None));
+        var same = await service.RenameGroupAsync(anna, conversationId, "New name", CancellationToken.None);
+        Assert.Equal("New name", same.Title);
+        Assert.False(same.Changed);
         Assert.Single(await service.GetMessagesAsync(bertil, conversationId, 10, null, CancellationToken.None));
         Assert.Empty(pushes);
 
         // An empty name takes the name away; the group is shown by its members again.
-        Assert.Null(await service.RenameGroupAsync(anna, conversationId, "   ", CancellationToken.None));
+        var removed = await service.RenameGroupAsync(anna, conversationId, "   ", CancellationToken.None);
+        Assert.Null(removed.Title);
+        Assert.True(removed.Changed);
         detail = await service.GetConversationAsync(bertil, conversationId, CancellationToken.None);
         Assert.Null(detail!.Title);
         Assert.Contains("Anna", detail.DisplayTitle, StringComparison.Ordinal);
+
+        // Removing the name of a nameless group is a no-op too.
+        pushes.Clear();
+        Assert.False((await service.RenameGroupAsync(anna, conversationId, null, CancellationToken.None)).Changed);
+        Assert.Equal(2, (await service.GetMessagesAsync(bertil, conversationId, 10, null, CancellationToken.None)).Count);
+        Assert.Empty(pushes);
     }
 
     [Fact]
@@ -258,6 +270,23 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
 
         // Adding only members already in the group changes nothing.
         Assert.Empty(await service.AddParticipantsAsync(anna, conversationId, [cecilia, bertil], CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task When_the_creator_leaves_a_disabled_member_is_passed_over_for_the_seat()
+    {
+        var (service, _) = _fixture.CreateService();
+        var anna = await _fixture.InsertUserAsync("Anna");
+        var bertil = await _fixture.InsertUserAsync("Bertil");
+        var cecilia = await _fixture.InsertUserAsync("Cecilia");
+        var conversationId = await service.CreateGroupConversationAsync(anna, [bertil, cecilia], "Succession test", CancellationToken.None);
+        await _fixture.SetAccountStatusAsync(bertil, 0);
+
+        var removal = await service.RemoveParticipantAsync(anna, conversationId, anna, CancellationToken.None);
+
+        Assert.Equal(cecilia, removal.NewAdminUserId);
+        var detail = await service.GetConversationAsync(cecilia, conversationId, CancellationToken.None);
+        Assert.Equal(cecilia, detail!.CreatedByUserId);
     }
 
     [Fact]

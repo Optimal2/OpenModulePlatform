@@ -16,7 +16,8 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   back and starts at the current end of the thread, so old messages do not
   come back as unread, though the history stays readable as in any group
   chat. The seat cannot be handed to a disabled account, which could
-  neither use it nor give it back. A badge next to the
+  neither use it nor give it back, and the succession when the creator
+  leaves passes such an account over for the same reason. A badge next to the
   cross on each other member hands them the admin seat after a confirmation
   that says plainly the creator loses the admin rights themselves. Each
   change is told to the group as a system line, everyone gets a push, and

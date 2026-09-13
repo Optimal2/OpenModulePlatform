@@ -3390,6 +3390,7 @@
   <data name="Group name" xml:space="preserve"><value>Gruppnamn</value></data>
   <data name="Save name" xml:space="preserve"><value>Spara namn</value></data>
   <data name="The group was renamed." xml:space="preserve"><value>Gruppen har fått ett nytt namn.</value></data>
+  <data name="The group already has that name." xml:space="preserve"><value>Gruppen heter redan så.</value></data>
   <data name="The group's name was removed." xml:space="preserve"><value>Gruppens namn togs bort.</value></data>
   <data name="Add participants" xml:space="preserve"><value>Lägg till deltagare</value></data>
   <data name="Add to group" xml:space="preserve"><value>Lägg till i gruppen</value></data>
