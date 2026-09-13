@@ -200,6 +200,12 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
         Assert.Equal("renamed the group to \"New name\"", line.Content);
         Assert.Equal(2, pushes.Count(p => p.PayloadJson!.Contains("\"action\":\"membership\"", StringComparison.Ordinal)));
 
+        // Saving the name it already has is a no-op: no line, no push.
+        pushes.Clear();
+        Assert.Equal("New name", await service.RenameGroupAsync(anna, conversationId, "New name", CancellationToken.None));
+        Assert.Single(await service.GetMessagesAsync(bertil, conversationId, 10, null, CancellationToken.None));
+        Assert.Empty(pushes);
+
         // An empty name takes the name away; the group is shown by its members again.
         Assert.Null(await service.RenameGroupAsync(anna, conversationId, "   ", CancellationToken.None));
         detail = await service.GetConversationAsync(bertil, conversationId, CancellationToken.None);
@@ -234,14 +240,21 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
         Assert.Equal("added Cecilia to the group", Assert.Single(rows, row => row.IsSystem).Content);
         // The message from before she joined is not unread for her; the line announcing her is.
         Assert.Equal(1, await service.GetUnreadMessageCountAsync(cecilia, CancellationToken.None));
-        Assert.Equal(3, pushes.Count(p => p.PayloadJson!.Contains("\"action\":\"membership\"", StringComparison.Ordinal)));
+        Assert.Equal(
+            new int?[] { anna, bertil, cecilia }.Order(),
+            pushes.Where(p => p.PayloadJson!.Contains("\"action\":\"membership\"", StringComparison.Ordinal)).Select(p => p.TargetUserId).Order());
 
-        // Leaving and being added again reopens her row rather than adding a second one.
+        // Leaving and being added again reopens her row rather than adding a
+        // second one, and again she starts at the end: what was said while she
+        // was out is not unread, only the line announcing her return.
+        await service.MarkConversationReadAsync(cecilia, conversationId, CancellationToken.None);
         await service.RemoveParticipantAsync(cecilia, conversationId, cecilia, CancellationToken.None);
+        await service.SendMessageAsync(anna, conversationId, "while Cecilia was out", [], CancellationToken.None);
         Assert.Single(await service.AddParticipantsAsync(anna, conversationId, [cecilia], CancellationToken.None));
         detail = await service.GetConversationAsync(cecilia, conversationId, CancellationToken.None);
         Assert.Equal(3, detail!.Participants.Count);
         Assert.Single(detail.Participants, participant => participant.UserId == cecilia);
+        Assert.Equal(1, await service.GetUnreadMessageCountAsync(cecilia, CancellationToken.None));
 
         // Adding only members already in the group changes nothing.
         Assert.Empty(await service.AddParticipantsAsync(anna, conversationId, [cecilia, bertil], CancellationToken.None));
@@ -260,6 +273,11 @@ public sealed class MessageServiceGroupTests : IClassFixture<MessageServiceTestF
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.TransferGroupAdminAsync(bertil, conversationId, cecilia, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.TransferGroupAdminAsync(anna, conversationId, outsider, CancellationToken.None));
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.TransferGroupAdminAsync(anna, conversationId, anna, CancellationToken.None));
+
+        // A disabled member could neither use the seat nor give it back.
+        await _fixture.SetAccountStatusAsync(cecilia, 0);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.TransferGroupAdminAsync(anna, conversationId, cecilia, CancellationToken.None));
+        await _fixture.SetAccountStatusAsync(cecilia, 1);
 
         Assert.Equal("Bertil", await service.TransferGroupAdminAsync(anna, conversationId, bertil, CancellationToken.None));
 
@@ -336,6 +354,16 @@ public sealed class MessageServiceTestFixture : IAsyncLifetime
         await using var cmd = new SqlCommand("SELECT COUNT(1) FROM omp.message_attachments WHERE message_id = @id;", conn);
         cmd.Parameters.AddWithValue("@id", messageId);
         return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    public async Task SetAccountStatusAsync(int userId, int accountStatus)
+    {
+        await using var conn = new SqlConnection(ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand("UPDATE omp.users SET account_status = @status WHERE user_id = @id;", conn);
+        cmd.Parameters.AddWithValue("@status", accountStatus);
+        cmd.Parameters.AddWithValue("@id", userId);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task<int> InsertUserAsync(string displayName)

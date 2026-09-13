@@ -803,7 +803,9 @@ WHERE conversation_id = @conversation_id;";
     /// <summary>
     /// Gives the group a new name, or takes its name away: an empty name means
     /// the group is shown by its members' names again. Only the group's creator
-    /// may. The group is told with a system line, and everyone gets a push.
+    /// may. The group is told with a system line, and everyone gets a push;
+    /// saving the name it already has changes nothing and tells nobody, since
+    /// system lines cannot be taken back.
     /// </summary>
     /// <returns>The name as stored, null when the group has none.</returns>
     public async Task<string?> RenameGroupAsync(int actorUserId, long conversationId, string? title, CancellationToken ct)
@@ -828,11 +830,18 @@ WHERE conversation_id = @conversation_id;";
             throw new InvalidOperationException("OMP messages tables are not installed.");
         }
 
+        var changed = false;
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
         try
         {
-            await LockGroupForCreatorAsync(conn, tx, actorUserId, conversationId, "Only the group's creator can rename the group.", ct);
+            var currentTitle = await LockGroupForCreatorAsync(conn, tx, actorUserId, conversationId, "Only the group's creator can rename the group.", ct);
+            if (string.Equals(currentTitle, cleanedTitle, StringComparison.Ordinal))
+            {
+                await tx.CommitAsync(ct);
+                return cleanedTitle;
+            }
 
+            changed = true;
             const string renameSql = @"
 UPDATE omp.conversations
 SET title = @title,
@@ -855,7 +864,11 @@ WHERE conversation_id = @conversation_id;";
             throw;
         }
 
-        await PushMembershipChangedToAllAsync(conn, conversationId, ct);
+        if (changed)
+        {
+            await PushMembershipChangedToAllAsync(conn, conversationId, ct);
+        }
+
         return cleanedTitle;
     }
 
@@ -863,7 +876,9 @@ WHERE conversation_id = @conversation_id;";
     /// Brings more OMP users into the group. Only the group's creator may. A
     /// user who is already in the group is skipped; one who left earlier has
     /// their row reopened rather than a second one, and starts at the current
-    /// end of the thread so the old messages do not come back as unread. Each
+    /// end of the thread so the old messages do not come back as unread. The
+    /// thread itself is not cut at the join: a member, new or returning, can
+    /// scroll back through everything said before, as in any group chat. Each
     /// newcomer is announced with a system line, and everyone, newcomers
     /// included, gets a push.
     /// </summary>
@@ -1014,6 +1029,9 @@ END";
         try
         {
             await LockGroupForCreatorAsync(conn, tx, actorUserId, conversationId, "Only the group's creator can hand over the admin role.", ct);
+            // A disabled account could neither use the seat nor give it back, and
+            // the group would be stuck without anyone able to change it.
+            await RequireActiveUserAsync(conn, tx, newAdminUserId, ct);
 
             const string memberSql = @"
 SELECT u.display_name
@@ -1066,7 +1084,8 @@ WHERE conversation_id = @conversation_id;";
     /// conversation row is read with UPDLOCK so concurrent changes to the same
     /// group queue up behind each other (see <see cref="RemoveParticipantAsync"/>).
     /// </summary>
-    private static async Task LockGroupForCreatorAsync(
+    /// <returns>The group's current title, null when it has none.</returns>
+    private static async Task<string?> LockGroupForCreatorAsync(
         SqlConnection conn,
         SqlTransaction tx,
         int actorUserId,
@@ -1080,7 +1099,7 @@ WHERE conversation_id = @conversation_id;";
         }
 
         const string sql = @"
-SELECT c.conversation_type, c.created_by_user_id
+SELECT c.conversation_type, c.created_by_user_id, c.title
 FROM omp.conversations c WITH (UPDLOCK, HOLDLOCK)
 WHERE c.conversation_id = @conversation_id;";
         await using var cmd = new SqlCommand(sql, conn, tx);
@@ -1100,6 +1119,8 @@ WHERE c.conversation_id = @conversation_id;";
         {
             throw new UnauthorizedAccessException(creatorOnlyMessage);
         }
+
+        return rdr.IsDBNull(2) ? null : rdr.GetString(2);
     }
 
     /// <summary>Everyone in the group refreshes their list and thread, and the top bar recounts.</summary>

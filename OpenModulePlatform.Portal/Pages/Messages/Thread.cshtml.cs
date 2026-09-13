@@ -16,6 +16,9 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 {
     private const string MessagesPartialName = "_ThreadMessages";
 
+    /// <summary>How many users one search for members to add shows, and how many one add accepts.</summary>
+    private const int MemberSearchLimit = 50;
+
     private readonly MessageService _messages;
     private readonly ActivityLogWriter _activityLog;
 
@@ -105,7 +108,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
         {
             GroupTitle = Conversation!.Title;
             var inGroup = Conversation.Participants.Select(participant => participant.UserId).ToHashSet();
-            MemberCandidates = (await _messages.SearchUsersAsync(userId, MemberQuery, 50, ct))
+            MemberCandidates = (await _messages.SearchUsersAsync(userId, MemberQuery, MemberSearchLimit, ct))
                 .Where(user => !inGroup.Contains(user.UserId))
                 .ToArray();
         }
@@ -330,7 +333,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
                 Subject = new ActivitySubject("conversation", id, title),
                 Args = new Dictionary<string, object?> { ["conversationId"] = conversationId, ["title"] = title }
             }, User, CancellationToken.None);
-            StatusMessage = T("The group was renamed.");
+            StatusMessage = title is null ? T("The group's name was removed.") : T("The group was renamed.");
         }
         catch (UnauthorizedAccessException)
         {
@@ -365,7 +368,9 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
 
         try
         {
-            var added = await _messages.AddParticipantsAsync(userId, conversationId, AddUserIds, ct);
+            // The form offers at most as many users as one search shows; a
+            // hand-built post gets the same ceiling.
+            var added = await _messages.AddParticipantsAsync(userId, conversationId, AddUserIds.Take(MemberSearchLimit), ct);
             if (added.Count == 0)
             {
                 StatusMessage = T("Everyone selected is already in the group.");
@@ -539,7 +544,7 @@ public sealed class ThreadModel : OmpSecurePageModel<PortalResource>
                 MessageKey = "conversation.admin_transferred",
                 Summary = $"Group conversation {conversationId} is now administered by {removal.NewAdminDisplayName} (#{newAdminUserId})",
                 Subject = new ActivitySubject("conversation", conversationId),
-                Data = new Dictionary<string, object?> { ["newAdminUserId"] = newAdminUserId },
+                Data = new Dictionary<string, object?> { ["newAdminUserId"] = newAdminUserId, ["handedOver"] = false },
                 Args = new Dictionary<string, object?> { ["conversationId"] = removal.ConversationId, ["name"] = removal.NewAdminDisplayName, ["userId"] = newAdminUserId }
             }, User, ct);
         }

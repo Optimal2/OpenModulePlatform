@@ -11,9 +11,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 - **Messages: the group's creator can rename the group, add members and
   hand over the admin seat.** A "Manage group" section under the member
   list holds a name field (an empty name shows the group by its members
-  again) and a user search with checkboxes for adding members; someone who
-  left earlier gets their seat back and starts at the current end of the
-  thread, so old messages do not come back as unread. A badge next to the
+  again; saving an unchanged name tells nobody) and a user search with
+  checkboxes for adding members; someone who left earlier gets their seat
+  back and starts at the current end of the thread, so old messages do not
+  come back as unread, though the history stays readable as in any group
+  chat. The seat cannot be handed to a disabled account, which could
+  neither use it nor give it back. A badge next to the
   cross on each other member hands them the admin seat after a confirmation
   that says plainly the creator loses the admin rights themselves. Each
   change is told to the group as a system line, everyone gets a push, and
