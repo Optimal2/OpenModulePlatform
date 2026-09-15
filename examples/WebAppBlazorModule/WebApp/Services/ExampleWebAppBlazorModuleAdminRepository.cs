@@ -121,7 +121,8 @@ WHERE ConfigId = @configId
         };
     }
 
-    public async Task UpdateConfigurationAsync(
+    /// <returns>True when the configuration existed and was updated; false when no row matched.</returns>
+    public async Task<bool> UpdateConfigurationAsync(
         ModuleConfigId configId,
         string configJson,
         string? comment,
@@ -145,6 +146,6 @@ WHERE ConfigId = @configId
         cmd.Parameters.AddWithValue("@configJson", configJson);
         cmd.Parameters.AddWithValue("@comment", (object?)comment ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@actor", actor);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 }

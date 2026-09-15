@@ -4,6 +4,7 @@
 @using OpenModulePlatform.Web.Shared.Configuration
 @inherits ExampleWebAppBlazorModuleComponentBase
 @using OpenModulePlatform.Web.Shared.ActivityLog
+@using OpenModulePlatform.Web.Shared.Security
 @inject ExampleWebAppBlazorModuleAdminRepository Repo
 @inject ActivityLogWriter ActivityLog
 
@@ -104,22 +105,32 @@ else
             return;
         }
 
-        await Repo.UpdateConfigurationAsync(
+        var updated = await Repo.UpdateConfigurationAsync(
             Input.ConfigId,
             Input.ConfigJson,
             Input.Comment,
             CurrentUserName,
             CancellationToken.None);
+        if (!updated)
+        {
+            ShowNotFoundError(L["The configuration was not found."].Value);
+            return;
+        }
 
         // The user log says that the configuration was saved and which one,
         // never what it contains or what the comment said. The principal comes
-        // from the cascading authentication state the component base resolved.
-        await ActivityLog.WriteAsync(new ActivityEntry
+        // from the cascading authentication state the component base resolved;
+        // an anonymous save (development mode) is not a person the log can
+        // name, so nothing is written then.
+        if (OmpUserIdentity.TryGetOmpUserId(CurrentUser) is not null)
         {
-            Event = "configuration.saved",
-            Summary = $"Saved configuration {Input.ConfigId.Value}",
-            Subject = new ActivitySubject("configuration", Input.ConfigId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
-        }, CurrentUser, CancellationToken.None);
+            await ActivityLog.WriteAsync(new ActivityEntry
+            {
+                Event = "configuration.saved",
+                Summary = $"Saved configuration {Input.ConfigId.Value}",
+                Subject = new ActivitySubject("configuration", Input.ConfigId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            }, CurrentUser, CancellationToken.None);
+        }
 
         StatusMessage = L["Configuration updated."];
     }

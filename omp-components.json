@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.729",
+  "repositoryVersion": "0.3.731",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -30,12 +30,12 @@
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.96",
+      "definitionVersion": "0.3.97",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
       "moduleKey": "example_webapp_blazor",
-      "definitionVersion": "0.3.96",
+      "definitionVersion": "0.3.97",
       "path": "examples/WebAppBlazorModule/example_webapp_blazor.module-definition.json"
     },
     {
@@ -236,7 +236,7 @@
       "appKey": "example_webapp_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp",
-      "version": "0.3.248",
+      "version": "0.3.249",
       "projectPath": "examples/WebAppModule/WebApp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppModule.zip",
@@ -249,7 +249,7 @@
       "appKey": "example_webapp_blazor_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp-blazor",
-      "version": "0.3.250",
+      "version": "0.3.251",
       "projectPath": "examples/WebAppBlazorModule/WebApp",
       "relativePathTemplate": "example-webapp-blazor/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppBlazorModule.zip",

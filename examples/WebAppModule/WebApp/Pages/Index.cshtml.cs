@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Web.ExampleWebAppModule/Pages/Index.cshtml.cs
 using OpenModulePlatform.Web.ExampleWebAppModule.Services;
 using OpenModulePlatform.Web.Shared.ActivityLog;
+using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.ExampleWebAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
@@ -76,7 +77,7 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
             return RedirectToPage();
         }
 
-        await _notifications.CreateForUserAsync(
+        var notificationId = await _notifications.CreateForUserAsync(
             userId.Value,
             new NotificationCreateRequest(
                 Title: T("Test notification"),
@@ -88,10 +89,12 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
                 CallerIcon: "/_content/OpenModulePlatform.Web.Shared/icons/notifications.svg"),
             ct);
 
+        // The OMP user id is known here (checked above), so the entry always has a person.
         await _activityLog.WriteAsync(new ActivityEntry
         {
             Event = "test_notification.sent",
-            Summary = "Sent a test notification to themselves"
+            Summary = $"Sent test notification {notificationId} to themselves",
+            Subject = new ActivitySubject("test_notification", notificationId.ToString(System.Globalization.CultureInfo.InvariantCulture))
         }, User, CancellationToken.None);
         StatusMessage = T("Notification sent");
         return RedirectToPage();
@@ -157,7 +160,7 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
             return guard;
         }
 
-        await _banners.CreateAsync(
+        var bannerId = await _banners.CreateAsync(
             new BannerCreateRequest(
                 Title: title,
                 Content: content,
@@ -169,17 +172,23 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
             ct);
 
         // Which kind of banner went where; the banner text is a fixed demo
-        // string, so nothing of it needs to be in the log.
-        await _activityLog.WriteAsync(new ActivityEntry
+        // string, so nothing of it needs to be in the log. Only for a signed-in
+        // OMP user: an anonymous send (development mode) is not a person the
+        // log can name.
+        if (OmpUserIdentity.TryGetOmpUserId(User) is not null)
         {
-            Event = "banner.sent",
-            Summary = $"Sent a level {level} test banner to {targets.Count} target(s)",
-            Data = new Dictionary<string, object?>
+            await _activityLog.WriteAsync(new ActivityEntry
             {
-                ["level"] = level,
-                ["targets"] = targets.Select(target => target.TargetType).Distinct().ToArray()
-            }
-        }, User, CancellationToken.None);
+                Event = "banner.sent",
+                Summary = $"Sent level {level} test banner {bannerId} to {targets.Count} target(s)",
+                Subject = new ActivitySubject("banner", bannerId.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                Data = new Dictionary<string, object?>
+                {
+                    ["level"] = level,
+                    ["targets"] = targets.Select(target => target.TargetType).Distinct().ToArray()
+                }
+            }, User, CancellationToken.None);
+        }
         StatusMessage = T("Banner sent");
         return RedirectToPage();
     }
