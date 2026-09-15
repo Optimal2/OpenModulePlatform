@@ -133,7 +133,8 @@ ORDER BY h.HostKey, ai.AppInstanceKey;";
         return rows.FirstOrDefault(x => x.AppInstanceId == appInstanceId);
     }
 
-    public async Task UpdateAppInstanceAsync(
+    /// <returns>True when the app instance existed and was updated; false when no row matched.</returns>
+    public async Task<bool> UpdateAppInstanceAsync(
         Guid appInstanceId,
         bool isAllowed,
         byte desiredState,
@@ -163,7 +164,7 @@ WHERE ai.AppInstanceId = @appInstanceId
         cmd.Parameters.AddWithValue("@desiredState", desiredState);
         cmd.Parameters.AddWithValue("@configId", (object?)configId?.ToNullable() ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@artifactId", (object?)artifactId ?? DBNull.Value);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
 
         const string auditSql = @"
 INSERT INTO omp.AuditLog(Actor, Action, TargetType, TargetId, BeforeJson, AfterJson)
@@ -267,7 +268,8 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         };
     }
 
-    public async Task UpdateConfigurationAsync(ModuleConfigId configId, string configJson, string? comment, string actor, CancellationToken ct)
+    /// <returns>True when the configuration existed and was updated; false when no row matched.</returns>
+    public async Task<bool> UpdateConfigurationAsync(ModuleConfigId configId, string configJson, string? comment, string actor, CancellationToken ct)
     {
         const string sql = @"
 UPDATE omp_example_serviceapp.Configurations
@@ -284,7 +286,7 @@ WHERE ConfigId = @configId AND VersionNo = 0;";
         cmd.Parameters.AddWithValue("@configJson", configJson);
         cmd.Parameters.AddWithValue("@comment", (object?)comment ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@actor", actor);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
     public async Task<IReadOnlyList<JobRow>> GetJobsAsync(CancellationToken ct)
@@ -317,10 +319,12 @@ ORDER BY JobId DESC;";
         return rows;
     }
 
-    public async Task EnqueueJobAsync(string requestType, string payloadJson, string actor, CancellationToken ct)
+    /// <returns>The id of the queued job.</returns>
+    public async Task<long> EnqueueJobAsync(string requestType, string payloadJson, string actor, CancellationToken ct)
     {
         const string sql = @"
 INSERT INTO omp_example_serviceapp.Jobs(RequestType, PayloadJson, Status, RequestedUtc, RequestedBy, UpdatedUtc)
+OUTPUT INSERTED.JobId
 VALUES(@requestType, @payloadJson, 0, SYSUTCDATETIME(), @actor, SYSUTCDATETIME());";
 
         await using var conn = _db.Create();
@@ -329,6 +333,6 @@ VALUES(@requestType, @payloadJson, 0, SYSUTCDATETIME(), @actor, SYSUTCDATETIME()
         cmd.Parameters.AddWithValue("@requestType", requestType);
         cmd.Parameters.AddWithValue("@payloadJson", payloadJson);
         cmd.Parameters.AddWithValue("@actor", actor);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 }

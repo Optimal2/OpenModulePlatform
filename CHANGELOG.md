@@ -8,6 +8,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **The service and worker examples' web apps write to the user log.** Each
+  records `configuration.saved`, `app_instance.saved` (allowed flag, desired
+  state, configuration and artifact ids) and `job.queued` (request type,
+  never the payload) in a new `ActivityLog` table in its own schema; the
+  service and the worker themselves are not persons and write nothing. A
+  save of a missing row answers not found instead of a green message, and
+  the queued job's id comes back from the insert so the entry can name it.
+
 - **The two example web modules write to the user log.** The Razor example
   records `configuration.saved`, `test_notification.sent` and `banner.sent`
   (level and target kinds, never the text), the Blazor example

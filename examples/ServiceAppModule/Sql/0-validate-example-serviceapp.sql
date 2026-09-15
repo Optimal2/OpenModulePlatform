@@ -44,6 +44,35 @@ BEGIN
         THEN 0 ELSE 1 END;
 END;
 
+-- The user log table, its columns and both indexes: an installation from
+-- before it gets them on the next import.
+IF OBJECT_ID(N'omp_example_serviceapp.ActivityLog', N'U') IS NULL
+    SELECT @Missing = @Missing + 1;
+
+;WITH RequiredLogColumns(ColumnName) AS
+(
+    SELECT v.ColumnName
+    FROM (VALUES (N'ActivityLogId'), (N'LoggedUtc'), (N'OmpUserId'), (N'Entry')) AS v(ColumnName)
+)
+SELECT @Missing = @Missing + COUNT(1)
+FROM RequiredLogColumns required
+WHERE COL_LENGTH(N'omp_example_serviceapp.ActivityLog', required.ColumnName) IS NULL;
+
+;WITH RequiredLogIndexes(IndexName) AS
+(
+    SELECT v.IndexName
+    FROM (VALUES (N'IX_omp_example_serviceapp_ActivityLog_LoggedUtc'), (N'IX_omp_example_serviceapp_ActivityLog_OmpUserId')) AS v(IndexName)
+)
+SELECT @Missing = @Missing + COUNT(1)
+FROM RequiredLogIndexes required
+WHERE NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes idx
+    WHERE idx.object_id = OBJECT_ID(N'omp_example_serviceapp.ActivityLog')
+      AND idx.name = required.IndexName
+);
+
 SELECT
     CAST(CASE WHEN @Missing = 0 THEN 1 ELSE 0 END AS bit) AS IsHealthy,
     CASE
