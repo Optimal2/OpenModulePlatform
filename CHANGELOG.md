@@ -8,6 +8,15 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **The two example web modules write to the user log.** The Razor example
+  records `configuration.saved`, `test_notification.sent` and `banner.sent`
+  (level and target kinds, never the text), the Blazor example
+  `configuration.saved` from its edit component using the cascading
+  authentication state; each in a new `ActivityLog` table in its own
+  schema, demanded by the probe so existing installations get it on the
+  next import. Together they serve as the reference for wiring a Razor
+  Pages module and a Blazor module into the user log.
+
 - **Messages: the group's creator can rename the group, add members and
   hand over the admin seat.** A "Manage group" section under the member
   list holds a name field (an empty name shows the group by its members

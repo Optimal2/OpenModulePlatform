@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Web.ExampleWebAppModule/Pages/Index.cshtml.cs
 using OpenModulePlatform.Web.ExampleWebAppModule.Services;
+using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.ExampleWebAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
@@ -15,6 +16,7 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
     private readonly NotificationService _notifications;
     private readonly BannerService _banners;
     private readonly ILogger<IndexModel> _logger;
+    private readonly ActivityLogWriter _activityLog;
 
     public IndexModel(
         IOptions<WebAppOptions> options,
@@ -22,13 +24,15 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
         ExampleWebAppModuleAdminRepository repo,
         NotificationService notifications,
         BannerService banners,
-        ILogger<IndexModel> logger)
+        ILogger<IndexModel> logger,
+        ActivityLogWriter activityLog)
         : base(options, rbac)
     {
         _repo = repo;
         _notifications = notifications;
         _banners = banners;
         _logger = logger;
+        _activityLog = activityLog;
     }
 
     public OverviewRow Overview { get; private set; } = new();
@@ -84,6 +88,11 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
                 CallerIcon: "/_content/OpenModulePlatform.Web.Shared/icons/notifications.svg"),
             ct);
 
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "test_notification.sent",
+            Summary = "Sent a test notification to themselves"
+        }, User, CancellationToken.None);
         StatusMessage = T("Notification sent");
         return RedirectToPage();
     }
@@ -159,6 +168,18 @@ public sealed class IndexModel : ExampleWebAppModulePageModel
             targets,
             ct);
 
+        // Which kind of banner went where; the banner text is a fixed demo
+        // string, so nothing of it needs to be in the log.
+        await _activityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "banner.sent",
+            Summary = $"Sent a level {level} test banner to {targets.Count} target(s)",
+            Data = new Dictionary<string, object?>
+            {
+                ["level"] = level,
+                ["targets"] = targets.Select(target => target.TargetType).Distinct().ToArray()
+            }
+        }, User, CancellationToken.None);
         StatusMessage = T("Banner sent");
         return RedirectToPage();
     }

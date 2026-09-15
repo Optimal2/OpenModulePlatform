@@ -3,7 +3,9 @@
 @using OpenModulePlatform.Web.ExampleWebAppBlazorModule.Localization
 @using OpenModulePlatform.Web.Shared.Configuration
 @inherits ExampleWebAppBlazorModuleComponentBase
+@using OpenModulePlatform.Web.Shared.ActivityLog
 @inject ExampleWebAppBlazorModuleAdminRepository Repo
+@inject ActivityLogWriter ActivityLog
 
 <PageTitle>@PageTitle</PageTitle>
 
@@ -108,6 +110,16 @@ else
             Input.Comment,
             CurrentUserName,
             CancellationToken.None);
+
+        // The user log says that the configuration was saved and which one,
+        // never what it contains or what the comment said. The principal comes
+        // from the cascading authentication state the component base resolved.
+        await ActivityLog.WriteAsync(new ActivityEntry
+        {
+            Event = "configuration.saved",
+            Summary = $"Saved configuration {Input.ConfigId.Value}",
+            Subject = new ActivitySubject("configuration", Input.ConfigId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
+        }, CurrentUser, CancellationToken.None);
 
         StatusMessage = L["Configuration updated."];
     }
