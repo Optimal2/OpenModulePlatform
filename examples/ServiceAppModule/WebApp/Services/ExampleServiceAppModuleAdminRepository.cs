@@ -164,7 +164,7 @@ WHERE ai.AppInstanceId = @appInstanceId
         cmd.Parameters.AddWithValue("@desiredState", desiredState);
         cmd.Parameters.AddWithValue("@configId", (object?)configId?.ToNullable() ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@artifactId", (object?)artifactId ?? DBNull.Value);
-        return await cmd.ExecuteNonQueryAsync(ct) > 0;
+        var updated = await cmd.ExecuteNonQueryAsync(ct) > 0;
 
         const string auditSql = @"
 INSERT INTO omp.AuditLog(Actor, Action, TargetType, TargetId, BeforeJson, AfterJson)
@@ -198,6 +198,8 @@ VALUES(@actor, @action, @targetType, @targetId, NULL, @afterJson);";
         {
             _log.LogWarning(ex, "Audit logging failed for app instance {AppInstanceId}.", appInstanceId);
         }
+
+        return updated;
     }
 
     public async Task<IReadOnlyList<ConfigurationRow>> GetConfigurationsAsync(CancellationToken ct)

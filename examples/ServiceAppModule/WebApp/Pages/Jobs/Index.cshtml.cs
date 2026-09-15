@@ -49,8 +49,8 @@ public sealed class IndexModel : ExampleServiceAppModulePageModel
         var jobId = await _repo.EnqueueJobAsync(Input.RequestType, Input.PayloadJson, User?.Identity?.Name ?? "unknown", ct);
         // A person queued a job with a click: that is the user log's business.
         // The job running later is the module's own history (Jobs and
-        // JobExecutions), not the log's. The request type is a fixed vocabulary;
-        // the payload is not logged.
+        // JobExecutions), not the log's. The request type is the admin's short
+        // label for the job and is logged; the payload is not.
         if (OmpUserIdentity.TryGetOmpUserId(User) is not null)
         {
             await _activityLog.WriteAsync(new ActivityEntry
