@@ -94,7 +94,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
     }
 
     /// <summary>True when the page was opened with any filter, so an empty result reads as "no match" rather than "nothing logged".</summary>
-    public bool HasFilter => UserIds.Length > 0 || Modules.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
+    public bool HasFilter => UserIds.Any(id => id > 0) || Modules.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {

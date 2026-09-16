@@ -47,11 +47,13 @@
                     return new HtmlString(System.Net.WebUtility.HtmlEncode(none));
                 }
 
+                // A plain replace rather than string.Format: a translation with
+                // a stray brace must not turn into a 500 for that language.
                 var wording = chosen.Count switch
                 {
                     1 => "{0}",
                     2 => L["{0} and one other"].Value,
-                    _ => string.Format(CultureInfo.CurrentCulture, L["{0} and {1} others"].Value, "{0}", chosen.Count - 1)
+                    _ => L["{0} and {1} others"].Value.Replace("{1}", (chosen.Count - 1).ToString(CultureInfo.CurrentCulture))
                 };
                 var parts = wording.Split("{0}", 2);
                 var encoded = System.Net.WebUtility.HtmlEncode(chosen[0]);

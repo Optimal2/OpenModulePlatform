@@ -64,6 +64,16 @@ public sealed class ActivityLogRoundTripTests : IClassFixture<ActivityLogTestFix
 
         var byUser = await repo.SearchActivityLogAsync(modules, new ActivityLogFilter { UserIds = [userId] }, CancellationToken.None);
         Assert.Single(byUser);
+
+        // Several users at once: the IN list takes each id, a repeated id
+        // counts once, and a user with nothing logged adds nothing.
+        var otherUserId = await _fixture.InsertUserAsync("Other Tester");
+        await writer.WriteAsync(new ActivityEntry { Event = "gadget.created", Summary = "Created gadget 2" }, otherUserId);
+        var byTwoUsers = await repo.SearchActivityLogAsync(modules, new ActivityLogFilter { UserIds = [userId, otherUserId, userId] }, CancellationToken.None);
+        Assert.Equal(2, byTwoUsers.Count);
+        Assert.All(byTwoUsers, row => Assert.Contains(row.OmpUserId, new int?[] { userId, otherUserId }));
+        var byStranger = await repo.SearchActivityLogAsync(modules, new ActivityLogFilter { UserIds = [otherUserId + 1000] }, CancellationToken.None);
+        Assert.Empty(byStranger);
         Assert.Equal("Created thing 1", ActivityLogJson.TryParse(byUser[0].Entry)!.Summary);
         Assert.Equal(3, ActivityLogJson.TryParse(byUser[0].Entry)!.Data!.Value.GetProperty("size").GetInt32());
 

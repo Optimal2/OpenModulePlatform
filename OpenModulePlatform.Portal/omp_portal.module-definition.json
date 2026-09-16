@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_portal",
-  "definitionVersion": "0.3.271",
+  "definitionVersion": "0.3.272",
   "module": {
     "displayName": "OpenModulePlatform Portal",
     "moduleType": "Portal",
@@ -43,7 +43,7 @@
       "targetName": "omp-portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "minVersion": "0.3.26",
-      "maxVersion": "0.3.715"
+      "maxVersion": "0.3.716"
     }
   ],
   "artifactConfigurationFiles": [
