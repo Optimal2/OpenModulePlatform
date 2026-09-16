@@ -3,8 +3,10 @@
 // panel holds radio or checkbox rows. Radios are a single choice: the chosen
 // row's text becomes the field label, and a click on a row closes the panel
 // (arrow keys move the choice without closing, so the keyboard can browse).
-// Checkboxes are a multiple choice: the label stays and the count badge says
-// how many are on. Either way the row that is checked is highlighted, the
+// Checkboxes are a multiple choice: the label shows the first chosen row's
+// text (or the picker's data-omp-picker-empty text when nothing is on), the
+// badge says "+N" for the rows beyond the first, and the field's title lists
+// them all. Either way the row that is checked is highlighted, the
 // field is marked active while a non-empty value is chosen, and a click
 // outside or Escape closes the panel; a panel that closes with the focus
 // inside hands the focus back to its field, so the keyboard never rests in
@@ -40,14 +42,34 @@
         // it says so with data-omp-picker-plain.
         picker.classList.toggle('omp-picker--active', !picker.hasAttribute('data-omp-picker-plain') && checked.some((input) => input.value !== ''));
 
+        const text = (input) => (input.closest('.omp-picker__option')?.textContent || '').trim();
         const single = all.some((input) => input.type === 'radio');
-        if (single && label && checked[0]) {
-            label.textContent = (checked[0].closest('.omp-picker__option')?.textContent || '').trim();
+        if (single) {
+            if (label && checked[0]) {
+                label.textContent = text(checked[0]);
+            }
+            if (count) {
+                const chosen = checked.filter((input) => input.value !== '').length;
+                count.textContent = String(chosen);
+                count.hidden = chosen === 0;
+            }
+            return;
+        }
+
+        picker.classList.add('omp-picker--multi');
+        const names = checked.map(text);
+        if (label) {
+            label.textContent = names[0] || picker.getAttribute('data-omp-picker-empty') || label.textContent;
         }
         if (count) {
-            const chosen = checked.filter((input) => input.value !== '').length;
-            count.textContent = String(chosen);
-            count.hidden = chosen === 0;
+            count.textContent = `+${names.length - 1}`;
+            count.hidden = names.length < 2;
+        }
+        const field = picker.querySelector('summary');
+        if (field) {
+            const purpose = field.getAttribute('data-omp-picker-title') ?? field.getAttribute('title') ?? '';
+            field.setAttribute('data-omp-picker-title', purpose);
+            field.setAttribute('title', names.length > 0 ? names.join(', ') : purpose);
         }
     };
 

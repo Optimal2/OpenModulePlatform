@@ -60,10 +60,21 @@
         </details>
         @if (Model.AvailableModules.Count > 0)
         {
-            <details class="omp-picker activity-bar__modules@(Model.Modules.Length > 0 ? " omp-picker--active" : null)" data-omp-picker>
-                <summary class="omp-picker__field activity-bar__field" title="@L["Module"]">
-                    <span data-omp-picker-label>@L["Module"]</span>
-                    <span class="omp-picker__count" data-omp-picker-count hidden="@(Model.Modules.Length == 0 ? "hidden" : null)">@Model.Modules.Length</span>
+            @* A multiple choice: the field names the first chosen module (in
+               list order) and counts the rest, "Dokumentbibliotek +2"; every
+               chosen name is in the field's title. *@
+            var chosenModules = Model.AvailableModules
+                .Where(module => Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase))
+                .Select(module => module.DisplayName)
+                .ToArray();
+            <details class="omp-picker omp-picker--multi activity-bar__modules@(chosenModules.Length > 0 ? " omp-picker--active" : null)"
+                     data-omp-picker
+                     data-omp-picker-empty="@L["All modules"]">
+                <summary class="omp-picker__field activity-bar__field"
+                         title="@(chosenModules.Length > 0 ? string.Join(", ", chosenModules) : L["Module"].Value)"
+                         data-omp-picker-title="@L["Module"]">
+                    <span class="omp-picker__label" data-omp-picker-label>@(chosenModules.Length > 0 ? chosenModules[0] : L["All modules"].Value)</span>
+                    <span class="omp-picker__count" data-omp-picker-count hidden="@(chosenModules.Length < 2 ? "hidden" : null)">+@(chosenModules.Length - 1)</span>
                 </summary>
                 <div class="omp-picker__menu">
                     @foreach (var module in Model.AvailableModules)

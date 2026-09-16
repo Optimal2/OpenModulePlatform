@@ -21,7 +21,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   user, module and rows dropdowns use it, so they match the period picker in
   height, border, radius and panel; a change there now waits a beat before
   fetching, so browsing a picker by keyboard is one request, not one per
-  step.
+  step. A multiple choice shows a box with a tick before every row, names
+  the first chosen row in the field with "+N" for the rest and lists them
+  all in the field's title; the user log's module picker says "All modules"
+  when none is chosen.
 
 - **The service and worker examples' web apps write to the user log.** Each
   records `configuration.saved`, `app_instance.saved` (allowed flag, desired
