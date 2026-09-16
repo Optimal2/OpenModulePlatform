@@ -7567,6 +7567,8 @@ tr.linkbox-editor-row--dragging {
     background: var(--surface);
     color: var(--text);
     font: inherit;
+    /* The current choice is what the bar is there to show: it reads at a glance. */
+    font-weight: 600;
 }
 
 /* One height for everything in the row: the search field, the pickers, the
