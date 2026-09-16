@@ -7558,8 +7558,7 @@ tr.linkbox-editor-row--dragging {
     width: 320px;
 }
 
-.activity-bar__field,
-.activity-bar select {
+.activity-bar__field {
     width: auto;
     min-height: 36px;
     padding: 6px 10px;
@@ -7570,12 +7569,8 @@ tr.linkbox-editor-row--dragging {
     font: inherit;
 }
 
-.activity-bar__modules .list-filter__menu {
-    z-index: 5;
-}
-
-/* One height for everything in the row: the search field, the selects, the
-   period button and the two ghost buttons. */
+/* One height for everything in the row: the search field, the pickers, the
+   period button and the Clear button. */
 .activity-bar__search,
 .activity-bar .btn {
     box-sizing: border-box;

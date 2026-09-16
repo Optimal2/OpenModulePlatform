@@ -24,7 +24,9 @@
        nothing reloads visibly (a plain GET submit is the fallback). The row
        search is the list component's own search over the loaded rows and
        nothing else: it has no name, so it never reaches the server, and the
-       rows it hid come back as soon as it is emptied. *@
+       rows it hid come back as soon as it is emptied. User, modules and rows
+       are shared pickers (omp-picker) dressed like the period picker, so the
+       four dropdowns read as one family. *@
     <form method="get" class="activity-bar" id="activity-filter-form" data-enhance="false">
         <input type="search"
                class="list-search activity-bar__search"
@@ -32,22 +34,40 @@
                placeholder="@L["Row search"]"
                aria-label="@L["Row search"]"
                title="@L["Filters the loaded rows as you type."]" />
-        <select name="UserId" class="activity-bar__field" aria-label="@L["User"]" data-activity-submit>
-            <option value="">@L["Any user"]</option>
-            @foreach (var user in Model.Users)
-            {
-                <option value="@user.UserId" selected="@(Model.UserId == user.UserId)">@user.DisplayName (@user.UserId)</option>
-            }
-        </select>
+        @{
+            var selectedUser = Model.Users.FirstOrDefault(user => Model.UserId == user.UserId);
+        }
+        <details class="omp-picker@(selectedUser is not null ? " omp-picker--active" : null)" data-omp-picker>
+            <summary class="omp-picker__field activity-bar__field" aria-label="@L["User"]" title="@L["User"]">
+                <span data-omp-picker-label>@(selectedUser is null ? L["Any user"].Value : $"{selectedUser.DisplayName} ({selectedUser.UserId})")</span>
+            </summary>
+            <div class="omp-picker__menu">
+                <label class="omp-picker__option@(selectedUser is null ? " omp-picker__option--active" : null)">
+                    <input type="radio" name="UserId" value="" checked="@(selectedUser is null)" data-activity-submit />
+                    @L["Any user"]
+                </label>
+                @foreach (var user in Model.Users)
+                {
+                    <label class="omp-picker__option@(Model.UserId == user.UserId ? " omp-picker__option--active" : null)">
+                        <input type="radio" name="UserId" value="@user.UserId" checked="@(Model.UserId == user.UserId)" data-activity-submit />
+                        @user.DisplayName (@user.UserId)
+                    </label>
+                }
+            </div>
+        </details>
         @if (Model.AvailableModules.Count > 0)
         {
-            <details class="list-filter activity-bar__modules @(Model.Modules.Length > 0 ? "list-filter--active" : null)">
-                <summary class="btn btn-secondary">@L["Module"]<span class="list-filter__count" hidden="@(Model.Modules.Length == 0 ? "hidden" : null)">@Model.Modules.Length</span></summary>
-                <div class="list-filter__menu">
+            <details class="omp-picker activity-bar__modules@(Model.Modules.Length > 0 ? " omp-picker--active" : null)" data-omp-picker>
+                <summary class="omp-picker__field activity-bar__field" aria-label="@L["Module"]" title="@L["Module"]">
+                    <span data-omp-picker-label>@L["Module"]</span>
+                    <span class="omp-picker__count" data-omp-picker-count hidden="@(Model.Modules.Length == 0 ? "hidden" : null)">@Model.Modules.Length</span>
+                </summary>
+                <div class="omp-picker__menu">
                     @foreach (var module in Model.AvailableModules)
                     {
-                        <label class="list-filter__option">
-                            <input type="checkbox" name="Modules" value="@module.ModuleKey" checked="@Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase)" data-activity-submit />
+                        var chosen = Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase);
+                        <label class="omp-picker__option@(chosen ? " omp-picker__option--active" : null)">
+                            <input type="checkbox" name="Modules" value="@module.ModuleKey" checked="@chosen" data-activity-submit />
                             @module.DisplayName
                         </label>
                     }
@@ -79,15 +99,24 @@
            data-activity-clear
            aria-disabled="@(Model.HasFilter ? null : "true")"
            tabindex="@(Model.HasFilter ? null : "-1")">@L["Clear"]</a>
-        <label class="activity-bar__rows">
+        <span class="activity-bar__rows">
             <span>@L["Rows"]</span>
-            <select name="Take" class="activity-bar__field" aria-label="@L["Rows"]" data-activity-submit>
-                @foreach (var take in new[] { 50, 200, 500, 1000 })
-                {
-                    <option value="@take" selected="@(Model.Take == take)">@take</option>
-                }
-            </select>
-        </label>
+            <details class="omp-picker" data-omp-picker data-omp-picker-plain>
+                <summary class="omp-picker__field activity-bar__field" aria-label="@L["Rows"]" title="@L["Rows"]">
+                    <span data-omp-picker-label>@Model.Take</span>
+                </summary>
+                @* At the right edge of the row, so the panel hangs from the field's right corner. *@
+                <div class="omp-picker__menu omp-picker__menu--end">
+                    @foreach (var take in new[] { 50, 200, 500, 1000 })
+                    {
+                        <label class="omp-picker__option@(Model.Take == take ? " omp-picker__option--active" : null)">
+                            <input type="radio" name="Take" value="@take" checked="@(Model.Take == take)" data-activity-submit />
+                            @take
+                        </label>
+                    }
+                </div>
+            </details>
+        </span>
     </form>
 </section>
 
