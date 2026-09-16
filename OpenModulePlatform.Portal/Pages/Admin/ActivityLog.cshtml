@@ -37,11 +37,12 @@
         @{
             var selectedUser = Model.Users.FirstOrDefault(user => Model.UserId == user.UserId);
         }
+        <span id="activity-user-label" class="visually-hidden">@L["User"]</span>
         <details class="omp-picker@(selectedUser is not null ? " omp-picker--active" : null)" data-omp-picker>
-            @* The chosen value is the field's own text, so it is also its
-               accessible name; the title says what the field is for. *@
-            <summary class="omp-picker__field activity-bar__field" title="@L["User"]">
-                <span data-omp-picker-label>@(selectedUser is null ? L["Any user"].Value : $"{selectedUser.DisplayName} ({selectedUser.UserId})")</span>
+            @* The name is what the field is for plus what it holds ("User,
+               Anna"); the label itself is unseen, since the value says enough. *@
+            <summary class="omp-picker__field activity-bar__field" aria-labelledby="activity-user-label activity-user-value" title="@L["User"]">
+                <span id="activity-user-value" data-omp-picker-label>@(selectedUser is null ? L["Any user"].Value : $"{selectedUser.DisplayName} ({selectedUser.UserId})")</span>
             </summary>
             <div class="omp-picker__menu">
                 <label class="omp-picker__option@(selectedUser is null ? " omp-picker__option--active" : null)">

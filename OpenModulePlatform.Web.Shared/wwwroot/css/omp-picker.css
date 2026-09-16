@@ -16,8 +16,9 @@
      </details>
 
    Radios make a single choice: the script writes the chosen row's text into
-   the label and closes the panel. Checkboxes make a multiple choice: the
-   label stays and the count badge says how many are on. The base look of the
+   the label, and a pointer click on a row closes the panel (arrow keys move
+   the choice without closing, so the keyboard can browse). Checkboxes make a
+   multiple choice: the label stays and the count badge says how many are on. The base look of the
    field sits at zero specificity so a host class (the page's own field class,
    handed the same way as the period picker's data-field-class) wins. A
    picker that always holds a value (a page size) adds data-omp-picker-plain

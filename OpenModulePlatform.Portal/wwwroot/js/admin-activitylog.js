@@ -242,10 +242,18 @@
         }
     };
 
+    // A change waits a beat before fetching: arrow keys browsing a picker
+    // fire one change per step, and only the value the user settles on
+    // should reach the server.
+    let changeTimer = 0;
+    const refreshSoon = () => {
+        window.clearTimeout(changeTimer);
+        changeTimer = window.setTimeout(refresh, 250);
+    };
     form.querySelectorAll('[data-activity-submit]').forEach((field) => {
-        field.addEventListener('change', refresh);
+        field.addEventListener('change', refreshSoon);
     });
-    form.addEventListener('omp-daterange-change', refresh);
+    form.addEventListener('omp-daterange-change', refreshSoon);
     // Enter in the row search must not submit the form: the text only filters
     // the loaded rows.
     const blockEnter = (event) => {

@@ -12,11 +12,16 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   and the user log's four dropdowns as one family.** `omp-picker.css` and
   `omp-picker.js` in Web.Shared give a `<details>` of radio or checkbox rows
   the same bordered field, chevron glyph and floating panel as the period
-  picker: a single choice writes its text into the field and closes, a
-  multiple choice keeps the label and counts in a badge, a click outside or
-  Escape closes, and a host field class can be handed in the same way. The
-  user log page's user, module and rows dropdowns use it, so they match the
-  period picker in height, border, radius and panel.
+  picker: a single choice writes its text into the field and a click on a
+  row closes the panel (arrow keys browse without closing, and a panel that
+  closes with the focus inside hands it back to the field), a multiple
+  choice keeps the label and counts in a badge, a click outside or Escape
+  closes, and a host field class can be handed in the same way; pages that
+  swap a picker's inputs call `window.ompPicker.sync`. The user log page's
+  user, module and rows dropdowns use it, so they match the period picker in
+  height, border, radius and panel; a change there now waits a beat before
+  fetching, so browsing a picker by keyboard is one request, not one per
+  step.
 
 - **The service and worker examples' web apps write to the user log.** Each
   records `configuration.saved`, `app_instance.saved` (allowed flag, desired
