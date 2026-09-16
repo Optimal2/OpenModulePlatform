@@ -89,6 +89,11 @@
     color: var(--link-hover, #0b57d0);
 }
 
+/* The badge's display rule would otherwise beat the UA sheet's [hidden]. */
+.omp-picker__count[hidden] {
+    display: none;
+}
+
 .omp-picker__count {
     display: inline-flex;
     align-items: center;

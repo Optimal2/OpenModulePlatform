@@ -38,7 +38,9 @@
             var selectedUser = Model.Users.FirstOrDefault(user => Model.UserId == user.UserId);
         }
         <details class="omp-picker@(selectedUser is not null ? " omp-picker--active" : null)" data-omp-picker>
-            <summary class="omp-picker__field activity-bar__field" aria-label="@L["User"]" title="@L["User"]">
+            @* The chosen value is the field's own text, so it is also its
+               accessible name; the title says what the field is for. *@
+            <summary class="omp-picker__field activity-bar__field" title="@L["User"]">
                 <span data-omp-picker-label>@(selectedUser is null ? L["Any user"].Value : $"{selectedUser.DisplayName} ({selectedUser.UserId})")</span>
             </summary>
             <div class="omp-picker__menu">
@@ -58,7 +60,7 @@
         @if (Model.AvailableModules.Count > 0)
         {
             <details class="omp-picker activity-bar__modules@(Model.Modules.Length > 0 ? " omp-picker--active" : null)" data-omp-picker>
-                <summary class="omp-picker__field activity-bar__field" aria-label="@L["Module"]" title="@L["Module"]">
+                <summary class="omp-picker__field activity-bar__field" title="@L["Module"]">
                     <span data-omp-picker-label>@L["Module"]</span>
                     <span class="omp-picker__count" data-omp-picker-count hidden="@(Model.Modules.Length == 0 ? "hidden" : null)">@Model.Modules.Length</span>
                 </summary>
@@ -99,11 +101,12 @@
            data-activity-clear
            aria-disabled="@(Model.HasFilter ? null : "true")"
            tabindex="@(Model.HasFilter ? null : "-1")">@L["Clear"]</a>
-        <span class="activity-bar__rows">
-            <span>@L["Rows"]</span>
+        <div class="activity-bar__rows">
+            <span id="activity-rows-label">@L["Rows"]</span>
             <details class="omp-picker" data-omp-picker data-omp-picker-plain>
-                <summary class="omp-picker__field activity-bar__field" aria-label="@L["Rows"]" title="@L["Rows"]">
-                    <span data-omp-picker-label>@Model.Take</span>
+                @* A number alone says nothing: the name is "Rows" plus the value. *@
+                <summary class="omp-picker__field activity-bar__field" aria-labelledby="activity-rows-label activity-rows-value" title="@L["Rows"]">
+                    <span id="activity-rows-value" data-omp-picker-label>@Model.Take</span>
                 </summary>
                 @* At the right edge of the row, so the panel hangs from the field's right corner. *@
                 <div class="omp-picker__menu omp-picker__menu--end">
@@ -116,7 +119,7 @@
                     }
                 </div>
             </details>
-        </span>
+        </div>
     </form>
 </section>
 

@@ -215,15 +215,16 @@
                 clear.dataset.serverDisabled = freshClear.getAttribute('aria-disabled') === 'true' ? 'true' : 'false';
                 syncClear();
             }
+            // The module picker's checked state follows the server's answer
+            // (a module that vanished, a value the server rejected); the shared
+            // picker redraws its badge and active colour from that.
             const freshModules = doc.querySelector('.activity-bar__modules');
             if (modules && freshModules) {
-                modules.classList.toggle('list-filter--active', freshModules.classList.contains('list-filter--active'));
-                const badge = modules.querySelector('.list-filter__count');
-                const freshBadge = freshModules.querySelector('.list-filter__count');
-                if (badge && freshBadge) {
-                    badge.textContent = freshBadge.textContent;
-                    badge.hidden = freshBadge.hidden;
-                }
+                const freshChecked = new Set(Array.from(freshModules.querySelectorAll('input:checked')).map((input) => input.value));
+                modules.querySelectorAll('input').forEach((input) => {
+                    input.checked = freshChecked.has(input.value);
+                });
+                window.ompPicker?.sync(modules);
             }
             window.history.replaceState(null, '', url);
             rebindSearch();

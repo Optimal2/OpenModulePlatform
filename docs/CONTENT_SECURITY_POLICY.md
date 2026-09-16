@@ -82,9 +82,9 @@ Directive notes:
   circuits) negotiates same-origin WebSockets; browsers that do not treat
   `'self'` as matching WebSocket schemes (Safari) need the explicit scheme
   entries. Script/style execution stays gated by the other directives.
-- `img-src ... data:` — the shared stylesheet
-  `OpenModulePlatform.Web.Shared/wwwroot/css/omp-datetime.css` embeds an SVG
-  icon as a `data:` URI.
+- `img-src ... data:` — the shared stylesheets
+  `OpenModulePlatform.Web.Shared/wwwroot/css/omp-datetime.css` and
+  `omp-picker.css` embed their glyphs as `data:` SVG URIs.
 - `worker-src 'none'` / `object-src 'none'` — no workers or plugins anywhere
   in the platform (verified against the vendored bundles).
 - `unsafe-eval` is **not** present and must not be added: verified against
