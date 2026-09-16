@@ -127,6 +127,31 @@
     border: 1px solid var(--border-strong, #c4cede);
     border-radius: 10px;
     box-shadow: 0 10px 28px rgba(17, 24, 39, 0.14);
+    /* A long list scrolls behind a thin, quiet bar rather than the browser's
+       default gutter: the standard properties for Firefox and new Chromium,
+       the WebKit pseudo-elements for the rest. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong, #c4cede) transparent;
+    scrollbar-gutter: stable;
+}
+
+.omp-picker__menu::-webkit-scrollbar {
+    width: 8px;
+}
+
+.omp-picker__menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.omp-picker__menu::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background-color: var(--border-strong, #c4cede);
+    background-clip: padding-box;
+}
+
+.omp-picker__menu::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-muted, #5b667a);
 }
 
 /* For a picker at the right edge of its row: the panel hangs from the
