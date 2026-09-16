@@ -4,7 +4,8 @@
 // row's text becomes the field label, and a click on a row closes the panel
 // (arrow keys move the choice without closing, so the keyboard can browse).
 // Checkboxes are a multiple choice: the label shows the first chosen row's
-// text (or the picker's data-omp-picker-empty text when nothing is on), the
+// text and keeps it while that row stays on, so a later choice does not push
+// it out (or the picker's data-omp-picker-empty text when nothing is on), the
 // badge says "+N" for the rows beyond the first, and the field's title lists
 // them all when the summary carries data-omp-picker-title (what the field is
 // for, shown when nothing is on). Either way the row that is checked is highlighted, the
@@ -59,10 +60,15 @@
 
         picker.classList.add('omp-picker--multi');
         const names = checked.map(text);
+        // The row the field names stays the one it named as long as it is on
+        // (the first the user chose, typically); only when that row goes off
+        // does the first row on, in list order, take its place.
+        const shown = checked.find((input) => input.value === picker._ompPickerShown) || checked[0];
+        picker._ompPickerShown = shown?.value;
         if (label) {
             // With nothing on, the field says what "nothing" means (the text in
             // data-omp-picker-empty), never a name that is no longer chosen.
-            label.textContent = names[0] || picker.getAttribute('data-omp-picker-empty') || '';
+            label.textContent = shown ? text(shown) : (picker.getAttribute('data-omp-picker-empty') || '');
         }
         if (count) {
             count.hidden = names.length < 2;

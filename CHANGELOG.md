@@ -21,8 +21,8 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   height, border, radius and panel; a change there now waits a beat before
   fetching, so browsing a picker by keyboard is one request, not one per
   step. A multiple choice shows a box with a tick before every row, names
-  the first chosen row in the field with "+N" for the rest and lists them
-  all in the field's title; the user log's module picker says "All modules"
+  the first chosen row in the field, keeps naming it while it stays on,
+  with "+N" for the rest, and lists them all in the field's title; the user log's module picker says "All modules"
   when none is chosen.
 
 - **The service and worker examples' web apps write to the user log.** Each
