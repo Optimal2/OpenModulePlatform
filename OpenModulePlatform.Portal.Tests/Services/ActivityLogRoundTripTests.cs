@@ -62,7 +62,7 @@ public sealed class ActivityLogRoundTripTests : IClassFixture<ActivityLogTestFix
         Assert.Equal("Activity Tester", all[1].UserDisplayName);
         Assert.Equal(ActivityLogTestFixture.ModuleKey, all[1].ModuleKey);
 
-        var byUser = await repo.SearchActivityLogAsync(modules, new ActivityLogFilter { UserId = userId }, CancellationToken.None);
+        var byUser = await repo.SearchActivityLogAsync(modules, new ActivityLogFilter { UserIds = [userId] }, CancellationToken.None);
         Assert.Single(byUser);
         Assert.Equal("Created thing 1", ActivityLogJson.TryParse(byUser[0].Entry)!.Summary);
         Assert.Equal(3, ActivityLogJson.TryParse(byUser[0].Entry)!.Data!.Value.GetProperty("size").GetInt32());

@@ -3284,4 +3284,6 @@
   <data name="Only group conversations can be changed." xml:space="preserve"><value>Only group conversations can be changed.</value></data>
   <data name="The new admin must be a participant of the group." xml:space="preserve"><value>The new admin must be a participant of the group.</value></data>
   <data name="You are already the group admin." xml:space="preserve"><value>You are already the group admin.</value></data>
+  <data name="{0} and one other" xml:space="preserve"><value>{0} and one other</value></data>
+  <data name="{0} and {1} others" xml:space="preserve"><value>{0} and {1} others</value></data>
 </root>

@@ -1,4 +1,5 @@
 @page "/admin/activitylog"
+@using Microsoft.AspNetCore.Html
 @using System.Globalization
 @using OpenModulePlatform.Web.Shared.ActivityLog
 @model OpenModulePlatform.Portal.Pages.Admin.ActivityLogModel
@@ -35,24 +36,53 @@
                aria-label="@L["Row search"]"
                title="@L["Filters the loaded rows as you type."]" />
         @{
-            var selectedUser = Model.Users.FirstOrDefault(user => Model.UserId == user.UserId);
+            // A multiple-choice field's text has three states: nothing chosen
+            // ("Any user"), one chosen (its name), several ("Anna and 2 others").
+            // The name gets its own span, clipped on its own by the shared
+            // picker's CSS, so the wording around it stays whole.
+            IHtmlContent PickerText(IReadOnlyList<string> chosen, string none)
+            {
+                if (chosen.Count == 0)
+                {
+                    return new HtmlString(System.Net.WebUtility.HtmlEncode(none));
+                }
+
+                var wording = chosen.Count switch
+                {
+                    1 => "{0}",
+                    2 => L["{0} and one other"].Value,
+                    _ => string.Format(CultureInfo.CurrentCulture, L["{0} and {1} others"].Value, "{0}", chosen.Count - 1)
+                };
+                var parts = wording.Split("{0}", 2);
+                var encoded = System.Net.WebUtility.HtmlEncode(chosen[0]);
+                return new HtmlString($"{System.Net.WebUtility.HtmlEncode(parts[0])}<span class=\"omp-picker__name\">{encoded}</span>{(parts.Length > 1 ? System.Net.WebUtility.HtmlEncode(parts[1]) : string.Empty)}");
+            }
+            var chosenUsers = Model.Users
+                .Where(user => Model.UserIds.Contains(user.UserId))
+                .Select(user => $"{user.DisplayName} ({user.UserId})")
+                .ToArray();
         }
         <span id="activity-user-label" class="visually-hidden">@L["User"]</span>
-        <details class="omp-picker@(selectedUser is not null ? " omp-picker--active" : null)" data-omp-picker>
+        <details class="omp-picker omp-picker--multi activity-bar__users@(chosenUsers.Length > 0 ? " omp-picker--active" : null)"
+                 data-omp-picker
+                 data-activity-picker="users"
+                 data-omp-picker-empty="@L["Any user"]"
+                 data-omp-picker-more-one="@L["{0} and one other"]"
+                 data-omp-picker-more="@L["{0} and {1} others"]">
             @* The name is what the field is for plus what it holds ("User,
                Anna"); the label itself is unseen, since the value says enough. *@
-            <summary class="omp-picker__field activity-bar__field" aria-labelledby="activity-user-label activity-user-value" title="@L["User"]">
-                <span id="activity-user-value" data-omp-picker-label>@(selectedUser is null ? L["Any user"].Value : $"{selectedUser.DisplayName} ({selectedUser.UserId})")</span>
+            <summary class="omp-picker__field activity-bar__field"
+                     aria-labelledby="activity-user-label activity-user-value"
+                     title="@(chosenUsers.Length > 0 ? string.Join(", ", chosenUsers) : L["User"].Value)"
+                     data-omp-picker-title="@L["User"]">
+                <span id="activity-user-value" class="omp-picker__label" data-omp-picker-label>@PickerText(chosenUsers, L["Any user"].Value)</span>
             </summary>
             <div class="omp-picker__menu">
-                <label class="omp-picker__option@(selectedUser is null ? " omp-picker__option--active" : null)">
-                    <input type="radio" name="UserId" value="" checked="@(selectedUser is null)" data-activity-submit />
-                    @L["Any user"]
-                </label>
                 @foreach (var user in Model.Users)
                 {
-                    <label class="omp-picker__option@(Model.UserId == user.UserId ? " omp-picker__option--active" : null)">
-                        <input type="radio" name="UserId" value="@user.UserId" checked="@(Model.UserId == user.UserId)" data-activity-submit />
+                    var chosen = Model.UserIds.Contains(user.UserId);
+                    <label class="omp-picker__option@(chosen ? " omp-picker__option--active" : null)">
+                        <input type="checkbox" name="UserIds" value="@user.UserId" checked="@chosen" data-activity-submit />
                         @user.DisplayName (@user.UserId)
                     </label>
                 }
@@ -61,8 +91,8 @@
         @if (Model.AvailableModules.Count > 0)
         {
             @* A multiple choice: the field names the first chosen module (in
-               list order) and counts the rest, "Dokumentbibliotek +2"; every
-               chosen name is in the field's title. *@
+               list order) and says how many more, "Dokumentbibliotek and 2
+               others"; every chosen name is in the field's title. *@
             var chosenModules = Model.AvailableModules
                 .Where(module => Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase))
                 .Select(module => module.DisplayName)
@@ -70,13 +100,15 @@
             <span id="activity-module-label" class="visually-hidden">@L["Module"]</span>
             <details class="omp-picker omp-picker--multi activity-bar__modules@(chosenModules.Length > 0 ? " omp-picker--active" : null)"
                      data-omp-picker
-                     data-omp-picker-empty="@L["All modules"]">
+                     data-activity-picker="modules"
+                     data-omp-picker-empty="@L["All modules"]"
+                     data-omp-picker-more-one="@L["{0} and one other"]"
+                     data-omp-picker-more="@L["{0} and {1} others"]">
                 <summary class="omp-picker__field activity-bar__field"
                          aria-labelledby="activity-module-label activity-module-value"
                          title="@(chosenModules.Length > 0 ? string.Join(", ", chosenModules) : L["Module"].Value)"
                          data-omp-picker-title="@L["Module"]">
-                    <span id="activity-module-value" class="omp-picker__label" data-omp-picker-label>@(chosenModules.Length > 0 ? chosenModules[0] : L["All modules"].Value)</span>
-                    <span class="omp-picker__count" data-omp-picker-count hidden="@(chosenModules.Length < 2 ? "hidden" : null)">@(chosenModules.Length > 1 ? $"+{chosenModules.Length - 1}" : string.Empty)</span>
+                    <span id="activity-module-value" class="omp-picker__label" data-omp-picker-label>@PickerText(chosenModules, L["All modules"].Value)</span>
                 </summary>
                 <div class="omp-picker__menu">
                     @foreach (var module in Model.AvailableModules)

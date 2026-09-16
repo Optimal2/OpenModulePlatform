@@ -5,8 +5,10 @@
 // (arrow keys move the choice without closing, so the keyboard can browse).
 // Checkboxes are a multiple choice: the label shows the first chosen row's
 // text and keeps it while that row stays on, so a later choice does not push
-// it out (or the picker's data-omp-picker-empty text when nothing is on), the
-// badge says "+N" for the rows beyond the first, and the field's title lists
+// it out (or the picker's data-omp-picker-empty text when nothing is on);
+// with data-omp-picker-more wording ("{0} and {1} others", and
+// data-omp-picker-more-one for exactly one more) the label says how many
+// more are on, otherwise the badge says "+N"; and the field's title lists
 // them all when the summary carries data-omp-picker-title (what the field is
 // for, shown when nothing is on). Either way the row that is checked is highlighted, the
 // field is marked active while a non-empty value is chosen, and a click
@@ -66,12 +68,30 @@
         const shown = checked.find((input) => input.value === picker._ompPickerShown) || checked[0];
         picker._ompPickerShown = shown?.value;
         if (label) {
-            // With nothing on, the field says what "nothing" means (the text in
-            // data-omp-picker-empty), never a name that is no longer chosen.
-            label.textContent = shown ? text(shown) : (picker.getAttribute('data-omp-picker-empty') || '');
+            // Three states: nothing on says what "nothing" means (the text in
+            // data-omp-picker-empty), one on says its name, several say the
+            // named one and how many more, through the page's own wording in
+            // data-omp-picker-more-one / data-omp-picker-more ({0} the name,
+            // {1} the number of others). Without that wording the badge below
+            // carries the number instead.
+            const more = picker.getAttribute('data-omp-picker-more');
+            const moreOne = picker.getAttribute('data-omp-picker-more-one') || more;
+            const others = names.length - 1;
+            if (!shown) {
+                label.textContent = picker.getAttribute('data-omp-picker-empty') || '';
+            } else {
+                // The name sits in its own span so a long one is clipped on its
+                // own while the wording around it ("and 2 others") stays whole.
+                const wording = others > 0 && more ? (others === 1 ? moreOne : more).replace('{1}', String(others)) : '{0}';
+                const [before, after] = wording.split('{0}');
+                const name = document.createElement('span');
+                name.className = 'omp-picker__name';
+                name.textContent = text(shown);
+                label.replaceChildren(document.createTextNode(before || ''), name, document.createTextNode(after || ''));
+            }
         }
         if (count) {
-            count.hidden = names.length < 2;
+            count.hidden = names.length < 2 || picker.hasAttribute('data-omp-picker-more');
             count.textContent = count.hidden ? '' : `+${names.length - 1}`;
         }
         // The field's title lists every chosen name; with nothing on it says

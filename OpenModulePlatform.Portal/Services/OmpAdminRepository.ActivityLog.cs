@@ -14,7 +14,8 @@ public sealed record ActivityLogUser(int UserId, string DisplayName);
 
 public sealed class ActivityLogFilter
 {
-    public int? UserId { get; init; }
+    /// <summary>OMP user ids to include; empty means every user.</summary>
+    public IReadOnlyList<int> UserIds { get; init; } = [];
 
     /// <summary>Module keys to include; empty means every module with a table.</summary>
     public IReadOnlyList<string> ModuleKeys { get; init; } = [];
@@ -132,9 +133,12 @@ ORDER BY u.display_name, u.user_id;";
 
         var take = Math.Clamp(filter.Take, 1, MaxActivityLogTake);
         var where = new StringBuilder();
-        if (filter.UserId.HasValue)
+        var userIds = filter.UserIds.Distinct().ToList();
+        if (userIds.Count > 0)
         {
-            where.Append(" AND a.OmpUserId = @UserId");
+            where.Append(" AND a.OmpUserId IN (")
+                 .Append(string.Join(", ", userIds.Select((_, i) => "@User" + i)))
+                 .Append(')');
         }
 
         if (filter.FromUtc.HasValue)
@@ -182,9 +186,9 @@ ORDER BY u.display_name, u.user_id;";
             cmd.Parameters.Add(new SqlParameter("@Module" + i, SqlDbType.NVarChar, 128) { Value = selected[i].ModuleKey });
         }
 
-        if (filter.UserId.HasValue)
+        for (var i = 0; i < userIds.Count; i++)
         {
-            cmd.Parameters.Add(new SqlParameter("@UserId", SqlDbType.Int) { Value = filter.UserId.Value });
+            cmd.Parameters.Add(new SqlParameter("@User" + i, SqlDbType.Int) { Value = userIds[i] });
         }
 
         if (filter.FromUtc.HasValue)

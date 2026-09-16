@@ -118,7 +118,6 @@
     // rebindSearch), so it is always looked up live, never held in a variable.
     const currentSearch = () => form.querySelector('.activity-bar__search');
     const clear = form.querySelector('[data-activity-clear]');
-    const modules = form.querySelector('.activity-bar__modules');
 
     // Clear is greyed out by the server while nothing is filtered; text in the
     // row search is something to clear too, so it enables the link on its own.
@@ -215,17 +214,20 @@
                 clear.dataset.serverDisabled = freshClear.getAttribute('aria-disabled') === 'true' ? 'true' : 'false';
                 syncClear();
             }
-            // The module picker's checked state follows the server's answer
-            // (a module that vanished, a value the server rejected); the shared
-            // picker redraws its badge and active colour from that.
-            const freshModules = doc.querySelector('.activity-bar__modules');
-            if (modules && freshModules) {
-                const freshChecked = new Set(Array.from(freshModules.querySelectorAll('input:checked')).map((input) => input.value));
-                modules.querySelectorAll('input').forEach((input) => {
+            // Each picker's checked state follows the server's answer (a user
+            // or module that vanished, a value the server rejected); the shared
+            // picker redraws its text and active colour from that.
+            form.querySelectorAll('details[data-activity-picker]').forEach((picker) => {
+                const fresh = doc.querySelector(`details[data-activity-picker="${picker.dataset.activityPicker}"]`);
+                if (!fresh) {
+                    return;
+                }
+                const freshChecked = new Set(Array.from(fresh.querySelectorAll('input:checked')).map((input) => input.value));
+                picker.querySelectorAll('input').forEach((input) => {
                     input.checked = freshChecked.has(input.value);
                 });
-                window.ompPicker?.sync(modules);
-            }
+                window.ompPicker?.sync(picker);
+            });
             window.history.replaceState(null, '', url);
             rebindSearch();
         } catch (error) {

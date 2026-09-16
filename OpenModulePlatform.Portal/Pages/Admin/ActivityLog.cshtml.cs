@@ -31,7 +31,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
     }
 
     [BindProperty(SupportsGet = true)]
-    public int? UserId { get; set; }
+    public int[] UserIds { get; set; } = [];
 
     [BindProperty(SupportsGet = true)]
     public string[] Modules { get; set; } = [];
@@ -94,7 +94,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
     }
 
     /// <summary>True when the page was opened with any filter, so an empty result reads as "no match" rather than "nothing logged".</summary>
-    public bool HasFilter => UserId.HasValue || Modules.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
+    public bool HasFilter => UserIds.Length > 0 || Modules.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
 
     public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
@@ -120,7 +120,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
 
         var filter = new ActivityLogFilter
         {
-            UserId = UserId,
+            UserIds = UserIds.Where(id => id > 0).ToList(),
             ModuleKeys = Modules.Where(key => !string.IsNullOrWhiteSpace(key)).ToList(),
             FromUtc = From?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
             ToUtc = To?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),

@@ -21,8 +21,10 @@
    multiple choice (class omp-picker--multi, which the script adds as well):
    every row shows a box with a tick when on, the label shows the first
    chosen row's text (kept while that row stays on), clipped, or the text in
-   data-omp-picker-empty when nothing is on, the badge says "+N" for the rows beyond the first, and the
-   summary's title lists every chosen name when it carries
+   data-omp-picker-empty when nothing is on; with several on it says "{0} and
+   {1} others" through the wording in data-omp-picker-more (and
+   data-omp-picker-more-one for exactly one more), or else the badge says
+   "+N"; and the summary's title lists every chosen name when it carries
    data-omp-picker-title (what the field is for, shown when nothing is on). The
    base look of the field sits at zero specificity so a host class (the
    page's own field class, handed the same way as the period picker's
@@ -117,8 +119,13 @@
 }
 
 /* A multiple choice names its first chosen row in the field; a long name is
-   clipped so the bar keeps its rhythm, and the field's title holds them all. */
+   clipped on its own so the bar keeps its rhythm and the wording around it
+   ("and 2 others") stays whole; the field's title holds every name. */
 .omp-picker--multi .omp-picker__label {
+    white-space: nowrap;
+}
+
+.omp-picker__name {
     display: inline-block;
     max-width: var(--omp-picker-label-width, 160px);
     overflow: hidden;
