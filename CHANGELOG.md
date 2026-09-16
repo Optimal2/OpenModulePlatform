@@ -14,8 +14,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   the same bordered field, chevron glyph and floating panel as the period
   picker: a single choice writes its text into the field and a click on a
   row closes the panel (arrow keys browse without closing, and a panel that
-  closes with the focus inside hands it back to the field), a multiple
-  choice keeps the label and counts in a badge, a click outside or Escape
+  closes with the focus inside hands it back to the field), a click outside or Escape
   closes, and a host field class can be handed in the same way; pages that
   swap a picker's inputs call `window.ompPicker.sync`. The user log page's
   user, module and rows dropdowns use it, so they match the period picker in

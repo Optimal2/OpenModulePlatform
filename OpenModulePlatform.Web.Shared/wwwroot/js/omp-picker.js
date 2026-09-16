@@ -6,7 +6,8 @@
 // Checkboxes are a multiple choice: the label shows the first chosen row's
 // text (or the picker's data-omp-picker-empty text when nothing is on), the
 // badge says "+N" for the rows beyond the first, and the field's title lists
-// them all. Either way the row that is checked is highlighted, the
+// them all when the summary carries data-omp-picker-title (what the field is
+// for, shown when nothing is on). Either way the row that is checked is highlighted, the
 // field is marked active while a non-empty value is chosen, and a click
 // outside or Escape closes the panel; a panel that closes with the focus
 // inside hands the focus back to its field, so the keyboard never rests in
@@ -59,16 +60,20 @@
         picker.classList.add('omp-picker--multi');
         const names = checked.map(text);
         if (label) {
-            label.textContent = names[0] || picker.getAttribute('data-omp-picker-empty') || label.textContent;
+            // With nothing on, the field says what "nothing" means (the text in
+            // data-omp-picker-empty), never a name that is no longer chosen.
+            label.textContent = names[0] || picker.getAttribute('data-omp-picker-empty') || '';
         }
         if (count) {
-            count.textContent = `+${names.length - 1}`;
             count.hidden = names.length < 2;
+            count.textContent = count.hidden ? '' : `+${names.length - 1}`;
         }
+        // The field's title lists every chosen name; with nothing on it says
+        // what the field is for, which the page hands over in
+        // data-omp-picker-title (the title itself may already hold names).
         const field = picker.querySelector('summary');
-        if (field) {
-            const purpose = field.getAttribute('data-omp-picker-title') ?? field.getAttribute('title') ?? '';
-            field.setAttribute('data-omp-picker-title', purpose);
+        const purpose = field?.getAttribute('data-omp-picker-title');
+        if (field && purpose !== null) {
             field.setAttribute('title', names.length > 0 ? names.join(', ') : purpose);
         }
     };

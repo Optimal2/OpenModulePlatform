@@ -67,14 +67,16 @@
                 .Where(module => Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase))
                 .Select(module => module.DisplayName)
                 .ToArray();
+            <span id="activity-module-label" class="visually-hidden">@L["Module"]</span>
             <details class="omp-picker omp-picker--multi activity-bar__modules@(chosenModules.Length > 0 ? " omp-picker--active" : null)"
                      data-omp-picker
                      data-omp-picker-empty="@L["All modules"]">
                 <summary class="omp-picker__field activity-bar__field"
+                         aria-labelledby="activity-module-label activity-module-value"
                          title="@(chosenModules.Length > 0 ? string.Join(", ", chosenModules) : L["Module"].Value)"
                          data-omp-picker-title="@L["Module"]">
-                    <span class="omp-picker__label" data-omp-picker-label>@(chosenModules.Length > 0 ? chosenModules[0] : L["All modules"].Value)</span>
-                    <span class="omp-picker__count" data-omp-picker-count hidden="@(chosenModules.Length < 2 ? "hidden" : null)">+@(chosenModules.Length - 1)</span>
+                    <span id="activity-module-value" class="omp-picker__label" data-omp-picker-label>@(chosenModules.Length > 0 ? chosenModules[0] : L["All modules"].Value)</span>
+                    <span class="omp-picker__count" data-omp-picker-count hidden="@(chosenModules.Length < 2 ? "hidden" : null)">@(chosenModules.Length > 1 ? $"+{chosenModules.Length - 1}" : string.Empty)</span>
                 </summary>
                 <div class="omp-picker__menu">
                     @foreach (var module in Model.AvailableModules)

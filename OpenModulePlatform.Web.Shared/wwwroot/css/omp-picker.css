@@ -21,7 +21,9 @@
    multiple choice (class omp-picker--multi, which the script adds as well):
    every row shows a box with a tick when on, the label shows the first
    chosen row's text, clipped, or the text in data-omp-picker-empty when
-   nothing is on, and the badge says "+N" for the rows beyond the first. The
+   nothing is on, the badge says "+N" for the rows beyond the first, and the
+   summary's title lists every chosen name when it carries
+   data-omp-picker-title (what the field is for, shown when nothing is on). The
    base look of the field sits at zero specificity so a host class (the
    page's own field class, handed the same way as the period picker's
    data-field-class) wins. A picker that always holds a value (a page size)
