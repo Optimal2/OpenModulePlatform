@@ -749,9 +749,10 @@
         function syncActive() {
             var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
             var known = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0];
-            // An unknown key (a stale bookmark) shows the neutral label, so it
-            // is not a choice either.
-            var active = known ? known.key !== neutral : (!hiddens.range.value && !!(hiddens.from.value || hiddens.to.value));
+            // A custom period carries the key "custom" (or none) with its dates;
+            // an unknown key without dates (a stale bookmark) shows the neutral
+            // label, so it is not a choice either.
+            var active = known ? known.key !== neutral : !!(hiddens.from.value || hiddens.to.value);
             container.classList.toggle("omp-daterange--active", active);
         }
         syncActive();
