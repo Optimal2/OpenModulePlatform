@@ -156,7 +156,10 @@
     outline: none;
 }
 
-.omp-confirm-dialog__ok {
+/* The same specificity as the base rule above, and after it, so the
+   primary button keeps its fill at rest too (the base rule's element part
+   beat the class alone, and the button sat there dressed as Cancel). */
+.omp-confirm-dialog__actions button.omp-confirm-dialog__ok {
     border-color: var(--link);
     background: var(--link);
     color: #fff;

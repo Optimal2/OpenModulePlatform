@@ -199,6 +199,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **The confirmation dialog's OK button is filled again.** The base rule for
+  the dialog's buttons outweighed the primary button's own class, so OK sat
+  next to Cancel in the same grey; the primary rule now carries the same
+  weight and comes after.
+
 - **The OIDC/ADFS sign-in path no longer depends on a single claim mapping for
   the `DOMAIN\name` principal form.** The claim resolver reads `unique_name` and
   `windowsaccountname` (short names and WS URIs) as user-principal candidates
