@@ -1142,4 +1142,5 @@
   <data name="You are already the group admin." xml:space="preserve"><value>You are already the group admin.</value></data>
   <data name="{0} and one other" xml:space="preserve"><value>{0} and one other</value></data>
   <data name="{0} and {1} others" xml:space="preserve"><value>{0} and {1} others</value></data>
+  <data name="{0} and others" xml:space="preserve"><value>{0} and others</value></data>
 </root>

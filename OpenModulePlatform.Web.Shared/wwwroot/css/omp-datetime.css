@@ -374,6 +374,13 @@
     --omp-dt-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='1.5'%3E%3Crect x='1.5' y='2.5' width='13' height='12' rx='2'/%3E%3Cpath d='M1.5 6.5h13M5 1v3M11 1v3'/%3E%3C/svg%3E");
 }
 
+/* A period other than the neutral preset reads as a choice made, like a
+   choice picker with a choice on: the link colour on border and text. */
+.omp-daterange--active .omp-daterange__field {
+    border-color: var(--link, #0b57d0);
+    color: var(--link-hover, #0b57d0);
+}
+
 .omp-daterange-panel {
     grid-template-columns: max-content max-content;
     gap: 0 14px;

@@ -737,6 +737,17 @@
         var st = { container: container, hiddens: hiddens, presets: presets, field: field };
         container._ompDaterange = st;
 
+        // The field takes the active look (the same as a choice picker with a
+        // choice on) whenever the period is anything but the neutral preset:
+        // the one named in data-neutral, or else the first. A custom period is
+        // always a choice.
+        function syncActive() {
+            var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
+            var active = hiddens.range.value ? hiddens.range.value !== neutral : !!(hiddens.from.value || hiddens.to.value);
+            container.classList.toggle("omp-daterange--active", active);
+        }
+        syncActive();
+
         function applyChoice(rangeValue, fromValue, toValue, keepOpen) {
             var changed = hiddens.range.value !== rangeValue
                 || hiddens.from.value !== fromValue
@@ -745,6 +756,7 @@
             hiddens.from.value = fromValue;
             hiddens.to.value = toValue;
             field.textContent = currentLabel();
+            syncActive();
             if (!keepOpen) { closeRangePanel(); }
             if (changed) {
                 hiddens.range.dispatchEvent(new Event("change", { bubbles: true }));

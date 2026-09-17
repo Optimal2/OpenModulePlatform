@@ -37,7 +37,7 @@
                title="@L["Filters the loaded rows as you type."]" />
         @{
             // A multiple-choice field's text has three states: nothing chosen
-            // ("Any user"), one chosen (its name), several ("Anna and 2 others").
+            // ("Any user"), one chosen (its name), several ("Anna and others").
             // The name gets its own span, clipped on its own by the shared
             // picker's CSS, so the wording around it stays whole.
             IHtmlContent PickerText(IReadOnlyList<string> chosen, string none)
@@ -49,12 +49,7 @@
 
                 // A plain replace rather than string.Format: a translation with
                 // a stray brace must not turn into a 500 for that language.
-                var wording = chosen.Count switch
-                {
-                    1 => "{0}",
-                    2 => L["{0} and one other"].Value,
-                    _ => L["{0} and {1} others"].Value.Replace("{1}", (chosen.Count - 1).ToString(CultureInfo.CurrentCulture))
-                };
+                var wording = chosen.Count == 1 ? "{0}" : L["{0} and others"].Value;
                 var parts = wording.Split("{0}", 2);
                 var encoded = System.Net.WebUtility.HtmlEncode(chosen[0]);
                 return new HtmlString($"{System.Net.WebUtility.HtmlEncode(parts[0])}<span class=\"omp-picker__name\">{encoded}</span>{(parts.Length > 1 ? System.Net.WebUtility.HtmlEncode(parts[1]) : string.Empty)}");
@@ -69,8 +64,7 @@
                  data-omp-picker
                  data-activity-picker="users"
                  data-omp-picker-empty="@L["Any user"]"
-                 data-omp-picker-more-one="@L["{0} and one other"]"
-                 data-omp-picker-more="@L["{0} and {1} others"]">
+                 data-omp-picker-more="@L["{0} and others"]">
             @* The name is what the field is for plus what it holds ("User,
                Anna"); the label itself is unseen, since the value says enough. *@
             <summary class="omp-picker__field activity-bar__field"
@@ -93,7 +87,7 @@
         @if (Model.AvailableModules.Count > 0)
         {
             @* A multiple choice: the field names the first chosen module (in
-               list order) and says how many more, "Dokumentbibliotek and 2
+               list order) and says there are more, "Dokumentbibliotek and
                others"; every chosen name is in the field's title. *@
             var chosenModules = Model.AvailableModules
                 .Where(module => Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase))
@@ -104,8 +98,7 @@
                      data-omp-picker
                      data-activity-picker="modules"
                      data-omp-picker-empty="@L["All modules"]"
-                     data-omp-picker-more-one="@L["{0} and one other"]"
-                     data-omp-picker-more="@L["{0} and {1} others"]">
+                     data-omp-picker-more="@L["{0} and others"]">
                 <summary class="omp-picker__field activity-bar__field"
                          aria-labelledby="activity-module-label activity-module-value"
                          title="@(chosenModules.Length > 0 ? string.Join(", ", chosenModules) : L["Module"].Value)"
@@ -129,7 +122,7 @@
             var presetTodayIso = presetToday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
         <span data-omp-daterange data-range-name="Range" data-from-name="From" data-to-name="To"
-              data-field-class="activity-bar__field" data-max="today"
+              data-field-class="activity-bar__field" data-max="today" data-neutral="all"
               data-from-text="@L["From date"]" data-to-text="@L["To date"]" data-apply-text="@L["Apply"]">
             <input type="hidden" name="Range" value="@Model.Range" />
             <input type="hidden" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />

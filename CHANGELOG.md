@@ -22,10 +22,13 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   fetching, so browsing a picker by keyboard is one request, not one per
   step. A multiple choice shows a box with a tick before every row, names
   the first chosen row in the field, keeps naming it while it stays on,
-  says "and N others" for the rest in the page's own words (or "+N" in a
-  badge without them), and lists them all in the field's title; the user log's module picker says "All modules"
+  says "and others" for the rest in the page's own words ("m.fl." in
+  Swedish; or "+N" in a badge without them), and lists them all in the
+  field's title; the user log's module picker says "All modules"
   when none is chosen. The user log's user filter is a multiple choice too,
-  so several users can be followed at once; the page reads `UserIds`.
+  so several users can be followed at once; the page reads `UserIds`. The
+  period field takes the same active look as a picker with a choice on
+  whenever the period is anything but "Since the start" (`data-neutral`).
 
 - **The service and worker examples' web apps write to the user log.** Each
   records `configuration.saved`, `app_instance.saved` (allowed flag, desired
