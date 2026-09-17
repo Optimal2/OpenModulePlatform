@@ -103,7 +103,12 @@
         syncOk();
 
         return new Promise((resolve) => {
+            let settled = false;
             const finish = (result) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
                 okButton.removeEventListener('click', onOk);
                 cancelButton.removeEventListener('click', onCancel);
                 dialog.removeEventListener('cancel', onDialogCancel);
@@ -130,7 +135,14 @@
                 finish(false);
             };
             // Closed by other means (a script, the browser): the answer is no.
-            const onClose = () => finish(false);
+            // The close event is queued, not fired on the spot, so the one
+            // from a dialog that has just finished may reach the next question
+            // on the same element; a dialog that is open again ignores it.
+            const onClose = () => {
+                if (!dialog.open) {
+                    finish(false);
+                }
+            };
             // Enter in a text field in the content submits the dialog's own
             // form; that is OK, unless a required checkbox still holds it back.
             const onSubmit = (event) => {

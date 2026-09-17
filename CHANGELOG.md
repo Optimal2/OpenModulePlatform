@@ -19,8 +19,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   they were when it closes, so the page reads the values out of them; a
   checkbox marked `data-omp-confirm-requires` holds the OK button until it is
   checked, an `autofocus` element takes the focus, Enter in a text field is
-  OK, and a dialog closed by other means answers no. omp-forms.css dresses the
-  building blocks (`__facts`, `__field`, `__warning`, `__check`).
+  OK, and a dialog closed by other means answers no (a question asked right
+  after another is not answered by the earlier dialog's queued close event).
+  omp-forms.css dresses the building blocks (`__facts`, `__field`,
+  `__warning`, `__check`), and a block the page hides inside the content
+  stays hidden.
 
 - **A shared choice picker (`omp-picker`) in the period picker's clothes,
   and the user log's four dropdowns as one family.** `omp-picker.css` and

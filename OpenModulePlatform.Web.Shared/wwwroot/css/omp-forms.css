@@ -54,7 +54,8 @@
 }
 
 .omp-confirm-dialog__title[hidden],
-.omp-confirm-dialog__content[hidden] {
+.omp-confirm-dialog__content[hidden],
+.omp-confirm-dialog__content [hidden] {
     display: none;
 }
 
