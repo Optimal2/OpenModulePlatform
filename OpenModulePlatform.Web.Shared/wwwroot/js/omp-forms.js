@@ -3,7 +3,19 @@
 //
 // window.ompConfirm(message, options) -> Promise<boolean>
 //   Shows an OMP-styled modal <dialog> instead of the native window.confirm.
-//   options: { okLabel, cancelLabel } - plain strings, already localized by the page.
+//   options: { okLabel, cancelLabel, title, content }
+//     okLabel, cancelLabel: plain strings, already localized by the page.
+//     title: a heading above the message; none when empty.
+//     content: an element shown between the message and the buttons, holding
+//       the page's own fields (a note, an optional text field, a checkbox). It
+//       is moved into the dialog while the dialog is open and put back where
+//       it was when the dialog closes, so the page reads the values out of it
+//       afterwards. A checkbox in it marked data-omp-confirm-requires keeps
+//       the OK button disabled until it is checked; an element marked
+//       autofocus takes the focus when the dialog opens; Enter in a text
+//       field there is OK. The building blocks omp-forms.css dresses:
+//       omp-confirm-dialog__facts (a dl), __field (a label around an input),
+//       __warning (a p) and __check (a label around a checkbox).
 //
 // Declarative wiring (initialized on DOMContentLoaded):
 //   <form data-omp-confirm="message"> - submit is intercepted until confirmed.
@@ -27,8 +39,16 @@
         body.method = 'dialog';
         body.className = 'omp-confirm-dialog__body';
 
+        const title = document.createElement('h2');
+        title.className = 'omp-confirm-dialog__title';
+        title.hidden = true;
+
         const message = document.createElement('p');
         message.className = 'omp-confirm-dialog__message';
+
+        const content = document.createElement('div');
+        content.className = 'omp-confirm-dialog__content';
+        content.hidden = true;
 
         const actions = document.createElement('div');
         actions.className = 'omp-confirm-dialog__actions';
@@ -42,7 +62,7 @@
         okButton.className = 'omp-confirm-dialog__ok';
 
         actions.append(cancelButton, okButton);
-        body.append(message, actions);
+        body.append(title, message, content, actions);
         dialog.append(body);
         document.body.append(dialog);
         return dialog;
@@ -55,20 +75,52 @@
         }
 
         const dialog = ensureDialog();
+        const title = dialog.querySelector('.omp-confirm-dialog__title');
+        title.textContent = settings.title || '';
+        title.hidden = !settings.title;
         dialog.querySelector('.omp-confirm-dialog__message').textContent = message || '';
         const okButton = dialog.querySelector('.omp-confirm-dialog__ok');
         const cancelButton = dialog.querySelector('.omp-confirm-dialog__cancel');
         okButton.textContent = settings.okLabel || 'OK';
         cancelButton.textContent = settings.cancelLabel || 'Cancel';
 
+        // The page's content is borrowed, not copied: a placeholder keeps its
+        // seat so it goes back exactly where it came from, values and all.
+        const slot = dialog.querySelector('.omp-confirm-dialog__content');
+        const content = settings.content instanceof Element ? settings.content : null;
+        const placeholder = content && content.parentNode ? document.createComment('omp-confirm-content') : null;
+        if (placeholder) {
+            content.parentNode.insertBefore(placeholder, content);
+        }
+        slot.replaceChildren(...(content ? [content] : []));
+        slot.hidden = !content;
+        dialog.classList.toggle('omp-confirm-dialog--content', !!content);
+        const body = dialog.querySelector('.omp-confirm-dialog__body');
+        const syncOk = () => {
+            okButton.disabled = Array.from(slot.querySelectorAll('input[data-omp-confirm-requires]'))
+                .some((input) => !input.checked);
+        };
+        syncOk();
+
         return new Promise((resolve) => {
             const finish = (result) => {
                 okButton.removeEventListener('click', onOk);
                 cancelButton.removeEventListener('click', onCancel);
                 dialog.removeEventListener('cancel', onDialogCancel);
+                dialog.removeEventListener('close', onClose);
+                body.removeEventListener('submit', onSubmit);
+                slot.removeEventListener('change', syncOk);
                 if (dialog.open) {
                     dialog.close();
                 }
+                if (content) {
+                    if (placeholder && placeholder.parentNode) {
+                        placeholder.replaceWith(content);
+                    } else {
+                        content.remove();
+                    }
+                }
+                okButton.disabled = false;
                 resolve(result);
             };
             const onOk = () => finish(true);
@@ -77,12 +129,26 @@
                 event.preventDefault();
                 finish(false);
             };
+            // Closed by other means (a script, the browser): the answer is no.
+            const onClose = () => finish(false);
+            // Enter in a text field in the content submits the dialog's own
+            // form; that is OK, unless a required checkbox still holds it back.
+            const onSubmit = (event) => {
+                event.preventDefault();
+                if (!okButton.disabled) {
+                    finish(true);
+                }
+            };
 
             okButton.addEventListener('click', onOk);
             cancelButton.addEventListener('click', onCancel);
             dialog.addEventListener('cancel', onDialogCancel);
+            dialog.addEventListener('close', onClose);
+            body.addEventListener('submit', onSubmit);
+            slot.addEventListener('change', syncOk);
             dialog.showModal();
-            cancelButton.focus();
+            const focusTarget = content ? content.querySelector('[autofocus]') : null;
+            (focusTarget || cancelButton).focus();
         });
     }
 

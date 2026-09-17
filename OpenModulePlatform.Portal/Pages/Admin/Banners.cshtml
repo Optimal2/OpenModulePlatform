@@ -71,12 +71,12 @@
 
         <div class="form-field">
             <label asp-for="Input.TargetMode"></label>
-            <div class="segmented-control" role="group" aria-label="@L["Banner targets"]">
-                <label>
+            <div class="omp-segmented" role="radiogroup" aria-label="@L["Banner targets"]">
+                <label class="omp-segmented__option">
                     <input asp-for="Input.TargetMode" type="radio" value="global" />
                     <span>@L["Global"]</span>
                 </label>
-                <label>
+                <label class="omp-segmented__option">
                     <input asp-for="Input.TargetMode" type="radio" value="roles" />
                     <span>@L["Specific roles"]</span>
                 </label>

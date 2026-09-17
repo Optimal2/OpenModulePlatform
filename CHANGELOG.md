@@ -8,6 +8,20 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **A segmented choice in the picker family, and a confirmation dialog that
+  can hold a field.** `omp-picker.css` now also dresses `omp-segmented`: a
+  single choice with every option in view (two to four short ones), the
+  chosen one filled with the link colour like a chosen picker row, no script;
+  the banner page's target choice uses it instead of the portal's own
+  `segmented-control`. `ompConfirm` in omp-forms takes a `title` and a
+  `content` element: the page's own fields (a note, an optional text field, a
+  checkbox) are borrowed into the dialog while it is open and put back where
+  they were when it closes, so the page reads the values out of them; a
+  checkbox marked `data-omp-confirm-requires` holds the OK button until it is
+  checked, an `autofocus` element takes the focus, Enter in a text field is
+  OK, and a dialog closed by other means answers no. omp-forms.css dresses the
+  building blocks (`__facts`, `__field`, `__warning`, `__check`).
+
 - **A shared choice picker (`omp-picker`) in the period picker's clothes,
   and the user log's four dropdowns as one family.** `omp-picker.css` and
   `omp-picker.js` in Web.Shared give a `<details>` of radio or checkbox rows

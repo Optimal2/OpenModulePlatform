@@ -16,6 +16,11 @@
     box-shadow: 0 24px 64px rgba(17, 24, 39, 0.18);
 }
 
+/* A dialog with content of its own has room for a field or two. */
+.omp-confirm-dialog--content {
+    width: min(34rem, calc(100vw - 2rem));
+}
+
 .omp-confirm-dialog::backdrop {
     background: rgba(23, 32, 51, 0.35);
 }
@@ -27,10 +32,100 @@
     gap: 16px;
 }
 
+.omp-confirm-dialog__title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
 .omp-confirm-dialog__message {
     margin: 0;
     line-height: 1.5;
     overflow-wrap: anywhere;
+}
+
+/* The page's own content between the message and the buttons, and the
+   building blocks it may be made of. The [hidden] rules re-assert the UA
+   sheet against host rules that set a display on headings or divs. */
+.omp-confirm-dialog__content {
+    display: grid;
+    gap: 12px;
+}
+
+.omp-confirm-dialog__title[hidden],
+.omp-confirm-dialog__content[hidden] {
+    display: none;
+}
+
+.omp-confirm-dialog__facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 12px;
+    margin: 0;
+}
+
+.omp-confirm-dialog__facts dt {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.omp-confirm-dialog__facts dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.omp-confirm-dialog__field {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    font-weight: 600;
+}
+
+.omp-confirm-dialog__field input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 36px;
+    margin: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+.omp-confirm-dialog__field input:focus-visible {
+    border-color: var(--link);
+    outline: 3px solid color-mix(in srgb, var(--link) 18%, transparent);
+    outline-offset: 1px;
+}
+
+.omp-confirm-dialog__warning {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid #e0b15b;
+    border-left: 4px solid #9a6700;
+    border-radius: 8px;
+    background: #fff8e6;
+    color: #674300;
+    line-height: 1.5;
+}
+
+.omp-confirm-dialog__check {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.omp-confirm-dialog__check input {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin: 2px 0 0;
 }
 
 .omp-confirm-dialog__actions {
@@ -71,6 +166,14 @@
     border-color: var(--link-hover);
     background: var(--link-hover);
     color: #fff;
+}
+
+.omp-confirm-dialog__actions button.omp-confirm-dialog__ok:disabled {
+    border-color: var(--link);
+    background: var(--link);
+    color: #fff;
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 /* Higher specificity than the base rule above so the primary button keeps its

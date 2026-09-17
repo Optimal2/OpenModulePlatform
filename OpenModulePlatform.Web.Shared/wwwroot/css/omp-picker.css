@@ -29,7 +29,10 @@
    base look of the field sits at zero specificity so a host class (the
    page's own field class, handed the same way as the period picker's
    data-field-class) wins. A picker that always holds a value (a page size)
-   adds data-omp-picker-plain so it never shows the active colour. */
+   adds data-omp-picker-plain so it never shows the active colour.
+
+   The same file dresses a segmented choice (omp-segmented, at the bottom):
+   every option in view at once, for two to four short ones. */
 
 .omp-picker {
     position: relative;
@@ -249,6 +252,72 @@
 }
 
 .omp-picker__option:has(input:focus-visible) {
+    outline: 2px solid var(--link, #0b57d0);
+    outline-offset: 1px;
+}
+
+/* --- segmented choice ---------------------------------------------------
+   A single choice with every option in view, for two to four short ones (a
+   search mode, a target kind): one track in the field's clothes, the chosen
+   option filled with the link colour like a chosen picker row. No script: the
+   radio inside each option carries the state, and the form posts it as it
+   would any radio.
+
+     <div class="omp-segmented" role="radiogroup" aria-label="Search mode">
+       <label class="omp-segmented__option"><input type="radio" name="Mode" value="a" checked />Patient</label>
+       <label class="omp-segmented__option"><input type="radio" name="Mode" value="b" />Employee</label>
+     </div>
+*/
+
+.omp-segmented {
+    display: inline-flex;
+    align-items: stretch;
+    box-sizing: border-box;
+    min-height: 36px;
+    padding: 3px;
+    gap: 3px;
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 8px;
+    background: var(--surface, #fff);
+}
+
+.omp-segmented__option {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0 12px;
+    border-radius: 6px;
+    color: var(--text, #1d2433);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.omp-segmented__option:hover {
+    background: var(--accent, #e8f0fe);
+}
+
+.omp-segmented__option:has(input:checked),
+.omp-segmented__option:has(input:checked):hover {
+    background: var(--link, #0b57d0);
+    color: #fff;
+}
+
+/* As in the picker: the radio is what the form posts and the keyboard
+   reaches; the option itself shows the state. */
+.omp-segmented__option input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.omp-segmented__option:has(input:focus-visible) {
     outline: 2px solid var(--link, #0b57d0);
     outline-offset: 1px;
 }

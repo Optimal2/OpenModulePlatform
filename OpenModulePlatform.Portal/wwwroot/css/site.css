@@ -975,25 +975,6 @@
     gap: 8px;
 }
 
-.segmented-control {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-
-.segmented-control label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 34px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
-    cursor: pointer;
-    font-weight: 700;
-}
-
 .checkbox-list {
     display: grid;
     gap: 6px;
