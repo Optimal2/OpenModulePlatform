@@ -661,7 +661,11 @@
     // labels on the presets), so the page's GET contract and localization
     // stay where they were. Picking a preset applies immediately; custom
     // dates apply through the footer button. Either date may stay empty for
-    // an open-ended period; both empty applies as the first preset.
+    // an open-ended period; both empty applies as the first preset. The
+    // container takes omp-daterange--active whenever the period is a known
+    // preset other than the neutral one (data-neutral="all", else the first
+    // preset) or a custom period, and omp-daterange--open while its popup is
+    // up, so a host stylesheet can dress it like a choice picker.
 
     var rangePanel = null;
     var rangeContainer = null;
@@ -673,6 +677,7 @@
             if (panel && rangePanel.contains(panel)) { closePanel(); }
             rangePanel.remove();
             rangePanel = null;
+            if (rangeContainer) { rangeContainer.classList.remove("omp-daterange--open"); }
             rangeContainer = null;
         }
     }
@@ -743,7 +748,10 @@
         // always a choice.
         function syncActive() {
             var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
-            var active = hiddens.range.value ? hiddens.range.value !== neutral : !!(hiddens.from.value || hiddens.to.value);
+            var known = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0];
+            // An unknown key (a stale bookmark) shows the neutral label, so it
+            // is not a choice either.
+            var active = known ? known.key !== neutral : (!hiddens.range.value && !!(hiddens.from.value || hiddens.to.value));
             container.classList.toggle("omp-daterange--active", active);
         }
         syncActive();
@@ -770,6 +778,7 @@
             rangePanel = document.createElement("div");
             rangePanel.className = "omp-datetime-panel omp-daterange-panel";
             rangeContainer = container;
+            container.classList.add("omp-daterange--open");
 
             var rail = document.createElement("div");
             rail.className = "omp-daterange-panel__presets";

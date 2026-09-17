@@ -3206,7 +3206,5 @@
   <data name="Only group conversations can be changed." xml:space="preserve"><value>Bara gruppkonversationer kan ändras.</value></data>
   <data name="The new admin must be a participant of the group." xml:space="preserve"><value>Den nya adminen måste vara deltagare i gruppen.</value></data>
   <data name="You are already the group admin." xml:space="preserve"><value>Du är redan gruppadmin.</value></data>
-  <data name="{0} and one other" xml:space="preserve"><value>{0} och en annan</value></data>
-  <data name="{0} and {1} others" xml:space="preserve"><value>{0} och {1} andra</value></data>
   <data name="{0} and others" xml:space="preserve"><value>{0} m.fl.</value></data>
 </root>

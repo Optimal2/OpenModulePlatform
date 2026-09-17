@@ -375,9 +375,15 @@
 }
 
 /* A period other than the neutral preset reads as a choice made, like a
-   choice picker with a choice on: the link colour on border and text. */
+   choice picker with a choice on: the link colour on border and text; and
+   the field's border shows the link colour while its popup is up, as a
+   picker's does. */
+.omp-daterange--open .omp-daterange__field,
 .omp-daterange--active .omp-daterange__field {
     border-color: var(--link, #0b57d0);
+}
+
+.omp-daterange--active .omp-daterange__field {
     color: var(--link-hover, #0b57d0);
 }
 
