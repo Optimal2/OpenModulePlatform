@@ -310,9 +310,11 @@
 /* --- segmented choice ---------------------------------------------------
    A single choice with every option in view, for two to four short ones (a
    search mode, a target kind): one track in the field's clothes, the chosen
-   option filled with the link colour like a chosen picker row. No script: the
-   radio inside each option carries the state, and the form posts it as it
-   would any radio.
+   option filled with the link colour like a chosen picker row. The radio
+   inside each option carries the state, and the form posts it as it would
+   any radio; with omp-picker.js the fill is a thumb that glides from the
+   option that was on to the one that is (without the script each chosen
+   option fills itself).
 
      <div class="omp-segmented" role="radiogroup" aria-label="Search mode">
        <label class="omp-segmented__option"><input type="radio" name="Mode" value="a" checked />Patient</label>
@@ -321,6 +323,7 @@
 */
 
 .omp-segmented {
+    position: relative;
     display: inline-flex;
     align-items: stretch;
     box-sizing: border-box;
@@ -332,8 +335,28 @@
     background: var(--surface, #fff);
 }
 
+/* The sliding fill: sized and moved by the script to the option that is
+   on; it sits under the options, which keep their text above it. */
+.omp-segmented__thumb {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 0;
+    width: 0;
+    height: 0;
+    border-radius: 6px;
+    background: var(--link, #0b57d0);
+    pointer-events: none;
+    transition: transform 200ms ease, width 200ms ease, height 200ms ease;
+}
+
+.omp-segmented__thumb--still {
+    transition: none;
+}
+
 .omp-segmented__option {
     position: relative;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     margin: 0;
@@ -349,7 +372,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .omp-segmented__option {
+    .omp-segmented__option,
+    .omp-segmented__thumb {
         transition: none;
     }
 }
@@ -362,6 +386,13 @@
 .omp-segmented__option:has(input:checked):hover {
     background: var(--link, #0b57d0);
     color: #fff;
+}
+
+/* With the thumb in place the option's own fill steps aside, so the fill
+   is seen to move rather than to jump. */
+.omp-segmented--thumb .omp-segmented__option:has(input:checked),
+.omp-segmented--thumb .omp-segmented__option:has(input:checked):hover {
+    background: transparent;
 }
 
 /* As in the picker: the radio is what the form posts and the keyboard

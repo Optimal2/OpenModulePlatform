@@ -24,8 +24,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   current day the period and Clear puts the neutral preset back, both
   applied on the spot as a preset is; a custom period still goes through
   Apply. The user log's user and module badges show "0" when nothing is on.
-  A segmented choice fades from one option to the next instead of snapping
-  (not when the user prefers reduced motion).
+  A segmented choice's fill glides from the option that was on to the one
+  that is (a thumb placed by omp-picker.js; the text fades with it; not when
+  the user prefers reduced motion).
 
 - **A list message may stand in for a longer text.** A `.list-message`
   element with `data-list-message-text` opens that text in its popover

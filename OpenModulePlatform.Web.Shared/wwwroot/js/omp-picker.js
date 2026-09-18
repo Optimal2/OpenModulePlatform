@@ -22,6 +22,12 @@
 // hidden content. The inputs are ordinary form fields, so the page's own
 // change handling (a submit, a fetch) works untouched. One pair of document
 // listeners serves every picker on the page.
+//
+// The same script gives a segmented choice (.omp-segmented, see
+// omp-picker.css) its sliding fill: a thumb behind the options that glides
+// from the option that was on to the one that is, and follows a wrapped
+// row or a resized window. Without the script the chosen option carries
+// its own fill, so the choice reads the same either way.
 (() => {
     'use strict';
 
@@ -181,8 +187,43 @@
         }
     });
 
+    // The thumb is placed over the option that is on; it moves on change
+    // and re-measures when the window or the fonts change the layout. The
+    // first placement is still (no glide in from the corner on load).
+    const enhanceSegmented = (track) => {
+        if (track._ompSegmented) {
+            return;
+        }
+        track._ompSegmented = true;
+        const thumb = document.createElement('span');
+        thumb.className = 'omp-segmented__thumb';
+        thumb.setAttribute('aria-hidden', 'true');
+        track.prepend(thumb);
+        const place = (still) => {
+            const on = track.querySelector('.omp-segmented__option input:checked')?.closest('.omp-segmented__option');
+            track.classList.toggle('omp-segmented--thumb', !!on);
+            if (!on) {
+                return;
+            }
+            thumb.classList.toggle('omp-segmented__thumb--still', !!still);
+            thumb.style.transform = `translate(${on.offsetLeft}px, ${on.offsetTop}px)`;
+            thumb.style.width = `${on.offsetWidth}px`;
+            thumb.style.height = `${on.offsetHeight}px`;
+            if (still) {
+                // Flush the still placement before the transition comes back.
+                void thumb.offsetWidth;
+                thumb.classList.remove('omp-segmented__thumb--still');
+            }
+        };
+        track.addEventListener('change', () => place(false));
+        window.addEventListener('resize', () => place(true));
+        place(true);
+        document.fonts?.ready?.then(() => place(true));
+    };
+
     const init = (root) => {
         (root || document).querySelectorAll('details[data-omp-picker]').forEach(enhance);
+        (root || document).querySelectorAll('.omp-segmented').forEach(enhanceSegmented);
     };
 
     if (document.readyState === 'loading') {
