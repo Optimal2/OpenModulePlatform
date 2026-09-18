@@ -741,6 +741,12 @@
 
         var st = { container: container, hiddens: hiddens, presets: presets, field: field };
         container._ompDaterange = st;
+        // For a page that clears its filters in place: the neutral preset (or
+        // any preset by key) applied as if picked, change events included.
+        st.applyPreset = function (key) {
+            var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
+            applyChoice(key || neutral, "", "", false);
+        };
 
         // The field takes the active look (the same as a choice picker with a
         // choice on) whenever the period is anything but the neutral preset:
@@ -1102,7 +1108,15 @@
         }
     });
 
-    window.ompDatetime = { init: init };
+    // applyRangePreset(container, key): a period picker takes the preset with
+    // that key (the neutral one when the key is omitted), as if the user had
+    // picked it; the page hears the same change events.
+    function applyRangePreset(container, key) {
+        var st = container && container._ompDaterange;
+        if (st && st.applyPreset) { st.applyPreset(key); }
+    }
+
+    window.ompDatetime = { init: init, applyRangePreset: applyRangePreset };
 
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () { init(document); });

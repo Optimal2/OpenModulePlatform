@@ -268,11 +268,41 @@
         initialSearch.addEventListener('input', syncClear);
         initialSearch.addEventListener('keydown', blockEnter);
     }
+    // Clear puts every control back in place: the row search emptied, every
+    // picker row off, the period on its neutral preset. Each of those fires
+    // the change the bar already listens to, so one debounced fetch follows
+    // and the address is rewritten; the link's own navigation is the
+    // fallback when the swap is not available.
     if (clear) {
         clear.addEventListener('click', (event) => {
             if (clear.getAttribute('aria-disabled') === 'true') {
                 event.preventDefault();
+                return;
             }
+            if (!results || typeof window.fetch !== 'function') {
+                return;
+            }
+            event.preventDefault();
+            const search = currentSearch();
+            if (search && search.value) {
+                search.value = '';
+                search.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            form.querySelectorAll('details[data-activity-picker]').forEach((picker) => {
+                const on = Array.from(picker.querySelectorAll('input:checked'));
+                on.forEach((input) => {
+                    input.checked = false;
+                });
+                if (on.length > 0) {
+                    on[0].dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                window.ompPicker?.sync(picker);
+            });
+            const period = form.querySelector('[data-omp-daterange]');
+            if (period) {
+                window.ompDatetime?.applyRangePreset?.(period);
+            }
+            syncClear();
         });
     }
 })();

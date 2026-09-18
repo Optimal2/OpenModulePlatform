@@ -8,6 +8,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **A picker with a fixed label, a Clear in its panel, and a period that a
+  page can put back.** `omp-picker` with `data-omp-picker-static` keeps the
+  label the page rendered ("User") and counts the rows that are on in the
+  badge; a `data-omp-picker-clear` button in the panel's footer turns every
+  row off and fires the change the page listens to. `ompDatetime.applyRangePreset`
+  lets a page set a period picker to a preset (the neutral one by default)
+  as if picked. The user log's user and module fields say "User" and
+  "Module" with the count, each panel ends with Clear, and the bar's Clear
+  clears in place: the fetch swaps the results as for any other change, so
+  the page no longer reloads. The page's info text is in Swedish again (its
+  last sentence had no translation).
+
 - **A list message may stand in for a longer text.** A `.list-message`
   element with `data-list-message-text` opens that text in its popover
   instead of its own: a status pill can be the one click away from the

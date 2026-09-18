@@ -10,7 +10,12 @@
 // data-omp-picker-more-one for exactly one more) the label says how many
 // more are on, otherwise the badge says "+N"; and the field's title lists
 // them all when the summary carries data-omp-picker-title (what the field is
-// for, shown when nothing is on). Either way the row that is checked is highlighted, the
+// for, shown when nothing is on). A picker with data-omp-picker-static keeps
+// the label the page rendered (what the field is for) and lets the badge
+// say how many are on. A button marked data-omp-picker-clear inside the
+// panel turns every row off (and is disabled while none is on); it fires a
+// change on a row so the page's own change handling runs. Either way the
+// row that is checked is highlighted, the
 // field is marked active while a non-empty value is chosen, and a click
 // outside or Escape closes the panel; a panel that closes with the focus
 // inside hands the focus back to its field, so the keyboard never rests in
@@ -45,6 +50,10 @@
         // A picker that always holds a value (a page size) is never "active";
         // it says so with data-omp-picker-plain.
         picker.classList.toggle('omp-picker--active', !picker.hasAttribute('data-omp-picker-plain') && checked.some((input) => input.value !== ''));
+        const clearButton = picker.querySelector('[data-omp-picker-clear]');
+        if (clearButton) {
+            clearButton.disabled = !checked.some((input) => input.value !== '');
+        }
 
         const text = (input) => (input.closest('.omp-picker__option')?.textContent || '').trim();
         const single = all.some((input) => input.type === 'radio');
@@ -67,7 +76,10 @@
         // does the first row on, in list order, take its place.
         const shown = checked.find((input) => input.value === picker._ompPickerShown) || checked[0];
         picker._ompPickerShown = shown?.value;
-        if (label) {
+        // A static label is the page's own words for the field ("User");
+        // only the badge and the title tell what is on.
+        const staticLabel = picker.hasAttribute('data-omp-picker-static');
+        if (label && !staticLabel) {
             // Three states: nothing on says what "nothing" means (the text in
             // data-omp-picker-empty), one on says its name, several say the
             // named one and how many more, through the page's own wording in
@@ -91,8 +103,13 @@
             }
         }
         if (count) {
-            count.hidden = names.length < 2 || picker.hasAttribute('data-omp-picker-more');
-            count.textContent = count.hidden ? '' : `+${names.length - 1}`;
+            if (staticLabel) {
+                count.hidden = names.length === 0;
+                count.textContent = count.hidden ? '' : String(names.length);
+            } else {
+                count.hidden = names.length < 2 || picker.hasAttribute('data-omp-picker-more');
+                count.textContent = count.hidden ? '' : `+${names.length - 1}`;
+            }
         }
         // The field's title lists every chosen name; with nothing on it says
         // what the field is for, which the page hands over in
@@ -117,6 +134,22 @@
         // and so does the click the browser synthesises when a key changes a
         // radio; that one carries detail 0, a pointer click never does.
         picker.addEventListener('click', (event) => {
+            // Clear turns every row off and tells the page through one change
+            // event on a row that was on, so a page listening to its inputs
+            // (a fetch, a submit) hears it; the panel stays open.
+            const clearButton = event.target.closest('[data-omp-picker-clear]');
+            if (clearButton) {
+                const on = Array.from(picker.querySelectorAll('.omp-picker__option input')).filter((input) => input.checked && input.value !== '');
+                on.forEach((input) => {
+                    input.checked = false;
+                });
+                if (on.length > 0) {
+                    on[0].dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                    sync(picker);
+                }
+                return;
+            }
             if (event.detail === 0) {
                 return;
             }

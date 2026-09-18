@@ -1,5 +1,4 @@
 @page "/admin/activitylog"
-@using Microsoft.AspNetCore.Html
 @using System.Globalization
 @using OpenModulePlatform.Web.Shared.ActivityLog
 @model OpenModulePlatform.Portal.Pages.Admin.ActivityLogModel
@@ -36,42 +35,24 @@
                aria-label="@L["Row search"]"
                title="@L["Filters the loaded rows as you type."]" />
         @{
-            // A multiple-choice field's text has three states: nothing chosen
-            // ("Any user"), one chosen (its name), several ("Anna and others").
-            // The name gets its own span, clipped on its own by the shared
-            // picker's CSS, so the wording around it stays whole.
-            IHtmlContent PickerText(IReadOnlyList<string> chosen, string none)
-            {
-                if (chosen.Count == 0)
-                {
-                    return new HtmlString(System.Net.WebUtility.HtmlEncode(none));
-                }
-
-                // A plain replace rather than string.Format: a translation with
-                // a stray brace must not turn into a 500 for that language.
-                var wording = chosen.Count == 1 ? "{0}" : L["{0} and others"].Value;
-                var parts = wording.Split("{0}", 2);
-                var encoded = System.Net.WebUtility.HtmlEncode(chosen[0]);
-                return new HtmlString($"{System.Net.WebUtility.HtmlEncode(parts[0])}<span class=\"omp-picker__name\">{encoded}</span>{(parts.Length > 1 ? System.Net.WebUtility.HtmlEncode(parts[1]) : string.Empty)}");
-            }
+            // A multiple-choice field says what it is for ("User") and, in
+            // the badge, how many are on; the chosen names are in its title.
             var chosenUsers = Model.Users
                 .Where(user => Model.UserIds.Contains(user.UserId))
                 .Select(user => $"{user.DisplayName} ({user.UserId})")
                 .ToArray();
         }
-        <span id="activity-user-label" class="visually-hidden">@L["User"]</span>
         <details class="omp-picker omp-picker--multi activity-bar__users@(chosenUsers.Length > 0 ? " omp-picker--active" : null)"
                  data-omp-picker
-                 data-activity-picker="users"
-                 data-omp-picker-empty="@L["Any user"]"
-                 data-omp-picker-more="@L["{0} and others"]">
-            @* The name is what the field is for plus what it holds ("User,
-               Anna"); the label itself is unseen, since the value says enough. *@
+                 data-omp-picker-static
+                 data-activity-picker="users">
+            @* The name is the field's word plus the count ("User 2"). *@
             <summary class="omp-picker__field activity-bar__field"
-                     aria-labelledby="activity-user-label activity-user-value"
+                     aria-labelledby="activity-user-value activity-user-count"
                      title="@(chosenUsers.Length > 0 ? string.Join(", ", chosenUsers) : L["User"].Value)"
                      data-omp-picker-title="@L["User"]">
-                <span id="activity-user-value" class="omp-picker__label" data-omp-picker-label>@PickerText(chosenUsers, L["Any user"].Value)</span>
+                <span id="activity-user-value" class="omp-picker__label" data-omp-picker-label>@L["User"]</span>
+                <span id="activity-user-count" class="omp-picker__count" data-omp-picker-count hidden="@(chosenUsers.Length == 0)">@chosenUsers.Length</span>
             </summary>
             <div class="omp-picker__menu">
                 @foreach (var user in Model.Users)
@@ -82,28 +63,29 @@
                         @user.DisplayName (@user.UserId)
                     </label>
                 }
+                <div class="omp-picker__footer">
+                    <button type="button" class="omp-picker__clear" data-omp-picker-clear disabled="@(chosenUsers.Length == 0)">@L["Clear"]</button>
+                </div>
             </div>
         </details>
         @if (Model.AvailableModules.Count > 0)
         {
-            @* A multiple choice: the field names the first chosen module (in
-               list order) and says there are more, "Dokumentbibliotek and
-               others"; every chosen name is in the field's title. *@
+            @* The same shape: the field's word, the count in the badge, the
+               chosen names in the title. *@
             var chosenModules = Model.AvailableModules
                 .Where(module => Model.Modules.Contains(module.ModuleKey, StringComparer.OrdinalIgnoreCase))
                 .Select(module => module.DisplayName)
                 .ToArray();
-            <span id="activity-module-label" class="visually-hidden">@L["Module"]</span>
             <details class="omp-picker omp-picker--multi activity-bar__modules@(chosenModules.Length > 0 ? " omp-picker--active" : null)"
                      data-omp-picker
-                     data-activity-picker="modules"
-                     data-omp-picker-empty="@L["All modules"]"
-                     data-omp-picker-more="@L["{0} and others"]">
+                     data-omp-picker-static
+                     data-activity-picker="modules">
                 <summary class="omp-picker__field activity-bar__field"
-                         aria-labelledby="activity-module-label activity-module-value"
+                         aria-labelledby="activity-module-value activity-module-count"
                          title="@(chosenModules.Length > 0 ? string.Join(", ", chosenModules) : L["Module"].Value)"
                          data-omp-picker-title="@L["Module"]">
-                    <span id="activity-module-value" class="omp-picker__label" data-omp-picker-label>@PickerText(chosenModules, L["All modules"].Value)</span>
+                    <span id="activity-module-value" class="omp-picker__label" data-omp-picker-label>@L["Module"]</span>
+                    <span id="activity-module-count" class="omp-picker__count" data-omp-picker-count hidden="@(chosenModules.Length == 0)">@chosenModules.Length</span>
                 </summary>
                 <div class="omp-picker__menu">
                     @foreach (var module in Model.AvailableModules)
@@ -114,6 +96,9 @@
                             @module.DisplayName
                         </label>
                     }
+                    <div class="omp-picker__footer">
+                        <button type="button" class="omp-picker__clear" data-omp-picker-clear disabled="@(chosenModules.Length == 0)">@L["Clear"]</button>
+                    </div>
                 </div>
             </details>
         }
@@ -133,9 +118,11 @@
             <span data-omp-daterange-preset="30d" data-from="@presetToday.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 30]</span>
             <span data-omp-daterange-preset="90d" data-from="@presetToday.AddDays(-89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 90]</span>
         </span>
-        @* Clear is a plain link back to the unfiltered page, next to the
-           filters it clears; it is greyed out while there is nothing to clear
-           (the script also enables it as soon as the row search holds text). *@
+        @* Clear is a link back to the unfiltered page, next to the filters it
+           clears; the page script clears the bar in place instead and lets the
+           usual fetch swap the results, so nothing reloads. It is greyed out
+           while there is nothing to clear (the script also enables it as
+           soon as the row search holds text). *@
         <a class="btn btn-danger activity-bar__clear"
            href="@Url.Content("~/admin/activitylog")"
            data-activity-clear

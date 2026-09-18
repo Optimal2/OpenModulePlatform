@@ -7566,11 +7566,6 @@ tr.linkbox-editor-row--dragging {
     flex: 1 1 auto;
 }
 
-/* A user's name carries its id: a little more room before it is clipped. */
-.activity-bar__users {
-    --omp-picker-label-width: 200px;
-}
-
 /* The results card fades slightly while a filter change is being fetched, so
    the swap reads as a quiet update rather than a page load. */
 .activity-results {

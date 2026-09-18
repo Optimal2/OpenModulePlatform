@@ -29,7 +29,14 @@
    base look of the field sits at zero specificity so a host class (the
    page's own field class, handed the same way as the period picker's
    data-field-class) wins. A picker that always holds a value (a page size)
-   adds data-omp-picker-plain so it never shows the active colour.
+   adds data-omp-picker-plain so it never shows the active colour. With
+   data-omp-picker-static the label stays what the page rendered ("User")
+   and the badge counts the rows that are on. A panel may end with a footer
+   holding a Clear button, in the period picker's clothes:
+
+     <div class="omp-picker__footer">
+       <button type="button" class="omp-picker__clear" data-omp-picker-clear>Clear</button>
+     </div>
 
    The same file dresses a segmented choice (omp-segmented, at the bottom):
    every option in view at once, for two to four short ones. */
@@ -185,6 +192,50 @@
 .omp-picker__menu--end {
     left: auto;
     right: 0;
+}
+
+/* The footer stays in view at the bottom of a long, scrolling panel; the
+   negative margins let its top border run edge to edge. */
+.omp-picker__footer {
+    position: sticky;
+    bottom: -10px;
+    display: flex;
+    justify-content: flex-start;
+    margin: 6px -10px -10px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border, #d7deea);
+    background: var(--surface, #fff);
+}
+
+.omp-picker__clear {
+    min-height: 26px;
+    margin: 0;
+    padding: 2px 10px;
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 6px;
+    background: var(--surface, #fff);
+    color: var(--link, #0b57d0);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.omp-picker__clear:hover,
+.omp-picker__clear:focus-visible {
+    background: var(--accent, #e8f0fe);
+    border-color: var(--border-strong, #c4cede);
+    color: var(--link-hover, #0842a1);
+    outline: none;
+}
+
+.omp-picker__clear:disabled,
+.omp-picker__clear:disabled:hover {
+    background: var(--surface, #fff);
+    border-color: var(--border, #d7deea);
+    color: var(--text-muted, #5b667a);
+    opacity: 0.55;
+    cursor: default;
 }
 
 .omp-picker__option {
