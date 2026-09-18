@@ -344,6 +344,14 @@
     white-space: nowrap;
     cursor: pointer;
     user-select: none;
+    /* A choice fades over rather than snapping, so the eye follows it. */
+    transition: background-color 160ms ease, color 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .omp-segmented__option {
+        transition: none;
+    }
 }
 
 .omp-segmented__option:hover {
