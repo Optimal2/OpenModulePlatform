@@ -820,7 +820,12 @@
                 if (isOwnPopover) {
                     closeInfoPopover();
                 } else {
-                    openInfoPopover(message, (message.textContent || '').trim());
+                    // The popover shows the element's own text, or the text
+                    // in data-list-message-text when the element is only a
+                    // short stand-in for it (a status pill whose message is
+                    // the whole story).
+                    const text = message.getAttribute('data-list-message-text');
+                    openInfoPopover(message, (text ?? message.textContent ?? '').trim());
                 }
             });
         });

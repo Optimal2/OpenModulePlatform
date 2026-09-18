@@ -8,6 +8,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **A list message may stand in for a longer text.** A `.list-message`
+  element with `data-list-message-text` opens that text in its popover
+  instead of its own: a status pill can be the one click away from the
+  whole status message, so a list keeps one short line per row.
+
 - **A segmented choice in the picker family, and a confirmation dialog that
   can hold a field.** `omp-picker.css` now also dresses `omp-segmented`: a
   single choice with every option in view (two to four short ones), the
