@@ -18,7 +18,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   "Module" with the count, each panel ends with Clear, and the bar's Clear
   clears in place: the fetch swaps the results as for any other change, so
   the page no longer reloads. The page's info text is in Swedish again (its
-  last sentence had no translation).
+  last sentence had no translation). The period picker's "Today" preset is
+  gone from the user log (the calendar's own Today button remains), and the
+  Swedish word is spelled "Idag".
 
 - **A list message may stand in for a longer text.** A `.list-message`
   element with `data-list-message-text` opens that text in its popover

@@ -3156,7 +3156,7 @@
   <data name="Row search" xml:space="preserve"><value>Radsök</value></data>
   <data name="Filters the loaded rows as you type." xml:space="preserve"><value>Filtrerar de laddade raderna medan du skriver.</value></data>
   <data name="Since the start" xml:space="preserve"><value>Sedan start</value></data>
-  <data name="Today" xml:space="preserve"><value>I dag</value></data>
+  <data name="Today" xml:space="preserve"><value>Idag</value></data>
   <data name="Last {0} days" xml:space="preserve"><value>Senaste {0} dagarna</value></data>
   <data name="Clear" xml:space="preserve"><value>Rensa</value></data>
   <data name="Formatted entry" xml:space="preserve"><value>Formaterad post</value></data>

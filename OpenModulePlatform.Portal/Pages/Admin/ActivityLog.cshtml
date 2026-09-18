@@ -113,7 +113,6 @@
             <input type="hidden" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
             <input type="hidden" name="To" value="@(Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
             <span data-omp-daterange-preset="all" data-to="@presetTodayIso">@L["Since the start"]</span>
-            <span data-omp-daterange-preset="today" data-from="@presetTodayIso" data-to="@presetTodayIso">@L["Today"]</span>
             <span data-omp-daterange-preset="7d" data-from="@presetToday.AddDays(-6).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 7]</span>
             <span data-omp-daterange-preset="30d" data-from="@presetToday.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 30]</span>
             <span data-omp-daterange-preset="90d" data-from="@presetToday.AddDays(-89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 90]</span>

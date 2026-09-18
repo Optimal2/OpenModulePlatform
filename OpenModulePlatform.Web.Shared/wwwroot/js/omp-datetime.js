@@ -10,7 +10,7 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "I dag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå" }
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå" }
         : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy" };
 
     // The year placeholder follows the page language; its four letters keep
