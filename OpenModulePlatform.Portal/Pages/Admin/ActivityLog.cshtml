@@ -52,7 +52,7 @@
                      title="@(chosenUsers.Length > 0 ? string.Join(", ", chosenUsers) : L["User"].Value)"
                      data-omp-picker-title="@L["User"]">
                 <span id="activity-user-value" class="omp-picker__label" data-omp-picker-label>@L["User"]</span>
-                <span id="activity-user-count" class="omp-picker__count" data-omp-picker-count hidden="@(chosenUsers.Length == 0)">@chosenUsers.Length</span>
+                <span id="activity-user-count" class="omp-picker__count" data-omp-picker-count hidden="@(chosenUsers.Length == 0)">@(chosenUsers.Length > 0 ? chosenUsers.Length.ToString() : string.Empty)</span>
             </summary>
             <div class="omp-picker__menu">
                 @foreach (var user in Model.Users)
@@ -85,7 +85,7 @@
                          title="@(chosenModules.Length > 0 ? string.Join(", ", chosenModules) : L["Module"].Value)"
                          data-omp-picker-title="@L["Module"]">
                     <span id="activity-module-value" class="omp-picker__label" data-omp-picker-label>@L["Module"]</span>
-                    <span id="activity-module-count" class="omp-picker__count" data-omp-picker-count hidden="@(chosenModules.Length == 0)">@chosenModules.Length</span>
+                    <span id="activity-module-count" class="omp-picker__count" data-omp-picker-count hidden="@(chosenModules.Length == 0)">@(chosenModules.Length > 0 ? chosenModules.Length.ToString() : string.Empty)</span>
                 </summary>
                 <div class="omp-picker__menu">
                     @foreach (var module in Model.AvailableModules)

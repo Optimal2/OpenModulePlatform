@@ -745,7 +745,11 @@
         // any preset by key) applied as if picked, change events included.
         st.applyPreset = function (key) {
             var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
-            applyChoice(key || neutral, "", "", false);
+            var wanted = key || neutral;
+            // A key the page never rendered is a mistake in the caller, not a
+            // period: nothing happens, rather than the filter quietly going.
+            if (!presets.some(function (preset) { return preset.key === wanted; })) { return; }
+            applyChoice(wanted, "", "", false);
         };
 
         // The field takes the active look (the same as a choice picker with a
@@ -1110,7 +1114,8 @@
 
     // applyRangePreset(container, key): a period picker takes the preset with
     // that key (the neutral one when the key is omitted), as if the user had
-    // picked it; the page hears the same change events.
+    // picked it; the page hears the same change events. A key the picker
+    // does not offer is ignored.
     function applyRangePreset(container, key) {
         var st = container && container._ompDaterange;
         if (st && st.applyPreset) { st.applyPreset(key); }

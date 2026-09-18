@@ -148,6 +148,11 @@
                 } else {
                     sync(picker);
                 }
+                // The button has just disabled itself; a keyboard that was on
+                // it would fall out of the panel, so the field takes the focus.
+                if (clearButton.disabled && picker.contains(document.activeElement)) {
+                    picker.querySelector('summary')?.focus();
+                }
                 return;
             }
             if (event.detail === 0) {

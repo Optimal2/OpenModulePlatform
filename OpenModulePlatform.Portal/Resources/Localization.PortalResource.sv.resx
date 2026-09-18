@@ -3207,5 +3207,5 @@
   <data name="The new admin must be a participant of the group." xml:space="preserve"><value>Den nya adminen måste vara deltagare i gruppen.</value></data>
   <data name="You are already the group admin." xml:space="preserve"><value>Du är redan gruppadmin.</value></data>
   <data name="{0} and others" xml:space="preserve"><value>{0} m.fl.</value></data>
-  <data name="What people did in every module that keeps a user log, attributed to the OMP user who did it. This is an audit trail of user actions, not an error log. Pick a user to follow one person across modules." xml:space="preserve"><value>Vad människor gjort i varje modul som för användarlogg, knutet till den OMP-användare som gjorde det. Det är ett revisionsspår över användarhandlingar, inte en felllogg. Välj en användare för att följa en person genom modulerna.</value></data>
+  <data name="What people did in every module that keeps a user log, attributed to the OMP user who did it. This is an audit trail of user actions, not an error log. Pick a user to follow one person across modules." xml:space="preserve"><value>Vad människor gjort i varje modul som för användarlogg, knutet till den OMP-användare som gjorde det. Det är ett revisionsspår över användarhandlingar, inte en fellogg. Välj en användare för att följa en person genom modulerna.</value></data>
 </root>

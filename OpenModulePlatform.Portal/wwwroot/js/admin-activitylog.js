@@ -298,8 +298,10 @@
                 }
                 window.ompPicker?.sync(picker);
             });
+            // Only a period that is a choice goes back; the neutral one would
+            // fire a change for nothing.
             const period = form.querySelector('[data-omp-daterange]');
-            if (period) {
+            if (period?.classList.contains('omp-daterange--active')) {
                 window.ompDatetime?.applyRangePreset?.(period);
             }
             syncClear();
