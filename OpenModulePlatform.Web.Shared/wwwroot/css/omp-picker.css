@@ -31,7 +31,7 @@
    data-field-class) wins. A picker that always holds a value (a page size)
    adds data-omp-picker-plain so it never shows the active colour. With
    data-omp-picker-static the label stays what the page rendered ("User")
-   and the badge counts the rows that are on. A panel may end with a footer
+   and the badge counts the rows that are on, "0" included. A panel may end with a footer
    holding a Clear button, in the period picker's clothes:
 
      <div class="omp-picker__footer">

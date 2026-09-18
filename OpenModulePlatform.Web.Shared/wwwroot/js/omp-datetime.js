@@ -659,9 +659,11 @@
     //   </span>
     // The hidden inputs are page-owned (server-rendered values, page resx
     // labels on the presets), so the page's GET contract and localization
-    // stay where they were. Picking a preset applies immediately; custom
-    // dates apply through the footer button. Either date may stay empty for
-    // an open-ended period; both empty applies as the first preset. The
+    // stay where they were. Picking a preset applies immediately, and so do
+    // the footer's Today (the current day as the period) and Clear (the
+    // neutral preset again); a custom period, typed or picked in the
+    // calendar, applies through the footer button. Either date may stay
+    // empty for an open-ended period; both empty applies as the first preset. The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -726,6 +728,8 @@
             if (match) { return match.label; }
             var from = hiddens.from.value;
             var to = hiddens.to.value;
+            // A single day (Today, or the same day picked twice) is one date.
+            if (from && from === to) { return from; }
             if (from || to) { return (from || "") + " – " + (to || ""); }
             return presets.length > 0 ? presets[0].label : "";
         }
@@ -804,6 +808,7 @@
                 // resolved dates SET in the fields and calendar - the
                 // preset doubles as a base: nudge an end, then apply as a
                 // custom period. Escape or a click outside just closes.
+                button._ompPresetKey = preset.key;
                 button.addEventListener("click", function () {
                     setFieldDate(fromInput, preset.from);
                     setFieldDate(toInput, preset.to);
@@ -1026,18 +1031,33 @@
 
             var footer = document.createElement("div");
             footer.className = "omp-datetime-panel__footer";
-            // Bottom-left: jump the calendar view back to the current month,
-            // and clear both dates for a fresh pick (each field also has its
-            // own quick-clear X for emptying just one end).
+            // The rail's highlight follows whatever the period is now.
+            function syncRail() {
+                Array.prototype.forEach.call(rail.children, function (button) {
+                    button.classList.toggle("omp-daterange-panel__preset--active", button._ompPresetKey === hiddens.range.value);
+                });
+            }
+            // Bottom-left: Today makes the current day the period and Clear
+            // puts the neutral preset back, both applied on the spot as a
+            // preset is (the panel stays open, the field answers at once). A
+            // custom period still goes through Apply, since it needs both
+            // ends (each field also has its own quick-clear X for one end).
             var todayButton = document.createElement("button");
             todayButton.type = "button";
             todayButton.className = "omp-datetime-panel__action";
             todayButton.textContent = texts.today;
             todayButton.addEventListener("click", function () {
                 var current = new Date();
+                var todayIso = current.toISOString().slice(0, 10);
                 cal.year = current.getUTCFullYear();
                 cal.month = current.getUTCMonth() + 1;
+                cal.pendingStart = null;
+                cal.hoverIso = null;
+                setFieldDate(fromInput, todayIso);
+                setFieldDate(toInput, todayIso);
                 renderRangeCalendar();
+                applyChoice("custom", todayIso, todayIso, true);
+                syncRail();
             });
             var clearButton = document.createElement("button");
             clearButton.type = "button";
@@ -1049,6 +1069,9 @@
                 cal.pendingStart = null;
                 cal.hoverIso = null;
                 renderRangeCalendar();
+                var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
+                if (neutral) { applyChoice(neutral, "", "", true); }
+                syncRail();
             });
             footer.append(todayButton, clearButton);
             var apply = document.createElement("button");

@@ -20,7 +20,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   the page no longer reloads. The page's info text is in Swedish again (its
   last sentence had no translation). The period picker's "Today" preset is
   gone from the user log (the calendar's own Today button remains), and the
-  Swedish word is spelled "Idag".
+  Swedish word is spelled "Idag". In the period popup, Today makes the
+  current day the period and Clear puts the neutral preset back, both
+  applied on the spot as a preset is; a custom period still goes through
+  Apply. The user log's user and module badges show "0" when nothing is on.
 
 - **A list message may stand in for a longer text.** A `.list-message`
   element with `data-list-message-text` opens that text in its popover

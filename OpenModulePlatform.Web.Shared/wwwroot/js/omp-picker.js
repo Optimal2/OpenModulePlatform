@@ -12,7 +12,7 @@
 // them all when the summary carries data-omp-picker-title (what the field is
 // for, shown when nothing is on). A picker with data-omp-picker-static keeps
 // the label the page rendered (what the field is for) and lets the badge
-// say how many are on. A button marked data-omp-picker-clear inside the
+// say how many are on, "0" included. A button marked data-omp-picker-clear inside the
 // panel turns every row off (and is disabled while none is on); it fires a
 // change on a row so the page's own change handling runs. Either way the
 // row that is checked is highlighted, the
@@ -104,8 +104,9 @@
         }
         if (count) {
             if (staticLabel) {
-                count.hidden = names.length === 0;
-                count.textContent = count.hidden ? '' : String(names.length);
+                // Always in view, "0" included: the count is the field's state.
+                count.hidden = false;
+                count.textContent = String(names.length);
             } else {
                 count.hidden = names.length < 2 || picker.hasAttribute('data-omp-picker-more');
                 count.textContent = count.hidden ? '' : `+${names.length - 1}`;
