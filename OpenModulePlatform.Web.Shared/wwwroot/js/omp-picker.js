@@ -201,8 +201,12 @@
         track.prepend(thumb);
         const place = (still) => {
             const on = track.querySelector('.omp-segmented__option input:checked')?.closest('.omp-segmented__option');
-            track.classList.toggle('omp-segmented--thumb', !!on);
-            if (!on) {
+            // A track without a layout box (hidden, or not in the document
+            // yet) cannot be measured: the option keeps its own fill until
+            // the observer below sees the track get its size.
+            const measurable = !!on && on.offsetWidth > 0;
+            track.classList.toggle('omp-segmented--thumb', measurable);
+            if (!measurable) {
                 return;
             }
             thumb.classList.toggle('omp-segmented__thumb--still', !!still);
@@ -216,7 +220,14 @@
             }
         };
         track.addEventListener('change', () => place(false));
-        window.addEventListener('resize', () => place(true));
+        // The track's own size is what moves the options (a resize, a wrap,
+        // a hidden track shown): an observer on the track, not the window,
+        // so a track that leaves the page takes its listener with it.
+        if (typeof ResizeObserver === 'function') {
+            new ResizeObserver(() => place(true)).observe(track);
+        } else {
+            window.addEventListener('resize', () => place(true));
+        }
         place(true);
         document.fonts?.ready?.then(() => place(true));
     };
