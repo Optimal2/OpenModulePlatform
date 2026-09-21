@@ -2,7 +2,24 @@
 
 ## Status
 
-Proposed (2026-07-13)
+Accepted and implemented (proposed 2026-07-13, implemented 2026-07-13 in commit
+`eb15f86a`).
+
+Implementation summary: Mechanism A with `Warn` as default and per-module-instance
+scope. The module definition declares `consistentArtifactSets`
+(`docs/MODULE_DEFINITIONS.md`, section "consistentArtifactSets"), stored in
+`omp.ModuleDefinitionConsistentArtifactSets` and
+`omp.ModuleDefinitionConsistentArtifactSetMembers`
+(`sql/1-setup-openmoduleplatform.sql`). `DeploySetConsistencyService.CheckAsync`
+(`OpenModulePlatform.HostAgent.Runtime/Services/DeploySetConsistencyService.cs`)
+runs in `HostAgentEngine.RunOnceAsync` after the desired artifacts are resolved
+and before deployment. `HostAgent:DeploySetConsistencyMode`
+(`OpenModulePlatform.HostAgent.Runtime/Models/HostAgentSettings.cs`) accepts
+`None`, `Warn` and `Block`; in `Block` mode only the affected module instances'
+deployments are skipped and the reason is published into the host runtime
+state. The sections below record the analysis as it stood when the ADR was
+proposed; line numbers quoted there were measured at that time and may have
+drifted, so locate code by the symbol or check name given next to them.
 
 ## Context
 
@@ -40,9 +57,8 @@ ADR records the gap that allowed a mixed set to be deployed in the first place.
 `scripts/omp/validate-component-versions.ps1` "Check 10" validates that every
 component version listed in `omp-components.json` falls inside the
 `compatibleArtifacts` min/max range declared by its module definition
-(`validate-component-versions.ps1:457-499`). It also performs a transitive
-`ProjectReference` lockstep bump check ("Check 9",
-`validate-component-versions.ps1:830-965`).
+(`validate-component-versions.ps1`, "Check 10"). It also performs a transitive
+`ProjectReference` lockstep bump check ("Check 9", same script).
 
 `omp-components.json` carries a single `repositoryVersion` for the whole
 repository (`omp-components.json:4`). That value is written into the
@@ -125,7 +141,8 @@ field for `repositoryVersion`, `buildId`, `builtAgainst`, or a set identifier.
 4. `channel-type` and other non-runtime packages are explicitly skipped from
    auto-applying to `AppInstances` because they are "compatibility/channel
    metadata rather than a runtime artifact"
-   (`OpenModulePlatform.Portal/Services/OmpAdminRepository.Editor.cs:3305-3307`),
+   (`OpenModulePlatform.Portal/Services/OmpAdminRepository.Editor.cs`,
+   `ArtifactApplicationResult` with the "compatibility/channel metadata" text),
    which is correct for their package type but means the only thing keeping them
    consistent with the runtime that loads them is the operator's build/package
    discipline.

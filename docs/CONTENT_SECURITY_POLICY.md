@@ -135,7 +135,15 @@ inline block returns to a Portal page.
 
 ## Per-app policies
 
-The appsettings.json of each app carries its effective policy:
+The appsettings.json of each app carries its effective policy. Note that the
+checked-in `appsettings.json` of a packaged app never reaches a host: the
+artifact payload strips `appsettings*.json` (`RuntimeConfigurationFiles`), and
+HostAgent writes the component's `Packaging/appsettings.json` (merged over its
+built-in web-app template, which carries no `SecurityHeaders` section) instead.
+The Portal, Auth and Content module therefore repeat their policy in
+`Packaging/appsettings.json`, and `PortalInlineScriptGuardTests` pins the
+packaged Portal policy to the checked-in one. Keep both copies identical when a
+policy changes.
 
 > **The hardening lives in configuration, and losing the key un-does it silently.**
 > `OmpContentSecurityPolicy.Build` falls back to `Baseline` whenever

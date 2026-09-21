@@ -25,9 +25,23 @@ design**, because no text-based scanner can close them, and a third by operator
 choice rather than by impossibility:
 
 1. **Dynamic SQL.** `EXEC(N'INSERT INTO omp.Artifacts ...')` is invisible to
-   the guard because string literals are blanked before scanning. Blocking
+   the regex guard because string literals are blanked before scanning. Blocking
    `EXEC` is not an option: the platform's own scripts use
-   `EXEC(N'CREATE SCHEMA ...')` as an idiom.
+   `EXEC('CREATE SCHEMA [omp]');` as an idiom
+   (`sql/1-setup-openmoduleplatform.sql`, the `omp` schema bootstrap).
+
+   Note that this applies to the regex guard for `omp.Artifacts` and the
+   pointer columns only. The second guard, the ScriptDom rule
+   `OMP-MODULE-SQL-CONFIG-OWNERSHIP` for the three configuration tables
+   (`omp.ArtifactConfigurationFiles`, `omp.ConfigOverlayDocuments`,
+   `omp.ConfigOverlayConfigurationFiles`; `shared/ModuleDefinitionSqlOwnership.cs`,
+   source-linked into the same three executors), does follow dynamic SQL:
+   `EXEC(...)` and `sp_executesql` payloads that are constant (string literals,
+   concatenations of them, and single-assignment variables) are parsed
+   recursively, and a payload that cannot be resolved to a constant is
+   rejected outright ("dynamic SQL payload cannot be resolved"). The dynamic
+   SQL hole therefore exists for the artifact surface but not for the
+   configuration-table surface.
 2. **The stored-module-body exemption.** Batches that start with
    `CREATE/ALTER PROCEDURE|TRIGGER|FUNCTION` are excluded from the ownership
    scan because the platform's own `omp.MaterializeInstanceTemplate`

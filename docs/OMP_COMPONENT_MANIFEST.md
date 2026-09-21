@@ -88,8 +88,8 @@ same script in interactive mode so the operator can choose component keys and,
 when needed, module-definition keys.
 
 The older `scripts/bump-component-version.ps1` helper is **deprecated** and
-kept only for backward compatibility. It warns on every call, updates component
-versions in `omp-components.json` only, and leaves `repositoryVersion`,
+kept only for backward compatibility. It throws unless `-AllowDeprecated` is
+passed, updates component versions in `omp-components.json` only, and leaves `repositoryVersion`,
 module-definition versions, and `compatibleArtifacts.maxVersion` behind —
 exactly the drift behind the 2026-08-18 incident class. Do not use it for
 routine bumps; use `scripts/omp/bump-version.ps1` instead. Only reach for it
@@ -131,9 +131,11 @@ identity fields. The HostAgent-first package builder consumes
 component projects, and emits standard artifact package zips.
 
 The graphical bootstrapper exposes the same workflow for development machines.
-It can load multiple bootstrap JSON profiles from the package-local `configs`
-folder so one installer package can be reused across local and private
-environments. `Check source objects` compares the selected profile's package and
+It reads all bootstrap JSON profiles from the package-local `hosts\<profile>`
+and `configs` folders so one installer package can be reused across local and
+private environments, but it locks onto the single profile whose machine names
+match the local computer; there is no profile picker.
+`Check source objects` compares the matched profile's package and
 database with the source manifests. `Create updated installer package` starts a
 detached refresh process that rebuilds the HostAgent-first package from the
 manifest, replaces the current package after the GUI exits, and restarts the

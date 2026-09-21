@@ -33,7 +33,9 @@ OMP metadata; it does not infer the latest version from file or folder names.
 - Database-backed HostAgent job queue in `omp.HostAgentJobs`, currently used
   for central artifact store, host-local artifact cache cleanup, and
   maintenance scan/cleanup tasks requested from Portal maintenance and
-  Portal web-app health operations
+  Portal web-app health operations; HostAgent itself also enqueues a
+  detect-only maintenance scan for its own host on a schedule
+  (`HostAgent:MaintenanceScanIntervalMinutes`, default 1440)
 - Local named-pipe RPC for synchronous artifact provisioning:
   - operation: `ensureArtifact`
   - operation: `quiesce`
@@ -89,18 +91,34 @@ The cleanup job types are:
   to delete the cache root or `.staging`, and skips paths that are still
   referenced by current host state.
 - `MaintenanceScan` - global or host-specific scan requested by Portal
-  maintenance. The global scan records stale HostAgent runtime-state rows that
-  are inactive, unleased, and no longer match desired state. The host-specific
-  scan records stopped old HostAgent Windows services and HostAgent install or
-  staging directories below the configured HostAgent install root. Scan jobs only
-  create or reopen rows in `omp.MaintenanceFindings`; they do not delete
-  anything.
+  maintenance, or enqueued by HostAgent itself for its own host every
+  `HostAgent:MaintenanceScanIntervalMinutes` minutes (default 1440; `0`
+  disables the schedule; see `MaintenanceScanScheduler`). The global scan
+  records stale HostAgent runtime-state rows that are inactive, unleased, and
+  no longer match desired state. The host-specific scan records:
+  - stopped old HostAgent Windows services and HostAgent install or staging
+    directories below the configured HostAgent install root
+    (`BuildHostAgentLeftoverFindings`)
+  - leftover WorkerManager services (`BuildWorkerManagerLeftoverServiceFindings`)
+  - orphaned service-app directories and Windows services below the services
+    root that no enabled `AppInstance` claims, legacy/unprefixed duplicate
+    ("twin") services of a claimed canonical service, and services under the
+    services root that share a display name (`BuildOrphanServiceAppFindings`);
+    the local artifact cache, the active HostAgent directories and the
+    credential-store directories are never flagged
+  - orphaned `omp.Hosts` rows: hosts without an environment, not belonging to
+    an active `omp.Instances` row, and with no app instances
+    (`BuildOrphanHostFindings`)
+
+  Scan jobs only create or reopen rows in `omp.MaintenanceFindings`; they do
+  not delete anything.
 - `MaintenanceCleanup` - global or host-specific cleanup request for selected
   `omp.MaintenanceFindings` rows. HostAgent revalidates every target immediately
   before cleanup. It refuses to delete the active HostAgent service, running
   services, directories outside the configured install root, the install root
-  itself, the active process directory, credential-store directories, and
-  directories still referenced by HostAgent services.
+  itself, the active process directory, credential-store directories (and any
+  parent of them), the local artifact cache root (and anything inside or
+  containing it), and directories still referenced by HostAgent services.
 - `WebAppHealthProbe` - host-specific Portal health probe requested from the
   operations page. It calls the configured Portal readiness endpoint and writes
   `omp.WebAppHealthStates`. The request can optionally ask HostAgent to recycle
@@ -161,11 +179,15 @@ An empty `PipeName` resolves to:
 OpenModulePlatform.HostAgent.{HostKey}
 ```
 
-HostAgent creates the pipe with an explicit ACL. By default it allows local
-Administrators, `LocalSystem`, `LocalService`, `NetworkService`, and the running
-HostAgent service identity. Add custom service accounts with
-`RpcAllowedClientAccounts`, or allow Windows service SIDs by service name with
-`RpcAllowedClientServiceNames`:
+HostAgent creates the pipe with an explicit ACL. By default it allows only
+local Administrators, `LocalSystem`, and the running HostAgent service
+identity. `LocalService` and `NetworkService` are deliberately not included:
+granting them would let any unrelated service under those well-known accounts
+call the pipe. Clients that run under another account (a WorkerManager that is
+not `LocalSystem`, for example) are added with `RpcAllowedClientAccounts`, or
+by Windows service name with `RpcAllowedClientServiceNames`. The `quiesce`
+operation is additionally restricted to `LocalSystem` and administrators
+regardless of the ACL:
 
 ```json
 {
@@ -302,6 +324,14 @@ when no app-specific URL is present. Use a local node address, never the
 load-balancer URL: a healthy peer must not mask a failed deployment. Readiness
 must return HTTP 2xx; redirects and failures do not fall back to IIS state.
 Without a readiness URL, both the app pool and IIS site must be `Started`.
+That fallback reads IIS through `appcmd.exe` (`IisAppCmd`), which needs the
+HostAgent service identity to have IIS read permission even when the default
+`app_offline.htm` deployment path is in use and no other step touches IIS
+configuration. On a host where the identity lacks it, every coordinated web
+deployment except the site-root Portal ends `Failed` with the `appcmd.exe`
+error although the app is up. Give each coordinated web app a
+`DeploymentHealthUrls` entry (an HTTP probe needs no IIS permission), or grant
+the identity IIS read access.
 Service apps must be `Running`. Checks occur before release. In host mode the
 lease remains held across healthy apps and is released at the end of the sweep.
 Failure or cancellation releases promptly with a reason; the remaining host
@@ -328,7 +358,10 @@ Package building, import and HostAgent restart are operator activation steps.
 
 ## Portal health monitoring
 
-Portal exposes `/health/live` and `/health/ready`. HostAgent can probe the
+Portal exposes `/health/live` and `/health/ready`. Readiness requires both a
+reachable database and the Portal-owned schema objects listed in
+`docs/HOSTING_WINDOWS_IIS.md`; a reachable database with a stale schema is
+reported as unhealthy. HostAgent can probe the
 Portal readiness endpoint on each web host and write the latest result to
 `omp.WebAppHealthStates`. This is intentionally application-specific health, not
 a whole-node load-balancer decision. A broken Portal instance should answer with
@@ -354,8 +387,10 @@ Default HostAgent settings:
 }
 ```
 
-When `HostName` is empty, HostAgent probes `localhost` on the configured IIS
-binding port. Use `HostHeader` when the web server needs the public host header
+When `PortalHealthCheck:HostName` is empty, HostAgent probes the host key
+resolved for the agent itself (`HostAgent:HostKey`, else `HostAgent:HostName`,
+else the machine name) on the configured IIS binding port; it never falls back
+to `localhost`. Use `HostHeader` when the web server needs the public host header
 for routing, and set `AllowInvalidTlsCertificate` only for environments where a
 load balancer terminates the public certificate and the local server certificate
 does not match the probed host name.
@@ -378,6 +413,18 @@ web host. Runtime apps and non-load-balanced web apps should use one concrete
 app instance per host so each runtime has its own `AppInstanceId`. Active
 desired rows cannot mix host-neutral and host-specific placement for the same
 module/app definition.
+
+Host-neutral placement applies to `web-app` (and `worker-host`) instances only.
+A `service-app` instance is part of a host's desired state only when its
+`HostId` is that host, or when `HostId` is `NULL` and its
+`TargetHostTemplateId` names a host template with an active
+`omp.HostDeploymentAssignments` row for that host
+(`OmpHostArtifactRepository`, the service-app desired-state query). A
+`service-app` instance with neither `HostId` nor `TargetHostTemplateId` is
+selected by no host and is never deployed; nothing warns about it. A Windows
+service is one process with one identity on one machine, so give a service app
+a concrete host, or a host template when several hosts should each run their
+own copy.
 
 Before copying files, HostAgent writes an `app_offline.htm` marker by default,
 waits briefly for ASP.NET Core to release loaded files, mirrors the provisioned
@@ -466,9 +513,28 @@ app-instance-specific runtime configuration:
 - `{{Omp.ConnectionStrings.OmpDb}}`
 - `{{Omp.ConnectionStrings.OmpDb.DatabaseName}}`
 
+HostAgent settings of the deploying host are also exposed, so an artifact-level
+file can refer to host-local paths and proxy settings:
+
+- `{{Omp.HostAgent.CentralArtifactRoot}}`
+- `{{Omp.HostAgent.LocalArtifactCacheRoot}}`
+- `{{Omp.HostAgent.WebAppsRoot}}`
+- `{{Omp.HostAgent.PortalPhysicalPath}}`
+- `{{Omp.HostAgent.ServicesRoot}}`
+- `{{Omp.HostAgent.WebAppDataProtectionKeyPath}}` (the resolved key path)
+- `{{Omp.HostAgent.WebAppUseForwardedHeaders}}` (`True`/`False`)
+- `{{Omp.HostAgent.WebAppForwardedHeadersTrustAllProxies}}` (`True`/`False`)
+- `{{Omp.HostAgent.WebAppForwardedHeadersKnownProxies}}` (comma-separated)
+- `{{Omp.HostAgent.WebAppForwardedHeadersKnownNetworks}}` (comma-separated)
+
+The list is defined in `ArtifactConfigurationFileWriter.CreateVariables`
+(`OpenModulePlatform.HostAgent.Runtime/Services/ArtifactConfigurationFileWriter.cs`);
+unknown `{{Omp.*}}` tokens are left as-is.
+
 For values written inside JSON strings, use the `Omp.Json.` variants, for
-example `{{Omp.Json.ConnectionStrings.OmpDb}}`. Those variants escape the value
-for JSON string content but do not include the surrounding quotes.
+example `{{Omp.Json.ConnectionStrings.OmpDb}}`. Every token above has such a
+variant. Those variants escape the value for JSON string content but do not
+include the surrounding quotes.
 
 ## Import folder
 
@@ -500,16 +566,36 @@ that universal package instead of dropping individual object files into the
 folder.
 
 HostAgent performs only the unattended choices that are safe to automate. It
-applies imported module definitions, runs embedded idempotent repair SQL for
-non-platform modules, imports compatible artifact packages, registers packaged
-configuration files or copies configuration file rows from the latest previous
-matching artifact when enabled, and selects imported artifacts for matching
+applies imported module definitions and runs their embedded idempotent SQL in
+three ways: for the platform core (`omp_core`) the repair scripts run before
+the definition is applied and regardless of whether the packaged
+`definitionVersion` is newer than the installed one, so old installations can
+bridge schema gaps; for other modules the physical schema is compared with
+what the definition declares (schemas, tables, columns, indexes, constraints,
+triggers) and only the scripts whose declared objects are missing are re-run,
+even when the version gate otherwise skips the definition; and when a newer
+non-core definition is applied without such gaps, the full repair pass runs
+after apply. It imports compatible artifact packages, registers packaged
+configuration files or, when `CopyConfigurationFilesFromPreviousVersion` is
+enabled, copies configuration file rows from the artifact's continuity source
+(the artifact the slot's pointers referenced before the import, with a
+per-path fallback when no pointer names a source, never simply the most
+recently created sibling), and selects imported artifacts for matching
 desired app rows.
 
 For universal package zips, HostAgent treats each inner artifact package
-independently. Identical already-registered artifacts are skipped, incompatible
-historical artifact versions are skipped, and compatible missing artifacts are
-imported. If the package carries an older module definition than the one already
+independently. Identical already-registered artifacts are skipped, and
+compatible missing artifacts are imported. An inner artifact whose version
+falls outside the `compatibleArtifacts` range of the module definition carried
+in the same package is skipped as historical package content (the package's
+own pre-check). The repository's slot check against the applied definition is
+stricter: an artifact for which no slot exists ("does not allow artifacts") is
+skipped, because a universal package may carry artifacts for modules this
+installation does not have, but an artifact whose slot exists and whose
+version is outside the applied definition's range counts as `Failed`, because
+that is the lockstep failure the version validators exist to prevent
+(`IsArtifactCompatibilityMessage` in `ArtifactZipImportService`). If the
+package carries an older module definition than the one already
 applied, HostAgent stores it but keeps the newer applied definition. If several
 compatible versions for the same app/package/target slot are present, only the
 highest compatible version is selected as desired state so an exported package
@@ -519,8 +605,10 @@ The folder import is intentionally strict. Duplicate module definitions with the
 same version but different JSON, duplicate artifact versions with different
 content, invalid package filenames, unknown module/app/package combinations,
 unsafe repair SQL, and malformed JSON or zip files fail without prompting. An
-incompatible inner artifact in a universal package is skipped as historical
-package content. Successful files move to `processed`; failed files move to
+inner artifact that the package's own module definition does not accept is
+skipped as historical package content; one that the applied definition's slot
+rejects on version is a failure (see above). Successful files move to
+`processed`; failed files move to
 `failed` with an adjacent `.error.txt`. Files that are not universal package
 zips are treated as unsupported and moved to `failed` once HostAgent can open
 them exclusively.
@@ -694,7 +782,10 @@ or AD account and needs that identity for IIS, SQL, or artifact-store access,
 the bootstrapper writes the password to the local HostAgent credential store and
 puts only the credential key in appsettings. The credential store uses Windows
 DPAPI; with `ProtectionScope = "LocalMachine"` the encrypted password can only
-be decrypted on the same Windows machine.
+be decrypted on the same Windows machine. Every writer of the store (bootstrapper,
+`set-hostagent-credential-store.ps1`, HostAgent itself and the self-upgrade copy)
+leaves the file with a non-inherited ACL limited to Administrators, SYSTEM, the
+writing identity and the HostAgent service account.
 
 During self-upgrade the old HostAgent copies the credential store into the new
 versioned install folder and rewrites the new appsettings to point at that local
@@ -964,11 +1055,12 @@ The named-pipe RPC response writer uses an `async Task` method and awaits `Strea
 
 ## Not implemented yet
 
-- package extraction from archive files
-- HTTP/S3/Azure Blob download sources
-- signing/certificate verification
-- remote HostAgent management API
-- service credential provisioning and rotation
+- HTTP/S3/Azure Blob download sources (artifacts are read from the central
+  artifact root or the import folder)
+- artifact signing/certificate verification
+- remote HostAgent management API (only the local named-pipe RPC exists)
+- automatic service credential rotation (credentials are written to the
+  host-local credential store by the installer and read by HostAgent)
 
 ## v2.2 stabilization note
 
@@ -1243,10 +1335,11 @@ because the shared auth cookie is the whole point of the family:
   cookie — for example a standalone service web app with its own sign-in, or a
   worker dashboard without SSO. Today HostAgent assigns ONE shared key folder
   per host (`HostAgent:WebAppDataProtectionKeyPath`, fallback
-  `<runtimeRoot>\DataProtectionKeys`, see
-  `WebAppDeploymentService.ResolveWebAppDataProtectionKeyPath`), and every
-  deployed web app inherits it through the generated `appsettings.json`
-  (`ArtifactConfigurationFileWriter.cs`).
+  `<runtimeRoot>\DataProtectionKeys`, resolved by
+  `ArtifactConfigurationFileWriter.ResolveWebAppDataProtectionKeyPath`), and
+  every deployed web app inherits it through the generated `appsettings.json`
+  written by that class. `WebAppDeploymentService` calls the same method for
+  its OmpAuth validation, so the two cannot drift.
 - **How a non-SSO app gets its own ring (no code change made here — this is
   the documented path, any change is a separate decision):** give the app a
   config overlay that sets a DIFFERENT `OmpAuth:DataProtectionKeyPath` (and,

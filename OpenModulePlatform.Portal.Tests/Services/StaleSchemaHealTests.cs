@@ -184,13 +184,6 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             repo,
             NullLogger<ArtifactZipImportService>.Instance);
 
-        var importMethod = typeof(ArtifactZipImportService).GetMethod(
-            "ImportModuleDefinitionAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-            null,
-            [typeof(ModuleDefinitionImportDocument), typeof(CancellationToken)],
-            null)!;
-
         var document = new ModuleDefinitionImportDocument(
             "hostagent_stale_test_module",
             "1.0.0",
@@ -201,10 +194,7 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             [],
             []);
 
-        var task = (Task)importMethod.Invoke(service, [document, CancellationToken.None])!;
-        await task;
-        var resultProperty = task.GetType().GetProperty("Result")!;
-        var result = (ModuleDefinitionImportResult)resultProperty.GetValue(task)!;
+        var result = await service.ImportModuleDefinitionAsync(document, CancellationToken.None);
 
         Assert.False(result.Applied);
         Assert.True(result.SqlRepairCount > 0);
@@ -345,12 +335,6 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             new StaticOptionsMonitor<HostAgentSettings>(new HostAgentSettings()),
             repo,
             NullLogger<ArtifactZipImportService>.Instance);
-        var importMethod = typeof(ArtifactZipImportService).GetMethod(
-            "ImportModuleDefinitionAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-            null,
-            [typeof(ModuleDefinitionImportDocument), typeof(CancellationToken)],
-            null)!;
         var document = new ModuleDefinitionImportDocument(
             "witness_hostagent_probe_module",
             "1.0.0",
@@ -361,9 +345,7 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             [],
             []);
 
-        var task = (Task)importMethod.Invoke(service, [document, CancellationToken.None])!;
-        await task;
-        var result = (ModuleDefinitionImportResult)task.GetType().GetProperty("Result")!.GetValue(task)!;
+        var result = await service.ImportModuleDefinitionAsync(document, CancellationToken.None);
 
         Assert.False(result.Applied);
         Assert.True(result.SqlRepairCount > 0);
@@ -471,12 +453,6 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             new StaticOptionsMonitor<HostAgentSettings>(new HostAgentSettings()),
             repo,
             logger);
-        var importMethod = typeof(ArtifactZipImportService).GetMethod(
-            "ImportModuleDefinitionAsync",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-            null,
-            [typeof(ModuleDefinitionImportDocument), typeof(CancellationToken)],
-            null)!;
         var document = new ModuleDefinitionImportDocument(
             "witness_unhealable_module",
             "1.0.0",
@@ -487,8 +463,7 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             [],
             []);
 
-        var task = (Task)importMethod.Invoke(service, [document, CancellationToken.None])!;
-        await task;
+        await service.ImportModuleDefinitionAsync(document, CancellationToken.None);
 
         // The object is still missing, so nothing may claim it healed.
         var missingAfter = await repo.GetMissingRequiredObjectsByScriptKeyAsync(definitionJson, CancellationToken.None);

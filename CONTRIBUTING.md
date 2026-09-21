@@ -35,7 +35,9 @@ Follow the process described in [SECURITY.md](SECURITY.md).
 
 ## Versioning and release discipline
 
-The repository is currently prepared for the `0.1.x` public beta line.
+The repository is on the `0.3.x` line; the current version is the
+`repositoryVersion` value in `omp-components.json` (bumped automatically on
+push by `scripts/omp/push-with-rebump.ps1`, never by hand).
 Breaking changes should be documented clearly and coordinated with release notes.
 
 ## Repository hygiene

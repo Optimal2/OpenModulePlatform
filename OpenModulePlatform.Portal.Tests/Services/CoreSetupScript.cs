@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -13,7 +14,7 @@ internal static class CoreSetupScript
 {
     public static async Task ApplyAsync(string connectionString)
     {
-        var setupSql = ReadRepositoryTextFile("sql", "1-setup-openmoduleplatform.sql");
+        var setupSql = OmpRepositoryFiles.ReadRepositoryTextFile("sql", "1-setup-openmoduleplatform.sql");
 
         // Strip the historical local development database switch, the same way
         // scripts/dev/embed-module-definition-sql.ps1 does, so the script runs
@@ -40,35 +41,5 @@ internal static class CoreSetupScript
     {
         return Regex.Split(sql, @"^\s*GO\s*$", RegexOptions.Multiline)
             .Where(batch => !string.IsNullOrWhiteSpace(batch));
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-    }
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-    {
-        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
-        if (rootedSegment is not null)
-        {
-            throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
-        }
-
-        var segments = new string[relativePathSegments.Length + 1];
-        segments[0] = FindRepositoryRoot();
-        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-        return File.ReadAllText(Path.Join(segments));
     }
 }

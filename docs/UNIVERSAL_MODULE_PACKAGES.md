@@ -197,9 +197,10 @@ object library.
 
 Use the installer action `Refresh object archive` to populate or update
 `data/global` from the matched profile's configured source repositories without
-starting an installation. The refresh first runs `git pull --ff-only` for every
+starting an installation. The refresh first runs `git fetch --prune` and
+`git merge --ff-only` of the single configured upstream for every
 configured source repository and stops if any repository needs manual
-merge/conflict handling. Each pull has a two-minute timeout so a stuck network
+merge/conflict handling. Each Git command has a two-minute timeout so a stuck network
 or credential prompt does not block the installer indefinitely. A developer
 installer that contains profiles for multiple target hosts can use
 `Prepare all host profiles` to materialize host-specific package objects for

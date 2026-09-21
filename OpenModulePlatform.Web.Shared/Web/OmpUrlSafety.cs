@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Web.Shared/Web/OmpUrlSafety.cs
+using System.Diagnostics.CodeAnalysis;
+
 namespace OpenModulePlatform.Web.Shared.Web;
 
 /// <summary>
@@ -36,16 +38,46 @@ public static class OmpUrlSafety
     /// True when <paramref name="value"/> is a same-origin, absolute-path destination —
     /// the only kind we assign to window.location or follow in a redirect.
     /// </summary>
-    public static bool IsSafeLocalDestination(string? value)
+    /// <remarks>
+    /// Rooted at '/', not protocol-relative ("//host"), and no backslash anywhere: browsers
+    /// read "/\host" as "//host", and a backslash later in the path has no legitimate use in
+    /// a destination we generate ourselves.
+    /// </remarks>
+    public static bool IsSafeLocalDestination([NotNullWhen(true)] string? value)
+        => !string.IsNullOrWhiteSpace(value)
+            && value.StartsWith('/')
+            && !value.StartsWith("//", StringComparison.Ordinal)
+            && !value.Contains('\\', StringComparison.Ordinal);
+
+    /// <summary>
+    /// The stricter check for a return URL that arrived from the outside (a query string or a
+    /// form field): everything <see cref="IsSafeLocalDestination"/> requires, plus the value
+    /// must be a well-formed relative URI and must still pass the '//' and backslash rules
+    /// after one round of percent-decoding, so "%2F%2Fevil" cannot smuggle an authority past
+    /// the raw check.
+    /// </summary>
+    /// <remarks>
+    /// B69: this was implemented three times (Auth's Program.cs, OmpLogoutDecisionFactory and
+    /// OmpWebHostingExtensions) with identical intent; they now all call here.
+    /// </remarks>
+    public static bool IsSafeLocalReturnUrl([NotNullWhen(true)] string? returnUrl)
     {
-        if (string.IsNullOrEmpty(value))
+        if (!IsSafeLocalDestination(returnUrl)
+            || !Uri.IsWellFormedUriString(returnUrl, UriKind.Relative))
         {
             return false;
         }
 
-        // Must be an absolute path, not "//host", not "/\host", and carry no scheme.
-        return value[0] == '/'
-            && (value.Length < 2 || (value[1] != '/' && value[1] != '\\'));
+        try
+        {
+            var unescaped = Uri.UnescapeDataString(returnUrl);
+            return !unescaped.StartsWith("//", StringComparison.Ordinal)
+                && !unescaped.Contains('\\', StringComparison.Ordinal);
+        }
+        catch (UriFormatException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

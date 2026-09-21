@@ -5,7 +5,7 @@ This checklist documents the integration contract for OMP web applications that 
 ## Startup registration
 
 - [ ] In `Program.cs`, call `AddOmpWebDefaults<TAppResource>(optionsSectionName: "Portal")` where `TAppResource` is the application's shared resource type.
-- [ ] In the web pipeline, call `UseOmpWebDefaults()`.
+- [ ] In the web pipeline, call `UseOmpWebDefaults(optionsSectionName: "Portal")` with the same section name as the `Add` call. Without the argument, `UseOmpWebDefaults` reads the `WebApp` section, so CSP and other `WebAppOptions` would come from a different section than the one the `Add` call configured.
 
 ## Layout / shared UI
 

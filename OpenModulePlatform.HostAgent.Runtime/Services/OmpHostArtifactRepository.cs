@@ -2323,35 +2323,6 @@ SELECT @@ROWCOUNT;";
         return affected > 0;
     }
 
-    public async Task CompleteHostDeploymentAsync(
-        long hostDeploymentId,
-        bool succeeded,
-        string outcomeMessage,
-        CancellationToken ct)
-    {
-        const string sql = @"
-UPDATE omp.HostDeployments
-SET Status = @status,
-    CompletedUtc = SYSUTCDATETIME(),
-    LeaseUntilUtc = NULL,
-    LeaseToken = NULL,
-    OutcomeMessage = @outcomeMessage,
-    UpdatedUtc = SYSUTCDATETIME()
-WHERE HostDeploymentId = @hostDeploymentId
-  AND Status = @runningStatus;";
-
-        var safeMessage = SanitizeOutcomeMessage(outcomeMessage);
-
-        await using var conn = _db.Create();
-        await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@hostDeploymentId", hostDeploymentId);
-        cmd.Parameters.AddWithValue("@status", succeeded ? HostDeploymentStatuses.Succeeded : HostDeploymentStatuses.Failed);
-        cmd.Parameters.AddWithValue("@runningStatus", HostDeploymentStatuses.Running);
-        cmd.Parameters.AddWithValue("@outcomeMessage", string.IsNullOrWhiteSpace(safeMessage) ? DBNull.Value : safeMessage);
-        await cmd.ExecuteNonQueryAsync(ct);
-    }
-
     /// <summary>
     /// Marks a host deployment complete. Returns false when the row was not updated
     /// because the lease was lost and the deployment re-claimed under a new token.

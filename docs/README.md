@@ -50,6 +50,8 @@ For repository and release work:
 - `worker-runtime-windows.md` - Windows-specific worker runtime notes.
 - `HOSTING_WINDOWS_IIS.md` - IIS hosting guidance.
 - `PUSH_EVENTS.md` - push event model for web apps, service apps, workers, and UI refresh hints.
+- `CHANNEL_TYPE_RECONCILE.md` - contract and template for module-owned channel-type
+  reconciliation (the generalization decided in ADR 0004).
 - `OPEN_DOC_VIEWER_EXAMPLES.md` - host-side CSP requirements for the OMP OpenDocViewer embed examples.
 - `LOGGING.md` - logging conventions.
 
@@ -66,6 +68,9 @@ For repository and release work:
 
 - `CODEX_DEVELOPMENT.md` - agent-friendly repository map, validation ladder, and local publish workflow.
 - `OMP_COMPONENT_MANIFEST.md` - repository component manifest and version-bump helper usage.
+- `VALIDATOR_CHECKS.md` - canonical numbered check list for
+  `scripts/omp/validate-component-versions.ps1`; the check numbers are a contract shared
+  across repositories.
 - `CODE_SIGNING.md` - signing of the installer runner and what the gate refuses.
 - `TEST_DEBT.md` - deliberately excluded or skipped tests, with the reason for each. Kept in
   the same commit as the change that adds an entry (see `CONTRIBUTING.md`/`AGENTS.md`).
@@ -91,10 +96,15 @@ Decisions with their reasoning and status, so a later reader can tell a delibera
 from an accident.
 
 - `0001-module-configid-bridge.md` - typed `ModuleConfigId` bridge with opt-in validation.
-- `0002-deploy-set-consistency-check.md` - HostAgent deploy-set consistency check.
+- `0002-deploy-set-consistency-check.md` - HostAgent deploy-set consistency check
+  (accepted and implemented).
 - `0003-webshared-private-consumer-cascade.md` - Web.Shared private-consumer cross-repo
   cascade awareness. This is the reasoning behind Check 14.
 - `0004-channel-type-reconcile-generalization.md` - channel-type reconcile generalization.
+- `0005-artifact-ownership-database-principal.md` - moving artifact-ownership enforcement
+  from the text guard to a database principal (decision support; operator-gated).
+- `0006-config-overlay-artifactversion-minimum.md` - config overlay `artifactVersion` is a
+  minimum version (decided and implemented).
 
 ### `runbooks/` - what to do when a specific thing has gone wrong
 

@@ -5,7 +5,9 @@
 OMP is beyond proof-of-concept but is not yet a fully completed platform.
 The current repository is best described as a public platform skeleton with working reference examples and a clear direction toward a robust instance model.
 
-For release planning purposes, `0.1.0` is the first public beta baseline.
+For release planning purposes, `0.1.0` (2026-04-13) was the first public beta
+baseline; the repository is now on the `0.3.x` line and the current version is
+the `repositoryVersion` value in `omp-components.json`.
 
 ## Runtime and tooling baseline
 

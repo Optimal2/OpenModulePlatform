@@ -14,7 +14,6 @@ public sealed class WebAppDeploymentService
 {
     private const string IisSslBindingAppId = "{6E9C7F30-6D4E-4D8A-9D1E-9F086C35B508}";
     private const string SystemSecurityPermissionsAssemblyName = "System.Security.Permissions";
-    private const int MaxIisAppPoolNameLength = 80;
     private static readonly TimeSpan AppPoolStatePollDelay = TimeSpan.FromMilliseconds(250);
 
     private static readonly object IisAssemblyResolverLock = new();
@@ -190,7 +189,7 @@ public sealed class WebAppDeploymentService
                 configuredConnectionString,
                 settings);
 
-            var hostDataProtectionKeyPath = ResolveWebAppDataProtectionKeyPath(settings);
+            var hostDataProtectionKeyPath = ArtifactConfigurationFileWriter.ResolveWebAppDataProtectionKeyPath(settings);
             ompAuthValidation = ValidateOmpAuthConfiguration(configurationFiles, configurationVariables, hostDataProtectionKeyPath, isMultiHost);
             foreach (var warning in ompAuthValidation.Warnings)
             {
@@ -359,7 +358,7 @@ public sealed class WebAppDeploymentService
                 && settings.StartIisAppPoolAfterWebAppDeployment
                 && !string.IsNullOrWhiteSpace(runtimeName))
             {
-                var initialAppPoolState = GetAppPoolState(runtimeName);
+                var initialAppPoolState = IisAppCmd.GetAppPoolState(runtimeName);
                 if (string.Equals(initialAppPoolState, "Started", StringComparison.OrdinalIgnoreCase))
                 {
                     DeploymentRuntimeStopMarker.Write(
@@ -482,8 +481,8 @@ public sealed class WebAppDeploymentService
             ? runtimeName
             : GetIisAppPoolName(ResolveIisAppName(settings, deployment));
         if (string.IsNullOrWhiteSpace(poolName)
-            || !string.Equals(GetAppPoolState(poolName), "Started", StringComparison.OrdinalIgnoreCase)
-            || !RunAppCmd("list", "site", $"/name:{settings.IisSiteName}", "/text:state")
+            || !string.Equals(IisAppCmd.GetAppPoolState(poolName), "Started", StringComparison.OrdinalIgnoreCase)
+            || !IisAppCmd.Run("list", "site", $"/name:{settings.IisSiteName}", "/text:state")
                 .Any(line => string.Equals(line.Trim(), "Started", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Deployment health check failed: IIS application pool and site must both be Started.");
     }
@@ -702,25 +701,6 @@ public sealed class WebAppDeploymentService
         };
     }
 
-    private static string ResolveWebAppDataProtectionKeyPath(HostAgentSettings settings)
-    {
-        if (!string.IsNullOrWhiteSpace(settings.WebAppDataProtectionKeyPath))
-        {
-            return settings.WebAppDataProtectionKeyPath.Trim();
-        }
-
-        if (string.IsNullOrWhiteSpace(settings.WebAppsRoot))
-        {
-            return string.Empty;
-        }
-
-        var webAppsRoot = Path.GetFullPath(settings.WebAppsRoot.Trim());
-        var runtimeRoot = Directory.GetParent(webAppsRoot)?.FullName;
-        return string.IsNullOrWhiteSpace(runtimeRoot)
-            ? string.Empty
-            : Path.Join(runtimeRoot, "DataProtectionKeys");
-    }
-
     private static string ResolveIisAppName(
         HostAgentSettings settings,
         WebAppDeploymentDescriptor deployment)
@@ -873,7 +853,7 @@ public sealed class WebAppDeploymentService
         var siteName = settings.IisSiteName.Trim();
         if (!IisObjectExists("list", "site", $"/name:{siteName}"))
         {
-            RunAppCmd(
+            IisAppCmd.Run(
                 "add",
                 "site",
                 $"/name:{siteName}",
@@ -882,10 +862,10 @@ public sealed class WebAppDeploymentService
         }
         else
         {
-            RunAppCmd("set", "vdir", $"/vdir.name:{siteName}/", $"/physicalPath:{physicalPath}");
+            IisAppCmd.Run("set", "vdir", $"/vdir.name:{siteName}/", $"/physicalPath:{physicalPath}");
         }
 
-        RunAppCmd("set", "app", $"/app.name:{siteName}/", $"/applicationPool:{appPoolName}");
+        IisAppCmd.Run("set", "app", $"/app.name:{siteName}/", $"/applicationPool:{appPoolName}");
         EnsureIisBindingCertificate(settings);
         EnsureIisAuthentication(siteName, anonymousEnabled: true, windowsEnabled: false);
     }
@@ -899,7 +879,7 @@ public sealed class WebAppDeploymentService
     {
         if (!IisApplicationExists(iisAppName))
         {
-            RunAppCmd(
+            IisAppCmd.Run(
                 "add",
                 "app",
                 $"/site.name:{settings.IisSiteName.Trim()}",
@@ -909,8 +889,8 @@ public sealed class WebAppDeploymentService
         }
         else
         {
-            RunAppCmd("set", "vdir", $"/vdir.name:{iisAppName}/", $"/physicalPath:{physicalPath}");
-            RunAppCmd("set", "app", $"/app.name:{iisAppName}", $"/applicationPool:{appPoolName}");
+            IisAppCmd.Run("set", "vdir", $"/vdir.name:{iisAppName}/", $"/physicalPath:{physicalPath}");
+            IisAppCmd.Run("set", "app", $"/app.name:{iisAppName}", $"/applicationPool:{appPoolName}");
         }
 
         EnsureIisAuthentication(
@@ -955,10 +935,10 @@ public sealed class WebAppDeploymentService
     {
         if (!IisObjectExists("list", "apppool", $"/name:{appPoolName}"))
         {
-            RunAppCmd("add", "apppool", $"/name:{appPoolName}");
+            IisAppCmd.Run("add", "apppool", $"/name:{appPoolName}");
         }
 
-        RunAppCmd(
+        IisAppCmd.Run(
             "set",
             "apppool",
             $"/apppool.name:{appPoolName}",
@@ -1250,30 +1230,11 @@ public sealed class WebAppDeploymentService
             baseName = deployment.DisplayName;
         }
 
-        return BuildIisAppPoolName(settings, baseName);
+        return IisAppCmd.BuildAppPoolName(settings, baseName);
     }
 
     private static string ResolvePortalAppPoolName(HostAgentSettings settings)
-        => BuildIisAppPoolName(settings, "portal");
-
-    private static string BuildIisAppPoolName(HostAgentSettings settings, string value)
-    {
-        var prefix = string.IsNullOrWhiteSpace(settings.IisAppPoolNamePrefix)
-            ? string.Empty
-            : settings.IisAppPoolNamePrefix.Trim();
-        var normalized = new string(value
-            .Trim()
-            .Select(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '-' or '_' ? ch : '_')
-            .ToArray());
-        normalized = normalized.Trim('_');
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            normalized = "app";
-        }
-
-        var name = prefix + normalized;
-        return name.Length <= MaxIisAppPoolNameLength ? name : name[..MaxIisAppPoolNameLength].TrimEnd('_', '.', '-');
-    }
+        => IisAppCmd.BuildAppPoolName(settings, "portal");
 
     private static string CreateIisBinding(HostAgentSettings settings)
     {
@@ -1411,21 +1372,9 @@ public sealed class WebAppDeploymentService
         return path;
     }
 
-    private static string GetAppCmdPath()
-    {
-        var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var appCmdPath = Path.Join(windowsDirectory, "System32", "inetsrv", "appcmd.exe");
-        if (!File.Exists(appCmdPath))
-        {
-            throw new FileNotFoundException($"IIS appcmd.exe was not found: '{appCmdPath}'.", appCmdPath);
-        }
-
-        return appCmdPath;
-    }
-
     private static string GetIisAppPoolName(string iisAppName)
     {
-        var output = RunAppCmd("list", "app", iisAppName);
+        var output = IisAppCmd.Run("list", "app", iisAppName);
         var text = string.Join('\n', output);
         const string marker = "applicationPool:";
         var start = text.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
@@ -1450,45 +1399,24 @@ public sealed class WebAppDeploymentService
         return appPoolName;
     }
 
-    private static string? GetAppPoolState(string appPoolName)
-    {
-        var output = RunAppCmd("list", "apppool", $"/name:{appPoolName}");
-        var text = string.Join('\n', output);
-        const string marker = "state:";
-        var start = text.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (start < 0)
-        {
-            return null;
-        }
-
-        start += marker.Length;
-        var end = text.IndexOfAny([',', ')'], start);
-        if (end < 0)
-        {
-            end = text.Length;
-        }
-
-        return text[start..end].Trim();
-    }
-
     private static async Task<bool> StopAppPoolIfRunningAsync(
         string appPoolName,
         int timeoutSeconds,
         string? initialState,
         CancellationToken cancellationToken)
     {
-        var state = initialState ?? GetAppPoolState(appPoolName);
+        var state = initialState ?? IisAppCmd.GetAppPoolState(appPoolName);
         if (!string.Equals(state, "Started", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        RunAppCmd("stop", "apppool", $"/apppool.name:{appPoolName}");
+        IisAppCmd.Run("stop", "apppool", $"/apppool.name:{appPoolName}");
 
         var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
         while (DateTimeOffset.UtcNow < deadline)
         {
-            state = GetAppPoolState(appPoolName);
+            state = IisAppCmd.GetAppPoolState(appPoolName);
             if (string.Equals(state, "Stopped", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
@@ -1502,13 +1430,13 @@ public sealed class WebAppDeploymentService
 
     private static void StartAppPoolIfStopped(string appPoolName)
     {
-        var state = GetAppPoolState(appPoolName);
+        var state = IisAppCmd.GetAppPoolState(appPoolName);
         if (string.Equals(state, "Started", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        RunAppCmd("start", "apppool", $"/apppool.name:{appPoolName}");
+        IisAppCmd.Run("start", "apppool", $"/apppool.name:{appPoolName}");
     }
 
     private static bool TryStartAppPool(string appPoolName, ILogger logger)
@@ -1591,10 +1519,10 @@ public sealed class WebAppDeploymentService
     }
 
     private static bool IisObjectExists(params string[] arguments)
-        => RunAppCmdRaw(arguments, throwOnFailure: false).ExitCode == 0;
+        => IisAppCmd.RunRaw(arguments, throwOnFailure: false).ExitCode == 0;
 
     private static bool IisApplicationExists(string iisAppName)
-        => RunAppCmd("list", "app")
+        => IisAppCmd.Run("list", "app")
             .Any(line => line.Contains(
                 $"\"{iisAppName}\"",
                 StringComparison.OrdinalIgnoreCase));
@@ -1761,111 +1689,26 @@ public sealed class WebAppDeploymentService
         method.Invoke(serverManager, null);
     }
 
-    private static string[] RunAppCmd(params string[] arguments)
-    {
-        var result = RunAppCmdRaw(arguments, throwOnFailure: true);
-        return result.StdOut
-            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    }
-
-    private static AppCmdResult RunAppCmdRaw(IReadOnlyList<string> arguments, bool throwOnFailure)
-    {
-        var result = RunProcess(GetAppCmdPath(), arguments);
-        if (throwOnFailure && result.ExitCode != 0)
-        {
-            var message = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
-            throw new InvalidOperationException(CreateAppCmdFailureMessage(result.ExitCode, message));
-        }
-
-        return new AppCmdResult(result.ExitCode, result.StdOut, result.StdErr);
-    }
-
     private static ProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
     {
         var result = HostAgentProcessRunner.Run(fileName, arguments);
         return new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
-    private static string CreateAppCmdFailureMessage(int exitCode, string message)
-    {
-        var trimmed = message.Trim();
-        var result = $"appcmd.exe failed with exit code {exitCode}: {trimmed}";
-        // appcmd.exe does not expose a stable structured error code for this
-        // IIS configuration ACL failure. Keep this message enhancement as a
-        // best-effort diagnostic hint and preserve the original appcmd output.
-        if (trimmed.Contains("redirection.config", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Contains("insufficient permissions", StringComparison.OrdinalIgnoreCase))
-        {
-            result += " HostAgent could not read IIS configuration. Grant the HostAgent service identity access to IIS configuration, or keep HostAgent:UseAppOfflineForWebAppDeployment enabled so web-app deployment does not need appcmd.exe.";
-        }
-
-        return result;
-    }
-
     /// <summary>
     /// Deployment faults this service records against the deployment row instead of
-    /// letting them abort the whole HostAgent cycle.
+    /// letting them abort the whole HostAgent cycle. See <see cref="DeploymentFaults"/>
+    /// for the list and the history of the copies it replaced.
     /// </summary>
-    /// <remarks>
-    /// Win32Exception and TargetInvocationException were missing, while both siblings --
-    /// IsExpectedRecoveryStartFailure just below, and the ServiceApp equivalent -- already
-    /// listed Win32Exception. This path starts icacls.exe, netsh.exe and appcmd.exe
-    /// without a prior existence check, and every IIS configuration call goes through
-    /// reflection without BindingFlags.DoNotWrapExceptions, so a Microsoft.Web.Administration
-    /// failure (an applicationHost.config ACL, for instance) surfaced as
-    /// TargetInvocationException. Neither matched, so the exception escaped DeployAsync and
-    /// HostAgentEngine.RunOnceAsync, skipping the Portal health probe, service-app deploy,
-    /// self-upgrade, file mirroring, job processing and telemetry for that cycle -- with no
-    /// per-deployment result published. Same blast radius R6-D1 closed for service apps
-    /// (R7-D2).
-    ///
-    /// COMException and ManagementException were added to the ServiceApp twin in R8-P4-4
-    /// and to HostAgentEngine's outermost copy, and this one -- the third of the three --
-    /// was left behind (R12-F1). It is the copy that needs them most: this file is the only
-    /// deployment path that loads Microsoft.Web.Administration by reflection, and IIS
-    /// configuration is COM underneath, so a locked or corrupt applicationHost.config
-    /// surfaces here as a raw COMException. TargetInvocationException unwrapping does not
-    /// help when the COM call is not the reflected one. An unmatched type here takes down
-    /// the entire HostAgent cycle.
-    /// </remarks>
     private static bool IsExpectedDeploymentFailure(Exception exception)
-        => exception is InvalidOperationException
-            or IOException
-            or UnauthorizedAccessException
-            or TimeoutException
-            or System.ComponentModel.Win32Exception
-            or System.Management.ManagementException
-            or System.Runtime.InteropServices.COMException
-            || (exception is System.Reflection.TargetInvocationException invocation
-                && invocation.InnerException is not null
-                && IsExpectedDeploymentFailure(invocation.InnerException));
+        => DeploymentFaults.IsRecordable(exception);
 
     /// <summary>
     /// Faults while restarting a runtime during recovery, recorded rather than allowed to
-    /// abort the HostAgent cycle.
+    /// abort the HostAgent cycle. Same list as deployment (R8-P4-10).
     /// </summary>
-    /// <remarks>
-    /// R8-P4-10. This did not get the TargetInvocationException unwrapping its sibling
-    /// twelve lines up received in R7-D2 -- the fix was applied to one of the pair. Recovery
-    /// happens to run through appcmd today, so nothing unwrapped is reaching it, but this
-    /// file holds two parallel IIS APIs and the reflection-based one wraps everything.
-    /// Leaving the pair asymmetric is how the R7-D2 blast radius comes back -- which is
-    /// exactly what happened again with COMException/ManagementException, added to both
-    /// ServiceApp methods and to neither of these two (R12-F1, sibling sweep).
-    /// </remarks>
     private static bool IsExpectedRecoveryStartFailure(Exception exception)
-        => exception is InvalidOperationException
-            or IOException
-            or UnauthorizedAccessException
-            or TimeoutException
-            or System.ComponentModel.Win32Exception
-            or System.Management.ManagementException
-            or System.Runtime.InteropServices.COMException
-            || (exception is System.Reflection.TargetInvocationException invocation
-                && invocation.InnerException is not null
-                && IsExpectedRecoveryStartFailure(invocation.InnerException));
-
-    private sealed record AppCmdResult(int ExitCode, string StdOut, string StdErr);
+        => DeploymentFaults.IsRecordable(exception);
 
     private sealed record ProcessResult(int ExitCode, string StdOut, string StdErr);
 }

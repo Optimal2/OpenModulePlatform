@@ -151,7 +151,8 @@ public static class OmpTestDatabaseNames
 
     /// <summary>
     /// Drops Portal test databases whose owner is gone. Once per process; every
-    /// failure is reported on stderr and swallowed -- a sweep must never fail a test.
+    /// failure is reported through <see cref="OmpTestCleanupLog"/> (stderr plus the
+    /// log file CI surfaces as warnings) and swallowed -- a sweep must never fail a test.
     /// </summary>
     public static void SweepStalePortalDatabasesOnce(string masterConnectionString)
     {
@@ -161,8 +162,8 @@ public static class OmpTestDatabaseNames
         }
 
         // The sweep runs as a task whose fault is observed rather than caught: the contract
-        // (report on stderr, never fail a test) holds for every exception type without a
-        // catch clause that would have to name them all.
+        // (report, never fail a test) holds for every exception type without a catch
+        // clause that would have to name them all.
         var sweep = Task.Run(() => SweepStalePortalDatabases(masterConnectionString));
         sweep.ContinueWith(
             static _ => { },
@@ -171,7 +172,9 @@ public static class OmpTestDatabaseNames
             TaskScheduler.Default).Wait();
         if (sweep.Exception is { } failure)
         {
-            Console.Error.WriteLine($"[OmpTestDatabaseNames] Sweep of stale Portal test databases failed: {failure.GetBaseException().Message}");
+            OmpTestCleanupLog.RecordFailure(
+                nameof(OmpTestDatabaseNames),
+                $"Sweep of stale Portal test databases failed: {failure.GetBaseException().Message}");
         }
     }
 
@@ -212,7 +215,9 @@ public static class OmpTestDatabaseNames
             }
             catch (SqlException ex)
             {
-                Console.Error.WriteLine($"[OmpTestDatabaseNames] Could not drop stale test database '{name}': {ex.Message}");
+                OmpTestCleanupLog.RecordFailure(
+                    nameof(OmpTestDatabaseNames),
+                    $"Could not drop stale test database '{name}': {ex.Message}");
             }
         }
     }

@@ -57,7 +57,7 @@ namespace OpenModulePlatform.HostAgent.Sentinel
                 {
                     var observation = ReadAgent();
                     if (observation.EventId == 0 && settings.DatabaseEnabled)
-                        observation = ReadDatabase(connectionString, settings.HeartbeatStaleMinutes) ?? observation;
+                        observation = ReadDatabase(connectionString, settings.EffectiveHostKey, settings.HeartbeatStaleMinutes) ?? observation;
                     var events = state.Apply(observation, DateTime.UtcNow, settings.OkHeartbeatMinutes);
                     var stop = SentinelState.ShouldStop(state.ReportedEventId, settings.StopSelfWhenHostAgentDown);
                     if (state.Faulted && !File.Exists(stateFile)) File.WriteAllText(stateFile, state.ReportedEventId.ToString());
@@ -146,7 +146,7 @@ namespace OpenModulePlatform.HostAgent.Sentinel
             return builder.ConnectionString;
         }
 
-        private static Observation ReadDatabase(string connectionString, int staleMinutes)
+        private static Observation ReadDatabase(string connectionString, string hostKey, int staleMinutes)
         {
             try
             {
@@ -155,7 +155,7 @@ namespace OpenModulePlatform.HostAgent.Sentinel
                 {
                     command.CommandText = "SELECT LastSeenUtc FROM omp.Hosts WHERE HostKey = @hostKey";
                     command.CommandTimeout = 5;
-                    command.Parameters.Add("@hostKey", SqlDbType.NVarChar, 200).Value = Environment.MachineName;
+                    command.Parameters.Add("@hostKey", SqlDbType.NVarChar, 200).Value = hostKey;
                     connection.Open();
                     var result = command.ExecuteScalar();
                     var lastSeen = result == null || result == DBNull.Value ? (DateTime?)null

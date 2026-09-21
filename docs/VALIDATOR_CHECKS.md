@@ -73,7 +73,9 @@ with a future canonical check. Reserve a number here before using it.
 | 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | repositories whose module definitions declare `consistentArtifactSets` (currently this platform repository and IbsPackager) |
 | 19 | (repo-local) runtime cascade-bump | base-diff | exactly one consumer repository |
 
-Checks 7, 8, 9, 12, 13 and 19 diff against `-BaseCommit` (default
+Checks 7, 8, 9, 11, 12, 13 and 19, and the unnumbered `repositoryVersion`
+rule (repositoryVersion must move when any component version moved since the
+baseline), diff against `-BaseCommit` (default
 `origin/main`); the diff readers are fail-loud — a git answer that could not
 be read is a validation error, never a silent pass. Check 13 additionally
 scans the working tree and untracked files so an uncommitted own-source edit

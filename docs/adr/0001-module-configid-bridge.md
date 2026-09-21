@@ -65,4 +65,6 @@ modules to validate a selected value.
 - `OpenModulePlatform.Web.Shared/Configuration/ModuleConfigId.cs`
 - `OpenModulePlatform.Web.Shared/Configuration/IModuleConfigIdValidator.cs`
 - `OpenModulePlatform.Portal/Models/AdminEditModels.cs`
-- `sql/1-setup-openmoduleplatform.sql` (lines 723, 1518, 2472-2745)
+- `sql/1-setup-openmoduleplatform.sql` (`omp.AppInstances.ConfigId`,
+  `omp.InstanceTemplateAppInstances.DesiredConfigId`, and the
+  `omp.MaterializeInstanceTemplate` procedure that copies the desired value)

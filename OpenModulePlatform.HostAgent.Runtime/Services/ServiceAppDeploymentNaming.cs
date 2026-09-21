@@ -292,45 +292,6 @@ internal static class ServiceAppDeploymentNaming
         }
     }
 
-    private static string ResolveExecutableRelativePath(ServiceAppDeploymentDescriptor deployment)
-    {
-        if (!Directory.Exists(deployment.SourceLocalPath))
-        {
-            throw new DirectoryNotFoundException($"Provisioned service app artifact path was not found: '{deployment.SourceLocalPath}'.");
-        }
-
-        var executables = Directory.EnumerateFiles(deployment.SourceLocalPath, "*.exe", SearchOption.TopDirectoryOnly)
-            .Select(path => Path.GetRelativePath(deployment.SourceLocalPath, path))
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (executables.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"Service app artifact '{deployment.ArtifactId}' contains no executable in its root directory.");
-        }
-
-        if (executables.Length == 1)
-        {
-            return executables[0];
-        }
-
-        var installationName = Clean(deployment.InstallationName);
-        if (!IsGenericInstallationName(installationName))
-        {
-            var expected = installationName + ".exe";
-            var match = executables.FirstOrDefault(
-                path => string.Equals(Path.GetFileName(path), expected, StringComparison.OrdinalIgnoreCase));
-            if (match is not null)
-            {
-                return match;
-            }
-        }
-
-        throw new InvalidOperationException(
-            $"Service app artifact '{deployment.ArtifactId}' contains more than one root executable. Set AppInstances.InstallationName to the Windows service/executable name.");
-    }
-
     private static void ValidateServiceName(string serviceName, string appInstanceKey)
     {
         if (string.IsNullOrWhiteSpace(serviceName)

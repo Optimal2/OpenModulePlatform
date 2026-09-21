@@ -1269,7 +1269,7 @@ else {
     # changed, so "Repository version validated" meant "the field is filled in", not "the
     # number is right" -- a line that reads like a result and is not one.
     #
-    # It cost a real defect the same day: commit 4f45aee1 raised omp-hostagent-service
+    # It cost a real defect the same day: commit 3dfbc743 raised omp-hostagent-service
     # 0.3.244 -> 0.3.245 and left repositoryVersion at 0.3.621, byte-identical to its parent.
     # Local CI green, GitHub CI 5/5 green; an independent reviewer found it, not the gate.
     # The universal package takes its filename and sourceRepositoryVersion from this value, so

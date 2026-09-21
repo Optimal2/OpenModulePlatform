@@ -12,6 +12,9 @@ namespace OpenModulePlatform.HostAgent.Sentinel
         public bool CheckDatabaseHeartbeat { get; private set; }
         public int HeartbeatStaleMinutes { get; private set; }
         public string DatabaseConnectionString { get; private set; }
+        // The omp.Hosts.HostKey the heartbeat query looks up. Empty means the machine
+        // name, which is also HostAgent's default; set it when HostAgent:HostKey differs.
+        public string HostKey { get; private set; } = "";
         // A fault seen this soon after Sentinel started is held, never reported: at boot
         // Sentinel usually starts before HostAgent has reached Running.
         public int StartupGraceSeconds { get; private set; }
@@ -30,6 +33,7 @@ namespace OpenModulePlatform.HostAgent.Sentinel
                 CheckDatabaseHeartbeat = Boolean(values, "CheckDatabaseHeartbeat", false),
                 HeartbeatStaleMinutes = Number(values, "HeartbeatStaleMinutes", 15, 1, 10080),
                 DatabaseConnectionString = (values["DatabaseConnectionString"] ?? "").Trim(),
+                HostKey = (values["HostKey"] ?? "").Trim(),
                 StartupGraceSeconds = Number(values, "StartupGraceSeconds", 120, 0, 3600),
                 FaultConfirmations = Number(values, "FaultConfirmations", 2, 1, 10),
                 FaultRecheckSeconds = Number(values, "FaultRecheckSeconds", 10, 1, 3600)
@@ -37,6 +41,8 @@ namespace OpenModulePlatform.HostAgent.Sentinel
         }
 
         public bool DatabaseEnabled => CheckDatabaseHeartbeat && DatabaseConnectionString.Length > 0;
+
+        public string EffectiveHostKey => HostKey.Length > 0 ? HostKey : Environment.MachineName;
 
         private static int Number(NameValueCollection values, string key, int fallback, int min, int max)
         {

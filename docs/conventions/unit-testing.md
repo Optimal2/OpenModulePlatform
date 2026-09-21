@@ -18,13 +18,13 @@ Read from every repository's `Directory.Packages.props` on the same day (ODVGate
 
 | Package | Version | Where |
 |---|---|---|
-| `Microsoft.NET.Test.Sdk` | **18.9.0** | all eight .NET repos |
+| `Microsoft.NET.Test.Sdk` | **18.10.0** | all eight .NET repos |
 | `xunit` | **2.9.3** | all eight (the latest and final v2 core release) |
 | `xunit.runner.visualstudio` | **4.0.0** | all eight |
 | `Xunit.SkippableFact` | **1.5.85** | the seven CPM repos (ODVGateway does not use it) |
 | `Microsoft.Playwright` | **1.62.0** | the seven repos with a `*.UiTests` project (all but ODVGateway) |
 | `coverlet.collector` | **10.0.1** | six repos; **not** VajSkrivare, **not** ODVGateway |
-| `Microsoft.AspNetCore.Mvc.Testing` | 10.0.11 | where web-host tests exist |
+| `Microsoft.AspNetCore.Mvc.Testing` | 10.0.12 | where web-host tests exist |
 | `vitest` | `^4.1.11` | OpenDocViewer (`package.json`) |
 | `node:test` | built in | AgentDocMap (no test dependencies at all) |
 
@@ -38,7 +38,7 @@ pre-push hook. "CI" is `.github/workflows/ci.yml`.
 
 | Repo | Test projects on `origin/main` | Framework | Pins | Local gate runs tests | CI runs tests |
 |---|---|---|---|---|---|
-| **OpenModulePlatform** | 8 xUnit projects (`Bootstrapper.Tests`, `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`, `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`) + 9 Pester 5 suites in `tests/*.Tests.ps1` | xUnit + Playwright; Pester 5 (5.9.1) | CPM | Yes: `dotnet test` per project, Pester suites, zero-execution TRX gate | Yes: `dotnet test` (Integration, lease and `Category=Ui` excluded by filter), Pester suites, TRX gate |
+| **OpenModulePlatform** | 8 xUnit projects (`Bootstrapper.Tests`, `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`, `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`) + 14 Pester 5 suites in `tests/*.Tests.ps1` | xUnit + Playwright; Pester 5 (5.9.1) | CPM | Yes: `dotnet test` per project, Pester suites, zero-execution TRX gate | Yes: `dotnet test` (Integration, lease and `Category=Ui` excluded by filter), Pester suites, TRX gate |
 | **IbsPackager** | 4 (`IbsPackager.Tests`, `IbsPackager.ChannelTypes.FileDrop.Tests`, `IbsPackager.ChannelTypes.ImageCompose.Tests`, `IbsPackager.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No (build + validate only) |
 | **LogSearch** | 2 (`LogSearch.Tests`, `LogSearch.UiTests`) | xUnit + Playwright | CPM | Yes | No |
 | **EArkivChecker** | 3 (`EArkivChecker.Runtime.Tests`, `EArkivChecker.Web.Tests`, `EArkivChecker.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No |
@@ -77,9 +77,14 @@ in the per-repo table.
   `OpenModulePlatform.Portal.Tests/Integration/TestAuthHandler.cs`.
 - **Unit vs integration:** Tier suffix on class names - `*TierDTests` = pure in-memory,
   `*TierCTests` = real SQL Server (`OmpHostArtifactRepositoryTierCTests.cs`,
-  `HostAgentEngineTierDTests.cs`). DB-backed tests use `IClassFixture` over per-class databases:
+  `HostAgentEngineTierDTests.cs`). DB-backed tests provision their own databases in two
+  styles: the HostAgent TierC classes create an `OmpHostArtifactRepositoryTestDatabase` in the
+  test-class constructor (one database per test instance, disposed with it), while the
+  Portal.Tests database classes share one per class through `IClassFixture<>`.
   `OmpHostArtifactRepositoryTestDatabase.cs` honors `OMP_TEST_CONNECTION_STRING` (default
-  `Server=(local);Integrated Security=true`), creates a uniquely named database per test class
+  `Server=(local);Integrated Security=true;TrustServerCertificate=true`; the Portal helper
+  `TestSqlConnection.cs` builds `DataSource=localhost` with integrated security and
+  `TrustServerCertificate` when the variable is unset), creates a uniquely named database
   tagged with owner machine + PID + process-start ticks, sweeps only databases whose owner is
   verifiably dead (or unidentifiable and older than 24 h), and reports cleanup failures to
   `OMP_TEST_CLEANUP_LOG`, which `ci.yml` surfaces as workflow warnings. Web hosting uses
@@ -104,8 +109,10 @@ in the per-repo table.
   restored on demand into the repo-local `.psmodules` cache by `scripts/omp/pester-bootstrap.ps1`
   (process-local `PSModulePath`, so a divergent global Pester cannot affect the run). Per-suite
   harness code lives in `tests/*.TestHelpers.ps1`, dot-sourced from each `Describe` block's
-  `BeforeAll` because Pester 5 runs containers in a separate session state. Both gates invoke the
-  runner through `powershell.exe` because one suite spawns child `powershell.exe` processes.
+  `BeforeAll` because Pester 5 runs containers in a separate session state. CI invokes the
+  runner with `shell: powershell` (Windows PowerShell 5.1) because one suite spawns child
+  `powershell.exe` processes; the local gate (`scripts/local-ci.ps1`) runs it in the current
+  shell, which the pinned runner supports for both Windows PowerShell and pwsh.
 - **Zero-execution gate:** VSTest exits 0 when a filter matches nothing, so
   `assert-tests-executed.ps1` parses every `.trx` and fails when `executed == 0` (with
   `-RequirePerFile`, when any single file shows 0), when a `.trx` lacks `ResultSummary/Counters`,
@@ -215,7 +222,7 @@ done and recorded in the changelog.
 |---|---|---|
 | VajSkrivare | Add `coverlet.collector` 10.0.1 to `Directory.Packages.props`; add a `global.json` SDK pin (the only repo without one, so it floats to the build host's SDK). Keep the `tests/` folder layout - renaming is low-value churn. | Low |
 | ODVGateway | Introduce `Directory.Packages.props` (the only .NET repo without CPM) and a `.slnx` grouping `src/ODVGateway` and `tests/ODVGateway.Tests`; keep the smoke script as the e2e gate. | Low-Medium |
-| OpenModulePlatform | Adopt `[SkippableFact]` + env-var gating for Tier C tests so `dotnet test` passes on machines without SQL Server (CI currently sidesteps this with a `--filter`, tracked in `docs/TEST_DEBT.md`). Confirm `coverlet.collector` is referenced by every test project. | Low |
+| OpenModulePlatform | Adopt `[SkippableFact]` + env-var gating for Tier C tests so `dotnet test` passes on machines without SQL Server (CI currently sidesteps this with a `--filter`, tracked in `docs/TEST_DEBT.md`). `coverlet.collector` is referenced by every test project since 2026-09-21 (UiTests and Web.Shared.Analyzers.Tests were the two missing). | Low |
 | iKrock2 | Replace the two test classes that reach private static production methods via reflection (`StatusCodeParsingTests.cs`, `CollisionSearchFilterQueryParserTests.cs`, noted in the 2026-07-15 audit; not re-measured) with public-API tests. | Low |
 | IbsPackager | Optionally rename `IbsPackager.Tests` to `IbsPackager.Runtime.Tests` to match the `<ProjectUnderTest>.Tests` convention (it tests `IbsPackager.Runtime`). | Very low |
 | AgentDocMap | Deduplicate the local `withTempDir` copy in `test/secretSafety.test.js` by importing `test/testUtils.js`. | Very low |

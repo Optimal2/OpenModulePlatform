@@ -8,6 +8,33 @@ $ErrorActionPreference = 'Stop'
 $script:BootstrapScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/omp/pester-bootstrap.ps1'
 $script:RunnerScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/omp/run-script-tests.ps1'
 $script:PinnedPesterVersion = '5.9.1'
+# The repository-local cache run-script-tests.ps1 restores into. It is the seed
+# for every restore case below: the bootstrap copies an already available
+# pinned Pester instead of downloading, so with this cache on the child's
+# module path the suite never needs PSGallery.
+$script:RepoModuleCache = Join-Path (Split-Path -Parent $PSScriptRoot) '.psmodules'
+
+function Test-PinnedPesterSeedAvailable {
+    <#
+    .SYNOPSIS
+    True when a restore can be served without the network: the pinned version
+    is in the repository-local cache (the runner put it there) or is installed
+    globally. Restore cases skip with a reason otherwise, instead of turning
+    the script gate into a PSGallery download.
+    #>
+    $cached = Join-Path (Join-Path (Join-Path $script:RepoModuleCache 'Pester') $script:PinnedPesterVersion) 'Pester.psd1'
+    if (Test-Path -LiteralPath $cached -PathType Leaf) {
+        return $true
+    }
+    $global = @(Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version.ToString() -eq $script:PinnedPesterVersion })
+    return $global.Count -gt 0
+}
+
+function Skip-UnlessPinnedPesterSeedAvailable {
+    if (-not (Test-PinnedPesterSeedAvailable)) {
+        Set-ItResult -Skipped -Because "no offline source for Pester $script:PinnedPesterVersion (neither $script:RepoModuleCache nor a global install); run scripts/omp/run-script-tests.ps1 once to seed the cache"
+    }
+}
 
 function Invoke-ChildPowerShell {
     <#
@@ -48,8 +75,18 @@ function Invoke-PesterBootstrap {
     #>
     param([Parameter(Mandatory = $true)][string]$CacheRoot)
 
-    return Invoke-ChildPowerShell -ScriptPath $script:BootstrapScript `
-        -ScriptArguments @('-RequiredVersion', $script:PinnedPesterVersion, '-CacheRoot', $CacheRoot)
+    # The child inherits the module path; putting the repository cache first
+    # makes the local-copy branch of the restore deterministic rather than a
+    # property of whichever process happens to host this suite.
+    $originalModulePath = $env:PSModulePath
+    try {
+        $env:PSModulePath = $script:RepoModuleCache + ';' + $originalModulePath
+        return Invoke-ChildPowerShell -ScriptPath $script:BootstrapScript `
+            -ScriptArguments @('-RequiredVersion', $script:PinnedPesterVersion, '-CacheRoot', $CacheRoot)
+    }
+    finally {
+        $env:PSModulePath = $originalModulePath
+    }
 }
 
 function New-TestDirectory {

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
+using OpenModulePlatform.Web.Shared.Web;
 using System.Security.Claims;
 
 namespace OpenModulePlatform.Auth.Services;
@@ -275,29 +276,7 @@ public static class OmpOidcAuthenticationExtensions
         => string.IsNullOrWhiteSpace(claimType) ? fallback : claimType.Trim();
 
     private static string NormalizeLocalRedirectUri(string? redirectUri, string fallback)
-    {
-        if (string.IsNullOrWhiteSpace(redirectUri) ||
-            !Uri.IsWellFormedUriString(redirectUri, UriKind.Relative) ||
-            !redirectUri.StartsWith("/", StringComparison.Ordinal) ||
-            redirectUri.StartsWith("//", StringComparison.Ordinal) ||
-            redirectUri.Contains('\\', StringComparison.Ordinal))
-        {
-            return fallback;
-        }
-
-        try
-        {
-            var unescaped = Uri.UnescapeDataString(redirectUri);
-            return !unescaped.StartsWith("//", StringComparison.Ordinal) &&
-                   !unescaped.Contains('\\', StringComparison.Ordinal)
-                ? redirectUri
-                : fallback;
-        }
-        catch (UriFormatException)
-        {
-            return fallback;
-        }
-    }
+        => OmpUrlSafety.IsSafeLocalReturnUrl(redirectUri) ? redirectUri : fallback;
 
     private static void RedirectToLogin(HttpContext context, string error)
     {

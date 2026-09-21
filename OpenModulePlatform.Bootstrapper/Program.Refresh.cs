@@ -280,7 +280,8 @@ internal static partial class Program
         WaitForPackageProcessesToExit(payloadRoot);
 
         var config = await ReadJsonAsync<BootstrapConfig>(configPath);
-        var sourceRoot = ResolvePrimaryDeveloperSourceRoot(config, payloadRoot, configPath);
+        var sourceRoots = ResolveDeveloperSourceRoots(config, payloadRoot, configPath);
+        var sourceRoot = sourceRoots.First(IsOpenModulePlatformSourceRoot);
         var packageConfigPath = ResolveDeveloperPackageConfigPath(config, sourceRoot);
         var packageOutputRoot = ResolveSafeInstallerRefreshOutputRoot(config, sourceRoot, payloadRoot);
 
@@ -293,7 +294,6 @@ internal static partial class Program
         Console.WriteLine($"Log file:       {logPath}");
         Console.WriteLine();
 
-        var sourceRoots = ResolveDeveloperSourceRoots(config, payloadRoot, configPath);
         Console.WriteLine("Source repository updates:");
         PullDeveloperSourceRepositories(
             sourceRoots,
@@ -449,7 +449,6 @@ internal static partial class Program
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        process.WaitForExit();
         process.WaitForExit();
 
         if (process.ExitCode != 0)
@@ -851,21 +850,6 @@ internal static partial class Program
         {
             configuredRoots.Insert(0, discoveredRoot);
             return configuredRoots;
-        }
-
-        throw new DirectoryNotFoundException("Developer source roots must include an OpenModulePlatform source repository.");
-    }
-
-    private static string ResolvePrimaryDeveloperSourceRoot(
-        BootstrapConfig config,
-        string payloadRoot,
-        string configPath)
-    {
-        var primaryRoot = ResolveDeveloperSourceRoots(config, payloadRoot, configPath)
-            .FirstOrDefault(IsOpenModulePlatformSourceRoot);
-        if (primaryRoot is not null)
-        {
-            return primaryRoot;
         }
 
         throw new DirectoryNotFoundException("Developer source roots must include an OpenModulePlatform source repository.");

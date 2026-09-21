@@ -4,6 +4,11 @@
 > Status: Documentation-only audit. No source code was changed.  
 > Date: 2026-07-16
 
+> **Line anchors (note added 2026-09-21).** The `file.cs:NN` references in
+> this document were measured when the audit was written and many have
+> drifted since. Resolve every reference by the **symbol or file name**, not by
+> the line number; the same note applies in `configuration.md`.
+
 This document summarizes how each repository currently handles errors, highlights divergences, and recommends a single standard pattern per ecosystem (.NET and JS/npm).
 
 ---
@@ -669,7 +674,7 @@ This document summarizes how each repository currently handles errors, highlight
    - Always use `throw;` to preserve stack traces. Never use `throw ex;`.
 
 3. **Structured logging**
-   - Use `_logger.LogError(exception, "...")` inside catch blocks so Serilog/Seq captures the full exception object.
+   - Use `_logger.LogError(exception, "...")` inside catch blocks so the logging provider (NLog, per `logging.md`) captures the full exception object.
    - Include contextual identifiers (job id, search id, channel id, etc.) in log messages.
 
 4. **User-facing responses**
@@ -767,32 +772,3 @@ This document summarizes how each repository currently handles errors, highlight
 - **Current state:** Simple CLI; plain `Error` throws; bare `catch { }` for optional I/O; no structured logging or result abstraction.
 - **Migration:** Keep simplicity, but distinguish “file does not exist” from permission/IO errors in `fsUtils.js` and `fileInventory.js`. Add a minimal `Result<T>` or `{ ok, error }` return type for `sourceAnalyzer.js` instead of mutating a `parseError` field.
 - **Priority:** Low.
-
----
-
-## Output
-
-### What changed
-- Created one new documentation file: `docs/conventions/error-handling.md` in `OpenModulePlatform`.
-- No source code was modified in any repository.
-- No component versions were bumped.
-- No follow-up or runtime jobs were created.
-
-### Validation
-- Read-only investigation completed across all 10 OMP+ODV repositories.
-- Findings include file:line citations for custom exceptions, catch patterns, global handling, logging vs user-facing behavior, result patterns, and swallowed exceptions.
-- Document contains the requested comparison matrix, divergence highlights, recommended standard patterns, and per-repo migration notes.
-
-### Commit / push
-- `git status --short` in `OpenModulePlatform` was clean before starting.
-- Only `docs/conventions/error-handling.md` will be staged and committed.
-- Push status will be reported after the commit command completes.
-
-### Package / win-unpacked status
-- Not applicable — documentation-only change, no build artifacts produced.
-
-### Remaining work
-- None for this documentation-only job. Implementation of the recommended patterns is intentionally out of scope and would require separate, per-repo follow-up jobs if approved.
-
-### Confidence Check
-- High confidence in the audit findings and the resulting convention document. All repositories were inspected with focused read-only searches; the synthesized patterns and divergences are directly supported by the cited source locations.

@@ -1,5 +1,10 @@
 # Logging conventions for OMP+ODV
 
+> **Line anchors (note added 2026-09-21).** The `file.cs:NN` references in
+> this document were measured when the audit was written and many have
+> drifted since. Resolve every reference by the **symbol or file name**, not by
+> the line number; the same note applies in `configuration.md`.
+
 This document records the logging patterns found in the OMP+ODV repositories (source code only; `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded from the audit).
 
 ## 1. Per-repo logging map
@@ -26,9 +31,8 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 - **Destinations:** NLog writes to rolling file + console in every app.
   - `OpenModulePlatform.HostAgent.WindowsService/appsettings.json:81-89`
   - Emergency startup fallback writes a one-off text file: `OpenModulePlatform.HostAgent.WindowsService/Program.cs:120-138`
-- **Correlation IDs:** No request/correlation middleware or `Activity.Current.Id` usage. A domain-specific `CorrelationKey` exists only for push-event outbox deduplication.
-  - `OpenModulePlatform.EventPublisher.Abstractions/PushEvent.cs:11`
-  - `OpenModulePortal.Tests/Services/PushEventTests.cs:15`
+- **Correlation IDs:** `OmpRequestCorrelationMiddleware` (`OpenModulePlatform.Web.Shared/Web/OmpRequestCorrelationMiddleware.cs`) resolves or generates an `X-Correlation-ID` per request, stores it in `HttpContext.Items["CorrelationId"]`, echoes it on the response and opens a logging scope with the property `CorrelationId`. It is registered by `UseOmpWebDefaults` (`OmpWebHostingExtensions.cs`, `app.UseOmpRequestCorrelation()`) right after the security headers, so every shared-pipeline app carries it. The Portal, Content and iFrame layouts (checked-in and packaged `appsettings.json`) render it with `${scopeproperty:item=CorrelationId}`; the Auth app runs its own pipeline without the scope. No `Activity.Current.Id` usage. A domain-specific `CorrelationKey` exists separately for push-event outbox deduplication.
+  - `OpenModulePlatform.EventPublisher.Abstractions/PushEvent.cs` (`CorrelationKey`)
 
 ### IbsPackager
 

@@ -49,7 +49,7 @@ namespace OpenModulePlatform.Web.Shared
             var test = new CSharpAnalyzerTest<OmpWebDefaultsAnalyzer, DefaultVerifier>
             {
                 TestCode = source,
-                ReferenceAssemblies = ReferenceAssemblies.Net.Net80,
+                ReferenceAssemblies = ReferenceAssemblies.Net.Net100,
                 TestState =
                 {
                     OutputKind = OutputKind.ConsoleApplication,

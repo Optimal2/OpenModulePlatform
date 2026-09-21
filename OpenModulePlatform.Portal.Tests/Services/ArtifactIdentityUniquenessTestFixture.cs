@@ -106,7 +106,7 @@ SELECT CAST(SCOPE_IDENTITY() AS int);",
 
     private async Task ApplyCoreSetupScriptAsync()
     {
-        var setupSql = ReadRepositoryTextFile("sql", "1-setup-openmoduleplatform.sql");
+        var setupSql = OmpRepositoryFiles.ReadRepositoryTextFile("sql", "1-setup-openmoduleplatform.sql");
 
         // Strip the historical local development database switch, the same way
         // scripts/dev/embed-module-definition-sql.ps1 does, so the script runs
@@ -157,39 +157,13 @@ DROP DATABASE [{DatabaseName}];",
         {
             await cmd.ExecuteNonQueryAsync();
         }
-        catch (SqlException)
+        catch (SqlException ex)
         {
-            // Best-effort cleanup.
+            // A failed drop must not fail the run, but it must not be silent either:
+            // the shared log is what CI turns into a warning about the leaked database.
+            OmpTestCleanupLog.RecordFailure(
+                nameof(ArtifactIdentityUniquenessTestFixture),
+                $"Could not drop test database '{DatabaseName}': {ex.Message}");
         }
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-    }
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-    {
-        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
-        if (rootedSegment is not null)
-        {
-            throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
-        }
-
-        var segments = new string[relativePathSegments.Length + 1];
-        segments[0] = FindRepositoryRoot();
-        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-        return File.ReadAllText(Path.Join(segments));
     }
 }

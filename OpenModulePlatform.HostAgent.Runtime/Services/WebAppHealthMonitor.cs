@@ -42,13 +42,13 @@ public sealed class WebAppHealthMonitor
 
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly OmpHostArtifactRepository _repository;
+    private readonly IOmpHostArtifactRepository _repository;
     private readonly ILogger<WebAppHealthMonitor> _logger;
 
     public WebAppHealthMonitor(
         IOptionsMonitor<HostAgentSettings> settings,
         IHttpClientFactory httpClientFactory,
-        OmpHostArtifactRepository repository,
+        IOmpHostArtifactRepository repository,
         ILogger<WebAppHealthMonitor> logger)
     {
         _settings = settings;
@@ -337,7 +337,7 @@ public sealed class WebAppHealthMonitor
     }
 
     private static string ResolvePortalAppPoolName(HostAgentSettings settings)
-        => BuildIisAppPoolName(settings, "portal");
+        => IisAppCmd.BuildAppPoolName(settings, "portal");
 
     private static DeploymentLockStatus? GetActivePortalDeploymentLock(HostAgentSettings settings)
     {
@@ -361,25 +361,6 @@ public sealed class WebAppHealthMonitor
         return $"{message} LockId={lockStatus.Document.LockId}; ExpiresUtc={lockStatus.Document.ExpiresUtc.UtcDateTime:u}.";
     }
 
-    private static string BuildIisAppPoolName(HostAgentSettings settings, string value)
-    {
-        var prefix = string.IsNullOrWhiteSpace(settings.IisAppPoolNamePrefix)
-            ? string.Empty
-            : settings.IisAppPoolNamePrefix.Trim();
-        var normalized = new string(value
-            .Trim()
-            .Select(static ch => char.IsLetterOrDigit(ch) || ch is '.' or '-' or '_' ? ch : '_')
-            .ToArray());
-        normalized = normalized.Trim('_');
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            normalized = "app";
-        }
-
-        var name = prefix + normalized;
-        return name.Length <= 80 ? name : name[..80].TrimEnd('_', '.', '-');
-    }
-
     private static string RecycleAppPool(string appPoolName)
     {
         if (string.IsNullOrWhiteSpace(appPoolName))
@@ -387,74 +368,16 @@ public sealed class WebAppHealthMonitor
             throw new InvalidOperationException("IIS application pool name is required.");
         }
 
-        var state = GetAppPoolState(appPoolName);
+        var state = IisAppCmd.GetAppPoolState(appPoolName);
         if (string.Equals(state, "Started", StringComparison.OrdinalIgnoreCase))
         {
-            RunAppCmd("recycle", "apppool", $"/apppool.name:{appPoolName}");
+            IisAppCmd.Run("recycle", "apppool", $"/apppool.name:{appPoolName}");
             return $"Recycled IIS application pool '{appPoolName}'.";
         }
 
-        RunAppCmd("start", "apppool", $"/apppool.name:{appPoolName}");
+        IisAppCmd.Run("start", "apppool", $"/apppool.name:{appPoolName}");
         return $"Started IIS application pool '{appPoolName}' because its state was '{state ?? "unknown"}'.";
     }
-
-    private static string? GetAppPoolState(string appPoolName)
-    {
-        var output = RunAppCmd("list", "apppool", $"/name:{appPoolName}");
-        var text = string.Join('\n', output);
-        const string marker = "state:";
-        var start = text.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (start < 0)
-        {
-            return null;
-        }
-
-        start += marker.Length;
-        var end = text.IndexOfAny([',', ')'], start);
-        if (end < 0)
-        {
-            end = text.Length;
-        }
-
-        return text[start..end].Trim();
-    }
-
-    private static string[] RunAppCmd(params string[] arguments)
-    {
-        var result = RunProcess(GetAppCmdPath(), arguments);
-        if (result.ExitCode == 0)
-        {
-            return SplitOutput(result.StdOut);
-        }
-
-        var message = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
-        throw new InvalidOperationException(
-            $"appcmd.exe failed with exit code {result.ExitCode}: {message.Trim()}");
-    }
-
-    private static string GetAppCmdPath()
-    {
-        var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var appCmdPath = Path.Join(windowsDirectory, "System32", "inetsrv", "appcmd.exe");
-        if (!File.Exists(appCmdPath))
-        {
-            throw new FileNotFoundException($"IIS appcmd.exe was not found: '{appCmdPath}'.", appCmdPath);
-        }
-
-        return appCmdPath;
-    }
-
-    private static ProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
-    {
-        var result = HostAgentProcessRunner.Run(fileName, arguments);
-        return new ProcessResult(result.ExitCode, result.StdOut, result.StdErr);
-    }
-
-    private static string[] SplitOutput(string value)
-        => value
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static LogTailResult ReadTail(string path, int maxLines)
     {
@@ -514,8 +437,6 @@ public sealed class WebAppHealthMonitor
         text = text.Replace('\r', ' ').Replace('\n', ' ');
         return text.Length <= 1000 ? text : text[..1000];
     }
-
-    private sealed record ProcessResult(int ExitCode, string StdOut, string StdErr);
 
     private sealed record LogTailResult(string Text, int LineCount);
 }

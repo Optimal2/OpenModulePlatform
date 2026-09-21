@@ -58,11 +58,11 @@ builder.Services.AddScoped<PortableModulePackageService>();
 builder.Services.AddSingleton<PortalDeploymentLockService>();
 builder.Services.AddScoped<ConfigOverlayObjectService>();
 builder.Services.AddScoped<PortalHealthService>();
-// No validation rules: empty roots disable the optional import surfaces by
-// design, and a non-positive MaxUploadBytes falls back to the default above.
+// No validation rules (so no ValidateOnStart either): empty roots disable the
+// optional import surfaces by design, and a non-positive MaxUploadBytes falls
+// back to the default above.
 builder.Services.AddOptions<ArtifactUploadOptions>()
-    .Bind(builder.Configuration.GetSection(ArtifactUploadOptions.SectionName))
-    .ValidateOnStart();
+    .Bind(builder.Configuration.GetSection(ArtifactUploadOptions.SectionName));
 
 builder.Services.AddOptions<MusicPlayerWidgetOptions>()
     .Bind(builder.Configuration.GetSection(MusicPlayerWidgetOptions.SectionName));

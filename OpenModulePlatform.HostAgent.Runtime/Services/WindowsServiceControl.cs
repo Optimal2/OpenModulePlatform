@@ -33,29 +33,7 @@ public sealed class WindowsServiceControl : IWindowsServiceControl
                 serviceName));
         }
 
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var stateIndex = line.IndexOf("STATE", StringComparison.OrdinalIgnoreCase);
-            if (stateIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', stateIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            var stateText = line[(separatorIndex + 1)..].Trim();
-            var parts = stateText.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length > 0)
-            {
-                return parts[^1];
-            }
-        }
-
-        return null;
+        return WindowsServiceQuery.ParseServiceState(result.Output);
     }
 
     public bool IsServiceRunning(string serviceName)
@@ -64,47 +42,7 @@ public sealed class WindowsServiceControl : IWindowsServiceControl
     public string? GetServiceExecutablePath(string serviceName)
     {
         var result = RunSc("qc", serviceName);
-        if (result.ExitCode != 0)
-        {
-            return null;
-        }
-
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var binaryPathIndex = line.IndexOf("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase);
-            if (binaryPathIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', binaryPathIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            return TryExtractExecutablePath(line[(separatorIndex + 1)..].Trim());
-        }
-
-        return null;
-    }
-
-    private static string? TryExtractExecutablePath(string binaryPath)
-    {
-        if (string.IsNullOrWhiteSpace(binaryPath))
-        {
-            return null;
-        }
-
-        var trimmed = binaryPath.Trim();
-        if (trimmed.StartsWith('"'))
-        {
-            var closingQuote = trimmed.IndexOf('"', 1);
-            return closingQuote > 1 ? trimmed[1..closingQuote] : null;
-        }
-
-        var executableEnd = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
-        return executableEnd < 0 ? null : trimmed[..(executableEnd + ".exe".Length)].Trim();
+        return result.ExitCode != 0 ? null : WindowsServiceQuery.ParseServiceExecutablePath(result.Output);
     }
 
     public void StartServiceIfStopped(string serviceName, int timeoutSeconds)

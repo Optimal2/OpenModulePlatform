@@ -1,5 +1,7 @@
 // File: OpenModulePlatform.Portal.Tests/Security/PortalInlineScriptGuardTests.cs
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Security;
 
@@ -15,7 +17,7 @@ public sealed class PortalInlineScriptGuardTests
     [Fact]
     public void PortalPages_HaveNoExecutableInlineScriptBlocks()
     {
-        var pagesDirectory = GetRepositoryPath("OpenModulePlatform.Portal", "Pages");
+        var pagesDirectory = OmpRepositoryFiles.GetRepositoryPath("OpenModulePlatform.Portal", "Pages");
         var offenders = new List<string>();
 
         foreach (var file in Directory.EnumerateFiles(pagesDirectory, "*.cshtml", SearchOption.AllDirectories))
@@ -45,31 +47,41 @@ public sealed class PortalInlineScriptGuardTests
             + string.Join("\n - ", offenders));
     }
 
-    [Fact]
-    public void PortalConfiguredPolicy_DropsUnsafeInlineFromScriptSrc()
+    // The checked-in appsettings.json never reaches a host: the artifact payload strips
+    // it and HostAgent writes Packaging/appsettings.json (merged over its built-in
+    // template) instead. Both files are therefore checked, and the packaged policy is
+    // pinned to the checked-in one so the strict policy cannot be lost on the way out.
+    [Theory]
+    [InlineData("appsettings.json")]
+    [InlineData("Packaging/appsettings.json")]
+    public void PortalConfiguredPolicy_DropsUnsafeInlineFromScriptSrc(string relativePath)
     {
         var appsettings = File.ReadAllText(
-            GetRepositoryPath("OpenModulePlatform.Portal", "appsettings.json"));
+            OmpRepositoryFiles.GetRepositoryPath("OpenModulePlatform.Portal", relativePath));
 
         Assert.DoesNotContain("script-src 'self' 'unsafe-inline'", appsettings, StringComparison.Ordinal);
     }
 
-    private static string GetRepositoryPath(params string[] relativePathSegments)
+    [Fact]
+    public void PackagedPortalConfiguration_CarriesTheCheckedInPolicyAndNLogSection()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                var segments = new string[relativePathSegments.Length + 1];
-                segments[0] = directory.FullName;
-                Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-                return Path.Join(segments);
-            }
+        using var checkedIn = JsonDocument.Parse(
+            File.ReadAllText(OmpRepositoryFiles.GetRepositoryPath("OpenModulePlatform.Portal", "appsettings.json")),
+            new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
+        using var packaged = JsonDocument.Parse(
+            File.ReadAllText(OmpRepositoryFiles.GetRepositoryPath("OpenModulePlatform.Portal", "Packaging", "appsettings.json")),
+            new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip });
 
-            directory = directory.Parent;
-        }
+        var checkedInPolicy = checkedIn.RootElement
+            .GetProperty("Portal").GetProperty("SecurityHeaders").GetProperty("ContentSecurityPolicy").GetProperty("Policy")
+            .GetString();
+        var packagedPolicy = packaged.RootElement
+            .GetProperty("Portal").GetProperty("SecurityHeaders").GetProperty("ContentSecurityPolicy").GetProperty("Policy")
+            .GetString();
 
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
+        Assert.False(string.IsNullOrWhiteSpace(checkedInPolicy));
+        Assert.Equal(checkedInPolicy, packagedPolicy);
+        Assert.True(packaged.RootElement.TryGetProperty("NLog", out var nlog));
+        Assert.True(nlog.TryGetProperty("targets", out _));
     }
 }

@@ -79,13 +79,13 @@ public sealed partial class HostResourceCollector
 
             var samples = new List<HostResourceSample>();
 
-            // Read before the sync sweep: the process ids come from the database, and
-            // CollectSamples runs on the thread pool without a connection (R8-P5-20).
+            // Read before the sweep: the process ids come from the database, and
+            // CollectSamplesAsync runs on the thread pool without a connection (R8-P5-20).
             var workerProcesses = settings.CollectWorkerProcesses
                 ? await _repository.GetLocalWorkerProcessTargetsAsync(linkedCts.Token)
                 : [];
 
-            await Task.Run(() => CollectSamples(settings, samples, workerProcesses, linkedCts.Token), linkedCts.Token);
+            await Task.Run(() => CollectSamplesAsync(settings, samples, workerProcesses, linkedCts.Token), linkedCts.Token);
 
             if (samples.Count == 0)
             {
@@ -243,7 +243,7 @@ public sealed partial class HostResourceCollector
         }
     }
 
-    private void CollectSamples(
+    private async Task CollectSamplesAsync(
         HostResourceTelemetrySettings settings,
         List<HostResourceSample> samples,
         IReadOnlyList<(string WorkerInstanceKey, int ProcessId)> workerProcesses,
@@ -289,7 +289,7 @@ public sealed partial class HostResourceCollector
                 $"{WorkerMemoryKeyPrefix}{normalizedWorkerKey}"));
         }
 
-        CollectProcessTargetSamples(settings, targets, samples, cancellationToken);
+        await CollectProcessTargetSamplesAsync(settings, targets, samples, cancellationToken);
     }
 
     [SupportedOSPlatform("windows")]
@@ -299,7 +299,7 @@ public sealed partial class HostResourceCollector
         List<HostResourceSample> samples,
         CancellationToken cancellationToken)
     {
-        var appCmdPath = GetAppCmdPath();
+        var appCmdPath = IisAppCmd.TryGetPath();
         if (appCmdPath is null)
         {
             _logger.LogDebug("IIS appcmd.exe was not found; skipping IIS app pool telemetry collection.");
@@ -538,7 +538,7 @@ public sealed partial class HostResourceCollector
         }
     }
 
-    private void CollectProcessTargetSamples(
+    private async Task CollectProcessTargetSamplesAsync(
         HostResourceTelemetrySettings settings,
         IReadOnlyList<ProcessTelemetryTarget> targets,
         List<HostResourceSample> samples,
@@ -556,21 +556,10 @@ public sealed partial class HostResourceCollector
             .ToArray();
         var startSnapshots = CaptureProcessSnapshots(uniqueProcessIds);
 
-        try
-        {
-            if (cancellationToken.WaitHandle.WaitOne(TimeSpan.FromSeconds(settings.SampleWindowSeconds)))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return;
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
+        // The CPU figure is the delta over this window. The wait used to block the pool
+        // thread (WaitHandle.WaitOne) for the whole window; a timer-based delay hands the
+        // thread back and still throws OperationCanceledException on shutdown.
+        await Task.Delay(TimeSpan.FromSeconds(settings.SampleWindowSeconds), cancellationToken);
 
         var endUtc = DateTime.UtcNow;
         var endSnapshots = CaptureProcessSnapshots(uniqueProcessIds);
@@ -780,13 +769,6 @@ public sealed partial class HostResourceCollector
 
     [GeneratedRegex(@"^APPPOOL\s+""([^""]+)""\s+\(", RegexOptions.IgnoreCase)]
     private static partial Regex AppCmdAppPoolRegex();
-
-    private static string? GetAppCmdPath()
-    {
-        var windowsDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        var appCmdPath = Path.Join(windowsDirectory, "System32", "inetsrv", "appcmd.exe");
-        return File.Exists(appCmdPath) ? appCmdPath : null;
-    }
 
     private static string[] SplitOutput(string value)
         => value

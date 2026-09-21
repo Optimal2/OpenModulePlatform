@@ -827,7 +827,7 @@ public sealed class ServiceAppDeploymentService
         }
 
         if (string.Equals(serviceName, settings.ServiceName, StringComparison.OrdinalIgnoreCase)
-            || HostAgentJobProcessor.IsServiceNameWithKnownPrefix(serviceName, HostAgentJobProcessor.KnownHostAgentServiceNamePrefixes)
+            || HostAgentJobProcessor.IsServiceNameWithKnownPrefix(serviceName, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes)
             || HostAgentJobProcessor.IsServiceNameWithKnownPrefix(serviceName, HostAgentJobProcessor.KnownWorkerManagerServiceNamePrefixes))
         {
             return $"Refusing to remove '{serviceName}': it is a HostAgent or WorkerManager service.";
@@ -1406,9 +1406,12 @@ public sealed class ServiceAppDeploymentService
             var credential = await _credentialStore.TryReadCredentialAsync(identity.PasswordCredentialKey, cancellationToken);
             if (credential is null)
             {
-                return string.IsNullOrWhiteSpace(userName)
-                    ? ServiceAppIdentityResolution.NotConfigured
-                    : new ServiceAppIdentityResolution(userName.Trim(), password, source);
+                // A configured key that does not resolve is a broken configuration, the same
+                // as for IIS app pools and the self-upgrade account. Falling back to the
+                // legacy clear-text Password here silently deployed under whatever that
+                // field happened to hold (B66).
+                throw new InvalidOperationException(
+                    $"Service app credential '{identity.PasswordCredentialKey}' ({source}) could not be resolved from HostAgent credential store.");
             }
 
             if (string.IsNullOrWhiteSpace(userName))
@@ -1800,46 +1803,20 @@ public sealed class ServiceAppDeploymentService
         return HostAgentCredentialAutomationModes.Disabled;
     }
 
-    /// <remarks>
-    /// ManagementException belongs here because this file drives WMI directly in the deploy
-    /// path -- ChangeServiceStartAccount goes through ManagementObjectSearcher and
-    /// InvokeMethod("Change", ...). That is the exact "service-identity repair" R5-D1's own
-    /// comment names as a ManagementException source. The deploy loop has no per-deployment
-    /// try/catch, so a WMI blip skipped the remaining service apps and everything sequenced
-    /// after them in the cycle: self-upgrade, file mirroring, jobs and telemetry -- the R6-D1
-    /// blast radius, reintroduced through a too-narrow filter (R8-P4-3).
-    /// </remarks>
+    /// <summary>
+    /// Deployment faults this service records against the deployment row instead of
+    /// letting them abort the whole HostAgent cycle. See <see cref="DeploymentFaults"/>
+    /// for the list and the history of the copies it replaced.
+    /// </summary>
     private static bool IsExpectedDeploymentFailure(Exception exception)
-        => exception is InvalidOperationException
-            or IOException
-            or UnauthorizedAccessException
-            or TimeoutException
-            or System.ComponentModel.Win32Exception
-            or System.Management.ManagementException
-            or System.Runtime.InteropServices.COMException;
+        => DeploymentFaults.IsRecordable(exception);
 
     /// <summary>
     /// Faults while restarting a service during recovery, recorded rather than allowed to
-    /// abort the HostAgent cycle.
+    /// abort the HostAgent cycle. Same list as deployment (R8-P4-10).
     /// </summary>
-    /// <remarks>
-    /// R8-P4-10. Kept in step with IsExpectedDeploymentFailure directly above, which is the
-    /// same list. Recovery restarts a Windows service through the same WMI and
-    /// ServiceController surface the deployment path uses, so ManagementException and
-    /// COMException reach here for the same reasons they reach that one; they were listed in
-    /// only one of the pair.
-    /// </remarks>
     private static bool IsExpectedRecoveryStartFailure(Exception exception)
-        => exception is InvalidOperationException
-            or IOException
-            or UnauthorizedAccessException
-            or TimeoutException
-            or System.ComponentModel.Win32Exception
-            or System.Management.ManagementException
-            or System.Runtime.InteropServices.COMException
-            || (exception is System.Reflection.TargetInvocationException invocation
-                && invocation.InnerException is not null
-                && IsExpectedRecoveryStartFailure(invocation.InnerException));
+        => DeploymentFaults.IsRecordable(exception);
 
     private sealed record ServiceAppIdentityResolution(string UserName, string Password, string Source)
     {

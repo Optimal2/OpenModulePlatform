@@ -1,5 +1,32 @@
 # Security Audit 2026-05-24
 
+> **Status note (2026-09-21).** This document is a dated baseline and is kept
+> as the record of what was reviewed and fixed on 2026-05-24. It is not the
+> current state. Since then:
+>
+> - A Content Security Policy is emitted by every OMP web app through the
+>   shared pipeline (`OpenModulePlatform.Web.Shared/Security/OmpContentSecurityPolicy.cs`,
+>   `OmpWebHostingExtensions.UseOmpSecurityHeaders`), in report-only mode by
+>   default with enforcement as a configuration flip; see
+>   `docs/CONTENT_SECURITY_POLICY.md`. The "full CSP not enabled" finding
+>   below is therefore superseded.
+> - `Strict-Transport-Security` (`max-age=31536000; includeSubDomains`) is
+>   emitted on HTTPS requests by the same middleware; it is not in the header
+>   list under "Fixes Applied".
+> - The localization endpoint `/localization/set-language` is deliberately
+>   `AllowAnonymous` in both the shared pipeline and the Auth app (a
+>   sign-in-gated language switch redirected the language GET to the login
+>   page); its protection is the local-return-URL check, not authentication.
+>   Read the "localization return URL endpoint is protected by the normal auth
+>   flow" line below with that in mind.
+> - Code scanning runs as GitHub CodeQL default setup on the repository
+>   (languages `csharp`, `python`, `actions`; weekly schedule plus
+>   push/pull-request analysis), configured in the repository settings rather
+>   than in a workflow file, so `.github/workflows/` does not show it. Code
+>   comments that cite CodeQL alert numbers (for example
+>   `OpenModulePlatform.Web.Shared/Security/OmpLogSanitizer.cs`) refer to
+>   those findings. `gitleaks` and `semgrep` are still not part of CI.
+
 This document records the security audit baseline performed for the OMP-related repositories on 2026-05-24.
 
 This public copy generalizes private consumer repository names where the exact

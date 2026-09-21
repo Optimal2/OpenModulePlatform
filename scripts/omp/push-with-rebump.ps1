@@ -77,19 +77,19 @@ function Invoke-Git {
     #>
     param([Parameter(Mandatory)][string[]]$Arguments, [switch]$AllowFailure)
 
-    # EAP maste sankas RUNT anropet, inte bara beskrivas i kommentaren ovan. Med
-    # $ErrorActionPreference = 'Stop' pa skriptniva gor `2>&1` att varje rad git skriver
-    # till stderr blir ett TERMINERANDE fel — och git skriver sin normala "To <url>" dit
-    # vid en LYCKAD push. Skriptet dog darfor precis efter att ha pushat, forsta gangen
-    # det kordes skarpt. Domen ska falla pa $LASTEXITCODE, inget annat.
-    $tidigareEap = $ErrorActionPreference
+    # EAP must be lowered AROUND the call, not merely described in the comment above. With
+    # $ErrorActionPreference = 'Stop' at script level, `2>&1` turns every line git writes
+    # to stderr into a TERMINATING error -- and git writes its normal "To <url>" there on a
+    # SUCCESSFUL push. The script therefore died right after pushing, the first time it ran
+    # for real. The verdict must rest on $LASTEXITCODE, nothing else.
+    $previousEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
         $stdout = & git @Arguments 2>&1
         $code = $LASTEXITCODE
     }
     finally {
-        $ErrorActionPreference = $tidigareEap
+        $ErrorActionPreference = $previousEap
     }
     $text = ($stdout | Out-String).TrimEnd()
     if ($code -ne 0 -and -not $AllowFailure) {
@@ -138,15 +138,15 @@ function Get-BumpedComponentKeys {
     #>
     param([string]$CommitRef = 'HEAD', [string]$Upstream = '')
 
-    # Basen ar ALLT som inte ar pushat, inte bara toppcommiten.
+    # The base is EVERYTHING that is not pushed, not just the top commit.
     #
-    # Ursprungligen jamforde den HEAD mot HEAD^, och alfons_windows pekade ut luckan vid
-    # genomlasningen: med TVA eller flera opushade commits, dar den UNDRE commitens bump
-    # kolliderar med det publicerade, blir den bumpen en no-op i rebasen medan rebumpen bara
-    # raknar om toppcommitens komponentset. Grinden stoppar det (fails closed) men rapporterar
-    # det som "a real finding about this change, not a race" — fel diagnos, och ingen auto-fix.
+    # Originally this compared HEAD against HEAD^, and alfons_windows pointed out the gap in
+    # review: with TWO or more unpushed commits, where the LOWER commit's bump collides with
+    # what is published, that bump becomes a no-op in the rebase while the rebump only
+    # recomputes the top commit's component set. The gate stops it (fails closed) but reports
+    # it as "a real finding about this change, not a race" -- wrong diagnosis, and no auto-fix.
     #
-    # Merge-basen mot upstream ar stabil over en rebase, till skillnad fran upstream sjalv.
+    # The merge base against upstream is stable across a rebase, unlike upstream itself.
     $base = ''
     if ($Upstream) {
         $mb = (Invoke-Git -Arguments @('merge-base', $Upstream, $CommitRef) -AllowFailure)
@@ -206,10 +206,10 @@ function Invoke-Rebump {
 $branch = (Invoke-Git -Arguments @('rev-parse', '--abbrev-ref', 'HEAD')).Output.Trim()
 if ($branch -eq 'HEAD') { throw 'Detached HEAD; check out a branch first.' }
 
-# @() runt anropet ar inte kosmetik: under Set-StrictMode -Version Latest packar
-# PowerShell upp en enelementslista till en skalar, och da finns ingen .Count.
-# Ett enda bumpat komponentnamn hade alltsa kraschat skriptet — hittat av torrkorningen.
-$bumpedKeys = @()   # raknas ut i loopen, efter fetch: basen beror pa upstream
+# @() around the call is not cosmetic: under Set-StrictMode -Version Latest PowerShell
+# unwraps a one-element list to a scalar, and then there is no .Count.
+# A single bumped component name would thus have crashed the script -- found by the dry run.
+$bumpedKeys = @()   # computed in the loop, after fetch: the base depends on upstream
 if ($bumpedKeys.Count -gt 0) {
     Write-Note "This commit bumps: $($bumpedKeys -join ', ')"
 }
@@ -227,18 +227,18 @@ for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     $upstream = "$Remote/$branch"
     $behind = [int](Invoke-Git -Arguments @('rev-list', '--count', "HEAD..$upstream")).Output.Trim()
 
-    # Efter fetch vet vi var upstream star, sa komponentsetet kan raknas ut mot merge-basen.
-    # Det gors om varje varv: en rebase flyttar basen.
+    # After fetch we know where upstream is, so the component set can be computed against
+    # the merge base. It is redone every round: a rebase moves the base.
     $bumpedKeys = @(Get-BumpedComponentKeys -Upstream $upstream)
     if ($attempt -eq 1) {
-        if ($bumpedKeys.Count -gt 0) { Write-Note "Opushat arbete bumpar: $($bumpedKeys -join ', ')" }
-        else { Write-Note 'Inget opushat arbete bumpar nagon komponentversion; rebump hoppas over.' }
+        if ($bumpedKeys.Count -gt 0) { Write-Note "Unpushed work bumps: $($bumpedKeys -join ', ')" }
+        else { Write-Note 'No unpushed work bumps any component version; the rebump step is skipped.' }
     }
 
-    # Inget att pusha: kor inte en attaminuters grind for en no-op. (alfons_windows, 2026-09-04)
+    # Nothing to push: do not run an eight-minute gate for a no-op. (alfons_windows, 2026-09-04)
     $ahead = [int](Invoke-Git -Arguments @('rev-list', '--count', "$upstream..HEAD")).Output.Trim()
     if ($ahead -eq 0 -and $behind -eq 0) {
-        Write-Good "Ingenting att pusha: HEAD ar redan $upstream."
+        Write-Good "Nothing to push: HEAD is already at $upstream."
         exit 0
     }
 

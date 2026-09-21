@@ -165,7 +165,11 @@ try {
                 'OpenModulePlatform.Bootstrapper.Tests',
                 'OpenModulePlatform.Worker.Abstractions.Tests',
                 'OpenModulePlatform.WorkerProcessHost.Tests',
-                'OpenModulePlatform.WorkerManager.WindowsService.Tests'
+                'OpenModulePlatform.WorkerManager.WindowsService.Tests',
+                # The analyzer suite used to run only in CI (through the solution
+                # filter); an analyzer regression therefore first showed up after
+                # the push, which is exactly what this gate exists to prevent.
+                'OpenModulePlatform.Web.Shared.Analyzers.Tests'
             )
             # Remove stale TRX files so the zero-execution gate below only sees
             # the current run; old files would mask a run that produced nothing.
@@ -224,7 +228,7 @@ try {
         $unreadableTrxReason = ''
         if (Get-Command Get-LocalCiTrxCounters -ErrorAction SilentlyContinue) {
             try {
-                $suite = Get-LocalCiTrxCounters -ResultsDirectory $localCiTrxRoot -SuiteName 'unit tests (6 projects)'
+                $suite = Get-LocalCiTrxCounters -ResultsDirectory $localCiTrxRoot -SuiteName 'unit tests (7 projects)'
                 if ($null -ne $suite) { $telemetrySuites += $suite }
             }
             catch {

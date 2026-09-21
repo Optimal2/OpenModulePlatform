@@ -144,6 +144,21 @@ can still add local MP3 files in the browser session through the widget controls
 or drag-and-drop. Local files are held as browser object URLs and are never
 uploaded to the server.
 
+The widget's player surface is selected in the Portal `appsettings.json`
+(`OpenModulePlatform.Portal/Options/MusicPlayerWidgetOptions.cs`):
+
+```json
+"MusicPlayerWidget": {
+  "Mode": "webamp"
+}
+```
+
+`Mode` is `webamp` (default; the vendored Winamp-style player under
+`wwwroot/lib/webamp`, which is why the Portal policy allows `blob:` in `img-src`
+and `media-src`) or `classic` (the plain audio-element player). The classic
+markup is always rendered as the fallback; an unsupported browser or a missing
+bundle degrades to it automatically.
+
 The public repository should keep only playlist format samples and
 documentation for this widget. MP3 files are runtime data and must not be placed
 inside the Portal web artifact because upgrades replace that folder. See
@@ -290,6 +305,30 @@ Configure the Portal with:
 `HostAgent:CentralArtifactRoot`. The Portal refuses uploads when this root is
 missing. The Portal runtime identity needs write access to this root; HostAgent
 needs read access to the same files.
+
+The section has further keys (`OpenModulePlatform.Portal/Options/ArtifactUploadOptions.cs`;
+the packaged `Packaging/appsettings.json` points the four library folders at
+`<CentralArtifactRoot>\_available\...`):
+
+| Key | Default | Purpose |
+| --- | --- | --- |
+| `TempRoot` | empty (`%TEMP%\OpenModulePlatform\PortalUploads`) | Writable folder for ASP.NET Core multipart upload buffering. The Portal creates it, probes that it can write there and sets `ASPNETCORE_TEMP` to it at startup, so a 500 MB upload is not buffered under the app pool's profile. Environment variables are expanded. |
+| `AvailableModuleDefinitionsRoot` | empty | Folder of module definition JSON files offered on `/admin/moduledefinitions` for import. |
+| `AvailableArtifactsRoot` | empty | Folder of artifact package zips offered for import next to the definitions. |
+| `AvailableHostConfigurationsRoot` | empty | Folder of host configuration JSON files offered on `/admin/modulepackageimport`. |
+| `AvailableConfigOverlaysRoot` | empty | Folder of config overlay JSON files or zip packages offered on `/admin/modulepackageimport`. |
+| `MaxUploadBytes` | 536870912 (512 MB) | Upper bound for one upload; applied to Kestrel, the IIS in-process server and the multipart form limit. |
+
+An empty library folder key hides the corresponding "available packages" list;
+an import that needs one reports which key is missing.
+
+`MaxUploadBytes` is also copied, as a static number, into the Portal's
+`web.config` (`requestFiltering/requestLimits@maxAllowedContentLength`, the
+same 536870912). IIS request filtering rejects a larger body with 404.13 before
+the request reaches the application, so raising `MaxUploadBytes` alone does not
+raise the effective limit under IIS: raise `maxAllowedContentLength` in the
+deployed `web.config` as well. Lowering `MaxUploadBytes` needs no `web.config`
+change.
 
 The supported filename metadata format is:
 

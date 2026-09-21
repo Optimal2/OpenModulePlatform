@@ -66,27 +66,6 @@ public sealed class DeploySetConsistencyService
             .Where(key => !string.IsNullOrWhiteSpace(key))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
-
-    public void ThrowIfBlocked(DeploySetConsistencyCheckSummary summary)
-    {
-        var mode = DeploySetConsistencyModes.Normalize(_settings.CurrentValue.DeploySetConsistencyMode);
-        if (!string.Equals(mode, DeploySetConsistencyModes.Block, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        if (summary.DeviationCount == 0)
-        {
-            return;
-        }
-
-        var first = summary.Deviations[0];
-        throw new InvalidOperationException(
-            $"Deploy-set consistency check is configured to Block and detected a version mismatch. " +
-            $"ModuleInstance={first.ModuleInstanceKey} ({first.ModuleKey}), Set={first.SetKey}, " +
-            $"Versions={first.ActualVersions}. " +
-            $"Rebuild and import a consistent artifact set, or switch DeploySetConsistencyMode to Warn.");
-    }
 }
 
 public sealed record DeploySetConsistencyCheckSummary(

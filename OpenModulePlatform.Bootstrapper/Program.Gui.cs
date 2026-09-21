@@ -752,7 +752,6 @@ internal static partial class Program
         // sync does not repeat the same Git and fallback source-state checks for every component.
         private readonly Dictionary<string, string> _sourceStateStampCache = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string?> _scopedSourceStateStampCache = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly Dictionary<string, Dictionary<string, string>> _msBuildPropertyMapCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, IReadOnlyList<string>> _scopedDirectoryFileCache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, string> _scopedFileContentStampCache = new(StringComparer.Ordinal);
         private int _unbumpedVersionWarningCount;
@@ -3145,6 +3144,7 @@ internal static partial class Program
             var sourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: true);
             Report($"Resolved {sourceRoots.Count} developer source root(s).");
             var warnings = 0;
+            _unbumpedVersionWarningCount = 0;
             lines.Add("Source repository updates:");
             warnings += PullDeveloperSourceRepositories(
                 sourceRoots,
@@ -3686,7 +3686,6 @@ internal static partial class Program
                 string.Empty
             };
             var warnings = 0;
-            _unbumpedVersionWarningCount = 0;
             var synced = 0;
             var skipped = 0;
             var seenProfiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -4810,10 +4809,6 @@ internal static partial class Program
 
         /// <summary>
         /// Collects the MSBuild directory files that apply to <paramref name="projectDirectory"/>,
-        /// walking up to (and including) the source root.
-        /// </summary>
-        /// <summary>
-        /// Collects the MSBuild directory files that apply to <paramref name="projectDirectory"/>,
         /// walking up to and including the repository root that contains it. The walk is not
         /// bounded by the component's own source root, because a cross-repository reference such
         /// as OpenModulePlatform.Web.Shared is governed by its own repository's build files.
@@ -5729,41 +5724,6 @@ ORDER BY ar.ArtifactId DESC;
                 : NormalizeUniversalPackagePath($"{directory}/{fileName}");
         }
 
-        private static bool TryReadDashboardWidgetPackageVersion(string path, out string version)
-        {
-            version = string.Empty;
-            try
-            {
-                var node = JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8));
-                version = ReadDashboardWidgetPackageVersion(node);
-                return !string.IsNullOrWhiteSpace(version);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or NotSupportedException)
-            {
-                return false;
-            }
-        }
-
-        private static string ReadDashboardWidgetPackageVersion(JsonNode? node)
-        {
-            var packageVersion = GetJsonStringProperty(node, "packageVersion");
-            if (!string.IsNullOrWhiteSpace(packageVersion))
-            {
-                return packageVersion;
-            }
-
-            if (GetJsonObjectProperty(node, "widgets") is not JsonArray widgets)
-            {
-                return string.Empty;
-            }
-
-            return widgets
-                .Select(widget => GetJsonStringProperty(widget, "widgetVersion"))
-                .Where(static widgetVersion => !string.IsNullOrWhiteSpace(widgetVersion))
-                .OrderByDescending(static widgetVersion => widgetVersion, VersionTextComparer.Instance)
-                .FirstOrDefault() ?? string.Empty;
-        }
-
         private static string NormalizeDashboardWidgetPackageJson(string sourcePath, string? version)
         {
             var node = JsonNode.Parse(File.ReadAllText(sourcePath, Encoding.UTF8)) as JsonObject
@@ -5887,8 +5847,11 @@ ORDER BY ar.ArtifactId DESC;
 
         internal async Task SaveCurrentConfigAsync()
         {
+            // The form owns every editable property, so the whole model is written. BOM-free
+            // like the two merge writes in Program.Refresh.cs: hand-maintained profiles carry
+            // no BOM and plain Encoding.UTF8 would add one on the first save.
             var json = JsonSerializer.Serialize(_config, JsonOptions);
-            await AtomicJsonFile.WriteAsync(_configPath, json + Environment.NewLine, Encoding.UTF8);
+            await AtomicJsonFile.WriteAsync(_configPath, json + Environment.NewLine, new UTF8Encoding(false));
         }
 
         private static int CompareVersionText(string left, string right)
@@ -7343,18 +7306,6 @@ ORDER BY ar.ArtifactId DESC;
     private static bool IsJsonOrZipFile(string path)
         => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
             || path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
-
-    private static string ResolveUniversalPackageHostKey(string configPath)
-    {
-        if (Path.GetFileName(configPath).Equals("bootstrap.json", StringComparison.OrdinalIgnoreCase)
-            && Path.GetDirectoryName(configPath) is { } parent
-            && !string.IsNullOrWhiteSpace(Path.GetFileName(parent)))
-        {
-            return SanitizeUniversalPackagePathSegment(Path.GetFileName(parent));
-        }
-
-        return SanitizeUniversalPackagePathSegment(Path.GetFileNameWithoutExtension(configPath));
-    }
 
     private static bool TryResolveInstallerHostProfileKey(string configPath, out string hostProfileKey)
     {

@@ -469,7 +469,7 @@ public sealed class ArtifactProvisioner
     {
         Directory.CreateDirectory(targetDirectory);
 
-        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", OmpReparsePointGuard.RecursiveNoFollow))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relativeDirectory = Path.GetRelativePath(sourceDirectory, directory);

@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal.Tests/Web/PortalAdminNavigationTests.cs
 using OpenModulePlatform.Web.Shared.Navigation;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Web;
 
@@ -82,9 +83,9 @@ public sealed class PortalAdminNavigationTests
     [Fact]
     public void UserLogPermission_IsSeededAndProbed()
     {
-        var initialize = ReadRepositoryTextFile("OpenModulePlatform.Portal", "sql", "2-initialize-omp-portal.sql");
-        var validate = ReadRepositoryTextFile("OpenModulePlatform.Portal", "sql", "0-validate-omp-portal.sql");
-        var definition = ReadRepositoryTextFile("OpenModulePlatform.Portal", "omp_portal.module-definition.json");
+        var initialize = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "sql", "2-initialize-omp-portal.sql");
+        var validate = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "sql", "0-validate-omp-portal.sql");
+        var definition = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "omp_portal.module-definition.json");
 
         Assert.Contains($"N'{PortalAdminNavigation.UserLogPermission}'", initialize);
         Assert.Contains("VALUES(@PortalAdminsRoleId, @PortalUserLogPermissionId)", initialize);
@@ -95,20 +96,4 @@ public sealed class PortalAdminNavigationTests
 
     private static IReadOnlySet<string> Set(params string[] permissions)
         => new HashSet<string>(permissions, StringComparer.Ordinal);
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        if (directory is null)
-        {
-            throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-        }
-
-        return File.ReadAllText(Path.Join([directory.FullName, .. relativePathSegments]));
-    }
 }

@@ -16,19 +16,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class HostAgentSelfUpgradeService
 {
-    private const int DirectoryDeleteMaxAttempts = 20;
     private const string DefaultNLogAppName = "OpenModulePlatform.HostAgent.WindowsService";
     private const string DefaultNLogDirectory = "${basedir}/logs";
-    // Keep legacy branded prefixes so self-upgrade can recognize older installs
-    // without depending on customer-specific configuration files.
-    private static readonly string[] KnownHostAgentServiceNamePrefixes =
-    [
-        "EMP.HostAgent",
-        "OMP.HostAgent",
-        "OpenModulePlatform.HostAgent"
-    ];
-    private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
-
     private readonly IOptionsMonitor<HostAgentSettings> _settings;
     private readonly OmpHostArtifactRepository _repository;
     private readonly ArtifactProvisioner _provisioner;
@@ -168,7 +157,7 @@ public sealed class HostAgentSelfUpgradeService
         var delay = TimeSpan.FromSeconds(Math.Max(0, _settings.CurrentValue.SelfUpgrade.PreparedServiceStartupVerificationDelaySeconds));
         await Task.Delay(delay, cancellationToken);
 
-        var state = GetServiceState(serviceName);
+        var state = WindowsServiceQuery.GetServiceState(serviceName);
         if (string.Equals(state, "RUNNING", StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -233,7 +222,7 @@ public sealed class HostAgentSelfUpgradeService
             throw;
         }
 
-        var previousExecutablePath = TryGetServiceExecutablePath(previousServiceName);
+        var previousExecutablePath = WindowsServiceQuery.TryGetServiceExecutablePath(previousServiceName);
 
         await _repository.RequestHostAgentQuiesceAsync(
             hostId,
@@ -539,30 +528,10 @@ public sealed class HostAgentSelfUpgradeService
         var prefix = FirstNonEmpty(desired.ServiceNamePrefix, settings.SelfUpgrade.ServiceNamePrefix);
         if (string.IsNullOrWhiteSpace(prefix))
         {
-            prefix = TrimTrailingVersion(_process.ServiceName);
+            prefix = HostAgentServiceNames.TrimTrailingVersion(_process.ServiceName);
         }
 
         return prefix.Trim().TrimEnd('.');
-    }
-
-    private static string TrimTrailingVersion(string serviceName)
-    {
-        var trimmed = serviceName.Trim();
-        var parts = trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length < 2)
-        {
-            return trimmed;
-        }
-
-        var suffixStart = parts.Length;
-        while (suffixStart > 0 && parts[suffixStart - 1].All(char.IsDigit))
-        {
-            suffixStart--;
-        }
-
-        return suffixStart == parts.Length
-            ? trimmed
-            : string.Join('.', parts.Take(Math.Max(1, suffixStart)));
     }
 
     private static void PrepareInstallDirectory(
@@ -635,7 +604,10 @@ public sealed class HostAgentSelfUpgradeService
 
         var credentialStore = GetOrCreateObject(hostAgent, "CredentialStore");
         var targetCredentialStorePath = Path.Join(installPath, "hostagent.credentials.json");
-        TryCopyCredentialStoreFile(settings.CredentialStore, targetCredentialStorePath);
+        TryCopyCredentialStoreFile(
+            settings.CredentialStore,
+            targetCredentialStorePath,
+            settings.SelfUpgrade.ServiceAccountName);
         credentialStore["AutomationMode"] = settings.CredentialStore.AutomationMode;
         credentialStore["FilePath"] = targetCredentialStorePath;
         credentialStore["ProtectionScope"] = settings.CredentialStore.ProtectionScope;
@@ -715,7 +687,8 @@ public sealed class HostAgentSelfUpgradeService
 
     private static void TryCopyCredentialStoreFile(
         HostAgentCredentialStoreSettings settings,
-        string targetCredentialStorePath)
+        string targetCredentialStorePath,
+        string serviceAccountName)
     {
         var sourceCredentialStorePath = ResolveCredentialStoreFilePath(settings);
         if (!File.Exists(sourceCredentialStorePath))
@@ -738,6 +711,8 @@ public sealed class HostAgentSelfUpgradeService
 
         Directory.CreateDirectory(Path.GetDirectoryName(fullTargetPath)!);
         File.Copy(fullSourcePath, fullTargetPath, overwrite: true);
+        // A copy inherits the target directory's ACL, not the source file's (B65).
+        HostAgentCredentialStoreFileAcl.Apply(fullTargetPath, serviceAccountName);
     }
 
     private static void WriteNormalSettings(string installPath, string serviceName)
@@ -945,7 +920,7 @@ public sealed class HostAgentSelfUpgradeService
         HostAgentUpgradeSettings upgradeSettings,
         string version)
     {
-        if (GetServiceState(serviceName) is null)
+        if (WindowsServiceQuery.GetServiceState(serviceName) is null)
         {
             RunScChecked(
                 "create",
@@ -1098,13 +1073,13 @@ public sealed class HostAgentSelfUpgradeService
 
     private static void StopServiceIfRunning(string serviceName, int timeoutSeconds)
     {
-        var state = GetServiceState(serviceName);
+        var state = WindowsServiceQuery.GetServiceState(serviceName);
         if (state is null || state.Equals("STOPPED", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        var result = RunSc("stop", serviceName);
+        var result = WindowsServiceQuery.Run("stop", serviceName);
         if (result.ExitCode == 0)
         {
             WaitForServiceStoppedOrTerminate(serviceName, timeoutSeconds, timeoutSeconds);
@@ -1137,7 +1112,7 @@ public sealed class HostAgentSelfUpgradeService
 
     private static void StartServiceIfStopped(string serviceName, int timeoutSeconds)
     {
-        var state = GetServiceState(serviceName);
+        var state = WindowsServiceQuery.GetServiceState(serviceName);
         if (state is null)
         {
             throw new InvalidOperationException($"Windows service '{serviceName}' was not found.");
@@ -1152,7 +1127,7 @@ public sealed class HostAgentSelfUpgradeService
 
     private static void DeleteServiceIfExists(string serviceName)
     {
-        if (GetServiceState(serviceName) is null)
+        if (WindowsServiceQuery.GetServiceState(serviceName) is null)
         {
             return;
         }
@@ -1168,7 +1143,7 @@ public sealed class HostAgentSelfUpgradeService
             return [];
         }
 
-        var prefixes = GetKnownHostAgentServiceNamePrefixes(prefix);
+        var prefixes = HostAgentServiceNames.GetKnownPrefixes(prefix);
         return EnumerateHostAgentServices(prefix)
             .Where(service => IsSupersededHostAgentServiceName(service.Name, prefixes))
             .ToArray();
@@ -1182,13 +1157,13 @@ public sealed class HostAgentSelfUpgradeService
             return [];
         }
 
-        var result = RunSc("queryex", "type=", "service", "state=", "all");
+        var result = WindowsServiceQuery.Run("queryex", "type=", "service", "state=", "all");
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");
         }
 
-        var prefixes = GetKnownHostAgentServiceNamePrefixes(prefix);
+        var prefixes = HostAgentServiceNames.GetKnownPrefixes(prefix);
         var serviceNames = result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Trim())
             .Where(line => line.StartsWith("SERVICE_NAME:", StringComparison.OrdinalIgnoreCase))
@@ -1199,7 +1174,7 @@ public sealed class HostAgentSelfUpgradeService
             .ToArray();
 
         return serviceNames
-            .Select(name => new HostAgentServiceCandidate(name, TryGetServiceExecutablePath(name)))
+            .Select(name => new HostAgentServiceCandidate(name, WindowsServiceQuery.TryGetServiceExecutablePath(name)))
             .ToArray();
     }
 
@@ -1213,64 +1188,6 @@ public sealed class HostAgentSelfUpgradeService
             && serviceNamePrefixes.Any(prefix =>
             string.Equals(serviceName, prefix, StringComparison.OrdinalIgnoreCase)
             || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
-
-    private static IReadOnlySet<string> GetKnownHostAgentServiceNamePrefixes(string serviceNamePrefix)
-    {
-        var prefixes = new HashSet<string>(KnownHostAgentServiceNamePrefixes, StringComparer.OrdinalIgnoreCase);
-        var prefix = serviceNamePrefix.Trim().TrimEnd('.');
-        if (!string.IsNullOrWhiteSpace(prefix))
-        {
-            prefixes.Add(prefix);
-        }
-
-        return prefixes;
-    }
-
-    private static string? TryGetServiceExecutablePath(string serviceName)
-    {
-        var result = RunSc("qc", serviceName);
-        if (result.ExitCode != 0)
-        {
-            return null;
-        }
-
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var binaryPathIndex = line.IndexOf("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase);
-            if (binaryPathIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', binaryPathIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            return TryExtractExecutablePath(line[(separatorIndex + 1)..].Trim());
-        }
-
-        return null;
-    }
-
-    private static string? TryExtractExecutablePath(string binaryPath)
-    {
-        if (string.IsNullOrWhiteSpace(binaryPath))
-        {
-            return null;
-        }
-
-        var trimmed = binaryPath.Trim();
-        if (trimmed.StartsWith('"'))
-        {
-            var closingQuote = trimmed.IndexOf('"', 1);
-            return closingQuote > 1 ? trimmed[1..closingQuote] : null;
-        }
-
-        var executableEnd = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
-        return executableEnd < 0 ? null : trimmed[..(executableEnd + ".exe".Length)].Trim();
-    }
 
     private void TryDeletePreviousInstallDirectory(
         string previousServiceName,
@@ -1342,7 +1259,7 @@ public sealed class HostAgentSelfUpgradeService
             return;
         }
 
-        DeleteDirectoryWithRetry(fullInstallDirectory, cancellationToken);
+        DirectoryDeletion.DeleteWithRetry(fullInstallDirectory, cancellationToken);
     }
 
     private void CleanupOrphanedInstallDirectories(
@@ -1377,7 +1294,7 @@ public sealed class HostAgentSelfUpgradeService
 
             try
             {
-                DeleteDirectoryWithRetry(fullDirectory, cancellationToken);
+                DirectoryDeletion.DeleteWithRetry(fullDirectory, cancellationToken);
             }
             catch (IOException ex)
             {
@@ -1387,40 +1304,6 @@ public sealed class HostAgentSelfUpgradeService
             {
                 _logger.LogDebug(ex, "Could not remove orphaned HostAgent install directory because access was denied. Directory={Directory}", fullDirectory);
             }
-        }
-    }
-
-    private static void DeleteDirectoryWithRetry(string path, CancellationToken cancellationToken)
-    {
-        for (var attempt = 1; ; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            try
-            {
-                if (Directory.Exists(path))
-                {
-                    Directory.Delete(path, recursive: true);
-                }
-
-                return;
-            }
-            catch (IOException) when (attempt < DirectoryDeleteMaxAttempts)
-            {
-                WaitBeforeDirectoryDeleteRetry(cancellationToken);
-            }
-            catch (UnauthorizedAccessException) when (attempt < DirectoryDeleteMaxAttempts)
-            {
-                WaitBeforeDirectoryDeleteRetry(cancellationToken);
-            }
-        }
-    }
-
-    private static void WaitBeforeDirectoryDeleteRetry(CancellationToken cancellationToken)
-    {
-        if (cancellationToken.WaitHandle.WaitOne(DirectoryDeleteRetryDelay))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 
@@ -1474,7 +1357,7 @@ public sealed class HostAgentSelfUpgradeService
         var deadline = DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds);
         while (DateTimeOffset.UtcNow < deadline)
         {
-            var state = GetServiceState(serviceName);
+            var state = WindowsServiceQuery.GetServiceState(serviceName);
             if (state is null && desiredState.Equals("DELETED", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
@@ -1491,42 +1374,9 @@ public sealed class HostAgentSelfUpgradeService
         return false;
     }
 
-    private static string? GetServiceState(string serviceName)
-    {
-        var result = RunSc("query", serviceName);
-        if (result.ExitCode != 0)
-        {
-            return result.IsServiceNotFound() ? null : throw new InvalidOperationException(result.CombinedOutput.Trim());
-        }
-
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var stateIndex = line.IndexOf("STATE", StringComparison.OrdinalIgnoreCase);
-            if (stateIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', stateIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            var parts = line[(separatorIndex + 1)..].Trim()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length > 0)
-            {
-                return parts[^1];
-            }
-        }
-
-        return null;
-    }
-
     private static int? GetServiceProcessId(string serviceName)
     {
-        var result = RunSc("queryex", serviceName);
+        var result = WindowsServiceQuery.Run("queryex", serviceName);
         if (result.ExitCode != 0)
         {
             return result.IsServiceNotFound()
@@ -1584,17 +1434,9 @@ public sealed class HostAgentSelfUpgradeService
         WaitForServiceState(serviceName, "STOPPED", Math.Max(timeoutSeconds, 5));
     }
 
-    private static ScCommandResult RunSc(params string[] arguments)
-    {
-        var result = HostAgentProcessRunner.Run(
-            Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
-            arguments);
-        return new ScCommandResult(result.ExitCode, result.StdOut, result.StdErr);
-    }
-
     private static void RunScChecked(params string[] arguments)
     {
-        var result = RunSc(arguments);
+        var result = WindowsServiceQuery.Run(arguments);
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"sc.exe failed with exit code {result.ExitCode}: {result.CombinedOutput.Trim()}");

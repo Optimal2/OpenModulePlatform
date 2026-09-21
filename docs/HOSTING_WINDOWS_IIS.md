@@ -73,8 +73,16 @@ Portal exposes these anonymous health endpoints:
 
 - `/health/live` returns HTTP 200 when the Portal process can answer requests.
 - `/health/ready` returns HTTP 200 only when Portal can also reach the OMP
-  database with a small SQL probe. It returns HTTP 503 when Portal cannot serve
-  real traffic safely.
+  database with a small SQL probe and the schema objects Portal itself depends
+  on exist: the columns `profile_image_file_name` and
+  `profile_image_storage_key` in `omp.users`, and the table
+  `omp_portal.widget_binary_data` with the columns `owner_ref`, `content_hash`
+  and `data_value` (`PortalHealthService` in
+  `OpenModulePlatform.Portal/Services/PortalHealthService.cs`). It returns
+  HTTP 503 when Portal cannot serve real traffic safely; a reachable database
+  with a stale schema reports "Required profile image storage schema is
+  missing" and is fixed by running the SQL repair for the `omp_core` and
+  `omp_portal` module definitions.
 
 Use `/health/ready` for Portal-specific routing decisions. If a deployment
 fronts several applications through the same DNS name, use equivalent

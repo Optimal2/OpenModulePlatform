@@ -15,11 +15,16 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 /// ArtifactZipImportService, so nobody else could call it even if they knew it existed. It now
 /// lives in OpenModulePlatform.Artifacts, which HostAgent, the Portal and the Bootstrapper all
 /// reference -- and these tests plant the real thing rather than a mock, because a guard nothing
-/// exercises is how R6-D7 found one that had silently become a no-op.
+/// exercises is how R6-D7 found one that had silently become a no-op. For the same reason a
+/// test that cannot plant its link reports SKIPPED with the reason rather than returning
+/// green without an assertion.
 /// </remarks>
 [SupportedOSPlatform("windows")]
 public sealed class OmpReparsePointGuardTests : IDisposable
 {
+    private const string SkipReason =
+        "This process cannot create a directory link (symlink privilege or Developer Mode required); the guard was not exercised.";
+
     private readonly string _root = Path.Join(
         Path.GetTempPath(),
         "omp-guard-tests-" + Guid.NewGuid().ToString("N"));
@@ -52,16 +57,13 @@ public sealed class OmpReparsePointGuardTests : IDisposable
         OmpReparsePointGuard.EnsureNotReparsePoint(Path.Join(_root, "missing"), "test");
     }
 
-    [Fact]
+    [SkippableFact]
     public void EnsureNotReparsePoint_refuses_a_junction()
     {
         var target = Path.Join(_root, "target");
         Directory.CreateDirectory(target);
         var link = Path.Join(_root, "link");
-        if (!TryCreateJunction(link, target))
-        {
-            return;
-        }
+        Skip.IfNot(TryCreateJunction(link, target), SkipReason);
 
         Assert.Throws<IOException>(() => OmpReparsePointGuard.EnsureNotReparsePoint(link, "test"));
     }
@@ -70,16 +72,13 @@ public sealed class OmpReparsePointGuardTests : IDisposable
     /// Checking only the leaf is what left several findings exploitable: the junction goes on a
     /// directory above, and the leaf below it looks perfectly ordinary.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void EnsureNoReparsePointInPath_refuses_a_junction_above_the_leaf()
     {
         var target = Path.Join(_root, "target");
         Directory.CreateDirectory(target);
         var linkedParent = Path.Join(_root, "parent");
-        if (!TryCreateJunction(linkedParent, target))
-        {
-            return;
-        }
+        Skip.IfNot(TryCreateJunction(linkedParent, target), SkipReason);
 
         var leaf = Path.Join(linkedParent, "child", "leaf.txt");
 
@@ -90,7 +89,7 @@ public sealed class OmpReparsePointGuardTests : IDisposable
             () => OmpReparsePointGuard.EnsureNoReparsePointInPath(leaf, _root, "test"));
     }
 
-    [Fact]
+    [SkippableFact]
     public void RecursiveNoFollow_does_not_enumerate_through_a_junction()
     {
         var source = Path.Join(_root, "source");
@@ -101,10 +100,7 @@ public sealed class OmpReparsePointGuardTests : IDisposable
         Directory.CreateDirectory(secret);
         File.WriteAllText(Path.Join(secret, "credentials.txt"), "top secret");
 
-        if (!TryCreateJunction(Path.Join(source, "leak"), secret))
-        {
-            return;
-        }
+        Skip.IfNot(TryCreateJunction(Path.Join(source, "leak"), secret), SkipReason);
 
         var files = Directory.EnumerateFiles(source, "*", OmpReparsePointGuard.RecursiveNoFollow)
             .Select(Path.GetFileName)
@@ -117,7 +113,7 @@ public sealed class OmpReparsePointGuardTests : IDisposable
     /// <summary>
     /// The artifact integrity hash must not be computable over content behind a link.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task ComputeSha256Async_refuses_a_linked_artifact_root()
     {
         var target = Path.Join(_root, "target");
@@ -125,10 +121,7 @@ public sealed class OmpReparsePointGuardTests : IDisposable
         File.WriteAllText(Path.Join(target, "file.txt"), "content");
 
         var link = Path.Join(_root, "artifact");
-        if (!TryCreateJunction(link, target))
-        {
-            return;
-        }
+        Skip.IfNot(TryCreateJunction(link, target), SkipReason);
 
         await Assert.ThrowsAsync<IOException>(
             () => ArtifactHash.ComputeSha256Async(link, CancellationToken.None));

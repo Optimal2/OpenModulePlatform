@@ -27,3 +27,18 @@ By default logs are written to:
 - the console output of the running process
 
 The log directory is ignored by Git through `.gitignore`.
+
+### Packaged web apps
+
+The checked-in `appsettings.json` of a packaged web app never reaches a host: the
+artifact payload strips `appsettings*.json`, and HostAgent writes the component's
+`Packaging/appsettings.json` (merged over its built-in web-app template) instead.
+The built-in template carries no `NLog` section, so a component packaged without
+one runs with no log targets at all. The Portal, Auth and Content module therefore
+repeat their `NLog` section in `Packaging/appsettings.json`;
+`PackagedNLogConfigurationTests` in the Portal test project parses every packaged
+and checked-in section the way NLog does at startup. Web apps that go through
+`UseOmpWebDefaults` render the request correlation id with
+`${scopeproperty:item=CorrelationId}` in their layouts (see
+`docs/conventions/logging.md`); the Auth app has its own pipeline without that
+scope and leaves the renderer out.

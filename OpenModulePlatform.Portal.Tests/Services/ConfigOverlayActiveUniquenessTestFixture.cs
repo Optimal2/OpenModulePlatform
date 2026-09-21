@@ -162,9 +162,13 @@ DROP DATABASE [{DatabaseName}];",
         {
             await cmd.ExecuteNonQueryAsync();
         }
-        catch (SqlException)
+        catch (SqlException ex)
         {
-            // Best-effort cleanup.
+            // A failed drop must not fail the run, but it must not be silent either:
+            // the shared log is what CI turns into a warning about the leaked database.
+            OmpTestCleanupLog.RecordFailure(
+                nameof(ConfigOverlayActiveUniquenessTestFixture),
+                $"Could not drop test database '{DatabaseName}': {ex.Message}");
         }
     }
 }

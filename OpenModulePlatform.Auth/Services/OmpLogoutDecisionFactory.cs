@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.WebUtilities;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
+using OpenModulePlatform.Web.Shared.Web;
 using System.Security.Claims;
 
 namespace OpenModulePlatform.Auth.Services;
@@ -75,27 +76,7 @@ internal static class OmpLogoutDecisionFactory
             : providerName.Trim();
 
     private static bool IsSafeLocalReturnUrl(string? returnUrl)
-    {
-        if (string.IsNullOrWhiteSpace(returnUrl)
-            || !Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
-            || !returnUrl.StartsWith("/", StringComparison.Ordinal)
-            || returnUrl.StartsWith("//", StringComparison.Ordinal)
-            || returnUrl.Contains('\\', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        try
-        {
-            var unescaped = Uri.UnescapeDataString(returnUrl);
-            return !unescaped.StartsWith("//", StringComparison.Ordinal)
-                && !unescaped.Contains('\\', StringComparison.Ordinal);
-        }
-        catch (UriFormatException)
-        {
-            return false;
-        }
-    }
+        => OmpUrlSafety.IsSafeLocalReturnUrl(returnUrl);
 }
 
 internal sealed record OmpLogoutDecision(

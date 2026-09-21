@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Web.Shared.Notifications;
 using System.Data;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -110,7 +111,7 @@ public sealed class PushEventDispatcherTests
     [InlineData("module.specific", false)]
     public void PortalTopbarScript_RefreshesOnlySummaryCategories(string? category, bool expectedRefresh)
     {
-        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js");
+        var script = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js");
         var start = script.IndexOf("function isTopbarSummaryPushCategory(category)", StringComparison.Ordinal);
         var end = script.IndexOf("function handleTopbarPushEvent(envelope)", StringComparison.Ordinal);
         var functionBody = script[start..end];
@@ -152,7 +153,7 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void PortalTopbarScript_HandlesEnvelopeDedupAndOldNoArgumentSignal()
     {
-        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js");
+        var script = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "portal-topbar.js");
 
         Assert.Contains("function handleTopbarPushEvent(envelope)", script);
         Assert.Contains("rememberTopbarPushEvent(eventKey)", script);
@@ -169,7 +170,7 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void PortalNotificationToastScript_RefreshesFromTopbarPushEvent()
     {
-        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-toasts.js");
+        var script = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-toasts.js");
 
         Assert.Contains("""var pushEventName = "omp:push-event";""", script);
         Assert.Contains("window.addEventListener(pushEventName, handlePushEvent);", script);
@@ -188,11 +189,11 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void PortalMessageThreadPage_FollowsTopbarUpdateModeAndFiltersPushByConversation()
     {
-        var page = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml");
+        var page = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml");
         // The page script moved out of the .cshtml to a static file so the Portal
         // script-src can drop 'unsafe-inline' (campaign csp-vagen-till-enforcement).
-        var script = ReadRepositoryTextFile("OpenModulePlatform.Portal", "wwwroot", "js", "message-thread-page.js");
-        var pageModel = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml.cs");
+        var script = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "wwwroot", "js", "message-thread-page.js");
+        var pageModel = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Messages", "Thread.cshtml.cs");
 
         Assert.Contains("data-refresh-url", page);
         Assert.Contains("""<script src="~/js/message-thread-page.js"></script>""", page);
@@ -217,7 +218,7 @@ public sealed class PushEventDispatcherTests
     {
         // The fallback poller may stay, but it must never silently rescue a
         // broken push path again: engaging it has to be visible in the console.
-        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-live-refresh.js");
+        var script = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-live-refresh.js");
         var start = script.IndexOf("function scheduleFallback(subscription)", StringComparison.Ordinal);
         var end = script.IndexOf("// --- state propagation", StringComparison.Ordinal);
         Assert.True(start >= 0 && end > start, "scheduleFallback must exist before the state propagation section.");
@@ -232,7 +233,7 @@ public sealed class PushEventDispatcherTests
     [Fact]
     public void OmpLiveRefreshScript_ReArmsFallbackWarningWhenPushReturns()
     {
-        var script = ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-live-refresh.js");
+        var script = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Web.Shared", "wwwroot", "js", "omp-live-refresh.js");
         var start = script.IndexOf("function notifyState(subscription)", StringComparison.Ordinal);
         var end = script.IndexOf("function recomputeState()", StringComparison.Ordinal);
         Assert.True(start >= 0 && end > start, "notifyState must exist before recomputeState.");
@@ -257,41 +258,8 @@ public sealed class PushEventDispatcherTests
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
             new DateTime(2026, 6, 24, 10, 30, 0, DateTimeKind.Utc));
 
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-    }
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-        => File.ReadAllText(GetRepositoryPath(relativePathSegments));
-
     private static SqlConnection CreateCommandOnlyConnection()
         => new(CommandOnlyConnectionString);
-
-    private static string GetRepositoryPath(params string[] relativePathSegments)
-    {
-        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
-        if (rootedSegment is not null)
-        {
-            throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
-        }
-
-        var segments = new string[relativePathSegments.Length + 1];
-        segments[0] = FindRepositoryRoot();
-        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-        return Path.Join(segments);
-    }
 
     private static void AssertParameter(SqlCommand cmd, string name, SqlDbType sqlDbType, object expectedValue)
     {

@@ -224,6 +224,50 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Deployed Portal, Auth and Content run with the repository's CSP and log
+  to file.** The checked-in `appsettings.json` never reaches a host: the
+  payload strips it and HostAgent writes `Packaging/appsettings.json` over a
+  built-in template that has neither a `SecurityHeaders` nor an `NLog`
+  section, so every deployed web app fell back to the baseline policy with
+  `script-src 'unsafe-inline'` and wrote no log file. The three packaging
+  files now carry the same policy and `NLog` section as the checked-in
+  files; `PortalInlineScriptGuardTests` pins the packaged Portal policy to
+  the checked-in one and `PackagedNLogConfigurationTests` parses every
+  section the way NLog does at startup. Because the package baseline of
+  these three files changes, the first import of the new artifacts reports
+  a carry-forward conflict for an operator-edited `appsettings.json` row
+  (the package file wins); re-apply such edits once from the artifact's
+  configuration page. The Portal, Content and iFrame
+  layouts render the request correlation id
+  (`${scopeproperty:item=CorrelationId}`) that the shared middleware has
+  opened a scope for since it was introduced. The HostAgent template lists
+  `ResourceTelemetry:RetainDays` and `CollectWorkerProcesses` with their
+  defaults; `ADMIN_CONFIGURATION.md` documents the IIS request-filtering
+  copy of the upload limit in `web.config`, the `MusicPlayerWidget` and
+  `ArtifactUpload` folder keys; `HOST_AGENT.md` documents that a
+  service-app instance needs a host or a host template and that the
+  post-deploy health check reads IIS through `appcmd` unless
+  `DeploymentHealthUrls` is set.
+
+- **Sentinel's database heartbeat can look up a configured HostKey.** The
+  optional `omp.Hosts.LastSeenUtc` check queried `Environment.MachineName`
+  only, so a host whose `HostAgent:HostKey` differs from its machine name got
+  event 103 while HostAgent was alive. A new `HostKey` app setting names the
+  key; empty keeps the machine name. The Bootstrapper no longer counts
+  `OMP.HostAgent.Sentinel` as a HostAgent service when upgrade/complete decides
+  whether a missing HostAgent must be installed (self-upgrade already excluded
+  it), parses `net localgroup` output by shape instead of by English or Swedish
+  completion text, reads an unquoted service `BINARY_PATH_NAME` up to the `.exe`
+  that ends a token rather than the first `.exe` anywhere in the path, refuses
+  to remove a runtime directory that is or contains Windows, Program Files,
+  ProgramData or the user profile, and saves a host profile from the GUI
+  without a UTF-8 BOM like the two merge writes already did. HostAgent's
+  IIS/appcmd, sc.exe, service-name and directory-deletion helpers, the shared
+  data-protection key path fallback, the artifact directory hash and the
+  expected-deployment-fault list each have one definition instead of two to
+  five copies; the import-side hash now refuses to follow reparse points like
+  the packaging and provisioning hashes do.
+
 - **The confirmation dialog's OK button is filled again.** The base rule for
   the dialog's buttons outweighed the primary button's own class, so OK sat
   next to Cancel in the same grey; the primary rule now carries the same
@@ -309,7 +353,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   deployed `omp.HostAppDeploymentStates.ContentSha256`, so replaced artifact
   content no longer requires a version bump to reach the runtime.
 
-> **Note:** This changelog was not maintained per-release after `0.1.0`. The repository has since advanced to the `0.3.x` release line. The authoritative current version is the `repositoryVersion` in `omp-components.json` (and the central metadata in `Directory.Build.props`) — not the newest entry below. Treat the `0.1.0` section as the initial-baseline record, not the current state; future notable changes should be logged here per the Keep a Changelog format.
+> **Note:** This changelog was not maintained per-release after `0.1.0`. The repository has since advanced to the `0.3.x` release line. The authoritative current version is the `repositoryVersion` in `omp-components.json` — not the newest entry below, and not `Directory.Build.props`, whose assembly version is intentionally static and decoupled from the component versions. Treat the `0.1.0` section as the initial-baseline record, not the current state; future notable changes should be logged here per the Keep a Changelog format.
 
 ## [0.1.0] - 2026-04-13
 

@@ -482,7 +482,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
     /// necessarily lands between the read and the overwrite, the stuck Move waits the test
     /// handle out and replaces the claim, and the final assertion fails: this test is RED
     /// against the two-step pattern by construction, not by scheduling luck (measured: the
-    /// pre-4f45aee1 loop fails the ownership assertion). The atomic renewal writes in
+    /// pre-3dfbc743 loop fails the ownership assertion). The atomic renewal writes in
     /// place and never creates a temp file, so the barrier simply expires; its exclusive
     /// open retries behind the test handle and reads the foreign claim on the first open
     /// after release.

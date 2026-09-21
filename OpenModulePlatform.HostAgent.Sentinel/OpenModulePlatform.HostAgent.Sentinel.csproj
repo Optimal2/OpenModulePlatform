@@ -6,11 +6,25 @@
     <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
     <IsPackable>false</IsPackable>
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
-    <Version>1.0.2</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.2.0</FileVersion>
-    <InformationalVersion>1.0.2</InformationalVersion>
   </PropertyGroup>
+  <!--
+    The exe carries the omp-hostagent-sentinel component version from omp-components.json,
+    read at evaluation time, so the file version an operator sees in Explorer or the
+    Event Log is the version the manifest and bump-version.ps1 know. A hand-maintained
+    copy here drifted (1.0.2 in the csproj while the manifest was at 1.0.4).
+    AssemblyVersion stays fixed: it is a binding identity, not a shipment number.
+  -->
+  <PropertyGroup>
+    <OmpComponentManifestPath>$(MSBuildThisFileDirectory)..\omp-components.json</OmpComponentManifestPath>
+    <OmpComponentVersion>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(OmpComponentManifestPath)')), '(?&lt;="componentKey":\s*"omp-hostagent-sentinel"[^}]*"version":\s*")\d+\.\d+\.\d+').Value)</OmpComponentVersion>
+    <Version>$(OmpComponentVersion)</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>$(OmpComponentVersion).0</FileVersion>
+    <InformationalVersion>$(OmpComponentVersion)</InformationalVersion>
+  </PropertyGroup>
+  <Target Name="OmpAssertComponentVersion" BeforeTargets="BeforeBuild">
+    <Error Condition="'$(OmpComponentVersion)' == ''" Text="Could not read the omp-hostagent-sentinel version from $(OmpComponentManifestPath)." />
+  </Target>
   <!-- The published payload zip must be installable on its own: ship the installer with the exe. -->
   <ItemGroup>
     <None Include="..\scripts\omp\Install-HostAgentSentinel.ps1" Link="Install-HostAgentSentinel.ps1" CopyToPublishDirectory="PreserveNewest" />

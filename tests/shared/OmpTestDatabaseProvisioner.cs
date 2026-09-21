@@ -17,8 +17,8 @@ namespace OpenModulePlatform.TestSupport;
 /// <para>
 /// CREATE DATABASE copies the <c>model</c> database, and to do that it takes an exclusive
 /// lock on it. Concurrent creates therefore queue behind each other, and on a slow agent
-/// disk that queue outlasts the 30-second default command timeout. CI ran four test
-/// assemblies in parallel, each with xUnit running its collections in parallel, each
+/// disk that queue outlasts the 30-second default command timeout. At the time CI ran four
+/// test assemblies in parallel, each with xUnit running its collections in parallel, each
 /// fixture creating a database -- so runs failed with
 /// "Could not obtain exclusive lock on database 'model'" and a wall of timeouts, in
 /// fixture constructors rather than in any test body.
@@ -111,7 +111,15 @@ public static class OmpTestDatabaseProvisioner
         {
             // A timed-out wait is not a reason to give up: proceeding unserialised is what
             // the code did before, so the worst case is the old behaviour rather than a
-            // test run that refuses to start.
+            // test run that refuses to start. It is reported, though: an unserialised
+            // CREATE DATABASE is the very contention this lock exists to prevent.
+            if (!acquired)
+            {
+                OmpTestCleanupLog.RecordFailure(
+                    nameof(OmpTestDatabaseProvisioner),
+                    $"Creation lock not acquired within {MutexWaitTimeout.TotalMinutes:0} minutes; running CREATE DATABASE unserialised.");
+            }
+
             using var conn = new SqlConnection(masterConnectionString);
             conn.Open();
             using var cmd = new SqlCommand(createStatement, conn)

@@ -17,9 +17,15 @@ For Windows/IIS hosting prerequisites and official Microsoft links, see [Hosting
 
 ## Release status
 
-The repository is being prepared for the first public beta release: **0.1.0**.
-Version `0.1.0` should be treated as a stable public baseline for evaluation,
-documentation, and iterative hardening, not as a feature-complete production platform.
+The repository is on the `0.3.x` release line. The current repository version
+is the `repositoryVersion` value in `omp-components.json`; it is bumped by
+`scripts/omp/push-with-rebump.ps1` on every push, and `SECURITY.md` lists the
+supported line. `0.1.0` (2026-04-13, see `CHANGELOG.md`) was the first public
+beta baseline. The platform should still be treated as a baseline for
+evaluation, documentation, and iterative hardening, not as a feature-complete
+production platform. The assembly version in `Directory.Build.props` is
+intentionally static and not a release indicator (see
+`scripts/omp/validate-component-versions.ps1`).
 
 ## Repository contents
 
@@ -37,7 +43,7 @@ documentation, and iterative hardening, not as a feature-complete production pla
 - `OpenModulePlatform.Worker.Abstractions` - shared contracts for worker plugins
 - `examples/WorkerAppModule/WebApp` - web interface for the manager-driven worker example module
 - `examples/WorkerAppModule/WorkerApp` - plugin-based worker reference example
-- `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - neutral core schema, RBAC, default instance, host, and bootstrap data
+- `sql/0-validate-openmoduleplatform.sql`, `sql/1-setup-openmoduleplatform.sql` and `sql/2-initialize-openmoduleplatform.sql` - read-only validation probe, neutral core schema, RBAC, default instance, host, and bootstrap data (every SQL folder follows this `0-validate`/`1-setup`/`2-initialize` pattern; see `sql/README.md`)
 - `OpenModulePlatform.Portal/sql/1-setup-omp-portal.sql` and `OpenModulePlatform.Portal/sql/2-initialize-omp-portal.sql` - Portal-owned schema and Portal registration data
 - `OpenModulePlatform.Web.ContentWebAppModule/Sql/1-setup-content-webapp.sql` and `OpenModulePlatform.Web.ContentWebAppModule/Sql/2-initialize-content-webapp.sql` - content module schema and registration data, without default content pages
 - `OpenModulePlatform.Web.iFrameWebAppModule/Sql/1-setup-iframe-webapp.sql` and `OpenModulePlatform.Web.iFrameWebAppModule/Sql/2-initialize-iframe-webapp.sql` - iframe module schema and registration data
@@ -130,12 +136,16 @@ runner as described in `installer/README.md`. Content starts without sample
 pages; run `scripts/dev/seed-content-webapp-test-pages.ps1` only when you want
 explicit local Content smoke-test pages.
 
-Each example module owns its own SQL folder and follows the same two-file pattern:
+Each example module owns its own SQL folder and follows the same three-file pattern:
 
 ```text
+examples/<module>/sql/0-validate-*.sql
 examples/<module>/sql/1-setup-*.sql
 examples/<module>/sql/2-initialize-*.sql
 ```
+
+`0-validate-*.sql` is a read-only probe that the installer runs before the
+idempotent repair scripts; it is not part of the manual install order.
 
 Run only the example modules you explicitly want in the local environment.
 
@@ -182,8 +192,11 @@ Prerequisites and behavior:
 - Most tests are in-memory and need nothing installed.
 - Database-backed tests need a local SQL Server (LocalDB is enough). They
   read the connection string from the `OMP_TEST_CONNECTION_STRING`
-  environment variable, defaulting to `Server=(local);Integrated Security=true`,
-  and create/drop their own uniquely named databases.
+  environment variable, defaulting to
+  `Server=(local);Integrated Security=true;TrustServerCertificate=true`
+  (HostAgent.Runtime.Tests) or `DataSource=localhost` with integrated security
+  and `TrustServerCertificate` (Portal.Tests), and create/drop their own
+  uniquely named databases.
 - Two areas are excluded from the CI gate and only run locally against a
   provisioned database; the register of exclusions and their re-enable
   criteria lives in [docs/TEST_DEBT.md](docs/TEST_DEBT.md). CI must keep its
@@ -193,11 +206,12 @@ Prerequisites and behavior:
 
 ### UI suite (Playwright invariant scans)
 
-`OpenModulePlatform.UiTests` boots the built Portal and Auth apps and runs
-generic broken-UI invariant scans (horizontal overflow, invisible text,
-zero-size clickable elements) over their main pages at three viewports
-(1920x1080, 1366x768, 375x812). The pre-push gate and CI exclude it
-(`Category!=Ui`) because it boots the apps and needs a browser; run it
+`OpenModulePlatform.UiTests` boots the built Portal, Auth and iFrame example
+module apps and runs generic broken-UI invariant scans (horizontal overflow,
+invisible text, zero-size clickable elements) over their main pages at three
+viewports (1920x1080, 1366x768, 375x812), plus CSP checks. CI excludes it with
+`Category!=Ui` and the pre-push gate by leaving the project out of its test
+project list, because it boots the apps and needs a browser; run it
 explicitly:
 
 ```
@@ -221,7 +235,8 @@ The repository includes:
 - a GitHub Actions build workflow
 - Dependabot configuration for NuGet packages and GitHub Actions
 - repository hygiene checks for common local IDE files and generated artifacts
-- central version metadata for the `0.1.0` release line
+- the repository version (`repositoryVersion` in `omp-components.json`) and
+  per-component versions, validated by `scripts/omp/validate-component-versions.ps1`
 
 ## Git hooks (tracked pre-push CI gate)
 
@@ -241,16 +256,25 @@ This sets `core.hooksPath` to the tracked `.githooks` directory.
   - Staged `.ps1` files must not contain tab characters.
   - No build or test here; commits stay fast.
 
-- **pre-push** — full CI-equivalent gate (heavy, run at push time):
-  - `dotnet build OpenModulePlatform.slnx -c Release`
-  - `dotnet test` across all test projects except the UI suite
-    (`--filter "Category!=Ui"`, see Running tests above)
-  - `scripts/omp/validate-component-versions.ps1 -BaseCommit <upstream-tracking-parent>`
+- **pre-push** — full CI-equivalent gate (heavy, run at push time). The hook
+  runs `scripts/local-ci.ps1`, which executes these steps in order:
   - `scripts/omp/validate-module-definitions.ps1`
+  - `scripts/omp/Test-ModuleSqlGuards.ps1` (module SQL ownership guards)
+  - `scripts/omp/validate-component-versions.ps1 -BaseCommit <baseline>`
+  - `scripts/omp/run-script-analyzer.ps1` (PSScriptAnalyzer over the scripts)
+  - `scripts/omp/run-script-tests.ps1` (the Pester suites under `tests/`)
+  - `dotnet build OpenModulePlatform.slnx -c Release`
+  - `dotnet test` per project for the six non-UI test projects listed in
+    `local-ci.ps1`, followed by a zero-execution gate on the TRX files. No
+    `--filter` is used; `OpenModulePlatform.UiTests` is excluded simply by not
+    being in that list (see Running tests above).
 
-The pre-push hook reads the remote ref's current SHA from git's stdin and uses
-that as the diff baseline for cascade/version validators. If the remote ref does
-not exist yet (new branch), it falls back to `origin/main`.
+`local-ci.ps1` resolves the diff baseline itself: when the branch has an
+upstream with unpushed commits, the baseline is the upstream ref; otherwise
+(nothing to push, or no upstream configured, which is every first push of a new
+branch) it is `HEAD^`. The hook also reads the remote SHA from git's stdin,
+but only for its gate cache: a tree that already passed against the same
+baseline is not rerun (force with `OMP_GATE_NOCACHE=1`).
 
 ### Important caveats
 

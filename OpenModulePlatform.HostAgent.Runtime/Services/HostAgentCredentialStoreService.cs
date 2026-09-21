@@ -212,6 +212,12 @@ public sealed class HostAgentCredentialStoreService
         }
 
         File.Move(tempPath, path, overwrite: true);
+
+        // The moved file carries the directory's inherited ACL; cut it down to the
+        // readers that need the store (B65). The self-upgrade account is granted
+        // explicitly because the next HostAgent may run under it rather than under
+        // the identity writing here.
+        HostAgentCredentialStoreFileAcl.Apply(path, _settings.SelfUpgrade.ServiceAccountName);
     }
 
     private static HostAgentCredentialStoreDocument NormalizeDocument(HostAgentCredentialStoreDocument? document)

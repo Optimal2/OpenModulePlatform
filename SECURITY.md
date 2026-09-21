@@ -38,7 +38,7 @@ No specific response-time SLA is guaranteed for the public beta release line.
 
 This repository intentionally contains no customer-specific integrations, credentials, or environment-specific deployment secrets.
 
-The SQL bootstrap scripts require operator-provided values such as `@BootstrapPortalAdminPrincipal`. These values are installation inputs, not working credentials. Prefer the local PowerShell installer for automated bootstrap runs because it escapes principal values before invoking `sqlcmd`.
+The SQL bootstrap scripts require operator-provided values such as `@BootstrapPortalAdminPrincipal`. These values are installation inputs, not working credentials. Prefer the installer (`OpenModulePlatform.Bootstrapper`) for automated bootstrap runs: it executes the scripts through `SqlConnection` rather than `sqlcmd`, and replaces the placeholder declarations with escaped Unicode string literals (`PatchBootstrapPrincipal` in `OpenModulePlatform.Bootstrapper/Program.cs`) so a principal value cannot break out of the literal.
 
 ## Operational guidance
 

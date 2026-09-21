@@ -1,3 +1,5 @@
+using OpenModulePlatform.TestSupport;
+
 namespace OpenModulePlatform.Portal.Tests.Security;
 
 /// <summary>
@@ -16,8 +18,8 @@ public sealed class LocalPasswordCanonicalizationGuardTests
     [Fact]
     public void LpwdComparisons_ArePinnedToTheSharedBinaryCollation()
     {
-        var authRepository = ReadRepositoryTextFile("OpenModulePlatform.Auth", "Services", "OmpAuthRepository.cs");
-        var adminRepository = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Services", "OmpUserAdminRepository.cs");
+        var authRepository = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Auth", "Services", "OmpAuthRepository.cs");
+        var adminRepository = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Services", "OmpUserAdminRepository.cs");
 
         // The old, unpinned comparison must be gone -- not just accompanied by
         // a pinned one.
@@ -37,7 +39,7 @@ public sealed class LocalPasswordCanonicalizationGuardTests
     [Fact]
     public void AdminWritePaths_ApplyTheSharedNormalizationRule()
     {
-        var adminRepository = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Services", "OmpUserAdminRepository.cs");
+        var adminRepository = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Services", "OmpUserAdminRepository.cs");
 
         // Create, add-login, reset, and removal all key the hash row by the
         // canonical form produced by the one shared rule.
@@ -53,42 +55,12 @@ public sealed class LocalPasswordCanonicalizationGuardTests
     [Fact]
     public void CoreSetup_ShipsTheCanonicalizationMigration()
     {
-        var setupScript = ReadRepositoryTextFile("sql", "1-setup-openmoduleplatform.sql");
+        var setupScript = OmpRepositoryFiles.ReadRepositoryTextFile("sql", "1-setup-openmoduleplatform.sql");
 
         Assert.Contains("-- R7-F12: local password user-name canonicalization (begin)", setupScript);
         Assert.Contains("-- R7-F12: local password user-name canonicalization (end)", setupScript);
         Assert.Contains("FROM omp.auth_provider_lpwd target", setupScript);
         Assert.Contains("LOWER(LTRIM(RTRIM(target.user_name)))", setupScript);
         Assert.Contains("FROM omp.user_auth target", setupScript);
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-    }
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-    {
-        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
-        if (rootedSegment is not null)
-        {
-            throw new ArgumentException("Repository test paths must be relative.", nameof(rootedSegment));
-        }
-
-        var segments = new string[relativePathSegments.Length + 1];
-        segments[0] = FindRepositoryRoot();
-        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-        return File.ReadAllText(Path.Join(segments));
     }
 }

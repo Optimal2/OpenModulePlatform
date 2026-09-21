@@ -129,8 +129,9 @@ rejects the consumer artifact at import.
 `validate-shared-scripts.ps1` is the canonical implementation of the consumer-side
 "Check 15" shared-script drift guard, and is the sibling of the Check 14 guard above.
 Where Check 14 locks shared source TREES, Check 15 locks the shared SCRIPTS that are
-copied verbatim across the fleet -- today exactly one file, `scripts/omp/bump-version.ps1`
-(the `$sharedScripts` list), which is byte-identical in all nine repositories. The
+copied verbatim across the fleet -- today two files, `scripts/omp/bump-version.ps1` and
+`scripts/omp/validate-component-versions.helpers.ps1` (the `$sharedScripts` list), which are
+byte-identical in all nine repositories. The
 consumer's `scripts/validate-component-versions.ps1` calls this script out of the sibling
 OpenModulePlatform checkout; it is deliberately **not** copied into the consumers, because
 a copied guard would be subject to the very drift it exists to detect. Comparison is a
@@ -160,9 +161,9 @@ that script, not the Check 14 guard above):
 - A component `moduleKey` that points to a module definition not declared in
   `moduleDefinitions`. This catches stale or misspelled module references.
 - A component `minModuleDefinitionVersion` that is greater than the currently
-  declared module definition version. This is reported as a **warning** because
-  it means the component expects a newer module definition than the manifest
-  provides.
+  declared module definition version. This is a **hard error** (Check 6): a
+  package built from that state would carry a minimum-version requirement that
+  no existing module definition can satisfy, so the import would always fail.
 - A change to the `OpenModulePlatform.Web.Shared` binary that is not matched
   by a cascade-bump of its declared consumers (Check 11). The validator builds
   `OpenModulePlatform.Web.Shared.dll` from both the parent commit and HEAD with

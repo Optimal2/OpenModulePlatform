@@ -10,36 +10,36 @@ param(
 )
 
 # ---------------------------------------------------------------------------
-# SPÄRR (2026-08-23). Det här skriptet gör en OFULLSTÄNDIG bump och har valts av
-# misstag flera gånger — dess namn låter mer specifikt än det kanoniska, så den
-# som vill "bumpa en komponent" landar här. En Write-Warning räckte inte: en
-# varning i ett skriptutflöde syns inte för den som läser exit-koden.
-# Nu måste avvikelsen vara ett aktivt val.
+# GUARD (2026-08-23). This script performs an INCOMPLETE bump and has been picked
+# by mistake several times: its name sounds more specific than the canonical one,
+# so whoever wants to "bump a component" lands here. A Write-Warning was not
+# enough: a warning in script output is invisible to whoever reads the exit code.
+# The deviation now has to be an active choice.
 # ---------------------------------------------------------------------------
 if (-not $AllowDeprecated) {
     throw @"
-DEPRECATED: scripts/bump-component-version.ps1 gör en OFULLSTÄNDIG bump.
+DEPRECATED: scripts/bump-component-version.ps1 performs an INCOMPLETE bump.
 
-ANVÄND I STÄLLET (kanoniskt skript, hela versionsmatrisen):
+USE INSTEAD (canonical script, the whole version matrix):
 
-    .\scripts\omp\bump-version.ps1 -ComponentKey <komponentnyckel>
+    .\scripts\omp\bump-version.ps1 -ComponentKey <componentKey>
     .\scripts\omp\bump-version.ps1 -AllComponents -AllModuleDefinitions -UpdateModuleMinimums
 
-Det kanoniska skriptet uppdaterar ALLT som hänger ihop:
-  - komponentversioner i omp-components.json
-  - definitionVersion i varje berörd module-definition.json
-  - compatibleArtifacts.maxVersion per modul
-  - widgetversioner
+The canonical script updates EVERYTHING that belongs together:
+  - component versions in omp-components.json
+  - definitionVersion in every affected module-definition.json
+  - compatibleArtifacts.maxVersion per module
+  - widget versions
   - repositoryVersion
 
-DET HÄR skriptet bumpar BARA komponentversioner. Resultatet blir ett halvbumpat
-repo som pre-push-grinden avvisar, och om det ändå når en värd avvisar
-HostAgenten importen med "same version, different content".
+THIS script bumps ONLY component versions. The result is a half-bumped
+repository that the pre-push gate rejects, and if it still reaches a host the
+HostAgent refuses the import with "same version, different content".
 
-Behöver du verkligen en komponent-only-bump och tänker själv stämma av
-repositoryVersion och moduldefinitionerna efteråt:
+If you really need a component-only bump and will reconcile repositoryVersion
+and the module definitions yourself afterwards:
 
-    .\scripts\bump-component-version.ps1 -AllowDeprecated <övriga argument>
+    .\scripts\bump-component-version.ps1 -AllowDeprecated <other arguments>
 "@
 }
 

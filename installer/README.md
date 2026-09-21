@@ -13,6 +13,7 @@ installer/
       host-configs/                      # generated locally, ignored by Git
       config-overlays/                   # generated locally, ignored by Git
       widgets/                           # generated locally, ignored by Git
+      widget-data/                       # generated locally, ignored by Git
   hosts/
     sample/
       bootstrap.json

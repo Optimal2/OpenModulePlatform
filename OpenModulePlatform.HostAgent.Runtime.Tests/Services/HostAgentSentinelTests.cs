@@ -173,6 +173,8 @@ public sealed class HostAgentSentinelTests
             Assert.True(config.StopSelfWhenHostAgentDown);
             Assert.False(config.CheckDatabaseHeartbeat);
             Assert.False(config.DatabaseEnabled);
+            Assert.Equal(string.Empty, config.HostKey);
+            Assert.Equal(Environment.MachineName, config.EffectiveHostKey);
             Assert.Equal(120, config.StartupGraceSeconds);
             Assert.Equal(2, config.FaultConfirmations);
             Assert.Equal(10, config.FaultRecheckSeconds);
@@ -216,6 +218,8 @@ public sealed class HostAgentSentinelTests
         Assert.False(config.DatabaseEnabled);
         values["DatabaseConnectionString"] = "Server=localhost;Database=example;Integrated Security=true";
         Assert.True(SentinelSettings.Read(values).DatabaseEnabled);
+        values["HostKey"] = " app-host-01 ";
+        Assert.Equal("app-host-01", SentinelSettings.Read(values).EffectiveHostKey);
     }
 
     [Theory]

@@ -16,12 +16,16 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 /// silently become a no-op. These tests plant the real thing rather than a mock so the guard is
 /// exercised the way an attacker would trigger it (R8-P2).
 ///
-/// Directory junctions need no privilege on Windows. File symlinks do, so those tests skip
-/// themselves when the process cannot create one rather than failing on a developer machine.
+/// Creating the link needs the symlink privilege (or Developer Mode) on Windows. A test that
+/// cannot plant one reports itself as SKIPPED with the reason, so a machine without the
+/// privilege shows the guard as unexercised instead of silently green.
 /// </remarks>
 [SupportedOSPlatform("windows")]
 public sealed class ReparsePointGuardTests : IDisposable
 {
+    private const string SkipReason =
+        "This process cannot create a directory link (symlink privilege or Developer Mode required); the guard was not exercised.";
+
     private readonly string _root = Path.Join(
         Path.GetTempPath(),
         "omp-reparse-tests-" + Guid.NewGuid().ToString("N"));
@@ -43,7 +47,7 @@ public sealed class ReparsePointGuardTests : IDisposable
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void MirrorDirectory_DoesNotFollowJunctionInSource()
     {
         // A junction inside the provisioned artifact path is the R8-P2-7 scenario: the source
@@ -55,10 +59,7 @@ public sealed class ReparsePointGuardTests : IDisposable
         File.WriteAllText(Path.Join(secret, "credentials.txt"), "top secret");
         File.WriteAllText(Path.Join(source, "real.txt"), "payload");
 
-        if (!TryCreateDirectoryJunction(Path.Join(source, "leak"), secret))
-        {
-            return;
-        }
+        Skip.IfNot(TryCreateDirectoryJunction(Path.Join(source, "leak"), secret), SkipReason);
 
         ArtifactDirectoryMirror.MirrorDirectory(source, target, [], CancellationToken.None);
 
@@ -68,7 +69,7 @@ public sealed class ReparsePointGuardTests : IDisposable
             "The mirror followed a junction in the source and copied the target's content.");
     }
 
-    [Fact]
+    [SkippableFact]
     public void MirrorDirectory_DoesNotDeleteThroughJunctionInTarget()
     {
         // The mirror-side counterpart: R5S-D1's original scenario, where the stale-entry sweep
@@ -80,10 +81,7 @@ public sealed class ReparsePointGuardTests : IDisposable
         File.WriteAllText(victimFile, "must survive");
         File.WriteAllText(Path.Join(source, "real.txt"), "payload");
 
-        if (!TryCreateDirectoryJunction(Path.Join(target, "stale"), victim))
-        {
-            return;
-        }
+        Skip.IfNot(TryCreateDirectoryJunction(Path.Join(target, "stale"), victim), SkipReason);
 
         try
         {
@@ -105,8 +103,9 @@ public sealed class ReparsePointGuardTests : IDisposable
     }
 
     /// <summary>
-    /// Creates a real directory junction. Returns false when the platform refuses, so the test
-    /// skips instead of failing on an environment that cannot create one.
+    /// Creates a real directory link. Returns false when the platform refuses, so the test
+    /// reports a skip (with <see cref="SkipReason"/>) instead of failing on an environment
+    /// that cannot create one.
     /// </summary>
     private static bool TryCreateDirectoryJunction(string linkPath, string targetPath)
     {

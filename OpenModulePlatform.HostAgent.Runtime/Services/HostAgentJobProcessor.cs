@@ -10,21 +10,9 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
 public sealed class HostAgentJobProcessor
 {
-    private const int DirectoryDeleteMaxAttempts = 20;
     private const int MaxServiceAppDeploymentsForOrphanScan = 10000;
     private const int MaxOrphanHostCandidates = 10000;
     private const string OrphanServiceAppFindingCategory = "OrphanServiceApp";
-    private static readonly TimeSpan DirectoryDeleteRetryDelay = TimeSpan.FromMilliseconds(500);
-    // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
-    // older installs without exposing any customer-specific configuration.
-    // Internal so ServiceAppDeploymentService applies the same never-touch guards
-    // when removing services of disabled service-app instances.
-    internal static readonly string[] KnownHostAgentServiceNamePrefixes =
-    [
-        "EMP.HostAgent",
-        "OMP.HostAgent",
-        "OpenModulePlatform.HostAgent"
-    ];
     internal static readonly string[] KnownWorkerManagerServiceNamePrefixes =
     [
         "EMP.WorkerManager",
@@ -418,7 +406,7 @@ public sealed class HostAgentJobProcessor
             // The scan's three service enumerations share one listing (see QueryAllServices).
             // A failed listing is not cached: each enumerator then queries itself and
             // reports the sc.exe failure exactly as before.
-            var listing = RunSc("queryex", "type=", "service", "state=", "all");
+            var listing = WindowsServiceQuery.Run("queryex", "type=", "service", "state=", "all");
             ScanServiceListing.Value = listing.ExitCode == 0 ? listing : null;
             try
             {
@@ -726,7 +714,7 @@ public sealed class HostAgentJobProcessor
         {
             if (Directory.Exists(localPath))
             {
-                DeleteDirectoryWithRetry(localPath, cancellationToken);
+                DirectoryDeletion.DeleteWithRetry(localPath, cancellationToken);
                 AddEntryResult(result, entry, localPath, "Deleted", null);
             }
             else if (File.Exists(localPath))
@@ -831,7 +819,7 @@ public sealed class HostAgentJobProcessor
         {
             if (Directory.Exists(storePath))
             {
-                DeleteDirectoryWithRetry(storePath, cancellationToken);
+                DirectoryDeletion.DeleteWithRetry(storePath, cancellationToken);
                 AddStoreEntryResult(result, entry, normalizedRelativePath, storePath, "Deleted", null);
             }
             else if (File.Exists(storePath))
@@ -1568,18 +1556,18 @@ public sealed class HostAgentJobProcessor
         }
 
         if (IsServiceNameWithKnownPrefix(serviceName, KnownWorkerManagerServiceNamePrefixes)
-            || IsServiceNameWithKnownPrefix(serviceName, KnownHostAgentServiceNamePrefixes))
+            || IsServiceNameWithKnownPrefix(serviceName, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes))
         {
             return (null, null);
         }
 
-        var state = GetServiceState(serviceName);
+        var state = WindowsServiceQuery.GetServiceState(serviceName);
         if (state is null)
         {
             return (null, null);
         }
 
-        var executablePath = TryGetServiceExecutablePath(serviceName);
+        var executablePath = WindowsServiceQuery.TryGetServiceExecutablePath(serviceName);
         return (state, executablePath);
     }
 
@@ -1666,7 +1654,7 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Skipped", "Refusing to delete the active HostAgent service.");
         }
 
-        var state = GetServiceState(serviceName);
+        var state = WindowsServiceQuery.GetServiceState(serviceName);
         if (state is null)
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Missing", "The Windows service was already missing.");
@@ -1691,7 +1679,7 @@ public sealed class HostAgentJobProcessor
             return CreateMaintenanceCleanupEntryResult(entry, "Skipped", "Refusing to delete a running Windows service.");
         }
 
-        var result = RunSc("delete", serviceName);
+        var result = WindowsServiceQuery.Run("delete", serviceName);
         if (result.ExitCode == 0 || result.IsServiceNotFound())
         {
             return CreateMaintenanceCleanupEntryResult(entry, "Cleaned", $"Deleted Windows service '{serviceName}'.");
@@ -1739,9 +1727,9 @@ public sealed class HostAgentJobProcessor
             }
         }
 
-        var canonicalState = GetServiceState(canonicalServiceName);
-        var serviceExecutablePath = TryGetServiceExecutablePath(serviceName);
-        var canonicalExecutablePath = TryGetServiceExecutablePath(canonicalServiceName);
+        var canonicalState = WindowsServiceQuery.GetServiceState(canonicalServiceName);
+        var serviceExecutablePath = WindowsServiceQuery.TryGetServiceExecutablePath(serviceName);
+        var canonicalExecutablePath = WindowsServiceQuery.TryGetServiceExecutablePath(canonicalServiceName);
 
         bool deleted;
         string? refusalReason;
@@ -1829,7 +1817,7 @@ public sealed class HostAgentJobProcessor
         IReadOnlySet<string> claimedServiceNames)
     {
         if (string.Equals(serviceName, settings.ServiceName, StringComparison.OrdinalIgnoreCase)
-            || IsServiceNameWithKnownPrefix(serviceName, KnownHostAgentServiceNamePrefixes))
+            || IsServiceNameWithKnownPrefix(serviceName, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes))
         {
             return $"Refusing to delete '{serviceName}': it is a HostAgent service.";
         }
@@ -1845,7 +1833,7 @@ public sealed class HostAgentJobProcessor
         }
 
         if (string.Equals(canonicalServiceName, settings.ServiceName, StringComparison.OrdinalIgnoreCase)
-            || IsServiceNameWithKnownPrefix(canonicalServiceName, KnownHostAgentServiceNamePrefixes)
+            || IsServiceNameWithKnownPrefix(canonicalServiceName, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes)
             || IsServiceNameWithKnownPrefix(canonicalServiceName, KnownWorkerManagerServiceNamePrefixes))
         {
             return $"Refusing to delete '{serviceName}': the canonical service '{canonicalServiceName}' is a HostAgent or WorkerManager service; the finding action is inconsistent.";
@@ -2004,7 +1992,7 @@ public sealed class HostAgentJobProcessor
 
         try
         {
-            DeleteDirectoryWithRetry(directory, cancellationToken);
+            DirectoryDeletion.DeleteWithRetry(directory, cancellationToken);
             return CreateMaintenanceCleanupEntryResult(entry, "Cleaned", $"Deleted directory '{directory}'.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -2354,33 +2342,13 @@ public sealed class HostAgentJobProcessor
         HostAgentSettings settings,
         string serviceName)
     {
-        var prefix = FirstNonEmpty(settings.SelfUpgrade.ServiceNamePrefix, TrimTrailingVersion(serviceName), serviceName);
+        var prefix = FirstNonEmpty(settings.SelfUpgrade.ServiceNamePrefix, HostAgentServiceNames.TrimTrailingVersion(serviceName), serviceName);
         return prefix.Trim().TrimEnd('.');
-    }
-
-    private static string TrimTrailingVersion(string serviceName)
-    {
-        var trimmed = serviceName.Trim();
-        var parts = trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length < 2)
-        {
-            return trimmed;
-        }
-
-        var suffixStart = parts.Length;
-        while (suffixStart > 0 && parts[suffixStart - 1].All(char.IsDigit))
-        {
-            suffixStart--;
-        }
-
-        return suffixStart == parts.Length
-            ? trimmed
-            : string.Join('.', parts.Take(Math.Max(1, suffixStart)));
     }
 
     private static IReadOnlyList<HostAgentServiceCandidate> EnumerateHostAgentServices(string serviceNamePrefix)
     {
-        var prefixes = GetKnownHostAgentServiceNamePrefixes(serviceNamePrefix);
+        var prefixes = HostAgentServiceNames.GetKnownPrefixes(serviceNamePrefix);
         return EnumerateWindowsServicesByPrefix(prefixes);
     }
 
@@ -2398,7 +2366,7 @@ public sealed class HostAgentJobProcessor
     private static readonly AsyncLocal<ScCommandResult?> ScanServiceListing = new();
 
     private static ScCommandResult QueryAllServices()
-        => ScanServiceListing.Value ?? RunSc("queryex", "type=", "service", "state=", "all");
+        => ScanServiceListing.Value ?? WindowsServiceQuery.Run("queryex", "type=", "service", "state=", "all");
 
     private static IReadOnlyList<HostAgentServiceCandidate> EnumerateWindowsServicesByPrefix(IEnumerable<string> serviceNamePrefixes)
     {
@@ -2422,7 +2390,7 @@ public sealed class HostAgentJobProcessor
             .ToArray();
 
         return serviceNames
-            .Select(name => new HostAgentServiceCandidate(name, GetServiceStateForInventory(name), TryGetServiceExecutablePath(name)))
+            .Select(name => new HostAgentServiceCandidate(name, GetServiceStateForInventory(name), WindowsServiceQuery.TryGetServiceExecutablePath(name)))
             .ToArray();
     }
 
@@ -2453,7 +2421,7 @@ public sealed class HostAgentJobProcessor
 
         var serviceNames = described.Keys
             .Where(name =>
-                !IsServiceNameWithKnownPrefix(name, KnownHostAgentServiceNamePrefixes)
+                !IsServiceNameWithKnownPrefix(name, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes)
                 && !IsServiceNameWithKnownPrefix(name, KnownWorkerManagerServiceNamePrefixes)
                 && !string.Equals(name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
@@ -2463,7 +2431,7 @@ public sealed class HostAgentJobProcessor
             .Select(name => new ServiceAppServiceCandidate(
                 name,
                 described[name].State,
-                TryGetServiceExecutablePath(name),
+                WindowsServiceQuery.TryGetServiceExecutablePath(name),
                 described[name].DisplayName))
             .Where(candidate => !string.IsNullOrWhiteSpace(candidate.ExecutablePath))
             .Select(candidate =>
@@ -2579,7 +2547,7 @@ public sealed class HostAgentJobProcessor
                 continue;
             }
 
-            if (IsServiceNameWithKnownPrefix(candidate.Name, KnownHostAgentServiceNamePrefixes)
+            if (IsServiceNameWithKnownPrefix(candidate.Name, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes)
                 || IsServiceNameWithKnownPrefix(candidate.Name, KnownWorkerManagerServiceNamePrefixes)
                 || string.Equals(candidate.Name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
             {
@@ -2658,7 +2626,7 @@ public sealed class HostAgentJobProcessor
             var unclaimedCandidates = group
                 .Where(candidate =>
                     !claimedServiceNames.Contains(candidate.Name)
-                    && !IsServiceNameWithKnownPrefix(candidate.Name, KnownHostAgentServiceNamePrefixes)
+                    && !IsServiceNameWithKnownPrefix(candidate.Name, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes)
                     && !IsServiceNameWithKnownPrefix(candidate.Name, KnownWorkerManagerServiceNamePrefixes)
                     && !string.Equals(candidate.Name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
@@ -2803,7 +2771,7 @@ public sealed class HostAgentJobProcessor
                 continue;
             }
 
-            if (IsServiceNameWithKnownPrefix(candidate.Name, KnownHostAgentServiceNamePrefixes)
+            if (IsServiceNameWithKnownPrefix(candidate.Name, HostAgentServiceNames.KnownHostAgentServiceNamePrefixes)
                 || IsServiceNameWithKnownPrefix(candidate.Name, KnownWorkerManagerServiceNamePrefixes)
                 || string.Equals(candidate.Name, settings.ServiceName, StringComparison.OrdinalIgnoreCase))
             {
@@ -2858,18 +2826,6 @@ public sealed class HostAgentJobProcessor
         return matches;
     }
 
-    private static IReadOnlySet<string> GetKnownHostAgentServiceNamePrefixes(string serviceNamePrefix)
-    {
-        var prefixes = new HashSet<string>(KnownHostAgentServiceNamePrefixes, StringComparer.OrdinalIgnoreCase);
-        var prefix = serviceNamePrefix.Trim().TrimEnd('.');
-        if (!string.IsNullOrWhiteSpace(prefix))
-        {
-            prefixes.Add(prefix);
-        }
-
-        return prefixes;
-    }
-
     internal static bool IsServiceNameWithKnownPrefix(string serviceName, IEnumerable<string> serviceNamePrefixes)
         => serviceNamePrefixes.Any(prefix =>
             string.Equals(serviceName, prefix, StringComparison.OrdinalIgnoreCase)
@@ -2879,135 +2835,23 @@ public sealed class HostAgentJobProcessor
     /// Service state for inventory purposes: unreadable is reported as unknown, not thrown.
     /// </summary>
     /// <remarks>
-    /// <see cref="GetServiceState"/> throws on any sc.exe failure other than "service does
+    /// <see cref="WindowsServiceQuery.GetServiceState"/> throws on any sc.exe failure other than "service does
     /// not exist", which is right where the answer drives a decision -- treating an
     /// access-denied service as absent would make the caller try to install over it. It is
     /// wrong while walking every service on the machine: one protected third-party service
     /// took down the whole MaintenanceScan job on every scheduled run (R7-D8). Its
-    /// sibling here, <see cref="TryGetServiceExecutablePath"/>, already returns null in the same situation --
+    /// sibling, <see cref="WindowsServiceQuery.TryGetServiceExecutablePath"/>, already returns null in the same situation --
     /// and a candidate with no readable executable path is filtered out downstream anyway.
     /// </remarks>
     private static string? GetServiceStateForInventory(string serviceName)
     {
         try
         {
-            return GetServiceState(serviceName);
+            return WindowsServiceQuery.GetServiceState(serviceName);
         }
         catch (InvalidOperationException)
         {
             return null;
-        }
-    }
-
-    private static string? GetServiceState(string serviceName)
-    {
-        var result = RunSc("query", serviceName);
-        if (result.ExitCode != 0)
-        {
-            return result.IsServiceNotFound() ? null : throw new InvalidOperationException(result.CombinedOutput.Trim());
-        }
-
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var stateIndex = line.IndexOf("STATE", StringComparison.OrdinalIgnoreCase);
-            if (stateIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', stateIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            var parts = line[(separatorIndex + 1)..].Trim()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length > 0)
-            {
-                return parts[^1];
-            }
-        }
-
-        return null;
-    }
-
-    private static string? TryGetServiceExecutablePath(string serviceName)
-    {
-        var result = RunSc("qc", serviceName);
-        if (result.ExitCode != 0)
-        {
-            return null;
-        }
-
-        foreach (var line in result.Output.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries))
-        {
-            var binaryPathIndex = line.IndexOf("BINARY_PATH_NAME", StringComparison.OrdinalIgnoreCase);
-            if (binaryPathIndex < 0)
-            {
-                continue;
-            }
-
-            var separatorIndex = line.IndexOf(':', binaryPathIndex);
-            if (separatorIndex < 0)
-            {
-                continue;
-            }
-
-            return TryExtractExecutablePath(line[(separatorIndex + 1)..].Trim());
-        }
-
-        return null;
-    }
-
-    private static string? TryExtractExecutablePath(string binaryPath)
-    {
-        if (string.IsNullOrWhiteSpace(binaryPath))
-        {
-            return null;
-        }
-
-        var trimmed = binaryPath.Trim();
-        if (trimmed.StartsWith('"'))
-        {
-            var closingQuote = trimmed.IndexOf('"', 1);
-            return closingQuote > 1 ? trimmed[1..closingQuote] : null;
-        }
-
-        var executableEnd = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
-        return executableEnd < 0 ? null : trimmed[..(executableEnd + ".exe".Length)].Trim();
-    }
-
-    private static void DeleteDirectoryWithRetry(string path, CancellationToken cancellationToken)
-    {
-        for (var attempt = 1; ; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                if (Directory.Exists(path))
-                {
-                    Directory.Delete(path, recursive: true);
-                }
-
-                return;
-            }
-            catch (IOException) when (attempt < DirectoryDeleteMaxAttempts)
-            {
-                WaitBeforeDirectoryDeleteRetry(cancellationToken);
-            }
-            catch (UnauthorizedAccessException) when (attempt < DirectoryDeleteMaxAttempts)
-            {
-                WaitBeforeDirectoryDeleteRetry(cancellationToken);
-            }
-        }
-    }
-
-    private static void WaitBeforeDirectoryDeleteRetry(CancellationToken cancellationToken)
-    {
-        if (cancellationToken.WaitHandle.WaitOne(DirectoryDeleteRetryDelay))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 
@@ -3024,14 +2868,6 @@ public sealed class HostAgentJobProcessor
         {
             yield return directory;
         }
-    }
-
-    private static ScCommandResult RunSc(params string[] arguments)
-    {
-        var result = HostAgentProcessRunner.Run(
-            Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "sc.exe"),
-            arguments);
-        return new ScCommandResult(result.ExitCode, result.StdOut, result.StdErr);
     }
 
     private static string FirstNonEmpty(params string?[] values)

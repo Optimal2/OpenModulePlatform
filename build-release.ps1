@@ -33,11 +33,7 @@ try {
 
     $solution = Get-ChildItem -Path $scriptRoot -Filter *.slnx -File | Select-Object -First 1
     if (-not $solution) {
-        $solution = Get-ChildItem -Path $scriptRoot -Filter *.sln -File | Select-Object -First 1
-    }
-
-    if (-not $solution) {
-        throw "Could not find a solution file (*.slnx or *.sln) in $scriptRoot"
+        throw "Could not find a solution file (*.slnx) in $scriptRoot"
     }
 
     Write-Host "Using solution: $($solution.Name)" -ForegroundColor Cyan

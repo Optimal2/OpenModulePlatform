@@ -17,6 +17,12 @@ This helper publishes the currently publishable OMP projects and skips the share
 - OpenModulePlatform.HostAgent.WindowsService
 - OpenModulePlatform.WorkerManager.WindowsService
 - OpenModulePlatform.WorkerProcessHost
+- OpenModulePlatform.Bootstrapper
+- OpenModulePlatform.HostAgent.Sentinel (standalone .NET Framework 4.8 alarm
+  service; `omp-components.json` declares its payload zip, so
+  `package-hostagent-first.ps1` expects this publish folder)
+
+The list is the `$projects` array in `publish-all.ps1`.
 
 Excluded on purpose:
 

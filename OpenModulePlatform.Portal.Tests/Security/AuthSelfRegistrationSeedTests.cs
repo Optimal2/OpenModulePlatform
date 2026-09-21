@@ -1,3 +1,5 @@
+using OpenModulePlatform.TestSupport;
+
 namespace OpenModulePlatform.Portal.Tests.Security;
 
 /// <summary>
@@ -13,7 +15,7 @@ public sealed class AuthSelfRegistrationSeedTests
     [Fact]
     public void AuthSeed_SeedsSelfRegistrationDisabled()
     {
-        var sql = ReadRepositoryTextFile("OpenModulePlatform.Auth", "sql", "2-initialize-omp-auth.sql");
+        var sql = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Auth", "sql", "2-initialize-omp-auth.sql");
 
         Assert.Contains("(N'auth', N'selfRegistrationEnabled', N'false')", sql);
         Assert.DoesNotContain("(N'auth', N'selfRegistrationEnabled', N'true')", sql);
@@ -22,9 +24,9 @@ public sealed class AuthSelfRegistrationSeedTests
     [Fact]
     public void SelfRegistrationReaders_TreatAbsentValueAsDisabled()
     {
-        var repository = ReadRepositoryTextFile("OpenModulePlatform.Auth", "Services", "OmpAuthRepository.cs");
-        var portalSettings = ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Account", "Settings.cshtml.cs");
-        var loginPage = ReadRepositoryTextFile("OpenModulePlatform.Auth", "Pages", "Login.cshtml.cs");
+        var repository = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Auth", "Services", "OmpAuthRepository.cs");
+        var portalSettings = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Portal", "Pages", "Account", "Settings.cshtml.cs");
+        var loginPage = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Auth", "Pages", "Login.cshtml.cs");
 
         // Every reader of auth/selfRegistrationEnabled must fail closed when the
         // value is absent: an installation without the seeded row is an
@@ -38,35 +40,5 @@ public sealed class AuthSelfRegistrationSeedTests
         Assert.Contains(
             "OmpAuthDefaults.ParseEnabledConfigValue(value, defaultValue: false)",
             loginPage);
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-    }
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-    {
-        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
-        if (rootedSegment is not null)
-        {
-            throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
-        }
-
-        var segments = new string[relativePathSegments.Length + 1];
-        segments[0] = FindRepositoryRoot();
-        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-        return File.ReadAllText(Path.Join(segments));
     }
 }

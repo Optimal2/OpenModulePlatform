@@ -1,5 +1,10 @@
 # Dependency injection conventions for OMP+ODV
 
+> **Line anchors (note added 2026-09-21).** The `file.cs:NN` references in
+> this document were measured when the audit was written and many have
+> drifted since. Resolve every reference by the **symbol or file name**, not by
+> the line number; the same note applies in `configuration.md`.
+
 This document records the dependency-injection (DI) patterns found in the
 eight OMP+ODV .NET repositories (source code only; `bin/`, `obj/`,
 `artifacts/`, `node_modules/`, `dist/` and other build output were excluded

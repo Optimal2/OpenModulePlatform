@@ -81,11 +81,14 @@ exceptions can be configured in `HostAgent:ServiceAppIdentityOverrides`, keyed b
 app instance key, installation name, target name, or resolved Windows service
 name.
 
-Not implemented in v1:
+Not implemented:
 
-- remote HTTP download
-- package extraction
-- retention/cleanup policy
+- remote HTTP download sources (artifacts are read from the central artifact
+  root or the import folder)
+
+Package extraction and artifact retention/cleanup are implemented in the
+runtime; see `../docs/HOST_AGENT.md` ("Import folder" and "HostAgent job
+queue").
 
 See `../docs/HOST_AGENT_TEMPLATE_AUTOMATION.md` for the roadmap from template
 metadata to full HostAgent-driven deployment automation.

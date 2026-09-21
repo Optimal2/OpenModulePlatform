@@ -13,6 +13,29 @@ The most important architectural choice in the current codebase is that `AppInst
 
 ## Solution components
 
+The sections below describe the components that carry the platform model. The
+repository also contains, without a section of their own here:
+
+- `OpenModulePlatform.Auth` - the sign-in web app that issues the shared OMP
+  cookie (see Security below and `AUTHENTICATION_AND_RBAC.md`).
+- `OpenModulePlatform.HostAgent.WindowsService` / `.HostAgent.Runtime` - the
+  host-local agent that provisions and deploys artifacts (`HOST_AGENT.md`).
+- `OpenModulePlatform.HostAgent.Sentinel` - a standalone .NET Framework 4.8
+  alarm service with a fixed service name that survives HostAgent upgrades
+  (`HOST_AGENT_FIRST_INSTALL.md`).
+- `OpenModulePlatform.Bootstrapper` - the installer (`HOST_AGENT_FIRST_INSTALL.md`).
+- `OpenModulePlatform.WorkerManager.WindowsService`, `.WorkerProcessHost` and
+  `.Worker.Abstractions` - the manager-driven worker runtime (`WORKER_RUNTIME.md`).
+- `OpenModulePlatform.Artifacts` - artifact package reading and writing shared
+  by installer, HostAgent and Portal (`ARTIFACT_PACKAGES.md`).
+- `OpenModulePlatform.EventPublisher.Abstractions` / `.EventPublisher.Sql` -
+  the push-event outbox (`PUSH_EVENTS.md`).
+- `OpenModulePlatform.Web.ContentWebAppModule` and
+  `OpenModulePlatform.Web.iFrameWebAppModule` - first-party modules shipped
+  with the platform.
+- Four example modules under `examples/`: the three described below plus
+  `WebAppBlazorModule`, the Blazor variant of the simple web app example.
+
 ### OpenModulePlatform.Portal
 
 The Portal is both the landing surface and the administrative UI.
@@ -78,9 +101,13 @@ It shows how a module can use the same platform model while moving background pr
 
 - `omp.Modules`
 - `omp.Apps`
+- `omp.AppPermissions` (permissions an app requires; see `AUTHENTICATION_AND_RBAC.md`)
 - `omp.Artifacts`
+- `omp.ArtifactConfigurationFiles`
 - `omp.ModuleDefinitionDocuments`
 - `omp.ModuleDefinitionArtifactCompatibility`
+- `omp.ModuleDefinitionConsistentArtifactSets` and `...Members` (ADR 0002)
+- `omp.ModuleDefinitionSqlExecutions` (audit of executed module SQL)
 
 Definitions should not hold runtime-specific values such as route, install path, or host placement.
 Module definition documents describe the schema and metadata contract that must
@@ -91,6 +118,7 @@ exist before compatible artifact versions are selected for deployment.
 - `omp.Instances`
 - `omp.ModuleInstances`
 - `omp.AppInstances`
+- `omp.WorkerInstances`
 - `omp.Hosts`
 
 These tables represent the concrete environment. `ModuleInstances` and `AppInstances` are especially important because they make it possible to run multiple instances of the same definition.
@@ -102,6 +130,7 @@ These tables represent the concrete environment. `ModuleInstances` and `AppInsta
 `omp.AppInstances` currently contains, among other things:
 
 - `HostId`
+- `TargetHostTemplateId` (host-role placement, see below)
 - `ArtifactId`
 - `ConfigId`
 - `RoutePath`
@@ -142,14 +171,19 @@ RBAC is built on four core tables:
 - `omp.RolePermissions`
 - `omp.RolePrincipals`
 
-The Portal and module UIs read effective permissions through `RbacService`. `RolePrincipals` can target first-class OMP users with `PrincipalType = 'OmpUser'`, direct AD users with `PrincipalType = 'ADUser'`, large AD groups with `PrincipalType = 'ADGroup'`, or other provider-specific principal types such as `LocalUser`. This lets an administrator grant access to an AD group with many users without creating one `omp.users` row per member.
+The Portal and module UIs read effective permissions through `RbacService`. `RolePrincipals` can target first-class OMP users with `PrincipalType = 'OmpUser'`, direct Windows users with `PrincipalType = 'ADUser'` or `'User'` (`RbacService` adds both keys for a Windows identity), large AD groups with `PrincipalType = 'ADGroup'`, or other provider-specific principal types such as `LocalUser`. Every request also carries the system principals `OMPSystem`/`Everyone` and, for authenticated users, `OMPSystem`/`AuthenticatedUsers`. This lets an administrator grant access to an AD group with many users without creating one `omp.users` row per member.
 
 ### Installation topology and deployment
 
 The current automation model uses one default installation profile as the
-admin-facing desired state for the OMP installation. The database still uses the
-historical table names and can store more than one profile, but the Portal
-workflow is intentionally scoped to one active installation profile for now:
+admin-facing desired state for the OMP installation. That is a working model,
+not a constraint in the data or the UI: the database uses the historical table
+names, `omp.InstanceTemplates` has no "active" column, and the Portal lists
+and edits every profile row (`Pages/Admin/InstanceTemplates.cshtml.cs`,
+`InstanceTemplateEdit.cshtml.cs`). What selects a profile at runtime is the
+`InstanceTemplateId` on an enabled `omp.Instances` row: materialization
+(`omp.MaterializeInstanceTemplate`) walks enabled instances to their profile.
+Installations are expected to keep one default instance and one profile:
 
 - `omp.InstanceTemplates`
 - `omp.HostTemplates`
@@ -210,17 +244,22 @@ load-balanced identity.
 
 ## Known limitations
 
-- the schema can represent several installation profiles, but Portal currently
-  exposes one default installation profile
+- the schema can represent several installation profiles and the Portal lists
+  them all, but the working model, the seed data and the installer assume one
+  default profile; multi-profile operation is untested
 - origin tracking between template rows and materialized runtime rows is not yet explicit
 - `ConfigId` is now represented by the typed `ModuleConfigId` bridge, but validation of the
   bridge is opt-in per module because the target table is module-owned
 - the Portal administrative workflows are better than before but still table-centric
 - deeper drift reporting between desired topology and actual runtime state is
   still evolving
-- HostAgent verifies each artifact's hash independently; it does not yet check
-  that all artifacts deployed together for a module came from the same
-  consistent build (see `docs/adr/0002-deploy-set-consistency-check.md`)
+- HostAgent verifies each artifact's hash independently and, when a module
+  definition declares `consistentArtifactSets`, checks that the artifacts
+  selected for a module instance share the same version
+  (`DeploySetConsistencyService`, setting `HostAgent:DeploySetConsistencyMode`,
+  default `Warn`; see `docs/adr/0002-deploy-set-consistency-check.md`). A module
+  definition without set declarations is not checked, so mixed sets are only
+  caught where module authors have opted in
 
 ## Recommended direction
 

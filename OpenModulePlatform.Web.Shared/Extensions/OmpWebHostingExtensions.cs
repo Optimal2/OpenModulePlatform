@@ -1669,49 +1669,13 @@ public static class OmpWebHostingExtensions
         return QueryHelpers.AddQueryString(loginPath, "returnUrl", returnUrl);
     }
 
+    // B69: the platform-wide rule lives in OmpUrlSafety; these two names stay as the
+    // local entry points so the many call sites in this file read as before.
     private static bool IsSafeLocalReturnUrl(string? returnUrl)
-        => IsSafeLocalPath(returnUrl, enforceWellFormedAndUnescaped: true);
+        => OmpUrlSafety.IsSafeLocalReturnUrl(returnUrl);
 
     private static bool IsSafeLocalDestination(string? destinationUrl)
-        => IsSafeLocalPath(destinationUrl, enforceWellFormedAndUnescaped: false);
-
-    // One implementation for "is this a safe local (non-open-redirect) path", so
-    // the two entry points can no longer drift apart the next time a bypass
-    // technique has to be blocked. The base checks (non-blank, rooted at '/', not
-    // '//', no backslash) always run; the return-url path additionally requires a
-    // well-formed relative URI and re-applies the '//' and backslash rules after
-    // unescaping -- the stricter behaviour the login redirect already relied on.
-    private static bool IsSafeLocalPath(string? url, bool enforceWellFormedAndUnescaped)
-    {
-        if (string.IsNullOrWhiteSpace(url)
-            || !url.StartsWith("/", StringComparison.Ordinal)
-            || url.StartsWith("//", StringComparison.Ordinal)
-            || url.Contains('\\', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (!enforceWellFormedAndUnescaped)
-        {
-            return true;
-        }
-
-        if (!Uri.IsWellFormedUriString(url, UriKind.Relative))
-        {
-            return false;
-        }
-
-        try
-        {
-            var unescaped = Uri.UnescapeDataString(url);
-            return !unescaped.StartsWith("//", StringComparison.Ordinal)
-                && !unescaped.Contains('\\', StringComparison.Ordinal);
-        }
-        catch (UriFormatException)
-        {
-            return false;
-        }
-    }
+        => OmpUrlSafety.IsSafeLocalDestination(destinationUrl);
 
     private static string ToToastSnippet(string value)
     {

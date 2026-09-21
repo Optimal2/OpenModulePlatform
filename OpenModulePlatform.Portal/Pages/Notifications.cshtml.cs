@@ -96,8 +96,5 @@ public sealed class NotificationsModel : OmpSecurePageModel<PortalResource>
     }
 
     private static bool IsSafeLocalDestination(string? destinationUrl)
-        => !string.IsNullOrWhiteSpace(destinationUrl)
-           && destinationUrl.StartsWith("/", StringComparison.Ordinal)
-           && !destinationUrl.StartsWith("//", StringComparison.Ordinal)
-           && !destinationUrl.Contains('\\', StringComparison.Ordinal);
+        => OmpUrlSafety.IsSafeLocalDestination(destinationUrl);
 }

@@ -168,4 +168,15 @@ public interface IOmpHostArtifactRepository
         Guid currentHostId,
         int maxCandidates,
         CancellationToken ct);
+
+    Task<WebAppHealthProbeResult> UpsertWebAppHealthStateAsync(
+        Guid hostId,
+        WebAppHealthProbeResult probe,
+        CancellationToken ct);
+
+    Task RecordWebAppHealthActionAsync(
+        Guid hostId,
+        string healthKey,
+        string message,
+        CancellationToken ct);
 }

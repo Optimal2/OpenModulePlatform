@@ -1,24 +1,33 @@
 # OpenModulePlatform.HostAgent.Runtime
 
-Shared runtime for the OMP HostAgent Windows service.
+Shared runtime for the OMP HostAgent Windows service
+(`OpenModulePlatform.HostAgent.WindowsService`). The service project hosts the
+engine; this project contains the engine itself and everything it drives.
 
-Implemented in v1:
+The authoritative feature description, configuration reference and operator
+runbook live in `docs/HOST_AGENT.md`. In short, the runtime provides:
 
-- host heartbeat publishing
-- optional template topology materialization for the local host
-- optional processing of pending `omp.HostDeployments` queue entries
-- desired artifact discovery from OMP SQL
-- immutable local artifact cache
-- source-to-cache copy from a central artifact root
-- file and directory SHA-256 verification
-- provisioning status publishing to `omp.HostArtifactStates`
-- optional Windows DPAPI-backed credential-store model for host-local service
-  and IIS identities
+- host heartbeat and per-host runtime state publishing
+- desired artifact discovery from OMP SQL, an immutable local artifact cache,
+  SHA-256 verification and provisioning state in `omp.HostArtifactStates`
+- artifact package import from the import folder, including universal module
+  packages and package extraction (`ArtifactZipImportService`)
+- IIS web app and Windows service app deployment
+  (`WebAppDeploymentService`, `ServiceAppDeploymentService`), with
+  configuration continuity between artifact versions
+- the deploy-set consistency check (`DeploySetConsistencyService`, ADR 0002)
+- the database-backed job queue (`HostAgentJobProcessor`) for artifact
+  retention and cache cleanup, maintenance scans and cleanups, and Portal
+  health operations
+- runtime file mirrors (`HostAgentFileMirrorService`)
+- HostAgent self-upgrade (`HostAgentSelfUpgradeService`), which reads the
+  service account password from the host-local credential store
+- the Windows DPAPI-backed credential store
+  (`HostAgentCredentialStoreService`) used for service, app-pool and
+  self-upgrade identities
+- Portal health monitoring (`WebAppHealthMonitor`) and host resource
+  telemetry (`HostResourceCollector`)
 
-Not implemented in v1:
-
-- cleanup/retention of unused artifact versions
-- package extraction for zip/nupkg artifacts
-- signing/certificate validation
-- automatic use of credential-store entries during IIS app-pool, Windows
-  service, or HostAgent self-upgrade operations
+Still not implemented: remote (HTTP/blob) artifact download sources, artifact
+signing/certificate verification, and a remote management API beyond the local
+named-pipe RPC. See the "Not implemented yet" section in `docs/HOST_AGENT.md`.

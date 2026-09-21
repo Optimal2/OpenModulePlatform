@@ -341,6 +341,25 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
         return Task.FromResult<IReadOnlyList<OrphanHostCandidate>>(OrphanHostCandidates);
     }
 
+    public Task<WebAppHealthProbeResult> UpsertWebAppHealthStateAsync(
+        Guid hostId,
+        WebAppHealthProbeResult probe,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(probe);
+    }
+
+    public Task RecordWebAppHealthActionAsync(
+        Guid hostId,
+        string healthKey,
+        string message,
+        CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
     public sealed record CompletedDeployment(
         long HostDeploymentId,
         Guid LeaseToken,

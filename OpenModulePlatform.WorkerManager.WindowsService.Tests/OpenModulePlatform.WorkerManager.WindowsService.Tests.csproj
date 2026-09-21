@@ -27,6 +27,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared test support, linked rather than copied (see tests/shared). -->
+    <Compile Include="..\tests\shared\OmpRepositoryFiles.cs" Link="TestSupport\OmpRepositoryFiles.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

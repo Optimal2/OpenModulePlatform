@@ -27,9 +27,10 @@ public sealed class ContentSecurityPolicyOptions
     /// Gets or sets a full replacement policy. When null or empty the shared
     /// baseline (<see cref="Security.OmpContentSecurityPolicy.Baseline"/>) is
     /// used. An app that needs extra sources (for example the Portal's webamp
-    /// widget or the Content module's CDN-hosted editor) sets the complete
-    /// policy here; a comment in the app's appsettings.json must state which
-    /// code forces each added source.
+    /// widget with blob: sources, or the Content module's https: image sources
+    /// for externally referenced images) sets the complete policy here; a
+    /// comment in the app's appsettings.json must state which code forces
+    /// each added source.
     /// </summary>
     public string? Policy { get; set; }
 

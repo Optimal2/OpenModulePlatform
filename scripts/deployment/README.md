@@ -32,6 +32,8 @@ data/global/module-definitions
 data/global/artifacts
 data/global/host-configs
 data/global/config-overlays
+data/global/widgets
+data/global/widget-data
 ```
 
 Generated host-specific bootstrap helper files belong under the matching host
@@ -57,7 +59,8 @@ runtime differences should be expressed as host configuration and config overlay
 objects, not as duplicated module or artifact packages.
 
 When a bootstrap config references `artifacts/<package>.zip`, the bootstrapper
-checks the selected host folder first and then falls back to `data/global`. Use
+checks the selected host folder (`data/hosts/<config-name>`) first, then
+`data/profiles/<config-name>`, and then falls back to `data/global`. Use
 host-local artifacts only for bootstrap repair scenarios; normal runtime
 configuration belongs in config overlays.
 

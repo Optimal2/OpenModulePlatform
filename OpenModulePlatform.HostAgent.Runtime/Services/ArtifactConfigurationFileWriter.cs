@@ -724,7 +724,12 @@ internal static class ArtifactConfigurationFileWriter
         }
     }
 
-    private static string ResolveWebAppDataProtectionKeyPath(HostAgentSettings settings)
+    /// <summary>
+    /// The one place the shared data-protection key folder is resolved: configured
+    /// <c>HostAgent:WebAppDataProtectionKeyPath</c>, else <c>&lt;runtimeRoot&gt;\DataProtectionKeys</c>
+    /// next to <c>WebAppsRoot</c>. <see cref="WebAppDeploymentService"/> validates against the same value.
+    /// </summary>
+    internal static string ResolveWebAppDataProtectionKeyPath(HostAgentSettings settings)
     {
         if (!string.IsNullOrWhiteSpace(settings.WebAppDataProtectionKeyPath))
         {

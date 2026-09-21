@@ -20,10 +20,13 @@ param()
     run-script-tests.ps1 as a child powershell.exe process against temporary
     directories and asserts on the exit code and printed output.
 
-    The restore cases download the pinned Pester from PSGallery for real:
-    stubbing Save-Module would test the stub, not the restore. The same
-    gallery access is already a hard prerequisite of CI, which installed the
-    pin from PSGallery before this bootstrap existed.
+    The restore cases run the real restore code, not a stub of Save-Module,
+    but they are served offline: the helper puts the repository-local cache
+    (.psmodules, which run-script-tests.ps1 has already populated) on the
+    child's module path, and the bootstrap copies an available pinned Pester
+    instead of downloading. Only a machine with neither that cache nor a
+    global 5.9.1 would reach PSGallery, and there the restore cases skip with
+    a reason rather than make the gate depend on the network.
 
     Pester 5 runs every container in a separate session state, so the shared
     harness (child-process invoker + temp-directory helpers) lives in
@@ -39,6 +42,7 @@ Describe 'pester-bootstrap: empty module cache' {
     }
 
     It 'Restores the pinned Pester into an empty repo-local cache and loads it from there' {
+        Skip-UnlessPinnedPesterSeedAvailable
         $cache = New-TestDirectory
         try {
             $result = Invoke-PesterBootstrap -CacheRoot $cache
@@ -60,10 +64,13 @@ Describe 'pester-bootstrap: already-restored module cache' {
         . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')
         # Seed the cache with a real restore once; the test then measures the
         # SECOND invocation, which must be served from the cache alone.
-        $script:WarmCache = New-TestDirectory
-        $seed = Invoke-PesterBootstrap -CacheRoot $script:WarmCache
-        if ($seed.ExitCode -ne 0) {
-            throw "Could not seed the warm-cache fixture: $($seed.Output)"
+        $script:WarmCache = $null
+        if (Test-PinnedPesterSeedAvailable) {
+            $script:WarmCache = New-TestDirectory
+            $seed = Invoke-PesterBootstrap -CacheRoot $script:WarmCache
+            if ($seed.ExitCode -ne 0) {
+                throw "Could not seed the warm-cache fixture: $($seed.Output)"
+            }
         }
     }
     AfterAll {
@@ -71,6 +78,7 @@ Describe 'pester-bootstrap: already-restored module cache' {
     }
 
     It 'Reuses the cached copy without restoring again' {
+        Skip-UnlessPinnedPesterSeedAvailable
         $result = Invoke-PesterBootstrap -CacheRoot $script:WarmCache
 
         $result.ExitCode | Should -Be 0
@@ -86,6 +94,7 @@ Describe 'pester-bootstrap: a different global Pester version' {
     }
 
     It 'Loads the repo-local pin, not a globally installed Pester of another version' {
+        Skip-UnlessPinnedPesterSeedAvailable
         $otherVersions = @(Get-Module -ListAvailable Pester | Where-Object { $_.Version -ne [Version]'5.9.1' })
         $cache = New-TestDirectory
         try {
@@ -114,6 +123,8 @@ Describe 'run-script-tests: zero-test gate' {
     }
 
     It 'Fails red when the only suite discovers zero tests' {
+        # The runner bootstraps its own Pester from the repository cache first.
+        Skip-UnlessPinnedPesterSeedAvailable
         $testsDir = New-TestDirectory
         try {
             # A suite file exists (so discovery and the container-count gate

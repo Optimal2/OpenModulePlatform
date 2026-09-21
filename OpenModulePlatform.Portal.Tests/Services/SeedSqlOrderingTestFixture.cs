@@ -55,13 +55,13 @@ DROP DATABASE [{DatabaseName}];",
                 conn);
             await cmd.ExecuteNonQueryAsync();
         }
-        catch (SqlException)
+        catch (Exception ex) when (ex is SqlException or InvalidOperationException)
         {
-            // Best-effort cleanup.
-        }
-        catch (InvalidOperationException)
-        {
-            // Best-effort cleanup (connection could not be opened).
+            // A failed drop must not fail the run, but it must not be silent either:
+            // the shared log is what CI turns into a warning about the leaked database.
+            OmpTestCleanupLog.RecordFailure(
+                nameof(SeedSqlOrderingTestFixture),
+                $"Could not drop test database '{DatabaseName}': {ex.Message}");
         }
     }
 

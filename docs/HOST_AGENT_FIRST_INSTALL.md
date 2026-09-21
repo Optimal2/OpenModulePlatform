@@ -31,8 +31,10 @@ remaining path is manual SQL run by the operator, not an installer re-run.
 HostAgent Sentinel provides the fixed Windows service name `OMP.HostAgent.Sentinel`
 and display name `OMP HostAgent Sentinel`. Its executable stays in
 `<OMP-root>\Services\HostAgentSentinel`; HostAgent upgrades do not rename it.
-Sentinel has its own `omp-hostagent-sentinel` component version (initial shipment
-1.0.2), independent of `omp-hostagent-service`. Its runtime dependencies are
+Sentinel has its own `omp-hostagent-sentinel` component version, independent of
+`omp-hostagent-service`; the current number is the manifest entry in
+`omp-components.json`, and the exe's file version is read from that entry at
+build time. Its runtime dependencies are
 **Windows + .NET Framework 4.8, nothing else**: no NuGet packages, modern .NET
 runtime, PowerShell worker, OMP libraries or network dependency in the default mode.
 The optional DB mode also needs an available OMP SQL database and Windows access.
@@ -112,6 +114,7 @@ Configure event 200 as an alarm on Sentinel's own ability to monitor.
 | `CheckDatabaseHeartbeat` | `false` | Enables optional SQL check only when the connection string is also nonempty. |
 | `HeartbeatStaleMinutes` | `15` | 1–10080 minutes; strictly older than this limit is stale. |
 | `DatabaseConnectionString` | empty | Integrated Security only, with an explicit database; no username/password or attached database allowed. |
+| `HostKey` | empty | `omp.Hosts.HostKey` for the heartbeat query. Empty means `Environment.MachineName`, which is also HostAgent's default; set it when `HostAgent:HostKey` is configured to something else, or the check reports 103 for a host that is alive. |
 | `StartupGraceSeconds` | `120` | 0–3600 seconds; a fault first seen within this time after Sentinel started is held, not reported. Covers boot, where Sentinel usually reaches Running before HostAgent. A healthy sample clears the hold; a fault that persists past the grace is reported at the next sample. |
 | `FaultConfirmations` | `2` | 1–10 consecutive samples that must report the same fault before it is logged (and, for 100/102, before Sentinel stops). `1` restores single-sample reporting. |
 | `FaultRecheckSeconds` | `10` | 1–3600 seconds between samples while a fault is unconfirmed, instead of `PollIntervalSeconds`. With the defaults a real fault is reported about 10 seconds after it is first seen, at most 40 seconds after it occurred. |
@@ -153,9 +156,9 @@ so a real fault is remembered across Sentinel restarts. Only the installer
 registers the event source; the running service never creates one.
 
 The optional SQL query reads `omp.Hosts.LastSeenUtc WHERE HostKey = @hostKey`, with
-`@hostKey = Environment.MachineName`. It uses inbox `System.Data.SqlClient`, a
-parameterized read, and five-second connect/command timeouts. A custom HostAgent
-HostKey is outside this optional check's contract. LocalSystem connects locally
+`@hostKey` from the `HostKey` setting or, when it is empty, `Environment.MachineName`.
+It uses inbox `System.Data.SqlClient`, a parameterized read, and five-second
+connect/command timeouts. LocalSystem connects locally
 as SYSTEM and, on a domain-joined machine, remotely using the machine account.
 An operator must grant that existing identity least-privilege SELECT access; the
 installer never grants SQL permissions or obtains credentials. Do not enable it
@@ -420,9 +423,11 @@ install-hostagent-first.cmd
 ```
 
 Both entry points open the graphical installer. The EXE requests administrator
-rights, loads `hosts\<profile>\bootstrap.json` beside the package (or legacy
-`configs\*.json` files when present), locks onto the profile matching the local
-computer, and shows common SQL, path, HostAgent, and IIS settings as read-only
+rights, loads `hosts\<profile>\bootstrap.json` and `configs\*.json` beside the
+package in the same pass (`bootstrap.local.sample.json` is the legacy fallback
+when neither exists), locks onto the profile matching the local
+computer (exactly one profile must match; the GUI has no profile selector),
+and shows common SQL, path, HostAgent, and IIS settings as read-only
 values. Operational changes are made in the JSON file and then loaded with
 `Reload config`.
 
@@ -439,14 +444,16 @@ same concrete host to both roles so role-targeted desired apps work immediately.
 
 On machines where the matched config resolves valid source repositories, the
 recommended action has a checked option to refresh package objects from source
-before it runs. The refresh first runs `git pull --ff-only` for each configured
-source repository so the object archive is built from the latest clean upstream
+before it runs. The refresh first updates each configured
+source repository with `git fetch --prune` of the branch's single configured
+upstream followed by `git merge --ff-only` (a branch with zero or several
+upstreams stops the refresh) so the object archive is built from the latest clean upstream
 state. If Git cannot fast-forward a repository, the refresh stops and the Git
 state must be resolved manually before continuing. Typical causes include a
 dirty worktree, a detached HEAD, or commits that require a merge. Run
 `git status` in the affected repository, commit or stash pending changes, and
-run `git pull --ff-only` to confirm the repository is current. Each pull has a
-two-minute timeout so a network or credential prompt cannot block the installer
+run `git pull --ff-only` to confirm the repository is current. Each fetch and
+merge has a two-minute timeout so a network or credential prompt cannot block the installer
 indefinitely. After the repository update, the refresh copies newer or missing
 module definitions and artifact packages, and treats same-version artifacts
 with different content as something to fix before continuing. On production
@@ -464,22 +471,34 @@ copies missing artifact folders, publishes missing package-library files, and
 installs HostAgent only if no HostAgent service is present. It recognizes the
 current `OMP.HostAgent` naming standard, older `OpenModulePlatform.HostAgent`
 services, and HostAgent services whose executable is already using the target
-HostAgent folder. If an older versioned HostAgent service is already present,
-the bootstrapper leaves the runtime service alone and lets HostAgent
-self-upgrade complete the version switch. The running desired HostAgent also
-cleans up duplicate HostAgent services, including older service-name prefixes,
-without deleting the active install directory. Existing artifact folders and an
-existing HostAgent service are deliberately left unchanged; use
+HostAgent folder. Three cases exist (`RunUpgradeOrCompleteAsync` in
+`OpenModulePlatform.Bootstrapper/Program.cs`):
+
+- The service with the exact versioned name from the selected package already
+  exists: the bootstrapper rewrites its `appsettings` and credential store from
+  the host profile (`RefreshExistingHostAgentRuntimeSettingsAsync`) and, when
+  `hostAgent.startService` is true (the default), stops and starts it so the
+  refreshed settings take effect. The install directory and artifact folders
+  are not touched.
+- Only a HostAgent service with another version suffix exists: the runtime
+  installation is left unchanged so HostAgent self-upgrade can complete the
+  version switch. The running desired HostAgent also cleans up duplicate
+  HostAgent services, including older service-name prefixes, without deleting
+  the active install directory.
+- No HostAgent service exists: HostAgent is installed.
+
+Existing artifact folders are deliberately left unchanged; use
 `Install or update` when a full bootstrap/reconfiguration pass is intended.
 When the selected package contains newer standard artifact packages than the
 versions pinned in an older host profile, the bootstrapper selects the newest
 available package for each matching app slot at runtime. This keeps portable
 packages from accidentally re-selecting stale desired artifact versions while
 still allowing older package files to remain in the archive as history.
-If a HostAgent service exists but is stopped or failed, `Upgrade / complete`
-still leaves it unchanged. Start the intended service manually with Windows
-Services or `sc.exe start <service-name>`, or run a full `Install or update`
-when the service should be reconfigured from the selected host profile.
+If a HostAgent service with another version suffix exists but is stopped or
+failed, `Upgrade / complete` still leaves it unchanged. Start the intended
+service manually with Windows Services or `sc.exe start <service-name>`, or
+run a full `Install or update` when the service should be reconfigured from
+the selected host profile.
 
 Use `Install or update` for first installation, deliberate repair, or a full
 reconfiguration pass. That path runs the full bootstrap, uses install/update
@@ -496,7 +515,7 @@ moves on. Clear the option before deliberate same-version repair, checksum
 investigation, or recovery from a package that was previously built with the
 same version but different content. The equivalent CLI opt-out is
 `--full-content-check` for `--upgrade-or-complete`, `--sync-package-objects`,
-or `--sync-package-objects-before-action`.
+`--sync-package-objects-before-action`, or `--refresh-and-stage-package`.
 
 When imported module definitions include validation SQL, the bootstrapper runs
 the read-only validation script first. Idempotent repair SQL runs only when the
@@ -506,8 +525,11 @@ including platform core definitions, so a package catch-up can add missing
 idempotent schema objects without requiring a full reinstall.
 
 When a configured artifact has no package-owned configuration files, the
-bootstrapper copies configuration-file rows from the latest previous artifact
-version in the same app slot if the new artifact has no rows yet. This keeps
+bootstrapper copies configuration-file rows from the artifact's continuity
+source in the same app slot if the new artifact has no rows yet. The source is
+the artifact the slot's pointers referenced before the import, with a per-path
+fallback when no pointer names a source; it is never simply the most recently
+created artifact version. This is the same SQL HostAgent and Portal use. This keeps
 artifact-only code releases from losing `appsettings.json` or similar
 artifact-owned configuration.
 
@@ -528,15 +550,21 @@ the package and installed database with the source repository manifest:
 - `Sync package objects` is the normal lightweight developer action. It fills
   the package object library from source manifests and selectively builds only
   missing .NET artifact packages. It first fast-forwards each configured source
-  repository with `git pull --ff-only`; a repository that needs merge/conflict
-  handling stops the sync instead of continuing with stale source. Git pulls are
-  limited to two minutes per repository. Use this before install/upgrade when a
+  repository with `git fetch --prune` and `git merge --ff-only` of the single
+  configured upstream; a repository that needs merge/conflict
+  handling stops the sync instead of continuing with stale source. Git commands are
+  limited to two minutes each. Use this before install/upgrade when a
   private developer package is intentionally minimal. It may update artifact
   targets in the running installer
   configuration so the current install/upgrade action uses the freshly synced
   versions, but it does not rewrite the tracked host profile files. Persisting
   host config changes is an explicit package refresh or manual config-editing
-  step.
+  step. The exception is `Refresh and stage package` (and the CLI verb
+  `--refresh-and-stage-package`): when its refresh step updated artifact
+  targets, they are written back to the host profile config after the stage
+  (and the awaited import, if any) succeeded, so the tracked config describes
+  the versions that actually shipped. A failed write-back is reported as a
+  warning and does not fail the run.
 - `Prepare all host profiles` materializes host-specific portable objects for
   every discovered host profile in the installer package. It copies
   profile-local and profile-declared `host-configs`, `config-overlays`,
@@ -610,12 +638,16 @@ HostAgent-first packages keep one shared portable object library under
   into ArtifactStore and Portal can later import.
 - `host-configs` contains host configuration JSON/zip objects.
 - `config-overlays` contains host-specific config overlay JSON/zip objects.
+- `widgets` contains widget definition JSON objects.
+- `widget-data` contains widget runtime data zip objects.
 
 During bootstrap these files are copied, without deleting older files, into
-  `ArtifactStoreRoot\_available\module-definitions` and
+  `ArtifactStoreRoot\_available\module-definitions`,
   `ArtifactStoreRoot\_available\artifacts`,
-  `ArtifactStoreRoot\_available\host-configs`, and
-  `ArtifactStoreRoot\_available\config-overlays`. Portal reads those folders
+  `ArtifactStoreRoot\_available\host-configs`,
+  `ArtifactStoreRoot\_available\config-overlays`,
+  `ArtifactStoreRoot\_available\widgets`, and
+  `ArtifactStoreRoot\_available\widget-data`. Portal reads those folders
   from the `ArtifactUpload` settings so admins can import modules and
   host-specific overlays after the base installation is complete. External
   module artifacts are copied here from
@@ -711,14 +743,17 @@ developing: rebuild the package from source, put it where the host agent will
 import it, and wait for the import to finish. They were implemented long before
 they were written down; this section is that catch-up.
 
+The verbs below are listed as the usage text in
+`OpenModulePlatform.Bootstrapper/Program.cs` (`WriteUsage`) prints them.
+
 | Option | What it does |
 | --- | --- |
-| `--refresh-installer-package` | Rebuilds the installed package from the source repository declared in the installer profile. Package objects are refreshed; the runner itself is only replaced when it passes the signature gate (see below). |
-| `--refresh-and-stage-package` | The same refresh, followed by staging the rebuilt package into the host agent's import folder so the next import picks it up. This is the normal developer loop. |
-| `--skip-refresh` | Stages what is already on disk without rebuilding first. Use it when the package was just built by another step and rebuilding would only cost time. |
-| `--wait-for-import` | Blocks until the host agent has finished importing the staged package, instead of returning as soon as the files are in place. Without it a script can race ahead and check a state the import has not reached yet. |
-| `--wait-for-import-seconds <n>` | How long `--wait-for-import` waits before giving up. Reaching the limit is reported as a failure, not as a completed import: an import that has not finished must never read as one that has. |
-| `--check-developer-source-status` | Reports whether the installed package still matches the source repository, without changing anything. Read-only. |
+| `--refresh-installer-package` | Pulls the configured source repositories, rebuilds the whole installer package from source (`scripts/deployment/package-hostagent-first.ps1`, including the installer binaries) and swaps the installed package root for the rebuilt one. This is a different, much slower operation than the data-folder refresh below. Optional: `--parent-process-id`, `--restart-gui`, `--log-file`. |
+| `--refresh-and-stage-package` | Refreshes the installer's data folder (`data/global`, `data/hosts`) from every configured source repository, builds one global universal package and stages it in this host's HostAgent import folder so the next import picks it up. It does not rebuild the installer binaries. This is the normal loop for updating an existing installation. Optional: `--full-content-check`, `--skip-refresh`, and one of `--wait-for-import` or `--wait-for-import-seconds <n>`. |
+| `--skip-refresh` | With `--refresh-and-stage-package`: stages what is already in the data folder without refreshing it first. Use it when the data folder was just refreshed by another step. |
+| `--wait-for-import` | With `--refresh-and-stage-package`: blocks until the host agent has finished importing the staged package, with the built-in limit of 180 seconds, instead of returning as soon as the files are in place. Without it a script can race ahead and check a state the import has not reached yet. |
+| `--wait-for-import-seconds <n>` | Alternative to `--wait-for-import` with an explicit limit in seconds. Reaching the limit is reported as a failure, not as a completed import: an import that has not finished must never read as one that has. |
+| `--check-developer-source-status` | Reports whether the installed package still matches the source repository, without changing anything. Read-only. Optional: `--json`. |
 
 ### How this differs from `--sync-package-objects`
 
@@ -732,14 +767,18 @@ options when the source repository has moved ahead of the installation.
 
 ### The runner signature gate
 
-A refresh rebuilds `OpenModulePlatform.Bootstrapper.exe` and replaces it in the
-package root, the tools copy and the tools zip. If the runner already in the
-package carries a valid Authenticode signature, an unsigned or invalidly signed
-replacement is REFUSED before any file is touched -- a package is never left
-partially replaced. Signing itself stays optional: `sign-artifacts.ps1` is a
-no-op unless signing is configured, so unsigned developer packaging works
-unchanged. What the gate forbids is the downgrade: quietly putting an unsigned
-binary where a signed one was.
+`scripts/deployment/update-installer-runner-only.ps1` rebuilds
+`OpenModulePlatform.Bootstrapper.exe` and replaces it in the package root, the
+tools copy and the tools zip. If the runner already in the package carries a
+valid Authenticode signature, an unsigned or invalidly signed replacement is
+REFUSED before any file is touched (`scripts/deployment/assert-runner-signature.ps1`)
+-- a package is never left partially replaced. Signing itself stays optional:
+`sign-artifacts.ps1` is a no-op unless signing is configured, so unsigned
+developer packaging works unchanged. What the gate forbids is the downgrade:
+quietly putting an unsigned binary where a signed one was. The gate is
+invoked only by that script; `--refresh-installer-package` swaps the whole
+package root without a signature comparison, so use the script when a signed
+runner must be preserved.
 
 ### Version identity for installer-only changes
 
@@ -761,10 +800,17 @@ that component key as well with the same script.
 
 The graphical installer also includes uninstall actions:
 
-- `Uninstall runtime` removes the HostAgent service, runtime services whose
-  executables live below the configured services root, the configured IIS site,
-  and IIS app pools that use the configured app-pool prefix. Runtime files and
-  database objects are kept.
+- `Uninstall runtime` removes the HostAgent service, the services listed in
+  `hostAgent.additionalServiceNamesToRemove`, runtime services whose
+  executables live below the configured HostAgent install path or services
+  root, every Windows service whose name starts with `OMP.` or
+  `OpenModulePlatform.` regardless of where its executable lives
+  (`RemoveWindowsServices` in `OpenModulePlatform.Bootstrapper/Program.cs`),
+  the configured IIS site, and IIS app pools that use the configured app-pool
+  prefix. Runtime files and database objects are kept. The name-prefix rule
+  also applies to `Clean uninstall` and `Full uninstall`, so a product-named
+  service installed outside the configured roots on the same machine is removed
+  too.
 - `Clean uninstall` performs the runtime uninstall and also removes configured
   runtime folders such as Portal, WebApps, Services, ArtifactStore,
   ArtifactCache, DataProtectionKeys, and artifact import folders.
@@ -965,8 +1011,10 @@ environments.
 
 Artifact source paths in a bootstrap config can also be written relative to the
 selected data level, for example `artifacts/<package>.zip`. The bootstrapper
-looks below `data/hosts/<config-file-name-without-extension>` first and then
-falls back to `data/global`. Runtime configuration differences should normally
+looks below `data/hosts/<config-file-name-without-extension>` first, then
+`data/profiles/<config-file-name-without-extension>`, and then falls back to
+`data/global` (`EnumerateHostAndGlobalDataRoots` in
+`OpenModulePlatform.Bootstrapper/Program.cs`). Runtime configuration differences should normally
 be captured as config overlay objects in the central library; host-local
 artifact overrides should be reserved for bootstrap repair scenarios.
 
@@ -992,9 +1040,13 @@ For example, a protected customer package can set:
 New HostAgent-first packages should not store clear-text passwords in either
 bootstrap JSON or generated HostAgent appsettings.
 
-The bootstrap JSON may contain portable encrypted values in fields such as
-`hostAgent.serviceAccountPassword`, `hostAgent.iisAppPoolPassword`, and
-`hostAgent.iisAppPoolOverrides.*.password`. Produce values in the
+The bootstrap JSON may contain portable encrypted values in these fields:
+`hostAgent.serviceAccountPassword`, `hostAgent.iisAppPoolPassword`,
+`hostAgent.iisAppPoolOverrides.*.password`, `hostAgent.serviceAppPassword`,
+and `hostAgent.serviceAppIdentityOverrides.*.password` (the same five that
+`scripts/protect-bootstrap-config-secrets.ps1` encrypts and that
+`ResolveInstallerSecret` in `OpenModulePlatform.Bootstrapper/Program.cs`
+decrypts). Produce values in the
 `enc:aesgcm:v1:...` format before packaging the private installer profile. The
 portable key can be stored as `security.portableEncryptionKey` or supplied
 through `security.portableEncryptionKeyEnvironmentVariable`. This encryption is
@@ -1008,7 +1060,11 @@ HostAgent appsettings contain only credential keys such as
 `HostAgent:IisAppPoolPasswordCredentialKey` and
 `HostAgent:SelfUpgrade:ServiceAccountPasswordCredentialKey`. With the default
 `LocalMachine` protection scope, the stored password cannot be moved to another
-computer and decrypted there.
+computer and decrypted there. Because any process on the machine that can read
+the file could decrypt it under that scope, the bootstrapper also replaces the
+file's inherited ACL with one that grants access only to Administrators, SYSTEM,
+the installing identity and the HostAgent service account; the HostAgent applies
+the same ACL when it writes or copies the store itself.
 
 Only HostAgent should need a manual service bootstrap. Once HostAgent is running,
 application versions should be changed through OMP artifacts and instance

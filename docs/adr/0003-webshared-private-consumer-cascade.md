@@ -24,8 +24,9 @@ this ADR was written and is false now. AI Orchestrator commit `c70f6c3` removed 
 2026-08-22, and `AI-Orchestrator/src/gui/jobConcurrency.ts:119` now states "There is
 intentionally NO `build:omp-web-shared` lock". Concurrent consumer builds are made safe by
 output isolation instead of by serialization: the consumer's `local-ci.ps1` passes
-`-p:OmpIsolatedBuildRoot=<repo-local folder>`, which `Directory.Build.props:62-74` in this
-repository uses to redirect `BaseIntermediateOutputPath`/`BaseOutputPath` per consumer. Read
+`-p:OmpIsolatedBuildRoot=<repo-local folder>`, which the `OmpIsolatedBuildRoot` property
+groups in `Directory.Build.props` in this repository use to redirect
+`BaseIntermediateOutputPath`/`BaseOutputPath` per consumer. Read
 the lock references below as history. (Verified 2026-08-28.)
 
 The rule lives in exactly one place:
@@ -100,10 +101,10 @@ This is a design/documentation gap, not a bug in any single repo. The independen
 
 `scripts/omp/validate-component-versions.ps1` uses that declaration for two checks:
 
-- **Check 7** (`scripts/omp/validate-component-versions.ps1:609-675`): if the Web.Shared source tree changed since the baseline, every declared consumer component must have its version bumped.
-- **Check 11** (`scripts/omp/validate-component-versions.ps1:678-822`): builds `OpenModulePlatform.Web.Shared.dll` from both the parent commit and HEAD with deterministic settings and compares the SHA-256 hashes. If the binary changed but no in-repo consumer was bumped, the check fails.
+- **Check 7** (`scripts/omp/validate-component-versions.ps1`, "Check 7: Shared project cascade version bumps"): if the Web.Shared source tree changed since the baseline, every declared consumer component must have its version bumped.
+- **Check 11** (same script, "Check 11: Web.Shared binary identity"): builds `OpenModulePlatform.Web.Shared.dll` from both the parent commit and HEAD with deterministic settings and compares the SHA-256 hashes. If the binary changed but no in-repo consumer was bumped, the check fails.
 
-There is also a contract scanner, `scripts/omp/validate-webshared-contracts.ps1:1-18`, but it only scans consumers declared inside the same `omp-components.json`.
+There is also a contract scanner, `scripts/omp/validate-webshared-contracts.ps1` (see its header comment), but it only scans consumers declared inside the same `omp-components.json`.
 
 ### Each private repo consumes Web.Shared via `<ProjectReference>` to OMP source
 
@@ -323,11 +324,13 @@ A periodic AO job or local script diffs OMP's current Web.Shared against the reg
 
 ## References
 
-- `OpenModulePlatform/omp-components.json:52-67`
-- `OpenModulePlatform/scripts/omp/validate-component-versions.ps1:609-675`
-- `OpenModulePlatform/scripts/omp/validate-component-versions.ps1:678-822`
-- `OpenModulePlatform/scripts/omp/validate-webshared-contracts.ps1:1-18`
-- `OpenModulePlatform/.githooks/pre-push.ps1:100-106`
+- `OpenModulePlatform/omp-components.json` (`sharedProjects`, the
+  `OpenModulePlatform.Web.Shared` entry and its `consumers`)
+- `OpenModulePlatform/scripts/omp/validate-component-versions.ps1` (Check 7)
+- `OpenModulePlatform/scripts/omp/validate-component-versions.ps1` (Check 11)
+- `OpenModulePlatform/scripts/omp/validate-webshared-contracts.ps1` (header comment)
+- `OpenModulePlatform/.githooks/pre-push.ps1` (the `& $localCi` invocation of
+  `scripts/local-ci.ps1`, which runs the validator)
 - `DEV/OpenModulePlatform/AI-Orchestrator/src/gui/jobConcurrency.ts:24-33`
 - `DEV/OpenModulePlatform/AI-Orchestrator/src/gui/jobConcurrency.ts:92-94`
 - `IbsPackager/Directory.Build.targets:9-10`

@@ -10,6 +10,7 @@ using OpenModulePlatform.Web.Shared.Localization;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
 using OpenModulePlatform.Web.Shared.Services;
+using OpenModulePlatform.Web.Shared.Web;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -154,9 +155,9 @@ app.MapGet("/localization/set-language", (
     var effectiveCulture = cultureSelection.ResolveEffectiveCulture(preferredCulture, authWebAppOptions);
     cultureSelection.ApplyCookies(context.Response, preferredCulture, effectiveCulture);
 
-    if (returnUrl is not null && IsSafeLocalReturnUrl(returnUrl))
+    if (OmpUrlSafety.IsSafeLocalReturnUrl(returnUrl))
     {
-        return Results.LocalRedirect(returnUrl!);
+        return Results.LocalRedirect(returnUrl);
     }
 
     return Results.LocalRedirect("/");
@@ -307,7 +308,7 @@ static async Task<OmpSelfRegistrationStatus> ReadSelfRegistrationStatusAsync(Web
 static string ResolveSafeReturnUrl(HttpContext context, string? returnUrl)
 {
     if (!string.IsNullOrWhiteSpace(returnUrl) &&
-        IsSafeLocalReturnUrl(returnUrl) &&
+        OmpUrlSafety.IsSafeLocalReturnUrl(returnUrl) &&
         !IsCurrentLoginUrl(context, returnUrl))
     {
         return returnUrl;
@@ -323,28 +324,6 @@ static bool IsCurrentLoginUrl(HttpContext context, string returnUrl)
 
     return string.Equals(returnPath, currentLoginPath, StringComparison.OrdinalIgnoreCase)
         || string.Equals(returnPath, OmpAuthDefaults.LoginPath, StringComparison.OrdinalIgnoreCase);
-}
-
-static bool IsSafeLocalReturnUrl(string returnUrl)
-{
-    if (!Uri.IsWellFormedUriString(returnUrl, UriKind.Relative) ||
-        !returnUrl.StartsWith("/", StringComparison.Ordinal) ||
-        returnUrl.StartsWith("//", StringComparison.Ordinal) ||
-        returnUrl.Contains('\\', StringComparison.Ordinal))
-    {
-        return false;
-    }
-
-    try
-    {
-        var unescaped = Uri.UnescapeDataString(returnUrl);
-        return !unescaped.StartsWith("//", StringComparison.Ordinal)
-            && !unescaped.Contains('\\', StringComparison.Ordinal);
-    }
-    catch (UriFormatException)
-    {
-        return false;
-    }
 }
 
 static string ExtractPath(string returnUrl)

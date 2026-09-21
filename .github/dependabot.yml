@@ -1,4 +1,16 @@
 version: 2
+# open-pull-requests-limit: 0 (since 2026-05-23): Dependabot still scans both
+# ecosystems and keeps the security alerts on the repository's Security tab, but
+# opens no version-update PRs. The package pins are coordinated by hand, not
+# bumped one at a time: Directory.Packages.props keeps Microsoft.CodeAnalysis.*
+# at the Roslyn of the SDK band global.json pins (a newer analyzer fails to load
+# in the SDK's compiler host) and keeps the xunit v2 core until a deliberate v3
+# migration, and the Microsoft.* 10.0.x runtime packages move together with the
+# runtime floor .github/workflows/ci.yml tests against. A weekly PR per package
+# would propose exactly those bumps, and every merged one needs the component
+# version bump that scripts/omp/push-with-rebump.ps1 computes at push time, which
+# a bot-authored PR does not carry. Raise the limit only together with an
+# `ignore:` list covering the pins above, or the bot re-proposes them weekly.
 updates:
   - package-ecosystem: "nuget"
     directory: "/"

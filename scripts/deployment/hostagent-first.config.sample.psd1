@@ -9,7 +9,9 @@
     PackageRoot = ''
     PublicBaseUrl = 'http://localhost:8088/'
 
-    Version = '0.3.3'
+    # Empty means the package takes repositoryVersion from omp-components.json.
+    # Set a value only to build a package under a different version label.
+    Version = ''
     Configuration = 'Release'
 
     RuntimeRoot = 'C:\OMP'

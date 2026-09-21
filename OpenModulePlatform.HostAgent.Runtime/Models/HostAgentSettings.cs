@@ -18,6 +18,9 @@ public sealed class HostAgentSettings
 
     public int RefreshSeconds { get; set; } = 30;
 
+    // Not checked by Validate(): AppDeploymentLeaseCycle.CreateAsync normalizes an
+    // unknown scope to "app" and a lease outside 1..86400 seconds to 600, and the
+    // database-side DeploymentLock* settings override both when present.
     public string DeploymentLockScope { get; set; } = "app";
 
     public int DeploymentLeaseSeconds { get; set; } = 600;
@@ -191,6 +194,8 @@ public sealed class HostAgentSettings
 
     public int RpcRequestTimeoutSeconds { get; set; } = 60;
 
+    // Not checked by Validate(): DeploySetConsistencyModes.Normalize maps an unknown or
+    // misspelled value to Warn at the point of use, never to None (see its remarks).
     public string DeploySetConsistencyMode { get; set; } = DeploySetConsistencyModes.Warn;
 
     public string ResolveHostKey()

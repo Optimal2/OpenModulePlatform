@@ -131,7 +131,7 @@ Describe 'validate-shared-scripts: cannot-measure is visible, never silently gre
     }
 }
 
-Describe 'validate-shared-scripts: exitkoden ar kontraktet' {
+Describe 'validate-shared-scripts: the exit code is the contract' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
     }
@@ -168,7 +168,7 @@ Describe 'validate-shared-scripts: exitkoden ar kontraktet' {
     }
 }
 
-Describe 'validate-shared-scripts: radslutsstil ar inte drift' {
+Describe 'validate-shared-scripts: line-ending style is not drift' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
     }

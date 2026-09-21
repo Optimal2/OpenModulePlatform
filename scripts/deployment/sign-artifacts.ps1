@@ -13,8 +13,8 @@
 
         {
           "Endpoint": "https://weu.codesigning.azure.net",
-          "CodeSigningAccountName": "optimal2-signing",
-          "CertificateProfileName": "optimal2-public-trust"
+          "CodeSigningAccountName": "<your Trusted Signing account name>",
+          "CertificateProfileName": "<your certificate profile name>"
         }
 
     The config path resolves in order: -ConfigPath, the OMP_TRUSTED_SIGNING_CONFIG

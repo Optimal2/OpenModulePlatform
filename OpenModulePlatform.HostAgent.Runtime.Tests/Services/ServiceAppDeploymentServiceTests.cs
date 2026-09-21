@@ -1048,6 +1048,33 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedServiceAppResults.Last().Result.State);
     }
 
+    [Fact]
+    public async Task UnresolvableCredentialKey_FailsTheDeploymentInsteadOfFallingBackToClearTextPassword()
+    {
+        // IIS app pools and the self-upgrade account already refuse a credential key that
+        // is not in the store; the service-app path silently deployed under the legacy
+        // clear-text Password instead (B66). All three now fail the same way.
+        var (service, repository, control, deployment, _) = CreateScenario(configure: settings =>
+        {
+            settings.ServiceAppUserName = @"NT AUTHORITY\LocalService";
+            settings.ServiceAppPassword = "clear-text-leftover";
+            settings.ServiceAppPasswordCredentialKey = "service-app:missing";
+            settings.CredentialStore.AutomationMode = HostAgentCredentialAutomationModes.Full;
+            settings.CredentialStore.FilePath = Path.Join(_tempRoot, "hostagent.credentials.json");
+        });
+        control.SetState("TestService", "RUNNING");
+        control.SetStartName("TestService", @"NT AUTHORITY\NetworkService");
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, default);
+
+        Assert.Empty(control.StopAttempts);
+        Assert.Empty(control.StartAccountChanges);
+        var result = repository.PublishedServiceAppResults.Last().Result;
+        Assert.Equal(HostDeploymentStatuses.Failed, result.State);
+        Assert.Contains("service-app:missing", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("could not be resolved from HostAgent credential store", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("app")]
     [InlineData("host")]

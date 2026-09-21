@@ -38,9 +38,10 @@ A concrete runtime target inside an OMP instance. A host can carry zero or more 
 The desired topology for an OMP installation.
 
 The database table is still named `omp.InstanceTemplates`, and the schema can
-store more than one profile. The current Portal workflow intentionally exposes
-one default installation profile and treats one OMP database/runtime set as one
-OMP installation.
+store more than one profile; the Portal lists and edits every profile row and
+the table has no "active" flag. The working model is one default installation
+profile per OMP database/runtime set, which is treated as one OMP
+installation.
 
 ## Host role
 

@@ -11,6 +11,11 @@ indent_size = 4
 [*.md]
 trim_trailing_whitespace = false
 
+# Windows-only scripts are checked out with CRLF (.gitattributes: *.ps1, *.bat, *.cmd
+# eol=crlf); the editor must agree or every save flips the whole file.
+[*.{ps1,bat,cmd}]
+end_of_line = crlf
+
 [*.{json,yml,yaml}]
 indent_size = 2
 

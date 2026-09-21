@@ -5,6 +5,11 @@
 **Purpose:** Document current HTTP-client usage, divergences, and the recommended standard pattern.  
 **Constraint:** Read-only audit; no source changes.
 
+> **Line anchors (note added 2026-09-21).** The `file.cs:NN` references in
+> this document were measured when the audit was written and many have
+> drifted since. Resolve every reference by the **symbol or file name**, not by
+> the line number; the same note applies in `configuration.md`.
+
 Repositories audited:
 
 | Repository | Language | Outbound HTTP? |
@@ -421,39 +426,3 @@ export async function fetchWithRetry(url, options, { maxAttempts = 3, baseDelayM
 | **LogSearch** | No HTTP clients | No migration needed | — |
 | **VajSkrivare** | No HTTP clients | No migration needed | — |
 | **AgentDocMap** | No HTTP clients | No migration needed | — |
-
----
-
-## Output
-
-### Per-repo findings summary
-
-- **5 repos make outbound HTTP calls:** OpenModulePlatform, EArkivChecker, Dokumentbibliotek, ODVGateway, OpenDocViewer.
-- **5 repos do not:** IbsPackager, LogSearch, VajSkrivare, iKrock2, AgentDocMap.
-- **No `new HttpClient()` anti-pattern** was found.
-- **No repo uses Polly** or `Microsoft.Extensions.Http.Resilience`.
-- **System.Text.Json is the .NET standard** across all repos that serialize JSON.
-- **OpenDocViewer** has the most complex HTTP surface (mixed clients, hand-rolled retry, config-driven endpoints).
-- **OpenModulePlatform** and **ODVGateway** correctly use `IHttpClientFactory` but should adopt typed clients and standard resilience.
-
-### Validation
-
-- Audit was read-only; no source files were modified.
-- `docs/conventions/http-clients.md` is the only new file.
-
-### Commit / push
-
-```text
-File staged: docs/conventions/http-clients.md
-```
-
-Committed and pushed to `main` in OpenModulePlatform. The exact commit hash and push status are recorded in the job result / `git log`.
-
----
-
-## Confidence Check
-
-- **Investigation:** High — 10 repos searched in parallel; file:line citations verified against subagent reports.
-- **Documentation accuracy:** High — all findings are quoted from source file paths and line numbers.
-- **No source changes:** Confirmed; only `docs/conventions/http-clients.md` is created.
-- **Risk of missing call sites:** Low for compiled .NET (HttpClient is easy to grep) and moderate for dynamic JS URL construction; excluded directories were respected.

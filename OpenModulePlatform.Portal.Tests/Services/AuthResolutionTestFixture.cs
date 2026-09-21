@@ -55,9 +55,13 @@ DROP DATABASE [{DatabaseName}];",
         {
             await cmd.ExecuteNonQueryAsync();
         }
-        catch (SqlException)
+        catch (SqlException ex)
         {
-            // Best-effort cleanup.
+            // A failed drop must not fail the run, but it must not be silent either:
+            // the shared log is what CI turns into a warning about the leaked database.
+            OmpTestCleanupLog.RecordFailure(
+                nameof(AuthResolutionTestFixture),
+                $"Could not drop test database '{DatabaseName}': {ex.Message}");
         }
     }
 
@@ -183,7 +187,7 @@ END",
     private static IReadOnlyList<string> ReadCoreSetupMigrationBatches()
     {
         var setupSql = File.ReadAllText(
-            Path.Join(FindRepositoryRoot(), "sql", "1-setup-openmoduleplatform.sql"));
+            Path.Join(OmpRepositoryFiles.FindRepositoryRoot(), "sql", "1-setup-openmoduleplatform.sql"));
 
         const string beginMarker = "-- R7-F12: local password user-name canonicalization (begin)";
         const string endMarker = "-- R7-F12: local password user-name canonicalization (end)";
@@ -212,22 +216,6 @@ END",
 
         batches.Add(string.Join('\n', current));
         return batches.Where(batch => !string.IsNullOrWhiteSpace(batch)).ToList();
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
     }
 
     /// <summary>

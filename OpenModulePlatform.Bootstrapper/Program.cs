@@ -142,14 +142,6 @@ internal static partial class Program
         }
     }
 
-    private static async Task<int> RunBootstrapAsync(CliOptions cli)
-    {
-        var configPath = Path.GetFullPath(cli.ConfigPath);
-        var config = await ReadJsonAsync<BootstrapConfig>(configPath);
-        var payloadRoot = ResolvePayloadRoot(cli, configPath);
-        return await RunBootstrapAsync(config, configPath, payloadRoot, cli.PayloadZipPath, cli.Yes);
-    }
-
     private static async Task<int> RunBootstrapAsync(
         BootstrapConfig config,
         string configPath,
@@ -1977,13 +1969,6 @@ WHERE ModuleDefinitionDocumentId = @documentId
         return false;
     }
 
-    private static bool IsInstallerManagedModuleDefinitionSql(string definitionJson)
-    {
-        var root = JsonNode.Parse(definitionJson) as JsonObject;
-        return root is not null
-            && string.Equals(GetJsonStringProperty(root, "definitionType"), "platform-core", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static IReadOnlyList<PortableModuleDefinitionSqlScript> ReadPortableSqlScripts(string definitionJson)
     {
         OpenModulePlatform.ModuleDefinitions.ModuleDefinitionSqlOwnership.ValidateDocument(definitionJson);
@@ -3352,9 +3337,7 @@ END;
             {
                 if (File.Exists(source) && source.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
                 {
-                    var configurationFiles = ExtractArtifactPackageConfigurationFiles(
-                        source,
-                        artifactStoreRoot);
+                    var configurationFiles = ReadArtifactPackageConfigurationFilesOnly(source);
                     if (configurationFiles.Count > 0)
                     {
                         preparedConfigurationFiles.Add(new PreparedArtifactConfigurationFiles(
@@ -3588,20 +3571,12 @@ END;
     private const long MaxArtifactConfigReadManifestBytes = 1024 * 1024;
     private const long MaxArtifactConfigReadFileBytes = 1024 * 1024 * 5;
 
-    private static IReadOnlyList<ArtifactPackageConfigurationFile> ExtractArtifactPackageConfigurationFiles(
-        string source,
-        string artifactStoreRoot)
-    {
-        // R5-G5: for an AddMissingOnly artifact that already exists we only need
-        // its configuration files, not its (potentially multi-GB) payload. The
-        // previous path called ArtifactPackageExtractor.Extract, which unpacked
-        // the ENTIRE payload to a staging folder just to hand back the small
-        // configuration entries, then deleted it. Read the manifest and the
-        // referenced configuration entries straight out of the zip instead.
-        _ = artifactStoreRoot;
-        return ReadArtifactPackageConfigurationFilesOnly(source);
-    }
-
+    // R5-G5: for an AddMissingOnly artifact that already exists we only need
+    // its configuration files, not its (potentially multi-GB) payload. The
+    // previous path called ArtifactPackageExtractor.Extract, which unpacked
+    // the ENTIRE payload to a staging folder just to hand back the small
+    // configuration entries, then deleted it. Read the manifest and the
+    // referenced configuration entries straight out of the zip instead.
     private static IReadOnlyList<ArtifactPackageConfigurationFile> ReadArtifactPackageConfigurationFilesOnly(string source)
     {
         using var archive = ZipFile.OpenRead(source);
@@ -4501,7 +4476,7 @@ SELECT COUNT(1) FROM @changes;
             if (copied > 0)
             {
                 Console.WriteLine(
-                    $"> Artifact config files {artifactRelativePath}: copied {copied} from latest previous artifact version.");
+                    $"> Artifact config files {artifactRelativePath}: copied {copied} from the previous artifact version the slot pointed to.");
             }
         }
     }
@@ -4888,7 +4863,7 @@ ORDER BY ArtifactId;
         var path = CombineUnderRoot(installPath, fileName);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-        await WriteHostAgentCredentialStoreAsync(credentialPlan);
+        await WriteHostAgentCredentialStoreAsync(credentialPlan, hostAgent.ServiceAccountName);
 
         await AtomicJsonFile.WriteAsync(
             path,
@@ -5164,7 +5139,9 @@ ORDER BY ArtifactId;
         return settings;
     }
 
-    private static async Task WriteHostAgentCredentialStoreAsync(HostAgentCredentialBootstrapPlan credentialPlan)
+    private static async Task WriteHostAgentCredentialStoreAsync(
+        HostAgentCredentialBootstrapPlan credentialPlan,
+        string serviceAccountName)
     {
         if (credentialPlan.Credentials.Count == 0)
         {
@@ -5210,6 +5187,10 @@ ORDER BY ArtifactId;
             path,
             JsonSerializer.Serialize(document, JsonOptions),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        // Same protected ACL as set-hostagent-credential-store.ps1: Administrators,
+        // SYSTEM, the installing identity and the HostAgent service account (B65).
+        HostAgentCredentialStoreFileAcl.Apply(path, serviceAccountName);
     }
 
     private static void AddCredentialIfConfigured(
@@ -5319,24 +5300,6 @@ ORDER BY ArtifactId;
         using var aes = new AesGcm(key, tag.Length);
         aes.Decrypt(nonce, cipherText, tag, plainText);
         return Encoding.UTF8.GetString(plainText);
-    }
-
-    private static string ProtectPortableInstallerSecret(string value, byte[] key)
-    {
-        var nonce = RandomNumberGenerator.GetBytes(12);
-        var plainText = Encoding.UTF8.GetBytes(value);
-        var cipherText = new byte[plainText.Length];
-        var tag = new byte[16];
-        using var aes = new AesGcm(key, tag.Length);
-        aes.Encrypt(nonce, plainText, cipherText, tag);
-        return string.Join(
-            ':',
-            "enc",
-            "aesgcm",
-            "v1",
-            Convert.ToBase64String(nonce),
-            Convert.ToBase64String(cipherText),
-            Convert.ToBase64String(tag));
     }
 
     private static JsonObject GetOrCreateJsonObject(JsonObject parent, string propertyName)
@@ -5567,15 +5530,18 @@ ORDER BY ArtifactId;
                 return false;
             }
 
+            // The member list follows the "---" separator and net.exe always closes a
+            // successful listing with a localized completion line ("The command completed
+            // successfully.", "Kommandot har utförts."), so drop the last non-empty line
+            // instead of matching its text per locale.
             members.AddRange(
                 result.StdOut
                     .Split([Environment.NewLine], StringSplitOptions.None)
                     .Select(static rawLine => rawLine.Trim())
                     .SkipWhile(static line => !line.StartsWith("---", StringComparison.Ordinal))
                     .Skip(1)
-                    .Where(static line => line.Length > 0
-                        && !line.Contains("command completed", StringComparison.OrdinalIgnoreCase)
-                        && !line.Contains("kommandot slutf", StringComparison.OrdinalIgnoreCase))
+                    .Where(static line => line.Length > 0)
+                    .SkipLast(1)
                     .Select(NormalizeWindowsAccount));
 
             return true;
@@ -5768,10 +5734,19 @@ ORDER BY ArtifactId;
             }
         }
 
+        // An unquoted BINARY_PATH_NAME ends its executable at the first ".exe" that is
+        // followed by whitespace or the end of the value, so a directory segment such as
+        // "Tools.exe.d" earlier in the path does not truncate it.
         var exeIndex = trimmed.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
-        if (exeIndex >= 0)
+        while (exeIndex >= 0)
         {
-            return Path.GetFullPath(trimmed[..(exeIndex + 4)]);
+            var end = exeIndex + ".exe".Length;
+            if (end == trimmed.Length || char.IsWhiteSpace(trimmed[end]))
+            {
+                return Path.GetFullPath(trimmed[..end]);
+            }
+
+            exeIndex = trimmed.IndexOf(".exe", end, StringComparison.OrdinalIgnoreCase);
         }
 
         var firstToken = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
@@ -5961,6 +5936,15 @@ ORDER BY ArtifactId;
         return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
     }
 
+    private static readonly Environment.SpecialFolder[] ProtectedRuntimeDeleteFolders =
+    [
+        Environment.SpecialFolder.Windows,
+        Environment.SpecialFolder.ProgramFiles,
+        Environment.SpecialFolder.ProgramFilesX86,
+        Environment.SpecialFolder.CommonApplicationData,
+        Environment.SpecialFolder.UserProfile
+    ];
+
     private static void EnsureSafeRuntimeDeletePath(string path)
     {
         var root = Path.GetPathRoot(path);
@@ -5968,6 +5952,17 @@ ORDER BY ArtifactId;
             || Path.TrimEndingDirectorySeparator(path).Equals(Path.TrimEndingDirectorySeparator(root), StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Refusing to remove unsafe runtime directory path: '{path}'.");
+        }
+
+        // A runtime root may live UNDER these folders (C:\ProgramData\OMP is common); it
+        // must never be one of them or a parent of one.
+        foreach (var folder in ProtectedRuntimeDeleteFolders)
+        {
+            var protectedPath = Environment.GetFolderPath(folder);
+            if (!string.IsNullOrWhiteSpace(protectedPath) && IsSameOrChildPath(path, protectedPath))
+            {
+                throw new InvalidOperationException($"Refusing to remove runtime directory path '{path}' because it contains '{protectedPath}'.");
+            }
         }
     }
 
@@ -6017,9 +6012,13 @@ ORDER BY ArtifactId;
     }
 
     private static bool IsKnownHostAgentServiceName(string serviceName, IEnumerable<string> serviceNamePrefixes)
-        => serviceNamePrefixes.Any(prefix =>
-            serviceName.Equals(prefix, StringComparison.OrdinalIgnoreCase)
-            || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
+        // The independent alarm service shares the prefix but is not a HostAgent: its
+        // presence must not make upgrade/complete skip installing a missing HostAgent.
+        // Same rule as HostAgentSelfUpgradeService.IsHostAgentServiceName.
+        => !serviceName.Equals("OMP.HostAgent.Sentinel", StringComparison.OrdinalIgnoreCase)
+            && serviceNamePrefixes.Any(prefix =>
+                serviceName.Equals(prefix, StringComparison.OrdinalIgnoreCase)
+                || serviceName.StartsWith(prefix + ".", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsHostAgentWindowsServiceExecutable(string executablePath, string? installPath)
     {

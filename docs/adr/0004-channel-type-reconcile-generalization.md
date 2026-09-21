@@ -28,7 +28,8 @@ HostAgent discovers required artifacts from three sources today:
 
 `omp.HostArtifactRequirements` is the generic seam that module-specific code can
 use to request additional artifacts for a host. HostAgent polls it like any
-other desired-artifact source (`OpenModulePlatform.HostAgent.Runtime/Services/OmpHostArtifactRepository.cs:2981-2999`).
+other desired-artifact source (`OpenModulePlatform.HostAgent.Runtime/Services/OmpHostArtifactRepository.cs`,
+the queries that read `FROM omp.HostArtifactRequirements`).
 
 ## Problem
 
@@ -269,7 +270,7 @@ Cons:
 RPC-based approach (B1) or a pool table (B3) only when a concrete host-neutral
 channel design is proposed. The existing `ensureArtifact` RPC already provides
 an emergency path for worker processes that need an artifact before starting
-(`docs/HOST_AGENT.md:141-155`).
+(`docs/HOST_AGENT.md`, section "Worker Manager integration").
 
 > **ÄGARBESLUT (b):** Decide whether to build a HostAgent RPC for host-neutral
 > channel provisioning now, or document the gap and defer until a concrete

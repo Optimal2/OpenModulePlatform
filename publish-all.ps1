@@ -32,23 +32,15 @@ function Get-AbsolutePath {
 function Get-SolutionPath {
     param([string]$RootPath)
 
-    $preferred = @(
-        (Join-Path $RootPath 'OpenModulePlatform.slnx'),
-        (Join-Path $RootPath 'OpenModulePlatform.sln')
-    )
-
-    foreach ($candidate in $preferred) {
-        if (Test-Path -LiteralPath $candidate) {
-            return $candidate
-        }
+    # The repository has exactly one solution file, OpenModulePlatform.slnx. The project
+    # list below is hard-coded to this repository, so a generic .sln fallback only hid a
+    # wrong -Root behind a misleading "publishing" message.
+    $solution = Join-Path $RootPath 'OpenModulePlatform.slnx'
+    if (Test-Path -LiteralPath $solution) {
+        return $solution
     }
 
-    $anySolution = Get-ChildItem -LiteralPath $RootPath -File | Where-Object { $_.Extension -in @('.slnx', '.sln') } | Select-Object -First 1
-    if ($null -ne $anySolution) {
-        return $anySolution.FullName
-    }
-
-    throw 'No solution file (.slnx or .sln) was found in the repository root.'
+    throw "OpenModulePlatform.slnx was not found in '$RootPath'. Pass -Root <repository root>."
 }
 
 function Invoke-DotnetCommand {

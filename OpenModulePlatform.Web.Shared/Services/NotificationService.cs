@@ -1,6 +1,7 @@
 using OpenModulePlatform.Web.Shared.Navigation;
 using OpenModulePlatform.Web.Shared.Notifications;
 using OpenModulePlatform.Web.Shared.Security;
+using OpenModulePlatform.Web.Shared.Web;
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Globalization;
@@ -506,32 +507,11 @@ WHERE user_id = @user_id
     private static object ToDbValue(string? value)
         => string.IsNullOrWhiteSpace(value) ? DBNull.Value : value;
 
+    // An empty destination means "no link", which is allowed; anything else must pass the
+    // platform return-URL rule (B69).
     private static bool IsSafeInternalDestination(string? destinationUrl)
-    {
-        if (string.IsNullOrWhiteSpace(destinationUrl))
-        {
-            return true;
-        }
-
-        if (!Uri.IsWellFormedUriString(destinationUrl, UriKind.Relative)
-            || !destinationUrl.StartsWith("/", StringComparison.Ordinal)
-            || destinationUrl.StartsWith("//", StringComparison.Ordinal)
-            || destinationUrl.Contains('\\', StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        try
-        {
-            var unescaped = Uri.UnescapeDataString(destinationUrl);
-            return !unescaped.StartsWith("//", StringComparison.Ordinal)
-                && !unescaped.Contains('\\', StringComparison.Ordinal);
-        }
-        catch (UriFormatException)
-        {
-            return false;
-        }
-    }
+        => string.IsNullOrWhiteSpace(destinationUrl)
+            || OmpUrlSafety.IsSafeLocalReturnUrl(destinationUrl);
 }
 
 public sealed record NotificationCreateRequest(

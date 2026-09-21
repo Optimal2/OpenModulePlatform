@@ -1133,9 +1133,10 @@ $developerSourceRoots = Get-DeveloperSourceRoots `
     -RepositoryRoot $RepositoryRoot `
     -OpenDocViewerRoot $OpenDocViewerRoot
 
-# E:\OMP is the documented local HostAgent-first default. Real installer packages
-# should set RuntimeRoot in their private package configuration or bootstrap profile.
-$defaultRuntimeRoot = 'E:\OMP'
+# C:\OMP is the neutral HostAgent-first default, the same value the sample package
+# configuration and the sample bootstrap profile use. Real installer packages should
+# set RuntimeRoot in their private package configuration or bootstrap profile.
+$defaultRuntimeRoot = 'C:\OMP'
 $runtimeRoot = [string](Get-ConfigValue -Config $config -Name 'RuntimeRoot' -DefaultValue $defaultRuntimeRoot)
 $artifactArchiveRoots = Get-ArtifactArchiveRoots `
     -ConfiguredRoots @((Get-NestedConfigValue -Config $config -Section 'HostAgentFirst' -Name 'AvailableArtifactArchiveRoots' -DefaultValue @())) `
@@ -1150,8 +1151,14 @@ if (-not (Test-Path -LiteralPath $componentManifestPath -PathType Leaf)) {
 $componentManifest = Get-Content -LiteralPath $componentManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $components = @($componentManifest.components)
 
+# Precedence: -Version, then a non-empty Version in the package configuration, then
+# repositoryVersion from omp-components.json (the documented package identity). A blank
+# configuration value means "use the repository version", not "0.0.0-dev".
 if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = [string](Get-ConfigValue -Config $config -Name 'Version' -DefaultValue ([string]$componentManifest.repositoryVersion))
+    $Version = [string](Get-ConfigValue -Config $config -Name 'Version' -DefaultValue '')
+}
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = [string]$componentManifest.repositoryVersion
 }
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $Version = '0.0.0-dev'

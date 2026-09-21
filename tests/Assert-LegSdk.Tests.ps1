@@ -19,15 +19,15 @@ param()
     it asked for.
 
     That second layer had never been seen red. On 2026-08-28 a deliberate
-    sabotage commit (05f55fce) pointed the matrix at unsupported .NET 9 to
+    sabotage commit (ae907db4) pointed the matrix at unsupported .NET 9 to
     prove the gate; CI run 33182860062 came back GREEN, with the matrix leg
     literally named "SABOTAGE: unsupported .NET major, the gate must fail"
     reported as success. The reason is the one documented in ci.yml: the hosted
     windows-latest image carries newer SDK bands, so a leg that asks
     setup-dotnet for an old version still resolves and builds on the image's
-    SDK under rollForward. The follow-up commit e5297bab added the pinExact
+    SDK under rollForward. The follow-up commit 5e00f365 added the pinExact
     narrowing and this assertion to close exactly that hole -- but it landed
-    AFTER the sabotage was removed (596a2b59, whose message claims "gate proven
+    AFTER the sabotage was removed (c85c3f6d, whose message claims "gate proven
     red"). The claim was not backed by a red run.
 
     These tests close that gap durably: the gate logic lives in

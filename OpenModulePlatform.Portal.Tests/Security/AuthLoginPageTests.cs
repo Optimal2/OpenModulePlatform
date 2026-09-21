@@ -1,3 +1,5 @@
+using OpenModulePlatform.TestSupport;
+
 namespace OpenModulePlatform.Portal.Tests.Security;
 
 public sealed class AuthLoginPageTests
@@ -5,7 +7,7 @@ public sealed class AuthLoginPageTests
     [Fact]
     public void LoginPage_MakesOidcPrimaryOnlyWhenEnabled()
     {
-        var page = ReadRepositoryTextFile("OpenModulePlatform.Auth", "Pages", "Login.cshtml");
+        var page = OmpRepositoryFiles.ReadRepositoryTextFile("OpenModulePlatform.Auth", "Pages", "Login.cshtml");
         var primaryActions = ExtractBetween(
             page,
             """<div class="primary-actions">""",
@@ -35,35 +37,5 @@ public sealed class AuthLoginPageTests
         Assert.True(endIndex >= 0, $"Could not find end marker '{end}'.");
 
         return value[startIndex..endIndex];
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
-    }
-
-    private static string ReadRepositoryTextFile(params string[] relativePathSegments)
-    {
-        var rootedSegment = relativePathSegments.FirstOrDefault(Path.IsPathRooted);
-        if (rootedSegment is not null)
-        {
-            throw new ArgumentException("Repository test paths must be relative.", nameof(relativePathSegments));
-        }
-
-        var segments = new string[relativePathSegments.Length + 1];
-        segments[0] = FindRepositoryRoot();
-        Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-        return File.ReadAllText(Path.Join(segments));
     }
 }

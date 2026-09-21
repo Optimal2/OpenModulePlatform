@@ -2,6 +2,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OpenModulePlatform.Web.iFrameWebAppModule.Security;
+using OpenModulePlatform.TestSupport;
 
 namespace OpenModulePlatform.Portal.Tests.Security;
 
@@ -19,7 +20,7 @@ public sealed class IFrameModuleInlineScriptGuardTests
     [Fact]
     public void ModulePages_HaveNoExecutableInlineScriptBlocks()
     {
-        var pagesDirectory = GetRepositoryPath("OpenModulePlatform.Web.iFrameWebAppModule", "Pages");
+        var pagesDirectory = OmpRepositoryFiles.GetRepositoryPath("OpenModulePlatform.Web.iFrameWebAppModule", "Pages");
         var offenders = new List<string>();
 
         foreach (var file in Directory.EnumerateFiles(pagesDirectory, "*.cshtml", SearchOption.AllDirectories))
@@ -59,7 +60,7 @@ public sealed class IFrameModuleInlineScriptGuardTests
     [Fact]
     public void ModuleConfiguredPolicy_PresentAndDropsUnsafeInlineFromScriptSrc()
     {
-        var appsettingsPath = GetRepositoryPath("OpenModulePlatform.Web.iFrameWebAppModule", "appsettings.json");
+        var appsettingsPath = OmpRepositoryFiles.GetRepositoryPath("OpenModulePlatform.Web.iFrameWebAppModule", "appsettings.json");
         using var document = JsonDocument.Parse(File.ReadAllText(appsettingsPath), AppsettingsJsonOptions);
 
         // The Policy key must exist: before campaign
@@ -96,7 +97,7 @@ public sealed class IFrameModuleInlineScriptGuardTests
         // when the configured Policy key is absent; the two must not drift apart, or
         // a lost key silently changes the policy again.
         using var document = JsonDocument.Parse(File.ReadAllText(
-            GetRepositoryPath("OpenModulePlatform.Web.iFrameWebAppModule", "appsettings.json")),
+            OmpRepositoryFiles.GetRepositoryPath("OpenModulePlatform.Web.iFrameWebAppModule", "appsettings.json")),
             AppsettingsJsonOptions);
         var configured = document.RootElement
             .GetProperty("Portal")
@@ -122,24 +123,5 @@ public sealed class IFrameModuleInlineScriptGuardTests
             .FirstOrDefault(directive => directive.StartsWith("script-src", StringComparison.OrdinalIgnoreCase));
         Assert.False(string.IsNullOrWhiteSpace(scriptSrc), $"Policy carries no script-src directive: {policy}");
         Assert.DoesNotContain("unsafe-inline", scriptSrc, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetRepositoryPath(params string[] relativePathSegments)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Join(directory.FullName, "OpenModulePlatform.slnx")))
-            {
-                var segments = new string[relativePathSegments.Length + 1];
-                segments[0] = directory.FullName;
-                Array.Copy(relativePathSegments, 0, segments, 1, relativePathSegments.Length);
-                return Path.Join(segments);
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate OpenModulePlatform repository root.");
     }
 }

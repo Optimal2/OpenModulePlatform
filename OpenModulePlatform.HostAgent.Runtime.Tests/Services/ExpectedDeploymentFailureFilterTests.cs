@@ -19,9 +19,10 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 /// ManagementException and COMException to the ServiceApp pair and to HostAgentEngine and
 /// left both WebApp copies without them -- on the one deployment path that actually loads
 /// Microsoft.Web.Administration through reflection, where COM faults are not hypothetical.
-/// The right structural answer is one shared predicate, but these are five private statics
-/// in production code this cluster is not free to re-plumb. A gate that compares them and
-/// fails is the next best thing (metod section 4.6), and unlike a comment it cannot drift.
+/// The five entry points now all delegate to DeploymentFaults.IsRecordable (D5 B36), so
+/// the list itself can no longer drift. This gate stays: it fails the moment one of them
+/// is re-plumbed back to a private list, and it documents the one intended asymmetry
+/// (DbException in HostAgentEngine only).
 /// </remarks>
 // ManagementException is a Windows-only type, as is every code path these filters guard.
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]

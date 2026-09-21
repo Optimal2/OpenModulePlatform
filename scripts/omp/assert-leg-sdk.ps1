@@ -27,11 +27,11 @@
 
     Why this is a script and not inline workflow YAML: as inline PowerShell the
     assertion could not be tested, and it showed. The deliberate sabotage on
-    2026-08-28 (commit 05f55fce) that was supposed to prove the gate red came
+    2026-08-28 (commit ae907db4) that was supposed to prove the gate red came
     back GREEN -- CI run 33182860062, with the leg named "SABOTAGE: unsupported
     .NET major, the gate must fail" reported as success -- because the fix that
-    would have caught it landed afterwards (e5297bab), while the commit that
-    removed the sabotage (596a2b59) already claimed the gate was "proven red".
+    would have caught it landed afterwards (5e00f365), while the commit that
+    removed the sabotage (c85c3f6d) already claimed the gate was "proven red".
     As a script the gate is proven red by Assert-LegSdk.Tests.ps1 on every CI
     run and every pre-push, rather than once by a sabotage nobody re-runs.
 
