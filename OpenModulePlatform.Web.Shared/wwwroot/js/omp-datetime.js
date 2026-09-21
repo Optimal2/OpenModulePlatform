@@ -286,6 +286,19 @@
         }
     }
 
+    // A popup hangs from its field's left edge; a field near the right edge
+    // of the page would push it past the viewport and give the page a
+    // horizontal scroll. The popup is shifted left as far as needed, but
+    // never past the left edge of the page.
+    function keepInViewport(popup) {
+        var rect = popup.getBoundingClientRect();
+        var limit = document.documentElement.clientWidth - 8;
+        var overflow = rect.right - limit;
+        if (overflow > 0) {
+            popup.style.left = (-Math.min(overflow, Math.max(0, rect.left - 8))) + "px";
+        }
+    }
+
     function closePanel() {
         if (panel) { panel.remove(); panel = null; panelInput = null; }
         if (panelToggle) {
@@ -523,6 +536,7 @@
         st.toggle.classList.add("omp-datetime__toggle--open");
         st.toggle.setAttribute("aria-label", texts.close);
         st.wrapper.appendChild(panel);
+        keepInViewport(panel);
         renderPanel(st);
     }
 
@@ -1103,6 +1117,7 @@
             rangePanel.appendChild(fields);
 
             container.appendChild(rangePanel);
+            keepInViewport(rangePanel);
         }
 
         field.addEventListener("click", function () {

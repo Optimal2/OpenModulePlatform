@@ -392,6 +392,20 @@
     gap: 0 14px;
 }
 
+/* On a phone the rail and the fields side by side are wider than the
+   screen: the presets become a wrapping row above the fields instead. */
+@media (max-width: 600px) {
+    .omp-daterange-panel {
+        grid-template-columns: max-content;
+        gap: 10px 0;
+    }
+
+    .omp-daterange-panel__presets {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+}
+
 .omp-daterange-panel__presets {
     display: flex;
     flex-direction: column;

@@ -226,6 +226,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **A date popup near the right edge stays on the page.** The period
+  picker's popup (and a date field's calendar) hangs from the field's left
+  edge; from a field at the right of a row it ran past the viewport and
+  gave the page a horizontal scroll. It now shifts left as far as needed.
+
 - **Deployed Portal, Auth and Content run with the repository's CSP and log
   to file.** The checked-in `appsettings.json` never reaches a host: the
   payload strips it and HostAgent writes `Packaging/appsettings.json` over a
