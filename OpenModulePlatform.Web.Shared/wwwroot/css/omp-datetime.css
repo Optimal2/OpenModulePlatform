@@ -392,34 +392,6 @@
     gap: 0 14px;
 }
 
-/* On a phone the rail and the fields side by side are wider than the
-   screen: the presets become a wrapping row above the fields instead. */
-@media (max-width: 600px) {
-    .omp-daterange-panel {
-        grid-template-columns: max-content;
-        gap: 10px 0;
-    }
-
-    .omp-daterange-panel__presets {
-        flex-direction: row;
-        flex-wrap: wrap;
-        padding-right: 0;
-        padding-bottom: 8px;
-        border-right: 0;
-        border-bottom: 1px solid var(--border, #d7deea);
-    }
-
-    .omp-daterange-panel__heading {
-        width: 100%;
-    }
-
-    .omp-daterange-panel__preset--today {
-        margin-top: 0;
-        padding-top: 5px;
-        border-top: 0;
-        border-radius: 7px;
-    }
-}
 
 .omp-daterange-panel__presets {
     display: flex;
@@ -484,7 +456,13 @@
     outline: none;
 }
 
+/* Laid out as a flex row and started at the left on purpose: a host's own
+   button rule may make buttons flex containers that centre their text,
+   and the rail should read as a list under its heading in every host. */
 .omp-daterange-panel__preset {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
     text-align: left;
     padding: 5px 12px;
     border: 1px solid transparent;
@@ -591,4 +569,43 @@
     color: var(--text-muted, #5b667a);
     opacity: 0.35;
     cursor: default;
+}
+
+/* Last in the file on purpose: the phone rules beat the base rules above at
+   the same specificity only by coming after them. On a phone the rail and the fields side by side are wider than the
+   screen: the presets become a wrapping row above the fields instead. */
+@media (max-width: 600px) {
+    /* One column no wider than the screen, so the rail's row of presets
+       wraps inside it instead of stretching the popup. */
+    .omp-daterange-panel {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px 0;
+        width: max-content;
+        max-width: calc(100vw - 16px);
+    }
+
+    .omp-daterange-panel__presets {
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding-right: 0;
+        padding-bottom: 8px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border, #d7deea);
+    }
+
+    .omp-daterange-panel__heading {
+        width: 100%;
+    }
+
+    /* The two fields with their arrows are wider than a phone side by side. */
+    .omp-daterange-panel__rows {
+        flex-wrap: wrap;
+    }
+
+    .omp-daterange-panel__preset--today {
+        margin-top: 0;
+        padding-top: 5px;
+        border-top: 0;
+        border-radius: 7px;
+    }
 }

@@ -698,6 +698,7 @@
 
     var rangePanel = null;
     var rangeContainer = null;
+    var rangeSerial = 0;
 
     function closeRangePanel() {
         if (rangePanel) {
@@ -822,11 +823,16 @@
             rangeContainer = container;
             container.classList.add("omp-daterange--open");
 
+            // The rail is a named group so the heading is the group's name
+            // for assistive tech, not loose text before a run of buttons.
             var rail = document.createElement("div");
             rail.className = "omp-daterange-panel__presets";
+            rail.setAttribute("role", "group");
             var railHeading = document.createElement("div");
             railHeading.className = "omp-daterange-panel__heading";
+            railHeading.id = "omp-daterange-heading-" + (++rangeSerial);
             railHeading.textContent = texts.presets;
+            rail.setAttribute("aria-labelledby", railHeading.id);
             rail.appendChild(railHeading);
             presets.forEach(function (preset) {
                 var button = document.createElement("button");
@@ -892,12 +898,16 @@
             rows.className = "omp-daterange-panel__rows";
             fields.appendChild(rows);
             var makeRow = function (labelText, value) {
-                var row = document.createElement("label");
+                // A div with a label for the input, not a label around it:
+                // the arrows beside the field must not join the field's name.
+                var row = document.createElement("div");
                 row.className = "omp-daterange-panel__row";
-                var caption = document.createElement("span");
+                var caption = document.createElement("label");
                 caption.textContent = labelText;
                 row.appendChild(caption);
                 var input = document.createElement("input");
+                input.id = "omp-daterange-field-" + (++rangeSerial);
+                caption.htmlFor = input.id;
                 input.setAttribute("data-omp-datetime", "date");
                 // The shared range calendar below serves both fields; the
                 // fields keep the mask and quick-clear only. They dress in
@@ -924,8 +934,9 @@
                     arrow.type = "button";
                     arrow.className = "omp-daterange-panel__nudge-button";
                     arrow.textContent = step[1];
-                    arrow.title = step[2];
-                    arrow.setAttribute("aria-label", step[2]);
+                    // Named with the field it moves, since there are two of each.
+                    arrow.title = step[2] + " (" + labelText + ")";
+                    arrow.setAttribute("aria-label", step[2] + " (" + labelText + ")");
                     arrow.addEventListener("click", function () {
                         var current = state(input).hidden.value;
                         var base = /^\d{4}-\d{2}-\d{2}$/.test(current) ? current : new Date().toISOString().slice(0, 10);
@@ -940,6 +951,7 @@
                         cal.year = +iso.slice(0, 4);
                         cal.month = +iso.slice(5, 7);
                         renderRangeCalendar();
+                        dimRail();
                     });
                     nudge.appendChild(arrow);
                 });
@@ -1117,17 +1129,29 @@
                 cal.pendingStart = null;
                 cal.hoverIso = null;
                 renderRangeCalendar();
+                dimRail();
+            });
+            calHost.addEventListener("click", function (event) {
+                if (event.target.closest(".omp-datetime-panel__day")) { dimRail(); }
             });
 
             renderRangeCalendar();
 
             var footer = document.createElement("div");
             footer.className = "omp-datetime-panel__footer";
-            // The rail's highlight follows whatever the period is now.
+            // The rail's highlight follows whatever the period is now; while
+            // the fields hold a draft that differs from it (a nudge, a typed
+            // date, a calendar pick, Clear) no quick pick is lit, since
+            // Confirm would apply the draft, not the lit one.
             function syncRail() {
                 Array.prototype.forEach.call(rail.children, function (button) {
                     var on = button._ompIsOn ? button._ompIsOn() : (button._ompPresetKey !== undefined && button._ompPresetKey === hiddens.range.value);
                     button.classList.toggle("omp-daterange-panel__preset--active", on);
+                });
+            }
+            function dimRail() {
+                Array.prototype.forEach.call(rail.children, function (button) {
+                    button.classList.remove("omp-daterange-panel__preset--active");
                 });
             }
             // Bottom-left: Clear empties both fields (each field also has
@@ -1144,6 +1168,7 @@
                 cal.pendingStart = null;
                 cal.hoverIso = null;
                 renderRangeCalendar();
+                dimRail();
             });
             footer.appendChild(clearButton);
             var cancel = document.createElement("button");
