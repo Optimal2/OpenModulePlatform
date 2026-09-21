@@ -3577,7 +3577,7 @@ END;
     // the ENTIRE payload to a staging folder just to hand back the small
     // configuration entries, then deleted it. Read the manifest and the
     // referenced configuration entries straight out of the zip instead.
-    private static IReadOnlyList<ArtifactPackageConfigurationFile> ReadArtifactPackageConfigurationFilesOnly(string source)
+    internal static IReadOnlyList<ArtifactPackageConfigurationFile> ReadArtifactPackageConfigurationFilesOnly(string source)
     {
         using var archive = ZipFile.OpenRead(source);
         var manifestEntry = archive.Entries.FirstOrDefault(entry =>

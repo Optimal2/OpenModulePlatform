@@ -226,6 +226,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **The Bootstrapper refresh packages the manifest's configuration files.**
+  The selective build handed the artifact writer an empty configuration-files
+  list, so an artifact built by `--refresh-and-stage-package` carried no
+  `artifactConfigurationFiles` even when `omp-components.json` declared them;
+  only the script-built packages did. HostAgent then kept the `appsettings.json`
+  the slot already had, and a packaged change (the SecurityHeaders and NLog
+  sections added to Portal, Auth and Content) never reached a refresh-deployed
+  host. Measured on a development host: the deployed Portal `appsettings.json`
+  was dated 2026-07-31 after a deploy on 2026-09-21. The build now reads the
+  manifest entries, packages the files in the configuration-files section and
+  hashes their content into the per-component source stamp, so a change in a
+  packaged configuration file rebuilds the artifact. Five regression tests.
 - **A date popup near the right edge stays on the page.** The period
   picker's popup (and a date field's calendar) hangs from the field's left
   edge; from a field at the right of a row it ran past the viewport and

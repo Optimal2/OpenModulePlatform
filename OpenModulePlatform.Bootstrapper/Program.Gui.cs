@@ -4535,7 +4535,8 @@ internal static partial class Program
                     component.MinModuleDefinitionVersion,
                     component.MinWorkerHostVersion,
                     packageName,
-                    sourceStateStamp);
+                    sourceStateStamp,
+                    GetArtifactConfigurationFilesStamp(component));
                 return GetTextSha256Hex(stampText);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)
@@ -5021,12 +5022,17 @@ internal static partial class Program
                 }
 
                 RemoveRuntimeConfigurationFiles(publishRoot);
+                var configurationFiles = ReadArtifactConfigurationFilesForBuild(component);
                 new ArtifactPackageWriter().CreateFromPayloadDirectory(
                     publishRoot,
                     destination,
-                    [],
+                    configurationFiles,
                     component.MinModuleDefinitionVersion,
                     component.MinWorkerHostVersion);
+                if (configurationFiles.Count > 0)
+                {
+                    lines.Add($"  BUILD   {component.ComponentKey}: packaged {configurationFiles.Count} configuration file(s) from the manifest.");
+                }
                 WriteArtifactBuildStamp(component, packageName, destination);
 
                 lines.Add($"  BUILD   {component.ComponentKey}: created {destination}.");
@@ -5590,36 +5596,6 @@ ORDER BY ar.ArtifactId DESC;
                 .Where(item => !string.IsNullOrWhiteSpace(item.ModuleKey)
                     && !string.IsNullOrWhiteSpace(item.DefinitionVersion)
                     && !string.IsNullOrWhiteSpace(item.Path))
-                .ToArray();
-        }
-
-        private static IReadOnlyList<ManifestComponent> ReadManifestComponents(
-            JsonNode manifest,
-            string sourceRoot,
-            string repositoryKey)
-        {
-            if (GetJsonObjectProperty(manifest, "components") is not JsonArray items)
-            {
-                return [];
-            }
-
-            return items
-                .OfType<JsonObject>()
-                .Select(item => new ManifestComponent(
-                    sourceRoot,
-                    repositoryKey,
-                    GetJsonStringProperty(item, "componentKey"),
-                    GetJsonStringProperty(item, "moduleKey"),
-                    GetJsonStringProperty(item, "appKey"),
-                    GetJsonStringProperty(item, "packageType"),
-                    GetJsonStringProperty(item, "targetName"),
-                    GetJsonStringProperty(item, "version"),
-                    GetJsonStringProperty(item, "relativePathTemplate"),
-                    GetJsonStringProperty(item, "projectPath"),
-                    GetJsonStringProperty(item, "packageFileTemplate"),
-                    GetJsonStringProperty(item, "minModuleDefinitionVersion"),
-                    GetJsonStringProperty(item, "minWorkerHostVersion")))
-                .Where(static item => item.HasCompleteArtifactIdentity)
                 .ToArray();
         }
 
@@ -7550,6 +7526,135 @@ ORDER BY ar.ArtifactId DESC;
 
     internal sealed record ComponentPackageEvaluation(string Status, string Line);
 
+    internal static IReadOnlyList<ManifestComponent> ReadManifestComponents(
+        JsonNode manifest,
+        string sourceRoot,
+        string repositoryKey)
+    {
+        if (GetJsonObjectProperty(manifest, "components") is not JsonArray items)
+        {
+            return [];
+        }
+
+        return items
+            .OfType<JsonObject>()
+            .Select(item => new ManifestComponent(
+                sourceRoot,
+                repositoryKey,
+                GetJsonStringProperty(item, "componentKey"),
+                GetJsonStringProperty(item, "moduleKey"),
+                GetJsonStringProperty(item, "appKey"),
+                GetJsonStringProperty(item, "packageType"),
+                GetJsonStringProperty(item, "targetName"),
+                GetJsonStringProperty(item, "version"),
+                GetJsonStringProperty(item, "relativePathTemplate"),
+                GetJsonStringProperty(item, "projectPath"),
+                GetJsonStringProperty(item, "packageFileTemplate"),
+                GetJsonStringProperty(item, "minModuleDefinitionVersion"),
+                GetJsonStringProperty(item, "minWorkerHostVersion"),
+                ReadManifestArtifactConfigurationFiles(item, sourceRoot)))
+            .Where(static item => item.HasCompleteArtifactIdentity)
+            .ToArray();
+    }
+
+    // Mirrors Get-ComponentArtifactConfigurationFiles in
+    // scripts/deployment/package-hostagent-first.ps1: relativePath plus
+    // sourcePath (or the older "path"), resolved against the source root.
+    // Entries that name a missing file are reported at build time, not here.
+    private static IReadOnlyList<ManifestArtifactConfigurationFile> ReadManifestArtifactConfigurationFiles(
+        JsonObject component,
+        string sourceRoot)
+    {
+        if (GetJsonObjectProperty(component, "artifactConfigurationFiles") is not JsonArray items)
+        {
+            return [];
+        }
+
+        var result = new List<ManifestArtifactConfigurationFile>();
+        foreach (var entry in items.OfType<JsonObject>())
+        {
+            var relativePath = GetJsonStringProperty(entry, "relativePath");
+            var sourcePath = GetJsonStringProperty(entry, "sourcePath");
+            if (string.IsNullOrWhiteSpace(sourcePath))
+            {
+                sourcePath = GetJsonStringProperty(entry, "path");
+            }
+
+            if (string.IsNullOrWhiteSpace(relativePath) || string.IsNullOrWhiteSpace(sourcePath))
+            {
+                continue;
+            }
+
+            var resolved = Path.IsPathRooted(sourcePath)
+                ? Path.GetFullPath(sourcePath)
+                : Path.GetFullPath(Path.Join(sourceRoot, sourcePath));
+            result.Add(new ManifestArtifactConfigurationFile(relativePath.Trim(), resolved));
+        }
+
+        return result;
+    }
+
+    // The selective build used to hand the writer an empty list, so an
+    // artifact built by the Bootstrapper refresh carried no configuration
+    // files even when the manifest declared them; only the script-built
+    // packages did. HostAgent then kept whatever appsettings.json the slot
+    // already had, and a packaged change (for example the SecurityHeaders and
+    // NLog sections added to Portal, Auth and Content on 2026-09-21) never
+    // reached a refresh-deployed host.
+    internal static IReadOnlyList<ArtifactPackageConfigurationFile> ReadArtifactConfigurationFilesForBuild(
+        ManifestComponent component)
+    {
+        var declared = component.ArtifactConfigurationFiles;
+        if (declared is null || declared.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<ArtifactPackageConfigurationFile>(declared.Count);
+        foreach (var file in declared)
+        {
+            if (!File.Exists(file.SourcePath))
+            {
+                throw new FileNotFoundException(
+                    $"Component '{component.ComponentKey}' declares artifact configuration file '{file.RelativePath}' but its source was not found: {file.SourcePath}",
+                    file.SourcePath);
+            }
+
+            result.Add(new ArtifactPackageConfigurationFile(
+                file.RelativePath,
+                File.ReadAllText(file.SourcePath, new UTF8Encoding(false))));
+        }
+
+        return result;
+    }
+
+    // Manifest configuration files live outside the project closure (Packaging/),
+    // so the per-component source stamp would not see a change in them. Hash
+    // their content into the stamp; a missing file hashes as "missing" so the
+    // build is attempted and fails loudly there instead of being skipped.
+    internal static string GetArtifactConfigurationFilesStamp(ManifestComponent component)
+    {
+        var declared = component.ArtifactConfigurationFiles;
+        if (declared is null || declared.Count == 0)
+        {
+            return "config:none";
+        }
+
+        var parts = new List<string>(declared.Count);
+        foreach (var file in declared.OrderBy(static f => f.RelativePath, StringComparer.Ordinal))
+        {
+            var contentHash = File.Exists(file.SourcePath)
+                ? GetManifestTextSha256Hex(File.ReadAllText(file.SourcePath, new UTF8Encoding(false)))
+                : "missing";
+            parts.Add(file.RelativePath + "=" + contentHash);
+        }
+
+        return "config:" + string.Join(';', parts);
+    }
+
+    private static string GetManifestTextSha256Hex(string text)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
     internal sealed record ManifestComponent(
         string SourceRoot,
         string RepositoryKey,
@@ -7563,7 +7668,8 @@ ORDER BY ar.ArtifactId DESC;
         string ProjectPath,
         string PackageFileTemplate,
         string MinModuleDefinitionVersion,
-        string MinWorkerHostVersion)
+        string MinWorkerHostVersion,
+        IReadOnlyList<ManifestArtifactConfigurationFile>? ArtifactConfigurationFiles = null)
     {
         public bool HasCompleteArtifactIdentity
             => !string.IsNullOrWhiteSpace(ComponentKey)
@@ -7574,6 +7680,11 @@ ORDER BY ar.ArtifactId DESC;
                 && !string.IsNullOrWhiteSpace(Version)
                 && !string.IsNullOrWhiteSpace(RelativePathTemplate);
     }
+
+    // A manifest-declared artifact configuration file (omp-components.json
+    // artifactConfigurationFiles[]): the runtime configuration that must travel
+    // in the artifact's configuration-files section, never in the payload.
+    internal sealed record ManifestArtifactConfigurationFile(string RelativePath, string SourcePath);
 
     private sealed record ManifestPortableObject(
         string SourceRoot,
