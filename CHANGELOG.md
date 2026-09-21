@@ -26,7 +26,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   Apply. The user log's user and module badges show "0" when nothing is on.
   A segmented choice's fill glides from the option that was on to the one
   that is (a thumb placed by omp-picker.js; the text fades with it; not when
-  the user prefers reduced motion).
+  the user prefers reduced motion). The user log bar's button is "Reset"
+  ("Återställ"): it puts the whole bar back, while "Clear" in a panel
+  empties one field.
 
 - **A list message may stand in for a longer text.** A `.list-message`
   element with `data-list-message-text` opens that text in its popover

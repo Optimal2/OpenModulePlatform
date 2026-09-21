@@ -117,16 +117,17 @@
             <span data-omp-daterange-preset="30d" data-from="@presetToday.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 30]</span>
             <span data-omp-daterange-preset="90d" data-from="@presetToday.AddDays(-89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 90]</span>
         </span>
-        @* Clear is a link back to the unfiltered page, next to the filters it
-           clears; the page script clears the bar in place instead and lets the
-           usual fetch swap the results, so nothing reloads. It is greyed out
-           while there is nothing to clear (the script also enables it as
-           soon as the row search holds text). *@
+        @* Reset is a link back to the unfiltered page, next to the filters it
+           puts back; the page script resets the bar in place instead and lets
+           the usual fetch swap the results, so nothing reloads. It is greyed
+           out while there is nothing to reset (the script also enables it as
+           soon as the row search holds text). "Reset" for the whole bar,
+           "Clear" for one field in a panel: two words for two reaches. *@
         <a class="btn btn-danger activity-bar__clear"
            href="@Url.Content("~/admin/activitylog")"
            data-activity-clear
            aria-disabled="@(Model.HasFilter ? null : "true")"
-           tabindex="@(Model.HasFilter ? null : "-1")">@L["Clear"]</a>
+           tabindex="@(Model.HasFilter ? null : "-1")">@L["Reset"]</a>
         <span class="activity-bar__spacer"></span>
         <div class="activity-bar__rows">
             <span id="activity-rows-label">@L["Rows"]</span>
