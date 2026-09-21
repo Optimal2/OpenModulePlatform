@@ -291,6 +291,9 @@
     // horizontal scroll. The popup is shifted left as far as needed, but
     // never past the left edge of the page.
     function keepInViewport(popup) {
+        // Measured from its natural place, so a popup that was shifted for
+        // a narrower page can move back when the page widens.
+        popup.style.left = "";
         var rect = popup.getBoundingClientRect();
         var limit = document.documentElement.clientWidth - 8;
         var overflow = rect.right - limit;
@@ -298,6 +301,13 @@
             popup.style.left = (-Math.min(overflow, Math.max(0, rect.left - 8))) + "px";
         }
     }
+
+    // A page that changes width under an open popup (a zoom, a window
+    // resized) gets the popup placed again.
+    window.addEventListener("resize", function () {
+        if (panel) { keepInViewport(panel); }
+        if (rangePanel) { keepInViewport(rangePanel); }
+    });
 
     function closePanel() {
         if (panel) { panel.remove(); panel = null; panelInput = null; }
