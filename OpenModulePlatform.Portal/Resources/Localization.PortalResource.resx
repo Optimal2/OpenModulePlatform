@@ -3287,4 +3287,5 @@
   <data name="{0} and others" xml:space="preserve"><value>{0} and others</value></data>
   <data name="What people did in every module that keeps a user log, attributed to the OMP user who did it. This is an audit trail of user actions, not an error log. Pick a user to follow one person across modules." xml:space="preserve"><value>What people did in every module that keeps a user log, attributed to the OMP user who did it. This is an audit trail of user actions, not an error log. Pick a user to follow one person across modules.</value></data>
   <data name="Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Confirm" xml:space="preserve"><value>Confirm</value></data>
 </root>

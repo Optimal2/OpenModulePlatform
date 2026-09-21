@@ -10,8 +10,8 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå" }
-        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy" };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Bekräfta", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare" }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Confirm", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later" };
 
     // The year placeholder follows the page language; its four letters keep
     // the slot positions identical across languages. Segments are digit-index
@@ -683,11 +683,14 @@
     //   </span>
     // The hidden inputs are page-owned (server-rendered values, page resx
     // labels on the presets), so the page's GET contract and localization
-    // stay where they were. Picking a preset applies immediately, and so do
-    // the footer's Today (the current day as the period) and Clear (the
-    // neutral preset again); a custom period, typed or picked in the
-    // calendar, applies through the footer button. Either date may stay
-    // empty for an open-ended period; both empty applies as the first preset. The
+    // stay where they were. The rail on the left ("Quick picks") applies at
+    // once: the page's presets and a built-in Today (the current day as the
+    // period). Everything on the right goes through Confirm: the dates typed,
+    // picked in the calendar or nudged a day with the arrows next to each
+    // field, and Clear (which only empties the fields). Cancel closes with
+    // nothing applied. Either date may stay empty for an open-ended period;
+    // both empty confirms as the neutral preset. data-apply-text and
+    // data-cancel-text name the two buttons (Confirm/Cancel by default). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -821,6 +824,10 @@
 
             var rail = document.createElement("div");
             rail.className = "omp-daterange-panel__presets";
+            var railHeading = document.createElement("div");
+            railHeading.className = "omp-daterange-panel__heading";
+            railHeading.textContent = texts.presets;
+            rail.appendChild(railHeading);
             presets.forEach(function (preset) {
                 var button = document.createElement("button");
                 button.type = "button";
@@ -851,6 +858,32 @@
                 });
                 rail.appendChild(button);
             });
+            // Today is a quick pick of its own: the current day as the period,
+            // applied on the spot like a preset; lit while that is the period.
+            var todayIsoNow = function () { return new Date().toISOString().slice(0, 10); };
+            var todayButton = document.createElement("button");
+            todayButton.type = "button";
+            todayButton.className = "omp-daterange-panel__preset omp-daterange-panel__preset--today";
+            todayButton.textContent = texts.today;
+            todayButton._ompIsOn = function () {
+                var iso = todayIsoNow();
+                return hiddens.range.value === "custom" && hiddens.from.value === iso && hiddens.to.value === iso;
+            };
+            todayButton.classList.toggle("omp-daterange-panel__preset--active", todayButton._ompIsOn());
+            todayButton.addEventListener("click", function () {
+                var current = new Date();
+                var todayIso = todayIsoNow();
+                cal.year = current.getUTCFullYear();
+                cal.month = current.getUTCMonth() + 1;
+                cal.pendingStart = null;
+                cal.hoverIso = null;
+                setFieldDate(fromInput, todayIso);
+                setFieldDate(toInput, todayIso);
+                renderRangeCalendar();
+                applyChoice("custom", todayIso, todayIso, true);
+                syncRail();
+            });
+            rail.appendChild(todayButton);
             rangePanel.appendChild(rail);
 
             var fields = document.createElement("div");
@@ -876,6 +909,41 @@
                 row.appendChild(input);
                 rows.appendChild(row);
                 enhance(input);
+                // Arrows beside the field step the date a day at a time (an
+                // empty field starts from today), never past the cap; the
+                // calendar follows. Like typing, this waits for Confirm.
+                var line = document.createElement("span");
+                line.className = "omp-daterange-panel__line";
+                var wrapper = input.closest(".omp-datetime") || input;
+                row.insertBefore(line, wrapper);
+                line.appendChild(wrapper);
+                var nudge = document.createElement("span");
+                nudge.className = "omp-daterange-panel__nudge";
+                [[-1, "‹", texts.dayBack], [1, "›", texts.dayForward]].forEach(function (step) {
+                    var arrow = document.createElement("button");
+                    arrow.type = "button";
+                    arrow.className = "omp-daterange-panel__nudge-button";
+                    arrow.textContent = step[1];
+                    arrow.title = step[2];
+                    arrow.setAttribute("aria-label", step[2]);
+                    arrow.addEventListener("click", function () {
+                        var current = state(input).hidden.value;
+                        var base = /^\d{4}-\d{2}-\d{2}$/.test(current) ? current : new Date().toISOString().slice(0, 10);
+                        var date = new Date(base + "T00:00:00Z");
+                        date.setUTCDate(date.getUTCDate() + step[0]);
+                        var iso = date.toISOString().slice(0, 10);
+                        var cap = maxIso();
+                        if (cap && iso > cap) { iso = cap; }
+                        setFieldDate(input, iso);
+                        cal.pendingStart = null;
+                        cal.hoverIso = null;
+                        cal.year = +iso.slice(0, 4);
+                        cal.month = +iso.slice(5, 7);
+                        renderRangeCalendar();
+                    });
+                    nudge.appendChild(arrow);
+                });
+                line.appendChild(nudge);
                 return input;
             };
             // With a preset active the fields open pre-set to its resolved
@@ -1058,31 +1126,14 @@
             // The rail's highlight follows whatever the period is now.
             function syncRail() {
                 Array.prototype.forEach.call(rail.children, function (button) {
-                    button.classList.toggle("omp-daterange-panel__preset--active", button._ompPresetKey === hiddens.range.value);
+                    var on = button._ompIsOn ? button._ompIsOn() : (button._ompPresetKey !== undefined && button._ompPresetKey === hiddens.range.value);
+                    button.classList.toggle("omp-daterange-panel__preset--active", on);
                 });
             }
-            // Bottom-left: Today makes the current day the period and Clear
-            // puts the neutral preset back, both applied on the spot as a
-            // preset is (the panel stays open, the field answers at once). A
-            // custom period still goes through Apply, since it needs both
-            // ends (each field also has its own quick-clear X for one end).
-            var todayButton = document.createElement("button");
-            todayButton.type = "button";
-            todayButton.className = "omp-datetime-panel__action";
-            todayButton.textContent = texts.today;
-            todayButton.addEventListener("click", function () {
-                var current = new Date();
-                var todayIso = current.toISOString().slice(0, 10);
-                cal.year = current.getUTCFullYear();
-                cal.month = current.getUTCMonth() + 1;
-                cal.pendingStart = null;
-                cal.hoverIso = null;
-                setFieldDate(fromInput, todayIso);
-                setFieldDate(toInput, todayIso);
-                renderRangeCalendar();
-                applyChoice("custom", todayIso, todayIso, true);
-                syncRail();
-            });
+            // Bottom-left: Clear empties both fields (each field also has
+            // its own quick-clear X for one end); like every edit on this
+            // side it waits for Confirm. Bottom-right: Cancel closes with
+            // nothing applied, Confirm applies what the fields hold.
             var clearButton = document.createElement("button");
             clearButton.type = "button";
             clearButton.className = "omp-datetime-panel__action";
@@ -1093,20 +1144,24 @@
                 cal.pendingStart = null;
                 cal.hoverIso = null;
                 renderRangeCalendar();
-                var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
-                if (neutral) { applyChoice(neutral, "", "", true); }
-                syncRail();
             });
-            footer.append(todayButton, clearButton);
+            footer.appendChild(clearButton);
+            var cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "omp-datetime-panel__action omp-daterange-panel__cancel";
+            cancel.textContent = container.getAttribute("data-cancel-text") || texts.cancel;
+            cancel.addEventListener("click", function () { closeRangePanel(); });
+            footer.appendChild(cancel);
             var apply = document.createElement("button");
             apply.type = "button";
             apply.className = "omp-datetime-panel__action omp-datetime-panel__action--on omp-daterange-panel__apply";
-            apply.textContent = container.getAttribute("data-apply-text") || "OK";
+            apply.textContent = container.getAttribute("data-apply-text") || texts.confirm;
             apply.addEventListener("click", function () {
                 var fromValue = state(fromInput).hidden.value;
                 var toValue = state(toInput).hidden.value;
-                if (fromValue === "" && toValue === "" && presets.length > 0) {
-                    applyChoice(presets[0].key, "", "", false);
+                var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
+                if (fromValue === "" && toValue === "" && neutral) {
+                    applyChoice(neutral, "", "", false);
                 } else {
                     // Reversed bounds are swapped and typed future dates
                     // clamp to the cap, rather than rejected - the server

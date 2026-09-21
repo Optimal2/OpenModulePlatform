@@ -403,6 +403,21 @@
     .omp-daterange-panel__presets {
         flex-direction: row;
         flex-wrap: wrap;
+        padding-right: 0;
+        padding-bottom: 8px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border, #d7deea);
+    }
+
+    .omp-daterange-panel__heading {
+        width: 100%;
+    }
+
+    .omp-daterange-panel__preset--today {
+        margin-top: 0;
+        padding-top: 5px;
+        border-top: 0;
+        border-radius: 7px;
     }
 }
 
@@ -412,6 +427,61 @@
     gap: 4px;
     padding-right: 14px;
     border-right: 1px solid var(--border, #d7deea);
+}
+
+/* The rail's heading: what the column is, in the calendar's caption voice. */
+.omp-daterange-panel__heading {
+    padding: 2px 12px 4px;
+    color: var(--text-muted, #5b667a);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* Today is the rail's own quick pick, set off from the page's presets. */
+.omp-daterange-panel__preset--today {
+    margin-top: 4px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border, #d7deea);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* A field and its day arrows on one line. */
+.omp-daterange-panel__line {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.omp-daterange-panel__nudge {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.omp-daterange-panel__nudge-button {
+    width: 22px;
+    height: 26px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border, #d7deea);
+    border-radius: 6px;
+    background: var(--surface, #fff);
+    color: var(--text-muted, #5b667a);
+    font: inherit;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.omp-daterange-panel__nudge-button:hover,
+.omp-daterange-panel__nudge-button:focus-visible {
+    background: var(--accent, #e8f0fe);
+    border-color: var(--border-strong, #c4cede);
+    color: var(--link-hover, #0842a1);
+    outline: none;
 }
 
 .omp-daterange-panel__preset {
@@ -460,7 +530,7 @@
 }
 
 .omp-daterange-panel__row .omp-datetime__input {
-    width: 148px;
+    width: 130px;
 }
 
 /* Base look for the embedded fields, at zero specificity so a host input
@@ -508,8 +578,8 @@
     justify-content: flex-start;
 }
 
-/* Today and Clear sit bottom-left; Apply alone at the right edge. */
-.omp-daterange-panel__apply {
+/* Clear sits bottom-left; Cancel and Confirm together at the right edge. */
+.omp-daterange-panel__cancel {
     margin-left: auto;
 }
 

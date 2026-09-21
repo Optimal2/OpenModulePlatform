@@ -8,6 +8,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **The period popup: quick picks on the left, everything else through
+  Confirm.** The rail has a heading ("Quick picks") and ends with a Today
+  of its own; a quick pick applies on the spot. On the right, each date
+  field has arrows that step it a day at a time, Clear only empties the
+  fields, and Cancel and Confirm ("Bekräfta") close the popup with nothing
+  or with what the fields hold; both fields empty confirms as the neutral
+  preset. `data-cancel-text` names the new button.
+
 - **A picker with a fixed label, a Clear in its panel, and a period that a
   page can put back.** `omp-picker` with `data-omp-picker-static` keeps the
   label the page rendered ("User") and counts the rows that are on in the
