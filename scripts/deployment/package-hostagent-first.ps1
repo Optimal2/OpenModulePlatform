@@ -1693,7 +1693,9 @@ $artifacts = [System.Collections.ArrayList]::new()
 foreach ($component in $components) {
     $componentKey = [string]$component.componentKey
     $packageTemplate = [string]$component.packageFileTemplate
-    $relativeTemplate = [string]$component.relativePathTemplate
+    # Not every component has an artifact identity (omp-hostagent-sentinel ships in the
+    # installer payload only); under Set-StrictMode a direct property read would throw.
+    $relativeTemplate = [string](Get-ManifestPropertyValue -Object $component -Name 'relativePathTemplate')
     $componentVersion = [string]$component.version
     if ([string]::IsNullOrWhiteSpace($packageTemplate) -or [string]::IsNullOrWhiteSpace($relativeTemplate)) {
         continue
