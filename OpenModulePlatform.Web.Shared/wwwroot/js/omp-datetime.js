@@ -291,13 +291,24 @@
     // of the page would push it past the viewport and give the page a
     // horizontal scroll. The popup is shifted left as far as needed, but
     // never past the left edge of the page.
+    // The caret (the bubble's tip) aims at the point the popup carries in
+    // _ompCaretX (the field's calendar glyph), from wherever the popup ended
+    // up, so a popup moved along the row still points at its own field.
+    function aimCaret(popup) {
+        if (typeof popup._ompCaretX !== "function") { return; }
+        var rect = popup.getBoundingClientRect();
+        var x = popup._ompCaretX() - rect.left;
+        popup.style.setProperty("--omp-caret-left", Math.min(Math.max(x, 16), Math.max(16, rect.width - 16)) + "px");
+    }
+
     function keepInViewport(popup) {
-        // Measured from its natural place, so a popup that was shifted for
-        // a narrower page can move back when the page widens.
-        popup.style.left = "";
+        // Measured from its natural place (the left the popup asked for in
+        // _ompBaseLeft), so a popup that was shifted for a narrower page can
+        // move back when the page widens.
+        popup.style.left = (popup._ompBaseLeft || 0) + "px";
         var rect = popup.getBoundingClientRect();
         var limit = document.documentElement.clientWidth - 8;
-        if (rect.right <= limit) { return; }
+        if (rect.right <= limit) { aimCaret(popup); return; }
         // First choice: hang from the field's right edge instead, so the
         // popup still visibly belongs to its field rather than to whatever
         // sits to the left of it. Otherwise shift just far enough.
@@ -306,10 +317,11 @@
         var endLeft = hostRect.width - rect.width;
         if (host && hostRect.right <= limit && hostRect.left + endLeft >= 8) {
             popup.style.left = endLeft + "px";
-            return;
+        } else {
+            var overflow = rect.right - limit;
+            popup.style.left = ((popup._ompBaseLeft || 0) - Math.min(overflow, Math.max(0, rect.left - 8))) + "px";
         }
-        var overflow = rect.right - limit;
-        popup.style.left = (-Math.min(overflow, Math.max(0, rect.left - 8))) + "px";
+        aimCaret(popup);
     }
 
     // A popup that changes size after it opened (fonts settling, the
@@ -549,6 +561,11 @@
         var maxLeft = Math.max(0, st.wrapper.offsetWidth - panel.offsetWidth);
         var left = Math.min(Math.max(toggleCenter + 20 - panel.offsetWidth, 0), maxLeft);
         panel.style.left = left + "px";
+        panel._ompBaseLeft = left;
+        panel._ompCaretX = function () {
+            var r = st.toggle.getBoundingClientRect();
+            return r.left + r.width / 2;
+        };
         panel.style.setProperty("--omp-caret-left", Math.max(toggleCenter - left, 16) + "px");
     }
 
@@ -1237,6 +1254,9 @@
             rangePanel.appendChild(fields);
 
             container.appendChild(rangePanel);
+            // The tip aims at the field's calendar glyph (its right end).
+            rangePanel._ompBaseLeft = 0;
+            rangePanel._ompCaretX = function () { return field.getBoundingClientRect().right - 18; };
             keepInViewport(rangePanel);
             rangePanelSizeWatch = watchSize(rangePanel);
         }

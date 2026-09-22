@@ -255,7 +255,8 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   field's right edge instead, so it still belongs to its field, or shifts
   just far enough when even that is too wide; and it is placed again when
   the page changes width under it or when it changes size itself (fonts
-  settling, the calendar growing a row).
+  settling, the calendar growing a row). Its tip aims at the field's
+  calendar glyph from wherever the popup ended up.
 
 - **Deployed Portal, Auth and Content run with the repository's CSP and log
   to file.** The checked-in `appsettings.json` never reaches a host: the
