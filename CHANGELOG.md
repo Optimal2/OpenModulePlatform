@@ -251,9 +251,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 - **A date popup near the right edge stays on the page.** The period
   picker's popup (and a date field's calendar) hangs from the field's left
   edge; from a field at the right of a row it ran past the viewport and
-  gave the page a horizontal scroll. It now shifts left as far as needed,
-  and again when the page changes width under an open popup (a zoom, a
-  resized window).
+  gave the page a horizontal scroll. When it does not fit it hangs from the
+  field's right edge instead, so it still belongs to its field, or shifts
+  just far enough when even that is too wide; and it is placed again when
+  the page changes width under it or when it changes size itself (fonts
+  settling, the calendar growing a row).
 
 - **Deployed Portal, Auth and Content run with the repository's CSP and log
   to file.** The checked-in `appsettings.json` never reaches a host: the

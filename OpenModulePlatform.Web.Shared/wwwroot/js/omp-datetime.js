@@ -32,6 +32,7 @@
     }
 
     var panel = null;
+    var panelSizeWatch = null;
     var panelInput = null;
     var panelToggle = null;
 
@@ -296,10 +297,28 @@
         popup.style.left = "";
         var rect = popup.getBoundingClientRect();
         var limit = document.documentElement.clientWidth - 8;
-        var overflow = rect.right - limit;
-        if (overflow > 0) {
-            popup.style.left = (-Math.min(overflow, Math.max(0, rect.left - 8))) + "px";
+        if (rect.right <= limit) { return; }
+        // First choice: hang from the field's right edge instead, so the
+        // popup still visibly belongs to its field rather than to whatever
+        // sits to the left of it. Otherwise shift just far enough.
+        var host = popup.offsetParent || popup.parentElement;
+        var hostRect = host ? host.getBoundingClientRect() : rect;
+        var endLeft = hostRect.width - rect.width;
+        if (host && hostRect.right <= limit && hostRect.left + endLeft >= 8) {
+            popup.style.left = endLeft + "px";
+            return;
         }
+        var overflow = rect.right - limit;
+        popup.style.left = (-Math.min(overflow, Math.max(0, rect.left - 8))) + "px";
+    }
+
+    // A popup that changes size after it opened (fonts settling, the
+    // calendar growing a row, the rail wrapping) is placed again.
+    function watchSize(popup) {
+        if (typeof ResizeObserver !== "function") { return null; }
+        var observer = new ResizeObserver(function () { keepInViewport(popup); });
+        observer.observe(popup);
+        return observer;
     }
 
     // A page that changes width under an open popup (a zoom, a window
@@ -310,6 +329,7 @@
     });
 
     function closePanel() {
+        if (panelSizeWatch) { panelSizeWatch.disconnect(); panelSizeWatch = null; }
         if (panel) { panel.remove(); panel = null; panelInput = null; }
         if (panelToggle) {
             panelToggle.classList.remove("omp-datetime__toggle--open");
@@ -547,6 +567,7 @@
         st.toggle.setAttribute("aria-label", texts.close);
         st.wrapper.appendChild(panel);
         keepInViewport(panel);
+        panelSizeWatch = watchSize(panel);
         renderPanel(st);
     }
 
@@ -699,12 +720,14 @@
     var rangePanel = null;
     var rangeContainer = null;
     var rangeSerial = 0;
+    var rangePanelSizeWatch = null;
 
     function closeRangePanel() {
         if (rangePanel) {
             // A child calendar panel lives inside the range popup; drop it
             // with the popup or the module would point at a detached panel.
             if (panel && rangePanel.contains(panel)) { closePanel(); }
+            if (rangePanelSizeWatch) { rangePanelSizeWatch.disconnect(); rangePanelSizeWatch = null; }
             rangePanel.remove();
             rangePanel = null;
             if (rangeContainer) { rangeContainer.classList.remove("omp-daterange--open"); }
@@ -1215,6 +1238,7 @@
 
             container.appendChild(rangePanel);
             keepInViewport(rangePanel);
+            rangePanelSizeWatch = watchSize(rangePanel);
         }
 
         field.addEventListener("click", function () {
