@@ -412,8 +412,8 @@
     white-space: nowrap;
 }
 
-/* Today is the rail's own quick pick, set off from the page's presets. */
-.omp-daterange-panel__preset--today {
+/* The neutral preset ("All dates") closes the rail, set off by a line. */
+.omp-daterange-panel__preset--neutral {
     margin-top: 4px;
     padding-top: 9px;
     border-top: 1px solid var(--border, #d7deea);
@@ -421,31 +421,39 @@
     border-top-right-radius: 0;
 }
 
-/* A field and its day arrows on one line. */
+/* A field and its day arrows on one line; the arrows stand in a column
+   as tall as the field, later above earlier. */
 .omp-daterange-panel__line {
     display: inline-flex;
-    align-items: center;
+    align-items: stretch;
     gap: 4px;
 }
 
 .omp-daterange-panel__nudge {
     display: inline-flex;
-    gap: 2px;
+    flex-direction: column;
+    align-self: stretch;
 }
 
 .omp-daterange-panel__nudge-button {
-    width: 22px;
-    height: 26px;
+    flex: 1 1 50%;
+    width: 20px;
+    min-height: 0;
     margin: 0;
     padding: 0;
     border: 1px solid var(--border, #d7deea);
-    border-radius: 6px;
+    border-radius: 6px 6px 0 0;
     background: var(--surface, #fff);
     color: var(--text-muted, #5b667a);
     font: inherit;
-    font-size: 15px;
+    font-size: 10px;
     line-height: 1;
     cursor: pointer;
+}
+
+.omp-daterange-panel__nudge-button + .omp-daterange-panel__nudge-button {
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
 }
 
 .omp-daterange-panel__nudge-button:hover,
@@ -602,7 +610,7 @@
         flex-wrap: wrap;
     }
 
-    .omp-daterange-panel__preset--today {
+    .omp-daterange-panel__preset--neutral {
         margin-top: 0;
         padding-top: 5px;
         border-top: 0;

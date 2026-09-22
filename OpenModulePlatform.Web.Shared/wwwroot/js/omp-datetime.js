@@ -834,12 +834,18 @@
             railHeading.textContent = texts.presets;
             rail.setAttribute("aria-labelledby", railHeading.id);
             rail.appendChild(railHeading);
-            presets.forEach(function (preset) {
+            // Time order: Today first, then the page's periods, and the
+            // neutral preset ("All dates") last, set off by a line.
+            var neutralKey = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
+            var orderedPresets = presets.filter(function (preset) { return preset.key !== neutralKey; })
+                .concat(presets.filter(function (preset) { return preset.key === neutralKey; }));
+            var addPreset = function (preset) {
                 var button = document.createElement("button");
                 button.type = "button";
                 button.className = "omp-daterange-panel__preset";
                 if (preset.key === hiddens.range.value) { button.classList.add("omp-daterange-panel__preset--active"); }
                 button.textContent = preset.label;
+                if (preset.key === neutralKey) { button.classList.add("omp-daterange-panel__preset--neutral"); }
                 // A preset applies right away (the page refreshes softly
                 // behind the popup) but keeps the popup open with its
                 // resolved dates SET in the fields and calendar - the
@@ -863,7 +869,7 @@
                     applyChoice(preset.key, "", "", true);
                 });
                 rail.appendChild(button);
-            });
+            };
             // Today is a quick pick of its own: the current day as the period,
             // applied on the spot like a preset; lit while that is the period.
             var todayIsoNow = function () { return new Date().toISOString().slice(0, 10); };
@@ -890,6 +896,7 @@
                 syncRail();
             });
             rail.appendChild(todayButton);
+            orderedPresets.forEach(addPreset);
             rangePanel.appendChild(rail);
 
             var fields = document.createElement("div");
@@ -929,7 +936,7 @@
                 line.appendChild(wrapper);
                 var nudge = document.createElement("span");
                 nudge.className = "omp-daterange-panel__nudge";
-                [[-1, "‹", texts.dayBack], [1, "›", texts.dayForward]].forEach(function (step) {
+                [[1, "▴", texts.dayForward], [-1, "▾", texts.dayBack]].forEach(function (step) {
                     var arrow = document.createElement("button");
                     arrow.type = "button";
                     arrow.className = "omp-daterange-panel__nudge-button";

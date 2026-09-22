@@ -14,7 +14,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   field has arrows that step it a day at a time, Clear only empties the
   fields, and Cancel and Confirm ("Bekräfta") close the popup with nothing
   or with what the fields hold; both fields empty confirms as the neutral
-  preset. `data-cancel-text` names the new button.
+  preset. `data-cancel-text` names the new button. The rail runs in time
+  order (Today, the page's periods, the neutral preset last), and the day
+  arrows stand in a column as tall as their field.
 
 - **A picker with a fixed label, a Clear in its panel, and a period that a
   page can put back.** `omp-picker` with `data-omp-picker-static` keeps the
