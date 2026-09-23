@@ -16,7 +16,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   (`ompConfirm` takes `focus: "ok"` for that); a draft is unsaved only
   when Confirm would change something. Focus that was in the popup
   returns to the field when it closes. The day arrows moved inside each
-  field at its right end, beside the quick-clear X.
+  field at its right end, beside the quick-clear X. The user log page
+  names its neutral period ("all") when none is chosen, so the popup
+  lights "Since the start" and does not treat picking it as a draft.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today
