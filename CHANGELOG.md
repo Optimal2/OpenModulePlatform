@@ -19,6 +19,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   field at its right end, beside the quick-clear X. The user log page
   names its neutral period ("all") when none is chosen, so the popup
   lights "Since the start" and does not treat picking it as a draft.
+  Enter in the popup is Confirm (from a date field, the trigger field or
+  with nothing focused; its buttons keep Enter). A click on a date field
+  arms it with a warm outline: the next calendar click sets that field
+  alone; otherwise the calendar's two-click logic stands.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today

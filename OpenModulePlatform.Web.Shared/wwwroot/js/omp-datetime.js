@@ -730,7 +730,12 @@
     // fields empty as the neutral preset) and closes; Cancel closes with
     // nothing applied. A click outside or Escape with an unsaved draft asks
     // first (Save or Cancel, Enter and Escape), through the shared confirm
-    // dialog when omp-forms.js is on the page. data-apply-text and
+    // dialog when omp-forms.js is on the page. Enter in a date field, on
+    // the trigger field or with nothing in particular focused is Confirm;
+    // the popup's buttons keep Enter for themselves. A click on a date
+    // field arms it (a warm outline): the next calendar click sets that
+    // field alone and disarms; otherwise the calendar's two-click logic
+    // (first click starts, second ends) stands. data-apply-text and
     // data-cancel-text name the two buttons (Confirm/Cancel by default). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
@@ -885,6 +890,24 @@
             // whether closing would lose something.
             var draftKey = null;
             var prompting = false;
+            // The armed field: clicked by the user, it takes the next
+            // calendar click alone (a warm outline says so). Null means the
+            // calendar's own two-click logic.
+            var armedInput = null;
+            function arm(input) {
+                armedInput = input;
+                [fromInput, toInput].forEach(function (other) {
+                    if (!other) { return; }
+                    var wrapper = other.closest(".omp-datetime") || other;
+                    wrapper.classList.toggle("omp-datetime--armed", other === input);
+                });
+                if (input) {
+                    cal.pendingStart = null;
+                    cal.hoverIso = null;
+                    renderRangeCalendar();
+                }
+            }
+            function disarm() { if (armedInput) { arm(null); } }
             // What the fields held when the popup opened (set once the
             // rows exist); a draft is unsaved when Confirm would change
             // something: another quick pick than the applied one, or
@@ -937,6 +960,7 @@
                         other.classList.toggle("omp-daterange-panel__preset--active", other === button);
                     });
                     renderRangeCalendar();
+                    disarm();
                     draftKey = preset.key;
                 });
                 rail.appendChild(button);
@@ -966,6 +990,7 @@
                 Array.prototype.forEach.call(rail.children, function (other) {
                     other.classList.toggle("omp-daterange-panel__preset--active", other === todayButton);
                 });
+                disarm();
                 draftKey = null;
             });
             rail.appendChild(todayButton);
@@ -999,6 +1024,8 @@
                 row.appendChild(input);
                 rows.appendChild(row);
                 enhance(input);
+                // A click on the field arms it for the next calendar click.
+                input.addEventListener("click", function () { arm(input); });
                 // Arrows at the right end of the field step the date a day
                 // at a time (an empty field starts from today), never past
                 // the cap; the calendar follows. Like typing, this waits for
@@ -1068,6 +1095,14 @@
             }
 
             function onDayPicked(iso) {
+                if (armedInput) {
+                    setFieldDate(armedInput, iso);
+                    cal.pendingStart = null;
+                    cal.hoverIso = null;
+                    arm(null);
+                    renderRangeCalendar();
+                    return;
+                }
                 if (cal.pendingStart === null) {
                     cal.pendingStart = iso;
                     cal.hoverIso = null;
@@ -1243,6 +1278,7 @@
                 setFieldDate(toInput, "");
                 cal.pendingStart = null;
                 cal.hoverIso = null;
+                disarm();
                 renderRangeCalendar();
                 edited();
             });
@@ -1315,6 +1351,7 @@
                 });
             }
             rangePanel._ompRequestClose = requestClose;
+            rangePanel._ompConfirm = confirmDraft;
             footer.appendChild(apply);
             fields.appendChild(footer);
             rangePanel.appendChild(fields);
@@ -1356,6 +1393,20 @@
     document.addEventListener("keydown", function (event) {
         // An open dialog (the unsaved-draft question) owns Escape itself.
         if (event.target.closest && event.target.closest("dialog[open]")) { return; }
+        if (event.key === "Enter" && rangePanel && !panel && typeof rangePanel._ompConfirm === "function") {
+            // Enter is Confirm from a date field (its own handler has just
+            // committed the typed date), from the trigger field, or with
+            // nothing in particular focused. The popup's buttons and
+            // selects keep Enter for their own activation.
+            var target = event.target;
+            var ownsEnter = target.closest && target.closest("button, select, textarea, a[href]");
+            var onField = rangeContainer && target === rangeContainer.querySelector(".omp-daterange__field");
+            if (onField || (!ownsEnter && (rangePanel.contains(target) || target === document.body))) {
+                event.preventDefault();
+                rangePanel._ompConfirm();
+                return;
+            }
+        }
         if (event.key === "Escape") {
             // The child calendar closes first; a second Escape closes the
             // range popup itself (asking first when a draft would be lost).

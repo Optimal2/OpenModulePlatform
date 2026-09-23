@@ -530,6 +530,14 @@
     border-color: var(--link, #0b57d0);
 }
 
+/* An armed field (clicked; the next calendar click sets it alone) wears a
+   warm outline that stays while focus moves to the calendar. */
+:where(.omp-daterange-panel__row) .omp-datetime--armed .omp-datetime__input,
+:where(.omp-daterange-panel__row) .omp-datetime--armed .omp-datetime__input:focus {
+    outline: 2px solid var(--warning-strong, #e0a800);
+    outline-offset: 1px;
+}
+
 /* The shared calendar centers in the fields column instead of hugging the
    left edge under the wider field row. */
 .omp-daterange-panel__fields > .omp-datetime-panel__calendar {
