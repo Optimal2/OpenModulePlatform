@@ -945,14 +945,17 @@
                 if (preset.key === neutralKey) { button.classList.add("omp-daterange-panel__preset--neutral"); }
                 // A preset is a draft: its resolved dates go into the fields
                 // and calendar (a base to nudge from), its key is what
-                // Confirm applies, and the rail lights it meanwhile.
+                // Confirm applies, and the rail lights it meanwhile. The
+                // neutral preset ("All dates") is no period at all, so it
+                // empties both fields whatever dates its markup carries.
                 button._ompPresetKey = preset.key;
                 button.addEventListener("click", function () {
-                    setFieldDate(fromInput, preset.from);
-                    setFieldDate(toInput, preset.to);
+                    var isNeutral = preset.key === neutralKey;
+                    setFieldDate(fromInput, isNeutral ? "" : preset.from);
+                    setFieldDate(toInput, isNeutral ? "" : preset.to);
                     cal.pendingStart = null;
                     cal.hoverIso = null;
-                    var anchor = preset.to || preset.from;
+                    var anchor = isNeutral ? todayIsoNow() : (preset.to || preset.from);
                     if (/^\d{4}-\d{2}/.test(anchor)) {
                         cal.year = +anchor.slice(0, 4);
                         cal.month = +anchor.slice(5, 7);
@@ -1275,15 +1278,20 @@
             // its own quick-clear X for one end); like every edit on this
             // side it waits for Confirm. Bottom-right: Cancel closes with
             // nothing applied, Confirm applies what the fields hold.
+            // Reset empties both fields and brings the calendar back to the
+            // current month; like any edit it waits for Confirm.
             var clearButton = document.createElement("button");
             clearButton.type = "button";
             clearButton.className = "omp-datetime-panel__action";
-            clearButton.textContent = texts.clear;
+            clearButton.textContent = texts.reset;
             clearButton.addEventListener("click", function () {
                 setFieldDate(fromInput, "");
                 setFieldDate(toInput, "");
                 cal.pendingStart = null;
                 cal.hoverIso = null;
+                var now = todayIsoNow();
+                cal.year = +now.slice(0, 4);
+                cal.month = +now.slice(5, 7);
                 disarm();
                 renderRangeCalendar();
                 edited();

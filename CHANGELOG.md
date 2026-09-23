@@ -26,7 +26,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   arms it with a warm outline: the next calendar click sets that field
   alone; a click on the same field again or Escape disarms it; otherwise
   the calendar's two-click logic stands. The calendar shades the span
-  between the two dates whichever field holds the earlier one.
+  between the two dates whichever field holds the earlier one. The
+  neutral quick pick ("All dates") empties both fields, and the footer's
+  Clear became Reset: it empties the fields and brings the calendar back
+  to the current month.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today
