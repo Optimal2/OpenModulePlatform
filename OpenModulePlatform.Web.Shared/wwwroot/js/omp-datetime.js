@@ -10,8 +10,8 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Bekräfta", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare" }
-        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Confirm", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later" };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Bekräfta", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Perioden är inte sparad.", save: "Spara" }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Confirm", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "The period is not saved.", save: "Save" };
 
     // The year placeholder follows the page language; its four letters keep
     // the slot positions identical across languages. Segments are digit-index
@@ -721,13 +721,16 @@
     //   </span>
     // The hidden inputs are page-owned (server-rendered values, page resx
     // labels on the presets), so the page's GET contract and localization
-    // stay where they were. The rail on the left ("Quick picks") applies at
-    // once: the page's presets and a built-in Today (the current day as the
-    // period). Everything on the right goes through Confirm: the dates typed,
-    // picked in the calendar or nudged a day with the arrows next to each
-    // field, and Clear (which only empties the fields). Cancel closes with
-    // nothing applied. Either date may stay empty for an open-ended period;
-    // both empty confirms as the neutral preset. data-apply-text and
+    // stay where they were. Nothing applies until Confirm: a quick pick in
+    // the rail on the left (the page's presets and a built-in Today) sets
+    // the fields as a draft, and so do the dates typed, picked in the
+    // calendar or nudged a day with the arrows inside each field, and Clear
+    // (which only empties the fields). Confirm applies the draft (a quick
+    // pick as its rolling key, anything else as a custom period; both
+    // fields empty as the neutral preset) and closes; Cancel closes with
+    // nothing applied. A click outside or Escape with an unsaved draft asks
+    // first (Save or Cancel, Enter and Escape), through the shared confirm
+    // dialog when omp-forms.js is on the page. data-apply-text and
     // data-cancel-text name the two buttons (Confirm/Cancel by default). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
@@ -865,6 +868,14 @@
 
             // The rail is a named group so the heading is the group's name
             // for assistive tech, not loose text before a run of buttons.
+            // The draft: what Confirm would apply. A quick pick leaves its
+            // key here (applied as a rolling period); any edit of the fields
+            // clears it (applied as the custom dates). dirty says whether
+            // closing would lose something.
+            var draftKey = null;
+            var dirty = false;
+            var prompting = false;
+
             var rail = document.createElement("div");
             rail.className = "omp-daterange-panel__presets";
             rail.setAttribute("role", "group");
@@ -886,11 +897,9 @@
                 if (preset.key === hiddens.range.value) { button.classList.add("omp-daterange-panel__preset--active"); }
                 button.textContent = preset.label;
                 if (preset.key === neutralKey) { button.classList.add("omp-daterange-panel__preset--neutral"); }
-                // A preset applies right away (the page refreshes softly
-                // behind the popup) but keeps the popup open with its
-                // resolved dates SET in the fields and calendar - the
-                // preset doubles as a base: nudge an end, then apply as a
-                // custom period. Escape or a click outside just closes.
+                // A preset is a draft: its resolved dates go into the fields
+                // and calendar (a base to nudge from), its key is what
+                // Confirm applies, and the rail lights it meanwhile.
                 button._ompPresetKey = preset.key;
                 button.addEventListener("click", function () {
                     setFieldDate(fromInput, preset.from);
@@ -906,12 +915,13 @@
                         other.classList.toggle("omp-daterange-panel__preset--active", other === button);
                     });
                     renderRangeCalendar();
-                    applyChoice(preset.key, "", "", true);
+                    draftKey = preset.key;
+                    dirty = preset.key !== hiddens.range.value;
                 });
                 rail.appendChild(button);
             };
             // Today is a quick pick of its own: the current day as the period,
-            // applied on the spot like a preset; lit while that is the period.
+            // a draft like a preset; lit while that is the period or the draft.
             var todayIsoNow = function () { return new Date().toISOString().slice(0, 10); };
             var todayButton = document.createElement("button");
             todayButton.type = "button";
@@ -932,8 +942,11 @@
                 setFieldDate(fromInput, todayIso);
                 setFieldDate(toInput, todayIso);
                 renderRangeCalendar();
-                applyChoice("custom", todayIso, todayIso, true);
-                syncRail();
+                Array.prototype.forEach.call(rail.children, function (other) {
+                    other.classList.toggle("omp-daterange-panel__preset--active", other === todayButton);
+                });
+                draftKey = null;
+                dirty = !todayButton._ompIsOn();
             });
             rail.appendChild(todayButton);
             orderedPresets.forEach(addPreset);
@@ -966,14 +979,11 @@
                 row.appendChild(input);
                 rows.appendChild(row);
                 enhance(input);
-                // Arrows beside the field step the date a day at a time (an
-                // empty field starts from today), never past the cap; the
-                // calendar follows. Like typing, this waits for Confirm.
-                var line = document.createElement("span");
-                line.className = "omp-daterange-panel__line";
-                var wrapper = input.closest(".omp-datetime") || input;
-                row.insertBefore(line, wrapper);
-                line.appendChild(wrapper);
+                // Arrows at the right end of the field step the date a day
+                // at a time (an empty field starts from today), never past
+                // the cap; the calendar follows. Like typing, this waits for
+                // Confirm.
+                var wrapper = input.closest(".omp-datetime") || row;
                 var nudge = document.createElement("span");
                 nudge.className = "omp-daterange-panel__nudge";
                 [[1, "▴", texts.dayForward], [-1, "▾", texts.dayBack]].forEach(function (step) {
@@ -998,11 +1008,11 @@
                         cal.year = +iso.slice(0, 4);
                         cal.month = +iso.slice(5, 7);
                         renderRangeCalendar();
-                        dimRail();
+                        edited();
                     });
                     nudge.appendChild(arrow);
                 });
-                line.appendChild(nudge);
+                wrapper.appendChild(nudge);
                 return input;
             };
             // With a preset active the fields open pre-set to its resolved
@@ -1176,10 +1186,10 @@
                 cal.pendingStart = null;
                 cal.hoverIso = null;
                 renderRangeCalendar();
-                dimRail();
+                edited();
             });
             calHost.addEventListener("click", function (event) {
-                if (event.target.closest(".omp-datetime-panel__day")) { dimRail(); }
+                if (event.target.closest(".omp-datetime-panel__day")) { edited(); }
             });
 
             renderRangeCalendar();
@@ -1201,6 +1211,12 @@
                     button.classList.remove("omp-daterange-panel__preset--active");
                 });
             }
+            // An edit of the fields makes the draft a custom period.
+            function edited() {
+                dimRail();
+                draftKey = null;
+                dirty = true;
+            }
             // Bottom-left: Clear empties both fields (each field also has
             // its own quick-clear X for one end); like every edit on this
             // side it waits for Confirm. Bottom-right: Cancel closes with
@@ -1215,7 +1231,7 @@
                 cal.pendingStart = null;
                 cal.hoverIso = null;
                 renderRangeCalendar();
-                dimRail();
+                edited();
             });
             footer.appendChild(clearButton);
             var cancel = document.createElement("button");
@@ -1228,7 +1244,11 @@
             apply.type = "button";
             apply.className = "omp-datetime-panel__action omp-datetime-panel__action--on omp-daterange-panel__apply";
             apply.textContent = container.getAttribute("data-apply-text") || texts.confirm;
-            apply.addEventListener("click", function () {
+            function confirmDraft() {
+                if (draftKey) {
+                    applyChoice(draftKey, "", "", false);
+                    return;
+                }
                 var fromValue = state(fromInput).hidden.value;
                 var toValue = state(toInput).hidden.value;
                 var neutral = container.getAttribute("data-neutral") || (presets.length > 0 ? presets[0].key : "");
@@ -1248,7 +1268,31 @@
                     }
                     applyChoice("custom", fromValue, toValue, false);
                 }
-            });
+            }
+            apply.addEventListener("click", confirmDraft);
+            // Closing with an unsaved draft asks first: Save (Enter) applies
+            // it, Cancel (Escape) drops it. The shared dialog when the page
+            // has it, the browser's own otherwise.
+            function askUnsaved() {
+                if (typeof window.ompConfirm === "function") {
+                    return window.ompConfirm(texts.unsaved, { okLabel: texts.save, cancelLabel: texts.cancel, focus: "ok" });
+                }
+                return Promise.resolve(window.confirm(texts.unsaved));
+            }
+            function requestClose() {
+                if (!rangePanel) { return; }
+                if (!dirty) { closeRangePanel(); return; }
+                if (prompting) { return; }
+                prompting = true;
+                // Asked on the next tick so the key or click that asked for
+                // the close is fully over before the dialog listens.
+                new Promise(function (resolve) { setTimeout(resolve, 0); }).then(askUnsaved).then(function (save) {
+                    prompting = false;
+                    if (!rangePanel) { return; }
+                    if (save) { confirmDraft(); } else { closeRangePanel(); }
+                });
+            }
+            rangePanel._ompRequestClose = requestClose;
             footer.appendChild(apply);
             fields.appendChild(footer);
             rangePanel.appendChild(fields);
@@ -1262,7 +1306,7 @@
         }
 
         field.addEventListener("click", function () {
-            if (rangeContainer === container) { closeRangePanel(); } else { openRangePanel(); }
+            if (rangeContainer === container) { requestRangeClose(); } else { openRangePanel(); }
         });
     }
 
@@ -1279,17 +1323,35 @@
         if (panel && !panel.contains(event.target) && !(panelInput && panelInput._ompDatetime.wrapper.contains(event.target))) {
             closePanel();
         }
+        // A click in the unsaved-draft dialog is not a click outside.
+        if (event.target.closest && event.target.closest(".omp-confirm-dialog")) { return; }
         if (rangePanel && rangeContainer && !rangeContainer.contains(event.target)) {
-            closeRangePanel();
+            requestRangeClose();
         }
     });
     document.addEventListener("keydown", function (event) {
+        // An open dialog (the unsaved-draft question) owns Escape itself.
+        if (event.target.closest && event.target.closest("dialog[open]")) { return; }
         if (event.key === "Escape") {
             // The child calendar closes first; a second Escape closes the
-            // range popup itself.
-            if (panel) { closePanel(); } else { closeRangePanel(); }
+            // range popup itself (asking first when a draft would be lost).
+            if (panel) { closePanel(); } else if (rangePanel) {
+                // Without this the same Escape would also cancel the
+                // unsaved-draft dialog the moment it opens.
+                event.preventDefault();
+                requestRangeClose();
+            }
         }
     });
+
+    // The range popup decides itself whether closing needs a question.
+    function requestRangeClose() {
+        if (rangePanel && typeof rangePanel._ompRequestClose === "function") {
+            rangePanel._ompRequestClose();
+        } else {
+            closeRangePanel();
+        }
+    }
 
     // applyRangePreset(container, key): a period picker takes the preset with
     // that key (the neutral one when the key is omitted), as if the user had

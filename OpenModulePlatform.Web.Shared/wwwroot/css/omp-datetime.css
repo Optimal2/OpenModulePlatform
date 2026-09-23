@@ -421,48 +421,41 @@
     border-top-right-radius: 0;
 }
 
-/* A field and its day arrows on one line; the arrows stand in a column
-   as tall as the field, later above earlier. */
-.omp-daterange-panel__line {
-    display: inline-flex;
-    align-items: stretch;
-    gap: 4px;
-}
-
+/* The day arrows stand in a column at the right end of the field, inside
+   its border, later above earlier; the quick-clear X moves in beside them. */
 .omp-daterange-panel__nudge {
-    display: inline-flex;
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    bottom: 3px;
+    display: flex;
     flex-direction: column;
-    align-self: stretch;
+    width: 18px;
+    border-left: 1px solid var(--border, #d7deea);
 }
 
 .omp-daterange-panel__nudge-button {
     flex: 1 1 50%;
-    width: 20px;
     min-height: 0;
     margin: 0;
     padding: 0;
-    border: 1px solid var(--border, #d7deea);
-    border-radius: 6px 6px 0 0;
-    background: var(--surface, #fff);
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
     color: var(--text-muted, #5b667a);
     font: inherit;
-    font-size: 10px;
+    font-size: 11px;
     line-height: 1;
     cursor: pointer;
-}
-
-.omp-daterange-panel__nudge-button + .omp-daterange-panel__nudge-button {
-    border-top: 0;
-    border-radius: 0 0 6px 6px;
 }
 
 .omp-daterange-panel__nudge-button:hover,
 .omp-daterange-panel__nudge-button:focus-visible {
     background: var(--accent, #e8f0fe);
-    border-color: var(--border-strong, #c4cede);
     color: var(--link-hover, #0842a1);
     outline: none;
 }
+
 
 /* Laid out as a flex row and started at the left on purpose: a host's own
    button rule may make buttons flex containers that centre their text,
@@ -516,7 +509,7 @@
 }
 
 .omp-daterange-panel__row .omp-datetime__input {
-    width: 130px;
+    width: 150px;
 }
 
 /* Base look for the embedded fields, at zero specificity so a host input
@@ -544,12 +537,13 @@
     margin-right: auto;
 }
 
+/* Room at the right end for the quick-clear X and the day arrows. */
 .omp-datetime--no-toggle .omp-datetime__input {
-    padding-right: 30px;
+    padding-right: 50px;
 }
 
 .omp-datetime--no-toggle .omp-datetime__clear {
-    right: 6px;
+    right: 26px;
 }
 
 /* Days strictly between the range ends (and the hover preview while the

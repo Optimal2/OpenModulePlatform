@@ -8,6 +8,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **The period popup applies nothing until Confirm.** A quick pick in the
+  rail is a draft like any edit of the fields: the rail lights it, Confirm
+  applies it (as its rolling key), Cancel drops it. Closing the popup with
+  an unsaved draft (a click outside, Escape, the field itself) asks first,
+  Save on Enter or Cancel on Escape, through the shared confirm dialog
+  (`ompConfirm` takes `focus: "ok"` for that). The day arrows moved inside
+  each field at its right end, beside the quick-clear X.
+
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today
   of its own; a quick pick applies on the spot. On the right, each date

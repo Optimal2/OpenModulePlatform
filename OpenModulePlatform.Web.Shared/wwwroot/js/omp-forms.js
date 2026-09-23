@@ -3,8 +3,10 @@
 //
 // window.ompConfirm(message, options) -> Promise<boolean>
 //   Shows an OMP-styled modal <dialog> instead of the native window.confirm.
-//   options: { okLabel, cancelLabel, title, content }
+//   options: { okLabel, cancelLabel, title, content, focus }
 //     okLabel, cancelLabel: plain strings, already localized by the page.
+//     focus: "ok" starts with the OK button focused (so Enter is OK and
+//       Escape is Cancel); the default starts on Cancel.
 //     title: a heading above the message; none when empty.
 //     content: an element shown between the message and the buttons, holding
 //       the page's own fields (a note, an optional text field, a checkbox). It
@@ -160,7 +162,7 @@
             slot.addEventListener('change', syncOk);
             dialog.showModal();
             const focusTarget = content ? content.querySelector('[autofocus]') : null;
-            (focusTarget || cancelButton).focus();
+            (focusTarget || (settings.focus === 'ok' ? okButton : cancelButton)).focus();
         });
     }
 
