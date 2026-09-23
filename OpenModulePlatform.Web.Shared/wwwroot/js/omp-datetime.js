@@ -753,12 +753,13 @@
             rangePanel = null;
             if (rangeContainer) {
                 rangeContainer.classList.remove("omp-daterange--open");
-                // Focus goes back to the field rather than falling to body
-                // (a keyboard user was in the popup, or the dialog's close
-                // handed focus back to a control that is now gone).
+                // Focus that was in the popup (a keyboard user, or the
+                // dialog's close handing it back to a control now gone)
+                // goes to the field rather than falling to body. A click
+                // elsewhere keeps its own focus.
                 var fieldButton = rangeContainer.querySelector(".omp-daterange__field");
-                if (fieldButton && (hadFocus || document.activeElement === document.body || !document.activeElement)) {
-                    fieldButton.focus();
+                if (fieldButton && hadFocus) {
+                    fieldButton.focus({ preventScroll: true });
                 }
             }
             rangeContainer = null;
@@ -1303,7 +1304,7 @@
                 // then just stays open with its draft instead of talking
                 // over that question.
                 new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
-                    if (document.querySelector("dialog[open]")) { return null; }
+                    if (document.querySelector(".omp-confirm-dialog[open]")) { return null; }
                     return askUnsaved();
                 }).then(function (save) {
                     prompting = false;

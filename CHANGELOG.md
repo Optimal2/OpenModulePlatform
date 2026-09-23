@@ -13,8 +13,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   applies it (as its rolling key), Cancel drops it. Closing the popup with
   an unsaved draft (a click outside, Escape, the field itself) asks first,
   Save on Enter or Cancel on Escape, through the shared confirm dialog
-  (`ompConfirm` takes `focus: "ok"` for that). The day arrows moved inside
-  each field at its right end, beside the quick-clear X.
+  (`ompConfirm` takes `focus: "ok"` for that); a draft is unsaved only
+  when Confirm would change something. Focus that was in the popup
+  returns to the field when it closes. The day arrows moved inside each
+  field at its right end, beside the quick-clear X.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today
