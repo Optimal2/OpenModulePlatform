@@ -1404,10 +1404,11 @@
             var target = event.target;
             var ownsEnter = target.closest && target.closest("button, select, textarea, a[href]");
             var onField = rangeContainer && target === rangeContainer.querySelector(".omp-daterange__field");
-            // A half-typed date stays with the user: confirming would post
-            // the field's last committed value and drop the digits.
-            var halfTyped = target._ompDatetime && canonicalFromDigits(target._ompDatetime) === null;
-            if (halfTyped) { return; }
+            // A half-typed (or impossible) date stays with the user:
+            // confirming would post the field's last committed value and
+            // drop the digits, and the host form must not submit either.
+            var halfTyped = target._ompDatetime && rangePanel.contains(target) && canonicalFromDigits(target._ompDatetime) === null;
+            if (halfTyped) { event.preventDefault(); return; }
             if (onField || (!ownsEnter && (rangePanel.contains(target) || target === document.body))) {
                 event.preventDefault();
                 rangePanel._ompConfirm();
