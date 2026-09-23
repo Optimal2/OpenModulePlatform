@@ -1294,6 +1294,9 @@
             apply.className = "omp-datetime-panel__action omp-datetime-panel__action--on omp-daterange-panel__apply";
             apply.textContent = container.getAttribute("data-apply-text") || texts.confirm;
             function confirmDraft() {
+                // Nothing to apply: the popup just closes, so an untouched
+                // rolling preset is not rewritten as fixed dates.
+                if (!isDirty()) { closeRangePanel(); return; }
                 if (draftKey) {
                     applyChoice(draftKey, "", "", false);
                     return;
@@ -1401,6 +1404,10 @@
             var target = event.target;
             var ownsEnter = target.closest && target.closest("button, select, textarea, a[href]");
             var onField = rangeContainer && target === rangeContainer.querySelector(".omp-daterange__field");
+            // A half-typed date stays with the user: confirming would post
+            // the field's last committed value and drop the digits.
+            var halfTyped = target._ompDatetime && canonicalFromDigits(target._ompDatetime) === null;
+            if (halfTyped) { return; }
             if (onField || (!ownsEnter && (rangePanel.contains(target) || target === document.body))) {
                 event.preventDefault();
                 rangePanel._ompConfirm();

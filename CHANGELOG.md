@@ -20,7 +20,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   names its neutral period ("all") when none is chosen, so the popup
   lights "Since the start" and does not treat picking it as a draft.
   Enter in the popup is Confirm (from a date field, the trigger field or
-  with nothing focused; its buttons keep Enter). A click on a date field
+  with nothing focused; its buttons keep Enter, and a half-typed date
+  keeps Enter until it is complete). Confirm with nothing changed just
+  closes. A click on a date field
   arms it with a warm outline: the next calendar click sets that field
   alone; otherwise the calendar's two-click logic stands.
 
