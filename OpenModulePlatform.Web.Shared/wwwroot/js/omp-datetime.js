@@ -724,8 +724,9 @@
     // stay where they were. Nothing applies until Confirm: a quick pick in
     // the rail on the left (the page's presets and a built-in Today) sets
     // the fields as a draft, and so do the dates typed, picked in the
-    // calendar or nudged a day with the arrows inside each field, and Clear
-    // (which only empties the fields). Confirm applies the draft (a quick
+    // calendar or nudged a day with the arrows inside each field, and Reset
+    // (which empties the fields and shows the current month). Confirm
+    // applies the draft (a quick
     // pick as its rolling key, anything else as a custom period; both
     // fields empty as the neutral preset) and closes; Cancel closes with
     // nothing applied. A click outside or Escape with an unsaved draft asks
@@ -1069,8 +1070,10 @@
             };
             // With a preset active the fields open pre-set to its resolved
             // dates (the hidden inputs stay empty - the preset stays a
-            // rolling period until the user applies an adjustment).
-            var activePreset = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0] || null;
+            // rolling period until the user applies an adjustment). The
+            // neutral preset is no period, so it seeds nothing whatever
+            // dates its markup carries, as its click does.
+            var activePreset = presets.filter(function (preset) { return preset.key === hiddens.range.value && preset.key !== neutralKey; })[0] || null;
             var seedFrom = hiddens.from.value || (activePreset ? activePreset.from : "");
             var seedTo = hiddens.to.value || (activePreset ? activePreset.to : "");
             var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, seedFrom);
@@ -1274,12 +1277,11 @@
                 dimRail();
                 draftKey = null;
             }
-            // Bottom-left: Clear empties both fields (each field also has
-            // its own quick-clear X for one end); like every edit on this
-            // side it waits for Confirm. Bottom-right: Cancel closes with
-            // nothing applied, Confirm applies what the fields hold.
-            // Reset empties both fields and brings the calendar back to the
-            // current month; like any edit it waits for Confirm.
+            // Bottom-left: Reset empties both fields (each field also has
+            // its own quick-clear X for one end) and brings the calendar
+            // back to the current month; like every edit on this side it
+            // waits for Confirm. Bottom-right: Cancel closes with nothing
+            // applied, Confirm applies what the fields hold.
             var clearButton = document.createElement("button");
             clearButton.type = "button";
             clearButton.className = "omp-datetime-panel__action";
