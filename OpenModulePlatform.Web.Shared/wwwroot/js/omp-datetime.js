@@ -748,9 +748,19 @@
             // with the popup or the module would point at a detached panel.
             if (panel && rangePanel.contains(panel)) { closePanel(); }
             if (rangePanelSizeWatch) { rangePanelSizeWatch.disconnect(); rangePanelSizeWatch = null; }
+            var hadFocus = rangePanel.contains(document.activeElement);
             rangePanel.remove();
             rangePanel = null;
-            if (rangeContainer) { rangeContainer.classList.remove("omp-daterange--open"); }
+            if (rangeContainer) {
+                rangeContainer.classList.remove("omp-daterange--open");
+                // Focus goes back to the field rather than falling to body
+                // (a keyboard user was in the popup, or the dialog's close
+                // handed focus back to a control that is now gone).
+                var fieldButton = rangeContainer.querySelector(".omp-daterange__field");
+                if (fieldButton && (hadFocus || document.activeElement === document.body || !document.activeElement)) {
+                    fieldButton.focus();
+                }
+            }
             rangeContainer = null;
         }
     }
@@ -870,11 +880,22 @@
             // for assistive tech, not loose text before a run of buttons.
             // The draft: what Confirm would apply. A quick pick leaves its
             // key here (applied as a rolling period); any edit of the fields
-            // clears it (applied as the custom dates). dirty says whether
-            // closing would lose something.
+            // clears it (applied as the custom dates). isDirty() says
+            // whether closing would lose something.
             var draftKey = null;
-            var dirty = false;
             var prompting = false;
+            // What the fields held when the popup opened (set once the
+            // rows exist); a draft is unsaved when Confirm would change
+            // something: another quick pick than the applied one, or
+            // fields that differ from what they opened with.
+            var baseline = "";
+            function fieldsSnapshot() {
+                return state(fromInput).hidden.value + "|" + state(toInput).hidden.value;
+            }
+            function isDirty() {
+                if (draftKey) { return draftKey !== hiddens.range.value; }
+                return fieldsSnapshot() !== baseline;
+            }
 
             var rail = document.createElement("div");
             rail.className = "omp-daterange-panel__presets";
@@ -916,7 +937,6 @@
                     });
                     renderRangeCalendar();
                     draftKey = preset.key;
-                    dirty = preset.key !== hiddens.range.value;
                 });
                 rail.appendChild(button);
             };
@@ -946,7 +966,6 @@
                     other.classList.toggle("omp-daterange-panel__preset--active", other === todayButton);
                 });
                 draftKey = null;
-                dirty = !todayButton._ompIsOn();
             });
             rail.appendChild(todayButton);
             orderedPresets.forEach(addPreset);
@@ -1200,12 +1219,6 @@
             // the fields hold a draft that differs from it (a nudge, a typed
             // date, a calendar pick, Clear) no quick pick is lit, since
             // Confirm would apply the draft, not the lit one.
-            function syncRail() {
-                Array.prototype.forEach.call(rail.children, function (button) {
-                    var on = button._ompIsOn ? button._ompIsOn() : (button._ompPresetKey !== undefined && button._ompPresetKey === hiddens.range.value);
-                    button.classList.toggle("omp-daterange-panel__preset--active", on);
-                });
-            }
             function dimRail() {
                 Array.prototype.forEach.call(rail.children, function (button) {
                     button.classList.remove("omp-daterange-panel__preset--active");
@@ -1215,7 +1228,6 @@
             function edited() {
                 dimRail();
                 draftKey = null;
-                dirty = true;
             }
             // Bottom-left: Clear empties both fields (each field also has
             // its own quick-clear X for one end); like every edit on this
@@ -1281,15 +1293,24 @@
             }
             function requestClose() {
                 if (!rangePanel) { return; }
-                if (!dirty) { closeRangePanel(); return; }
+                if (!isDirty()) { closeRangePanel(); return; }
                 if (prompting) { return; }
                 prompting = true;
                 // Asked on the next tick so the key or click that asked for
-                // the close is fully over before the dialog listens.
-                new Promise(function (resolve) { setTimeout(resolve, 0); }).then(askUnsaved).then(function (save) {
+                // the close is fully over before the dialog listens. If
+                // that click opened a dialog of its own (a Delete button's
+                // confirmation, say) the shared dialog is taken: the popup
+                // then just stays open with its draft instead of talking
+                // over that question.
+                new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
+                    if (document.querySelector("dialog[open]")) { return null; }
+                    return askUnsaved();
+                }).then(function (save) {
                     prompting = false;
-                    if (!rangePanel) { return; }
+                    if (save === null || !rangePanel) { return; }
                     if (save) { confirmDraft(); } else { closeRangePanel(); }
+                }, function () {
+                    prompting = false;
                 });
             }
             rangePanel._ompRequestClose = requestClose;
@@ -1298,6 +1319,7 @@
             rangePanel.appendChild(fields);
 
             container.appendChild(rangePanel);
+            baseline = fieldsSnapshot();
             // The tip aims at the field's calendar glyph (its right end).
             rangePanel._ompBaseLeft = 0;
             rangePanel._ompCaretX = function () { return field.getBoundingClientRect().right - 18; };
@@ -1320,11 +1342,12 @@
         // by the time this bubbles the target is detached; a detached
         // target was inside the panel and must not close it.
         if (!event.target.isConnected) { return; }
+        // A click in the unsaved-draft dialog is not a click outside, for
+        // the range popup or a calendar behind it.
+        if (event.target.closest && event.target.closest(".omp-confirm-dialog")) { return; }
         if (panel && !panel.contains(event.target) && !(panelInput && panelInput._ompDatetime.wrapper.contains(event.target))) {
             closePanel();
         }
-        // A click in the unsaved-draft dialog is not a click outside.
-        if (event.target.closest && event.target.closest(".omp-confirm-dialog")) { return; }
         if (rangePanel && rangeContainer && !rangeContainer.contains(event.target)) {
             requestRangeClose();
         }
