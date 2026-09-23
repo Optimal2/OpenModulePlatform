@@ -734,7 +734,8 @@
     // the trigger field or with nothing in particular focused is Confirm;
     // the popup's buttons keep Enter for themselves. A click on a date
     // field arms it (a warm outline): the next calendar click sets that
-    // field alone and disarms; otherwise the calendar's two-click logic
+    // field alone and disarms; a click on the same field again or Escape
+    // disarms without picking; otherwise the calendar's two-click logic
     // (first click starts, second ends) stands. data-apply-text and
     // data-cancel-text name the two buttons (Confirm/Cancel by default). The
     // container takes omp-daterange--active whenever the period is a known
@@ -1024,8 +1025,9 @@
                 row.appendChild(input);
                 rows.appendChild(row);
                 enhance(input);
-                // A click on the field arms it for the next calendar click.
-                input.addEventListener("click", function () { arm(input); });
+                // A click on the field arms it for the next calendar click;
+                // a click on the armed field again disarms it.
+                input.addEventListener("click", function () { arm(armedInput === input ? null : input); });
                 // Arrows at the right end of the field step the date a day
                 // at a time (an empty field starts from today), never past
                 // the cap; the calendar follows. Like typing, this waits for
@@ -1125,9 +1127,13 @@
                 var from = state(fromInput).hidden.value;
                 var to = state(toInput).hidden.value;
                 // While the second click is pending, the preview range runs
-                // from the first click to the hovered day.
+                // from the first click to the hovered day. Otherwise it is
+                // the span between the two fields whichever holds the
+                // earlier date: an armed pick may put Till before Från, and
+                // Confirm swaps them later.
                 var previewFrom = from;
                 var previewTo = to;
+                if (from && to && to < from) { previewFrom = to; previewTo = from; }
                 if (cal.pendingStart !== null && cal.hoverIso !== null) {
                     previewFrom = cal.pendingStart < cal.hoverIso ? cal.pendingStart : cal.hoverIso;
                     previewTo = cal.pendingStart < cal.hoverIso ? cal.hoverIso : cal.pendingStart;
@@ -1355,6 +1361,12 @@
             }
             rangePanel._ompRequestClose = requestClose;
             rangePanel._ompConfirm = confirmDraft;
+            // Escape backs out one layer at a time: an armed field first.
+            rangePanel._ompEscape = function () {
+                if (!armedInput) { return false; }
+                disarm();
+                return true;
+            };
             footer.appendChild(apply);
             fields.appendChild(footer);
             rangePanel.appendChild(fields);
@@ -1422,6 +1434,7 @@
                 // Without this the same Escape would also cancel the
                 // unsaved-draft dialog the moment it opens.
                 event.preventDefault();
+                if (typeof rangePanel._ompEscape === "function" && rangePanel._ompEscape()) { return; }
                 requestRangeClose();
             }
         }

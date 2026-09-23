@@ -24,7 +24,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   keeps Enter until it is complete). Confirm with nothing changed just
   closes. A click on a date field
   arms it with a warm outline: the next calendar click sets that field
-  alone; otherwise the calendar's two-click logic stands.
+  alone; a click on the same field again or Escape disarms it; otherwise
+  the calendar's two-click logic stands. The calendar shades the span
+  between the two dates whichever field holds the earlier one.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today
