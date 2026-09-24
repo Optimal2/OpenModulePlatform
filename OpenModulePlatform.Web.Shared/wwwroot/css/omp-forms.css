@@ -135,6 +135,16 @@
     gap: 10px;
 }
 
+/* With a third choice, Cancel stands alone at the left and the two
+   decisions sit together at the right. */
+.omp-confirm-dialog--spread .omp-confirm-dialog__actions .omp-confirm-dialog__cancel {
+    margin-right: auto;
+}
+
+.omp-confirm-dialog__actions button[hidden] {
+    display: none;
+}
+
 .omp-confirm-dialog__actions button {
     margin: 0;
     padding: 8px 14px;

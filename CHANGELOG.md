@@ -29,7 +29,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   between the two dates whichever field holds the earlier one. The
   neutral quick pick ("All dates") empties both fields, and the footer's
   Clear became Reset: it empties the fields and brings the calendar back
-  to the current month.
+  to the current month. The unsaved-draft question offers three ways
+  out: Save changes (Enter), Discard changes, and Cancel (Escape), which
+  keeps the popup open for more editing; `ompConfirm` takes `extraLabel`
+  for such a third choice and resolves with "extra" when it is chosen.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today

@@ -1,10 +1,14 @@
 // File: OpenModulePlatform.Web.Shared/wwwroot/js/omp-forms.js
 // Shared OMP form behaviours.
 //
-// window.ompConfirm(message, options) -> Promise<boolean>
+// window.ompConfirm(message, options) -> Promise<boolean | "extra">
 //   Shows an OMP-styled modal <dialog> instead of the native window.confirm.
-//   options: { okLabel, cancelLabel, title, content, focus }
+//   options: { okLabel, cancelLabel, extraLabel, title, content, focus }
 //     okLabel, cancelLabel: plain strings, already localized by the page.
+//     extraLabel: a third choice between Cancel and OK (say "Discard
+//       changes" beside "Save changes", with Cancel meaning keep editing);
+//       Cancel then sits alone at the left. The promise resolves with the
+//       string "extra" when it is chosen.
 //     focus: "ok" starts with the OK button focused (so Enter is OK and
 //       Escape is Cancel); the default starts on Cancel.
 //     title: a heading above the message; none when empty.
@@ -59,11 +63,15 @@
         cancelButton.type = 'button';
         cancelButton.className = 'omp-confirm-dialog__cancel';
 
+        const extraButton = document.createElement('button');
+        extraButton.type = 'button';
+        extraButton.className = 'omp-confirm-dialog__extra';
+        extraButton.hidden = true;
         const okButton = document.createElement('button');
         okButton.type = 'button';
         okButton.className = 'omp-confirm-dialog__ok';
 
-        actions.append(cancelButton, okButton);
+        actions.append(cancelButton, extraButton, okButton);
         body.append(title, message, content, actions);
         dialog.append(body);
         document.body.append(dialog);
@@ -83,8 +91,12 @@
         dialog.querySelector('.omp-confirm-dialog__message').textContent = message || '';
         const okButton = dialog.querySelector('.omp-confirm-dialog__ok');
         const cancelButton = dialog.querySelector('.omp-confirm-dialog__cancel');
+        const extraButton = dialog.querySelector('.omp-confirm-dialog__extra');
         okButton.textContent = settings.okLabel || 'OK';
         cancelButton.textContent = settings.cancelLabel || 'Cancel';
+        extraButton.textContent = settings.extraLabel || '';
+        extraButton.hidden = !settings.extraLabel;
+        dialog.classList.toggle('omp-confirm-dialog--spread', !!settings.extraLabel);
 
         // The page's content is borrowed, not copied: a placeholder keeps its
         // seat so it goes back exactly where it came from, values and all.
@@ -113,6 +125,7 @@
                 settled = true;
                 okButton.removeEventListener('click', onOk);
                 cancelButton.removeEventListener('click', onCancel);
+                extraButton.removeEventListener('click', onExtra);
                 dialog.removeEventListener('cancel', onDialogCancel);
                 dialog.removeEventListener('close', onClose);
                 body.removeEventListener('submit', onSubmit);
@@ -132,6 +145,7 @@
             };
             const onOk = () => finish(true);
             const onCancel = () => finish(false);
+            const onExtra = () => finish('extra');
             const onDialogCancel = (event) => {
                 event.preventDefault();
                 finish(false);
@@ -156,6 +170,7 @@
 
             okButton.addEventListener('click', onOk);
             cancelButton.addEventListener('click', onCancel);
+            extraButton.addEventListener('click', onExtra);
             dialog.addEventListener('cancel', onDialogCancel);
             dialog.addEventListener('close', onClose);
             body.addEventListener('submit', onSubmit);

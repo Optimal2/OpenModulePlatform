@@ -10,8 +10,8 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Bekräfta", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Perioden är inte sparad.", save: "Spara" }
-        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Confirm", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "The period is not saved.", save: "Save" };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Bekräfta", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Perioden är inte sparad.", save: "Spara ändringar", discard: "Kasta ändringar" }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Confirm", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "The period is not saved.", save: "Save changes", discard: "Discard changes" };
 
     // The year placeholder follows the page language; its four letters keep
     // the slot positions identical across languages. Segments are digit-index
@@ -730,8 +730,10 @@
     // pick as its rolling key, anything else as a custom period; both
     // fields empty as the neutral preset) and closes; Cancel closes with
     // nothing applied. A click outside or Escape with an unsaved draft asks
-    // first (Save or Cancel, Enter and Escape), through the shared confirm
-    // dialog when omp-forms.js is on the page. Enter in a date field, on
+    // first: Save changes (Enter), Discard changes, or Cancel (Escape),
+    // which keeps the popup open with the draft for more editing; through
+    // the shared confirm dialog when omp-forms.js is on the page (the
+    // browser's own confirm knows only save or discard). Enter in a date field, on
     // the trigger field or with nothing in particular focused is Confirm;
     // the popup's buttons keep Enter for themselves. A click on a date
     // field arms it (a warm outline): the next calendar click sets that
@@ -1338,14 +1340,16 @@
                 }
             }
             apply.addEventListener("click", confirmDraft);
-            // Closing with an unsaved draft asks first: Save (Enter) applies
-            // it, Cancel (Escape) drops it. The shared dialog when the page
-            // has it, the browser's own otherwise.
+            // Closing with an unsaved draft asks first: Save changes (Enter)
+            // applies it, Discard changes drops it and closes, Cancel
+            // (Escape) keeps editing. The shared dialog when the page has
+            // it; the browser's own otherwise, where OK saves and Cancel
+            // discards.
             function askUnsaved() {
                 if (typeof window.ompConfirm === "function") {
-                    return window.ompConfirm(texts.unsaved, { okLabel: texts.save, cancelLabel: texts.cancel, focus: "ok" });
+                    return window.ompConfirm(texts.unsaved, { okLabel: texts.save, cancelLabel: texts.cancel, extraLabel: texts.discard, focus: "ok" });
                 }
-                return Promise.resolve(window.confirm(texts.unsaved));
+                return Promise.resolve(window.confirm(texts.unsaved) ? true : "extra");
             }
             function requestClose() {
                 if (!rangePanel) { return; }
@@ -1361,10 +1365,11 @@
                 new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
                     if (document.querySelector(".omp-confirm-dialog[open]")) { return null; }
                     return askUnsaved();
-                }).then(function (save) {
+                }).then(function (answer) {
                     prompting = false;
-                    if (save === null || !rangePanel) { return; }
-                    if (save) { confirmDraft(); } else { closeRangePanel(); }
+                    if (answer === null || !rangePanel) { return; }
+                    if (answer === true) { confirmDraft(); } else if (answer === "extra") { closeRangePanel(); }
+                    // false: keep editing, the popup and its draft stay.
                 }, function () {
                     prompting = false;
                 });
