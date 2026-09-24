@@ -807,15 +807,17 @@
         // data-max caps the pickable range: "today" at the current UTC day,
         // or a date (yyyy-mm-dd) for a page that allows some way into the
         // future but not forever. Days, months and years past the cap are
-        // disabled in the calendar, and typed values clamp on apply.
-        // Opt-in - without it the picker points anywhere.
+        // disabled in the calendar, and typed values clamp on apply. A
+        // date already passed caps at today, so the calendar, Today and the
+        // arrows always have somewhere to go. Opt-in - without it the
+        // picker points anywhere.
         function maxIso() {
             var raw = container.getAttribute("data-max") || "";
-            if (raw === "today") {
-                var now = new Date();
-                return now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
-            }
-            return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+            var now = new Date();
+            var today = now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
+            if (raw === "today") { return today; }
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) { return null; }
+            return raw < today ? today : raw;
         }
 
         function currentLabel() {
