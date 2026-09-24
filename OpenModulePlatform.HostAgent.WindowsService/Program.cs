@@ -74,6 +74,8 @@ var builder = Host.CreateDefaultBuilder(hostArgs)
 try
 {
     using var host = builder.Build();
+    // The system log follows the binary, not the host-side settings file.
+    SystemLogNLogTarget.Attach(host.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), "OpenModulePlatform.HostAgent.WindowsService");
     if (runOnce)
     {
         // --run-once never calls IHost.StartAsync, so run the ValidateOnStart

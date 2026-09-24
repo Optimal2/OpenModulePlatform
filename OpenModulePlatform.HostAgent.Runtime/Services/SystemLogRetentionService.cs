@@ -11,10 +11,11 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 /// Prunes omp.SystemLog, the platform's central Warn-and-above log that every
 /// host-side process writes to through NLog's database target. Rows older than
 /// <see cref="HostAgentSettings.SystemLogRetentionDays"/> are deleted in small
-/// batches a few times a day. Every HostAgent runs this against the same table;
-/// the deletes are idempotent and cheap, so two hosts sweeping at once only
-/// share the work. The log files each process keeps are pruned by NLog itself
-/// (maxArchiveDays in each process's NLog section), not here.
+/// batches a few times a day. Every HostAgent runs this against the same table:
+/// the deletes are idempotent, and two hosts sweeping at once at worst block
+/// each other for a batch (a lost batch is retried on the next sweep). The log
+/// files each process keeps are pruned by NLog itself (maxArchiveDays in each
+/// process's NLog section), not here.
 /// </summary>
 public sealed class SystemLogRetentionService : BackgroundService
 {

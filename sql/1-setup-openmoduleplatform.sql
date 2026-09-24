@@ -198,6 +198,13 @@ BEGIN
 END
 GO
 
+-- The page's process filter lists the distinct writers on every view.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_omp_SystemLog_ProcessName' AND object_id = OBJECT_ID(N'omp.SystemLog'))
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_omp_SystemLog_ProcessName ON omp.SystemLog (ProcessName);
+END
+GO
+
 -------------------------------------------------------------------------------
 -- Operational template model
 -------------------------------------------------------------------------------

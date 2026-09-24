@@ -166,7 +166,7 @@
                 @foreach (var row in Model.Entries)
                 {
                     var detailId = $"systemlog-detail-{row.SystemLogId}";
-                    var hasDetail = !string.IsNullOrWhiteSpace(row.Exception) || !string.IsNullOrWhiteSpace(row.CorrelationId) || row.Message.Length > 200;
+                    var hasDetail = !string.IsNullOrWhiteSpace(row.Exception) || !string.IsNullOrWhiteSpace(row.CorrelationId) || row.Message.Length > 200 || row.Message.Contains('\n');
                     var searchText = string.Join(' ', row.HostName, row.ProcessName, row.Level, row.Logger, row.Message, row.Exception ?? string.Empty, row.CorrelationId ?? string.Empty);
                     <tr data-activity-row data-search="@searchText">
                         <td data-sort-value="@row.LoggedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)">

@@ -139,7 +139,7 @@ ORDER BY ProcessName;";
 
         if (hasText)
         {
-            cmd.Parameters.Add(new SqlParameter("@Text", SqlDbType.NVarChar, 400) { Value = "%" + EscapeLike(filter.Text!.Trim()) + "%" });
+            cmd.Parameters.Add(new SqlParameter("@Text", SqlDbType.NVarChar, -1) { Value = "%" + EscapeLike(filter.Text!.Trim()) + "%" });
         }
 
         await using var rdr = await cmd.ExecuteReaderAsync(ct);

@@ -35,4 +35,7 @@ var builder = Host.CreateDefaultBuilder(args)
         services.AddHostedService<WorkerManagerHostedService>();
     });
 
-await builder.Build().RunAsync();
+var host = builder.Build();
+// The system log follows the binary, not the generated settings file.
+SystemLogNLogTarget.Attach(host.Services.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>(), "OpenModulePlatform.WorkerManager.WindowsService");
+await host.RunAsync();
