@@ -804,14 +804,18 @@
                 };
             });
 
-        // data-max="today" caps the pickable range at the current UTC day:
-        // future days, months and years are disabled in the calendar, and
-        // typed values clamp on apply. Opt-in - other consumers may
-        // legitimately point into the future.
+        // data-max caps the pickable range: "today" at the current UTC day,
+        // or a date (yyyy-mm-dd) for a page that allows some way into the
+        // future but not forever. Days, months and years past the cap are
+        // disabled in the calendar, and typed values clamp on apply.
+        // Opt-in - without it the picker points anywhere.
         function maxIso() {
-            if (container.getAttribute("data-max") !== "today") { return null; }
-            var now = new Date();
-            return now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
+            var raw = container.getAttribute("data-max") || "";
+            if (raw === "today") {
+                var now = new Date();
+                return now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
+            }
+            return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
         }
 
         function currentLabel() {

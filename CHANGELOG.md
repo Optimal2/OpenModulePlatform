@@ -33,6 +33,8 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   out: Save changes (Enter), Discard changes, and Cancel (Escape), which
   keeps the popup open for more editing; `ompConfirm` takes `extraLabel`
   for such a third choice and resolves with "extra" when it is chosen.
+  `data-max` also takes a date, so a page can let the period reach into
+  the future up to a point; the user log allows two years ahead.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today
