@@ -81,7 +81,11 @@
     function ompConfirm(message, options) {
         const settings = options || {};
         if (typeof HTMLDialogElement !== 'function') {
-            return Promise.resolve(window.confirm(message));
+            // The browser's own confirm knows two answers: OK is OK, and
+            // Cancel stands for the third choice when there is one (so a
+            // caller that treats false as "keep going" is not stuck).
+            const answer = window.confirm(message);
+            return Promise.resolve(answer ? true : (settings.extraLabel ? 'extra' : false));
         }
 
         const dialog = ensureDialog();

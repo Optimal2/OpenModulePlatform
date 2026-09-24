@@ -1368,8 +1368,12 @@
                 }).then(function (answer) {
                     prompting = false;
                     if (answer === null || !rangePanel) { return; }
-                    if (answer === true) { confirmDraft(); } else if (answer === "extra") { closeRangePanel(); }
-                    // false: keep editing, the popup and its draft stay.
+                    if (answer === true) { confirmDraft(); return; }
+                    if (answer === "extra") { closeRangePanel(); return; }
+                    // false: keep editing, the popup and its draft stay. Focus
+                    // comes back into the popup if the click that asked left
+                    // it elsewhere, so Enter is Confirm and not the host form.
+                    if (!rangePanel.contains(document.activeElement)) { apply.focus({ preventScroll: true }); }
                 }, function () {
                     prompting = false;
                 });
