@@ -33,7 +33,7 @@ public static class UiInvariantScanner
                 findings.push(`horizontal overflow: scrollWidth ${root.scrollWidth} > viewport ${root.clientWidth}; sticks out: ${offenders.join(', ')}`);
             }
 
-            const effectiveBackground = el => {
+            const inheritedBackground = el => {
                 for (let node = el; node; node = node.parentElement) {
                     const bg = getComputedStyle(node).backgroundColor;
                     if (bg && bg !== 'transparent' && !bg.startsWith('rgba(0, 0, 0, 0)')) {
@@ -43,14 +43,72 @@ public static class UiInvariantScanner
                 return 'rgb(255, 255, 255)';
             };
 
-            for (const el of document.querySelectorAll('body *')) {
-                if (!el.checkVisibility || !el.checkVisibility()) { continue; }
-                const hasOwnText = [...el.childNodes].some(
-                    n => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0);
-                if (!hasOwnText) { continue; }
-                const style = getComputedStyle(el);
-                if (style.color === effectiveBackground(el)) {
-                    findings.push(`invisible text (color equals background ${style.color}): ${describe(el)} "${el.textContent.trim().slice(0, 40)}"`);
+            const ownText = el => [...el.childNodes].filter(
+                n => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0);
+            const opaqueBackground = node => {
+                const style = getComputedStyle(node);
+                // Computed opaque sRGB colors use rgb(), translucent ones rgba().
+                // Images and translucent/composited surfaces need a different model.
+                if (!style.backgroundColor.startsWith('rgb(') || style.backgroundImage !== 'none') { return null; }
+                for (let ancestor = node; ancestor; ancestor = ancestor.parentElement) {
+                    const s = getComputedStyle(ancestor);
+                    if (Number(s.opacity) !== 1 || s.filter !== 'none' || s.mixBlendMode !== 'normal') { return null; }
+                }
+                return style.backgroundColor;
+            };
+            const effectiveBackground = el => {
+                const fallback = inheritedBackground(el);
+                let surface = null;
+                for (const text of ownText(el)) {
+                    const range = document.createRange();
+                    range.selectNodeContents(text);
+                    for (const rect of range.getClientRects()) {
+                        if (rect.width <= 0 || rect.height <= 0) { continue; }
+                        // Require coverage of every text fragment, not just the control's center.
+                        const dx = Math.min(0.5, rect.width / 4);
+                        const dy = Math.min(0.5, rect.height / 4);
+                        const points = [
+                            [rect.left + dx, rect.top + dy], [rect.right - dx, rect.top + dy],
+                            [rect.left + dx, rect.bottom - dy], [rect.right - dx, rect.bottom - dy],
+                            [(rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2]
+                        ];
+                        for (const [x, y] of points) {
+                            // The browser supplies paint order and honors clipping/transforms.
+                            const stack = document.elementsFromPoint(x, y);
+                            const textIndex = stack.indexOf(el);
+                            if (textIndex < 0) { return fallback; }
+                            const behind = stack.slice(textIndex).find(node => opaqueBackground(node));
+                            if (!behind || (surface && behind !== surface)) { return fallback; }
+                            const bounds = behind.getBoundingClientRect();
+                            if (bounds.left > rect.left || bounds.right < rect.right ||
+                                bounds.top > rect.top || bounds.bottom < rect.bottom) { return fallback; }
+                            surface = behind;
+                        }
+                    }
+                }
+                return surface ? opaqueBackground(surface) : fallback;
+            };
+
+            // Decorative fills often opt out of hit testing. Include them temporarily
+            // without changing their geometry/paint, and restore the exact inline styles.
+            const hitTestOverrides = [...document.querySelectorAll('body, body *')]
+                .filter(el => getComputedStyle(el).pointerEvents === 'none')
+                .map(el => [el, el.getAttribute('style')]);
+            try {
+                for (const [el] of hitTestOverrides) { el.style.setProperty('pointer-events', 'auto', 'important'); }
+                for (const el of document.querySelectorAll('body *')) {
+                    if (!el.checkVisibility || !el.checkVisibility()) { continue; }
+                    if (ownText(el).length === 0) { continue; }
+                    const style = getComputedStyle(el);
+                    if (style.color === effectiveBackground(el)) {
+                        findings.push(`invisible text (color equals background ${style.color}): ${describe(el)} "${el.textContent.trim().slice(0, 40)}"`);
+                    }
+                }
+            }
+            finally {
+                for (const [el, originalStyle] of hitTestOverrides) {
+                    if (originalStyle === null) { el.removeAttribute('style'); }
+                    else { el.setAttribute('style', originalStyle); }
                 }
             }
 
