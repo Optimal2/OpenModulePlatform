@@ -31,6 +31,7 @@ DECLARE @PortalAppId int;
 DECLARE @PortalViewPermissionId int;
 DECLARE @PortalAdminPermissionId int;
 DECLARE @PortalUserLogPermissionId int;
+DECLARE @PortalSystemLogPermissionId int;
 DECLARE @PortalAdminsRoleId int;
 DECLARE @DefaultInstanceTemplateId int;
 DECLARE @DefaultTemplatePortalModuleInstanceId int;
@@ -63,7 +64,14 @@ IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.UserLog.V
 
 SELECT @PortalViewPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'OMP.Portal.View';
 SELECT @PortalAdminPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'OMP.Portal.Admin';
+-- Read access to the system log (what the platform's processes reported at
+-- Warn and above) on its own, for the people who run the system. PortalAdmins
+-- hold it too.
+IF NOT EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.SystemLog.View')
+    INSERT INTO omp.Permissions(Name, Description) VALUES(N'OMP.Portal.SystemLog.View', N'Read access to the OMP system log (what the platform''s processes reported at Warn and above) without other Portal admin rights');
+
 SELECT @PortalUserLogPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'OMP.Portal.UserLog.View';
+SELECT @PortalSystemLogPermissionId = PermissionId FROM omp.Permissions WHERE Name = N'OMP.Portal.SystemLog.View';
 SELECT @PortalAdminsRoleId = RoleId FROM omp.Roles WHERE Name = N'PortalAdmins';
 
 IF @PortalAdminsRoleId IS NOT NULL
@@ -77,6 +85,10 @@ IF @PortalAdminsRoleId IS NOT NULL
 IF @PortalAdminsRoleId IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @PortalUserLogPermissionId)
     INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @PortalUserLogPermissionId);
+
+IF @PortalAdminsRoleId IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM omp.RolePermissions WHERE RoleId = @PortalAdminsRoleId AND PermissionId = @PortalSystemLogPermissionId)
+    INSERT INTO omp.RolePermissions(RoleId, PermissionId) VALUES(@PortalAdminsRoleId, @PortalSystemLogPermissionId);
 
 /*
 Bootstrap portal administrator rows.

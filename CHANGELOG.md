@@ -8,6 +8,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **The system log.** What the platform's own processes report at Warn
+  and above now goes to one table, `omp.SystemLog`, from every host:
+  NLog's database target (async, discard on overflow, the files stay as
+  the fallback) is configured in the portal, Auth, HostAgent and
+  WorkerManager; the module services can follow the same recipe. The
+  HostAgent prunes rows older than `HostAgent:SystemLogRetentionDays`
+  (90 by default, 0 keeps forever), and each process's log files keep
+  14 days (`maxArchiveDays`). The portal page System log
+  (`/admin/systemlog`, permission `OMP.Portal.SystemLog.View`, held by
+  PortalAdmins) lists the rows with the user log's bar: process, level,
+  period, text, rows.
+
 - **The period popup applies nothing until Confirm.** A quick pick in the
   rail is a draft like any edit of the fields: the rail lights it, Confirm
   applies it (as its rolling key), Cancel drops it. Closing the popup with

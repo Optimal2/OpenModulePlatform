@@ -18,6 +18,7 @@ END;
         (N'omp', N'RolePermissions'),
         (N'omp', N'RolePrincipals'),
         (N'omp', N'AuditLog'),
+        (N'omp', N'SystemLog'),
         (N'omp', N'InstanceTemplates'),
         (N'omp', N'HostTemplates'),
         (N'omp', N'Instances'),

@@ -101,4 +101,5 @@
   <data name="The {0} field is not a valid fully-qualified http, https, or ftp URL." xml:space="preserve"><value>The {0} field is not a valid fully-qualified http, https, or ftp URL.</value></data>
   <data name="'{0}' and '{1}' do not match." xml:space="preserve"><value>'{0}' and '{1}' do not match.</value></data>
   <data name="User log" xml:space="preserve"><value>User log</value></data>
+  <data name="System log" xml:space="preserve"><value>System log</value></data>
 </root>

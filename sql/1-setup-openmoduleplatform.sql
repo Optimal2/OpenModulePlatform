@@ -168,6 +168,36 @@ BEGIN
 END
 GO
 
+-- The system log: what the platform's own processes (HostAgent, WorkerManager,
+-- the portal, Auth and, in time, the module services) report at Warn and
+-- above, written by NLog's database target from every host into this one
+-- table so an operator reads all of it in the portal instead of in one log
+-- folder per process and machine. The files stay as the fallback. Rows are
+-- pruned by the HostAgent after HostAgent:SystemLogRetentionDays.
+IF OBJECT_ID(N'omp.SystemLog', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp.SystemLog
+    (
+        SystemLogId bigint IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_SystemLog PRIMARY KEY CLUSTERED,
+        LoggedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_SystemLog_LoggedUtc DEFAULT SYSUTCDATETIME(),
+        HostName nvarchar(128) NOT NULL,
+        ProcessName nvarchar(128) NOT NULL,
+        Level nvarchar(16) NOT NULL,
+        Logger nvarchar(256) NOT NULL,
+        Message nvarchar(max) NOT NULL,
+        Exception nvarchar(max) NULL,
+        CorrelationId nvarchar(64) NULL
+    );
+END
+GO
+
+-- The page reads newest first within a period; the pruner deletes by age.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_omp_SystemLog_LoggedUtc' AND object_id = OBJECT_ID(N'omp.SystemLog'))
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_omp_SystemLog_LoggedUtc ON omp.SystemLog (LoggedUtc DESC, SystemLogId DESC);
+END
+GO
+
 -------------------------------------------------------------------------------
 -- Operational template model
 -------------------------------------------------------------------------------

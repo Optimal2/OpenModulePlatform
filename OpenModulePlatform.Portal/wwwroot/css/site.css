@@ -1804,6 +1804,12 @@ a:hover {
     color: #7a4c00;
 }
 
+.pill-danger {
+    background: #fde2e4;
+    color: #8a1c2b;
+    border-color: #f3b9c0;
+}
+
 .integrity-pill {
     display: inline-flex;
     align-items: center;
@@ -7680,6 +7686,24 @@ tr.linkbox-editor-row--dragging {
 .activity-detail__fields dd {
     margin: 0;
     min-width: 0;
+}
+
+/* The system log shares the user log's grid; its logger names are long
+   dotted type names, cut with an ellipsis (the full name is in the title),
+   and a message keeps its line breaks but not its length. */
+.systemlog-grid__logger {
+    display: block;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.systemlog-grid__message {
+    max-height: 4.5em;
+    overflow: hidden;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
 }
 
 .activity-detail__json {

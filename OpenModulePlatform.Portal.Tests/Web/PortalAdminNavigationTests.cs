@@ -41,6 +41,22 @@ public sealed class PortalAdminNavigationTests
     }
 
     [Fact]
+    public void SystemLogPermission_OpensOnlyTheSystemLog()
+    {
+        var sections = PortalAdminNavigation.CreateSections(Href, Set(PortalAdminNavigation.SystemLogPermission));
+
+        var section = Assert.Single(sections);
+        Assert.Equal("System", section.TextKey);
+        var item = Assert.Single(section.Items);
+        Assert.Equal("System log", item.TextKey);
+        Assert.Equal("/portal/admin/systemlog", item.Href);
+        Assert.Equal(PortalAdminNavigation.SystemLogPermission, item.Permission);
+        Assert.True(PortalAdminNavigation.CanAccess("/admin/systemlog?Levels=Error", Set(PortalAdminNavigation.SystemLogPermission)));
+        Assert.False(PortalAdminNavigation.CanAccess("/admin/activitylog", Set(PortalAdminNavigation.SystemLogPermission)));
+        Assert.False(PortalAdminNavigation.CanAccess("/admin/systemlog", Set(PortalAdminNavigation.UserLogPermission)));
+    }
+
+    [Fact]
     public void PlainUser_GetsNoAdminMenu()
     {
         Assert.Empty(PortalAdminNavigation.CreateSections(Href, Set()));

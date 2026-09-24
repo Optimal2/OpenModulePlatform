@@ -11,6 +11,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="NLog.Database" />
     <PackageReference Include="NLog.Extensions.Hosting" />
     <PackageReference Include="System.Management" />
   </ItemGroup>

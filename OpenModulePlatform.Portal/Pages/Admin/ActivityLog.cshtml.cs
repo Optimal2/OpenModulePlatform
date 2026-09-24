@@ -58,41 +58,6 @@ public sealed class ActivityLogModel : OmpPortalPageModel
 
     public IReadOnlyList<ActivityLogEntryView> Entries { get; private set; } = [];
 
-    /// <summary>
-    /// The range control sends a preset key; the page resolves the key to From/To
-    /// (UTC days) so the query and the control agree. A known key always wins over
-    /// the dates that travel with it: those are yesterday's resolution once the
-    /// page is reloaded the next day, and "last 7 days" must keep rolling. The
-    /// control writes an empty key for custom dates, and an unknown key is ignored.
-    /// </summary>
-    private void ApplyRangePreset()
-    {
-        if (string.IsNullOrWhiteSpace(Range))
-        {
-            return;
-        }
-
-        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-        switch (Range)
-        {
-            case "all":
-                (From, To) = (null, null);
-                break;
-            case "today":
-                (From, To) = (today, today);
-                break;
-            case "7d":
-                (From, To) = (today.AddDays(-6), today);
-                break;
-            case "30d":
-                (From, To) = (today.AddDays(-29), today);
-                break;
-            case "90d":
-                (From, To) = (today.AddDays(-89), today);
-                break;
-        }
-    }
-
     /// <summary>True when the page was opened with any filter, so an empty result reads as "no match" rather than "nothing logged".</summary>
     public bool HasFilter => UserIds.Any(id => id > 0) || Modules.Length > 0 || From.HasValue || To.HasValue || !string.IsNullOrWhiteSpace(Q);
 
@@ -108,7 +73,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
         // The repository caps the read; the page shows the same number so the
         // note and the Rows select never claim more than is fetched.
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxActivityLogTake);
-        ApplyRangePreset();
+        (From, To) = PeriodPresets.Apply(Range, From, To);
 
         AvailableModules = await _repo.GetActivityLogModulesAsync(ct);
         Users = await _repo.GetActivityLogUsersAsync(ct);

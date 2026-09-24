@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="NLog.Database" />
     <PackageReference Include="NLog.Web.AspNetCore" />
   </ItemGroup>
 

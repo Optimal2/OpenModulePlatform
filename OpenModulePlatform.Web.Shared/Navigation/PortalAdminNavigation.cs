@@ -16,6 +16,13 @@ public static class PortalAdminNavigation
     /// </summary>
     public const string UserLogPermission = "OMP.Portal.UserLog.View";
 
+    /// <summary>
+    /// Opens the system log (what the platform's processes reported at Warn
+    /// and above) on its own, for the people who run the system without the
+    /// rest of the admin area.
+    /// </summary>
+    public const string SystemLogPermission = "OMP.Portal.SystemLog.View";
+
     private sealed record Entry(string Section, string TextKey, string RelativePath, string? Permission = null);
 
     // Order is menu order. An entry without a permission is admin-only.
@@ -26,6 +33,7 @@ public static class PortalAdminNavigation
         new("System", "Artifacts", "/admin/artifacts"),
         new("System", "Maintenance", "/admin/maintenance"),
         new("System", "User log", "/admin/activitylog", UserLogPermission),
+        new("System", "System log", "/admin/systemlog", SystemLogPermission),
         new("System", "Operations", "/admin/hostdeployments"),
         new("System", "Resource monitor", "/admin/hostresources"),
         new("Administration", "Navigation", "/admin/portalentries"),

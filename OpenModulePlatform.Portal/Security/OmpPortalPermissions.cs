@@ -14,4 +14,5 @@ public static class OmpPortalPermissions
 
     /// <summary>Read access to the user log alone; PortalAdmins get it too, so an admin never loses the page.</summary>
     public const string UserLogView = PortalAdminNavigation.UserLogPermission;
+    public const string SystemLogView = PortalAdminNavigation.SystemLogPermission;
 }

@@ -82,6 +82,12 @@ public sealed class HostAgentSettings
     /// </summary>
     public int MaintenanceScanIntervalMinutes { get; set; } = 1440;
 
+    /// <summary>
+    /// Days a row stays in omp.SystemLog (the platform's central Warn-and-above
+    /// log) before the HostAgent deletes it. 0 keeps rows forever. Default 90.
+    /// </summary>
+    public int SystemLogRetentionDays { get; set; } = 90;
+
     public bool DeployWebApps { get; set; }
 
     public string IisSiteName { get; set; } = string.Empty;
@@ -250,6 +256,11 @@ public sealed class HostAgentSettings
         if (MaintenanceScanIntervalMinutes < 0)
         {
             throw new InvalidOperationException("HostAgent:MaintenanceScanIntervalMinutes must be zero or greater.");
+        }
+
+        if (SystemLogRetentionDays < 0)
+        {
+            throw new InvalidOperationException("HostAgent:SystemLogRetentionDays must be zero or greater.");
         }
 
         if (DeployWebApps)

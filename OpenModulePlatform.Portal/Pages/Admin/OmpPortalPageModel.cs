@@ -51,9 +51,16 @@ public abstract class OmpPortalPageModel : OmpSecurePageModel<PortalResource>
     /// permission may read it. The layout gets the caller's permissions so its admin menu
     /// lists only the pages they can open (just the user log for a pure auditor).
     /// </summary>
-    protected async Task<IActionResult?> RequireUserLogReaderAsync(CancellationToken ct)
+    protected Task<IActionResult?> RequireUserLogReaderAsync(CancellationToken ct)
+        => RequireLogReaderAsync(OmpPortalPermissions.UserLogView, ct);
+
+    /// <summary>The system log's twin: a Portal administrator or a holder of the system log permission.</summary>
+    protected Task<IActionResult?> RequireSystemLogReaderAsync(CancellationToken ct)
+        => RequireLogReaderAsync(OmpPortalPermissions.SystemLogView, ct);
+
+    private async Task<IActionResult?> RequireLogReaderAsync(string permission, CancellationToken ct)
     {
-        var result = await RequireAnyAsync(ct, OmpPortalPermissions.Admin, OmpPortalPermissions.UserLogView);
+        var result = await RequireAnyAsync(ct, OmpPortalPermissions.Admin, permission);
         if (result is not null)
         {
             return result;

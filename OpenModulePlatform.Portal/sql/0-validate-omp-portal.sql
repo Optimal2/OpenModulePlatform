@@ -156,6 +156,9 @@ BEGIN
     SELECT @Missing = @Missing + CASE
         WHEN EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.UserLog.View')
         THEN 0 ELSE 1 END;
+    SELECT @Missing = @Missing + CASE
+        WHEN EXISTS (SELECT 1 FROM omp.Permissions WHERE Name = N'OMP.Portal.SystemLog.View')
+        THEN 0 ELSE 1 END;
 END;
 
 SELECT
