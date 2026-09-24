@@ -45,8 +45,13 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   out: Save changes (Enter), Discard changes, and Cancel (Escape), which
   keeps the popup open for more editing; `ompConfirm` takes `extraLabel`
   for such a third choice and resolves with "extra" when it is chosen.
-  `data-max` also takes a date, so a page can let the period reach into
-  the future up to a point; the user log allows two years ahead.
+  `data-max` and the new `data-min` bound the period: "today", a day
+  count from today ("today+30") or a date; the user log, the system log
+  and LogSearch allow 30 days ahead. The calendar's year list stays the
+  same from one pick to the next (the bounds' years, or ten years either
+  side of today). Escape in the popup is Cancel: it closes with nothing
+  applied, no question asked; the question comes only for a click
+  outside.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today

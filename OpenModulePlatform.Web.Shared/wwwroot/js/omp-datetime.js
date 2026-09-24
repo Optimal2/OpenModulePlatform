@@ -729,17 +729,17 @@
     // applies the draft (a quick
     // pick as its rolling key, anything else as a custom period; both
     // fields empty as the neutral preset) and closes; Cancel closes with
-    // nothing applied. A click outside or Escape with an unsaved draft asks
-    // first: Save changes (Enter), Discard changes, or Cancel (Escape),
-    // which keeps the popup open with the draft for more editing; through
-    // the shared confirm dialog when omp-forms.js is on the page (the
-    // browser's own confirm knows only save or discard). Enter in a date field, on
+    // nothing applied, and so does Escape. A click outside with an unsaved
+    // draft asks first: Save changes (Enter), Discard changes, or Cancel
+    // (Escape), which keeps the popup open with the draft for more editing;
+    // through the shared confirm dialog when omp-forms.js is on the page
+    // (the browser's own confirm knows only save or discard). Enter in a date field, on
     // the trigger field or with nothing in particular focused is Confirm;
     // the popup's buttons keep Enter for themselves. A click on a date
     // field arms it (a warm outline): the next calendar click sets that
-    // field alone and disarms; a click on the same field again or Escape
-    // disarms without picking; otherwise the calendar's two-click logic
-    // (first click starts, second ends) stands. data-apply-text and
+    // field alone and disarms; a click on the same field again disarms
+    // without picking; otherwise the calendar's two-click logic (first
+    // click starts, second ends) stands. data-apply-text and
     // data-cancel-text name the two buttons (Confirm/Cancel by default). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
@@ -804,20 +804,39 @@
                 };
             });
 
-        // data-max caps the pickable range: "today" at the current UTC day,
-        // or a date (yyyy-mm-dd) for a page that allows some way into the
-        // future but not forever. Days, months and years past the cap are
-        // disabled in the calendar, and typed values clamp on apply. A
-        // date already passed caps at today, so the calendar, Today and the
-        // arrows always have somewhere to go. Opt-in - without it the
-        // picker points anywhere.
-        function maxIso() {
-            var raw = container.getAttribute("data-max") || "";
+        // data-min and data-max bound the pickable range. Each takes "today"
+        // (the current UTC day), a day count from today ("today+30",
+        // "today-7") or a date (yyyy-mm-dd). Days, months and years outside
+        // the bounds are disabled in the calendar, the arrows stop at them
+        // and typed values clamp on apply. A cap already passed counts as
+        // today, so the calendar, Today and the arrows always have somewhere
+        // to go, and a floor above the cap folds to the cap. Both are
+        // opt-in - without them the picker points anywhere.
+        function todayIsoUtc() {
             var now = new Date();
-            var today = now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
+            return now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
+        }
+        function parseLimit(raw) {
+            raw = (raw || "").trim();
+            var today = todayIsoUtc();
             if (raw === "today") { return today; }
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) { return null; }
-            return raw < today ? today : raw;
+            var relative = /^today([+-])(\d{1,4})$/.exec(raw);
+            if (relative) {
+                var date = new Date(today + "T00:00:00Z");
+                date.setUTCDate(date.getUTCDate() + (relative[1] === "-" ? -1 : 1) * (+relative[2]));
+                return date.toISOString().slice(0, 10);
+            }
+            return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+        }
+        function maxIso() {
+            var cap = parseLimit(container.getAttribute("data-max"));
+            var today = todayIsoUtc();
+            return cap && cap < today ? today : cap;
+        }
+        function minIso() {
+            var floor = parseLimit(container.getAttribute("data-min"));
+            var cap = maxIso();
+            return floor && cap && floor > cap ? cap : floor;
         }
 
         function currentLabel() {
@@ -1062,7 +1081,9 @@
                         date.setUTCDate(date.getUTCDate() + step[0]);
                         var iso = date.toISOString().slice(0, 10);
                         var cap = maxIso();
+                        var floor = minIso();
                         if (cap && iso > cap) { iso = cap; }
+                        if (floor && iso < floor) { iso = floor; }
                         setFieldDate(input, iso);
                         cal.pendingStart = null;
                         cal.hoverIso = null;
@@ -1156,11 +1177,15 @@
                 var max = maxIso();
                 var maxYear = max ? +max.slice(0, 4) : 0;
                 var maxMonth = max ? +max.slice(5, 7) : 0;
+                var min = minIso();
+                var minYear = min ? +min.slice(0, 4) : 0;
+                var minMonth = min ? +min.slice(5, 7) : 0;
 
                 var head = document.createElement("div");
                 head.className = "omp-datetime-panel__head";
                 var prev = document.createElement("button");
                 prev.type = "button"; prev.className = "omp-datetime-panel__step"; prev.textContent = "‹";
+                prev.disabled = !!min && cal.year === minYear && cal.month === minMonth;
                 prev.addEventListener("click", function () {
                     cal.month -= 1;
                     if (cal.month < 1) { cal.month = 12; cal.year -= 1; }
@@ -1172,13 +1197,21 @@
                     var option = document.createElement("option");
                     option.value = String(index + 1); option.textContent = name; option.selected = index + 1 === cal.month;
                     if (max && cal.year === maxYear && index + 1 > maxMonth) { option.disabled = true; }
+                    if (min && cal.year === minYear && index + 1 < minMonth) { option.disabled = true; }
                     monthSelect.appendChild(option);
                 });
                 monthSelect.addEventListener("change", function () { cal.month = +monthSelect.value; renderRangeCalendar(); });
                 var yearSelect = document.createElement("select");
                 yearSelect.className = "omp-datetime-panel__select";
-                var lastYear = max ? Math.min(cal.year + 12, maxYear) : cal.year + 12;
-                for (var y = cal.year - 12; y <= lastYear; y++) {
+                // The year list stays the same from one pick to the next: the
+                // bounds' years when they are set, otherwise ten years to
+                // either side of today; the shown year is always in it.
+                var todayYear = +todayIsoUtc().slice(0, 4);
+                var firstYear = min ? minYear : todayYear - 10;
+                var lastYear = max ? maxYear : todayYear + 10;
+                if (cal.year < firstYear) { firstYear = cal.year; }
+                if (cal.year > lastYear) { lastYear = cal.year; }
+                for (var y = firstYear; y <= lastYear; y++) {
                     var yearOption = document.createElement("option");
                     yearOption.value = String(y); yearOption.textContent = String(y); yearOption.selected = y === cal.year;
                     yearSelect.appendChild(yearOption);
@@ -1186,6 +1219,7 @@
                 yearSelect.addEventListener("change", function () {
                     cal.year = +yearSelect.value;
                     if (max && cal.year === maxYear && cal.month > maxMonth) { cal.month = maxMonth; }
+                    if (min && cal.year === minYear && cal.month < minMonth) { cal.month = minMonth; }
                     renderRangeCalendar();
                 });
                 var next = document.createElement("button");
@@ -1236,7 +1270,7 @@
                             } else if (previewFrom && previewTo && iso > previewFrom && iso < previewTo) {
                                 button.classList.add("omp-datetime-panel__day--range");
                             }
-                            if (max && iso > max) {
+                            if ((max && iso > max) || (min && iso < min)) {
                                 button.disabled = true;
                                 button.classList.add("omp-datetime-panel__day--disabled");
                             } else {
@@ -1339,6 +1373,11 @@
                         if (fromValue > cap) { fromValue = cap; }
                         if (toValue > cap) { toValue = cap; }
                     }
+                    var floor = minIso();
+                    if (floor) {
+                        if (fromValue !== "" && fromValue < floor) { fromValue = floor; }
+                        if (toValue !== "" && toValue < floor) { toValue = floor; }
+                    }
                     if (fromValue !== "" && toValue !== "" && fromValue > toValue) {
                         var swap = fromValue; fromValue = toValue; toValue = swap;
                     }
@@ -1386,10 +1425,10 @@
             }
             rangePanel._ompRequestClose = requestClose;
             rangePanel._ompConfirm = confirmDraft;
-            // Escape backs out one layer at a time: an armed field first.
+            // Escape is Cancel: the popup closes with nothing applied, no
+            // question asked, exactly like the footer's Cancel button.
             rangePanel._ompEscape = function () {
-                if (!armedInput) { return false; }
-                disarm();
+                closeRangePanel();
                 return true;
             };
             footer.appendChild(apply);
@@ -1454,7 +1493,7 @@
         }
         if (event.key === "Escape") {
             // The child calendar closes first; a second Escape closes the
-            // range popup itself (asking first when a draft would be lost).
+            // range popup itself, as Cancel does.
             if (panel) { closePanel(); } else if (rangePanel) {
                 // Without this the same Escape would also cancel the
                 // unsaved-draft dialog the moment it opens.
