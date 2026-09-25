@@ -33,11 +33,13 @@ public sealed class SystemLogModel : OmpPortalPageModel
     [BindProperty(SupportsGet = true)]
     public string[] Levels { get; set; } = [];
 
+    /// <summary>Start of the period, UTC, to the minute (yyyy-MM-ddTHH:mm); the picker sets whole days unless a time is typed.</summary>
     [BindProperty(SupportsGet = true)]
-    public DateOnly? From { get; set; }
+    public DateTime? From { get; set; }
 
+    /// <summary>End of the period, UTC, inclusive to the minute.</summary>
     [BindProperty(SupportsGet = true)]
-    public DateOnly? To { get; set; }
+    public DateTime? To { get; set; }
 
     [BindProperty(SupportsGet = true)]
     public string? Q { get; set; }
@@ -68,7 +70,14 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
         SetTitles("System log");
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxSystemLogTake);
-        (From, To) = PeriodPresets.Apply(Range, From, To);
+        // A preset key resolves to whole days; typed times only travel with
+        // a custom period.
+        var (presetFrom, presetTo) = PeriodPresets.Apply(Range, From is { } f ? DateOnly.FromDateTime(f) : null, To is { } t ? DateOnly.FromDateTime(t) : null);
+        if (!string.IsNullOrWhiteSpace(Range) && Range != "custom")
+        {
+            From = presetFrom?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            To = presetTo?.ToDateTime(new TimeOnly(23, 59), DateTimeKind.Utc);
+        }
 
         AvailableProcesses = await _repo.GetSystemLogProcessesAsync(ct);
 
@@ -76,8 +85,9 @@ public sealed class SystemLogModel : OmpPortalPageModel
         {
             Processes = Processes.Where(p => !string.IsNullOrWhiteSpace(p)).ToList(),
             Levels = Levels.Where(l => !string.IsNullOrWhiteSpace(l)).ToList(),
-            FromUtc = From?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-            ToUtc = To?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+            FromUtc = From is { } fromValue ? DateTime.SpecifyKind(fromValue, DateTimeKind.Utc) : null,
+            // Inclusive to the minute: the bound is the start of the next one.
+            ToUtc = To is { } toValue ? DateTime.SpecifyKind(toValue, DateTimeKind.Utc).AddMinutes(1) : null,
             Text = Q,
             Take = Take
         };
@@ -88,6 +98,10 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
     public static string FormatUtc(DateTime value)
         => value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
+    /// <summary>The value the picker's hidden inputs carry for a bound.</summary>
+    public static string FieldValue(DateTime? value)
+        => value?.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture) ?? string.Empty;
 
     /// <summary>The pill class for a level: Error and Fatal stand out, a warning is marked more lightly.</summary>
     public static string LevelPillClass(string level)

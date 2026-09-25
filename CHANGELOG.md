@@ -42,7 +42,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   neutral quick pick ("All dates") empties both fields, and the footer's
   Clear became Reset: it empties the fields and brings the calendar back
   to the current month. The unsaved-draft question offers three ways
-  out: Save changes (Enter), Discard changes, and Cancel (Escape), which
+  out: Save (Enter), Don't save, and Continue editing (Escape), which
   keeps the popup open for more editing; `ompConfirm` takes `extraLabel`
   for such a third choice and resolves with "extra" when it is chosen.
   `data-max` and the new `data-min` bound the period: "today", a day
@@ -53,7 +53,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   applied, no question asked; the question comes only for a click
   outside. Wording: the popup's buttons are Cancel and Apply, and the
   unsaved question reads "You have unsaved changes." with Save, Don't
-  save and Continue editing.
+  save and Continue editing. `data-precision="minute"` gives the two
+  fields a time (yyyy-mm-dd hh:mm): quick picks and calendar clicks set
+  whole days, the time is typed; the system log page uses it and its row
+  search now matches the time stamp too.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today

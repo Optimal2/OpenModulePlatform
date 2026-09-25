@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "omp_portal",
-  "definitionVersion": "0.3.320",
+  "definitionVersion": "0.3.321",
   "module": {
     "displayName": "OpenModulePlatform Portal",
     "moduleType": "Portal",
@@ -43,7 +43,7 @@
       "targetName": "omp-portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "minVersion": "0.3.26",
-      "maxVersion": "0.3.762"
+      "maxVersion": "0.3.763"
     }
   ],
   "artifactConfigurationFiles": [
@@ -243,7 +243,7 @@
         },
         {
           "name": "OMP.Portal.SystemLog.View",
-          "description": "Read access to the OMP system log (what the platform\u0027s processes reported at Warn and above) without other Portal admin rights."
+          "description": "Read access to the OMP system log (what the platform's processes reported at Warn and above) without other Portal admin rights."
         }
       ],
       "rolePermissions": [

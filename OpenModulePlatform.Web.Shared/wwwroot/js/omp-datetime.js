@@ -740,7 +740,10 @@
     // field alone and disarms; a click on the same field again disarms
     // without picking; otherwise the calendar's two-click logic (first
     // click starts, second ends) stands. data-apply-text and
-    // data-cancel-text name the two buttons (Apply/Cancel by default). The
+    // data-cancel-text name the two buttons (Apply/Cancel by default).
+    // data-precision="minute" gives the two fields a time as well (the
+    // datetime mask, values yyyy-mm-ddThh:mm): quick picks and calendar
+    // clicks set whole days, 00:00 to 23:59, and the time is typed. The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -842,8 +845,8 @@
         function currentLabel() {
             var match = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0];
             if (match) { return match.label; }
-            var from = hiddens.from.value;
-            var to = hiddens.to.value;
+            var from = hiddens.from.value.replace("T", " ");
+            var to = hiddens.to.value.replace("T", " ");
             // A single day (Today, or the same day picked twice) is one date.
             if (from && from === to) { return from; }
             if (from || to) { return (from || "") + " – " + (to || ""); }
@@ -858,6 +861,20 @@
         field.textContent = currentLabel();
         container.appendChild(field);
         container.classList.add("omp-daterange");
+        // With minute precision the fields carry a time and the popup gets
+        // wider fields; days from quick picks and the calendar span the
+        // whole day, and a field keeps its typed time when its day moves.
+        var minutePrecision = container.getAttribute("data-precision") === "minute";
+        container.classList.toggle("omp-daterange--minute", minutePrecision);
+        function dayOf(value) { return (value || "").slice(0, 10); }
+        function timeOf(value) { return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value || "") ? value.slice(11, 16) : ""; }
+        // The value a field takes for a day: the day itself, or with minute
+        // precision the day plus the field's own time, else the default
+        // (00:00 for a start, 23:59 for an end).
+        function dayValue(day, current, defaultTime) {
+            if (!day) { return ""; }
+            return minutePrecision ? day + "T" + (timeOf(current) || defaultTime) : day;
+        }
 
         var st = { container: container, hiddens: hiddens, presets: presets, field: field };
         container._ompDaterange = st;
@@ -979,8 +996,8 @@
                 button._ompPresetKey = preset.key;
                 button.addEventListener("click", function () {
                     var isNeutral = preset.key === neutralKey;
-                    setFieldDate(fromInput, isNeutral ? "" : preset.from);
-                    setFieldDate(toInput, isNeutral ? "" : preset.to);
+                    setFieldDate(fromInput, isNeutral ? "" : dayValue(preset.from, "", "00:00"));
+                    setFieldDate(toInput, isNeutral ? "" : dayValue(preset.to, "", "23:59"));
                     cal.pendingStart = null;
                     cal.hoverIso = null;
                     var anchor = isNeutral ? todayIsoNow() : (preset.to || preset.from);
@@ -1016,8 +1033,8 @@
                 cal.month = current.getUTCMonth() + 1;
                 cal.pendingStart = null;
                 cal.hoverIso = null;
-                setFieldDate(fromInput, todayIso);
-                setFieldDate(toInput, todayIso);
+                setFieldDate(fromInput, dayValue(todayIso, "", "00:00"));
+                setFieldDate(toInput, dayValue(todayIso, "", "23:59"));
                 renderRangeCalendar();
                 Array.prototype.forEach.call(rail.children, function (other) {
                     other.classList.toggle("omp-daterange-panel__preset--active", other === todayButton);
@@ -1045,7 +1062,7 @@
                 var input = document.createElement("input");
                 input.id = "omp-daterange-field-" + (++rangeSerial);
                 caption.htmlFor = input.id;
-                input.setAttribute("data-omp-datetime", "date");
+                input.setAttribute("data-omp-datetime", minutePrecision ? "datetime" : "date");
                 // The shared range calendar below serves both fields; the
                 // fields keep the mask and quick-clear only. They dress in
                 // the host's input class (same one the trigger field wears)
@@ -1056,6 +1073,13 @@
                 row.appendChild(input);
                 rows.appendChild(row);
                 enhance(input);
+                // A datetime field starts date-only until its own panel's
+                // Time chip turns the time on; these fields have no panel,
+                // so with minute precision the time is simply always shown.
+                if (minutePrecision) {
+                    setTimeVisible(state(input), true);
+                    render(state(input));
+                }
                 // A click on the field arms it for the next calendar click;
                 // a click on the armed field again disarms it.
                 input.addEventListener("click", function () { arm(armedInput === input ? null : input); });
@@ -1076,7 +1100,7 @@
                     arrow.setAttribute("aria-label", step[2] + " (" + labelText + ")");
                     arrow.addEventListener("click", function () {
                         var current = state(input).hidden.value;
-                        var base = /^\d{4}-\d{2}-\d{2}$/.test(current) ? current : new Date().toISOString().slice(0, 10);
+                        var base = /^\d{4}-\d{2}-\d{2}/.test(current) ? dayOf(current) : new Date().toISOString().slice(0, 10);
                         var date = new Date(base + "T00:00:00Z");
                         date.setUTCDate(date.getUTCDate() + step[0]);
                         var iso = date.toISOString().slice(0, 10);
@@ -1084,7 +1108,7 @@
                         var floor = minIso();
                         if (cap && iso > cap) { iso = cap; }
                         if (floor && iso < floor) { iso = floor; }
-                        setFieldDate(input, iso);
+                        setFieldDate(input, dayValue(iso, current, input === fromInput ? "00:00" : "23:59"));
                         cal.pendingStart = null;
                         cal.hoverIso = null;
                         cal.year = +iso.slice(0, 4);
@@ -1105,8 +1129,10 @@
             var activePreset = presets.filter(function (preset) { return preset.key === hiddens.range.value && preset.key !== neutralKey; })[0] || null;
             var seedFrom = hiddens.from.value || (activePreset ? activePreset.from : "");
             var seedTo = hiddens.to.value || (activePreset ? activePreset.to : "");
-            var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, seedFrom);
-            var toInput = makeRow(container.getAttribute("data-to-text") || names.to, seedTo);
+            // A day without a time (a date-only page value) seeds the whole
+            // day with minute precision: 00:00 for the start, 23:59 for the end.
+            var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, dayValue(dayOf(seedFrom), seedFrom, "00:00"));
+            var toInput = makeRow(container.getAttribute("data-to-text") || names.to, dayValue(dayOf(seedTo), seedTo, "23:59"));
 
             // --- shared range calendar: click start, click end ------------
             var calHost = document.createElement("div");
@@ -1133,7 +1159,7 @@
 
             function onDayPicked(iso) {
                 if (armedInput) {
-                    setFieldDate(armedInput, iso);
+                    setFieldDate(armedInput, dayValue(iso, state(armedInput).hidden.value, armedInput === fromInput ? "00:00" : "23:59"));
                     cal.pendingStart = null;
                     cal.hoverIso = null;
                     arm(null);
@@ -1143,14 +1169,14 @@
                 if (cal.pendingStart === null) {
                     cal.pendingStart = iso;
                     cal.hoverIso = null;
-                    setFieldDate(fromInput, iso);
+                    setFieldDate(fromInput, dayValue(iso, state(fromInput).hidden.value, "00:00"));
                     setFieldDate(toInput, "");
                 } else {
                     var start = cal.pendingStart;
                     var end = iso;
                     if (end < start) { var swap = start; start = end; end = swap; }
-                    setFieldDate(fromInput, start);
-                    setFieldDate(toInput, end);
+                    setFieldDate(fromInput, dayValue(start, state(fromInput).hidden.value, "00:00"));
+                    setFieldDate(toInput, dayValue(end, "", "23:59"));
                     cal.pendingStart = null;
                     cal.hoverIso = null;
                 }
@@ -1159,8 +1185,8 @@
 
             function renderRangeCalendar() {
                 calHost.textContent = "";
-                var from = state(fromInput).hidden.value;
-                var to = state(toInput).hidden.value;
+                var from = dayOf(state(fromInput).hidden.value);
+                var to = dayOf(state(toInput).hidden.value);
                 // While the second click is pending, the preview range runs
                 // from the first click to the hovered day. Otherwise it is
                 // the span between the two fields whichever holds the
@@ -1370,13 +1396,13 @@
                     // does the same, so the page never disagrees.
                     var cap = maxIso();
                     if (cap) {
-                        if (fromValue > cap) { fromValue = cap; }
-                        if (toValue > cap) { toValue = cap; }
+                        if (dayOf(fromValue) > cap) { fromValue = dayValue(cap, fromValue, "00:00"); }
+                        if (dayOf(toValue) > cap) { toValue = dayValue(cap, toValue, "23:59"); }
                     }
                     var floor = minIso();
                     if (floor) {
-                        if (fromValue !== "" && fromValue < floor) { fromValue = floor; }
-                        if (toValue !== "" && toValue < floor) { toValue = floor; }
+                        if (fromValue !== "" && dayOf(fromValue) < floor) { fromValue = dayValue(floor, fromValue, "00:00"); }
+                        if (toValue !== "" && dayOf(toValue) < floor) { toValue = dayValue(floor, toValue, "23:59"); }
                     }
                     if (fromValue !== "" && toValue !== "" && fromValue > toValue) {
                         var swap = fromValue; fromValue = toValue; toValue = swap;

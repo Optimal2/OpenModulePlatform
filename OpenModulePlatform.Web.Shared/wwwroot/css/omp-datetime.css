@@ -512,6 +512,11 @@
     width: 150px;
 }
 
+/* With a time in the fields (data-precision="minute") they need the room. */
+.omp-daterange--minute .omp-daterange-panel__row .omp-datetime__input {
+    width: 196px;
+}
+
 /* Base look for the embedded fields, at zero specificity so a host input
    class handed in via data-field-class always wins. */
 :where(.omp-daterange-panel__row) :where(.omp-datetime__input) {

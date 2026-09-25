@@ -100,11 +100,11 @@
             var presetTodayIso = presetToday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
         <span data-omp-daterange data-range-name="Range" data-from-name="From" data-to-name="To"
-              data-field-class="activity-bar__field" data-max="today+30" data-neutral="all"
+              data-field-class="activity-bar__field" data-max="today+30" data-neutral="all" data-precision="minute"
               data-from-text="@L["From date"]" data-to-text="@L["To date"]" data-apply-text="@L["Apply"]" data-cancel-text="@L["Cancel"]">
             <input type="hidden" name="Range" value="@(!string.IsNullOrWhiteSpace(Model.Range) ? Model.Range : (Model.From.HasValue || Model.To.HasValue ? "custom" : "all"))" />
-            <input type="hidden" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
-            <input type="hidden" name="To" value="@(Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
+            <input type="hidden" name="From" value="@SystemLogModel.FieldValue(Model.From)" />
+            <input type="hidden" name="To" value="@SystemLogModel.FieldValue(Model.To)" />
             <span data-omp-daterange-preset="all">@L["Since the start"]</span>
             <span data-omp-daterange-preset="7d" data-from="@presetToday.AddDays(-6).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 7]</span>
             <span data-omp-daterange-preset="30d" data-from="@presetToday.AddDays(-29).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)" data-to="@presetTodayIso">@L["Last {0} days", 30]</span>
@@ -167,7 +167,8 @@
                 {
                     var detailId = $"systemlog-detail-{row.SystemLogId}";
                     var hasDetail = !string.IsNullOrWhiteSpace(row.Exception) || !string.IsNullOrWhiteSpace(row.CorrelationId) || row.Message.Length > 200 || row.Message.Contains('\n');
-                    var searchText = string.Join(' ', row.HostName, row.ProcessName, row.Level, row.Logger, row.Message, row.Exception ?? string.Empty, row.CorrelationId ?? string.Empty);
+                    // The time stamp is searchable too, so "13:11" narrows the loaded rows to that minute.
+                    var searchText = string.Join(' ', SystemLogModel.FormatUtc(row.LoggedUtc), row.HostName, row.ProcessName, row.Level, row.Logger, row.Message, row.Exception ?? string.Empty, row.CorrelationId ?? string.Empty);
                     <tr data-activity-row data-search="@searchText">
                         <td data-sort-value="@row.LoggedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)">
                             <code>@SystemLogModel.FormatUtc(row.LoggedUtc)</code>
