@@ -3134,7 +3134,7 @@
   <data name="Text in summary or event" xml:space="preserve"><value>Text i sammanfattning eller händelse</value></data>
   <data name="e.g. manual_review or a job id" xml:space="preserve"><value>t.ex. manual_review eller ett jobb-id</value></data>
   <data name="Rows" xml:space="preserve"><value>Rader</value></data>
-  <data name="Apply" xml:space="preserve"><value>Använd</value></data>
+  <data name="Apply" xml:space="preserve"><value>Tillämpa</value></data>
   <data name="No enabled module has an activity log table yet." xml:space="preserve"><value>Ingen aktiverad modul har någon aktivitetsloggtabell ännu.</value></data>
   <data name="No activity matches the current filters." xml:space="preserve"><value>Ingen aktivitet matchar de aktuella filtren.</value></data>
   <data name="No activity has been logged yet." xml:space="preserve"><value>Ingen aktivitet har loggats ännu.</value></data>

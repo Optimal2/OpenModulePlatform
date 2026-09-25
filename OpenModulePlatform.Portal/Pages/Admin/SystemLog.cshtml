@@ -101,7 +101,7 @@
         }
         <span data-omp-daterange data-range-name="Range" data-from-name="From" data-to-name="To"
               data-field-class="activity-bar__field" data-max="today+30" data-neutral="all"
-              data-from-text="@L["From date"]" data-to-text="@L["To date"]" data-apply-text="@L["Confirm"]" data-cancel-text="@L["Cancel"]">
+              data-from-text="@L["From date"]" data-to-text="@L["To date"]" data-apply-text="@L["Apply"]" data-cancel-text="@L["Cancel"]">
             <input type="hidden" name="Range" value="@(!string.IsNullOrWhiteSpace(Model.Range) ? Model.Range : (Model.From.HasValue || Model.To.HasValue ? "custom" : "all"))" />
             <input type="hidden" name="From" value="@(Model.From?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />
             <input type="hidden" name="To" value="@(Model.To?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))" />

@@ -51,7 +51,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   same from one pick to the next (the bounds' years, or ten years either
   side of today). Escape in the popup is Cancel: it closes with nothing
   applied, no question asked; the question comes only for a click
-  outside.
+  outside. Wording: the popup's buttons are Cancel and Apply, and the
+  unsaved question reads "You have unsaved changes." with Save, Don't
+  save and Continue editing.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today

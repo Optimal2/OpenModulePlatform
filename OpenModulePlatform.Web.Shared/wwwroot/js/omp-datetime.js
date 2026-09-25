@@ -10,8 +10,8 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Bekräfta", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Perioden är inte sparad.", save: "Spara ändringar", discard: "Kasta ändringar" }
-        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Confirm", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "The period is not saved.", save: "Save changes", discard: "Discard changes" };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Tillämpa", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Du har osparade ändringar.", save: "Spara", discard: "Spara inte", keepEditing: "Fortsätt redigera" }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Apply", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "You have unsaved changes.", save: "Save", discard: "Don't save", keepEditing: "Continue editing" };
 
     // The year placeholder follows the page language; its four letters keep
     // the slot positions identical across languages. Segments are digit-index
@@ -730,17 +730,17 @@
     // pick as its rolling key, anything else as a custom period; both
     // fields empty as the neutral preset) and closes; Cancel closes with
     // nothing applied, and so does Escape. A click outside with an unsaved
-    // draft asks first: Save changes (Enter), Discard changes, or Cancel
-    // (Escape), which keeps the popup open with the draft for more editing;
-    // through the shared confirm dialog when omp-forms.js is on the page
-    // (the browser's own confirm knows only save or discard). Enter in a date field, on
+    // draft asks first ("You have unsaved changes."): Save (Enter), Don't
+    // save, or Continue editing (Escape), which keeps the popup open with
+    // the draft; through the shared confirm dialog when omp-forms.js is on
+    // the page (the browser's own confirm knows only save or don't save). Enter in a date field, on
     // the trigger field or with nothing in particular focused is Confirm;
     // the popup's buttons keep Enter for themselves. A click on a date
     // field arms it (a warm outline): the next calendar click sets that
     // field alone and disarms; a click on the same field again disarms
     // without picking; otherwise the calendar's two-click logic (first
     // click starts, second ends) stands. data-apply-text and
-    // data-cancel-text name the two buttons (Confirm/Cancel by default). The
+    // data-cancel-text name the two buttons (Apply/Cancel by default). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -1385,14 +1385,13 @@
                 }
             }
             apply.addEventListener("click", confirmDraft);
-            // Closing with an unsaved draft asks first: Save changes (Enter)
-            // applies it, Discard changes drops it and closes, Cancel
-            // (Escape) keeps editing. The shared dialog when the page has
-            // it; the browser's own otherwise, where OK saves and Cancel
-            // discards.
+            // Closing with an unsaved draft asks first: Save (Enter) applies
+            // it, Don't save drops it and closes, Continue editing (Escape)
+            // keeps the popup open. The shared dialog when the page has it;
+            // the browser's own otherwise, where OK saves and Cancel drops.
             function askUnsaved() {
                 if (typeof window.ompConfirm === "function") {
-                    return window.ompConfirm(texts.unsaved, { okLabel: texts.save, cancelLabel: texts.cancel, extraLabel: texts.discard, focus: "ok" });
+                    return window.ompConfirm(texts.unsaved, { okLabel: texts.save, cancelLabel: texts.keepEditing, extraLabel: texts.discard, focus: "ok" });
                 }
                 return Promise.resolve(window.confirm(texts.unsaved) ? true : "extra");
             }
