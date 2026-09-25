@@ -207,12 +207,25 @@
     }
 
     function onBlurCommit(st) {
+        // A field with a default time (the period popup's minute-precision
+        // rows) takes it when the day is typed and the time left empty.
+        fillDefaultTime(st);
         // A partial entry reverts to the last committed value instead of
         // posting garbage; a complete entry commits.
         if (canonicalFromDigits(st) === null) {
             digitsFromCanonical(st, st.hidden.value);
         }
         commit(st);
+    }
+
+    function fillDefaultTime(st) {
+        if (!st.defaultTime || st.mode !== "datetime") { return; }
+        var dayDone = st.digits.slice(0, 8).every(function (ch) { return ch !== ""; });
+        var timeEmpty = st.digits.slice(8).every(function (ch) { return ch === ""; });
+        if (dayDone && timeEmpty) {
+            setTimePart(st, +st.defaultTime.slice(0, 2), +st.defaultTime.slice(3, 5));
+            render(st);
+        }
     }
 
     function setDatePart(st, year, month, day) {
@@ -845,10 +858,17 @@
         function currentLabel() {
             var match = presets.filter(function (preset) { return preset.key === hiddens.range.value; })[0];
             if (match) { return match.label; }
-            var from = hiddens.from.value.replace("T", " ");
-            var to = hiddens.to.value.replace("T", " ");
-            // A single day (Today, or the same day picked twice) is one date.
-            if (from && from === to) { return from; }
+            var from = hiddens.from.value;
+            var to = hiddens.to.value;
+            // A single day (Today, or the same day picked twice) is one date;
+            // with minute precision a whole day (00:00 to 23:59) is too, and
+            // a window inside one day names the day once.
+            if (from && to && dayOf(from) === dayOf(to)) {
+                if (from === to || (timeOf(from) === "00:00" && timeOf(to) === "23:59")) { return dayOf(from); }
+                if (minutePrecision) { return dayOf(from) + " " + timeOf(from) + " – " + timeOf(to); }
+            }
+            from = from.replace("T", " ");
+            to = to.replace("T", " ");
             if (from || to) { return (from || "") + " – " + (to || ""); }
             return presets.length > 0 ? presets[0].label : "";
         }
@@ -1023,7 +1043,7 @@
             todayButton.textContent = texts.today;
             todayButton._ompIsOn = function () {
                 var iso = todayIsoNow();
-                return hiddens.range.value === "custom" && hiddens.from.value === iso && hiddens.to.value === iso;
+                return hiddens.range.value === "custom" && hiddens.from.value === dayValue(iso, "", "00:00") && hiddens.to.value === dayValue(iso, "", "23:59");
             };
             todayButton.classList.toggle("omp-daterange-panel__preset--active", todayButton._ompIsOn());
             todayButton.addEventListener("click", function () {
@@ -1051,7 +1071,7 @@
             var rows = document.createElement("div");
             rows.className = "omp-daterange-panel__rows";
             fields.appendChild(rows);
-            var makeRow = function (labelText, value) {
+            var makeRow = function (labelText, value, defaultTime) {
                 // A div with a label for the input, not a label around it:
                 // the arrows beside the field must not join the field's name.
                 var row = document.createElement("div");
@@ -1078,6 +1098,7 @@
                 // so with minute precision the time is simply always shown.
                 if (minutePrecision) {
                     setTimeVisible(state(input), true);
+                    state(input).defaultTime = defaultTime;
                     render(state(input));
                 }
                 // A click on the field arms it for the next calendar click;
@@ -1131,8 +1152,8 @@
             var seedTo = hiddens.to.value || (activePreset ? activePreset.to : "");
             // A day without a time (a date-only page value) seeds the whole
             // day with minute precision: 00:00 for the start, 23:59 for the end.
-            var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, dayValue(dayOf(seedFrom), seedFrom, "00:00"));
-            var toInput = makeRow(container.getAttribute("data-to-text") || names.to, dayValue(dayOf(seedTo), seedTo, "23:59"));
+            var fromInput = makeRow(container.getAttribute("data-from-text") || names.from, dayValue(dayOf(seedFrom), seedFrom, "00:00"), "00:00");
+            var toInput = makeRow(container.getAttribute("data-to-text") || names.to, dayValue(dayOf(seedTo), seedTo, "23:59"), "23:59");
 
             // --- shared range calendar: click start, click end ------------
             var calHost = document.createElement("div");
@@ -1378,6 +1399,13 @@
             apply.className = "omp-datetime-panel__action omp-datetime-panel__action--on omp-daterange-panel__apply";
             apply.textContent = container.getAttribute("data-apply-text") || texts.confirm;
             function confirmDraft() {
+                // A day typed without a time takes the field's default time
+                // before anything is read.
+                [fromInput, toInput].forEach(function (input) {
+                    var st = state(input);
+                    fillDefaultTime(st);
+                    if (canonicalFromDigits(st) !== null) { commit(st); }
+                });
                 // Nothing to apply: the popup just closes, so an untouched
                 // rolling preset is not rewritten as fixed dates.
                 if (!isDirty()) { closeRangePanel(); return; }

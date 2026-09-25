@@ -11,6 +11,10 @@ namespace OpenModulePlatform.Portal.Pages.Admin;
 /// </summary>
 internal static class PeriodPresets
 {
+    /// <summary>True for a key the pickers offer and this resolver knows.</summary>
+    public static bool IsPreset(string? key)
+        => key is "all" or "today" or "7d" or "30d" or "90d";
+
     public static (DateOnly? From, DateOnly? To) Apply(string? key, DateOnly? from, DateOnly? to)
     {
         if (string.IsNullOrWhiteSpace(key))

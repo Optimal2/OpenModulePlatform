@@ -70,11 +70,22 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
         SetTitles("System log");
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxSystemLogTake);
-        // A preset key resolves to whole days; typed times only travel with
-        // a custom period.
-        var (presetFrom, presetTo) = PeriodPresets.Apply(Range, From is { } f ? DateOnly.FromDateTime(f) : null, To is { } t ? DateOnly.FromDateTime(t) : null);
-        if (!string.IsNullOrWhiteSpace(Range) && Range != "custom")
+        // The bounds are UTC wall-clock minutes. A value with an offset (a
+        // hand-written "Z" in the address) is converted rather than relabelled,
+        // and a bound written as a bare day (a bookmark from the days-only
+        // page) spans that whole day.
+        From = AsUtc(From);
+        To = AsUtc(To);
+        if (To is { } toDay && !Request.Query["To"].ToString().Contains('T'))
         {
+            To = toDay.Date.AddHours(23).AddMinutes(59);
+        }
+
+        // A preset key resolves to whole days; typed times only travel with
+        // a custom period, and an unknown key leaves them alone.
+        if (PeriodPresets.IsPreset(Range))
+        {
+            var (presetFrom, presetTo) = PeriodPresets.Apply(Range, null, null);
             From = presetFrom?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
             To = presetTo?.ToDateTime(new TimeOnly(23, 59), DateTimeKind.Utc);
         }
@@ -98,6 +109,9 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
     public static string FormatUtc(DateTime value)
         => value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+
+    private static DateTime? AsUtc(DateTime? value)
+        => value is { } v ? (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)) : null;
 
     /// <summary>The value the picker's hidden inputs carry for a bound.</summary>
     public static string FieldValue(DateTime? value)
