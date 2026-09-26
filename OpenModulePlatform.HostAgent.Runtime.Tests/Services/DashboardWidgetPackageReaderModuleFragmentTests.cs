@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.TestSupport;
 
@@ -51,42 +52,50 @@ public sealed class DashboardWidgetPackageReaderModuleFragmentTests
     [InlineData("widgets/overview")]
     [InlineData("/widgets/../admin")]
     [InlineData("/widgets/%2e%2e/admin")]
-    public async Task InvalidFragmentPath_IsRejected(string fragmentPath)
+    public async Task InvalidFragmentPath_SkipsTheWidgetAndLogsIt(string fragmentPath)
     {
         var json = ModuleFragmentWidgetJson($"""
             "appKey": "example_webapp_webapp",
             "fragmentPath": {JsonSerializer.Serialize(fragmentPath)}
             """);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(json));
-        Assert.Contains("fragmentPath", ex.Message, StringComparison.Ordinal);
-        Assert.Contains("example:overview", ex.Message, StringComparison.Ordinal);
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(json, logger);
+
+        Assert.Empty(package.Widgets);
+        AssertWarning(logger, "example:overview", "fragmentPath");
     }
 
     [Fact]
-    public async Task MissingFragmentPath_IsRejected()
+    public async Task MissingFragmentPath_SkipsTheWidgetAndLogsIt()
     {
         var json = ModuleFragmentWidgetJson("""
             "appKey": "example_webapp_webapp"
             """);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(json));
-        Assert.Contains("fragmentPath is required", ex.Message, StringComparison.Ordinal);
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(json, logger);
+
+        Assert.Empty(package.Widgets);
+        AssertWarning(logger, "example:overview", "fragmentPath is required");
     }
 
     [Fact]
-    public async Task MissingAppKey_IsRejected()
+    public async Task MissingAppKey_SkipsTheWidgetAndLogsIt()
     {
         var json = ModuleFragmentWidgetJson("""
             "fragmentPath": "/widgets/overview"
             """);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(json));
-        Assert.Contains("appKey", ex.Message, StringComparison.Ordinal);
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(json, logger);
+
+        Assert.Empty(package.Widgets);
+        AssertWarning(logger, "example:overview", "appKey");
     }
 
     [Fact]
-    public async Task ModuleFragmentWithPayload_IsRejected()
+    public async Task ModuleFragmentWithPayload_SkipsTheWidgetAndLogsIt()
     {
         var json = ModuleFragmentWidgetJson("""
             "payload": "admin-overview",
@@ -94,8 +103,11 @@ public sealed class DashboardWidgetPackageReaderModuleFragmentTests
             "fragmentPath": "/widgets/overview"
             """);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(json));
-        Assert.Contains("instead of payload", ex.Message, StringComparison.Ordinal);
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(json, logger);
+
+        Assert.Empty(package.Widgets);
+        AssertWarning(logger, "example:overview", "instead of payload");
     }
 
     [Theory]
@@ -103,7 +115,7 @@ public sealed class DashboardWidgetPackageReaderModuleFragmentTests
     [InlineData("\"defaultWidth\": 5000", "defaultWidth")]
     [InlineData("\"defaultHeight\": 10", "defaultHeight")]
     [InlineData("\"defaultHeight\": 9000", "defaultHeight")]
-    public async Task DefaultSizeOutsideRange_IsRejected(string sizeProperty, string propertyName)
+    public async Task DefaultSizeOutsideRange_SkipsTheWidgetAndLogsIt(string sizeProperty, string propertyName)
     {
         var json = ModuleFragmentWidgetJson($"""
             "appKey": "example_webapp_webapp",
@@ -111,12 +123,15 @@ public sealed class DashboardWidgetPackageReaderModuleFragmentTests
             {sizeProperty}
             """);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(json));
-        Assert.Contains($"{propertyName} must be between", ex.Message, StringComparison.Ordinal);
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(json, logger);
+
+        Assert.Empty(package.Widgets);
+        AssertWarning(logger, "example:overview", $"{propertyName} must be between");
     }
 
     [Fact]
-    public async Task FragmentFieldsOnOtherWidgetType_AreRejected()
+    public async Task FragmentFieldsOnOtherWidgetType_AreSkippedAndLogged()
     {
         var json = WidgetDocument("""
             "widgetKey": "portal:admin",
@@ -128,8 +143,11 @@ public sealed class DashboardWidgetPackageReaderModuleFragmentTests
             "roleNames": []
             """);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ReadAsync(json));
-        Assert.Contains("only valid for widgetType 'module-fragment'", ex.Message, StringComparison.Ordinal);
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(json, logger);
+
+        Assert.Empty(package.Widgets);
+        AssertWarning(logger, "portal:admin", "only valid for widgetType 'module-fragment'");
     }
 
     [Fact]
@@ -147,6 +165,55 @@ public sealed class DashboardWidgetPackageReaderModuleFragmentTests
         var package = await ReadAsync(json);
 
         Assert.Equal("admin-overview", Assert.Single(package.Widgets).Payload);
+    }
+
+    [Fact]
+    public async Task InvalidWidget_DoesNotFailTheWholeFile_ValidWidgetsAreImported()
+    {
+        // One broken widget among valid ones must not fail the whole file: the valid
+        // widget is imported and only the broken one is dropped and logged.
+        var json = """
+            {
+              "format": "omp.portal.dashboard.widgets",
+              "formatVersion": 1,
+              "packageVersion": "1.0.0",
+              "widgets": [
+                {
+                  "widgetKey": "example:overview",
+                  "widgetVersion": "1.0.0",
+                  "title": "Example overview",
+                  "widgetType": "module-fragment",
+                  "moduleKey": "example_webapp",
+                  "appKey": "example_webapp_webapp",
+                  "fragmentPath": "/widgets/overview",
+                  "permissionNames": [],
+                  "roleNames": []
+                },
+                {
+                  "widgetKey": "example:broken",
+                  "widgetVersion": "1.0.0",
+                  "title": "Broken overview",
+                  "widgetType": "module-fragment",
+                  "moduleKey": "example_webapp",
+                  "appKey": "example_webapp_webapp",
+                  "fragmentPath": "https://evil.example/widget",
+                  "permissionNames": [],
+                  "roleNames": []
+                }
+              ]
+            }
+            """;
+
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(json, logger);
+
+        var widget = Assert.Single(package.Widgets);
+        Assert.Equal("example:overview", widget.WidgetKey);
+
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Contains("example:broken", warning.Message, StringComparison.Ordinal);
+        Assert.Contains("fragmentPath", warning.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -179,10 +246,37 @@ public sealed class DashboardWidgetPackageReaderModuleFragmentTests
             "roleNames": []
             """);
 
-    internal static async Task<PortableDashboardWidgetPackage> ReadAsync(string json)
+    internal static async Task<PortableDashboardWidgetPackage> ReadAsync(string json, ILogger? logger = null)
     {
         await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-        return await new DashboardWidgetPackageReader().ReadAsync(stream, "widgets.json", CancellationToken.None);
+        return await new DashboardWidgetPackageReader(logger).ReadAsync(stream, "widgets.json", CancellationToken.None);
+    }
+
+    private static void AssertWarning(RecordingLogger logger, string widgetKey, string reason)
+    {
+        var warning = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, warning.Level);
+        Assert.Contains(widgetKey, warning.Message, StringComparison.Ordinal);
+        Assert.Contains(reason, warning.Message, StringComparison.Ordinal);
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, formatter(state, exception)));
+        }
     }
 
     private static string WidgetDocument(string widgetProperties)

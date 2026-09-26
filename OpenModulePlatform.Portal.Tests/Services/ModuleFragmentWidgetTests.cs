@@ -120,6 +120,49 @@ public sealed class ModuleFragmentWidgetTests
         Assert.Null(ModuleFragmentWidget.TryParsePayload("not json"));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(159)]
+    [InlineData(1801)]
+    [InlineData(100000)]
+    public void TryParsePayload_WithDefaultWidthOutsideRange_IsIgnored(int defaultWidth)
+    {
+        var payload = ModuleFragmentWidget.SerializePayload(
+            new ModuleFragmentWidgetConfig(AppKey, "/widgets/overview", DefaultWidth: defaultWidth));
+
+        Assert.Null(ModuleFragmentWidget.TryParsePayload(payload));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(95)]
+    [InlineData(1401)]
+    [InlineData(100000)]
+    public void TryParsePayload_WithDefaultHeightOutsideRange_IsIgnored(int defaultHeight)
+    {
+        var payload = ModuleFragmentWidget.SerializePayload(
+            new ModuleFragmentWidgetConfig(AppKey, "/widgets/overview", DefaultHeight: defaultHeight));
+
+        Assert.Null(ModuleFragmentWidget.TryParsePayload(payload));
+    }
+
+    [Theory]
+    [InlineData(160, 96)]
+    [InlineData(1800, 1400)]
+    [InlineData(416, 320)]
+    public void TryParsePayload_WithDefaultSizeInRange_IsAccepted(int defaultWidth, int defaultHeight)
+    {
+        var payload = ModuleFragmentWidget.SerializePayload(
+            new ModuleFragmentWidgetConfig(AppKey, "/widgets/overview", defaultWidth, defaultHeight));
+
+        var config = ModuleFragmentWidget.TryParsePayload(payload);
+        Assert.NotNull(config);
+        Assert.Equal(defaultWidth, config.DefaultWidth);
+        Assert.Equal(defaultHeight, config.DefaultHeight);
+    }
+
     [Fact]
     public async Task HostAgentImportPayload_IsReadByTheRenderingPath()
     {
@@ -189,6 +232,40 @@ public sealed class ModuleFragmentWidgetTests
         {
             Assert.Contains(expected, result.Html, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public void Sanitize_PreservesSwedishCharacters()
+    {
+        const string html = "<div><p>Åtgärder för ärenden: översikt och sökning</p><a href=\"ärenden/5\">Visa</a></div>";
+
+        var result = ModuleFragmentHtmlSanitizer.Sanitize(html, ModuleBase);
+
+        Assert.Contains("Åtgärder för ärenden: översikt och sökning", result.Html, StringComparison.Ordinal);
+        Assert.DoesNotContain("�", result.Html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Sanitize_RemovesSvgUseForeignObjectAndXlinkHref()
+    {
+        const string html = """
+            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+              <use xlink:href="#icon-alert"></use>
+              <foreignObject width="10" height="10"><iframe src="https://evil.example"></iframe></foreignObject>
+              <rect x="0" y="0" width="16" height="16" fill="currentColor"></rect>
+              <a xlink:href="javascript:alert(1)">x</a>
+            </svg>
+            """;
+
+        var result = ModuleFragmentHtmlSanitizer.Sanitize(html, ModuleBase);
+
+        Assert.DoesNotContain("<use", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("foreignObject", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("xlink", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("javascript", result.Html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<iframe", result.Html, StringComparison.OrdinalIgnoreCase);
+        // The harmless rect survives, so the whole svg is not dropped wholesale.
+        Assert.Contains("<rect", result.Html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -433,6 +510,23 @@ public sealed class ModuleFragmentWidgetTests
         await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
 
         Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Fetch_WithUtf8Bom_PreservesSwedishCharacters()
+    {
+        // A module may serve its fragment as UTF-8 with a leading BOM; the fetch decodes
+        // the bytes and the sanitizer parses the markup, so the Swedish characters must
+        // survive intact and nothing is replaced by U+FFFD.
+        var html = "﻿<div><p>Åtgärder för ärenden, översikt</p></div>";
+        var handler = new StubHandler((_, _) => Task.FromResult(Html(html)));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions());
+
+        var result = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+
+        Assert.True(result.IsLoaded);
+        Assert.Contains("Åtgärder för ärenden, översikt", result.Html, StringComparison.Ordinal);
+        Assert.DoesNotContain("�", result.Html, StringComparison.Ordinal);
     }
 
     // ----- helpers ---------------------------------------------------------------------

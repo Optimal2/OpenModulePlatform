@@ -15,8 +15,9 @@ namespace OpenModulePlatform.Web.ExampleWebAppModule.Pages.Widgets;
 /// <remarks>
 /// The Portal requests this page server-side with the user's OMP cookies and inserts
 /// the sanitized markup into the widget. The page enforces the same permission as the
-/// module overview; a denied request answers with a redirect or error status, which
-/// the Portal shows as its neutral placeholder.
+/// module overview; a request without an authenticated user answers 401 (no cookie)
+/// and a signed-in user without the permission answers 403, which the Portal shows as
+/// its neutral placeholder either way.
 /// </remarks>
 public sealed class OverviewModel : ExampleWebAppModulePageModel
 {
@@ -38,7 +39,10 @@ public sealed class OverviewModel : ExampleWebAppModulePageModel
         var guard = await RequireViewAsync(ct);
         if (guard is not null)
         {
-            return guard;
+            // The Portal fetches this fragment server-side with the user's OMP cookie.
+            // A request without an authenticated user must answer 401 (no cookie), not
+            // 403, so the caller can tell "not signed in" apart from "no permission".
+            return User.Identity?.IsAuthenticated == true ? guard : Unauthorized();
         }
 
         Overview = await _repo.GetOverviewAsync(ct);

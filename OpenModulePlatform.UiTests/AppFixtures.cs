@@ -45,9 +45,44 @@ public sealed class IFrameAppFixture : WebAppProcessFixture
         new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
 }
 
+/// <summary>
+/// The example web app module as app-under-test: its <c>/widgets/overview</c> page is the
+/// <c>module-fragment</c> dashboard widget the Portal embeds, so the widget test boots the
+/// module directly (anonymous, like the Portal and iFrame fixtures) and asserts the fragment
+/// renders with only allowed elements and relative links.
+/// </summary>
+public sealed class ExampleWebAppModuleFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ExampleWebAppModule";
+    protected override string WebProjectDirectory => "examples/WebAppModule/WebApp";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
+}
+
+/// <summary>
+/// The example web app module with authentication required: boots without the anonymous
+/// override so the fragment endpoint answers 401 for a cookie-less request. The readiness
+/// probe is a static asset (served before Razor auth), because every Razor page of the
+/// module requires a signed-in user.
+/// </summary>
+public sealed class ExampleWebAppModuleAuthRequiredFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ExampleWebAppModule";
+    protected override string WebProjectDirectory => "examples/WebAppModule/WebApp";
+    protected override string ReadinessPath => "/css/site.css";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "false" };
+}
+
 [CollectionDefinition("ui")]
 public sealed class UiCollection :
     ICollectionFixture<PlaywrightSessionFixture>,
     ICollectionFixture<PortalAppFixture>,
     ICollectionFixture<AuthAppFixture>,
-    ICollectionFixture<IFrameAppFixture>;
+    ICollectionFixture<IFrameAppFixture>,
+    ICollectionFixture<ExampleWebAppModuleFixture>,
+    ICollectionFixture<ExampleWebAppModuleAuthRequiredFixture>;

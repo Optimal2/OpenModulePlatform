@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 
 namespace OpenModulePlatform.Artifacts;
 
@@ -44,6 +45,13 @@ public sealed class DashboardWidgetPackageReader
         WriteIndented = true
     };
 
+    private readonly ILogger? _logger;
+
+    public DashboardWidgetPackageReader(ILogger? logger = null)
+    {
+        _logger = logger;
+    }
+
     public async Task<PortableDashboardWidgetPackage> ReadAsync(
         Stream stream,
         string sourceName,
@@ -65,7 +73,10 @@ public sealed class DashboardWidgetPackageReader
             CleanVersionText(document.PackageVersion, "packageVersion") ?? LegacyWidgetVersion,
             CleanOptionalKey(document.ModuleKey, "moduleKey", 100),
             CleanOptionalText(document.Author, "author", 200),
-            document.Widgets.Select(item => Normalize(document, item)).ToArray());
+            document.Widgets.Select(item => NormalizeOrSkip(document, item, sourceName))
+                .Where(widget => widget is not null)
+                .Select(widget => widget!)
+                .ToArray());
     }
 
     private static void ValidateDocument(DashboardWidgetDocument document, string sourceName)
@@ -147,6 +158,31 @@ public sealed class DashboardWidgetPackageReader
             author,
             CleanDistinctNames(item.PermissionNames, "permissionNames"),
             CleanDistinctNames(item.RoleNames, "roleNames"));
+    }
+
+    /// <summary>
+    /// Normalizes one widget, or returns null (and logs the reason) when that single
+    /// widget violates a rule. A bad widget must not fail the whole file: the rest of
+    /// the document is imported and only the invalid widget is dropped.
+    /// </summary>
+    private PortableDashboardWidgetDefinition? NormalizeOrSkip(
+        DashboardWidgetDocument document,
+        DashboardWidgetDocumentItem item,
+        string sourceName)
+    {
+        try
+        {
+            return Normalize(document, item);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger?.LogWarning(
+                "Skipping invalid dashboard widget '{WidgetKey}' in '{SourceName}': {Reason}",
+                item.WidgetKey,
+                sourceName,
+                ex.Message);
+            return null;
+        }
     }
 
     private static string CleanRequiredText(string? value, string propertyName, int maxLength)

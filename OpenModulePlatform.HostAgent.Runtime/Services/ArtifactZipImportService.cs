@@ -1140,7 +1140,7 @@ public sealed class ArtifactZipImportService
         try
         {
             await using var stream = File.OpenRead(item.ExtractedPath);
-            var reader = new DashboardWidgetPackageReader();
+            var reader = new DashboardWidgetPackageReader(_logger);
             var widgets = await reader.ReadAsync(stream, item.SourceName, cancellationToken);
             var result = await _repository.SaveImportedDashboardWidgetsAsync(widgets, cancellationToken);
             return new UniversalHostAgentImportItemResult(

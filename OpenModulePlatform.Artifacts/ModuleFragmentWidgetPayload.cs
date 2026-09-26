@@ -71,7 +71,9 @@ public static class ModuleFragmentWidgetPayload
             var config = JsonSerializer.Deserialize<ModuleFragmentWidgetConfig>(payload, PayloadJsonOptions);
             if (config is null
                 || string.IsNullOrWhiteSpace(config.AppKey)
-                || GetFragmentPathError(config.FragmentPath) is not null)
+                || GetFragmentPathError(config.FragmentPath) is not null
+                || GetDefaultSizeError("defaultWidth", config.DefaultWidth, MinWidth, MaxWidth) is not null
+                || GetDefaultSizeError("defaultHeight", config.DefaultHeight, MinHeight, MaxHeight) is not null)
             {
                 return null;
             }
@@ -201,10 +203,14 @@ public static class ModuleFragmentWidgetPayload
 
     private static void ValidateDefaultSize(string widgetKey, string propertyName, int? value, int min, int max)
     {
-        if (value is { } size && (size < min || size > max))
+        if (GetDefaultSizeError(propertyName, value, min, max) is { } error)
         {
-            throw new InvalidOperationException(
-                $"Dashboard widget '{widgetKey}': {propertyName} must be between {min} and {max}.");
+            throw new InvalidOperationException($"Dashboard widget '{widgetKey}': {error}");
         }
     }
+
+    private static string? GetDefaultSizeError(string propertyName, int? value, int min, int max)
+        => value is { } size && (size < min || size > max)
+            ? $"{propertyName} must be between {min} and {max}."
+            : null;
 }
