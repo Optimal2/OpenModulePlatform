@@ -70,7 +70,16 @@ Describe 'sign-artifacts: external overlay codeSigning section' {
 
         $result = Invoke-SignArtifacts -Sandbox $script:sandbox
 
+        $result.ExitCode | Should -Be 0
         $result.Output | Should -Match 'codeSigning\.includePatterns'
+    }
+
+    It 'Names the overlay file when it is not valid JSON' {
+        # A raw ConvertFrom-Json exception says what is wrong but not in which
+        # file, and the overlay is a local, gitignored file nobody thinks of first.
+        [System.IO.File]::WriteAllText($script:sandbox.OverlayPath, '{ "codeSigning": { "includePatterns": [ ', [System.Text.Encoding]::UTF8)
+
+        { Invoke-SignArtifacts -Sandbox $script:sandbox } | Should -Throw -ExpectedMessage "Could not read the external-consumer overlay '*omp-components.external.json':*"
     }
 
     It 'Fails with -Strict when the overlay has no codeSigning section' {

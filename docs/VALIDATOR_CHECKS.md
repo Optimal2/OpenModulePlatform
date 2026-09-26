@@ -81,6 +81,25 @@ be read is a validation error, never a silent pass. Check 13 additionally
 scans the working tree and untracked files so an uncommitted own-source edit
 is caught before it is committed.
 
+## Finding the platform checkout (Checks 14 and 15)
+
+Check 15 compares against the OpenModulePlatform checkout. `validate-shared-scripts.ps1`
+resolves it in this order: `-PlatformRepositoryRoot`, then the environment variable
+`OMP_PLATFORM_ROOT`, then `OpenModulePlatformRoot`, then a sibling directory named
+`OpenModulePlatform`. Set `OMP_PLATFORM_ROOT` when the consumer checkout does not sit
+beside the platform checkout, for example a git worktree created under another root.
+
+When no root resolves, the guard reports `NOT VERIFIED`. Without `-Strict` that is a
+warning and exit 0; with `-Strict` it is exit 1. Pre-push hooks and `scripts/local-ci.ps1`
+must run the validator with `-Strict`. Measured 2026-09-26: jobs running in worktrees under
+another root found no sibling, got the warning, and pushed shared-script drift that then
+stopped every local push in eight repositories. Plain ad-hoc runs, and CI that checks out a
+single repository, are the only callers that should leave `-Strict` off.
+
+The consumer validator locates `validate-shared-scripts.ps1` itself before calling it, and
+that lookup is repo-local code. Each consumer must read `OMP_PLATFORM_ROOT` there too, or
+the guard is never reached from a worktree under another root.
+
 ## Present-but-vacuous is not applied uniformly (measured 2026-09-07)
 
 The rule above says a numbered check "must still be *present but vacuous*" where its guarded

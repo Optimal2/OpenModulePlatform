@@ -171,9 +171,19 @@ if (Test-Path -LiteralPath $externalOverlayPath -PathType Leaf) {
             }
         }
 
-        $overlayProjects = Get-OptionalPropertyValue -Object $externalOverlay -Name 'sharedProjects'
-        if ($null -eq $overlayProjects) {
+        # Read the property itself: returning an empty array from a function (or
+        # an if-expression) unrolls it to $null, which made an empty list read as
+        # a missing key and sent the reader looking for a typo.
+        $overlayProjectsProperty = $externalOverlay.PSObject.Properties['sharedProjects']
+        $overlayProjects = $null
+        if ($null -ne $overlayProjectsProperty) {
+            $overlayProjects = $overlayProjectsProperty.Value
+        }
+        if ($null -eq $overlayProjectsProperty -or $null -eq $overlayProjectsProperty.Value) {
             Add-ExternalOverlayProblem -Message "The external-consumer overlay '$externalOverlayPath' has no 'sharedProjects' array; no external consumers were merged. Expected { `"sharedProjects`": [ { `"projectPath`": ..., `"externalConsumers`": [ ... ] } ] } (see docs/OMP_COMPONENT_MANIFEST.md)."
+        }
+        elseif (@($overlayProjectsProperty.Value).Count -eq 0) {
+            Add-ExternalOverlayProblem -Message "The external-consumer overlay '$externalOverlayPath' has an empty 'sharedProjects' array; no external consumers were merged. Add an entry per shared project, or delete the overlay if it has nothing to declare."
         }
 
         foreach ($overlayProject in @($overlayProjects | Where-Object { $null -ne $_ })) {

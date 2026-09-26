@@ -261,7 +261,14 @@ function Get-OverlayIncludePatterns {
         return @()
     }
 
-    $overlay = Get-Content -LiteralPath $overlayPath -Raw | ConvertFrom-Json
+    # Named like the validator's message: a bare ConvertFrom-Json error says what
+    # is wrong but not in which file, and this local file is rarely the first suspect.
+    try {
+        $overlay = Get-Content -LiteralPath $overlayPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        throw "Could not read the external-consumer overlay '$overlayPath': $($_.Exception.Message)"
+    }
 
     # An overlay that exists but carries no usable patterns (section missing,
     # key misspelled, empty list) used to return nothing silently, so module

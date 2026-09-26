@@ -13,12 +13,15 @@ function New-Pair {
         [string] $ConsumerBody,
         [string] $PlatformBody,
         [switch] $OmitConsumerScript,
-        [switch] $OmitPlatformRoot
+        [switch] $OmitPlatformRoot,
+        # A name other than OpenModulePlatform puts the platform checkout where
+        # the sibling assumption cannot find it, as in a worktree under another root.
+        [string] $PlatformDirectoryName = 'OpenModulePlatform'
     )
 
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
     $consumer = Join-Path $root 'Consumer'
-    $platform = Join-Path $root 'OpenModulePlatform'
+    $platform = Join-Path $root $PlatformDirectoryName
 
     New-Item -ItemType Directory -Path (Join-Path $consumer 'scripts\omp') -Force | Out-Null
     if (-not $OmitConsumerScript) {
@@ -46,17 +49,38 @@ function Invoke-Guard {
 
         3>&1 fangar WARNING-strommen, dar noten om en omatbar kontroll skrivs.
     #>
-    param([hashtable] $Pair, [switch] $Strict)
+    param(
+        [hashtable] $Pair,
+        [switch] $Strict,
+        # Leaves -PlatformRepositoryRoot out so the guard resolves the root itself.
+        [switch] $OmitPlatformArgument,
+        # Environment for the child process only; restored afterwards. A $null
+        # value removes the variable, so an ambient value cannot leak into the proof.
+        [hashtable] $Environment = @{}
+    )
 
     $argsLista = @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script:GuardScript,
-        '-ConsumerRepositoryRoot', $Pair.Consumer,
-        '-PlatformRepositoryRoot', $Pair.Platform
+        '-ConsumerRepositoryRoot', $Pair.Consumer
     )
+    if (-not $OmitPlatformArgument) { $argsLista += @('-PlatformRepositoryRoot', $Pair.Platform) }
     if ($Strict) { $argsLista += '-Strict' }
 
-    $out = & powershell.exe @argsLista 2>&1 | Out-String
-    return @{ Threw = ($LASTEXITCODE -ne 0); Kod = $LASTEXITCODE; Output = $out }
+    $sparat = @{}
+    foreach ($namn in $Environment.Keys) {
+        $sparat[$namn] = [Environment]::GetEnvironmentVariable($namn, 'Process')
+        [Environment]::SetEnvironmentVariable($namn, $Environment[$namn], 'Process')
+    }
+    try {
+        $out = & powershell.exe @argsLista 2>&1 | Out-String
+        $kod = $LASTEXITCODE
+    }
+    finally {
+        foreach ($namn in $sparat.Keys) {
+            [Environment]::SetEnvironmentVariable($namn, $sparat[$namn], 'Process')
+        }
+    }
+    return @{ Threw = ($kod -ne 0); Kod = $kod; Output = $out }
 }
 
 function Remove-Pair {

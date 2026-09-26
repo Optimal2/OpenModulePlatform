@@ -131,6 +131,46 @@ Describe 'validate-shared-scripts: cannot-measure is visible, never silently gre
     }
 }
 
+Describe 'validate-shared-scripts: OMP_PLATFORM_ROOT names the platform root' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
+    It 'Compares against OMP_PLATFORM_ROOT when there is no sibling checkout' {
+        # Measured 2026-09-26: jobs running in worktrees under another root had no
+        # ..\OpenModulePlatform, got a warning and exit 0, and pushed drift that
+        # then stopped every local push in eight repositories.
+        $pair = New-Pair -ConsumerBody 'stale content' -PlatformBody 'canonical content' -PlatformDirectoryName 'PlatformElsewhere'
+        try {
+            $result = Invoke-Guard -Pair $pair -OmitPlatformArgument -Environment @{ OMP_PLATFORM_ROOT = $pair.Platform; OpenModulePlatformRoot = $null }
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'PlatformElsewhere') | Should -Be $true
+            ($result.Output -match 'checkout was not found') | Should -Be $false
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Passes against OMP_PLATFORM_ROOT when the copies match' {
+        $pair = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content' -PlatformDirectoryName 'PlatformElsewhere'
+        try {
+            $result = Invoke-Guard -Pair $pair -OmitPlatformArgument -Environment @{ OMP_PLATFORM_ROOT = $pair.Platform; OpenModulePlatformRoot = $null }
+            $result.Kod | Should -Be 0
+            ($result.Output -match 'matches the canonical copy') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails with -Strict when neither OMP_PLATFORM_ROOT nor a sibling resolves' {
+        $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformRoot
+        try {
+            $result = Invoke-Guard -Pair $pair -Strict -OmitPlatformArgument -Environment @{ OMP_PLATFORM_ROOT = $null; OpenModulePlatformRoot = $null }
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'OMP_PLATFORM_ROOT') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+}
+
 Describe 'validate-shared-scripts: the exit code is the contract' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')

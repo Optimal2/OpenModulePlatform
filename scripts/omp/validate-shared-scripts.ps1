@@ -50,12 +50,20 @@
     Root of the repository being validated.
 
 .PARAMETER PlatformRepositoryRoot
-    Root of the OpenModulePlatform checkout. Defaults to $env:OpenModulePlatformRoot,
-    then to a sibling directory named OpenModulePlatform - the same resolution
-    order the Check 14 wiring uses.
+    Root of the OpenModulePlatform checkout. Resolution order: this parameter,
+    then $env:OMP_PLATFORM_ROOT, then $env:OpenModulePlatformRoot, then a sibling
+    directory named OpenModulePlatform.
+
+    Set OMP_PLATFORM_ROOT when the consumer checkout does not sit beside the
+    platform checkout - typically a git worktree created under another root.
+    Measured 2026-09-26: jobs running in such worktrees found no sibling, got
+    the NOT VERIFIED warning with exit 0, and pushed shared-script drift that
+    then stopped every local push in eight repositories.
 
 .PARAMETER Strict
     Treat an absent platform repository as a failure instead of an unverified skip.
+    Pre-push and local CI gates should pass it; only a plain ad-hoc run, or CI
+    that checks out a single repository, should leave it off.
 
 .EXAMPLE
     .\scripts\omp\validate-shared-scripts.ps1 -ConsumerRepositoryRoot $RepoRoot
@@ -128,6 +136,9 @@ $consumerRoot = [System.IO.Path]::GetFullPath($ConsumerRepositoryRoot)
 
 $platformRoot = $PlatformRepositoryRoot
 if ([string]::IsNullOrWhiteSpace($platformRoot)) {
+    $platformRoot = $env:OMP_PLATFORM_ROOT
+}
+if ([string]::IsNullOrWhiteSpace($platformRoot)) {
     $platformRoot = $env:OpenModulePlatformRoot
 }
 if ([string]::IsNullOrWhiteSpace($platformRoot)) {
@@ -141,7 +152,7 @@ if ([System.IO.Path]::GetFullPath($platformRoot) -eq $consumerRoot) {
 }
 
 if (-not (Test-Path -LiteralPath $platformRoot -PathType Container)) {
-    $message = "Shared scripts: NOT VERIFIED - the OpenModulePlatform checkout was not found at '$platformRoot', so the shared scripts could not be compared against their canonical copies. This is expected in CI, which checks out one repository at a time."
+    $message = "Shared scripts: NOT VERIFIED - the OpenModulePlatform checkout was not found at '$platformRoot', so the shared scripts could not be compared against their canonical copies. Set OMP_PLATFORM_ROOT to the platform checkout when this repository is not beside it (for example in a worktree under another root). An absent checkout is expected in CI, which checks out one repository at a time."
     if ($Strict) {
         # Exit code here too, for the same reason as the drift path below: the
         # callers read $LASTEXITCODE, and a throw would kill them before they

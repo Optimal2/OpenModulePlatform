@@ -311,6 +311,18 @@ Describe 'Local external-consumer overlay (omp-components.external.json)' {
         $result.Output | Should -Match "overlay .*omp-components\.external\.json.* has no 'sharedProjects' array"
     }
 
+    It 'Says the sharedProjects array is empty rather than missing' {
+        # A valid but empty list is a different mistake from a missing or
+        # misspelled key; the message must not send the reader looking for a typo.
+        [System.IO.File]::WriteAllText($script:testRepo.OverlayPath, '{ "sharedProjects": [] }', [System.Text.Encoding]::UTF8)
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $script:testRepo.ValidatorPath -BaseCommit $script:testRepo.BaseCommit
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "overlay .*omp-components\.external\.json.* has an empty 'sharedProjects' array"
+        $result.Output | Should -Not -Match "has no 'sharedProjects' array"
+    }
+
     It 'Fails with the file name when the overlay is not valid JSON' {
         [System.IO.File]::WriteAllText($script:testRepo.OverlayPath, '{ "sharedProjects": [ ', [System.Text.Encoding]::UTF8)
 

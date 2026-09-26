@@ -136,8 +136,11 @@ consumer's `scripts/validate-component-versions.ps1` calls this script out of th
 OpenModulePlatform checkout; it is deliberately **not** copied into the consumers, because
 a copied guard would be subject to the very drift it exists to detect. Comparison is a
 SHA-256 over line-ending-normalised content, so a CRLF/LF difference alone does not fail
-the check. Neighbour resolution and fail-open behaviour are the same as Check 14: a missing
-neighbour is skipped VISIBLY, and `-Strict` turns that skip into an error.
+the check. The platform checkout is `-PlatformRepositoryRoot`, then `$env:OMP_PLATFORM_ROOT`,
+then `$env:OpenModulePlatformRoot`, then the sibling `..\OpenModulePlatform`; set
+`OMP_PLATFORM_ROOT` in worktrees that do not sit beside the platform checkout. A missing
+neighbour is skipped VISIBLY, and `-Strict` turns that skip into an error. Pre-push and
+local CI gates pass `-Strict` (see docs/VALIDATOR_CHECKS.md).
 
 There is no separate reference to maintain -- the canonical file in this repository IS the
 reference. When it changes here, copy it to the eight consumers in the same change; this
