@@ -113,7 +113,10 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
             }
 
             $exitCode | Should -Be 1
-            $output | Should -Match 'non-numeric maxVersion'
+            # Windows PowerShell wraps the error record to the console width when
+            # no console is attached (git hooks, headless runs), which can split a
+            # word; match with whitespace removed.
+            ($output -replace '\s', '') | Should -Match 'non-numericmaxVersion'
 
             # Atomic abort: the throw must happen before any file is written.
             [System.IO.File]::ReadAllText($manifestPath) | Should -Be $manifestBefore
