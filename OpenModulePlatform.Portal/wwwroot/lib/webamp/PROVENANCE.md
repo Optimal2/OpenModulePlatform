@@ -19,7 +19,7 @@
   in (skin, spår, milkdrop-preset). Ingen telemetri i biblioteket
   (webamp.org-sajtens analytics ligger utanför npm-paketet).
 - Källkodsgranskning på djupet: se katalognoten `inspiration/webamp.md` i
-  DEV-vaulten (fil:rad-referenser för embed-API, skinmotor, ljudgraf, egress).
+  det privata referensvalvet (fil:rad-referenser för embed-API, skinmotor, ljudgraf, egress).
 
 ## Beslut om grundskinnet (operatör, 2026-08-31)
 
