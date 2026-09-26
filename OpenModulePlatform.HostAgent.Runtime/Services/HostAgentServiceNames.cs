@@ -5,8 +5,8 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 /// </summary>
 internal static class HostAgentServiceNames
 {
-    // Keep legacy branded prefixes so upgrade and cleanup logic can recognize
-    // older installs without exposing any customer-specific configuration.
+    // "EMP.*" is a legacy service-name family accepted for in-place upgrades:
+    // upgrade and cleanup logic must still recognize installs registered under it.
     public static readonly string[] KnownHostAgentServiceNamePrefixes =
     [
         "EMP.HostAgent",
