@@ -485,9 +485,9 @@ consumer module):
 ```json
 "artifactConfigurationFiles": [
   {
-    "appKey": "vajskrivare_web",
+    "appKey": "example_module_web",
     "packageType": "web-app",
-    "targetName": "vajskrivare-web",
+    "targetName": "example-module-web",
     "relativePath": "appsettings.json",
     "contentSource": "host-agent-generated",
     "purpose": "Complete runtime configuration generated or overlaid for the target host.",

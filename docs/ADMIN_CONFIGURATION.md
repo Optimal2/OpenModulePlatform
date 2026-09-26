@@ -482,8 +482,8 @@ are saved.
 The default relative path keeps deployment packages grouped by product root and
 package-kind folder. Targets ending in `-web` or `-service` drop that suffix for
 the root folder. Service targets ending in `-backend` use `backend` as the
-package-kind folder, so a target such as `ikrock2-backend` defaults to
-`ikrock2/backend/<version>`.
+package-kind folder, so a target such as `example-module-backend` defaults to
+`example-module/backend/<version>`.
 
 The upload page accepts both legacy artifact zips and the manifest-based OMP
 artifact package format documented in [`ARTIFACT_PACKAGES.md`](ARTIFACT_PACKAGES.md).
