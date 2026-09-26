@@ -246,9 +246,18 @@ public static class ModuleFragmentHtmlSanitizer
         string decoded;
         try
         {
-            decoded = Uri.UnescapeDataString(path);
+            decoded = DecodePercentEncodingRepeatedly(path);
         }
         catch (UriFormatException)
+        {
+            // A value that fails to decode at all is hand-crafted; refuse it.
+            return true;
+        }
+
+        // Undecodable percent-escapes (for example an invalid UTF-8 byte sequence such
+        // as %c0%ae) survive decoding as a literal '%'. They are a hand-crafted value
+        // that a different decoder may resolve another way; refuse rather than guess.
+        if (decoded.Contains('%', StringComparison.Ordinal))
         {
             return true;
         }
@@ -262,5 +271,30 @@ public static class ModuleFragmentHtmlSanitizer
 
         return decoded.Contains('\\', StringComparison.Ordinal)
             || decoded.Split('/').Any(static segment => segment is "." or "..");
+    }
+
+    /// <summary>
+    /// Percent-decodes <paramref name="value"/> until the text stops changing, up to a
+    /// bounded number of passes. A single decode leaves double-encoded dot segments
+    /// (for example <c>%252e%252e</c>) hidden as <c>%2e%2e</c>, so the traversal check
+    /// would miss them; each extra pass peels one more encoding layer.
+    /// </summary>
+    private static string DecodePercentEncodingRepeatedly(string value)
+    {
+        const int MaxDecodePasses = 4;
+
+        var decoded = value;
+        for (var pass = 0; pass < MaxDecodePasses; pass++)
+        {
+            var next = Uri.UnescapeDataString(decoded);
+            if (string.Equals(next, decoded, StringComparison.Ordinal))
+            {
+                return next;
+            }
+
+            decoded = next;
+        }
+
+        return decoded;
     }
 }
