@@ -89,6 +89,30 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
     }
 
     [Fact]
+    public async Task DeletePaths_WhenAppliedDefinitionDeclaresNoRuntimeMaintenance_RunNothingAndBlockNothing()
+    {
+        // A module without the section: no module step runs and none blocks the delete.
+        await _fixture.InsertExampleDefinitionAsync(
+            isApplied: true,
+            rewriteJson: static json =>
+            {
+                var definition = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+                Assert.True(definition.Remove("runtimeMaintenance"));
+                return definition.ToJsonString();
+            });
+        var appInstanceId = Guid.NewGuid();
+        await _fixture.InsertBindingAsync(appInstanceId, artifactId: 910009);
+        await _fixture.InsertLeaseAsync(appInstanceId);
+        var repository = _fixture.CreatePortalRepository();
+
+        await repository.DeleteArtifactAsync(910009, CancellationToken.None);
+        await repository.DeleteAppInstanceAsync(appInstanceId, CancellationToken.None);
+
+        Assert.Equal(1, await _fixture.CountBindingsPinnedToAsync(910009));
+        Assert.Equal(1, await _fixture.CountLeasesAsync(appInstanceId));
+    }
+
+    [Fact]
     public async Task DeleteArtifactAsync_WhenSectionNameIsJsonEscaped_StillRunsTheStep()
     {
         // System.Text.Json reads the escaped name as runtimeMaintenance; a text pre-filter on the

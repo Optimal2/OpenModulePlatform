@@ -899,10 +899,10 @@ The tests `ModuleRuntimeMaintenanceTests` (validator matrix),
 `OmpAdminRepositoryRuntimeMaintenanceTests` (the three Portal events) run the
 example definition against a local test database.
 
-Some cleanup SQL for module tables is still hardcoded in the HostAgent and
-Portal delete paths while modules move to declared steps. Those statements are
-marked `transitional: removed once modules declare runtimeMaintenance` and
-will be removed; new modules must use `runtimeMaintenance`.
+The HostAgent and Portal delete paths carry no cleanup SQL for tables of
+modules outside this repository; a module whose tables reference platform rows
+must declare `runtimeMaintenance` steps, or those deletes fail on its foreign
+keys. `PlatformDeletePathsModuleSchemaTests` keeps it that way.
 
 ## Compatibility Policy
 

@@ -19,9 +19,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   `OMP-MODULE-RUNTIME-MAINTENANCE` at every import gate and again before
   they run: one batch, module-schema writes only, `IF OBJECT_ID(...) IS NOT
   NULL` guards, no `EXEC` or DDL. The example web app module declares one
-  step per event. The module-specific cleanup SQL still hardcoded in those
-  delete paths is marked transitional and goes once modules declare their
-  steps. See docs/MODULE_DEFINITIONS.md, "Runtime maintenance steps".
+  step per event. The module-specific cleanup SQL that used to be hardcoded
+  in those delete paths is gone; a module whose tables reference platform
+  rows declares its own steps. See docs/MODULE_DEFINITIONS.md, "Runtime
+  maintenance steps".
 
 - **Runtime maintenance steps may read two platform tables.** A module
   table keyed by the platform's `WorkerInstanceId` could not reach the

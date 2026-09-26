@@ -665,18 +665,6 @@ IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NOT NULL DELETE FROM omp.HostAgentJo
 -- than none, because the next caller trusts it.
 -- Module-owned rows that reference the host's worker rows are cleared by the module's declared
 -- host-removed runtime maintenance steps, which run before this batch in the same transaction.
--- transitional: removed once modules declare runtimeMaintenance
-IF OBJECT_ID(N'omp_ibs_packager.ChannelWorkerLeases', N'U') IS NOT NULL
-    DELETE FROM omp_ibs_packager.ChannelWorkerLeases
-    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId);
-IF OBJECT_ID(N'omp_ibs_packager.ChannelRuntimeStates', N'U') IS NOT NULL
-    UPDATE omp_ibs_packager.ChannelRuntimeStates
-    SET WorkerInstanceId = NULL
-    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId);
-IF OBJECT_ID(N'omp_ibs_packager.Channels', N'U') IS NOT NULL
-    UPDATE omp_ibs_packager.Channels
-    SET WorkerInstanceId = NULL
-    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId);
 IF OBJECT_ID(N'omp.WorkerInstanceRuntimeStates', N'U') IS NOT NULL
     DELETE FROM omp.WorkerInstanceRuntimeStates
     WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId)

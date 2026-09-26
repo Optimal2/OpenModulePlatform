@@ -49,6 +49,43 @@ public sealed class OmpHostArtifactRepositoryRuntimeMaintenanceTests : IDisposab
     }
 
     [Fact]
+    public async Task DeleteOrphanHostAsync_RunsTheStepOnlyInTheModuleSchema()
+    {
+        // A table of the same name and shape in another schema keeps its row for the removed host:
+        // the step is bound to omp_<moduleKey>, and the platform itself carries no module SQL.
+        Execute(@"
+EXEC(N'CREATE SCHEMA omp_other_module');
+CREATE TABLE omp_other_module.RuntimeLeases (HostId uniqueidentifier NOT NULL);");
+        InsertExampleDefinition(isApplied: true);
+        var hostId = _database.InsertHost("runtime-maintenance-other-schema", environment: null);
+        InsertLease(hostId);
+        Execute($"INSERT INTO omp_other_module.RuntimeLeases (HostId) VALUES ('{hostId}');");
+
+        var deleted = await _repository.DeleteOrphanHostAsync(hostId, CancellationToken.None);
+
+        Assert.Equal(1, deleted);
+        Assert.Equal(0, CountLeases(hostId));
+        Assert.Equal(1, Scalar($"SELECT COUNT(*) FROM omp_other_module.RuntimeLeases WHERE HostId = '{hostId}';"));
+    }
+
+    [Fact]
+    public async Task DeleteOrphanHostAsync_WhenAppliedDefinitionDeclaresNoRuntimeMaintenance_DeletesHostAndRunsNoStep()
+    {
+        // A module without the section: the platform's own delete still happens, nothing else runs.
+        var definition = JsonNode.Parse(ReadExampleDefinition())!.AsObject();
+        Assert.True(definition.Remove("runtimeMaintenance"));
+        InsertDefinition(definition.ToJsonString(), isApplied: true);
+        var hostId = _database.InsertHost("runtime-maintenance-undeclared", environment: null);
+        InsertLease(hostId);
+
+        var deleted = await _repository.DeleteOrphanHostAsync(hostId, CancellationToken.None);
+
+        Assert.Equal(1, deleted);
+        Assert.False(_database.HostExists(hostId));
+        Assert.Equal(1, CountLeases(hostId));
+    }
+
+    [Fact]
     public async Task DeleteOrphanHostAsync_WhenNoAppliedDefinitionDeclaresSteps_LeavesModuleRowsUntouched()
     {
         // Imported but not applied: the contract in force declares nothing, so nothing runs.
@@ -228,6 +265,14 @@ VALUES (@workerInstanceId, DATEADD(minute, 5, SYSUTCDATETIME()));", conn);
         conn.Open();
         using var cmd = new SqlCommand("SELECT COUNT(*) FROM omp_example_webapp.RuntimeWorkerLeases WHERE WorkerInstanceId = @workerInstanceId;", conn);
         cmd.Parameters.AddWithValue("@workerInstanceId", workerInstanceId);
+        return (int)cmd.ExecuteScalar()!;
+    }
+
+    private int Scalar(string sql)
+    {
+        using var conn = new SqlConnection(_database.ConnectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(sql, conn);
         return (int)cmd.ExecuteScalar()!;
     }
 

@@ -1910,17 +1910,6 @@ UPDATE omp.InstanceTemplateAppInstances
 SET DesiredArtifactId = NULL
 WHERE DesiredArtifactId = @ArtifactId;
 
--- Module-owned cross-schema reference. Guarded by OBJECT_ID so the statement is a no-op on
--- an installation without the owning module; the retention job discovers these dynamically, which
--- is why it protected artifacts the Portal was willing to delete. Modules now release their own
--- references through declared artifact-removed runtime maintenance steps, run before this batch.
--- transitional: removed once modules declare runtimeMaintenance
-IF OBJECT_ID(N'omp_ibs_packager.ChannelTypeVersions', N'U') IS NOT NULL
-BEGIN
-    EXEC sp_executesql N'UPDATE omp_ibs_packager.ChannelTypeVersions SET ArtifactId = NULL WHERE ArtifactId = @ArtifactId;',
-        N'@ArtifactId int', @ArtifactId = @ArtifactId;
-END;
-
 DELETE FROM omp.Artifacts
 WHERE ArtifactId = @ArtifactId;
 DECLARE @affected int = @@ROWCOUNT;
@@ -5314,9 +5303,10 @@ VALUES
     /// Both now share this helper. Writing a third copy is what produced the drift in the first
     /// place, and it is the defect class R8 was convened to sweep for.
     ///
-    /// The two NOT NULL cross-schema children cannot be unlinked, so they are reported instead of
-    /// deleted: silently removing an operator's channels or content pages as a side effect of
-    /// deleting a runtime row would be worse than refusing.
+    /// NOT NULL cross-schema children cannot be unlinked, so they are reported instead of deleted:
+    /// silently removing an operator's module rows or content pages as a side effect of deleting a
+    /// runtime row would be worse than refusing. Other modules report and release their rows
+    /// through their declared app-instance-blocking-count and app-instance-removed steps.
     /// </remarks>
     private static async Task ClearAppInstanceChildrenAsync(
         SqlConnection conn,
@@ -5332,40 +5322,6 @@ VALUES
             conn,
             tx,
             OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.AppInstanceRemoved,
-            appInstanceId,
-            ct);
-
-        // omp.WorkerInstances is itself a parent. Its cross-schema children have to go before the
-        // worker rows do, and they are keyed by WorkerInstanceId rather than AppInstanceId.
-        // transitional: removed once modules declare runtimeMaintenance
-        await ExecuteOptionalTableStatementAsync(
-            conn,
-            tx,
-            "omp_ibs_packager.ChannelWorkerLeases",
-            @"DELETE FROM omp_ibs_packager.ChannelWorkerLeases
-WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @Id);",
-            appInstanceId,
-            ct);
-
-        await ExecuteOptionalTableStatementAsync(
-            conn,
-            tx,
-            "omp_ibs_packager.ChannelRuntimeStates",
-            @"UPDATE omp_ibs_packager.ChannelRuntimeStates
-SET WorkerInstanceId = NULL
-WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @Id);",
-            appInstanceId,
-            ct);
-
-        // Channels.WorkerInstanceId is nullable, so a channel survives the worker row it ran on.
-        // Channels.AppInstanceId is not, which is why the guard above refuses that case outright.
-        await ExecuteOptionalTableStatementAsync(
-            conn,
-            tx,
-            "omp_ibs_packager.Channels",
-            @"UPDATE omp_ibs_packager.Channels
-SET WorkerInstanceId = NULL
-WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @Id);",
             appInstanceId,
             ct);
 
@@ -5433,19 +5389,6 @@ WHERE AppInstanceId = @Id
             ct))
         {
             blockers.Add($"{blocking.Count} {blocking.Description ?? $"row(s) owned by module '{blocking.ModuleKey}'"}");
-        }
-
-        // transitional: removed once modules declare runtimeMaintenance
-        var channelCount = await CountOptionalTableRowsAsync(
-            conn,
-            tx,
-            "omp_ibs_packager.Channels",
-            "SELECT COUNT(*) FROM omp_ibs_packager.Channels WHERE AppInstanceId = @Id;",
-            appInstanceId,
-            ct);
-        if (channelCount > 0)
-        {
-            blockers.Add($"{channelCount} module channel(s)");
         }
 
         var contentCount = await CountOptionalTableRowsAsync(
