@@ -139,7 +139,8 @@ SHA-256 over line-ending-normalised content, so a CRLF/LF difference alone does 
 the check. The platform checkout is `-PlatformRepositoryRoot`, then `$env:OMP_PLATFORM_ROOT`,
 then `$env:OpenModulePlatformRoot`, then the sibling `..\OpenModulePlatform`; set
 `OMP_PLATFORM_ROOT` in worktrees that do not sit beside the platform checkout. A missing
-neighbour is skipped VISIBLY, and `-Strict` turns that skip into an error. Pre-push and
+neighbour is skipped VISIBLY, and `-Strict` turns that skip into an error; an explicitly named
+root that is not a checkout is exit 1 regardless of `-Strict`. Pre-push and
 local CI gates pass `-Strict` (see docs/VALIDATOR_CHECKS.md).
 
 There is no separate reference to maintain -- the canonical file in this repository IS the

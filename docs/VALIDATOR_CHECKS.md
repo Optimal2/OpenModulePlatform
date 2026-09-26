@@ -96,6 +96,12 @@ another root found no sibling, got the warning, and pushed shared-script drift t
 stopped every local push in eight repositories. Plain ad-hoc runs, and CI that checks out a
 single repository, are the only callers that should leave `-Strict` off.
 
+A root that is named explicitly (`-PlatformRepositoryRoot` or `OMP_PLATFORM_ROOT`) but is not an
+OpenModulePlatform checkout (the canonical scripts or `omp-components.json` are missing) is a
+configuration error: exit 1 even without `-Strict`. A sibling directory that exists but is not a
+checkout is reported like a missing sibling: warning and exit 0 without `-Strict`, exit 1 with it.
+Relative roots are resolved against the consumer repository root, not the current directory.
+
 The consumer validator locates `validate-shared-scripts.ps1` itself before calling it, and
 that lookup is repo-local code. Each consumer must read `OMP_PLATFORM_ROOT` there too, or
 the guard is never reached from a worktree under another root.
