@@ -379,7 +379,7 @@ dotnet test  OpenModulePlatform.slnx --configuration Release
 
 `scripts/local-ci.ps1` runs the same checks as CI: module-definition
 validation, module SQL guards, component-version validation, PSScriptAnalyzer,
-the Pester suites under `tests/`, the Release build, and the six non-UI test
+the Pester suites under `tests/`, the Release build, and the seven non-UI test
 projects with a zero-execution check. Activate the tracked git hooks once per
 clone so it runs on `git push`:
 
