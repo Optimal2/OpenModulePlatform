@@ -1,0 +1,25 @@
+{
+  "format": "omp.portal.dashboard.widgets",
+  "formatVersion": 1,
+  "packageVersion": "0.1.0",
+  "moduleKey": "example_webapp",
+  "author": "OpenModulePlatform",
+  "widgets": [
+    {
+      "widgetKey": "example_webapp:overview",
+      "widgetVersion": "0.1.0",
+      "title": "Example Web App Module",
+      "description": "Module-owned widget served by the example web app as an HTML fragment.",
+      "widgetType": "module-fragment",
+      "appKey": "example_webapp_webapp",
+      "fragmentPath": "/widgets/overview",
+      "defaultWidth": 416,
+      "defaultHeight": 192,
+      "permissionNames": [
+        "ExampleWebAppModule.View",
+        "ExampleWebAppModule.Admin"
+      ],
+      "roleNames": []
+    }
+  ]
+}

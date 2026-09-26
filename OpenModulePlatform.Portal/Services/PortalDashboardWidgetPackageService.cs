@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal/Services/PortalDashboardWidgetPackageService.cs
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
 using System.Data;
@@ -405,9 +406,14 @@ WHERE widget_id = @widget_id;";
         var description = CleanOptionalText(item.Description, "description", 1000);
         var widgetType = CleanRequiredKey(item.WidgetType, "widgetType", 50);
         var moduleKey = CleanOptionalKey(item.ModuleKey ?? document.ModuleKey, "moduleKey", 100);
-        var payload = ModuleFragmentWidget.IsModuleFragment(widgetType)
-            ? NormalizeModuleFragmentPayload(item)
-            : NormalizeNonFragmentPayload(item);
+        var payload = ModuleFragmentWidgetPayload.NormalizeDefinition(
+            widgetKey,
+            widgetType,
+            CleanOptionalText(item.Payload, "payload", MaxPayloadLength),
+            item.AppKey,
+            item.FragmentPath,
+            item.DefaultWidth,
+            item.DefaultHeight);
         var author = CleanOptionalText(item.Author ?? document.Author, "author", 200);
         if (item.PermissionNames is null || item.RoleNames is null)
         {
@@ -429,67 +435,6 @@ WHERE widget_id = @widget_id;";
             author,
             permissionNames,
             roleNames);
-    }
-
-    private static string? NormalizeNonFragmentPayload(DashboardWidgetDocumentItem item)
-    {
-        if (item.AppKey is not null
-            || item.FragmentPath is not null
-            || item.DefaultWidth is not null
-            || item.DefaultHeight is not null)
-        {
-            throw new InvalidOperationException(
-                $"Dashboard widget '{item.WidgetKey}': appKey, fragmentPath, defaultWidth and defaultHeight are only valid for widgetType '{ModuleFragmentWidget.WidgetType}'.");
-        }
-
-        return CleanOptionalText(item.Payload, "payload", MaxPayloadLength);
-    }
-
-    /// <summary>
-    /// Validates a module-fragment definition and returns the JSON payload stored for it.
-    /// </summary>
-    internal static string NormalizeModuleFragmentPayload(DashboardWidgetDocumentItem item)
-    {
-        if (!string.IsNullOrWhiteSpace(item.Payload))
-        {
-            throw new InvalidOperationException(
-                $"Dashboard widget '{item.WidgetKey}' of type '{ModuleFragmentWidget.WidgetType}' must use appKey and fragmentPath instead of payload.");
-        }
-
-        var appKey = CleanRequiredKey(item.AppKey, "appKey", 100);
-        var pathError = ModuleFragmentWidget.GetFragmentPathError(item.FragmentPath);
-        if (pathError is not null)
-        {
-            throw new InvalidOperationException($"Dashboard widget '{item.WidgetKey}': {pathError}");
-        }
-
-        ValidateDefaultSize(
-            item.WidgetKey,
-            "defaultWidth",
-            item.DefaultWidth,
-            PortalDashboardService.MinWidgetWidth,
-            PortalDashboardService.MaxWidgetWidth);
-        ValidateDefaultSize(
-            item.WidgetKey,
-            "defaultHeight",
-            item.DefaultHeight,
-            PortalDashboardService.MinWidgetHeight,
-            PortalDashboardService.MaxWidgetHeight);
-
-        return ModuleFragmentWidget.SerializePayload(new ModuleFragmentWidgetConfig(
-            appKey,
-            item.FragmentPath!.Trim(),
-            item.DefaultWidth,
-            item.DefaultHeight));
-    }
-
-    private static void ValidateDefaultSize(string widgetKey, string propertyName, int? value, int min, int max)
-    {
-        if (value is { } size && (size < min || size > max))
-        {
-            throw new InvalidOperationException(
-                $"Dashboard widget '{widgetKey}': {propertyName} must be between {min} and {max}.");
-        }
     }
 
     private static async Task<DashboardWidgetSnapshot?> FindWidgetAsync(

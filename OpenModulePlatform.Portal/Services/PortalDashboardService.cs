@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Services/PortalDashboardService.cs
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
 using System.Data;
@@ -21,10 +22,11 @@ public sealed class PortalDashboardService
     private const bool DefaultExpandedCanvas = true;
     private const int DefaultWidgetWidth = 320;
     private const int DefaultWidgetHeight = 192;
-    public const int MinWidgetWidth = 160;
-    public const int MinWidgetHeight = 96;
-    public const int MaxWidgetWidth = 1800;
-    public const int MaxWidgetHeight = 1400;
+    // Shared with the widget definition import so imported default sizes fit the dashboard.
+    public const int MinWidgetWidth = ModuleFragmentWidgetPayload.MinWidth;
+    public const int MinWidgetHeight = ModuleFragmentWidgetPayload.MinHeight;
+    public const int MaxWidgetWidth = ModuleFragmentWidgetPayload.MaxWidth;
+    public const int MaxWidgetHeight = ModuleFragmentWidgetPayload.MaxHeight;
     private const int DefaultModuleFragmentWidth = 416;
     private const int DefaultModuleFragmentHeight = 320;
     private const int MaxWidgetOffset = 10000;

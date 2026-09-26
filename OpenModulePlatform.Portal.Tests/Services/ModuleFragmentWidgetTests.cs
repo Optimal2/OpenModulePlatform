@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
@@ -117,6 +118,29 @@ public sealed class ModuleFragmentWidgetTests
         var tampered = "{\"appKey\":\"sample_module_web\",\"fragmentPath\":\"//evil.example/x\"}";
         Assert.Null(ModuleFragmentWidget.TryParsePayload(tampered));
         Assert.Null(ModuleFragmentWidget.TryParsePayload("not json"));
+    }
+
+    [Fact]
+    public async Task HostAgentImportPayload_IsReadByTheRenderingPath()
+    {
+        // Universal packages are imported by the HostAgent through DashboardWidgetPackageReader,
+        // not by this Portal service. The payload it produces must be the one the Portal
+        // renders from, byte for byte, so a Portal re-import sees the row as unchanged.
+        var json = BuildDocument("\"appKey\": \"sample_module_web\", \"fragmentPath\": \"/widgets/overview?rows=5\", \"defaultWidth\": 480");
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+
+        var package = await new DashboardWidgetPackageReader().ReadAsync(stream, "test.json", CancellationToken.None);
+
+        var payload = Assert.Single(package.Widgets).Payload;
+        var config = ModuleFragmentWidget.TryParsePayload(payload);
+        Assert.NotNull(config);
+        Assert.Equal(AppKey, config.AppKey);
+        Assert.Equal("/widgets/overview?rows=5", config.FragmentPath);
+        Assert.Equal(480, config.DefaultWidth);
+        Assert.Null(config.DefaultHeight);
+        Assert.Equal(
+            ModuleFragmentWidget.SerializePayload(new ModuleFragmentWidgetConfig(AppKey, "/widgets/overview?rows=5", 480)),
+            payload);
     }
 
     // ----- sanitization ----------------------------------------------------------------

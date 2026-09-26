@@ -1,0 +1,11 @@
+@page "/widgets/overview"
+@model OpenModulePlatform.Web.ExampleWebAppModule.Pages.Widgets.OverviewModel
+@{
+    // A dashboard fragment: no layout, only the subset of HTML the Portal keeps.
+    Layout = null;
+}
+<div class="example-widget" data-module-key="@Model.Overview.ModuleKey">
+    <p><strong>@L["Example Web App Module"]</strong></p>
+    <p>@L["Active configurations"]: <strong>@Model.Overview.ActiveConfigurationCount</strong></p>
+    <p><a href="configurations">@L["Open configurations"]</a></p>
+</div>

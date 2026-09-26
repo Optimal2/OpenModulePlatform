@@ -261,7 +261,13 @@ serves an HTML fragment from its own web app and ships a widget definition with
 }
 ```
 
-Definition rules, enforced on import:
+Definition rules, enforced on import. Both import paths apply the same rules
+through the shared `ModuleFragmentWidgetPayload` in `OpenModulePlatform.Artifacts`:
+the Portal widget import (Portal UI and full import) and the HostAgent
+universal-package import, which is how module packages are installed in
+operation. A definition that breaks a rule fails the import of that widget
+file with a message naming the widget; it is never stored with an empty
+payload:
 
 - `appKey` is required and names the module's web app. The Portal resolves the
   app's registered address exactly like the app links on the dashboard
@@ -273,9 +279,19 @@ Definition rules, enforced on import:
 - `defaultWidth` (160-1800) and `defaultHeight` (96-1400) are optional pixel
   sizes for a newly added widget. Without them a `module-fragment` widget starts
   at 416 x 320.
-- `payload` must be empty; the Portal stores `appKey`, `fragmentPath`, and the
-  default size as JSON in `omp_portal.widgets.payload` and exports them as the
-  named fields again.
+- `payload` must be empty; the import normalizes `appKey`, `fragmentPath`, and
+  the default size into JSON in `omp_portal.widgets.payload`, for example
+  `{"appKey":"example_module_web","fragmentPath":"/widgets/overview","defaultWidth":416,"defaultHeight":320}`,
+  and the Portal exports them as the named fields again. Both import paths
+  write byte-identical JSON, so re-importing the same `widgetVersion` is
+  skipped as unchanged; a changed `fragmentPath` needs a new `widgetVersion`.
+- `appKey`, `fragmentPath`, `defaultWidth`, and `defaultHeight` are rejected on
+  every other widget type.
+
+`examples/WebAppModule` is the reference: its web app serves the fragment page
+`/widgets/overview`, and `examples/WebAppModule/widgets/example_webapp-widgets.json`
+(listed under `widgetFiles` in `omp-components.json`) ships the definition in
+the example module's universal package.
 
 Permissions are the same as for every widget: a user who does not match
 `permissionNames`/`roleNames` never sees the widget, and the Portal never

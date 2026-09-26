@@ -139,6 +139,13 @@ HostAgent unattended imports:
   `widgetVersion` or an explicit Portal full-import replacement for rollback or
   repair
 
+Widget definitions are normalized when they are imported, by Portal and
+HostAgent alike: a `module-fragment` widget's `appKey`, `fragmentPath`,
+`defaultWidth`, and `defaultHeight` become the JSON stored in
+`omp_portal.widgets.payload`, and an invalid definition fails that widget
+item instead of being stored without a payload. See
+[Module-owned widgets](ADMIN_CONFIGURATION.md#module-owned-widgets-module-fragment).
+
 `widget-data` objects are zip files inside the universal package. They contain
 an `omp-widget-runtime-data.json` manifest and binary entries. Runtime JSON may
 refer to media with `binaryDataHash`; `binaryDataId` remains supported for

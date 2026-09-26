@@ -568,6 +568,85 @@ ORDER BY RelativePath;",
         return rows;
     }
 
+    /// <summary>
+    /// Creates the Portal dashboard widget tables, and the permission/role tables they
+    /// reference, in the shape the HostAgent widget import checks for.
+    /// </summary>
+    public void CreateDashboardWidgetTables()
+    {
+        Execute(@"
+CREATE TABLE omp.Permissions
+(
+    PermissionId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    Name nvarchar(200) NOT NULL UNIQUE
+);
+CREATE TABLE omp.Roles
+(
+    RoleId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    Name nvarchar(200) NOT NULL UNIQUE
+);");
+        Execute("CREATE SCHEMA [omp_portal];");
+        Execute(@"
+CREATE TABLE omp_portal.widgets
+(
+    widget_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    widget_key nvarchar(200) NULL,
+    title nvarchar(200) NOT NULL,
+    description nvarchar(1000) NULL,
+    widget_type nvarchar(50) NOT NULL,
+    payload nvarchar(max) NULL,
+    module_key nvarchar(100) NULL,
+    author nvarchar(200) NULL,
+    is_enabled bit NOT NULL DEFAULT(1),
+    modified_at datetime2(3) NOT NULL DEFAULT(SYSUTCDATETIME()),
+    widget_version nvarchar(50) NOT NULL DEFAULT(N'0.0.0')
+);
+CREATE TABLE omp_portal.widget_permissions
+(
+    widget_permission_id int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    widget_id int NOT NULL REFERENCES omp_portal.widgets(widget_id),
+    permission_id int NULL REFERENCES omp.Permissions(PermissionId),
+    role_id int NULL REFERENCES omp.Roles(RoleId)
+);");
+    }
+
+    public void InsertDashboardWidget(
+        string widgetKey,
+        string title,
+        string widgetType,
+        string widgetVersion,
+        string? moduleKey,
+        string? payload)
+        => Execute(
+            "INSERT INTO omp_portal.widgets(widget_key, title, widget_type, widget_version, module_key, payload) VALUES(@widgetKey, @title, @widgetType, @widgetVersion, @moduleKey, @payload);",
+            new SqlParameter("@widgetKey", widgetKey),
+            new SqlParameter("@title", title),
+            new SqlParameter("@widgetType", widgetType),
+            new SqlParameter("@widgetVersion", widgetVersion),
+            new SqlParameter("@moduleKey", moduleKey ?? (object)DBNull.Value),
+            new SqlParameter("@payload", payload ?? (object)DBNull.Value));
+
+    public IReadOnlyList<(string WidgetKey, string WidgetType, string WidgetVersion, string? Payload)> GetDashboardWidgets()
+    {
+        var rows = new List<(string, string, string, string?)>();
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "SELECT widget_key, widget_type, widget_version, payload FROM omp_portal.widgets ORDER BY widget_id;",
+            conn);
+        using var rdr = cmd.ExecuteReader();
+        while (rdr.Read())
+        {
+            rows.Add((
+                rdr.GetString(0),
+                rdr.GetString(1),
+                rdr.GetString(2),
+                rdr.IsDBNull(3) ? null : rdr.GetString(3)));
+        }
+
+        return rows;
+    }
+
     public void CreateMaintenanceFindingsTable()
     {
         Execute(@"

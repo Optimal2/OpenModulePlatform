@@ -121,7 +121,14 @@ public sealed class DashboardWidgetPackageReader
         var description = CleanOptionalText(item.Description, "description", 1000);
         var widgetType = CleanRequiredKey(item.WidgetType, "widgetType", 50);
         var moduleKey = CleanOptionalKey(item.ModuleKey ?? document.ModuleKey, "moduleKey", 100);
-        var payload = CleanOptionalText(item.Payload, "payload", MaxPayloadLength);
+        var payload = ModuleFragmentWidgetPayload.NormalizeDefinition(
+            widgetKey,
+            widgetType,
+            CleanOptionalText(item.Payload, "payload", MaxPayloadLength),
+            item.AppKey,
+            item.FragmentPath,
+            item.DefaultWidth,
+            item.DefaultHeight);
         var author = CleanOptionalText(item.Author ?? document.Author, "author", 200);
         if (item.PermissionNames is null || item.RoleNames is null)
         {
@@ -266,6 +273,14 @@ public sealed class DashboardWidgetPackageReader
         public string WidgetType { get; set; } = "portal";
 
         public string? Payload { get; set; }
+
+        public string? AppKey { get; set; }
+
+        public string? FragmentPath { get; set; }
+
+        public int? DefaultWidth { get; set; }
+
+        public int? DefaultHeight { get; set; }
 
         public string? ModuleKey { get; set; }
 

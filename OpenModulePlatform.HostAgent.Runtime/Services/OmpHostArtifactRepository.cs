@@ -828,8 +828,11 @@ WHERE OverlayKey = @overlayKey
                             continue;
                         }
 
-                        throw new InvalidOperationException(
-                            $"Dashboard widget '{widget.WidgetKey}' already exists with version {existing.WidgetVersion}, but the imported content is different. Use a new widgetVersion for unattended HostAgent folder imports.");
+                        if (!IsModuleFragmentPayloadRepair(existing, widget, permissionIds, roleIds))
+                        {
+                            throw new InvalidOperationException(
+                                $"Dashboard widget '{widget.WidgetKey}' already exists with version {existing.WidgetVersion}, but the imported content is different. Use a new widgetVersion for unattended HostAgent folder imports.");
+                        }
                     }
 
                     await UpdateDashboardWidgetAsync(conn, tx, existing.WidgetId, widget, ct);
@@ -7706,6 +7709,26 @@ ORDER BY
             && string.Equals(existing.Author, imported.Author, StringComparison.Ordinal)
             && IdSetsMatch(existing.PermissionIds, permissionIds)
             && IdSetsMatch(existing.RoleIds, roleIds);
+
+    /// <summary>
+    /// True when a same-version re-import only supplies the payload of a
+    /// <c>module-fragment</c> row that was stored without a usable one.
+    /// </summary>
+    /// <remarks>
+    /// HostAgent imports before the shared <see cref="ModuleFragmentWidgetPayload"/>
+    /// normalization stored module-fragment widgets with a NULL payload, which the Portal
+    /// renders as a placeholder. Re-importing the unchanged package repairs such a row in
+    /// place instead of failing as "different content"; every other field must match.
+    /// </remarks>
+    private static bool IsModuleFragmentPayloadRepair(
+        DashboardWidgetSnapshot existing,
+        PortableDashboardWidgetDefinition imported,
+        IReadOnlyList<int> permissionIds,
+        IReadOnlyList<int> roleIds)
+        => ModuleFragmentWidgetPayload.IsModuleFragment(imported.WidgetType)
+            && ModuleFragmentWidgetPayload.TryParse(existing.Payload) is null
+            && ModuleFragmentWidgetPayload.TryParse(imported.Payload) is not null
+            && DashboardWidgetMatches(existing with { Payload = imported.Payload }, imported, permissionIds, roleIds);
 
     private static bool IdSetsMatch(IReadOnlyList<int> left, IReadOnlyList<int> right)
         => left.Count == right.Count
