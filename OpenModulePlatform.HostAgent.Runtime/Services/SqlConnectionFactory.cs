@@ -19,7 +19,7 @@ public sealed class SqlConnectionFactory : ISqlConnectionFactory
     /// six more seconds would fix; the cycle logs the failure and retries in 30 seconds
     /// anyway, so a too-short wait is self-correcting where a too-long one is not.
     ///
-    /// Measured on LINUS-LAPTOP against the deployed connection string (Data Source=localhost,
+    /// Measured on a development host against the deployed connection string (Data Source=localhost,
     /// Integrated Security): 103 ms cold, under 3 ms warm. Installations with a remote or slow
     /// instance raise it by writing Connect Timeout in the connection string, which is honoured
     /// below and needs no code change.

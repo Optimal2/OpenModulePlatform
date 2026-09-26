@@ -4,7 +4,7 @@
 #
 #   Get-OmpAppDeploymentDetail.ps1                    # all apps, worst first
 #   Get-OmpAppDeploymentDetail.ps1 -PendingOnly       # only what is not in sync
-#   Get-OmpAppDeploymentDetail.ps1 -HostKey LINUS-LAPTOP
+#   Get-OmpAppDeploymentDetail.ps1 -HostKey DEV-HOST-01
 #   Get-OmpAppDeploymentDetail.ps1 -Json
 #
 # Why this exists next to Get-OmpDeploymentDrift.ps1 rather than inside it:
@@ -35,7 +35,7 @@
 # worth of pending apps at once.
 #
 # Workers and worker hosts are listed too (R12-F2/R12-F7), and their RuntimeVersion
-# is honest about what can be known. Measured on LINUS-LAPTOP before this was
+# is honest about what can be known. Measured on a development host before this was
 # added: 16 web-app + 5 service-app instances were visible here, and 2 worker + 1
 # worker-host were not -- 3 of 24 desired app instances that no check could see.
 #

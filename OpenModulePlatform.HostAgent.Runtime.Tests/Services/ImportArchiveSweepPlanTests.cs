@@ -178,7 +178,7 @@ public sealed class ImportArchiveSweepPlanTests
     }
 
     [Fact]
-    public void MeasuredLinusLaptopArchiveIsBroughtUnderTheDefaultCap()
+    public void MeasuredDevelopmentHostArchiveIsBroughtUnderTheDefaultCap()
     {
         // Before/after simulation on the real numbers (metod 7): measured 2026-08-16, the
         // processed archive held 66 files / 7,10 GB after 16 days -- every one of them inside

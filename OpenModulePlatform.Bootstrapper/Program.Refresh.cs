@@ -628,7 +628,7 @@ internal static partial class Program
         var json = originalNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         // UTF8Encoding(false): plain Encoding.UTF8 EMITS a BOM, which the original
         // hand-maintained configs do not carry - the first rewrite silently added
-        // EF BB BF (measured 2026-08-31 on linus_hemma/bootstrap.json). BOM-free
+        // EF BB BF (measured 2026-08-31 on a development host's bootstrap.json). BOM-free
         // matches how the files are authored; System.Text.Json reads both.
         await AtomicJsonFile.WriteAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
     }
@@ -664,7 +664,7 @@ internal static partial class Program
         var json = originalNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         // UTF8Encoding(false): plain Encoding.UTF8 EMITS a BOM, which the original
         // hand-maintained configs do not carry - the first rewrite silently added
-        // EF BB BF (measured 2026-08-31 on linus_hemma/bootstrap.json). BOM-free
+        // EF BB BF (measured 2026-08-31 on a development host's bootstrap.json). BOM-free
         // matches how the files are authored; System.Text.Json reads both.
         await AtomicJsonFile.WriteAsync(configPath, json + Environment.NewLine, new UTF8Encoding(false));
     }

@@ -125,12 +125,12 @@ public sealed class ArtifactZipImportService
     /// per-artifact line in ArtifactProvisioner written only while that artifact is being
     /// provisioned -- so an artifact this host never provisions was completely invisible,
     /// and the gap was a number nobody could see, let alone drive to zero. Measured on
-    /// LINUS-LAPTOP 2026-08-16: 29 of 372 enabled artifacts have no Sha256, and none of the
+    /// A development host 2026-08-16: 29 of 372 enabled artifacts have no Sha256, and none of the
     /// 29 is referenced by anything enabled, so the flag could be turned on there today.
     /// That is exactly the conclusion this audit is meant to make reachable without a
     /// hand-written query against the production database.
     ///
-    /// No new flag governs it (Linus directive): the audit is a read-only COUNT run at most
+    /// No new flag governs it (operator directive): the audit is a read-only COUNT run at most
     /// once every six hours per host, which is not a cost worth a switch.
     /// </remarks>
     private async Task AuditArtifactContentHashGapAsync(bool force, CancellationToken cancellationToken)
@@ -786,7 +786,7 @@ public sealed class ArtifactZipImportService
             // omp.Artifacts (IbsPackager's @Version probe), and script execution is
             // version-gated, so a seed that ran before the registration recorded the
             // PREVIOUS import's version and never re-ran to correct it (measured on
-            // linus_hemma 2026-08-25: ChannelTypeVersions one import behind).
+            // a development host 2026-08-25: ChannelTypeVersions one import behind).
             //
             // The same version gate is why a FAILED artifact item defers the SQL
             // entirely: running it now would record a Succeeded execution over the

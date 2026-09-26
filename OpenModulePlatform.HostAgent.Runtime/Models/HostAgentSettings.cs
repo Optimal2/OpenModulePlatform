@@ -634,7 +634,7 @@ public sealed class HostAgentArtifactZipImportSettings
     /// R12-F13. Age alone does not bound the archive, because volume is driven by cadence,
     /// not by age: a universal package is ~124 MB and a refresh can be run several times a
     /// day, so 30 days of retention is 30 days of however many refreshes were run. Measured
-    /// on LINUS-LAPTOP 2026-08-16, 16 days after the store was created: 114 archived import
+    /// on a development host 2026-08-16, 16 days after the store was created: 114 archived import
     /// files totalling 9,63 GB (processed 66 files / 7,10 GB, failed 48 files / 2,53 GB),
     /// projecting to roughly 18 GB once the 30-day window is actually full -- and the volume
     /// that fills is the one holding the artifact store, so the failure mode is imports

@@ -15,7 +15,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 /// nobody could know how far the installation was from being able to turn the flag on,
 /// and a number nobody can see cannot be driven to zero.
 ///
-/// Measured on LINUS-LAPTOP 2026-08-16: 29 of 372 enabled artifacts carry no Sha256, and
+/// Measured on a development host 2026-08-16: 29 of 372 enabled artifacts carry no Sha256, and
 /// <b>none</b> of the 29 is referenced by an enabled app instance, worker instance or host
 /// artifact requirement. The board assumed enabling the flag would refuse to provision the
 /// 29; the measurement says it would refuse nothing, because all 29 are superseded rows.

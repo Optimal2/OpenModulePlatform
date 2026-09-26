@@ -225,7 +225,7 @@ Report keys map directly to JSON filenames:
 
 ```text
 module-status -> module-status.json
-alfons-test   -> alfons-test.json
+example-test  -> example-test.json
 ```
 
 Keys may only contain letters, numbers, underscores, and hyphens.
@@ -327,7 +327,7 @@ Relevant config section:
 ContentWebApp = @{
     ServerReportsPath = 'App_Data/ContentReports'
     HtmlFilesPath = 'App_Data/ContentPages'
-    AllowedServerReportDatabases = @('OpenModulePlatform', 'alfons-test-db')
+    AllowedServerReportDatabases = @('OpenModulePlatform', 'example-test-db')
 }
 ```
 
@@ -345,7 +345,7 @@ Runtime config example:
   "HtmlFilesPath": "App_Data/ContentPages",
   "AllowedServerReportDatabases": [
     "OpenModulePlatform",
-    "alfons-test-db"
+    "example-test-db"
   ]
 }
 ```

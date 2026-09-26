@@ -199,7 +199,7 @@ ORDER BY
     /// </summary>
     /// <remarks>
     /// The app-instance row used to be written directly by whichever worker published last.
-    /// With six worker instances under one app instance -- measured on LINUS-LAPTOP:
+    /// With six worker instances under one app instance -- measured on a development host:
     /// 7 rows in the per-instance table against 2 in this one -- that made the summary a
     /// coin toss, and a worker stuck in Failed(5) stayed invisible for as long as any
     /// sibling reported Running. The summary is now the WORST sibling, not the newest one,

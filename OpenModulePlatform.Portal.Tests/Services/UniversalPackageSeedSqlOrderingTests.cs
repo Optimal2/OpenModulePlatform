@@ -16,7 +16,7 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// rows are registered in omp.Artifacts.
 /// </summary>
 /// <remarks>
-/// Measured on linus_hemma 2026-08-25 (HostAgent 0.3.221, import of
+/// Measured on a development host 2026-08-25 (HostAgent 0.3.221, import of
 /// omp-universal__global__20260825-2202.zip): IbsPackager's seed script
 /// discovers "the latest channel-type artifact version" with a
 /// SELECT TOP 1 ... FROM omp.Artifacts ... ORDER BY ArtifactId DESC. Because

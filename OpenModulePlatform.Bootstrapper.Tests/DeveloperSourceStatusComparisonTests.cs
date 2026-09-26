@@ -25,7 +25,7 @@ public sealed class DeveloperSourceStatusComparisonTests
     [Fact]
     public void StaleVersionSegmentInTarget_WhenZipCarriesSourceVersion_IsNotAnUpdate()
     {
-        // Sabotage case from the linus_hemma dev installation: the config Target still
+        // Sabotage case from a development installation: the config Target still
         // carries the stale 0.3.64 segment while the configured zip and the source
         // manifest both carry 0.3.563. A path-only mismatch must never be an UPDATE.
         var component = CreateComponent("0.3.563");

@@ -25,7 +25,7 @@ public sealed class ActivityLogEnvelopeTests
             Outcome = ActivityOutcomes.Ok,
             Summary = "Approved manual review item 4711",
             Subject = new ActivitySubject("manual_review_item", "4711", "sas"),
-            Actor = new ActivityActor(ActivityActorKinds.User, "Alfons")
+            Actor = new ActivityActor(ActivityActorKinds.User, "anna")
         };
 
         var json = ActivityLogJson.Serialize(envelope);

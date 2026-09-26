@@ -1274,7 +1274,7 @@ public sealed class PortableModulePackageService
         // Seed scripts discover "the latest artifact version" from omp.Artifacts, and script
         // execution is version-gated, so a seed that ran before the registration recorded
         // the PREVIOUS import's version and never re-ran to correct it (measured on
-        // linus_hemma 2026-08-25: ChannelTypeVersions one import behind). The HostAgent
+        // a development host 2026-08-25: ChannelTypeVersions one import behind). The HostAgent
         // folder import orders the same way in ArtifactZipImportService.
         //
         // The same version gate is why a FAILED artifact item defers the SQL entirely:

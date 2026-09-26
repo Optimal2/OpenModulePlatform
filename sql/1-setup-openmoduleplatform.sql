@@ -1342,7 +1342,7 @@ GO
 -- instance -- "omp" is a substring of Company, Component, compare, compute, complete
 -- and compression under a case-insensitive collation -- ordered by the instance's
 -- heaviest statements, which on a shared server are typically somebody else's. Measured
--- on LINUS-LAPTOP before this change: 2 450 rows, of which 40 contained no omp object at
+-- on a development host before this change: 2 450 rows, of which 40 contained no omp object at
 -- all and had been pulled in because some other statement in the same batch mentioned
 -- one. Statement text of ad hoc SQL carries literals, so on a shared health-care
 -- instance those rows are other systems' data sitting in an OMP table with 400 days of

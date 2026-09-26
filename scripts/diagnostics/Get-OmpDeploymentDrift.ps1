@@ -280,7 +280,7 @@ ORDER BY h.HostKey;
         # Artifact provisioning state for every ENABLED REQUIREMENT ROW on each host.
         #
         # R12-F8: the comment here used to claim this covered worker and channel-type
-        # packages. Measured, it does not: omp.HostArtifactRequirements on LINUS-LAPTOP
+        # packages. Measured, it does not: omp.HostArtifactRequirements on a development host
         # holds 7 channel-type rows and 1 service-app row and NO worker or worker-host
         # row at all, because a worker's artifact is provisioned on demand through the
         # HostAgent EnsureArtifact RPC rather than declared as a requirement. So this
@@ -357,7 +357,7 @@ ORDER BY h.HostKey, a.PackageType, a.TargetName;
         # R12-D1. Per-instance state, not the app-instance summary. PublishObservationAsync
         # writes omp.AppInstanceRuntimeStates keyed on AppInstanceId alone while the
         # per-instance truth goes to omp.WorkerInstanceRuntimeStates -- measured on
-        # LINUS-LAPTOP: 7 rows in the per-instance table against 2 in the summary one, for
+        # a development host: 7 rows in the per-instance table against 2 in the summary one, for
         # 6 worker instances under ibs_packager_worker. Reading the summary meant one
         # worker stuck in Failed(5) was invisible for as long as any sibling reported
         # Running. The summary is now a real aggregation (worst state wins) as well, but

@@ -32,7 +32,7 @@ not the normal path.
 What it does NOT do
 -------------------
 It does not remove the race. Only deriving the number at build time from git height (the
-"option B" in `AI-System/Förslag till Linus — versionsnummer utan race.md`) does that, and
+"option B" in an internal design note) does that, and
 that is a campaign: 18 C# files and 13 scripts read these fields, and maxVersion pins,
 consistentArtifactSets and HostAgent's identity guard are all built on numbers stored in
 files. This script is the cheap 90 %, deliberately.
@@ -140,7 +140,7 @@ function Get-BumpedComponentKeys {
 
     # The base is EVERYTHING that is not pushed, not just the top commit.
     #
-    # Originally this compared HEAD against HEAD^, and alfons_windows pointed out the gap in
+    # Originally this compared HEAD against HEAD^, and a reviewer pointed out the gap in
     # review: with TWO or more unpushed commits, where the LOWER commit's bump collides with
     # what is published, that bump becomes a no-op in the rebase while the rebump only
     # recomputes the top commit's component set. The gate stops it (fails closed) but reports
@@ -235,7 +235,7 @@ for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
         else { Write-Note 'No unpushed work bumps any component version; the rebump step is skipped.' }
     }
 
-    # Nothing to push: do not run an eight-minute gate for a no-op. (alfons_windows, 2026-09-04)
+    # Nothing to push: do not run an eight-minute gate for a no-op. (review finding, 2026-09-04)
     $ahead = [int](Invoke-Git -Arguments @('rev-list', '--count', "$upstream..HEAD")).Output.Trim()
     if ($ahead -eq 0 -and $behind -eq 0) {
         Write-Good "Nothing to push: HEAD is already at $upstream."
