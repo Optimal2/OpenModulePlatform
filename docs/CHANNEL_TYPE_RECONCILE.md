@@ -42,8 +42,8 @@ bodies when copying the table setup (`sql/1-setup-contoso.sql:879-939`).
 
 ### Requirement identity and effective state
 
-1. The per-channel key is `<module>_channel:<channel-id>`, with the GUID converted
-   to `nvarchar(36)`; the reference uses `contoso_channel:`. A requirement is
+1. The per-channel key is `<module>.channeltype:<channel-id>`, with the GUID converted
+   to `nvarchar(36)`; the reference uses `contoso.channeltype:`. A requirement is
    matched by **both** `HostId` and `RequirementKey`, allowing the same channel key on
    several hosts. Source: `sql/1-setup-contoso.sql:261-266`, `:319-330`.
 2. Choose an enabled version of the same channel type. With a non-null pin, only that
@@ -70,9 +70,10 @@ bodies when copying the table setup (`sql/1-setup-contoso.sql:879-939`).
    `HOLDLOCK`. The procedure has no explicit encompassing transaction; repeated runs
    preserve desired state but refresh timestamps. Source:
    `sql/1-setup-contoso.sql:242-245`, `:297-330`.
-6. Preserve the literal SQL `LIKE` behavior in the template. The reference prefix
-   contains an underscore and does not escape it in `LIKE`; literal namespace
-   isolation beyond those SQL matching semantics is not proven here.
+6. Preserve the literal SQL `LIKE` behavior in the template. Most module keys
+   contain an underscore (a prefix such as `contoso_archive.channeltype:`), and the
+   template does not escape it in `LIKE`; literal namespace isolation beyond those
+   SQL matching semantics is not proven here.
    Source: `sql/1-setup-contoso.sql:303`.
 
 ### Every table and column used by the procedure
@@ -213,7 +214,7 @@ evidence (`Contoso.Tests/ReconcileChannelTypeArtifactRequirementsTests.cs:327-37
 This is the complete creation guard and procedure from
 `sql/1-setup-contoso.sql:233-332`, with only two substitutions:
 `omp_contoso` becomes `omp_<module>` and the key prefix
-`contoso_channel:` becomes `<module>_channel:`. Replace `<module>` with
+`contoso.channeltype:` becomes `<module>.channeltype:`. Replace `<module>` with
 the adopting module key before execution. No predicate, statement, ordering or
 locking change is part of the template.
 

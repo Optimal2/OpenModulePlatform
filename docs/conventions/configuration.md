@@ -189,7 +189,7 @@ described below apply unchanged to those real consumers.
 - **Config sources:** `Northwind.Web/appsettings.json` +
   `Northwind.Service/appsettings.json:1-50` (inline NLog `:13-49`), each
   with a Development variant; `appsettings.Local.json` documented as a
-  personal overlay (`docs/DEV-SETUP.md:128`, gitignored `.gitignore:368`) and
+  personal overlay (the consumer's developer setup guide, gitignored `.gitignore:368`) and
   loaded in both hosts right after `appsettings.{Environment}.json`
   (`Northwind.Web/Program.cs:8`, `Northwind.Service/Program.cs:10`);
   monitored folders are DB rows, not config.

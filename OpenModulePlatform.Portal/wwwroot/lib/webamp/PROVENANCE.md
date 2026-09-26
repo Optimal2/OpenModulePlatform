@@ -25,7 +25,7 @@
 
 **Gällande läge — läs bara det här stycket om du vill veta rättighetsläget i dag.**
 Widgeten renderar `skins/winomp.wsz`: operatörens bearbetning av grundskinnet, där
-WINAMP-texterna och logotypen är ersatta i Paint.NET (källfiler i det privata DEV-repot,
+WINAMP-texterna och logotypen är ersatta i Paint.NET (källfiler i det privata referensrepot,
 `Skins/base-winomp/`). Varumärkesdelarna är alltså borta; grafiken är i övrigt en
 bearbetning av Nullsofts original.
 
