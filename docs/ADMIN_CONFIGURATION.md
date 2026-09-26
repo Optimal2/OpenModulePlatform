@@ -296,7 +296,7 @@ Configure the Portal with:
 
 ```json
 "ArtifactUpload": {
-  "ArtifactStoreRoot": "E:\\OMP\\ArtifactStore",
+  "ArtifactStoreRoot": "<artifact-store-root>",
   "MaxUploadBytes": 536870912
 }
 ```

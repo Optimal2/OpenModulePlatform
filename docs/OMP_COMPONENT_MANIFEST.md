@@ -149,13 +149,13 @@ Repositories can also build their own portable objects without a full installer
 refresh:
 
 ```powershell
-.\scripts\omp\build-repository-objects.ps1 -OutputRoot G:\OMP\ObjectBuild -AllComponents
-.\scripts\omp\build-repository-objects.ps1 -OutputRoot G:\OMP\ObjectBuild -ComponentKey content-webapp -BuildArtifacts
+.\scripts\omp\build-repository-objects.ps1 -OutputRoot <omp-root>\ObjectBuild -AllComponents
+.\scripts\omp\build-repository-objects.ps1 -OutputRoot <omp-root>\ObjectBuild -ComponentKey content-webapp -BuildArtifacts
 .\scripts\omp\build-repository-objects.ps1 `
-  -OutputRoot G:\OMP\ObjectBuild `
+  -OutputRoot <omp-root>\ObjectBuild `
   -ComponentKey opendocviewer-web `
   -BuildArtifacts `
-  -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=E:\Secure\odv.site.config.js'
+  -ArtifactConfigurationFile 'opendocviewer-web:odv.site.config.js=<secure-folder>\odv.site.config.js'
 ```
 
 Components can list artifact-owned configuration files when the same file is
@@ -272,8 +272,8 @@ Host-specific package:
 .\scripts\omp\export-universal-package.ps1 `
   -AllComponents `
   -BuildArtifacts `
-  -HostProfilePath E:\Private\profiles\customer-test.package-profile.json `
-  -OutputPath E:\Packages\openmoduleplatform__customer-test__20260525.zip
+  -HostProfilePath <profiles-folder>\customer-test.package-profile.json `
+  -OutputPath <packages-folder>\openmoduleplatform__customer-test__20260525.zip
 ```
 
 The optional host profile is JSON. It may contain:

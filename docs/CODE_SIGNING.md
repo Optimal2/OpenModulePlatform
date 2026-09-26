@@ -59,7 +59,7 @@ the Bootstrapper automatically before zipping. Alternatives:
 Sign something manually (for example a hotfix binary):
 
 ```powershell
-.\scripts\deployment\sign-artifacts.ps1 -Path C:\path\to\publish-folder
+.\scripts\deployment\sign-artifacts.ps1 -Path <publish-folder>
 ```
 
 Authentication uses `DefaultAzureCredential`: run `az login` first for
@@ -77,8 +77,8 @@ tier quota.
 ## Verifying a release
 
 ```powershell
-Get-AuthenticodeSignature C:\path\to\OpenModulePlatform.HostAgent.WindowsService.exe
-signtool verify /pa /v C:\path\to\OpenModulePlatform.HostAgent.WindowsService.exe
+Get-AuthenticodeSignature <publish-folder>\OpenModulePlatform.HostAgent.WindowsService.exe
+signtool verify /pa /v <publish-folder>\OpenModulePlatform.HostAgent.WindowsService.exe
 ```
 
 A valid official release shows `Status: Valid` with an `Optimal2 AB` signer

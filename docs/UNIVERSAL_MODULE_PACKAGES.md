@@ -310,7 +310,7 @@ repository comparison helper when validating package generators:
 
 ```powershell
 .\scripts\omp\compare-universal-package-data.ps1 `
-  -FirstPackage E:\Private\installer\data\global `
+  -FirstPackage <installer-package-root>\data\global `
   -SecondPackage .\artifacts\universal-packages\openmoduleplatform__global__0.3.6.zip `
   -CommonOnly
 ```
@@ -325,7 +325,7 @@ Node/Playwright helper:
 ```powershell
 npm exec --package playwright -- node .\scripts\omp\validate-universal-package-builder-html.cjs `
   --module .\OpenModulePlatform.Portal\omp_portal.module-definition.json `
-  --artifact E:\Private\installer\data\global\artifacts\omp_portal__omp_portal__web-app__omp-portal__0.3.185.zip `
+  --artifact <installer-package-root>\data\global\artifacts\omp_portal__omp_portal__web-app__omp-portal__0.3.185.zip `
   --output $env:TEMP\omp-html-builder-validation.zip
 ```
 
@@ -346,7 +346,7 @@ files or overlays:
 .\scripts\omp\export-universal-package.ps1 `
   -AllComponents `
   -BuildArtifacts `
-  -HostProfilePath E:\Private\profiles\customer-test.package-profile.json
+  -HostProfilePath <profiles-folder>\customer-test.package-profile.json
 ```
 
 Public repositories should not store customer-specific profile files. The
@@ -363,7 +363,7 @@ repository owns that module key:
   "modules": {
     "example-service": {
       "settings": {
-        "printerListPath": "\\\\fileserver\\share\\Printers\\printer-list-test.json"
+        "printerListPath": "<shared-printer-list-file>"
       },
       "configOverlayFiles": [
         {

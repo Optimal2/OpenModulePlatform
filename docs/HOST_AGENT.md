@@ -194,7 +194,7 @@ regardless of the ACL:
   "HostAgent": {
     "EnableRpc": true,
     "RpcAllowedClientAccounts": [
-      "DOMAIN\\OmpWorkerManager"
+      "<worker-manager-account>"
     ],
     "RpcAllowedClientServiceNames": [
       "OMP.WorkerManager"
@@ -222,8 +222,8 @@ provisioned to the local artifact cache. This is enabled with:
     "EnsureIisSite": true,
     "IisBindingProtocol": "http",
     "IisBindingPort": 8088,
-    "WebAppsRoot": "D:\\OMP\\WebApps",
-    "PortalPhysicalPath": "D:\\OMP\\Sites\\Portal",
+    "WebAppsRoot": "<web-apps-root>",
+    "PortalPhysicalPath": "<portal-site-root>",
     "UseAppOfflineForWebAppDeployment": true
   }
 }
@@ -549,7 +549,7 @@ module package zip only.
   "HostAgent": {
     "ArtifactZipImport": {
       "IsEnabled": true,
-      "ImportPath": "E:\\\\OMP\\\\ArtifactImports",
+      "ImportPath": "<artifact-import-folder>",
       "ProcessedPath": "",
       "FailedPath": "",
       "MaxFilesPerCycle": 10,
@@ -625,13 +625,13 @@ local `App_Data` folders during normal requests.
   "HostAgent": {
     "FileMirrors": [
       {
-        "SourcePath": "\\\\fileserver\\share\\OMP\\Data\\ContentReports",
-        "TargetPath": "D:\\\\Apps\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentReports",
+        "SourcePath": "<shared-content-reports-folder>",
+        "TargetPath": "<content-reports-app-data-folder>",
         "DeleteStaleTargetEntries": true
       },
       {
-        "SourcePath": "\\\\fileserver\\share\\OMP\\Data\\ContentPages",
-        "TargetPath": "D:\\\\Apps\\\\Web\\\\WebApps\\\\content\\\\App_Data\\\\ContentPages",
+        "SourcePath": "<shared-content-pages-folder>",
+        "TargetPath": "<content-pages-app-data-folder>",
         "DeleteStaleTargetEntries": true
       }
     ]
@@ -653,7 +653,7 @@ have been provisioned. This is enabled with:
 {
   "HostAgent": {
     "DeployServiceApps": true,
-    "ServicesRoot": "D:\\OMP\\Services"
+    "ServicesRoot": "<services-root>"
   }
 }
 ```
@@ -757,7 +757,7 @@ Minimal configuration:
     "Version": "0.3.10",
     "SelfUpgrade": {
       "IsEnabled": true,
-      "InstallRoot": "D:\\OMP\\Services",
+      "InstallRoot": "<services-root>",
       "ServiceNamePrefix": "OMP.HostAgent",
       "ServiceAccountName": "",
       "ServiceAccountPasswordCredentialKey": "",
@@ -768,7 +768,7 @@ Minimal configuration:
     },
     "CredentialStore": {
       "AutomationMode": "Full",
-      "FilePath": "D:\\OMP\\Services\\HostAgent\\hostagent.credentials.json",
+      "FilePath": "<credential-store-file>",
       "ProtectionScope": "LocalMachine",
       "EntropyPurpose": "OpenModulePlatform.HostAgent.CredentialStore.v1"
     }
@@ -936,7 +936,7 @@ a transaction whenever possible.
 - **Recovery:**
   1. Locate the lock file under the deployed app's root, for example:
      ```text
-     D:\OMP\WebApps\portal\App_Data\omp-deployment.lock.json
+     <omp-root>\WebApps\portal\App_Data\omp-deployment.lock.json
      ```
   2. Open the file and check the expiry timestamp. The file uses the
      `OpenModulePlatform.DeploymentLock.v1` schema and contains an `ExpiresUtc` value.
@@ -998,8 +998,8 @@ a transaction whenever possible.
   `omp-components.json`, rebuild the universal package, and import the new package.
   1. Find the failed package and the error text:
      ```text
-     G:\OMP\ArtifactImports\failed\<package-name>.zip
-     G:\OMP\ArtifactImports\failed\<package-name>.zip.error.txt
+     <omp-root>\ArtifactImports\failed\<package-name>.zip
+     <omp-root>\ArtifactImports\failed\<package-name>.zip.error.txt
      ```
   2. Read the error file to confirm the identity and hash mismatch.
   3. Update the relevant component version in `omp-components.json`, run the build
@@ -1019,7 +1019,7 @@ a transaction whenever possible.
   operational configuration issue, not a HostAgent code bug.
 - **Manual verification (no source-code or AI Orchestrator access needed):**
   1. On each IIS node, open the runtime `appsettings.json` for the affected app
-     (for example `D:\OMP\WebApps\portal\appsettings.json`).
+     (for example `<omp-root>\WebApps\portal\appsettings.json`).
   2. Confirm that `OmpAuth:DataProtectionKeyPath` is set to the same shared path
      on every node.
   3. Confirm the shared folder exists and that each application pool identity has
@@ -1036,17 +1036,17 @@ a transaction whenever possible.
 Recommended central layout:
 
 ```text
-\\server\omp-artifacts\worker\ibs-packager\1.0.0\...
-\\server\omp-artifacts\channel-type\file-drop\0.1.0\...
-\\server\omp-artifacts\channel-type\file-drop\0.2.0\...
+<central-artifact-share>\worker\ibs-packager\1.0.0\...
+<central-artifact-share>\channel-type\file-drop\0.1.0\...
+<central-artifact-share>\channel-type\file-drop\0.2.0\...
 ```
 
 Recommended local layout is managed by HostAgent:
 
 ```text
-D:\OMP\Artifacts\worker\ibs-packager\1.0.0\...
-D:\OMP\Artifacts\channel-type\file-drop\0.1.0\...
-D:\OMP\Artifacts\channel-type\file-drop\0.2.0\...
+<omp-root>\Artifacts\worker\ibs-packager\1.0.0\...
+<omp-root>\Artifacts\channel-type\file-drop\0.1.0\...
+<omp-root>\Artifacts\channel-type\file-drop\0.2.0\...
 ```
 
 ## Stabilization note
@@ -1116,7 +1116,7 @@ Config overlays can override any `OmpAuth` field per host, app, or artifact, but
 
 ### Operator checklist for inconsistent role switch
 
-Run this on the deployed Windows server using only Notepad and folder access. For each app, the runtime content root is typically `D:\OMP\WebApps\<appInstanceKey>` for module apps or `D:\OMP\Sites\Portal` for the Portal app; use the actual runtime root for the environment.
+Run this on the deployed Windows server using only Notepad and folder access. For each app, the runtime content root is typically `<omp-root>\WebApps\<appInstanceKey>` for module apps or `<omp-root>\Sites\Portal` for the Portal app; use the actual runtime root for the environment.
 
 1. **Confirm the `OmpAuth` section exists.**
    - *Where:* open `appsettings.json` in the app's runtime root.
@@ -1142,7 +1142,7 @@ Run this on the deployed Windows server using only Notepad and folder access. Fo
    - *If wrong:* one app may fail to load keys and fall back to its own isolated key ring, breaking cookie sharing.
 
 6. **For load-balanced setups, confirm the path is shared across nodes.**
-   - *Expected:* a UNC/network path or the same SAN-mounted path on every node, not `C:\...` or `D:\...` local to a single node.
+   - *Expected:* a UNC/network path or the same SAN-mounted path on every node, not a drive-local path on a single node.
    - *If wrong:* a cookie issued on node A cannot be decrypted on node B, causing login loops and role-switch failures.
 
 7. **Browser check: role switch follows the user across apps.**

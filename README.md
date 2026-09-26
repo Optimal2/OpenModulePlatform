@@ -264,7 +264,7 @@ The supported path is the HostAgent-first installer:
    (or edit it) and set `profile.machineNames`, the SQL server/database, the
    bootstrap Portal administrator principal, and the paths under `hostAgent`
    (defaults: service `OMP.HostAgent`, IIS site `OpenModulePlatform` on port
-   `8088`, artifact store `C:\OMP\ArtifactStore`, cache `C:\OMP\ArtifactCache`).
+   `8088`, artifact store `ArtifactStore` and cache `ArtifactCache` under the OMP root on drive C).
 2. Build the installer runner:
    ```powershell
    .\scripts\deployment\update-installer-runner-only.ps1 -PackageRoot .\installer

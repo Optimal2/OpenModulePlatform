@@ -161,7 +161,7 @@ The build will naturally pick up whatever Web.Shared source is present in the si
 
 ### AI Orchestrator only serializes shared builds, it does not version-check
 
-`DEV/OpenModulePlatform/AI-Orchestrator/src/gui/jobConcurrency.ts:24-33` lists the repositories that share OMP web builds:
+`AI-Orchestrator/src/gui/jobConcurrency.ts:24-33` lists the repositories that share OMP web builds:
 
 ```typescript
 const ompSharedBuildRepoNames = new Set([
@@ -331,8 +331,8 @@ A periodic AO job or local script diffs OMP's current Web.Shared against the reg
 - `OpenModulePlatform/scripts/omp/validate-webshared-contracts.ps1` (header comment)
 - `OpenModulePlatform/.githooks/pre-push.ps1` (the `& $localCi` invocation of
   `scripts/local-ci.ps1`, which runs the validator)
-- `DEV/OpenModulePlatform/AI-Orchestrator/src/gui/jobConcurrency.ts:24-33`
-- `DEV/OpenModulePlatform/AI-Orchestrator/src/gui/jobConcurrency.ts:92-94`
+- `AI-Orchestrator/src/gui/jobConcurrency.ts:24-33`
+- `AI-Orchestrator/src/gui/jobConcurrency.ts:92-94`
 - `IbsPackager/Directory.Build.targets:9-10`
 - `IbsPackager/IbsPackager.Web/IbsPackager.Web.csproj:11`
 - `IbsPackager/omp-components.json:1-53`

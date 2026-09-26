@@ -33,7 +33,7 @@ JSON objects or standalone config-overlay zips.
   "description": "Host-level input for overlay generation.",
   "values": {
     "paths": {
-      "dataRoot": "E:\\OMP\\Data"
+      "dataRoot": "<data-root>"
     },
     "identity": {
       "defaultServiceAccountKey": "default-service"

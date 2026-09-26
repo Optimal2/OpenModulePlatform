@@ -52,7 +52,7 @@ pack (also available on the Windows CI image):
 
 ```powershell
 dotnet build OpenModulePlatform.HostAgent.Sentinel -c Release
-& ".\scripts\omp\Install-HostAgentSentinel.ps1" -OmpRoot "G:\OMP"
+& ".\scripts\omp\Install-HostAgentSentinel.ps1" -OmpRoot "<omp-root>"
 ```
 
 For distribution, use the published payload: `publish-all.ps1` publishes the
@@ -68,10 +68,10 @@ Use this standalone installer, not a normal version-named HostAgent service-app
 deployment. No module definition, desired-state registration, SQL migration or
 universal-package import is needed for Sentinel itself.
 
-När du installerar hos kunden kör du följande på den aktuella servern:
+To install on a target server, run the following on that server:
 
 ```powershell
-& ".\Install-HostAgentSentinel.ps1" -SourceDir "." -OmpRoot "D:\OMP"
+& ".\Install-HostAgentSentinel.ps1" -SourceDir "." -OmpRoot "<omp-root>"
 ```
 
 The script requests elevation when necessary, infers the root from exactly one
@@ -84,7 +84,7 @@ Existing configuration is preserved on reinstall. Uninstall removes the service
 and event source, retaining payload/configuration/state for inspection:
 
 ```powershell
-& ".\Install-HostAgentSentinel.ps1" -Uninstall -OmpRoot "D:\OMP"
+& ".\Install-HostAgentSentinel.ps1" -Uninstall -OmpRoot "<omp-root>"
 ```
 
 ### Alarm contract and configuration
@@ -355,7 +355,7 @@ initial Windows service is created with the current artifact version appended
 for example `OMP.HostAgent.0.3.35`. The initial runtime folder follows the same
 versioned convention as later self-upgrades:
 `HostAgent:ServicesRoot\HostAgent-<version>`, for example
-`G:\OMP\Services\HostAgent-0.3.35`. Future HostAgent artifact imports can then
+`<omp-root>\Services\HostAgent-0.3.35`. Future HostAgent artifact imports can then
 update the desired row. The running HostAgent provisions the new artifact,
 creates the next side-by-side versioned service and folder, starts it in
 takeover mode, and the new service removes the previous Windows service after it
@@ -594,7 +594,7 @@ When only installer code changed, update just the committed executable:
 
 ```powershell
 .\scripts\deployment\update-installer-runner-only.ps1 `
-  -PackageRoot "C:\OMP\PrivateInstaller"
+  -PackageRoot "<installer-package-root>"
 ```
 
 This runner-only update does not rebuild or commit module definitions, artifact
@@ -610,7 +610,7 @@ package from the command line, use the package-preserving wrapper instead:
 
 ```powershell
 .\scripts\deployment\refresh-existing-hostagent-first-package.ps1 `
-  -PackageRoot "C:\OMP\PrivateInstaller" `
+  -PackageRoot "<installer-package-root>" `
   -ConfigName developer-laptop
 ```
 
@@ -922,8 +922,8 @@ folder should be mirrored to the local IIS runtime:
 ContentWebApp = @{
     ServerReportsPath = 'App_Data/ContentReports'
     HtmlFilesPath = 'App_Data/ContentPages'
-    SharedServerReportsPath = 'D:\Shared\OMP\Data\ContentReports'
-    SharedHtmlFilesPath = 'D:\Shared\OMP\Data\ContentPages'
+    SharedServerReportsPath = '<shared-data-root>\ContentReports'
+    SharedHtmlFilesPath = '<shared-data-root>\ContentPages'
 }
 ```
 
