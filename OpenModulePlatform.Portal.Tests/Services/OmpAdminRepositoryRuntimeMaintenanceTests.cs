@@ -4,7 +4,7 @@ using OpenModulePlatform.Portal.Models;
 namespace OpenModulePlatform.Portal.Tests.Services;
 
 /// <summary>
-/// The Portal delete paths run the artifact-removed, app-instance-blocking-count and
+/// The Portal delete paths run the host-removed, artifact-removed, app-instance-blocking-count and
 /// app-instance-removed runtime maintenance steps that the applied example web app definition
 /// declares, and nothing module-specific when no applied definition declares a step.
 /// </summary>
@@ -38,6 +38,53 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
 
         Assert.Equal(0, await _fixture.CountBindingsPinnedToAsync(910001));
         Assert.Equal(1, await _fixture.CountBindingsPinnedToAsync(910002));
+    }
+
+    [Fact]
+    public async Task DeleteHostAsync_WhenModuleTableReferencesHost_RunsDeclaredHostRemovedStepAndDeletes()
+    {
+        // F4: a module table with a foreign key to omp.Hosts. The manual delete runs the module's
+        // host-removed step, as the HostAgent orphan-host cleanup does, instead of failing on the FK.
+        await _fixture.InsertExampleDefinitionAsync(isApplied: true);
+        await _fixture.AddLeaseHostForeignKeyAsync();
+        var removedHostId = await _fixture.InsertHostAsync();
+        var otherHostId = await _fixture.InsertHostAsync();
+        await _fixture.InsertHostLeaseAsync(removedHostId);
+        await _fixture.InsertHostLeaseAsync(otherHostId);
+
+        Assert.True(await _fixture.CreatePortalRepository().DeleteHostAsync(removedHostId, CancellationToken.None));
+
+        Assert.Equal(0, await _fixture.CountHostsAsync(removedHostId));
+        Assert.Equal(0, await _fixture.CountHostLeasesAsync(removedHostId));
+        Assert.Equal(1, await _fixture.CountHostLeasesAsync(otherHostId));
+    }
+
+    [Fact]
+    public async Task DeleteHostAsync_WhenModuleDeclaresNoHostRemovedStep_NamesTheModuleAndDeletesNothing()
+    {
+        // F3: a module definition applied before it declared runtimeMaintenance. The FK conflict
+        // from the module's table becomes guidance naming the module and the event; fail-closed.
+        await _fixture.InsertExampleDefinitionAsync(
+            isApplied: true,
+            rewriteJson: static json =>
+            {
+                var definition = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+                Assert.True(definition.Remove("runtimeMaintenance"));
+                return definition.ToJsonString();
+            });
+        await _fixture.AddLeaseHostForeignKeyAsync();
+        var hostId = await _fixture.InsertHostAsync();
+        await _fixture.InsertHostLeaseAsync(hostId);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _fixture.CreatePortalRepository().DeleteHostAsync(hostId, CancellationToken.None));
+
+        Assert.StartsWith("OMP-MODULE-RUNTIME-MAINTENANCE: Module 'example_webapp' (schema omp_example_webapp)", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("omp_example_webapp.RuntimeLeases", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("event 'host-removed'", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(547, Assert.IsType<SqlException>(ex.InnerException).Number);
+        Assert.Equal(1, await _fixture.CountHostsAsync(hostId));
+        Assert.Equal(1, await _fixture.CountHostLeasesAsync(hostId));
     }
 
     [Fact]

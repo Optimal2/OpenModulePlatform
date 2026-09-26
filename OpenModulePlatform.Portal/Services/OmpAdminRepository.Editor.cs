@@ -479,14 +479,7 @@ VALUES
             throw new InvalidOperationException("Stop the worker runtime before deleting the runtime row.");
         }
 
-        await ClearAppInstanceChildrenAsync(conn, tx, appInstanceId, ct);
-
-        var affected = await ExecuteNonQueryCountAsync(
-            conn,
-            tx,
-            "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
-            appInstanceId,
-            ct);
+        var affected = await ClearChildrenAndDeleteAppInstanceAsync(conn, tx, appInstanceId, ct);
 
         await tx.CommitAsync(ct);
         return affected > 0;
@@ -1371,6 +1364,12 @@ WHERE HostId = @HostId;";
     /// could not be deleted from the Portal at all; the transaction rolled back on the first
     /// FK and the operator saw a raw SQL error. The FK-ordered version already existed as
     /// OmpHostArtifactRepository.Maintenance DeleteOrphanHostAsync (R8-P3-1 / R7-F23).
+    ///
+    /// Module-owned rows that reference the host are released first, in the same transaction, by
+    /// the host-removed runtime maintenance steps the applied module definitions declare -- the
+    /// same steps the HostAgent orphan-host cleanup runs. Without them a module table with a
+    /// foreign key to omp.Hosts would block a manual host delete even though the module declared
+    /// how its rows let go of a removed host.
     /// </remarks>
     public async Task<bool> DeleteHostAsync(Guid hostId, CancellationToken ct)
     {
@@ -1446,14 +1445,46 @@ SELECT @affected;";
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn, tx);
-        Add(cmd, "@HostId", hostId);
-        // @@ROWCOUNT captured directly after the target statement, not the ExecuteNonQuery
-        // return value -- that is the SUM across the whole batch and would report success as
-        // soon as the host had a single child row (R8-P3-9).
-        var affected = await cmd.ExecuteScalarAsync(ct);
+
+        var affected = await WithModuleForeignKeyGuidanceAsync(
+            OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.HostRemoved,
+            async () =>
+            {
+                await OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor.RunAsync(
+                    conn,
+                    tx,
+                    OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.HostRemoved,
+                    hostId,
+                    ct);
+
+                await using var cmd = new SqlCommand(sql, conn, tx);
+                Add(cmd, "@HostId", hostId);
+                // @@ROWCOUNT captured directly after the target statement, not the ExecuteNonQuery
+                // return value -- that is the SUM across the whole batch and would report success as
+                // soon as the host had a single child row (R8-P3-9).
+                return await cmd.ExecuteScalarAsync(ct);
+            });
         await tx.CommitAsync(ct);
         return affected is int rows && rows > 0;
+    }
+
+    /// <summary>
+    /// Runs one platform delete and replaces a foreign key conflict raised by a module table
+    /// (schema <c>omp_&lt;moduleKey&gt;</c>) with guidance naming the module and the runtime
+    /// maintenance event it has to declare. Any other error propagates unchanged; the caller's
+    /// transaction is rolled back either way.
+    /// </summary>
+    private static async Task<T> WithModuleForeignKeyGuidanceAsync<T>(string eventName, Func<Task<T>> delete)
+    {
+        try
+        {
+            return await delete();
+        }
+        catch (SqlException ex) when (OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor
+            .DescribeModuleForeignKeyConflict(ex, eventName) is { } guidance)
+        {
+            throw guidance;
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -1922,16 +1953,21 @@ SELECT @affected;";
 
         try
         {
-            await OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor.RunAsync(
-                conn,
-                tx,
+            var affected = await WithModuleForeignKeyGuidanceAsync(
                 OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ArtifactRemoved,
-                artifactId,
-                ct);
+                async () =>
+                {
+                    await OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor.RunAsync(
+                        conn,
+                        tx,
+                        OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ArtifactRemoved,
+                        artifactId,
+                        ct);
 
-            await using var cmd = new SqlCommand(sql, conn, tx);
-            Add(cmd, "@ArtifactId", artifactId);
-            var affected = await cmd.ExecuteScalarAsync(ct);
+                    await using var cmd = new SqlCommand(sql, conn, tx);
+                    Add(cmd, "@ArtifactId", artifactId);
+                    return await cmd.ExecuteScalarAsync(ct);
+                });
             await tx.CommitAsync(ct);
             return affected is int rows && rows > 0;
         }
@@ -4182,14 +4218,7 @@ WHERE AppInstanceId = @AppInstanceId;";
                 "This app instance is managed by an instance template. Remove or disable the desired template app instead and let HostAgent materialize the change.");
         }
 
-        await ClearAppInstanceChildrenAsync(conn, tx, appInstanceId, ct);
-
-        var affected = await ExecuteNonQueryCountAsync(
-            conn,
-            tx,
-            "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
-            appInstanceId,
-            ct);
+        var affected = await ClearChildrenAndDeleteAppInstanceAsync(conn, tx, appInstanceId, ct);
 
         await tx.CommitAsync(ct);
         return affected > 0;
@@ -5286,6 +5315,29 @@ VALUES
         Add(cmd, "@Id", id);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    /// <summary>
+    /// Clears every row that references an app instance and deletes the omp.AppInstances row;
+    /// returns how many app instance rows were removed. A foreign key conflict raised by a module
+    /// table becomes guidance naming the module.
+    /// </summary>
+    private static Task<int> ClearChildrenAndDeleteAppInstanceAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        Guid appInstanceId,
+        CancellationToken ct)
+        => WithModuleForeignKeyGuidanceAsync(
+            OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.AppInstanceRemoved,
+            async () =>
+            {
+                await ClearAppInstanceChildrenAsync(conn, tx, appInstanceId, ct);
+                return await ExecuteNonQueryCountAsync(
+                    conn,
+                    tx,
+                    "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
+                    appInstanceId,
+                    ct);
+            });
 
     /// <summary>
     /// Clears every row that references an app instance, in FK order, so the caller can delete the

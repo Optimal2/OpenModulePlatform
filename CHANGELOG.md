@@ -24,6 +24,18 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   rows declares its own steps. See docs/MODULE_DEFINITIONS.md, "Runtime
   maintenance steps".
 
+- **Portal host delete runs `host-removed` steps; module FK conflicts name
+  the module.** The portal's manual host delete now runs the declared
+  `host-removed` steps in its transaction, as the HostAgent orphan-host
+  cleanup does, so a module table with a foreign key to `omp.Hosts` no longer
+  blocks it. When a platform delete still fails on a foreign key from an
+  `omp_<moduleKey>` table, the raw SQL error 547 becomes an
+  `OMP-MODULE-RUNTIME-MAINTENANCE` error naming the module, table, constraint
+  and event, and asking for a module definition upgrade; the delete still
+  rolls back. docs/MODULE_DEFINITIONS.md adds the delete-path/event table and
+  the upgrade order. `PlatformDeletePathsModuleSchemaTests` now also catches
+  bracket-quoted module schemas (`[omp_x].[T]`).
+
 - **Runtime maintenance steps may read two platform tables.** A module
   table keyed by the platform's `WorkerInstanceId` could not reach the
   removed host or app instance under the allow-list grammar, which refused

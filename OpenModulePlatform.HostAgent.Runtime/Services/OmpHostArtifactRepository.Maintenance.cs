@@ -698,7 +698,17 @@ SELECT @@ROWCOUNT;";
         await using (var cmd = new SqlCommand(sql, conn, tx))
         {
             Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
-            deleted = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+            try
+            {
+                deleted = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (SqlException ex) when (OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor
+                .DescribeModuleForeignKeyConflict(ex, OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.HostRemoved) is { } guidance)
+            {
+                // A module table still references the host and no declared host-removed step
+                // released it: name the module instead of surfacing the raw FK error.
+                throw guidance;
+            }
         }
 
         await tx.CommitAsync(ct);

@@ -71,16 +71,66 @@ DROP DATABASE [{DatabaseName}];",
     public const string BrokenModuleKeyA = "runtime_maintenance_broken_a";
     public const string BrokenModuleKeyB = "runtime_maintenance_broken_b";
 
+    /// <summary>Host keys of the hosts the tests create; the reset removes them.</summary>
+    public const string TestHostKeyPrefix = "runtime-maintenance-host-";
+
+    private const string LeaseHostForeignKey = "FK_test_RuntimeLeases_Host";
+
     /// <summary>
     /// Removes the example definition, its module registrations (in any letter case), the broken
-    /// test definitions and every example runtime row.
+    /// test definitions, every example runtime row, the test hosts and the test-only lease FK.
     /// </summary>
     public Task ResetAsync() => ExecuteAsync($@"
+IF OBJECT_ID(N'omp_example_webapp.{LeaseHostForeignKey}', N'F') IS NOT NULL
+    ALTER TABLE omp_example_webapp.RuntimeLeases DROP CONSTRAINT {LeaseHostForeignKey};
 DELETE FROM omp.ModuleDefinitionDocuments
 WHERE UPPER(ModuleKey) IN (N'EXAMPLE_WEBAPP', UPPER(N'{BrokenModuleKeyA}'), UPPER(N'{BrokenModuleKeyB}'));
 DELETE FROM omp.Modules WHERE UPPER(ModuleKey) IN (N'EXAMPLE_WEBAPP', UPPER(N'{IntruderModuleKey}'));
 DELETE FROM omp_example_webapp.RuntimeBindings WHERE RuntimeBindingId > 0;
-DELETE FROM omp_example_webapp.RuntimeLeases WHERE RuntimeLeaseId > 0;");
+DELETE FROM omp_example_webapp.RuntimeLeases WHERE RuntimeLeaseId > 0;
+DELETE FROM omp.Hosts WHERE HostKey LIKE N'{TestHostKeyPrefix}%';
+DELETE FROM omp.Instances WHERE InstanceKey LIKE N'{TestHostKeyPrefix}%';");
+
+    /// <summary>
+    /// Adds a foreign key from the example module's RuntimeLeases.HostId to omp.Hosts, the shape of
+    /// a module table that would block a host delete unless its host-removed step releases it.
+    /// Existing rows are not checked; the reset drops the key again.
+    /// </summary>
+    public Task AddLeaseHostForeignKeyAsync() => ExecuteAsync($@"
+ALTER TABLE omp_example_webapp.RuntimeLeases WITH NOCHECK
+    ADD CONSTRAINT {LeaseHostForeignKey} FOREIGN KEY (HostId) REFERENCES omp.Hosts(HostId);");
+
+    /// <summary>Creates a host (and its own instance) and returns its id.</summary>
+    public async Task<Guid> InsertHostAsync()
+    {
+        var hostId = Guid.NewGuid();
+        await ExecuteAsync(
+            @"
+DECLARE @instanceId uniqueidentifier = NEWID();
+INSERT INTO omp.Instances (InstanceId, InstanceKey, DisplayName) VALUES (@instanceId, @key, @key);
+INSERT INTO omp.Hosts (HostId, InstanceId, HostKey) VALUES (@hostId, @instanceId, @key);",
+            cmd =>
+            {
+                cmd.Parameters.AddWithValue("@hostId", hostId);
+                cmd.Parameters.AddWithValue("@key", TestHostKeyPrefix + hostId.ToString("N"));
+            });
+        return hostId;
+    }
+
+    public Task InsertHostLeaseAsync(Guid hostId)
+        => ExecuteAsync(
+            "INSERT INTO omp_example_webapp.RuntimeLeases (AppInstanceId, HostId, ExpiresUtc) VALUES (NEWID(), @hostId, SYSUTCDATETIME());",
+            cmd => cmd.Parameters.AddWithValue("@hostId", hostId));
+
+    public Task<int> CountHostLeasesAsync(Guid hostId)
+        => ScalarAsync(
+            "SELECT COUNT(*) FROM omp_example_webapp.RuntimeLeases WHERE HostId = @hostId;",
+            cmd => cmd.Parameters.AddWithValue("@hostId", hostId));
+
+    public Task<int> CountHostsAsync(Guid hostId)
+        => ScalarAsync(
+            "SELECT COUNT(*) FROM omp.Hosts WHERE HostId = @hostId;",
+            cmd => cmd.Parameters.AddWithValue("@hostId", hostId));
 
     /// <summary>
     /// Stores the example definition (optionally rewritten by <paramref name="rewriteJson"/>) and

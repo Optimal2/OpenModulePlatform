@@ -551,8 +551,8 @@ schema itself rather than an installable module row.
 
 ## Runtime maintenance steps
 
-Some platform operations remove rows that module-owned tables reference: an
-orphan host is deleted, an artifact is deleted, or an app instance is deleted.
+Some platform operations remove rows that module-owned tables reference: a
+host is deleted, an artifact is deleted, or an app instance is deleted.
 The platform does not know a module's tables, so a module that keeps such
 references declares how its own rows let go of them. The optional
 `runtimeMaintenance` section holds versioned SQL steps per platform event.
@@ -571,7 +571,7 @@ compatibility checks use.
 
 | Event | Parameter | Execution | Run by |
 | --- | --- | --- | --- |
-| `host-removed` | `@HostId uniqueidentifier` | `idempotent` | HostAgent orphan-host cleanup, before the host's `omp.WorkerInstances`, `omp.AppInstances` and `omp.Hosts` rows are deleted. |
+| `host-removed` | `@HostId uniqueidentifier` | `idempotent` | HostAgent orphan-host cleanup, before the host's `omp.WorkerInstances`, `omp.AppInstances` and `omp.Hosts` rows are deleted; Portal host delete, before the host's `omp.WorkerInstances` and `omp.AppInstances` rows are unlinked (`HostId` set to `NULL`) and the `omp.Hosts` row is deleted. |
 | `artifact-removed` | `@ArtifactId int` | `idempotent` | Portal artifact delete, before the `omp.Artifacts` row is deleted. |
 | `app-instance-blocking-count` | `@AppInstanceId uniqueidentifier` | `read-only` | Portal app-instance delete, first. Reports module rows that cannot be unlinked; any count above zero refuses the delete. |
 | `app-instance-removed` | `@AppInstanceId uniqueidentifier` | `idempotent` | Portal app-instance delete, after every blocking count was zero and before the instance's `omp.WorkerInstances` and `omp.AppInstances` rows are deleted. |
@@ -585,6 +585,54 @@ rows in the refusal message ("2 example runtime binding(s)").
 
 Steps run ordered by module key, then `order`, then `key`. A failing step fails
 the platform operation and rolls the whole transaction back.
+
+Which delete path raises which event:
+
+| Delete path | Events, in order |
+| --- | --- |
+| HostAgent orphan-host cleanup (`OmpHostArtifactRepository.DeleteOrphanHostAsync`) | `host-removed` |
+| Portal host delete (`OmpAdminRepository.DeleteHostAsync`) | `host-removed` |
+| Portal artifact delete (`OmpAdminRepository.DeleteArtifactAsync`) | `artifact-removed` |
+| Portal app-instance delete, including the runtime-row and manual worker-runtime deletes | `app-instance-blocking-count`, then `app-instance-removed` |
+
+A `host-removed` step must therefore not assume that the host's
+`omp.WorkerInstances` and `omp.AppInstances` rows are deleted afterwards: the
+HostAgent path deletes them, the Portal path only unlinks them. Release the
+module rows that reference the host, or that belong to it through those rows,
+and nothing else.
+
+### Foreign key conflicts from a module table
+
+When a platform delete still fails on a foreign key from a table in a module
+schema (`omp_<moduleKey>`, other than a platform-shipped module), no applied
+step released the rows. The delete stays fail-closed - the transaction rolls
+back and nothing is deleted - but the raw SQL error 547 is replaced by a
+`OMP-MODULE-RUNTIME-MAINTENANCE` error that names the module (derived from the
+schema), the blocking table and constraint, and the event, and tells the
+operator to upgrade the module definition. The original `SqlException` is kept
+as the inner exception. A conflict from a platform table (`omp`,
+`omp_content` and the other platform-shipped schemas) or any other error is
+reported unchanged.
+
+### Upgrade order
+
+The platform delete paths carry no cleanup SQL for modules outside this
+repository; a module that had such cleanup written into an older platform
+version must declare it as `runtimeMaintenance` steps instead. Upgrade in this
+order:
+
+1. Import and apply the module definition version that declares
+   `runtimeMaintenance` (its `definitionVersion` must be newer than the one
+   already applied, or the import skips it).
+2. Then install the platform version whose delete paths no longer carry that
+   module's SQL.
+
+In the other order there is a window in which the platform no longer cleans the
+module's rows and the applied definition does not yet declare steps. A host,
+artifact or app-instance delete that touches those rows then fails on the
+module's foreign key and rolls back, with the error described above, until the
+definition is upgraded. No data is lost, but those deletes cannot be done in the
+meantime.
 
 ### JSON shape
 
@@ -896,13 +944,16 @@ IF OBJECT_ID(N'omp_example_webapp.RuntimeWorkerLeases', N'U') IS NOT NULL
 
 The tests `ModuleRuntimeMaintenanceTests` (validator matrix),
 `OmpHostArtifactRepositoryRuntimeMaintenanceTests` (`host-removed`) and
-`OmpAdminRepositoryRuntimeMaintenanceTests` (the three Portal events) run the
+`OmpAdminRepositoryRuntimeMaintenanceTests` (the four Portal events) run the
 example definition against a local test database.
 
 The HostAgent and Portal delete paths carry no cleanup SQL for tables of
 modules outside this repository; a module whose tables reference platform rows
 must declare `runtimeMaintenance` steps, or those deletes fail on its foreign
-keys. `PlatformDeletePathsModuleSchemaTests` keeps it that way.
+keys (see "Foreign key conflicts from a module table" and "Upgrade order").
+`PlatformDeletePathsModuleSchemaTests` keeps it that way; it recognizes a
+module schema in every quoting form (`omp_x.T`, `[omp_x].[T]`, `[ omp_x ].T`,
+`omp_x.[T]`).
 
 ## Compatibility Policy
 

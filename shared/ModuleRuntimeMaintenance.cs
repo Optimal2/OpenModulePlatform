@@ -82,7 +82,12 @@ internal static class ModuleRuntimeMaintenance
     /// cannot widen it. The executor also requires omp.Modules to register this schema for the
     /// module, and for no other module.
     /// </summary>
-    internal static string AllowedSchemaFor(string moduleKey) => "omp_" + moduleKey;
+    internal static string AllowedSchemaFor(string moduleKey) => ModuleSchemaPrefix + moduleKey;
+
+    internal const string ModuleSchemaPrefix = "omp_";
+
+    /// <summary>Whether <paramref name="schemaName"/> belongs to a module the platform ships.</summary>
+    internal static bool IsPlatformModuleSchema(string schemaName) => PlatformModuleSchemas.Contains(schemaName);
 
     internal const string ModuleKeyCaseRuleId = "OMP-MODULE-KEY-CASE";
 

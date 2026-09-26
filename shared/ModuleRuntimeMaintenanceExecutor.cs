@@ -281,6 +281,66 @@ END;";
         return null;
     }
 
+    // SQL Server error 547 for a DELETE or UPDATE that a referencing row blocks. The table named is
+    // the referencing table, schema-qualified and unbracketed.
+    private const int ConstraintConflictErrorNumber = 547;
+
+    private static readonly System.Text.RegularExpressions.Regex ReferenceConflictPattern = new(
+        "REFERENCE constraint \"(?<constraint>[^\"]+)\"\\..*?table \"(?<schema>[^\".]+)\\.(?<table>[^\"]+)\"",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+    /// <summary>
+    /// Turns a foreign key conflict raised by a platform delete into guidance when the blocking
+    /// rows live in a module schema (<c>omp_&lt;moduleKey&gt;</c>, not a platform-shipped one):
+    /// the module owns rows that reference the removed platform row and no applied
+    /// <c>runtimeMaintenance</c> step for <paramref name="eventName"/> released them. Returns
+    /// <see langword="null"/> for every other error, which the caller rethrows unchanged. Nothing
+    /// is mutated; the caller's transaction still rolls back.
+    /// </summary>
+    internal static InvalidOperationException? DescribeModuleForeignKeyConflict(SqlException ex, string eventName)
+        => DescribeModuleForeignKeyConflict(ex.Number, ex.Message, eventName, ex);
+
+    internal static InvalidOperationException? DescribeModuleForeignKeyConflict(
+        int errorNumber,
+        string message,
+        string eventName,
+        Exception? inner = null)
+    {
+        if (errorNumber != ConstraintConflictErrorNumber)
+            return null;
+
+        var match = ReferenceConflictPattern.Match(message);
+        if (!match.Success)
+            return null;
+
+        var schema = match.Groups["schema"].Value;
+        if (!schema.StartsWith(ModuleRuntimeMaintenance.ModuleSchemaPrefix, StringComparison.OrdinalIgnoreCase)
+            || ModuleRuntimeMaintenance.IsPlatformModuleSchema(schema))
+        {
+            return null;
+        }
+
+        var moduleKey = schema[ModuleRuntimeMaintenance.ModuleSchemaPrefix.Length..];
+        if (moduleKey.Length == 0)
+            return null;
+
+        var removed = eventName switch
+        {
+            ModuleRuntimeMaintenance.HostRemoved => "host",
+            ModuleRuntimeMaintenance.ArtifactRemoved => "artifact",
+            ModuleRuntimeMaintenance.AppInstanceRemoved => "app instance",
+            _ => "platform row",
+        };
+
+        return new InvalidOperationException(
+            $"{ModuleRuntimeMaintenance.RuleId}: Module '{moduleKey}' (schema {schema}) has rows in "
+            + $"{schema}.{match.Groups["table"].Value} that reference the {removed} being removed "
+            + $"(constraint '{match.Groups["constraint"].Value}'). The module's applied definition declares no "
+            + $"runtimeMaintenance step for event '{eventName}' that releases them: upgrade the module definition "
+            + "to a version that declares one, then retry. Nothing was deleted.",
+            inner);
+    }
+
     private static InvalidOperationException StepFailed(ModuleRuntimeMaintenance.Step step, SqlException ex)
         => new(
             $"{ModuleRuntimeMaintenance.RuleId}: Runtime maintenance step '{step.Key}' of module '{step.ModuleKey}' failed for event '{step.Event}': {ex.Message}",

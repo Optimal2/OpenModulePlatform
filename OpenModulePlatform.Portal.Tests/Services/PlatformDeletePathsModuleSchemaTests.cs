@@ -26,15 +26,38 @@ public sealed partial class PlatformDeletePathsModuleSchemaTests
     {
         var source = OmpRepositoryFiles.ReadRepositoryTextFile(project, folder, file);
 
-        var foreignSchemas = QualifiedModuleSchemaPattern().Matches(source)
+        Assert.Empty(ForeignSchemas(source));
+    }
+
+    [Theory]
+    [InlineData("DELETE FROM omp_x.T WHERE HostId = @HostId;")]
+    [InlineData("DELETE FROM [omp_x].[T] WHERE HostId = @HostId;")]
+    [InlineData("DELETE FROM [ omp_x ].T WHERE HostId = @HostId;")]
+    [InlineData("DELETE FROM omp_x.[T] WHERE HostId = @HostId;")]
+    [InlineData("SELECT COUNT(*) FROM [omp_x] . [T];")]
+    public void Pattern_FindsModuleSchemaInEveryQuotingForm(string sql)
+    {
+        Assert.Equal(["omp_x"], ForeignSchemas(sql));
+    }
+
+    [Theory]
+    [InlineData("DELETE FROM omp.Hosts WHERE HostId = @HostId;")]
+    [InlineData("DELETE FROM [omp].[Hosts] WHERE HostId = @HostId;")]
+    [InlineData("SELECT COUNT(*) FROM [omp_content].[contents];")]
+    [InlineData("-- the omp_x module releases its own rows")]
+    public void Pattern_AllowsSchemasOwnedByThisRepositoryAndPlainText(string sql)
+    {
+        Assert.Empty(ForeignSchemas(sql));
+    }
+
+    private static string[] ForeignSchemas(string source)
+        => QualifiedModuleSchemaPattern().Matches(source)
             .Select(static match => match.Groups["schema"].Value)
             .Where(static schema => !SchemasOwnedByThisRepository.Contains(schema))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        Assert.Empty(foreignSchemas);
-    }
-
-    [GeneratedRegex(@"\b(?<schema>omp_[A-Za-z0-9_]+)\s*\.\s*\[?[A-Za-z]", RegexOptions.CultureInvariant)]
+    // A schema-qualified name in any quoting form: omp_x.T, [omp_x].[T], [ omp_x ].T, omp_x.[T].
+    [GeneratedRegex(@"\[?\s*\b(?<schema>omp_[A-Za-z0-9_]+)\s*\]?\s*\.\s*\[?\s*[A-Za-z]", RegexOptions.CultureInvariant)]
     private static partial Regex QualifiedModuleSchemaPattern();
 }
