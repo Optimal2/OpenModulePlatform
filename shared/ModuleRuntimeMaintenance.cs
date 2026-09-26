@@ -14,7 +14,8 @@ namespace OpenModulePlatform.ModuleDefinitions;
 /// <remarks>
 /// Source-linked into HostAgent, Portal and Bootstrapper next to
 /// <see cref="ModuleDefinitionSqlOwnership"/>, so every import gate and both executors apply one
-/// contract. Validation is fail-closed: anything the analyzer cannot prove safe is rejected.
+/// contract. Step SQL is checked against an allow-list grammar over the parsed T-SQL; anything the
+/// grammar does not name is rejected.
 /// </remarks>
 internal static class ModuleRuntimeMaintenance
 {
@@ -51,10 +52,6 @@ internal static class ModuleRuntimeMaintenance
         "inlineSql", "contentEncoding", "content", "sha256",
     };
 
-    // Reads are allowed from the platform catalog (joins such as "the worker rows on this host")
-    // and from the SQL Server catalog views. Everything else outside the module schema is refused.
-    private static readonly HashSet<string> ReadOnlySchemas = new(StringComparer.OrdinalIgnoreCase) { "omp", "sys" };
-
     // Schemas of the modules the platform ships. A module key that would derive one of them
     // (moduleKey "portal" derives omp_portal) is refused, so no definition can claim them.
     private static readonly HashSet<string> PlatformModuleSchemas = new(StringComparer.OrdinalIgnoreCase)
@@ -71,6 +68,56 @@ internal static class ModuleRuntimeMaintenance
     /// module, and for no other module.
     /// </summary>
     internal static string AllowedSchemaFor(string moduleKey) => "omp_" + moduleKey;
+
+    internal const string ModuleKeyCaseRuleId = "OMP-MODULE-KEY-CASE";
+
+    /// <summary>
+    /// T-SQL that throws when <paramref name="moduleKeyExpression"/> differs only in letter case
+    /// from a module key already in omp.Modules or omp.ModuleDefinitionDocuments. Two such keys
+    /// derive the same physical schema (SQL Server schema names follow the database collation),
+    /// and under a case-insensitive collation the registration MERGE would update the other
+    /// module's row. Every import and registration path runs it before it writes.
+    /// </summary>
+    /// <param name="moduleKeyExpression">A T-SQL variable or parameter holding the incoming key.</param>
+    /// <param name="excludeModuleIdExpression">When editing an existing module row, its id, so the row does not collide with itself.</param>
+    internal static string ModuleKeyCaseGuardSql(string moduleKeyExpression, string? excludeModuleIdExpression = null)
+    {
+        var excludeSelf = excludeModuleIdExpression is null ? string.Empty : $" AND existing.ModuleId <> {excludeModuleIdExpression}";
+        // Each table is probed only when it exists, so a database that predates omp.Modules still
+        // imports; deferred name resolution never compiles the skipped statement.
+        return $@"
+DECLARE @OmpModuleKeyCaseConflict bit = 0;
+IF OBJECT_ID(N'omp.Modules', N'U') IS NOT NULL
+BEGIN
+    IF EXISTS
+    (
+        SELECT 1
+        FROM omp.Modules existing
+        WHERE UPPER(existing.ModuleKey) = UPPER({moduleKeyExpression})
+          AND CONVERT(varbinary(400), existing.ModuleKey) <> CONVERT(varbinary(400), {moduleKeyExpression}){excludeSelf}
+    )
+        SET @OmpModuleKeyCaseConflict = 1;
+END;
+IF OBJECT_ID(N'omp.ModuleDefinitionDocuments', N'U') IS NOT NULL
+BEGIN
+    IF EXISTS
+    (
+        SELECT 1
+        FROM omp.ModuleDefinitionDocuments existing
+        WHERE UPPER(existing.ModuleKey) = UPPER({moduleKeyExpression})
+          AND CONVERT(varbinary(400), existing.ModuleKey) <> CONVERT(varbinary(400), {moduleKeyExpression})
+    )
+        SET @OmpModuleKeyCaseConflict = 1;
+END;
+IF @OmpModuleKeyCaseConflict = 1
+BEGIN
+    DECLARE @OmpModuleKeyCaseMessage nvarchar(2048) = CONCAT(
+        N'{ModuleKeyCaseRuleId}: Module key ''', {moduleKeyExpression},
+        N''' differs only in letter case from a module key that is already registered or imported; both would derive the same schema. Use the existing spelling.');
+    THROW 53240, @OmpModuleKeyCaseMessage, 1;
+END;
+";
+    }
 
     internal static void ValidateDocument(string definitionJson) => _ = ReadSteps(definitionJson);
 
@@ -156,8 +203,16 @@ internal static class ModuleRuntimeMaintenance
     }
 
     /// <summary>
-    /// Returns the first reason the step SQL is unsafe for <paramref name="contract"/>, or null.
+    /// Returns the first reason the step SQL is not one of the allowed forms for
+    /// <paramref name="contract"/>, or null.
     /// </summary>
+    /// <remarks>
+    /// An allow-list over the parsed T-SQL, not a deny-list: every statement, clause and expression
+    /// must match one of the forms in docs/MODULE_DEFINITIONS.md, "Runtime maintenance step
+    /// grammar", and anything the grammar does not name is refused. A second pass refuses any
+    /// syntax node whose type is outside the grammar's node set, so a clause the structural pass
+    /// forgot to inspect cannot carry SQL through.
+    /// </remarks>
     internal static string? ValidateStepSql(string sql, string moduleSchema, EventContract contract)
     {
         var parser = new TSql170Parser(initialQuotedIdentifiers: true);
@@ -168,25 +223,21 @@ internal static class ModuleRuntimeMaintenance
         if (fragment is not TSqlScript { Batches.Count: 1 } script)
             return "SQL must be exactly one batch; GO separators are not allowed.";
 
-        if (ModuleDefinitionSqlOwnership.Validate(sql) is { } ownership) return ownership;
-
-        var visitor = new StepVisitor(moduleSchema, contract);
-        script.Accept(visitor);
-        if (visitor.Error is not null) return visitor.Error;
-        if (!visitor.ReferencesParameter)
-            return $"SQL must use the event parameter {contract.ParameterName}.";
-        if (contract.Execution == ReadOnlyExecution)
+        // A parameter name in a comment reads like a binding to a reviewer but binds nothing.
+        foreach (var token in script.ScriptTokenStream)
         {
-            if (visitor.WritesData)
-                return $"Event '{contract.Name}' is read-only; the step must not modify data.";
-            if (visitor.Selects.Count != 1)
-                return $"Event '{contract.Name}' is read-only; the step must be exactly one SELECT (found {visitor.Selects.Count}).";
-            var select = visitor.Selects[0];
-            if (!new ParameterRestriction(contract.ParameterName).Query(select.QueryExpression))
-                return $"The SELECT must restrict the rows by the event parameter {contract.ParameterName} in its WHERE clause, an inner join or a subquery (line {select.StartLine}, column {select.StartColumn}).";
+            if (token.TokenType is TSqlTokenType.SingleLineComment or TSqlTokenType.MultilineComment
+                && token.Text.Contains('@', StringComparison.Ordinal))
+                return $"Comments must not contain '@' (line {token.Line}, column {token.Column}).";
         }
 
-        return null;
+        if (ModuleDefinitionSqlOwnership.Validate(sql) is { } ownership) return ownership;
+
+        if (new StepGrammar(moduleSchema, contract).Validate(script.Batches[0]) is { } error) return error;
+
+        var nodes = new GrammarNodeCheck();
+        script.Accept(nodes);
+        return nodes.Error;
     }
 
     private static void RejectUnknownProperties(JsonElement element, HashSet<string> allowed, string owner)
@@ -214,331 +265,461 @@ internal static class ModuleRuntimeMaintenance
             ? value.GetString()?.Trim()
             : null;
 
-    private sealed class StepVisitor(string moduleSchema, EventContract contract) : TSqlFragmentVisitor
+    /// <summary>
+    /// The step grammar (docs/MODULE_DEFINITIONS.md, "Runtime maintenance step grammar"):
+    /// <code>
+    /// step      := guard+
+    /// guard     := IF OBJECT_ID(N'schema.table', N'U') IS NOT NULL body      -- no ELSE
+    /// body      := statement | BEGIN statement* END
+    /// statement := guard | delete | update | count
+    /// delete    := DELETE [FROM] schema.table WHERE where
+    /// update    := UPDATE schema.table SET column = value [, column = value]* WHERE where
+    /// count     := SELECT COUNT(*) AS BlockingCount [, N'text' AS Description]
+    ///              FROM schema.table WHERE where                              -- read-only event only
+    /// where     := conjunct [AND conjunct]*, at least one binding conjunct
+    /// binding   := column = @Param | column IN (SELECT a.column FROM schema.table2 a WHERE inner)
+    /// inner     := like where, columns qualified by a, no further subquery
+    /// filter    := operand {= | &lt;&gt; | &lt; | &gt; | &lt;= | &gt;=} operand | column IS [NOT] NULL | column IN (constant, ...)
+    /// operand   := column | constant
+    /// value     := constant
+    /// constant  := number | -number | N'text' | 'text' | NULL | GETUTCDATE() | SYSUTCDATETIME()
+    /// </code>
+    /// schema is the module schema; every table must be named by an enclosing guard.
+    /// </summary>
+    private sealed class StepGrammar(string moduleSchema, EventContract contract)
     {
-        private readonly Stack<HashSet<string>> guards = new();
-        private HashSet<string> cteNames = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> guards = [];
+        private string targetName = string.Empty;
+        private int writes;
+        private int selects;
+        private string? error;
 
-        internal string? Error { get; private set; }
-        internal bool ReferencesParameter { get; private set; }
-        internal bool WritesData { get; private set; }
-        internal List<SelectStatement> Selects { get; } = [];
+        private string Param => contract.ParameterName;
 
-        private void Fail(TSqlFragment node, string message)
-            => Error ??= $"{message} (line {node.StartLine}, column {node.StartColumn}).";
-
-        public override void ExplicitVisit(TSqlScript node)
+        internal string? Validate(TSqlBatch batch)
         {
-            var collector = new CteCollector();
-            node.Accept(collector);
-            cteNames = collector.Names;
-            base.ExplicitVisit(node);
-        }
-
-        // The IF guard is the idempotency contract: a module table is only touched inside the THEN
-        // branch of IF OBJECT_ID(N'schema.table') IS NOT NULL, so an installation where the module
-        // is absent or half-installed runs the step as a no-op instead of failing the platform
-        // operation. The ELSE branch is not guarded by the predicate.
-        public override void ExplicitVisit(IfStatement node)
-        {
-            node.Predicate?.Accept(this);
-            var predicateGuards = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            CollectGuards(node.Predicate, predicateGuards);
-            guards.Push(predicateGuards);
-            node.ThenStatement?.Accept(this);
-            guards.Pop();
-            node.ElseStatement?.Accept(this);
-        }
-
-        public override void Visit(TSqlStatement node)
-        {
-            switch (node)
+            foreach (var statement in batch.Statements) Statement(statement);
+            if (error is not null) return error;
+            if (contract.Execution == ReadOnlyExecution)
             {
-                case BeginEndBlockStatement:
-                case InsertStatement:
-                case UpdateStatement:
-                case DeleteStatement:
-                case MergeStatement:
-                case DeclareVariableStatement:
-                case SetVariableStatement:
-                    return;
-                case SelectStatement select:
-                    if (select.Into is not null) Fail(node, "SELECT INTO is not allowed");
-                    Selects.Add(select);
-                    return;
-                case PredicateSetStatement set when set.Options == SetOptions.NoCount:
-                    return;
-                default:
-                    Fail(node, $"Statement {node.GetType().Name} is not allowed in a runtime maintenance step; use IF, BEGIN/END, SELECT, INSERT, UPDATE, DELETE, MERGE, DECLARE, SET @variable or SET NOCOUNT");
-                    return;
+                return selects == 1
+                    ? null
+                    : $"Event '{contract.Name}' is read-only; the step must be exactly one SELECT COUNT(*) AS BlockingCount (found {selects}).";
             }
+
+            return writes == 0 ? "The step must contain at least one DELETE or UPDATE." : null;
         }
 
-        public override void Visit(DataModificationSpecification node)
+        private bool Fail(TSqlFragment node, string message)
         {
-            WritesData = true;
-            if (node.OutputIntoClause is not null) Fail(node, "OUTPUT INTO is not allowed");
-            if (node is UpdateSpecification { WhereClause: null } or DeleteSpecification { WhereClause: null })
-                Fail(node, "UPDATE and DELETE must have a WHERE clause");
+            error ??= $"{message} (line {node.StartLine}, column {node.StartColumn}).";
+            return false;
+        }
 
-            if (node.Target is not NamedTableReference { SchemaObject.SchemaIdentifier: { } schema } target)
+        private static bool Is<T>(TSqlFragment? node) => node is not null && node.GetType() == typeof(T);
+
+        private void Statement(TSqlStatement statement)
+        {
+            if (error is not null) return;
+            if (Is<IfStatement>(statement))
             {
-                Fail(node, $"Write targets must be schema-qualified tables in the module schema '{moduleSchema}'; use the qualified table name, not an alias");
+                Guard((IfStatement)statement);
                 return;
             }
 
-            if (!schema.Value.Equals(moduleSchema, StringComparison.OrdinalIgnoreCase))
-                Fail(node, $"Writes {schema.Value}.{target.SchemaObject.BaseIdentifier.Value}; runtime maintenance steps may only write the module schema '{moduleSchema}'");
-
-            // Referencing the parameter somewhere in the step is not enough: each UPDATE, DELETE
-            // and MERGE must itself be restricted to the rows of the event's key.
-            var restriction = new ParameterRestriction(contract.ParameterName, target);
-            switch (node)
+            if (guards.Count == 0)
             {
-                case UpdateSpecification { WhereClause: { } where } update when !restriction.Write(where, update.FromClause):
-                case DeleteSpecification { WhereClause: { } where2 } delete when !restriction.Write(where2, delete.FromClause):
-                    Fail(node, $"The WHERE clause must restrict the rows by the event parameter {contract.ParameterName} (column = {contract.ParameterName}, IN, a correlated EXISTS subquery or an inner join on the target), combined with AND only");
-                    break;
-                case MergeSpecification merge:
-                    if (merge.ActionClauses.Any(static clause => clause.Condition == MergeCondition.NotMatchedBySource))
-                        Fail(node, "MERGE with WHEN NOT MATCHED BY SOURCE is not allowed; it changes rows outside the event's key");
-                    else if (!restriction.Condition(merge.SearchCondition))
-                        Fail(node, $"The MERGE ON condition must restrict the rows by the event parameter {contract.ParameterName}, combined with AND only");
-                    break;
-            }
-        }
-
-        public override void Visit(TableReference node)
-        {
-            if (node is not (NamedTableReference or JoinTableReference or QueryDerivedTable or JoinParenthesisTableReference or InlineDerivedTable))
-                Fail(node, $"Table source {node.GetType().Name} is not allowed; use schema-qualified tables");
-        }
-
-        public override void Visit(NamedTableReference node)
-        {
-            var name = node.SchemaObject;
-            if (name.ServerIdentifier is not null || name.DatabaseIdentifier is not null)
-            {
-                Fail(node, "Cross-database and linked-server references are not allowed");
+                Fail(statement, $"{statement.GetType().Name} is not allowed at the top level; a step is IF OBJECT_ID(N'{moduleSchema}.<table>', N'U') IS NOT NULL around DELETE, UPDATE or SELECT COUNT(*) AS BlockingCount");
                 return;
             }
 
-            if (name.SchemaIdentifier is null)
+            if (Is<BeginEndBlockStatement>(statement))
             {
-                if (!cteNames.Contains(name.BaseIdentifier.Value))
-                    Fail(node, $"Table reference '{name.BaseIdentifier.Value}' must be schema-qualified");
+                foreach (var inner in ((BeginEndBlockStatement)statement).StatementList.Statements) Statement(inner);
+            }
+            else if (Is<DeleteStatement>(statement))
+            {
+                Delete((DeleteStatement)statement);
+            }
+            else if (Is<UpdateStatement>(statement))
+            {
+                Update((UpdateStatement)statement);
+            }
+            else if (Is<SelectStatement>(statement))
+            {
+                Select((SelectStatement)statement);
+            }
+            else
+            {
+                Fail(statement, $"Statement {statement.GetType().Name} is not allowed in a runtime maintenance step; the allowed statements are IF OBJECT_ID guards, BEGIN/END, DELETE, UPDATE and SELECT COUNT(*) AS BlockingCount");
+            }
+        }
+
+        private void Guard(IfStatement node)
+        {
+            if (node.ElseStatement is not null)
+            {
+                Fail(node.ElseStatement, "IF ... ELSE is not allowed; a guard has no ELSE branch");
                 return;
             }
 
-            var schema = name.SchemaIdentifier.Value;
-            if (schema.Equals(moduleSchema, StringComparison.OrdinalIgnoreCase))
+            if (GuardedTable(node.Predicate) is not { } table)
             {
-                var qualified = $"{schema}.{name.BaseIdentifier.Value}";
-                if (!guards.Any(set => set.Contains(qualified)))
-                    Fail(node, $"{qualified} must be referenced inside IF OBJECT_ID(N'{qualified}', N'U') IS NOT NULL");
+                Fail(node.Predicate, $"The IF condition must be exactly OBJECT_ID(N'{moduleSchema}.<table>', N'U') IS NOT NULL");
                 return;
             }
 
-            if (!ReadOnlySchemas.Contains(schema))
-                Fail(node, $"References {schema}.{name.BaseIdentifier.Value}; steps may only reference the module schema '{moduleSchema}' and read omp or sys");
+            guards.Add(table);
+            Statement(node.ThenStatement);
+            guards.RemoveAt(guards.Count - 1);
         }
 
-        public override void Visit(ExecuteInsertSource node) => Fail(node, "INSERT ... EXEC is not allowed");
-
-        public override void Visit(ExecutableEntity node) => Fail(node, "EXEC and dynamic SQL are not allowed; the platform binds the event parameter itself");
-
-        public override void Visit(VariableReference node)
+        private string? GuardedTable(BooleanExpression predicate)
         {
-            if (node.Name.Equals(contract.ParameterName, StringComparison.OrdinalIgnoreCase)) ReferencesParameter = true;
-        }
-
-        public override void Visit(DeclareVariableElement node)
-        {
-            if (node.VariableName.Value.Equals(contract.ParameterName, StringComparison.OrdinalIgnoreCase))
-                Fail(node, $"{contract.ParameterName} is bound by the platform and must not be declared");
-        }
-
-        private static void CollectGuards(BooleanExpression? predicate, HashSet<string> into)
-        {
-            switch (predicate)
-            {
-                case BooleanParenthesisExpression parenthesis:
-                    CollectGuards(parenthesis.Expression, into);
-                    break;
-                case BooleanBinaryExpression { BinaryExpressionType: BooleanBinaryExpressionType.And } and:
-                    CollectGuards(and.FirstExpression, into);
-                    CollectGuards(and.SecondExpression, into);
-                    break;
-                case BooleanIsNullExpression { IsNot: true, Expression: FunctionCall function }
-                    when function.CallTarget is null
-                        && function.FunctionName.Value.Equals("OBJECT_ID", StringComparison.OrdinalIgnoreCase)
-                        && function.Parameters.Count is 1 or 2
-                        && function.Parameters[0] is StringLiteral literal
-                        && NormalizeTwoPartName(literal.Value) is { } qualified:
-                    into.Add(qualified);
-                    break;
-            }
-        }
-
-        private static string? NormalizeTwoPartName(string value)
-        {
-            var parts = value.Split('.');
+            if (predicate is not BooleanIsNullExpression { IsNot: true, Expression: FunctionCall call } || !Is<BooleanIsNullExpression>(predicate)) return null;
+            if (!IsPlainCall(call, "OBJECT_ID") || call.Parameters.Count != 2) return null;
+            if (call.Parameters[0] is not StringLiteral name || call.Parameters[1] is not StringLiteral kind) return null;
+            if (!kind.Value.Equals("U", StringComparison.OrdinalIgnoreCase)) return null;
+            var parts = name.Value.Split('.');
             if (parts.Length != 2) return null;
-            var schema = parts[0].Trim().Trim('[', ']', '"');
-            var table = parts[1].Trim().Trim('[', ']', '"');
-            return schema.Length == 0 || table.Length == 0 ? null : $"{schema}.{table}";
+            var schema = Unquote(parts[0]);
+            var table = Unquote(parts[1]);
+            if (table.Length == 0 || !schema.Equals(moduleSchema, StringComparison.OrdinalIgnoreCase)) return null;
+            return $"{schema}.{table}";
+        }
+
+        private static string Unquote(string part)
+        {
+            var value = part.Trim();
+            if (value.Length >= 2 && ((value[0] == '[' && value[^1] == ']') || (value[0] == '"' && value[^1] == '"')))
+                value = value[1..^1];
+            return value;
+        }
+
+        private void Delete(DeleteStatement statement)
+        {
+            writes++;
+            if (!Writable(statement) || !StatementExtras(statement, statement.WithCtesAndXmlNamespaces, statement.OptimizerHints)) return;
+            var spec = statement.DeleteSpecification;
+            if (!WriteSpecification(spec, spec.FromClause)) return;
+            Where(spec.WhereClause, spec);
+        }
+
+        private void Update(UpdateStatement statement)
+        {
+            writes++;
+            if (!Writable(statement) || !StatementExtras(statement, statement.WithCtesAndXmlNamespaces, statement.OptimizerHints)) return;
+            var spec = statement.UpdateSpecification;
+            if (!WriteSpecification(spec, spec.FromClause)) return;
+            foreach (var clause in spec.SetClauses)
+            {
+                if (!Is<AssignmentSetClause>(clause)
+                    || clause is not AssignmentSetClause { Variable: null, Column: { } column, AssignmentKind: AssignmentKind.Equals } assignment
+                    || !IsColumn(column, qualifier: null))
+                {
+                    Fail(clause, "SET must assign an unqualified column of the target table with '='; assigning variables is not allowed");
+                    return;
+                }
+
+                if (!IsConstant(assignment.NewValue))
+                {
+                    Fail(assignment.NewValue, "A SET value must be a constant, NULL, GETUTCDATE() or SYSUTCDATETIME()");
+                    return;
+                }
+            }
+
+            Where(spec.WhereClause, spec);
+        }
+
+        private bool Writable(TSqlStatement statement)
+            => contract.Execution != ReadOnlyExecution
+                || Fail(statement, $"Event '{contract.Name}' is read-only; the step must not modify data");
+
+        private bool StatementExtras(TSqlStatement statement, WithCtesAndXmlNamespaces? ctes, IList<OptimizerHint> hints)
+        {
+            if (ctes is not null) return Fail(statement, "Common table expressions (WITH) are not allowed");
+            if (hints.Count != 0) return Fail(statement, "OPTION hints are not allowed");
+            return true;
+        }
+
+        private bool WriteSpecification(UpdateDeleteSpecificationBase spec, FromClause? from)
+        {
+            if (spec.TopRowFilter is not null) return Fail(spec, "TOP is not allowed");
+            if (spec.OutputClause is not null || spec.OutputIntoClause is not null) return Fail(spec, "OUTPUT is not allowed");
+            if (from is not null) return Fail(from, $"A FROM clause or join on the write is not allowed; restrict the rows with WHERE column = {Param} or column IN (subquery)");
+            if (!Is<NamedTableReference>(spec.Target))
+                return Fail(spec.Target, $"The write target must be a table in the module schema '{moduleSchema}'");
+            return OwnTable((NamedTableReference)spec.Target, aliasAllowed: false, isTarget: true);
+        }
+
+        private void Select(SelectStatement statement)
+        {
+            selects++;
+            if (contract.Execution != ReadOnlyExecution)
+            {
+                Fail(statement, $"SELECT is only allowed in the read-only event '{AppInstanceBlockingCount}'; event '{contract.Name}' allows DELETE and UPDATE");
+                return;
+            }
+
+            if (!StatementExtras(statement, statement.WithCtesAndXmlNamespaces, statement.OptimizerHints)) return;
+            if (statement.Into is not null || statement.On is not null || statement.ComputeClauses.Count != 0)
+            {
+                Fail(statement, "SELECT INTO and COMPUTE are not allowed");
+                return;
+            }
+
+            if (!Is<QuerySpecification>(statement.QueryExpression))
+            {
+                Fail(statement.QueryExpression, "The read-only step must be one SELECT COUNT(*) AS BlockingCount FROM <table> WHERE ...");
+                return;
+            }
+
+            var spec = (QuerySpecification)statement.QueryExpression;
+            if (!PlainQuery(spec) || !SingleTable(spec, aliasAllowed: false, isTarget: true, out _)) return;
+
+            var elements = spec.SelectElements;
+            if (elements.Count is < 1 or > 2
+                || !IsNamed(elements[0], "BlockingCount", out var count) || !IsCountStar(count)
+                || (elements.Count == 2 && !(IsNamed(elements[1], "Description", out var description) && Is<StringLiteral>(description))))
+            {
+                Fail(spec, "The read-only step must select exactly COUNT(*) AS BlockingCount, optionally followed by N'text' AS Description");
+                return;
+            }
+
+            Where(spec.WhereClause, spec);
+        }
+
+        private bool PlainQuery(QuerySpecification spec)
+        {
+            if (spec.UniqueRowFilter != UniqueRowFilter.NotSpecified || spec.TopRowFilter is not null
+                || spec.GroupByClause is not null || spec.HavingClause is not null || spec.OrderByClause is not null
+                || spec.OffsetClause is not null || spec.ForClause is not null)
+                return Fail(spec, "DISTINCT, TOP, GROUP BY, HAVING, ORDER BY, OFFSET and FOR are not allowed");
+            return true;
+        }
+
+        private bool SingleTable(QuerySpecification spec, bool aliasAllowed, bool isTarget, out NamedTableReference table)
+        {
+            table = null!;
+            if (spec.FromClause is not { TableReferences.Count: 1 } from || !Is<NamedTableReference>(from.TableReferences[0]))
+                return Fail(spec, $"The query must read exactly one table of the module schema '{moduleSchema}'; joins are not allowed");
+            table = (NamedTableReference)from.TableReferences[0];
+            return OwnTable(table, aliasAllowed, isTarget);
+        }
+
+        private bool OwnTable(NamedTableReference table, bool aliasAllowed, bool isTarget)
+        {
+            var name = table.SchemaObject;
+            if (name.ServerIdentifier is not null || name.DatabaseIdentifier is not null)
+                return Fail(table, "Cross-database and linked-server references are not allowed");
+            if (name.SchemaIdentifier is null)
+                return Fail(table, $"Table '{name.BaseIdentifier.Value}' must be qualified with the module schema '{moduleSchema}'");
+            var qualified = $"{name.SchemaIdentifier.Value}.{name.BaseIdentifier.Value}";
+            if (!name.SchemaIdentifier.Value.Equals(moduleSchema, StringComparison.OrdinalIgnoreCase))
+                return Fail(table, $"References {qualified}; runtime maintenance steps may only reference the module schema '{moduleSchema}'");
+            if (table.TableHints.Count != 0 || table.TableSampleClause is not null || table.TemporalClause is not null)
+                return Fail(table, "Table hints, TABLESAMPLE and FOR SYSTEM_TIME are not allowed");
+            if (table.Alias is not null && !aliasAllowed)
+                return Fail(table, "The written or counted table must not have an alias");
+            if (!guards.Any(guard => guard.Equals(qualified, StringComparison.OrdinalIgnoreCase)))
+                return Fail(table, $"{qualified} must be referenced inside IF OBJECT_ID(N'{qualified}', N'U') IS NOT NULL");
+            if (isTarget) targetName = name.BaseIdentifier.Value;
+            return true;
+        }
+
+        private void Where(WhereClause? where, TSqlFragment owner)
+        {
+            if (where is null)
+            {
+                Fail(owner, $"The statement must have a WHERE clause with column = {Param}");
+                return;
+            }
+
+            if (where.Cursor is not null)
+            {
+                Fail(where, "WHERE CURRENT OF is not allowed");
+                return;
+            }
+
+            Restricts(where.SearchCondition, qualifier: null);
+        }
+
+        // qualifier null: the outer WHERE, where the only table in scope is the target and columns
+        // are unqualified. Otherwise the IN subquery, whose columns must name its own table, so a
+        // column missing from the inner table cannot silently resolve to the outer one.
+        private bool Restricts(BooleanExpression condition, string? qualifier)
+        {
+            var conjuncts = new List<BooleanExpression>();
+            if (!Flatten(condition, conjuncts)) return false;
+            var bound = false;
+            foreach (var conjunct in conjuncts)
+            {
+                switch (Conjunct(conjunct, qualifier))
+                {
+                    case null:
+                        return false;
+                    case true:
+                        bound = true;
+                        break;
+                }
+            }
+
+            return bound || Fail(condition, qualifier is null
+                ? $"The WHERE clause must restrict the rows by the event parameter: column = {Param} or column IN (SELECT a.column FROM {moduleSchema}.<table> a WHERE a.column = {Param}), combined with AND"
+                : $"The subquery WHERE clause must contain {qualifier}.column = {Param}, combined with AND");
+        }
+
+        private bool Flatten(BooleanExpression expression, List<BooleanExpression> into)
+        {
+            switch (expression)
+            {
+                case BooleanParenthesisExpression parenthesis when Is<BooleanParenthesisExpression>(parenthesis):
+                    return Flatten(parenthesis.Expression, into);
+                case BooleanBinaryExpression { BinaryExpressionType: BooleanBinaryExpressionType.And } conjunction when Is<BooleanBinaryExpression>(conjunction):
+                    return Flatten(conjunction.FirstExpression, into) && Flatten(conjunction.SecondExpression, into);
+                case BooleanBinaryExpression other:
+                    return Fail(other, $"{other.BinaryExpressionType} is not allowed in a runtime maintenance WHERE clause; combine conditions with AND");
+                default:
+                    into.Add(expression);
+                    return true;
+            }
+        }
+
+        // true: binds the rows to the parameter; false: an allowed filter; null: refused.
+        private bool? Conjunct(BooleanExpression condition, string? qualifier)
+        {
+            switch (condition)
+            {
+                case BooleanComparisonExpression comparison when Is<BooleanComparisonExpression>(comparison):
+                    if (comparison.ComparisonType == BooleanComparisonType.Equals
+                        && ((IsColumn(comparison.FirstExpression, qualifier) && IsParameter(comparison.SecondExpression))
+                            || (IsColumn(comparison.SecondExpression, qualifier) && IsParameter(comparison.FirstExpression))))
+                        return true;
+                    if (comparison.ComparisonType is BooleanComparisonType.Equals or BooleanComparisonType.NotEqualToBrackets
+                            or BooleanComparisonType.NotEqualToExclamation or BooleanComparisonType.LessThan
+                            or BooleanComparisonType.GreaterThan or BooleanComparisonType.LessThanOrEqualTo
+                            or BooleanComparisonType.GreaterThanOrEqualTo
+                        && IsOperand(comparison.FirstExpression, qualifier) && IsOperand(comparison.SecondExpression, qualifier))
+                        return false;
+                    break;
+                case BooleanIsNullExpression isNull when Is<BooleanIsNullExpression>(isNull) && IsColumn(isNull.Expression, qualifier):
+                    return false;
+                case InPredicate { NotDefined: false } inPredicate when Is<InPredicate>(inPredicate) && IsColumn(inPredicate.Expression, qualifier):
+                    if (inPredicate.Subquery is null)
+                        return inPredicate.Values.Count > 0 && inPredicate.Values.All(IsConstant) ? false : Refuse(inPredicate, "IN (...) may list constants only");
+                    if (qualifier is not null) return Refuse(inPredicate, "Only one level of IN subquery is allowed");
+                    return Subquery(inPredicate.Subquery) ? true : null;
+            }
+
+            return Refuse(condition, $"Condition {condition.GetType().Name} is not allowed; a condition is column = {Param}, column IN (subquery), a comparison of the table's columns with constants, column IS [NOT] NULL or column IN (constants)");
+        }
+
+        private bool? Refuse(TSqlFragment node, string message)
+        {
+            Fail(node, message);
+            return null;
+        }
+
+        private bool Subquery(ScalarSubquery subquery)
+        {
+            if (!Is<QuerySpecification>(subquery.QueryExpression) || subquery.Collation is not null)
+                return Fail(subquery, $"The IN subquery must be SELECT a.column FROM {moduleSchema}.<table> a WHERE a.column = {Param}");
+            var spec = (QuerySpecification)subquery.QueryExpression;
+            if (!PlainQuery(spec) || !SingleTable(spec, aliasAllowed: true, isTarget: false, out var table)) return false;
+            var exposed = table.Alias?.Value ?? table.SchemaObject.BaseIdentifier.Value;
+            if (exposed.Equals(targetName, StringComparison.OrdinalIgnoreCase))
+                return Fail(table, "Give the subquery table an alias that differs from the written table's name");
+            if (spec.SelectElements.Count != 1 || !IsNamed(spec.SelectElements[0], null, out var column) || !IsColumn(column, exposed))
+                return Fail(spec, $"The IN subquery must select exactly one column qualified by '{exposed}'");
+            if (spec.WhereClause is not { Cursor: null } where)
+                return Fail(spec, $"The IN subquery must have a WHERE clause with {exposed}.column = {Param}");
+            return Restricts(where.SearchCondition, exposed);
+        }
+
+        private static bool IsNamed(SelectElement element, string? alias, out ScalarExpression expression)
+        {
+            expression = null!;
+            if (!Is<SelectScalarExpression>(element)) return false;
+            var scalar = (SelectScalarExpression)element;
+            expression = scalar.Expression;
+            return alias is null
+                ? scalar.ColumnName is null
+                : scalar.ColumnName is { ValueExpression: null, Identifier: { } name } && name.Value.Equals(alias, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsCountStar(ScalarExpression expression)
+            => Is<FunctionCall>(expression)
+                && expression is FunctionCall call
+                && IsPlainCall(call, "COUNT")
+                && call.Parameters.Count == 1
+                && call.Parameters[0] is ColumnReferenceExpression { ColumnType: ColumnType.Wildcard, MultiPartIdentifier: null };
+
+        private static bool IsPlainCall(FunctionCall call, string name)
+            => call.CallTarget is null && call.OverClause is null && call.WithinGroupClause is null && call.Collation is null
+                && call.UniqueRowFilter == UniqueRowFilter.NotSpecified
+                && call.FunctionName.Value.Equals(name, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsColumn(ScalarExpression? expression, string? qualifier)
+        {
+            if (!Is<ColumnReferenceExpression>(expression)) return false;
+            var column = (ColumnReferenceExpression)expression!;
+            if (column.ColumnType != ColumnType.Regular || column.Collation is not null || column.MultiPartIdentifier is null) return false;
+            var identifiers = column.MultiPartIdentifier.Identifiers;
+            return qualifier is null
+                ? identifiers.Count == 1
+                : identifiers.Count == 2 && identifiers[0].Value.Equals(qualifier, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool IsParameter(ScalarExpression? expression)
+            => Is<VariableReference>(expression) && ((VariableReference)expression!).Name.Equals(Param, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsOperand(ScalarExpression? expression, string? qualifier)
+            => IsColumn(expression, qualifier) || IsConstant(expression);
+
+        private static bool IsConstant(ScalarExpression? expression)
+        {
+            if (expression is null) return false;
+            if (Is<IntegerLiteral>(expression) || Is<NumericLiteral>(expression) || Is<RealLiteral>(expression)
+                || Is<StringLiteral>(expression) || Is<NullLiteral>(expression))
+                return true;
+            if (Is<UnaryExpression>(expression))
+            {
+                var unary = (UnaryExpression)expression;
+                return unary.UnaryExpressionType == UnaryExpressionType.Negative
+                    && (Is<IntegerLiteral>(unary.Expression) || Is<NumericLiteral>(unary.Expression) || Is<RealLiteral>(unary.Expression));
+            }
+
+            return Is<FunctionCall>(expression)
+                && expression is FunctionCall call
+                && call.Parameters.Count == 0
+                && (IsPlainCall(call, "GETUTCDATE") || IsPlainCall(call, "SYSUTCDATETIME"));
         }
     }
 
     /// <summary>
-    /// Decides whether a search condition restricts rows to the event's key. Syntactic and
-    /// fail-closed: at least one top-level AND conjunct must be <c>column = @Param</c>,
-    /// <c>column IN (@Param)</c>, <c>column IN (subquery restricted by @Param)</c>,
-    /// <c>column = (scalar subquery restricted by @Param)</c> or an <c>EXISTS</c> subquery that is
-    /// restricted by @Param and refers to an outer table. OR, NOT and inequalities never restrict.
+    /// Second pass: every syntax node must be of a type the grammar uses, so a clause the
+    /// structural pass did not inspect cannot carry SQL through.
     /// </summary>
-    private sealed class ParameterRestriction(string parameterName, NamedTableReference? target = null)
+    private sealed class GrammarNodeCheck : TSqlFragmentVisitor
     {
-        internal bool Write(WhereClause where, FromClause? from)
+        private static readonly HashSet<Type> Allowed =
+        [
+            typeof(TSqlScript), typeof(TSqlBatch), typeof(IfStatement), typeof(BeginEndBlockStatement), typeof(StatementList),
+            typeof(DeleteStatement), typeof(DeleteSpecification), typeof(UpdateStatement), typeof(UpdateSpecification),
+            typeof(SelectStatement), typeof(QuerySpecification), typeof(SelectScalarExpression), typeof(IdentifierOrValueExpression),
+            typeof(FromClause), typeof(WhereClause), typeof(NamedTableReference), typeof(SchemaObjectName), typeof(Identifier),
+            typeof(MultiPartIdentifier), typeof(ColumnReferenceExpression), typeof(VariableReference), typeof(AssignmentSetClause),
+            typeof(BooleanComparisonExpression), typeof(BooleanBinaryExpression), typeof(BooleanParenthesisExpression),
+            typeof(BooleanIsNullExpression), typeof(InPredicate), typeof(ScalarSubquery), typeof(FunctionCall), typeof(UnaryExpression),
+            typeof(IntegerLiteral), typeof(NumericLiteral), typeof(RealLiteral), typeof(StringLiteral), typeof(NullLiteral),
+        ];
+
+        internal string? Error { get; private set; }
+
+        public override void Visit(TSqlFragment node)
         {
-            var outer = OuterNames(from);
-            AddNames(target!, outer);
-            return Condition(where.SearchCondition, outer) || JoinRestrictsTarget(from);
+            if (Error is null && !Allowed.Contains(node.GetType()))
+                Error = $"Syntax {node.GetType().Name} is not part of the runtime maintenance step grammar (line {node.StartLine}, column {node.StartColumn}).";
         }
-
-        internal bool Condition(BooleanExpression? condition)
-        {
-            var outer = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (target is not null) AddNames(target, outer);
-            return Condition(condition, outer);
-        }
-
-        internal bool Query(QueryExpression? query) => query switch
-        {
-            QueryParenthesisExpression parenthesis => Query(parenthesis.QueryExpression),
-            QuerySpecification spec => Condition(spec.WhereClause?.SearchCondition, OuterNames(spec.FromClause))
-                || (spec.FromClause is { } from && from.TableReferences.Any(reference => JoinRestricts(reference, requireTarget: false))),
-            _ => false,
-        };
-
-        private bool Condition(BooleanExpression? condition, HashSet<string> outer) => condition switch
-        {
-            BooleanParenthesisExpression parenthesis => Condition(parenthesis.Expression, outer),
-            BooleanBinaryExpression { BinaryExpressionType: BooleanBinaryExpressionType.And } and
-                => Condition(and.FirstExpression, outer) || Condition(and.SecondExpression, outer),
-            BooleanComparisonExpression { ComparisonType: BooleanComparisonType.Equals } equals
-                => (IsColumn(equals.FirstExpression) && IsRestrictedValue(equals.SecondExpression))
-                    || (IsColumn(equals.SecondExpression) && IsRestrictedValue(equals.FirstExpression)),
-            InPredicate { NotDefined: false } inPredicate when IsColumn(inPredicate.Expression)
-                => inPredicate.Subquery is { } subquery
-                    ? Query(subquery.QueryExpression)
-                    : inPredicate.Values.Count > 0 && inPredicate.Values.All(IsParameter),
-            ExistsPredicate exists => Query(exists.Subquery.QueryExpression) && IsCorrelated(exists.Subquery, outer),
-            _ => false,
-        };
-
-        private bool IsRestrictedValue(ScalarExpression? expression) => expression switch
-        {
-            ParenthesisExpression parenthesis => IsRestrictedValue(parenthesis.Expression),
-            ScalarSubquery subquery => Query(subquery.QueryExpression),
-            _ => IsParameter(expression),
-        };
-
-        private bool IsParameter(ScalarExpression? expression) => expression switch
-        {
-            ParenthesisExpression parenthesis => IsParameter(parenthesis.Expression),
-            VariableReference variable => variable.Name.Equals(parameterName, StringComparison.OrdinalIgnoreCase),
-            _ => false,
-        };
-
-        private static bool IsColumn(ScalarExpression? expression) => expression switch
-        {
-            ParenthesisExpression parenthesis => IsColumn(parenthesis.Expression),
-            ColumnReferenceExpression { ColumnType: ColumnType.Regular, MultiPartIdentifier: not null } => true,
-            _ => false,
-        };
-
-        // An uncorrelated EXISTS is true or false for every outer row alike, so it restricts
-        // nothing; the subquery must refer to an outer table by name or alias.
-        private static bool IsCorrelated(TSqlFragment subquery, HashSet<string> outer)
-        {
-            var columns = new ColumnCollector();
-            subquery.Accept(columns);
-            return columns.Columns.Any(column =>
-            {
-                var identifiers = column.MultiPartIdentifier.Identifiers;
-                if (identifiers.Count < 2) return false;
-                var qualifier = string.Join(".", identifiers.Take(identifiers.Count - 1).Select(static identifier => identifier.Value));
-                return outer.Contains(qualifier);
-            });
-        }
-
-        // UPDATE/DELETE ... FROM: an inner join restricts the write only when the target table is
-        // one of the joined tables.
-        private bool JoinRestrictsTarget(FromClause? from)
-            => from is not null && from.TableReferences.Any(reference => JoinRestricts(reference, requireTarget: true));
-
-        private bool JoinRestricts(TableReference reference, bool requireTarget)
-        {
-            switch (reference)
-            {
-                case JoinParenthesisTableReference parenthesis:
-                    return JoinRestricts(parenthesis.Join, requireTarget);
-                case QualifiedJoin join:
-                    if (join.QualifiedJoinType == QualifiedJoinType.Inner
-                        && Condition(join.SearchCondition, OuterNames(join))
-                        && (!requireTarget || ContainsTarget(join)))
-                        return true;
-                    return JoinRestricts(join.FirstTableReference, requireTarget) || JoinRestricts(join.SecondTableReference, requireTarget);
-                default:
-                    return false;
-            }
-        }
-
-        private bool ContainsTarget(TSqlFragment fragment)
-        {
-            var tables = new TableCollector();
-            fragment.Accept(tables);
-            var wanted = target!.SchemaObject;
-            return tables.Tables.Any(table =>
-                string.Equals(table.SchemaObject.SchemaIdentifier?.Value, wanted.SchemaIdentifier?.Value, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(table.SchemaObject.BaseIdentifier.Value, wanted.BaseIdentifier.Value, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static HashSet<string> OuterNames(TSqlFragment? from)
-        {
-            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (from is null) return names;
-            var tables = new TableCollector();
-            from.Accept(tables);
-            foreach (var table in tables.Tables) AddNames(table, names);
-            return names;
-        }
-
-        private static void AddNames(NamedTableReference table, HashSet<string> names)
-        {
-            var name = table.SchemaObject;
-            names.Add(name.BaseIdentifier.Value);
-            if (name.SchemaIdentifier is { } schema) names.Add($"{schema.Value}.{name.BaseIdentifier.Value}");
-            if (table.Alias is { } alias) names.Add(alias.Value);
-        }
-    }
-
-    private sealed class TableCollector : TSqlFragmentVisitor
-    {
-        internal List<NamedTableReference> Tables { get; } = [];
-        public override void Visit(NamedTableReference node) => Tables.Add(node);
-    }
-
-    private sealed class ColumnCollector : TSqlFragmentVisitor
-    {
-        internal List<ColumnReferenceExpression> Columns { get; } = [];
-        public override void Visit(ColumnReferenceExpression node) => Columns.Add(node);
-    }
-
-    private sealed class CteCollector : TSqlFragmentVisitor
-    {
-        internal HashSet<string> Names { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public override void Visit(CommonTableExpression node) => Names.Add(node.ExpressionName.Value);
     }
 }

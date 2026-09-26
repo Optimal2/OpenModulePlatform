@@ -579,10 +579,9 @@ compatibility checks use.
 The platform binds exactly the one parameter of the event. Each step is sent
 as a parameterized command, which SqlClient executes through `sp_executesql`;
 step SQL never receives concatenated values. An `app-instance-blocking-count`
-step returns one row with a `BlockingCount` column (or the count in the first
-column) and may add a `Description` column, which Portal uses to name the rows
-in the refusal message ("2 example runtime binding(s)"). A step that returns
-no row reports zero.
+step returns one row with a `BlockingCount` column and may add a
+`Description` column holding a text constant, which Portal uses to name the
+rows in the refusal message ("2 example runtime binding(s)").
 
 Steps run ordered by module key, then `order`, then `key`. A failing step fails
 the platform operation and rolls the whole transaction back.
@@ -637,12 +636,13 @@ schema such as `omp_portal`, fails the import. The rule also requires:
   differently by the import gate and by SQL `JSON_VALUE`.
 
 When the steps run, the executor also checks the platform's registration of
-the module. The stored document's `moduleKey` must match its
-`omp.ModuleDefinitionDocuments` row. `omp.Modules` must register the derived
-schema for that module, and no other module may register or be named as that
-schema. If any check fails, the event is refused and no step runs.
+the module. The stored document's `moduleKey` must equal its
+`omp.ModuleDefinitionDocuments` row's key exactly. `omp.Modules` must register
+the derived schema for that module, and no other module may register or be
+named as that schema or differ from its key only in letter case. If any check
+fails, the event is refused and no step runs.
 
-### Safety rules
+### Runtime maintenance step grammar
 
 Rule ID: `OMP-MODULE-RUNTIME-MAINTENANCE`. The shared validator
 (`shared/ModuleRuntimeMaintenance.cs`) runs in every gate that already checks
@@ -650,38 +650,133 @@ Rule ID: `OMP-MODULE-RUNTIME-MAINTENANCE`. The shared validator
 Bootstrapper - through `ModuleDefinitionSqlOwnership.ValidateDocument`, in
 `scripts/omp/Test-ModuleSqlGuards.ps1`, and again when a step is loaded for
 execution, so a definition row edited in the database after import is refused
-rather than run. Step SQL is parsed with Microsoft ScriptDom and is fail-closed:
+rather than run.
 
-- Exactly one batch; no `GO`.
-- Only `IF`, `BEGIN`/`END`, `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`,
-  `DECLARE`, `SET @variable` and `SET NOCOUNT`. `EXEC`, dynamic SQL, DDL,
-  transaction control, `TRY`/`CATCH`, `SELECT INTO` and `OUTPUT INTO` are
-  rejected.
-- Writes only to schema-qualified tables in the module's own schema. An alias
-  as the write target is rejected; write the qualified table name.
-- Reads only from the module schema, `omp` and `sys`. Cross-database,
-  linked-server, `OPENROWSET`-style and table-valued-function sources are
-  rejected, as are unqualified names other than CTE names.
-- Every reference to a module table sits in the THEN branch of
-  `IF OBJECT_ID(N'<schema>.<table>', ...) IS NOT NULL` (combined with `AND` at
-  most), so a step on an installation without the module's tables is a no-op.
-- `UPDATE` and `DELETE` have a `WHERE` clause, and each one is itself
-  restricted to the event's key. At least one top-level `AND` conjunct of the
-  `WHERE` clause must be `column = @Param`, `column IN (@Param)`,
-  `column IN (subquery restricted by @Param)`,
-  `column = (scalar subquery restricted by @Param)` or an `EXISTS` subquery
-  that is restricted by `@Param` and refers to the outer table. An inner join
-  on the target table whose `ON` condition meets the same rule also counts.
-  `OR`, `NOT`, `NOT IN` and inequalities never count, so
-  `DELETE ... WHERE 1 = 1; SELECT @HostId;` is rejected.
-- `MERGE` has an `ON` condition that meets the same rule and no
-  `WHEN NOT MATCHED BY SOURCE` clause.
-- The step uses the event parameter and does not declare it.
-- A `read-only` step does not modify data and is exactly one `SELECT` (inside
-  its `IF OBJECT_ID` guard) that is restricted by the event parameter in the
-  same way.
+Step SQL is parsed with Microsoft ScriptDom (`TSql170Parser`) and checked
+against an allow-list: every statement, clause and expression must be one of
+the forms below, and anything the grammar does not name is refused. A second
+pass refuses any syntax node whose type is not used by the grammar, so a
+clause the structural check does not inspect cannot carry SQL through. The
+check is the same at import and at execution.
+
+```text
+step      := guard { guard }                      -- one batch, no GO
+guard     := IF OBJECT_ID(N'<schema>.<table>', N'U') IS NOT NULL body
+                                                  -- exactly this condition; no ELSE
+body      := statement
+           | BEGIN { statement } END
+statement := guard | delete | update | count
+
+delete    := DELETE [FROM] <schema>.<table> WHERE where
+update    := UPDATE <schema>.<table>
+             SET <column> = constant { , <column> = constant }
+             WHERE where
+count     := SELECT COUNT(*) AS BlockingCount [ , N'<text>' AS Description ]
+             FROM <schema>.<table> WHERE where    -- read-only event only
+
+where     := conjunct { AND conjunct }            -- parentheses allowed;
+                                                  -- at least one conjunct is a binding
+binding   := <column> = @Param                    -- either operand order
+           | <column> IN ( SELECT <a>.<column> FROM <schema>.<table2> <a>
+                           WHERE inner )          -- one level
+inner     := like where, with every column written <a>.<column>,
+             at least one <a>.<column> = @Param, and no further subquery
+filter    := operand <op> operand                 -- <op>: = <> != < > <= >=
+           | <column> IS [NOT] NULL
+           | <column> IN ( constant { , constant } )
+conjunct  := binding | filter
+operand   := <column> | constant
+constant  := <number> | -<number> | N'<text>' | '<text>' | NULL
+           | GETUTCDATE() | SYSUTCDATETIME()
+```
+
+- `<schema>` is always the module schema `omp_<moduleKey>` (see "Module
+  schema"). Every table a statement names, including `<table2>` in a
+  subquery, must be named by an enclosing guard; guards nest.
+- `@Param` is the event's one parameter (`@HostId`, `@ArtifactId` or
+  `@AppInstanceId`). It may appear only as the right- or left-hand side of a
+  binding. It can never be assigned, compared with `<>`, or used in a `SET`.
+- Outer columns are unqualified and belong to the written or counted table,
+  which has no alias. Subquery columns are qualified by the subquery table's
+  alias or name, which must differ from the written table's name, so a column
+  missing from the inner table cannot silently resolve to the outer one.
+- An `idempotent` event (`host-removed`, `artifact-removed`,
+  `app-instance-removed`) contains at least one `DELETE` or `UPDATE` and no
+  `SELECT`. The `read-only` event (`app-instance-blocking-count`) is exactly
+  one `count` statement. `Description` is the only optional extra column,
+  because Portal uses it to name the rows in the refusal message.
+- Comments must not contain `@`: a parameter name in a comment reads like a
+  binding to a reviewer but binds nothing.
 - The configuration-ownership rule (`OMP-MODULE-SQL-CONFIG-OWNERSHIP`) applies
   as for every other module SQL.
+
+Allowed, for example:
+
+```sql
+IF OBJECT_ID(N'omp_my_module.Leases', N'U') IS NOT NULL
+BEGIN
+    IF OBJECT_ID(N'omp_my_module.Workers', N'U') IS NOT NULL
+        UPDATE omp_my_module.Leases
+        SET WorkerId = NULL, ReleasedUtc = SYSUTCDATETIME()
+        WHERE WorkerId IN
+        (
+            SELECT w.WorkerId
+            FROM omp_my_module.Workers w
+            WHERE w.HostId = @HostId AND w.IsActive = 1
+        );
+
+    DELETE FROM omp_my_module.Leases
+    WHERE HostId = @HostId AND ExpiresUtc < GETUTCDATE();
+END;
+```
+
+Everything else is refused at import and at execution, including:
+
+- `JOIN` or a second `FROM` on a write (`DELETE t FROM ... INNER JOIN ...`),
+  and joins in any `SELECT`.
+- `MERGE`, `INSERT`, `SELECT INTO`, `TRUNCATE`, DDL, `EXEC`, dynamic SQL,
+  transaction control, `TRY`/`CATCH`, `SET` options (including
+  `SET NOCOUNT`), `OUTPUT`, `TOP`, table and query hints.
+- `DECLARE` of any variable, `SET @variable = ...` and
+  `SELECT @variable = ...`, so the event parameter cannot be rebound.
+- Common table expressions (`WITH ...`).
+- `OR`, `NOT`, `NOT IN`, `EXISTS`, scalar subqueries and nested subqueries.
+- Function calls other than `COUNT(*)` in the `count` form, `OBJECT_ID` in a
+  guard, and `GETUTCDATE()`/`SYSUTCDATETIME()` as constants.
+- Tables outside the module schema, including `omp` and `sys`, and
+  cross-database or linked-server names.
+- Several statements where any one of them is not an allowed form, for
+  example a bound `DELETE` followed by an unbound one.
+
+A module whose rows are keyed only by platform rows (for example a worker
+instance id) cannot join `omp.WorkerInstances` to find them. Store the event's
+key (`HostId`, `AppInstanceId`, `ArtifactId`) in the module's own table, or
+keep a module-owned mapping table, and bind on that.
+
+### Module key letter case
+
+Two module keys that differ only in letter case derive the same physical
+schema, because SQL Server schema names follow the database collation, and
+under a case-insensitive collation the registration `MERGE` would update the
+other module's `omp.Modules` row. Every import and registration path therefore
+refuses a key that matches an existing `omp.Modules` or
+`omp.ModuleDefinitionDocuments` key case-insensitively but not exactly (rule
+`OMP-MODULE-KEY-CASE`, SQL error 53240): Portal definition save and apply,
+Portal module create and edit, HostAgent definition import and apply, and the
+Bootstrapper definition upsert and apply. At execution the stored document's
+`moduleKey` must equal its row's key exactly, and a registered key that
+differs only in case counts as another module claiming the schema.
+
+### Failure isolation
+
+The executor validates and binds each applied definition on its own. A
+definition that cannot be read, validated or bound - whatever the error,
+including a malformed `content` payload - is recorded as a failure of that
+module. The event is then refused with one message that names every failed
+module (`[<moduleKey>] <reason>`, separated by `|`), before any step runs, so
+the platform delete that raised the event is aborted fail-closed and one
+corrupt document never hides another module's failure. Nothing is known about
+what a failed document declares, so it fails every event.
 
 `scripts/omp/validate-module-definitions.ps1` and check 16 of
 `scripts/omp/validate-component-versions.ps1` also require every step's
@@ -716,18 +811,6 @@ IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NOT NULL
 IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NOT NULL
     DELETE FROM omp_example_webapp.RuntimeLeases
     WHERE AppInstanceId = @AppInstanceId;
-```
-
-A module whose rows are keyed by worker rows joins the platform catalog, which
-is a read and therefore allowed:
-
-```sql
-IF OBJECT_ID(N'my_module.WorkerLeases', N'U') IS NOT NULL
-    DELETE FROM my_module.WorkerLeases
-    WHERE WorkerInstanceId IN
-    (
-        SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId
-    );
 ```
 
 The tests `ModuleRuntimeMaintenanceTests` (validator matrix),

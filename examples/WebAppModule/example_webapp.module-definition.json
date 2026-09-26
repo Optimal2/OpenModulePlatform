@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_webapp",
-  "definitionVersion": "0.3.153",
+  "definitionVersion": "0.3.154",
   "module": {
     "displayName": "Example WebApp",
     "moduleType": "WebAppModule",
@@ -78,8 +78,8 @@
         "path": "examples/WebAppModule/Sql/runtime-maintenance/host-removed.sql",
         "inlineSql": null,
         "contentEncoding": "base64-utf8",
-        "content": "LS0gRXZlbnQgaG9zdC1yZW1vdmVkOiBASG9zdElkIHVuaXF1ZWlkZW50aWZpZXIgaXMgYm91bmQgYnkgdGhlIHBsYXRmb3JtLgotLSBBIGxlYXNlIGhlbGQgb24gYSByZW1vdmVkIGhvc3QgY2FuIG5ldmVyIGJlIHJlbmV3ZWQ7IGRyb3AgaXQuCklGIE9CSkVDVF9JRChOJ29tcF9leGFtcGxlX3dlYmFwcC5SdW50aW1lTGVhc2VzJywgTidVJykgSVMgTk9UIE5VTEwKICAgIERFTEVURSBGUk9NIG9tcF9leGFtcGxlX3dlYmFwcC5SdW50aW1lTGVhc2VzCiAgICBXSEVSRSBIb3N0SWQgPSBASG9zdElkOwo=",
-        "sha256": "8f16b72c29fa6f9066da3747487b2591c9bc196167d8fd835052ed7ad12b8f85"
+        "content": "LS0gRXZlbnQgaG9zdC1yZW1vdmVkOiB0aGUgcGxhdGZvcm0gYmluZHMgdGhlIEhvc3RJZCBwYXJhbWV0ZXIgKHVuaXF1ZWlkZW50aWZpZXIpLgotLSBBIGxlYXNlIGhlbGQgb24gYSByZW1vdmVkIGhvc3QgY2FuIG5ldmVyIGJlIHJlbmV3ZWQ7IGRyb3AgaXQuCklGIE9CSkVDVF9JRChOJ29tcF9leGFtcGxlX3dlYmFwcC5SdW50aW1lTGVhc2VzJywgTidVJykgSVMgTk9UIE5VTEwKICAgIERFTEVURSBGUk9NIG9tcF9leGFtcGxlX3dlYmFwcC5SdW50aW1lTGVhc2VzCiAgICBXSEVSRSBIb3N0SWQgPSBASG9zdElkOwo=",
+        "sha256": "c70053aefccee814c261d71e529b3b75e845922528478902c7979f3289f233f8"
       },
       {
         "key": "unpin-bindings-on-artifact-removed",
@@ -89,8 +89,8 @@
         "path": "examples/WebAppModule/Sql/runtime-maintenance/artifact-removed.sql",
         "inlineSql": null,
         "contentEncoding": "base64-utf8",
-        "content": "LS0gRXZlbnQgYXJ0aWZhY3QtcmVtb3ZlZDogQEFydGlmYWN0SWQgaW50IGlzIGJvdW5kIGJ5IHRoZSBwbGF0Zm9ybS4KLS0gQSBiaW5kaW5nIHBpbm5lZCB0byBhIHJlbW92ZWQgYXJ0aWZhY3QgZmFsbHMgYmFjayB0byB0aGUgYXBwIGluc3RhbmNlJ3MgY3VycmVudCBhcnRpZmFjdC4KSUYgT0JKRUNUX0lEKE4nb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVCaW5kaW5ncycsIE4nVScpIElTIE5PVCBOVUxMCiAgICBVUERBVEUgb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVCaW5kaW5ncwogICAgU0VUIEFydGlmYWN0SWQgPSBOVUxMCiAgICBXSEVSRSBBcnRpZmFjdElkID0gQEFydGlmYWN0SWQ7Cg==",
-        "sha256": "4ba80ebbc8ee3683619c3c0f2081104fc793f1252abfe0bc1e6e383685827d86"
+        "content": "LS0gRXZlbnQgYXJ0aWZhY3QtcmVtb3ZlZDogdGhlIHBsYXRmb3JtIGJpbmRzIHRoZSBBcnRpZmFjdElkIHBhcmFtZXRlciAoaW50KS4KLS0gQSBiaW5kaW5nIHBpbm5lZCB0byBhIHJlbW92ZWQgYXJ0aWZhY3QgZmFsbHMgYmFjayB0byB0aGUgYXBwIGluc3RhbmNlJ3MgY3VycmVudCBhcnRpZmFjdC4KSUYgT0JKRUNUX0lEKE4nb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVCaW5kaW5ncycsIE4nVScpIElTIE5PVCBOVUxMCiAgICBVUERBVEUgb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVCaW5kaW5ncwogICAgU0VUIEFydGlmYWN0SWQgPSBOVUxMCiAgICBXSEVSRSBBcnRpZmFjdElkID0gQEFydGlmYWN0SWQ7Cg==",
+        "sha256": "e4374f8ad1755d3160960b24d7cf0faeb493bf737157e4d715055009f9f77f09"
       },
       {
         "key": "release-leases-on-app-instance-removed",
@@ -100,8 +100,8 @@
         "path": "examples/WebAppModule/Sql/runtime-maintenance/app-instance-removed.sql",
         "inlineSql": null,
         "contentEncoding": "base64-utf8",
-        "content": "LS0gRXZlbnQgYXBwLWluc3RhbmNlLXJlbW92ZWQ6IEBBcHBJbnN0YW5jZUlkIHVuaXF1ZWlkZW50aWZpZXIgaXMgYm91bmQgYnkgdGhlIHBsYXRmb3JtLgotLSBSdW5zIG9ubHkgYWZ0ZXIgZXZlcnkgYXBwLWluc3RhbmNlLWJsb2NraW5nLWNvdW50IHN0ZXAgcmVwb3J0ZWQgemVyby4KSUYgT0JKRUNUX0lEKE4nb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVMZWFzZXMnLCBOJ1UnKSBJUyBOT1QgTlVMTAogICAgREVMRVRFIEZST00gb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVMZWFzZXMKICAgIFdIRVJFIEFwcEluc3RhbmNlSWQgPSBAQXBwSW5zdGFuY2VJZDsK",
-        "sha256": "3104d4b3fcc523ff3a22132b91e007cc2b55021086bbf52c9b3e3c206c2e4678"
+        "content": "LS0gRXZlbnQgYXBwLWluc3RhbmNlLXJlbW92ZWQ6IHRoZSBwbGF0Zm9ybSBiaW5kcyB0aGUgQXBwSW5zdGFuY2VJZCBwYXJhbWV0ZXIgKHVuaXF1ZWlkZW50aWZpZXIpLgotLSBSdW5zIG9ubHkgYWZ0ZXIgZXZlcnkgYXBwLWluc3RhbmNlLWJsb2NraW5nLWNvdW50IHN0ZXAgcmVwb3J0ZWQgemVyby4KSUYgT0JKRUNUX0lEKE4nb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVMZWFzZXMnLCBOJ1UnKSBJUyBOT1QgTlVMTAogICAgREVMRVRFIEZST00gb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVMZWFzZXMKICAgIFdIRVJFIEFwcEluc3RhbmNlSWQgPSBAQXBwSW5zdGFuY2VJZDsK",
+        "sha256": "4ed74e19e0c0459bb6e837b24c70505ff3db283685a0a4cdeb25f8ee4b3a1557"
       },
       {
         "key": "count-bindings-blocking-app-instance-removal",
@@ -111,8 +111,8 @@
         "path": "examples/WebAppModule/Sql/runtime-maintenance/app-instance-blocking-count.sql",
         "inlineSql": null,
         "contentEncoding": "base64-utf8",
-        "content": "LS0gRXZlbnQgYXBwLWluc3RhbmNlLWJsb2NraW5nLWNvdW50OiBAQXBwSW5zdGFuY2VJZCB1bmlxdWVpZGVudGlmaWVyIGlzIGJvdW5kIGJ5IHRoZSBwbGF0Zm9ybS4KLS0gUmVhZC1vbmx5LiBCaW5kaW5ncyBhcmUgb3BlcmF0b3IgZGF0YSB0aGF0IG11c3Qgbm90IGRpc2FwcGVhciBhcyBhIHNpZGUgZWZmZWN0LCBzbyB0aGV5Ci0tIGJsb2NrIHRoZSBkZWxldGU7IFBvcnRhbCBuYW1lcyB0aGVtIHdpdGggdGhlIERlc2NyaXB0aW9uIGNvbHVtbi4KSUYgT0JKRUNUX0lEKE4nb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVCaW5kaW5ncycsIE4nVScpIElTIE5PVCBOVUxMCiAgICBTRUxFQ1QgQ09VTlQoKikgQVMgQmxvY2tpbmdDb3VudCwKICAgICAgICAgICBOJ2V4YW1wbGUgcnVudGltZSBiaW5kaW5nKHMpJyBBUyBEZXNjcmlwdGlvbgogICAgRlJPTSBvbXBfZXhhbXBsZV93ZWJhcHAuUnVudGltZUJpbmRpbmdzCiAgICBXSEVSRSBBcHBJbnN0YW5jZUlkID0gQEFwcEluc3RhbmNlSWQ7Cg==",
-        "sha256": "84540a8c0afdd2e496ad4b02981f20d6ce0a0f279e6d34a073323c30e3b9a480"
+        "content": "LS0gRXZlbnQgYXBwLWluc3RhbmNlLWJsb2NraW5nLWNvdW50OiB0aGUgcGxhdGZvcm0gYmluZHMgdGhlIEFwcEluc3RhbmNlSWQgcGFyYW1ldGVyICh1bmlxdWVpZGVudGlmaWVyKS4KLS0gUmVhZC1vbmx5LiBCaW5kaW5ncyBhcmUgb3BlcmF0b3IgZGF0YSB0aGF0IG11c3Qgbm90IGRpc2FwcGVhciBhcyBhIHNpZGUgZWZmZWN0LCBzbyB0aGV5Ci0tIGJsb2NrIHRoZSBkZWxldGU7IFBvcnRhbCBuYW1lcyB0aGVtIHdpdGggdGhlIERlc2NyaXB0aW9uIGNvbHVtbi4KSUYgT0JKRUNUX0lEKE4nb21wX2V4YW1wbGVfd2ViYXBwLlJ1bnRpbWVCaW5kaW5ncycsIE4nVScpIElTIE5PVCBOVUxMCiAgICBTRUxFQ1QgQ09VTlQoKikgQVMgQmxvY2tpbmdDb3VudCwKICAgICAgICAgICBOJ2V4YW1wbGUgcnVudGltZSBiaW5kaW5nKHMpJyBBUyBEZXNjcmlwdGlvbgogICAgRlJPTSBvbXBfZXhhbXBsZV93ZWJhcHAuUnVudGltZUJpbmRpbmdzCiAgICBXSEVSRSBBcHBJbnN0YW5jZUlkID0gQEFwcEluc3RhbmNlSWQ7Cg==",
+        "sha256": "25bd2a6f75ec44140be048c409e948b0222c604d28880252be83c6ee7cce1676"
       }
     ]
   },

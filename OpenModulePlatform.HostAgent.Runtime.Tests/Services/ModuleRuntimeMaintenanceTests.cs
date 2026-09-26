@@ -47,38 +47,38 @@ public sealed class ModuleRuntimeMaintenanceTests
             $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL DELETE FROM {Schema}.Leases WHERE HostId = @HostId;"
         },
         {
-            // Joining platform rows is a read and allowed; this is the shape of a worker-keyed release.
+            // Nested guards, a one-level IN subquery over another module table, several SET
+            // constants and extra AND filters on the same table.
             ModuleRuntimeMaintenance.HostRemoved,
-            $@"SET NOCOUNT ON;
-IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL
+            $@"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL
 BEGIN
-    UPDATE {Schema}.Leases
-    SET WorkerInstanceId = NULL
-    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId);
+    IF OBJECT_ID(N'{Schema}.Workers', N'U') IS NOT NULL
+        UPDATE {Schema}.Leases
+        SET WorkerId = NULL, ReleasedUtc = SYSUTCDATETIME(), State = -1
+        WHERE WorkerId IN (SELECT w.WorkerId FROM {Schema}.Workers w WHERE w.HostId = @HostId AND w.IsActive = 1);
+    DELETE FROM {Schema}.Leases WHERE HostId = @HostId AND ExpiresUtc < GETUTCDATE();
 END;"
         },
         {
             ModuleRuntimeMaintenance.ArtifactRemoved,
-            $"IF (OBJECT_ID(N'[{Schema}].[Bindings]') IS NOT NULL AND 1 = 1) UPDATE [{Schema}].[Bindings] SET ArtifactId = NULL WHERE ArtifactId = @ArtifactId;"
+            $"IF OBJECT_ID(N'[{Schema}].[Bindings]', N'U') IS NOT NULL UPDATE [{Schema}].[Bindings] SET ArtifactId = NULL WHERE @ArtifactId = ArtifactId;"
+        },
+        {
+            ModuleRuntimeMaintenance.HostRemoved,
+            $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL DELETE {Schema}.Leases WHERE (HostId = @HostId AND State IN (1, 2)) AND ExpiresUtc IS NOT NULL;"
         },
         {
             ModuleRuntimeMaintenance.AppInstanceBlockingCount,
             $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount FROM {Schema}.Bindings WHERE AppInstanceId = @AppInstanceId;"
         },
         {
-            // The parameter may restrict the write through an inner join on the target table.
-            ModuleRuntimeMaintenance.HostRemoved,
-            $@"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL
-    UPDATE {Schema}.Leases
-    SET WorkerInstanceId = NULL
-    FROM {Schema}.Leases
-    INNER JOIN omp.WorkerInstances w ON w.WorkerInstanceId = {Schema}.Leases.WorkerInstanceId AND w.HostId = @HostId
-    WHERE {Schema}.Leases.WorkerInstanceId IS NOT NULL;"
+            ModuleRuntimeMaintenance.AppInstanceBlockingCount,
+            $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount, N'binding(s)' AS Description FROM {Schema}.Bindings WHERE AppInstanceId = @AppInstanceId AND IsPinned = 1;"
         },
         {
-            // ... or through an EXISTS subquery.
+            // A comment without a parameter name is fine.
             ModuleRuntimeMaintenance.HostRemoved,
-            $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL DELETE FROM {Schema}.Leases WHERE Expired = 1 AND EXISTS (SELECT 1 FROM omp.WorkerInstances w WHERE w.WorkerInstanceId = {Schema}.Leases.WorkerInstanceId AND w.HostId = @HostId);"
+            $"-- Drop leases of the removed host.\nIF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL DELETE FROM {Schema}.Leases WHERE HostId = @HostId;"
         },
     };
 
@@ -92,48 +92,61 @@ END;"
     public static TheoryData<string, string, string, string> UnsafeSteps()
     {
         const string guard = $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL ";
+        const string notGuard = "The IF condition must be exactly OBJECT_ID";
+        const string unbound = "must restrict the rows by the event parameter";
         return new()
         {
-            { "platform table write", "may only write the module schema", ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL DELETE FROM omp.WorkerInstances WHERE HostId = @HostId;" },
-            { "other module write", "may only write the module schema", ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'other_module.Leases', N'U') IS NOT NULL DELETE FROM other_module.Leases WHERE HostId = @HostId;" },
-            { "other module read", "may only reference the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId IN (SELECT HostId FROM other_module.Hosts WHERE HostId = @HostId);" },
-            { "no OBJECT_ID guard", "must be referenced inside IF OBJECT_ID", ModuleRuntimeMaintenance.HostRemoved, $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
-            { "IS NULL guard", "must be referenced inside IF OBJECT_ID", ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NULL DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
-            { "OR guard", "must be referenced inside IF OBJECT_ID", ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL OR 1 = 1 DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "platform table write", notGuard, ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL DELETE FROM omp.WorkerInstances WHERE HostId = @HostId;" },
+            { "other module write", notGuard, ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'other_module.Leases', N'U') IS NOT NULL DELETE FROM other_module.Leases WHERE HostId = @HostId;" },
+            { "other module read", "may only reference the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId IN (SELECT h.HostId FROM other_module.Hosts h WHERE h.HostId = @HostId);" },
+            { "platform read", "may only reference the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE WorkerId IN (SELECT w.WorkerInstanceId FROM omp.WorkerInstances w WHERE w.HostId = @HostId);" },
+            { "no OBJECT_ID guard", "is not allowed at the top level", ModuleRuntimeMaintenance.HostRemoved, $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "IS NULL guard", notGuard, ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NULL DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "OR guard", notGuard, ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL OR 1 = 1 DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "guard without type", notGuard, ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Leases') IS NOT NULL DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
             { "guard for another table", "must be referenced inside IF OBJECT_ID", ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Other', N'U') IS NOT NULL DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
-            { "write in ELSE", "must be referenced inside IF OBJECT_ID", ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN SELECT @HostId; END ELSE DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "write in ELSE", "IF ... ELSE is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId ELSE DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
             { "dynamic SQL", "ExecuteStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"EXEC sp_executesql N'DELETE FROM {Schema}.Leases WHERE HostId = @h', N'@h uniqueidentifier', @h = @HostId;" },
             { "procedure call", "ExecuteStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"EXEC {Schema}.ReleaseLeases @HostId;" },
             { "DDL", "DropTableStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DROP TABLE {Schema}.Leases;" },
-            { "DELETE without WHERE", "must have a WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases; SELECT @HostId;" },
-            { "UPDATE without WHERE", "must have a WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET HostId = @HostId;" },
-            { "parameter unused", "must use the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"INSERT INTO {Schema}.Leases (HostId) VALUES (NULL);" },
-            { "parameter redeclared", "must not be declared", ModuleRuntimeMaintenance.HostRemoved, $"DECLARE @HostId uniqueidentifier = NEWID(); " + guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "DELETE without WHERE", "must have a WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases;" },
+            { "UPDATE without WHERE", "must have a WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET HostId = NULL;" },
+            { "INSERT", "InsertStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"INSERT INTO {Schema}.Leases (HostId) VALUES (@HostId);" },
+            { "parameter redeclared", "DeclareVariableStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, "DECLARE @HostId uniqueidentifier = NEWID(); " + guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
             { "two batches", "exactly one batch", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;\nGO\nSELECT 1;" },
-            { "alias write target", "use the qualified table name, not an alias", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE l FROM {Schema}.Leases l WHERE l.HostId = @HostId;" },
+            { "alias write target", "A FROM clause or join on the write is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE l FROM {Schema}.Leases l WHERE l.HostId = @HostId;" },
             { "cross-database", "Cross-database", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM OtherDb.{Schema}.Leases WHERE HostId = @HostId;" },
-            { "OUTPUT INTO", "OUTPUT INTO is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases OUTPUT deleted.HostId INTO {Schema}.Leases(HostId) WHERE HostId = @HostId;" },
-            { "SELECT INTO", "SELECT INTO is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"SELECT * INTO {Schema}.Copy FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "OUTPUT INTO", "OUTPUT is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases OUTPUT deleted.HostId INTO {Schema}.Leases(HostId) WHERE HostId = @HostId;" },
+            { "TOP", "TOP is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE TOP (1) FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "table hint", "Table hints", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WITH (TABLOCKX) WHERE HostId = @HostId;" },
+            { "OPTION hint", "OPTION hints are not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId OPTION (MAXDOP 1);" },
+            { "SELECT INTO", "SELECT is only allowed in the read-only event", ModuleRuntimeMaintenance.HostRemoved, guard + $"SELECT * INTO {Schema}.Copy FROM {Schema}.Leases WHERE HostId = @HostId;" },
             { "transaction control", "BeginTransactionStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, "BEGIN TRANSACTION; " + guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId; COMMIT;" },
-            { "unqualified table", "use the qualified table name, not an alias", ModuleRuntimeMaintenance.HostRemoved, guard + "DELETE FROM Leases WHERE HostId = @HostId;" },
-            { "OPENROWSET", "Table source", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId IN (SELECT HostId FROM OPENROWSET('SQLNCLI', 'x', 'SELECT 1') r) AND HostId = @HostId;" },
+            { "unqualified table", "must be qualified with the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + "DELETE FROM Leases WHERE HostId = @HostId;" },
+            { "OPENROWSET", "must read exactly one table of the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId IN (SELECT r.HostId FROM OPENROWSET('SQLNCLI', 'x', 'SELECT 1') r) AND HostId = @HostId;" },
             { "SET option", "PredicateSetStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, "SET XACT_ABORT OFF; " + guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "SET NOCOUNT", "PredicateSetStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, "SET NOCOUNT ON; " + guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
             { "write in read-only event", "is read-only", ModuleRuntimeMaintenance.AppInstanceBlockingCount, guard + $"DELETE FROM {Schema}.Leases WHERE AppInstanceId = @AppInstanceId;" },
             { "unparseable", "cannot be parsed", ModuleRuntimeMaintenance.ArtifactRemoved, "UPDATE WHERE @ArtifactId" },
-            { "platform module schema write", "may only write the module schema", ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'omp_portal.Leases', N'U') IS NOT NULL DELETE FROM omp_portal.Leases WHERE HostId = @HostId;" },
-            { "platform module schema read", "may only reference the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId IN (SELECT HostId FROM omp_portal.Hosts WHERE HostId = @HostId);" },
-            // The WHERE clause of each write, not merely the step, must carry the event parameter.
-            { "parameter only in a separate SELECT", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE 1 = 1; SELECT @HostId;" },
-            { "parameter only in SET", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET HostId = @HostId WHERE HostId IS NOT NULL;" },
-            { "parameter diluted by OR", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId OR 1 = 1;" },
-            { "parameter under NOT IN", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId NOT IN (SELECT HostId FROM omp.Hosts WHERE HostId = @HostId);" },
-            { "parameter under inequality", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId <> @HostId;" },
-            { "join that excludes the target", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases FROM omp.WorkerInstances w INNER JOIN omp.Hosts h ON h.HostId = w.HostId AND h.HostId = @HostId WHERE 1 = 1;" },
-            { "second DELETE unbound", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN DELETE FROM {Schema}.Leases WHERE HostId = @HostId; DELETE FROM {Schema}.Leases WHERE 1 = 1; END" },
-            { "MERGE deleting unmatched rows", "WHEN NOT MATCHED BY SOURCE", ModuleRuntimeMaintenance.HostRemoved, guard + $"MERGE {Schema}.Leases AS t USING (SELECT @HostId AS HostId) AS s ON t.HostId = s.HostId AND t.HostId = @HostId WHEN NOT MATCHED BY SOURCE THEN DELETE;" },
-            { "MERGE ON unbound", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"MERGE {Schema}.Leases AS t USING (SELECT @HostId AS HostId) AS s ON t.HostId = s.HostId WHEN MATCHED THEN DELETE;" },
-            { "read-only with two SELECTs", "exactly one SELECT", ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount FROM {Schema}.Bindings WHERE 1 = 1; SELECT @AppInstanceId;" },
-            { "read-only SELECT unbound", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount, @AppInstanceId AS Id FROM {Schema}.Bindings WHERE AppInstanceId IS NOT NULL;" },
+            { "platform module schema write", notGuard, ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'omp_portal.Leases', N'U') IS NOT NULL DELETE FROM omp_portal.Leases WHERE HostId = @HostId;" },
+            { "platform module schema read", "may only reference the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId IN (SELECT h.HostId FROM omp_portal.Hosts h WHERE h.HostId = @HostId);" },
+            { "parameter only in a separate SELECT", unbound, ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE 1 = 1; SELECT @HostId;" },
+            { "parameter only in SET", "A SET value must be a constant", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET HostId = @HostId WHERE HostId IS NOT NULL;" },
+            { "SET without parameter binding", unbound, ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET HostId = NULL WHERE HostId IS NOT NULL;" },
+            { "parameter diluted by OR", "is not allowed in a runtime maintenance WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId OR 1 = 1;" },
+            { "NOT", "BooleanNotExpression is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId AND NOT (State = 1);" },
+            { "parameter under NOT IN", "InPredicate is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId NOT IN (SELECT l.HostId FROM {Schema}.Leases l WHERE l.HostId = @HostId);" },
+            { "parameter under inequality", "BooleanComparisonExpression is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId <> @HostId;" },
+            { "join that excludes the target", "A FROM clause or join on the write is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases FROM omp.WorkerInstances w INNER JOIN omp.Hosts h ON h.HostId = w.HostId AND h.HostId = @HostId WHERE 1 = 1;" },
+            { "second DELETE unbound", unbound, ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN DELETE FROM {Schema}.Leases WHERE HostId = @HostId; DELETE FROM {Schema}.Leases WHERE 1 = 1; END" },
+            { "MERGE deleting unmatched rows", "MergeStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"MERGE {Schema}.Leases AS t USING (SELECT @HostId AS HostId) AS s ON t.HostId = s.HostId AND t.HostId = @HostId WHEN NOT MATCHED BY SOURCE THEN DELETE;" },
+            { "two-level subquery", "Only one level of IN subquery", ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Owners', N'U') IS NOT NULL " + guard + $"DELETE FROM {Schema}.Leases WHERE LeaseId IN (SELECT o.LeaseId FROM {Schema}.Owners o WHERE o.HostId = @HostId AND o.OwnerId IN (SELECT p.OwnerId FROM {Schema}.Owners p WHERE p.HostId = @HostId));" },
+            { "subquery alias equal to the target name", "alias that differs", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE LeaseId IN (SELECT Leases.LeaseId FROM {Schema}.Leases WHERE Leases.HostId = @HostId);" },
+            { "subquery without parameter", "The subquery WHERE clause must contain", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId AND LeaseId IN (SELECT l.LeaseId FROM {Schema}.Leases l WHERE l.State = 1);" },
+            { "read-only with two SELECTs", "exactly one SELECT", ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL BEGIN SELECT COUNT(*) AS BlockingCount FROM {Schema}.Bindings WHERE AppInstanceId = @AppInstanceId; SELECT COUNT(*) AS BlockingCount FROM {Schema}.Bindings WHERE AppInstanceId = @AppInstanceId; END" },
+            { "read-only SELECT unbound", unbound, ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount FROM {Schema}.Bindings WHERE AppInstanceId IS NOT NULL;" },
+            { "read-only SELECT exposes the parameter", "must select exactly COUNT(*) AS BlockingCount", ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount, @AppInstanceId AS Id FROM {Schema}.Bindings WHERE AppInstanceId = @AppInstanceId;" },
+            { "read-only SELECT with other name", "must select exactly COUNT(*) AS BlockingCount", ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS Total FROM {Schema}.Bindings WHERE AppInstanceId = @AppInstanceId;" },
         };
     }
 
@@ -144,6 +157,45 @@ END;"
         var error = ModuleRuntimeMaintenance.ValidateStepSql(sql, Schema, ModuleRuntimeMaintenance.Events[eventName]);
 
         // Each case must be refused by the gate it targets, not by a typo in the probe.
+        Assert.True(error is not null, $"Expected '{description}' to be rejected.");
+        Assert.Contains(expectedReason, error, StringComparison.Ordinal);
+    }
+
+    // Round 3: each of these got past the round-2 rule "every write references the parameter in its
+    // WHERE clause". The allow-list refuses them because they are not one of the allowed forms.
+    public static TheoryData<string, string, string, string> Bypasses()
+    {
+        const string guard = $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL ";
+        return new()
+        {
+            { "F-A uncorrelated inner join writes every row", "A FROM clause or join on the write is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases FROM {Schema}.Leases INNER JOIN omp.Hosts h ON h.HostId = @HostId WHERE 1 = 1;" },
+            { "F-A uncorrelated inner join in UPDATE", "A FROM clause or join on the write is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET ExpiresUtc = NULL FROM {Schema}.Leases INNER JOIN omp.Hosts h ON h.HostId = @HostId WHERE 1 = 1;" },
+            { "F-B parameter rebound with SET", "SetVariableStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN SET @HostId = (SELECT TOP (1) HostId FROM {Schema}.Leases); DELETE FROM {Schema}.Leases WHERE HostId = @HostId; END" },
+            { "F-B parameter rebound with SELECT", "SELECT is only allowed in the read-only event", ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN SELECT @HostId = HostId FROM {Schema}.Leases; DELETE FROM {Schema}.Leases WHERE HostId = @HostId; END" },
+            { "F-C INSERT", "InsertStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN INSERT INTO {Schema}.Leases (HostId) VALUES (NEWID()); DELETE FROM {Schema}.Leases WHERE HostId = @HostId; END" },
+            { "F-D MERGE WHEN NOT MATCHED THEN INSERT", "MergeStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"MERGE {Schema}.Leases AS t USING (SELECT @HostId AS HostId) AS s ON t.HostId = @HostId WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (HostId) VALUES (NEWID());" },
+            { "round 2: OR dilutes the parameter", "is not allowed in a runtime maintenance WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE 1 = 1 OR @HostId IS NULL;" },
+            { "round 2: parameter only in a comment", "Comments must not contain '@'", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE 1 = 1; -- HostId = @HostId" },
+            { "round 2: one of several writes unbound", "must restrict the rows by the event parameter", ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN DELETE FROM {Schema}.Leases WHERE HostId = @HostId; DELETE FROM {Schema}.Leases WHERE ExpiresUtc IS NULL; END" },
+            { "subquery column resolving to the outer table", "must select exactly one column qualified by", ModuleRuntimeMaintenance.HostRemoved, guard + $"IF OBJECT_ID(N'{Schema}.Owners', N'U') IS NOT NULL DELETE FROM {Schema}.Leases WHERE LeaseId IN (SELECT LeaseId FROM {Schema}.Owners WHERE HostId = @HostId);" },
+            { "uncorrelated EXISTS", "ExistsPredicate is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId = HostId AND EXISTS (SELECT 1 FROM omp.Hosts WHERE HostId = @HostId);" },
+            { "parameter declared", "DeclareVariableStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, $"DECLARE @HostId2 uniqueidentifier; " + guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "CTE", "Common table expressions (WITH) are not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"WITH x AS (SELECT HostId FROM {Schema}.Leases) DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+            { "TRUNCATE", "TruncateTableStatement is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"BEGIN DELETE FROM {Schema}.Leases WHERE HostId = @HostId; TRUNCATE TABLE {Schema}.Leases; END" },
+            { "SET value from a subquery", "A SET value must be a constant", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET HostId = (SELECT TOP (1) HostId FROM {Schema}.Leases) WHERE HostId = @HostId;" },
+            { "SET value from another function", "A SET value must be a constant", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.Leases SET LeaseId = NEWID() WHERE HostId = @HostId;" },
+            { "read-only SELECT with extra column", "must select exactly COUNT(*) AS BlockingCount", ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount, MAX(BindingKey) AS Description FROM {Schema}.Bindings WHERE AppInstanceId = @AppInstanceId;" },
+            { "read-only SELECT with join", "must read exactly one table of the module schema", ModuleRuntimeMaintenance.AppInstanceBlockingCount, $"IF OBJECT_ID(N'{Schema}.Bindings', N'U') IS NOT NULL SELECT COUNT(*) AS BlockingCount FROM {Schema}.Bindings b INNER JOIN omp.Hosts h ON h.HostId = b.HostId WHERE b.AppInstanceId = @AppInstanceId;" },
+            { "comment containing @", "Comments must not contain '@'", ModuleRuntimeMaintenance.HostRemoved, "/* @HostId */ " + guard + $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(Bypasses))]
+    public void RoundThreeBypass_IsRejected(string description, string expectedReason, string eventName, string sql)
+    {
+        var error = ModuleRuntimeMaintenance.ValidateStepSql(sql, Schema, ModuleRuntimeMaintenance.Events[eventName]);
+
         Assert.True(error is not null, $"Expected '{description}' to be rejected.");
         Assert.Contains(expectedReason, error, StringComparison.Ordinal);
     }

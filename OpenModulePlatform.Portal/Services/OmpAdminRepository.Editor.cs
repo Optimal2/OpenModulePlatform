@@ -1505,7 +1505,7 @@ WHERE ModuleId = @ModuleId;";
 
         if (input.ModuleId == 0)
         {
-            const string insertSql = @"
+            var insertSql = OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ModuleKeyCaseGuardSql("@ModuleKey") + @"
 INSERT INTO omp.Modules
 (
     ModuleKey,
@@ -1534,7 +1534,7 @@ SELECT CAST(SCOPE_IDENTITY() AS int);";
             return input.ModuleId;
         }
 
-        const string updateSql = @"
+        var updateSql = OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ModuleKeyCaseGuardSql("@ModuleKey", "@ModuleId") + @"
 UPDATE omp.Modules
 SET ModuleKey = @ModuleKey,
     DisplayName = @DisplayName,
@@ -1962,7 +1962,7 @@ SELECT @affected;";
         bool replaceExisting,
         CancellationToken ct)
     {
-        const string findSql = @"
+        var findSql = OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ModuleKeyCaseGuardSql("@ModuleKey") + @"
 SELECT ModuleDefinitionDocumentId,
        DefinitionSha256
 FROM omp.ModuleDefinitionDocuments
@@ -2040,7 +2040,7 @@ WHERE ModuleKey = @ModuleKey
             };
         }
 
-        const string sql = @"
+        var sql = @"
 DECLARE @DefinitionJson nvarchar(max);
 DECLARE @ModuleKey nvarchar(100);
 DECLARE @ModuleDisplayName nvarchar(200);
@@ -2060,7 +2060,7 @@ IF @DefinitionJson IS NULL
 BEGIN
     THROW 53230, N'Module definition document was not found.', 1;
 END;
-
+" + OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ModuleKeyCaseGuardSql("@ModuleKey") + @"
 SELECT @ModuleDisplayName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.displayName'), N''),
        @ModuleType = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.moduleType'), N''),
        @SchemaName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.schemaName'), N''),

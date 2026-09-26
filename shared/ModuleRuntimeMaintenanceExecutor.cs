@@ -10,7 +10,10 @@ namespace OpenModulePlatform.ModuleDefinitions;
 /// </summary>
 /// <remarks>
 /// Source-linked into HostAgent and Portal. Steps are re-validated when they are loaded, so a
-/// definition row edited in the database after import is refused rather than executed. Each step
+/// definition row edited in the database after import is refused rather than executed. Each
+/// applied definition is validated on its own: a corrupt document is reported as a failure of
+/// that module, next to every other failing module, and the event is refused fail-closed before
+/// any step runs, so the platform change it belongs to is aborted. Each step
 /// is a parameterized command, which SqlClient sends as sp_executesql with the event parameter
 /// bound; step SQL never concatenates values.
 /// </remarks>
@@ -19,7 +22,9 @@ internal static class ModuleRuntimeMaintenanceExecutor
     internal sealed record BlockingRows(string ModuleKey, string StepKey, int Count, string? Description);
 
     // Latest applied definition per module, the same ordering the compatibility checks use, with
-    // the module's registration in omp.Modules. There is deliberately no text pre-filter on the
+    // the module's registration in omp.Modules. A registered key that differs from the applied
+    // key only in letter case counts as another claimant: both derive the same schema, and a
+    // case-insensitive collation would join the two. There is deliberately no text pre-filter on the
     // JSON: System.Text.Json reads a property name spelled with a JSON unicode escape for one of
     // its letters as the section, so a LIKE filter on the literal name would silently skip steps
     // the import gate validated. The parsed
@@ -33,8 +38,10 @@ BEGIN
            (
                SELECT COUNT(*)
                FROM omp.Modules other
-               WHERE other.ModuleKey <> applied.ModuleKey
-                 AND (other.SchemaName = registered.SchemaName OR other.ModuleKey = registered.SchemaName)
+               WHERE CONVERT(varbinary(400), other.ModuleKey) <> CONVERT(varbinary(400), applied.ModuleKey)
+                 AND (other.SchemaName = registered.SchemaName
+                      OR other.ModuleKey = registered.SchemaName
+                      OR UPPER(other.ModuleKey) = UPPER(applied.ModuleKey))
            ) AS OtherClaimants
     FROM
     (
@@ -54,7 +61,12 @@ BEGIN
     ORDER BY applied.ModuleKey;
 END;";
 
-    private sealed record AppliedDefinition(string ModuleKey, string DefinitionJson, string? RegisteredSchemaName, int OtherClaimants);
+    internal sealed record AppliedDefinition(string ModuleKey, string DefinitionJson, string? RegisteredSchemaName, int OtherClaimants);
+
+    /// <summary>A module whose applied definition could not be bound, and why.</summary>
+    internal sealed record ModuleFailure(string ModuleKey, string Reason);
+
+    internal sealed record BoundEvent(IReadOnlyList<ModuleRuntimeMaintenance.Step> Steps, IReadOnlyList<ModuleFailure> Failures);
 
     internal static async Task<IReadOnlyList<ModuleRuntimeMaintenance.Step>> LoadStepsAsync(
         SqlConnection conn,
@@ -79,20 +91,54 @@ END;";
             }
         }
 
-        return documents
-            .SelectMany(BoundSteps)
-            .Where(step => step.Event == eventName)
-            .OrderBy(static step => step.ModuleKey, StringComparer.Ordinal)
-            .ThenBy(static step => step.Order)
-            .ThenBy(static step => step.Key, StringComparer.Ordinal)
-            .ToArray();
+        var bound = Bind(documents, eventName);
+        if (bound.Failures.Count != 0)
+        {
+            throw new InvalidOperationException(
+                $"{ModuleRuntimeMaintenance.RuleId}: Event '{eventName}' was refused; runtime maintenance failed for "
+                + $"{bound.Failures.Count} module(s) and no step ran: "
+                + string.Join(" | ", bound.Failures.Select(static failure => $"[{failure.ModuleKey}] {failure.Reason}")));
+        }
+
+        return bound.Steps;
+    }
+
+    /// <summary>
+    /// Validates and binds every applied definition on its own. A definition that cannot be read,
+    /// validated or bound -- whatever the exception -- becomes a <see cref="ModuleFailure"/> of
+    /// that module and never hides another module's failure. Nothing module-specific is known
+    /// about a failed document, so it fails every event, not only the ones it might declare.
+    /// </summary>
+    internal static BoundEvent Bind(IEnumerable<AppliedDefinition> definitions, string eventName)
+    {
+        var steps = new List<ModuleRuntimeMaintenance.Step>();
+        var failures = new List<ModuleFailure>();
+        foreach (var definition in definitions)
+        {
+            try
+            {
+                steps.AddRange(BoundSteps(definition).Where(step => step.Event == eventName));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                failures.Add(new ModuleFailure(definition.ModuleKey, ex.Message));
+            }
+        }
+
+        return new BoundEvent(
+            steps
+                .OrderBy(static step => step.ModuleKey, StringComparer.Ordinal)
+                .ThenBy(static step => step.Order)
+                .ThenBy(static step => step.Key, StringComparer.Ordinal)
+                .ToArray(),
+            failures);
     }
 
     /// <summary>
     /// Re-validates one stored definition and binds its steps to the platform's registration of
-    /// the module: the document's moduleKey must be the row's module, omp.Modules must register
-    /// the derived schema for that module, and no other module may register or be named as that
-    /// schema. Any mismatch refuses the whole event rather than running a step against a schema
+    /// the module: the document's moduleKey must be the row's module key spelled exactly the same,
+    /// omp.Modules must register the derived schema for that module, and no other module may
+    /// register or be named as that schema or differ from its key only in letter case. Any mismatch refuses the whole event rather than running a step against a schema
     /// the module does not own.
     /// </summary>
     private static IReadOnlyList<ModuleRuntimeMaintenance.Step> BoundSteps(AppliedDefinition definition)
@@ -105,7 +151,7 @@ END;";
 
         var schema = steps[0].SchemaName;
         string? problem = null;
-        if (!string.Equals(steps[0].ModuleKey, definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(steps[0].ModuleKey, definition.ModuleKey, StringComparison.Ordinal))
             problem = $"the stored document declares moduleKey '{steps[0].ModuleKey}'";
         else if (definition.RegisteredSchemaName is null)
             problem = "the module is not registered in omp.Modules";

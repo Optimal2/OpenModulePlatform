@@ -67,10 +67,18 @@ DROP DATABASE [{DatabaseName}];",
     /// <summary>A module key the tests register to claim another module's schema.</summary>
     public const string IntruderModuleKey = "runtime_maintenance_intruder";
 
-    /// <summary>Removes the example definition, its module registrations and every example runtime row.</summary>
+    /// <summary>Module keys whose stored definitions the isolation tests corrupt.</summary>
+    public const string BrokenModuleKeyA = "runtime_maintenance_broken_a";
+    public const string BrokenModuleKeyB = "runtime_maintenance_broken_b";
+
+    /// <summary>
+    /// Removes the example definition, its module registrations (in any letter case), the broken
+    /// test definitions and every example runtime row.
+    /// </summary>
     public Task ResetAsync() => ExecuteAsync($@"
-DELETE FROM omp.ModuleDefinitionDocuments WHERE ModuleKey = N'example_webapp';
-DELETE FROM omp.Modules WHERE ModuleKey IN (N'example_webapp', N'{IntruderModuleKey}');
+DELETE FROM omp.ModuleDefinitionDocuments
+WHERE UPPER(ModuleKey) IN (N'EXAMPLE_WEBAPP', UPPER(N'{BrokenModuleKeyA}'), UPPER(N'{BrokenModuleKeyB}'));
+DELETE FROM omp.Modules WHERE UPPER(ModuleKey) IN (N'EXAMPLE_WEBAPP', UPPER(N'{IntruderModuleKey}'));
 DELETE FROM omp_example_webapp.RuntimeBindings WHERE RuntimeBindingId > 0;
 DELETE FROM omp_example_webapp.RuntimeLeases WHERE RuntimeLeaseId > 0;");
 
@@ -82,11 +90,12 @@ DELETE FROM omp_example_webapp.RuntimeLeases WHERE RuntimeLeaseId > 0;");
     public Task InsertExampleDefinitionAsync(
         bool isApplied,
         Func<string, string>? rewriteJson = null,
-        string registeredSchema = "omp_example_webapp")
+        string registeredSchema = "omp_example_webapp",
+        string registeredModuleKey = "example_webapp")
         => ExecuteAsync(
             @"
 INSERT INTO omp.Modules (ModuleKey, DisplayName, ModuleType, SchemaName)
-VALUES (N'example_webapp', N'Example web app', N'WebApp', @schema);
+VALUES (@moduleKey, N'Example web app', N'WebApp', @schema);
 INSERT INTO omp.ModuleDefinitionDocuments
     (ModuleKey, DefinitionVersion, FormatVersion, DefinitionJson, DefinitionSha256, SourceName, IsApplied, AppliedUtc)
 VALUES
@@ -98,6 +107,21 @@ VALUES
                 cmd.Parameters.AddWithValue("@json", rewriteJson is null ? json : rewriteJson(json));
                 cmd.Parameters.AddWithValue("@isApplied", isApplied);
                 cmd.Parameters.AddWithValue("@schema", registeredSchema);
+                cmd.Parameters.AddWithValue("@moduleKey", registeredModuleKey);
+            });
+
+    /// <summary>Stores an applied definition document for <paramref name="moduleKey"/> verbatim.</summary>
+    public Task InsertAppliedDocumentAsync(string moduleKey, string definitionJson)
+        => ExecuteAsync(
+            @"
+INSERT INTO omp.ModuleDefinitionDocuments
+    (ModuleKey, DefinitionVersion, FormatVersion, DefinitionJson, DefinitionSha256, SourceName, IsApplied, AppliedUtc)
+VALUES
+    (@moduleKey, N'runtime-maintenance-test', 1, @json, N'test', N'test', 1, SYSUTCDATETIME());",
+            cmd =>
+            {
+                cmd.Parameters.AddWithValue("@moduleKey", moduleKey);
+                cmd.Parameters.AddWithValue("@json", definitionJson);
             });
 
     /// <summary>Registers another module that claims <paramref name="schema"/>.</summary>

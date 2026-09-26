@@ -1163,7 +1163,7 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
         string sourceName,
         int commandTimeoutSeconds)
     {
-        const string sql = @"
+        var sql = OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ModuleKeyCaseGuardSql("@moduleKey") + @"
 DECLARE @now datetime2(3) = SYSUTCDATETIME();
 
 UPDATE omp.ModuleDefinitionDocuments
@@ -1305,7 +1305,7 @@ VALUES
         int documentId,
         int commandTimeoutSeconds)
     {
-        const string sql = @"
+        var sql = @"
 DECLARE @DefinitionJson nvarchar(max);
 DECLARE @ModuleKey nvarchar(100);
 DECLARE @ModuleDisplayName nvarchar(200);
@@ -1325,7 +1325,7 @@ IF @DefinitionJson IS NULL
 BEGIN
     THROW 53230, N'Module definition document was not found.', 1;
 END;
-
+" + OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ModuleKeyCaseGuardSql("@ModuleKey") + @"
 SELECT @ModuleDisplayName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.displayName'), N''),
        @ModuleType = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.moduleType'), N''),
        @SchemaName = NULLIF(JSON_VALUE(@DefinitionJson, N'$.module.schemaName'), N''),
