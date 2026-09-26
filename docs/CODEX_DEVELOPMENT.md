@@ -125,7 +125,7 @@ the default in-tree layout applies, so OMP's own builds are unaffected.
 
 The AI Orchestrator dropped its global `build:omp-web-shared` lock in the same change; each
 repository still takes its own `repo:<toplevel>` lock, so two implementations in the SAME
-repository remain serialised. (The orchestrator lives in the private DEV workspace, not in
+repository remain serialised. (The orchestrator lives in the maintainers' private companion repository, not in
 this repository: `AI-Orchestrator/src/gui/jobConcurrency.ts` carries the reasoning as a
 comment next to the lock list. It is named here for provenance only — it is not a path you
 can open from a clone of this repo.)

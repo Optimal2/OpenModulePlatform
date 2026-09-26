@@ -10,8 +10,8 @@
     scripts/local-ci.ps1 appends one compact schema_version=1 JSON line per run
     to %APPDATA%\@private\ai-orchestrator\local-ci-telemetry\<repo>.jsonl.
     One file per repo, so writers in different repositories never collide; the
-    writer opens the file, appends one whole UTF-8 line and closes it. The DEV
-    reader (board_charts.local_ci_trend_rows) skips and counts incomplete or
+    writer opens the file, appends one whole UTF-8 line and closes it. The
+    maintainers' companion reader (board_charts.local_ci_trend_rows) skips and counts incomplete or
     corrupt lines individually, so a truncated write never destroys the history.
 
     Telemetry is best-effort but NEVER silent and NEVER gate-breaking: callers
@@ -26,7 +26,7 @@
 #>
 
 # One telemetry record is one JSON line of at most this many UTF-8 bytes; the
-# DEV reader relies on the line contract, so the writer enforces it here.
+# companion reader relies on the line contract, so the writer enforces it here.
 $MaxTelemetryRecordBytes = 4096
 
 function Get-LocalCiTrxCounters {

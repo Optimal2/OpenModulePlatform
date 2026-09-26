@@ -274,8 +274,8 @@ objects can add an optional hook at
 `-ModuleKey`, and `-Configuration`, and should write generated host configs,
 config overlays, widgets, or widget runtime-data zips below `OutputRoot`.
 
-Keep private host profiles in the private installer or DEV repository, not in
-public module repositories.
+Keep private host profiles in the private installer or the maintainers'
+companion repository, not in public module repositories.
 
 ## Script Test Gates
 

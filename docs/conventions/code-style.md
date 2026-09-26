@@ -24,9 +24,9 @@ Audit of the ten repositories in the `omp-odv` campaign. Only documentation file
 | OpenDocViewer | `<workspace>\OpenDocViewer` | JS/npm |
 | AgentDocMap | `<workspace>\AgentDocMap` | JS/npm |
 
-The consumer repositories are sample/example module web apps. Real, named consumer
+The consumer repositories are private module web apps maintained outside this repository; the examples below use fictitious names. Real, named consumer
 names and per-repo source paths are operator-specific deployment data and live in
-the private DEV installation repository; only generic names are used here.
+the maintainers' private companion repository; only generic names are used here.
 
 Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
 
@@ -78,7 +78,7 @@ Excluded directories: `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/`.
   commit made every build look like new artifact content).
 - **`Directory.Packages.props`** — present, CPM enabled.
 - **`global.json`** — pins SDK `10.0.302` with `rollForward: latestFeature`.
-- **`.csproj`** — single project `Contoso.Web.AdventureWorks.RazorPages.csproj`,
+- **`.csproj`** — single project `AdventureWorks.Web.RazorPages.csproj`,
   now inheriting framework and analysis settings from `Directory.Build.props` and package versions
   from CPM. References `OpenModulePlatform.Web.Shared`.
 

@@ -116,14 +116,15 @@ if (-not (Test-Path $localCi)) { throw "scripts/local-ci.ps1 not found." }
 # uncommitted edit, and a rebase would refuse anyway. Refuse early with a clear reason rather
 # than failing three steps in.
 #
-# NEVER stash to work around this. In the DEV repository `git stash` deletes the .git junction
-# (measured, reproduced three times on 2026-08-30); the failure then looks like repository
-# corruption. Commit out of the way instead.
+# NEVER stash to work around this. In the maintainers' companion repository
+# `git stash` deletes the .git junction (measured, reproduced three times on
+# 2026-08-30); the failure then looks like repository corruption. Commit out of
+# the way instead.
 $dirty = (Invoke-Git -Arguments @('status', '--porcelain')).Output
 if ($dirty) {
     Write-Host 'Working tree is not clean:' -ForegroundColor Red
     Write-Host $dirty
-    throw 'Commit or set aside your changes first. Do not stash: in DEV that removes the .git junction.'
+    throw 'Commit or set aside your changes first. Do not stash: in the companion repository that removes the .git junction.'
 }
 
 function Get-BumpedComponentKeys {
@@ -245,8 +246,8 @@ for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     if ($behind -gt 0) {
         Write-Warn "$upstream moved ahead by $behind commit(s) -- rebasing onto it."
 
-        # No --autostash: the tree is clean (checked above), and in DEV the internal stash
-        # would take the .git junction with it.
+        # No --autostash: the tree is clean (checked above), and in the companion
+        # repository the internal stash would take the .git junction with it.
         $rebase = Invoke-Git -Arguments @('rebase', $upstream) -AllowFailure
         if ($rebase.ExitCode -ne 0) {
             Write-Host $rebase.Output

@@ -117,16 +117,13 @@ The tests deploy the procedure by parsing it directly from
 
 ### Other modules
 
-A read-only survey of the OMP+ODV repositories found **no other module** with a
-`ChannelTypeVersions`-style table or a reconcile procedure besides the modules
-that share a sibling repository for their backend service artifact (`sql/2-initialize-*.sql`,
-which uses `omp.HostArtifactRequirements` directly for that backend service but
-does not have channel-type versions or a reconcile SP). The other consumer
-modules do not currently implement this pattern; the pattern can be added per
-the contract in this ADR.
+The reference implementation is the first module that adopted the reconcile pattern. The survey found:
 
-This means `Contoso` is both the first implementation and the template for
-any future module with the same need.
+- No other module ships a `ChannelTypeVersions`-style table or a reconcile procedure.
+- The modules that pair with a sibling backend-service artifact seed `omp.HostArtifactRequirements` directly through their `sql/2-initialize-*.sql` scripts, but they do not carry channel-type versions or a reconcile stored procedure.
+- The remaining consumer modules do not currently implement the pattern; they can adopt it per the contract in this ADR.
+
+Implication: the reference module is both the first implementation and the template for any future module with the same need.
 
 ## Proposals
 

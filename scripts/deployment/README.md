@@ -65,7 +65,7 @@ host-local artifacts only for bootstrap repair scenarios; normal runtime
 configuration belongs in config overlays.
 
 Older `*-omp-suite*` scripts have been moved out of this public repository to
-the private DEV archive under
+the maintainers' private companion repository archive under
 `OpenModulePlatform/OLD/2026-05-24-public-repo-cleanup/tracked-legacy`. Do not
 use them for new local, test, production, or customer installs.
 

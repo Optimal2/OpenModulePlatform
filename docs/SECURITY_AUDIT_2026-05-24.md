@@ -40,7 +40,7 @@ Reviewed repositories:
 - OpenDocViewer
 - selected private OMP consumer repositories
 
-The private DEV repository was treated as installation material only. It was scanned for accidental secret exposure patterns, but this report does not include customer-specific values.
+The maintainers' private companion repository was treated as installation material only. It was scanned for accidental secret exposure patterns, but this report does not include customer-specific values.
 
 ## Checks Performed
 

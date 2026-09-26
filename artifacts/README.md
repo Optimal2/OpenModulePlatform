@@ -14,5 +14,5 @@ Current installable objects are produced from:
 - `scripts/deployment/package-hostagent-first.ps1`
 - the installer sync action in `installer/`
 
-If old local payloads are needed for investigation, keep them in the private
-DEV repository's ignored generated archive, currently `OLD/G`.
+If old local payloads are needed for investigation, keep them in the
+maintainers' private companion repository's ignored generated archive, currently `OLD/G`.

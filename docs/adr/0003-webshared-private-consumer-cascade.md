@@ -100,19 +100,19 @@ There is also a contract scanner, `scripts/omp/validate-webshared-contracts.ps1`
 
 ### Each private repo consumes Web.Shared via `<ProjectReference>` to OMP source
 
-The mechanism is uniform: each private consumer repo declares a `<ProjectReference>` against a sibling `OpenModulePlatform` checkout, with `OpenModulePlatformRoot` resolved either by an environment variable or by a sibling-directory `Directory.Build.targets` convention. The exact per-repo paths, file references, and override locations are operator-specific deployment data and live in the private DEV installation repository, not here.
+The mechanism is uniform: each private consumer repo declares a `<ProjectReference>` against a sibling `OpenModulePlatform` checkout, with `OpenModulePlatformRoot` resolved either by an environment variable or by a sibling-directory `Directory.Build.targets` convention. The exact per-repo paths, file references, and override locations are operator-specific deployment data and live in the maintainers' private companion repository, not here.
 
 None of the consumer repos consume Web.Shared as a NuGet package or a copied binary; they all compile against the OMP source tree on the local workstation.
 
 ### No private repo declares Web.Shared in `omp-components.json`
 
-All private consumer `omp-components.json` files have a `components` array and one or more `moduleDefinitions`, but **none of them have a `sharedProjects` section**. The exact per-repo manifests are operator-specific deployment data and live in the private DEV installation repository.
+All private consumer `omp-components.json` files have a `components` array and one or more `moduleDefinitions`, but **none of them have a `sharedProjects` section**. The exact per-repo manifests are operator-specific deployment data and live in the maintainers' private companion repository.
 
 Because there is no `sharedProjects` entry, the existing `validate-component-versions.ps1` logic used in OpenModulePlatform cannot be ported verbatim to those repos for Web.Shared.
 
 ### Ported validators explicitly disclaim cross-repo cascade
 
-The ported validators in the consumer repos explicitly state that consumer repos have no shared-projects cascade. Some carry an inline comment of the form "This script is a simplified counterpart to OpenModulePlatform's validate-component-versions.ps1. Consumer repos have no sharedProjects cascade." in their header or first lines; the exact list of which ones do is operator-specific deployment data and lives in the private DEV installation repository.
+The ported validators in the consumer repos explicitly state that consumer repos have no shared-projects cascade. Some carry an inline comment of the form "This script is a simplified counterpart to OpenModulePlatform's validate-component-versions.ps1. Consumer repos have no sharedProjects cascade." in their header or first lines; the exact list of which ones do is operator-specific deployment data and lives in the maintainers' private companion repository.
 
 One consumer's validator has its own in-repo cascade check for its own runtime library (e.g. a `Check 10` that covers that consumer's `Runtime` project and its module worker / channel-type binaries), but does not check `OpenModulePlatform.Web.Shared` against the consumer's component version.
 
@@ -127,7 +127,7 @@ The build will naturally pick up whatever Web.Shared source is present in the si
 
 ### AI Orchestrator only serializes shared builds, it does not version-check
 
-`AI-Orchestrator/src/gui/jobConcurrency.ts:24-33` lists the repositories that share OMP web builds. The exact repository-name set is operator-specific deployment data and lives in the private DEV installation repository.
+`AI-Orchestrator/src/gui/jobConcurrency.ts:24-33` lists the repositories that share OMP web builds. The exact repository-name set is operator-specific deployment data and lives in the maintainers' private companion repository.
 
 The same file used `build:omp-web-shared` as an exclusive lock for implementation-mode jobs (`jobResourceLocks`, `usesOmpSharedBuild`, `jobConcurrency.ts:92-94`). As noted above, that lock was removed on 2026-08-22; concurrent consumer builds are now safe by output isolation. The historical references in this section remain for the record.
 
@@ -290,5 +290,5 @@ A periodic AO job or local script diffs OMP's current Web.Shared against the reg
 
 Per-consumer repository paths, project references, `omp-components.json`
 ranges, validator-script line ranges, and `pre-push.ps1` line ranges are
-operator-specific deployment data and live in the private DEV installation
-repository; they are not reproduced in this public ADR.
+operator-specific deployment data and live in the maintainers' private
+companion repository; they are not reproduced in this public ADR.

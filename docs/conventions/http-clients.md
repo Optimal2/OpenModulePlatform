@@ -14,7 +14,7 @@ The private consumer repositories in the OMP+ODV ecosystem are represented
 here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,
 Tailwind, Globex). Per-repo source paths, file:line anchors, and
 product/namespace prefixes are operator-specific deployment data and live in
-the private DEV installation repository, not here.
+the maintainers' private companion repository, not here.
 
 Repositories audited:
 

@@ -30,7 +30,7 @@ Audited repositories (all under the local workspace root):
 The example modules above are placeholders for the actual private consumer
 repositories in the OMP+ODV ecosystem; per-repo paths, file paths, line
 ranges, and PSD1 file names are operator-specific deployment data and live in
-the private DEV installation repository, not here. The structural patterns
+the maintainers' private companion repository, not here. The structural patterns
 described below apply unchanged to those real consumers.
 
 ## 1. Per-repo configuration map
@@ -222,7 +222,7 @@ described below apply unchanged to those real consumers.
 ### AdventureWorks (.NET 10, single web project, OMP module)
 
 - **Config sources:** `appsettings.json` at **repo root**, linked into the
-  project (`RazorPages/Contoso.Web.AdventureWorks.RazorPages.csproj:11`);
+  project (`RazorPages/AdventureWorks.Web.RazorPages.csproj:11`);
   `RazorPages/appsettings.Development.json`; gitignored
   `appsettings.Local.json` (`.gitignore:14`). No env vars are read in repo
   code; no site-config JS.
@@ -251,16 +251,16 @@ described below apply unchanged to those real consumers.
   (DB setting → config keys → hardcoded fallback `"Images"`,
   `AdventureWorksImageService.cs:426-447`).
 
-### Tailwind (.NET 10, OMP module "PrintConnect")
+### Tailwind (.NET 10, OMP module)
 
-- **Config sources:** `src/PrintConnect.Web/appsettings.json`
+- **Config sources:** `src/Tailwind.Web/appsettings.json`
   (environment-neutral template, inline NLog `:8-44`) +
   `appsettings.Development.json`; **no committed Production file** — the
   deployed `appsettings.json` is HostAgent-generated; `web.config` (IIS
   hosting only); `launchSettings.json`.
 - **IOptions usage:** exemplary —
   `AddOptions<PrinterDatabaseCatalogOptions>().Bind(...).Validate(...).ValidateOnStart()`
-  (`src/PrintConnect.Web/Program.cs:36-40`) and the same for
+  (`src/Tailwind.Web/Program.cs:36-40`) and the same for
   `ZebraConfigOptions` (`Program.cs:51-57`); `WebAppOptions` via
   `AddOmpWebDefaults("Portal")` (`Program.cs:33`). `IOptions<T>` everywhere.
 - **Connection strings:** named indirection — each
@@ -276,9 +276,9 @@ described below apply unchanged to those real consumers.
 - **Overlay relationship:** the module definition declares
   `artifactConfigurationFiles` for `appsettings.json` with
   `"contentSource": "host-agent-generated"` and `requiredRootSections`
-  (`printconnect.module-definition.json:33-50`) — the overlay replaces the
+  (`tailwind.module-definition.json:33-50`) — the overlay replaces the
   whole file; module SQL disables legacy `appsettings.Production.json`
-  overlays (`Sql/01_initialize_printconnect_metadata.sql:65-94`).
+  overlays (`Sql/01_initialize_tailwind_metadata.sql:65-94`).
 - **Divergences:** orphaned keys — `ZebraConfig:BackupRetentionCount/Days`
   (`appsettings.json:81-82`) have no matching properties on
   `ZebraConfigOptions`; one direct `GetSection("Portal").Get<WebAppOptions>()`

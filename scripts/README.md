@@ -46,7 +46,7 @@ still part of the current OMP object/installer model.
 ## Removed Legacy Scripts
 
 The old script-first installer scripts and direct local runtime installer
-scripts were moved to the private DEV repository under:
+scripts were moved to the maintainers' private companion repository under:
 
 ```text
 OpenModulePlatform/OLD/2026-05-24-public-repo-cleanup/tracked-legacy/scripts

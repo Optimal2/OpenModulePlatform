@@ -9,8 +9,8 @@ the dated history of how the document got here. Do not add dated "superseded" la
 The private consumer repositories in the OMP+ODV ecosystem are represented
 here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,
 Tailwind, Globex). Per-repo source paths, line ranges, and product/namespace
-prefixes are operator-specific deployment data and live in the private DEV
-installation repository.
+prefixes are operator-specific deployment data and live in the maintainers'
+private companion repository.
 
 Repos covered: OpenModulePlatform, Contoso, Fabrikam, Northwind, AdventureWorks,
 Tailwind, Globex, ODVGateway (.NET); OpenDocViewer, AgentDocMap (JS/npm).

@@ -10,8 +10,8 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 The private consumer repositories in the OMP+ODV ecosystem are represented
 here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,
 Tailwind, Globex). Per-repo source paths, line ranges, and product/namespace
-prefixes are operator-specific deployment data and live in the private DEV
-installation repository.
+prefixes are operator-specific deployment data and live in the maintainers'
+private companion repository.
 
 ## 1. Per-repo logging map
 

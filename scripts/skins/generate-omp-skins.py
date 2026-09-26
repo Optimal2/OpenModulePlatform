@@ -356,7 +356,7 @@ def bygg_skin(t, ark, font_lookup):
         z.writestr("PLEDIT.TXT", pledit(t))
         z.writestr("README.txt",
                    "%s - eget skin for OpenModulePlatforms dashboardspelare.\r\n"
-                   "Genererat 2026-08-31 av gen_omp_skins.py (DEV-repot). Varje pixel ar\r\n"
+                   "Genererat 2026-08-31 av gen_omp_skins.py (det privata kompanjonrepot). Varje pixel ar\r\n"
                    "ritad av generatorn; inga sprites ar lanade fran nagot befintligt skin.\r\n"
                    "Upphovsratt: Optimal2. Far anvandas fritt inom OMP-installationer.\r\n" % t.titel)
     return ut

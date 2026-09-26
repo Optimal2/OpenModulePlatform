@@ -328,10 +328,10 @@ registrations.
   validation; it is present now.)
 - **HTTP clients:** none.
 
-### Tailwind (.NET 10, single web app, OMP module "PrintConnect")
+### Tailwind (.NET 10, single web app, OMP module)
 
 - **Registration location:** single file
-  `src/PrintConnect.Web/Program.cs`:
+  `src/Tailwind.Web/Program.cs`:
   `AddOmpWebDefaults<TailwindResource>("Portal")` (`:33`), options
   (`:36-40`, `:51-57`) and eight service registrations (`:42-60`) inline;
   `UseOmpWebDefaults` at `:177`. No extension methods declared in the
@@ -359,7 +359,7 @@ registrations.
   consumption. One non-DI read for startup logging
   (`Program.cs:75`).
 - **HTTP clients:** none. Tests use `WebApplicationFactory` with a scoped
-  fake override (`tests/PrintConnect.Web.Tests/ApiAnonymityTests.cs:36-39`).
+  fake override (`tests/Tailwind.Web.Tests/ApiAnonymityTests.cs:36-39`).
 
 ### Globex (.NET 10, OMP module)
 
@@ -685,7 +685,7 @@ SPI, HostAgent) already teaches.
 - Current: near-standard — interface-based scoped data layer, both options
   fully validated; only the missing module extension and one non-DI
   options read for startup logging.
-- Migration: extract `AddPrintConnectServices`; route the startup-log
+- Migration: extract `AddTailwindServices`; route the startup-log
   read through the bound options.
 - Priority: Low.
 

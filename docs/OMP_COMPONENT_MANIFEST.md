@@ -301,9 +301,9 @@ repository.
 
 Point `OutputRoot` at an installer package's `data/global` folder to refresh the
 shared package library directly. Customer or host-specific configuration is
-passed as arguments and must not be committed to source repositories; the DEV
-repository is the appropriate place to keep private profile files and the
-commands that pass those files into object generation.
+passed as arguments and must not be committed to source repositories; the
+maintainers' companion repository is the appropriate place to keep private
+profile files and the commands that pass those files into object generation.
 
 ## Repository Universal Package Export
 
@@ -367,9 +367,9 @@ The optional host profile is JSON. It may contain:
 ```
 
 Paths inside the profile are resolved relative to the profile file unless they
-are absolute. This lets the private DEV repository keep sensitive or
-customer-specific inputs while public module repositories keep only generic code,
-module definitions, and component metadata.
+are absolute. This lets the maintainers' private companion repository keep
+sensitive or customer-specific inputs while public module repositories keep only
+generic code, module definitions, and component metadata.
 
 Top-level file lists apply to the current repository export. Values under
 `modules.<moduleKey>` apply only when the repository owns that module key in
