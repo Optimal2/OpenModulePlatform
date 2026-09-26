@@ -105,7 +105,13 @@ Describe 'Bump-Version updates compatibleArtifacts.maxVersion' {
             $previousErrorActionPreference = $ErrorActionPreference
             $ErrorActionPreference = 'Continue'
             try {
-                $output = & powershell.exe -NoProfile -File $bumpScriptPath -ComponentKey 'test_app' 2>&1 | Out-String
+                # Keep only the raw stderr text of each record. Without a console
+                # (git hooks) every wrapped stderr line arrives as its own
+                # ErrorRecord, and Out-String would interleave "At ... char:" and
+                # CategoryInfo lines between the halves of a split word.
+                $output = & powershell.exe -NoProfile -File $bumpScriptPath -ComponentKey 'test_app' 2>&1 |
+                    ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_ } } |
+                    Out-String
                 $exitCode = $LASTEXITCODE
             }
             finally {
