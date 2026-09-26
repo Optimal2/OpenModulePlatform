@@ -318,6 +318,16 @@ public sealed class ModuleFragmentWidgetTests
         Assert.Null(ModuleFragmentHtmlSanitizer.RewriteHref(href, ModuleBase));
     }
 
+    [Theory]
+    [InlineData("/widgets/%2e%2e/admin")]
+    [InlineData("/widgets/%252e%252e/admin")]
+    [InlineData("/widgets/..%2fadmin")]
+    [InlineData("/widgets/%c0%ae/admin")]
+    public void RewriteHref_DropsPercentEncodedDotSegments(string href)
+    {
+        Assert.Null(ModuleFragmentHtmlSanitizer.RewriteHref(href, ModuleBase));
+    }
+
     [Fact]
     public void Sanitize_RewritesAndDropsLinksInMarkup()
     {
@@ -469,6 +479,55 @@ public sealed class ModuleFragmentWidgetTests
         Assert.False(PortalDashboardService.CanAccessWidget(7, restrictions, new HashSet<int> { 1 }, new HashSet<string> { "Other.View" }));
         Assert.True(PortalDashboardService.CanAccessWidget(7, restrictions, new HashSet<int>(), new HashSet<string> { "Sample.View" }));
         Assert.True(PortalDashboardService.CanAccessWidget(7, restrictions, new HashSet<int> { 3 }, new HashSet<string>()));
+    }
+
+    [Fact]
+    public void OrphanedWidget_NullEmptyOrKnownPayload_IsNotOrphan()
+    {
+        Assert.False(PortalDashboardService.IsOrphanedWidget(new DashboardWidgetDefinition
+        {
+            WidgetType = "portal",
+            Payload = null
+        }));
+        Assert.False(PortalDashboardService.IsOrphanedWidget(new DashboardWidgetDefinition
+        {
+            WidgetType = "portal",
+            Payload = string.Empty
+        }));
+        Assert.False(PortalDashboardService.IsOrphanedWidget(new DashboardWidgetDefinition
+        {
+            WidgetType = "portal",
+            Payload = "admin-overview"
+        }));
+        Assert.False(PortalDashboardService.IsOrphanedWidget(new DashboardWidgetDefinition
+        {
+            WidgetType = ModuleFragmentWidget.WidgetType,
+            Payload = ModuleFragmentWidget.SerializePayload(new ModuleFragmentWidgetConfig(AppKey, "/widgets/overview"))
+        }));
+    }
+
+    [Fact]
+    public void OrphanedWidget_UnknownPayload_IsOrphan()
+    {
+        Assert.True(PortalDashboardService.IsOrphanedWidget(new DashboardWidgetDefinition
+        {
+            WidgetType = "portal",
+            Payload = "legacy.private-module-key"
+        }));
+    }
+
+    [Fact]
+    public void PayloadFingerprint_IsDeterministicAndHidesThePayload()
+    {
+        const string payload = "legacy.private-module-key-do-not-log";
+
+        var first = PortalDashboardService.PayloadFingerprint(payload);
+        var second = PortalDashboardService.PayloadFingerprint(payload);
+
+        Assert.Equal(first, second);
+        Assert.DoesNotContain(payload, first, StringComparison.Ordinal);
+        Assert.DoesNotContain("private", first, StringComparison.Ordinal);
+        Assert.Matches(@"^\d+:[0-9A-F]{8}$", first);
     }
 
     [Fact]
