@@ -23,7 +23,6 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 {
     private readonly PortalDashboardService _dashboard;
     private readonly PortalEntryService _portalEntries;
-    private readonly PortalModuleDashboardService _moduleDashboard;
     private readonly PortalModuleFragmentService _moduleFragments;
     private readonly AppCatalogService _catalog;
     private readonly PortalBlankWidgetService _blankWidget;
@@ -37,7 +36,6 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         IOptions<WebAppOptions> options,
         PortalDashboardService dashboard,
         PortalEntryService portalEntries,
-        PortalModuleDashboardService moduleDashboard,
         PortalModuleFragmentService moduleFragments,
         AppCatalogService catalog,
         PortalBlankWidgetService blankWidget,
@@ -50,7 +48,6 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     {
         _dashboard = dashboard;
         _portalEntries = portalEntries;
-        _moduleDashboard = moduleDashboard;
         _moduleFragments = moduleFragments;
         _catalog = catalog;
         _blankWidget = blankWidget;
@@ -94,10 +91,6 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     public string NotificationRecentUrl { get; private set; } = NotificationService.RecentPath;
 
     public string NotificationMarkReadUrl { get; private set; } = NotificationService.MarkReadPath;
-
-    public DashboardLogSearchWidget LogSearchWidget { get; private set; } = new("/logsearch", []);
-
-    public DashboardEArkivCheckerWidget EArkivCheckerWidget { get; private set; } = new("/earkivchecker", 0, 0, null, []);
 
     /// <summary>
     /// Loaded module-fragment content per widget definition id.
@@ -480,8 +473,6 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
                 : [];
             NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
             NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
-            LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
-            EArkivCheckerWidget = await _moduleDashboard.GetEArkivCheckerWidgetAsync(Request, permissions, ct);
         }
         else
         {
@@ -497,8 +488,6 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             DashboardMessageConversations = [];
             NotificationRecentUrl = Url.Content($"~{NotificationService.RecentPath}");
             NotificationMarkReadUrl = Url.Content($"~{NotificationService.MarkReadPath}");
-            LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
-            EArkivCheckerWidget = await _moduleDashboard.GetEArkivCheckerWidgetAsync(Request, permissions, ct);
         }
 
         ModuleFragments = await LoadModuleFragmentsAsync(permissions, ct);

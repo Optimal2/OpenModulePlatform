@@ -45,7 +45,6 @@ builder.Services.AddScoped<PortalEntryService>();
 builder.Services.AddScoped<PortalEntryIFrameStandaloneHelperService>();
 builder.Services.AddScoped<IFrameAdminService>();
 builder.Services.AddScoped<PortalDashboardService>();
-builder.Services.AddScoped<PortalModuleDashboardService>();
 builder.Services.AddScoped<PortalModuleFragmentService>();
 builder.Services.AddMemoryCache();
 // Fragments are fetched with the user's shared OMP cookie set explicitly per request:
