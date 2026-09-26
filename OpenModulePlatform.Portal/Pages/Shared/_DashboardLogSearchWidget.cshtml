@@ -21,9 +21,9 @@
             {
                 var jobHref = $"{Model.ModuleHref.TrimEnd('/')}/JobDetails/{job.SearchJobId.ToString(CultureInfo.InvariantCulture)}";
                 <a class="dashboard-module-widget__item" href="@jobHref">
+                    @* No searched identifier here: the dashboard shows the kind of search only. *@
                     <span class="dashboard-module-widget__item-main">
                         <strong>@ModeLabel(job.SearchMode)</strong>
-                        <span>@job.PersonIdentifier</span>
                     </span>
                     <span class="dashboard-module-widget__item-meta">
                         <span class="dashboard-module-widget__pill dashboard-module-widget__pill--@StatusCss(job.Status)">@StatusLabel(job.Status)</span>

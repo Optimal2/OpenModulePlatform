@@ -46,6 +46,18 @@ builder.Services.AddScoped<PortalEntryIFrameStandaloneHelperService>();
 builder.Services.AddScoped<IFrameAdminService>();
 builder.Services.AddScoped<PortalDashboardService>();
 builder.Services.AddScoped<PortalModuleDashboardService>();
+builder.Services.AddScoped<PortalModuleFragmentService>();
+builder.Services.AddMemoryCache();
+// Fragments are fetched with the user's shared OMP cookie set explicitly per request:
+// the handler must not keep its own cookie jar (it would mix users) and must not follow
+// redirects (a module's login redirect means "no fragment", not "fetch the login page").
+builder.Services.AddHttpClient(PortalModuleFragmentService.HttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        UseCookies = false,
+        AutomaticDecompression = System.Net.DecompressionMethods.All
+    });
 builder.Services.AddScoped<PortalBlankWidgetService>();
 builder.Services.AddScoped<PortalMusicPlayerService>();
 builder.Services.AddScoped<PortalDashboardWidgetPackageService>();
@@ -66,6 +78,8 @@ builder.Services.AddOptions<ArtifactUploadOptions>()
 
 builder.Services.AddOptions<MusicPlayerWidgetOptions>()
     .Bind(builder.Configuration.GetSection(MusicPlayerWidgetOptions.SectionName));
+builder.Services.AddOptions<ModuleFragmentWidgetOptions>()
+    .Bind(builder.Configuration.GetSection(ModuleFragmentWidgetOptions.SectionName));
 builder.Services.Configure<IISServerOptions>(options =>
 {
     options.MaxRequestBodySize = maxUploadBytes;

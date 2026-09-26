@@ -21,6 +21,7 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />
+    <PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
     <PackageVersion Include="Markdig" Version="1.4.0" />
     <!--
       Roslyn/SDK coupling (verified 2026-08-31):

@@ -517,6 +517,9 @@
             const element = createWidgetElement(root, widget);
             canvas.appendChild(element);
             snapWidgetToGrid(element, state);
+            if (isModuleFragmentWidgetType(widget.widgetType)) {
+                loadModuleFragment(root, element, widget);
+            }
             state.addedWidgetIds.add(temporaryWidgetId);
             bindWidget(root, canvas, element, token, () => ++maxOrder, state, updateDirtyState);
             bindEntryFavoriteToggles(root, element, token);
@@ -3753,6 +3756,66 @@
         return parsed && parsed > 0 ? parsed : 0;
     }
 
+    function isModuleFragmentWidgetType(widgetType) {
+        return widgetType === 'module-fragment';
+    }
+
+    function createModuleFragmentPlaceholder(root) {
+        const container = document.createElement('div');
+        container.className = 'dashboard-module-fragment is-loading';
+        container.dataset.moduleFragment = '';
+        const placeholder = document.createElement('div');
+        placeholder.className = 'dashboard-module-fragment__placeholder';
+        placeholder.textContent = root.dataset.moduleFragmentLoadingLabel || 'Loading...';
+        container.appendChild(placeholder);
+        return container;
+    }
+
+    // A widget added without a page reload asks the Portal for the fragment; the Portal
+    // fetches and sanitizes it server-side exactly as on a full page load, so the
+    // response is the same partial the page itself renders.
+    async function loadModuleFragment(root, element, widget) {
+        const pending = element.querySelector('[data-module-fragment]');
+        if (!pending || !root.dataset.moduleFragmentUrl) {
+            return;
+        }
+
+        const showUnavailable = () => {
+            pending.classList.remove('is-loading');
+            pending.classList.add('is-unavailable');
+            const placeholder = pending.querySelector('.dashboard-module-fragment__placeholder');
+            if (placeholder) {
+                placeholder.textContent = root.dataset.moduleFragmentUnavailableLabel || 'The widget could not be loaded.';
+            }
+        };
+
+        try {
+            const url = new URL(root.dataset.moduleFragmentUrl, window.location.href);
+            url.searchParams.set('widgetId', String(widget.widgetId));
+            url.searchParams.set('width', String(Math.round(element.getBoundingClientRect().width) || widget.width || 0));
+            const response = await fetch(url.toString(), {
+                credentials: 'same-origin',
+                headers: { Accept: 'text/html' }
+            });
+            if (!response.ok || isDashboardLoginRedirect(response)) {
+                showUnavailable();
+                return;
+            }
+
+            const template = document.createElement('template');
+            template.innerHTML = await response.text();
+            const loaded = template.content.querySelector('[data-module-fragment]');
+            if (!loaded) {
+                showUnavailable();
+                return;
+            }
+
+            pending.replaceWith(loaded);
+        } catch {
+            showUnavailable();
+        }
+    }
+
     function isBlankWidgetPayload(payload) {
         return !payload || payload === 'blank-rectangle';
     }
@@ -4593,7 +4656,9 @@
         const scaleTarget = document.createElement('div');
         scaleTarget.className = 'dashboard-widget__content-scale-target';
         scaleTarget.dataset.widgetContentScaleTarget = '';
-        scaleTarget.appendChild(createWidgetBodyContent(root, widget.payload));
+        scaleTarget.appendChild(isModuleFragmentWidgetType(widget.widgetType)
+            ? createModuleFragmentPlaceholder(root)
+            : createWidgetBodyContent(root, widget.payload));
         content.appendChild(scaleTarget);
         body.appendChild(content);
         element.appendChild(body);

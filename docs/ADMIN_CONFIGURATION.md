@@ -111,12 +111,15 @@ Portal navigation entries:
   model independent of SQL Server computed-column or trigger behavior and gives
   portable packages a stable way to reference media before target ids exist.
 
-The current dashboard renderer supports Portal-owned widgets. `payload` selects
-which server-rendered widget body is used; for example, `admin-overview` renders
-the Portal administration metric cards and is restricted by
-`OMP.Portal.Admin`. The client script only persists user layout state. Widget
-definitions, permissions, and seeded widgets are owned by Portal SQL/module
-definition upgrades.
+The dashboard renderer supports two widget types. For `portal` widgets,
+`payload` selects which Portal-rendered widget body is used; for example,
+`admin-overview` renders the Portal administration metric cards and is
+restricted by `OMP.Portal.Admin`. For `module-fragment` widgets, the body is an
+HTML fragment served by a module's own web app (see
+[Module-owned widgets](#module-owned-widgets-module-fragment) below), so the
+module owns its widget completely. The client script only persists user layout
+state. Widget definitions, permissions, and seeded widgets are owned by Portal
+SQL/module definition upgrades or imported as widget definition documents.
 
 `user_id = 0` in `omp_portal.user_active_widgets` is reserved for the shared
 default dashboard layout. A signed-in OMP user who has no personal dashboard
@@ -236,6 +239,139 @@ HostAgent import-folder imports remain unattended and require a new
 
 Use empty `permissionNames` and `roleNames` arrays only when the widget should
 be available to every signed-in OMP user.
+
+#### Module-owned widgets (`module-fragment`)
+
+A module that wants a dashboard widget does not need any code in the Portal. It
+serves an HTML fragment from its own web app and ships a widget definition with
+`widgetType: "module-fragment"`:
+
+```json
+{
+  "widgetKey": "example:overview",
+  "widgetVersion": "1.0.0",
+  "title": "Example overview",
+  "widgetType": "module-fragment",
+  "appKey": "example_module_web",
+  "fragmentPath": "/widgets/overview",
+  "defaultWidth": 416,
+  "defaultHeight": 320,
+  "permissionNames": [ "Example.View" ],
+  "roleNames": []
+}
+```
+
+Definition rules, enforced on import:
+
+- `appKey` is required and names the module's web app. The Portal resolves the
+  app's registered address exactly like the app links on the dashboard
+  (`omp.AppInstances.RoutePath`, host base URL, or `PublicUrl`); the fragment URL
+  is that address plus `fragmentPath`.
+- `fragmentPath` is required, must start with a single `/`, and must not contain
+  a scheme, host, `..` or `.` segment (also percent-encoded), backslash, `#`,
+  `@`, `:`, whitespace, or control characters. A query string is allowed.
+- `defaultWidth` (160-1800) and `defaultHeight` (96-1400) are optional pixel
+  sizes for a newly added widget. Without them a `module-fragment` widget starts
+  at 416 x 320.
+- `payload` must be empty; the Portal stores `appKey`, `fragmentPath`, and the
+  default size as JSON in `omp_portal.widgets.payload` and exports them as the
+  named fields again.
+
+Permissions are the same as for every widget: a user who does not match
+`permissionNames`/`roleNames` never sees the widget, and the Portal never
+requests its fragment. The fragment is also only requested when the user may
+open the module's web app itself.
+
+**How the Portal fetches the fragment.** The Portal requests the fragment
+server-side while it renders the dashboard, with `Accept: text/html` and the
+header `X-OMP-Dashboard-Fragment: 1`. It forwards the user's identity the way
+every OMP web app already authenticates: only the shared OMP cookie (including
+its chunks), the active-role cookie, and the culture cookies are copied onto the
+request, and the module validates them as it would for the browser. The module
+endpoint must therefore enforce its own permissions, exactly like its pages do.
+Redirects are not followed; a redirect, an error status, a non-`text/html`
+response, a response above the size limit, or a timeout all show the neutral
+placeholder "The widget could not be loaded." to the user. Details only go to
+the Portal log.
+
+The request target is chosen so that a client cannot steer it:
+
+1. `ModuleFragmentWidgets:InternalBaseUrl`, when configured (scheme and
+   authority only; the path always comes from the module registration).
+2. The module's registered absolute address, when it is on another host.
+3. Otherwise this server's own local endpoint (`localhost` and the port the
+   request arrived on) with the public host name as the `Host` header.
+
+Configure `InternalBaseUrl` when the Portal runs behind a TLS-terminating proxy
+or cannot reach its own public binding through `localhost`.
+
+Portal settings (`appsettings.json`, all optional):
+
+```json
+"ModuleFragmentWidgets": {
+  "CacheSeconds": 30,
+  "TimeoutMilliseconds": 3000,
+  "MaxResponseBytes": 262144,
+  "InternalBaseUrl": null
+}
+```
+
+Results, including failures, are cached per user, active role, culture, and
+widget for `CacheSeconds` (0 disables the cache), so the dashboard does not call
+a module on every page load. A widget added without a page reload is loaded
+through the same server-side path.
+
+**Allowed fragment HTML.** The Portal inserts the fragment into its own page
+after sanitizing it server-side. Everything outside this subset is removed:
+
+- Elements: `div`, `span`, `p`, `a`, `ul`, `li`, `strong`, `em`, `table`,
+  `thead`, `tbody`, `tr`, `th`, `td`, and the SVG icon elements `svg`, `g`,
+  `path`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `rect`. Other
+  elements are dropped together with their content, including `script`,
+  `style`, `iframe`, `object`, `embed`, `img`, `form`, and SVG `use` or
+  `foreignObject`.
+- Attributes: `class`, `href`, `aria-*`, `data-module-*`, `colspan`, `rowspan`,
+  and presentational SVG geometry attributes (`viewBox`, `d`, `fill`, `stroke`,
+  and similar). `style`, `id`, and every `on*` handler are removed. Other
+  `data-*` names are removed because the Portal's own dashboard scripts bind to
+  `data-*` attributes; use the `data-module-` prefix for module data.
+- Links: `jobs/5` and `/jobs/5` are resolved against the module's base address
+  (a path that already starts with the module's base path is kept). An absolute
+  `http`/`https` link is kept only when it points inside the module's base
+  address. Every other link - other hosts, other modules, the Portal, `javascript:`
+  or `data:` URLs, `..` segments, bare `#fragment` links - loses its `href`.
+
+A fragment cannot carry CSS. It styles itself with the Portal's generic module
+widget classes (`dashboard-module-widget`, `dashboard-module-widget__summary`,
+`__kpis`, `__list`, `__item`, `__item-main`, `__item-meta`, `__action`,
+`__pill` with `--ok`/`--running`/`--queued`/`--warning`/`--error`/`--muted`,
+`__empty`) and the responsive helpers below.
+
+**Responsive contract.** The widget container has
+`container-type: inline-size`, so the Portal's CSS reacts to the widget's own
+width rather than the window. The container also carries one width class:
+
+| Class | Content width |
+| --- | --- |
+| `is-narrow` | below 360 px |
+| `is-medium` | 360 px up to 639 px |
+| `is-wide` | 640 px and wider |
+
+The Portal sets the class from the widget's saved width when it renders the
+dashboard. A module can suggest a mode instead by putting
+`data-widget-mode="narrow|medium|wide"` on an element of the fragment; the
+Portal then uses the matching class and removes the attribute. The helper
+classes follow the live width through container queries, so they keep working
+while a user resizes the widget, without any script:
+
+- `omp-fragment-hide-narrow`: hidden in narrow widgets.
+- `omp-fragment-narrow-only`: shown only in narrow widgets.
+- `omp-fragment-hide-wide`: hidden in wide widgets.
+- `omp-fragment-columns`: a grid with one column when narrow, two when medium,
+  and three when wide.
+
+In browsers without container query support the helpers fall back to the width
+class set at render time.
 
 ### 2. Manage the installation topology
 

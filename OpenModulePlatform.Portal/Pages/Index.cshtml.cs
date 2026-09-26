@@ -24,6 +24,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     private readonly PortalDashboardService _dashboard;
     private readonly PortalEntryService _portalEntries;
     private readonly PortalModuleDashboardService _moduleDashboard;
+    private readonly PortalModuleFragmentService _moduleFragments;
+    private readonly AppCatalogService _catalog;
     private readonly PortalBlankWidgetService _blankWidget;
     private readonly PortalMusicPlayerService _musicPlayer;
     private readonly SharedRbacService _rbac;
@@ -36,6 +38,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         PortalDashboardService dashboard,
         PortalEntryService portalEntries,
         PortalModuleDashboardService moduleDashboard,
+        PortalModuleFragmentService moduleFragments,
+        AppCatalogService catalog,
         PortalBlankWidgetService blankWidget,
         PortalMusicPlayerService musicPlayer,
         SharedRbacService rbac,
@@ -47,6 +51,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         _dashboard = dashboard;
         _portalEntries = portalEntries;
         _moduleDashboard = moduleDashboard;
+        _moduleFragments = moduleFragments;
+        _catalog = catalog;
         _blankWidget = blankWidget;
         _musicPlayer = musicPlayer;
         _rbac = rbac;
@@ -92,6 +98,15 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
     public DashboardLogSearchWidget LogSearchWidget { get; private set; } = new("/logsearch", []);
 
     public DashboardEArkivCheckerWidget EArkivCheckerWidget { get; private set; } = new("/earkivchecker", 0, 0, null, []);
+
+    /// <summary>
+    /// Loaded module-fragment content per widget definition id.
+    /// </summary>
+    public IReadOnlyDictionary<int, ModuleFragmentResult> ModuleFragments { get; private set; }
+        = new Dictionary<int, ModuleFragmentResult>();
+
+    public ModuleFragmentResult GetModuleFragment(int widgetId)
+        => ModuleFragments.TryGetValue(widgetId, out var result) ? result : ModuleFragmentResult.Unavailable;
 
     public async Task OnGet(bool manage = false, bool fullList = false, CancellationToken ct = default)
     {
@@ -169,6 +184,37 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         var conversations = await GetDashboardMessageConversationsAsync(userId, ct);
         return Partial("_DashboardMessageConversationWidget", new DashboardMessageConversationWidget(conversations, loadUrl));
+    }
+
+    /// <summary>
+    /// Returns the sanitized content of one module-fragment widget. Used by the
+    /// dashboard script when a widget is added without a page reload; the widget is
+    /// resolved from the definitions the current user may access, so a widget the user
+    /// lacks permission for is never fetched.
+    /// </summary>
+    public async Task<IActionResult> OnGetModuleFragment(int widgetId, int width = 0, CancellationToken ct = default)
+    {
+        var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
+        var permissions = roleContext.EffectivePermissions;
+        var definitions = await _dashboard.GetAvailableWidgetsAsync(
+            roleContext.EffectiveRoleIds.ToHashSet(),
+            permissions,
+            ct);
+        var definition = definitions.FirstOrDefault(item => item.WidgetId == widgetId
+            && ModuleFragmentWidget.IsModuleFragment(item.WidgetType));
+        var result = definition is null
+            ? ModuleFragmentResult.Unavailable
+            : await _moduleFragments.GetFragmentAsync(
+                HttpContext,
+                definition.WidgetId,
+                definition.Payload,
+                new HashSet<int> { definition.WidgetId },
+                await GetAccessibleAppsAsync(permissions, ct),
+                ct);
+
+        return Partial(
+            "_DashboardModuleFragmentWidget",
+            new DashboardModuleFragmentWidget(widgetId, Math.Clamp(width, 0, PortalDashboardService.MaxWidgetWidth), result));
     }
 
     public async Task<IActionResult> OnPostAddWidget(int widgetId, CancellationToken ct)
@@ -454,7 +500,44 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             LogSearchWidget = await _moduleDashboard.GetLogSearchWidgetAsync(Request, permissions, ct);
             EArkivCheckerWidget = await _moduleDashboard.GetEArkivCheckerWidgetAsync(Request, permissions, ct);
         }
+
+        ModuleFragments = await LoadModuleFragmentsAsync(permissions, ct);
     }
+
+    /// <summary>
+    /// Fetches every module-fragment widget on the dashboard in parallel.
+    /// </summary>
+    /// <remarks>
+    /// ActiveWidgets only contains widgets whose definition the user may access (the
+    /// permissionNames/roleNames of the definition), and each fetch is bounded by the
+    /// configured timeout, so one slow module delays the page by at most that timeout
+    /// and never blocks the other widgets.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<int, ModuleFragmentResult>> LoadModuleFragmentsAsync(
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+    {
+        var fragmentWidgets = ActiveWidgets
+            .Where(widget => ModuleFragmentWidget.IsModuleFragment(widget.WidgetType))
+            .Select(widget => new ModuleFragmentWidgetRequest(widget.WidgetId, widget.Payload))
+            .ToArray();
+        if (fragmentWidgets.Length == 0)
+        {
+            return new Dictionary<int, ModuleFragmentResult>();
+        }
+
+        return await _moduleFragments.GetFragmentsAsync(
+            HttpContext,
+            fragmentWidgets,
+            fragmentWidgets.Select(widget => widget.WidgetId).ToHashSet(),
+            await GetAccessibleAppsAsync(permissions, ct),
+            ct);
+    }
+
+    private async Task<IReadOnlyList<PortalAppEntry>> GetAccessibleAppsAsync(
+        IReadOnlySet<string> permissions,
+        CancellationToken ct)
+        => _catalog.FilterByPermissions(await _catalog.GetEnabledWebAppsAsync(ct), permissions);
 
     private static IReadOnlyList<DashboardActiveWidget> FilterMessageWidgets(
         IReadOnlyList<DashboardActiveWidget> widgets,

@@ -77,7 +77,6 @@ IF OBJECT_ID(N'omp_log_search.SearchJobs', N'U') IS NULL
 BEGIN
     SELECT CAST(NULL AS bigint) AS SearchJobId,
            CAST(NULL AS tinyint) AS SearchMode,
-           CAST(NULL AS nvarchar(100)) AS PersonIdentifier,
            CAST(NULL AS tinyint) AS Status,
            CAST(NULL AS datetime2(3)) AS RequestedUtc,
            CAST(NULL AS datetime2(3)) AS CompletedUtc,
@@ -90,7 +89,6 @@ END;
 SELECT TOP (@count)
        SearchJobId,
        CAST(0 AS tinyint) AS SearchMode,
-       PersonIdentifier,
        Status,
        RequestedUtc,
        CompletedUtc,
@@ -110,12 +108,11 @@ ORDER BY SearchJobId DESC;";
             rows.Add(new DashboardLogSearchJob(
                 rdr.GetInt64(0),
                 rdr.GetByte(1),
-                rdr.GetString(2),
-                rdr.GetByte(3),
-                rdr.GetDateTime(4),
-                rdr.IsDBNull(5) ? null : rdr.GetDateTime(5),
-                rdr.GetInt32(6),
-                rdr.GetInt32(7)));
+                rdr.GetByte(2),
+                rdr.GetDateTime(3),
+                rdr.IsDBNull(4) ? null : rdr.GetDateTime(4),
+                rdr.GetInt32(5),
+                rdr.GetInt32(6)));
         }
 
         return rows;

@@ -11,10 +11,14 @@ public sealed record DashboardLogSearchWidget(
 /// <summary>
 /// One recent LogSearch job shown in the dashboard widget.
 /// </summary>
+/// <remarks>
+/// Deliberately carries no searched identifier: the dashboard is not the place to show
+/// who was searched for, and a value that is never loaded cannot leak into HTML, title
+/// or data attributes.
+/// </remarks>
 public sealed record DashboardLogSearchJob(
     long SearchJobId,
     byte SearchMode,
-    string PersonIdentifier,
     byte Status,
     DateTime RequestedUtc,
     DateTime? CompletedUtc,

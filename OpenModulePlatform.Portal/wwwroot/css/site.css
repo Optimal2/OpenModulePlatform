@@ -4730,6 +4730,90 @@ button.dashboard-role-list__item:focus-visible {
     color: #166534;
 }
 
+/*
+ * module-fragment widgets: the container of a module-served, sanitized HTML fragment.
+ * A fragment may not carry style, so it styles itself with the dashboard-module-widget__*
+ * classes above and the omp-fragment-* helpers below. The helpers follow the container's
+ * live width through container queries; the is-narrow/is-medium/is-wide class the Portal
+ * sets at render time is the fallback for browsers without container query support.
+ * Breakpoints: narrow < 360px <= medium < 640px <= wide.
+ */
+.dashboard-module-fragment {
+    container-type: inline-size;
+    container-name: omp-module-fragment;
+    height: 100%;
+    min-height: 0;
+    overflow: auto;
+}
+
+.dashboard-module-fragment__placeholder {
+    display: grid;
+    min-height: 96px;
+    height: 100%;
+    place-items: center;
+    padding: 14px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: var(--surface-muted);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.dashboard-module-fragment svg {
+    width: 1em;
+    height: 1em;
+    flex: none;
+    vertical-align: -0.125em;
+}
+
+.dashboard-module-fragment .omp-fragment-columns {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+@supports not (container-type: inline-size) {
+    .dashboard-module-fragment.is-narrow .omp-fragment-hide-narrow,
+    .dashboard-module-fragment.is-wide .omp-fragment-hide-wide,
+    .dashboard-module-fragment:not(.is-narrow) .omp-fragment-narrow-only {
+        display: none;
+    }
+
+    .dashboard-module-fragment.is-medium .omp-fragment-columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dashboard-module-fragment.is-wide .omp-fragment-columns {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@container omp-module-fragment (max-width: 359.98px) {
+    .dashboard-module-fragment .omp-fragment-hide-narrow {
+        display: none;
+    }
+}
+
+@container omp-module-fragment (min-width: 360px) {
+    .dashboard-module-fragment .omp-fragment-narrow-only {
+        display: none;
+    }
+
+    .dashboard-module-fragment .omp-fragment-columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@container omp-module-fragment (min-width: 640px) {
+    .dashboard-module-fragment .omp-fragment-hide-wide {
+        display: none;
+    }
+
+    .dashboard-module-fragment .omp-fragment-columns {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
 .dashboard-navbar-list {
     height: 100%;
     min-height: 0;

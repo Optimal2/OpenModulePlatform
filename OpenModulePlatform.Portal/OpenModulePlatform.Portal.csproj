@@ -18,6 +18,7 @@
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="HtmlSanitizer" />
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" />
     <Compile Include="..\shared\ModuleDefinitionSqlOwnership.cs" Link="ModuleDefinitions\ModuleDefinitionSqlOwnership.cs" />
     <Compile Include="..\shared\ModuleDefinitionSqlText.cs" Link="ModuleDefinitions\ModuleDefinitionSqlText.cs" />

@@ -21,10 +21,12 @@ public sealed class PortalDashboardService
     private const bool DefaultExpandedCanvas = true;
     private const int DefaultWidgetWidth = 320;
     private const int DefaultWidgetHeight = 192;
-    private const int MinWidgetWidth = 160;
-    private const int MinWidgetHeight = 96;
-    private const int MaxWidgetWidth = 1800;
-    private const int MaxWidgetHeight = 1400;
+    public const int MinWidgetWidth = 160;
+    public const int MinWidgetHeight = 96;
+    public const int MaxWidgetWidth = 1800;
+    public const int MaxWidgetHeight = 1400;
+    private const int DefaultModuleFragmentWidth = 416;
+    private const int DefaultModuleFragmentHeight = 320;
     private const int MaxWidgetOffset = 10000;
     private const int MaxWidgetOrder = 10000;
     private const int MinWidgetContentScale = 25;
@@ -721,7 +723,7 @@ ORDER BY w.title,
         return definitions;
     }
 
-    private static bool CanAccessWidget(
+    internal static bool CanAccessWidget(
         int widgetId,
         IReadOnlyDictionary<int, List<WidgetAccessRule>> restrictions,
         IReadOnlySet<int> roleIds,
@@ -807,8 +809,15 @@ ORDER BY w.title,
         cmd.Parameters.Add("@hide_titlebar_when_viewing", SqlDbType.Bit).Value = update.HideTitlebarWhenViewing;
     }
 
-    private static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)
-        => definition.Payload switch
+    internal static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)
+    {
+        if (ModuleFragmentWidget.IsModuleFragment(definition.WidgetType))
+        {
+            var configured = ModuleFragmentWidget.TryParsePayload(definition.Payload)?.DefaultWidth;
+            return Clamp(configured ?? DefaultModuleFragmentWidth, MinWidgetWidth, MaxWidgetWidth);
+        }
+
+        return definition.Payload switch
         {
             "admin-overview" => 768,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" or "notification-feed" or "message-conversations" => 416,
@@ -819,9 +828,17 @@ ORDER BY w.title,
             "weekday-date" => 288,
             _ => DefaultWidgetWidth
         };
+    }
 
-    private static int GetDefaultWidgetHeight(DashboardWidgetDefinition definition)
-        => definition.Payload switch
+    internal static int GetDefaultWidgetHeight(DashboardWidgetDefinition definition)
+    {
+        if (ModuleFragmentWidget.IsModuleFragment(definition.WidgetType))
+        {
+            var configured = ModuleFragmentWidget.TryParsePayload(definition.Payload)?.DefaultHeight;
+            return Clamp(configured ?? DefaultModuleFragmentHeight, MinWidgetHeight, MaxWidgetHeight);
+        }
+
+        return definition.Payload switch
         {
             "admin-overview" => 384,
             "portal-entry-favorites" or "portal-entry-list" or "portal-entry-combolist" or "portal-navbar-links" or "notification-feed" or "message-conversations" => 384,
@@ -832,6 +849,7 @@ ORDER BY w.title,
             "weekday-date" => 160,
             _ => DefaultWidgetHeight
         };
+    }
 
-    private readonly record struct WidgetAccessRule(int? RoleId, string? PermissionName);
+    internal readonly record struct WidgetAccessRule(int? RoleId, string? PermissionName);
 }

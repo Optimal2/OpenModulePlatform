@@ -3220,4 +3220,6 @@
   <data name="No process has written to the system log yet." xml:space="preserve"><value>Ingen process har skrivit till systemloggen ännu.</value></data>
   <data name="No system log entries match the current filters." xml:space="preserve"><value>Inga systemloggrader matchar de aktuella filtren.</value></data>
   <data name="No process has reported anything at warning level or above yet." xml:space="preserve"><value>Ingen process har rapporterat något på varningsnivå eller högre ännu.</value></data>
+  <data name="The widget could not be loaded." xml:space="preserve"><value>Widgeten kunde inte laddas.</value></data>
+  <data name="Loading..." xml:space="preserve"><value>Laddar...</value></data>
 </root>

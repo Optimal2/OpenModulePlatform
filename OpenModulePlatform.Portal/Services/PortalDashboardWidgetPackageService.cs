@@ -215,29 +215,51 @@ WHERE widget_id = @widget_id;";
             Widgets = rows
                 .OrderBy(static row => row.ModuleKey, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static row => row.WidgetKey, StringComparer.OrdinalIgnoreCase)
-                .Select(row => new DashboardWidgetDocumentItem
-                {
-                    WidgetKey = row.WidgetKey,
-                    WidgetVersion = string.IsNullOrWhiteSpace(row.WidgetVersion) ? LegacyWidgetVersion : row.WidgetVersion,
-                    Title = row.Title,
-                    Description = row.Description,
-                    WidgetType = row.WidgetType,
-                    Payload = row.Payload,
-                    ModuleKey = GetExportItemModuleKey(row.ModuleKey, documentModuleKey),
-                    Author = row.Author,
-                    PermissionNames = row.PermissionNames
-                        .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                        .ToList(),
-                    RoleNames = row.RoleNames
-                        .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                        .ToList()
-                })
+                .Select(row => CreateExportItem(row, documentModuleKey))
                 .ToList()
         };
 
         var json = JsonSerializer.Serialize(document, JsonOptions);
         var fileName = $"omp-dashboard-widgets-{SanitizeFileName(fileNameKey)}-{SanitizeFileName(packageVersion)}-{DateTime.UtcNow:yyyyMMddHHmmss}.json";
         return (Encoding.UTF8.GetBytes(json), fileName, packageVersion);
+    }
+
+    private static DashboardWidgetDocumentItem CreateExportItem(
+        DashboardWidgetAdminRow row,
+        string? documentModuleKey)
+    {
+        var item = new DashboardWidgetDocumentItem
+        {
+            WidgetKey = row.WidgetKey,
+            WidgetVersion = string.IsNullOrWhiteSpace(row.WidgetVersion) ? LegacyWidgetVersion : row.WidgetVersion,
+            Title = row.Title,
+            Description = row.Description,
+            WidgetType = row.WidgetType,
+            Payload = row.Payload,
+            ModuleKey = GetExportItemModuleKey(row.ModuleKey, documentModuleKey),
+            Author = row.Author,
+            PermissionNames = row.PermissionNames
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            RoleNames = row.RoleNames
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+        };
+
+        // module-fragment widgets store their configuration as JSON in payload; the
+        // document carries it as named fields so an export round-trips to the same form
+        // a module author writes by hand.
+        if (ModuleFragmentWidget.IsModuleFragment(row.WidgetType)
+            && ModuleFragmentWidget.TryParsePayload(row.Payload) is { } fragment)
+        {
+            item.Payload = null;
+            item.AppKey = fragment.AppKey;
+            item.FragmentPath = fragment.FragmentPath;
+            item.DefaultWidth = fragment.DefaultWidth;
+            item.DefaultHeight = fragment.DefaultHeight;
+        }
+
+        return item;
     }
 
     public async Task<DashboardWidgetImportResult> ImportAsync(
@@ -316,6 +338,16 @@ WHERE widget_id = @widget_id;";
         }
     }
 
+    /// <summary>
+    /// Parses and validates a widget definition document without touching the database.
+    /// </summary>
+    internal static void ValidateJson(string json, string sourceName)
+    {
+        var document = JsonSerializer.Deserialize<DashboardWidgetDocument>(json, JsonOptions)
+            ?? throw new InvalidOperationException("The dashboard widget JSON file is empty.");
+        ValidateDocument(document, sourceName);
+    }
+
     private static void ValidateDocument(DashboardWidgetDocument document, string sourceName)
     {
         if (!string.Equals(document.Format, FormatName, StringComparison.OrdinalIgnoreCase))
@@ -373,7 +405,9 @@ WHERE widget_id = @widget_id;";
         var description = CleanOptionalText(item.Description, "description", 1000);
         var widgetType = CleanRequiredKey(item.WidgetType, "widgetType", 50);
         var moduleKey = CleanOptionalKey(item.ModuleKey ?? document.ModuleKey, "moduleKey", 100);
-        var payload = CleanOptionalText(item.Payload, "payload", MaxPayloadLength);
+        var payload = ModuleFragmentWidget.IsModuleFragment(widgetType)
+            ? NormalizeModuleFragmentPayload(item)
+            : NormalizeNonFragmentPayload(item);
         var author = CleanOptionalText(item.Author ?? document.Author, "author", 200);
         if (item.PermissionNames is null || item.RoleNames is null)
         {
@@ -395,6 +429,67 @@ WHERE widget_id = @widget_id;";
             author,
             permissionNames,
             roleNames);
+    }
+
+    private static string? NormalizeNonFragmentPayload(DashboardWidgetDocumentItem item)
+    {
+        if (item.AppKey is not null
+            || item.FragmentPath is not null
+            || item.DefaultWidth is not null
+            || item.DefaultHeight is not null)
+        {
+            throw new InvalidOperationException(
+                $"Dashboard widget '{item.WidgetKey}': appKey, fragmentPath, defaultWidth and defaultHeight are only valid for widgetType '{ModuleFragmentWidget.WidgetType}'.");
+        }
+
+        return CleanOptionalText(item.Payload, "payload", MaxPayloadLength);
+    }
+
+    /// <summary>
+    /// Validates a module-fragment definition and returns the JSON payload stored for it.
+    /// </summary>
+    internal static string NormalizeModuleFragmentPayload(DashboardWidgetDocumentItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.Payload))
+        {
+            throw new InvalidOperationException(
+                $"Dashboard widget '{item.WidgetKey}' of type '{ModuleFragmentWidget.WidgetType}' must use appKey and fragmentPath instead of payload.");
+        }
+
+        var appKey = CleanRequiredKey(item.AppKey, "appKey", 100);
+        var pathError = ModuleFragmentWidget.GetFragmentPathError(item.FragmentPath);
+        if (pathError is not null)
+        {
+            throw new InvalidOperationException($"Dashboard widget '{item.WidgetKey}': {pathError}");
+        }
+
+        ValidateDefaultSize(
+            item.WidgetKey,
+            "defaultWidth",
+            item.DefaultWidth,
+            PortalDashboardService.MinWidgetWidth,
+            PortalDashboardService.MaxWidgetWidth);
+        ValidateDefaultSize(
+            item.WidgetKey,
+            "defaultHeight",
+            item.DefaultHeight,
+            PortalDashboardService.MinWidgetHeight,
+            PortalDashboardService.MaxWidgetHeight);
+
+        return ModuleFragmentWidget.SerializePayload(new ModuleFragmentWidgetConfig(
+            appKey,
+            item.FragmentPath!.Trim(),
+            item.DefaultWidth,
+            item.DefaultHeight));
+    }
+
+    private static void ValidateDefaultSize(string widgetKey, string propertyName, int? value, int min, int max)
+    {
+        if (value is { } size && (size < min || size > max))
+        {
+            throw new InvalidOperationException(
+                $"Dashboard widget '{widgetKey}': {propertyName} must be between {min} and {max}.");
+        }
     }
 
     private static async Task<DashboardWidgetSnapshot?> FindWidgetAsync(
@@ -893,7 +988,7 @@ VALUES(@widget_id, @permission_id, @role_id);";
         public List<DashboardWidgetDocumentItem> Widgets { get; set; } = [];
     }
 
-    private sealed class DashboardWidgetDocumentItem
+    internal sealed class DashboardWidgetDocumentItem
     {
         public string WidgetKey { get; set; } = string.Empty;
 
@@ -910,6 +1005,14 @@ VALUES(@widget_id, @permission_id, @role_id);";
         public string? ModuleKey { get; set; }
 
         public string? Author { get; set; }
+
+        public string? AppKey { get; set; }
+
+        public string? FragmentPath { get; set; }
+
+        public int? DefaultWidth { get; set; }
+
+        public int? DefaultHeight { get; set; }
 
         public List<string>? PermissionNames { get; set; }
 

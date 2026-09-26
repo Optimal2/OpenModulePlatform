@@ -9,6 +9,9 @@
          data-is-portal-admin="@Model.IsPortalAdmin.ToString().ToLowerInvariant()"
          data-dashboard-draft-key="@Model.DashboardDraftKey"
          data-add-url="@Url.Page("/Index", "AddWidget")"
+         data-module-fragment-url="@Url.Page("/Index", "ModuleFragment")"
+         data-module-fragment-loading-label="@L["Loading..."]"
+         data-module-fragment-unavailable-label="@L["The widget could not be loaded."]"
          data-save-url="@Url.Page("/Index", "SaveDashboard")"
          data-preference-url="@Url.Page("/Index", "SaveDashboardPreference")"
          data-remove-url="@Url.Page("/Index", "RemoveWidget")"
@@ -169,7 +172,11 @@
                 <div class="dashboard-widget__body">
                     <div class="dashboard-widget__content" data-widget-content>
                         <div class="dashboard-widget__content-scale-target" data-widget-content-scale-target>
-                            @if (widget.Payload == "admin-overview")
+                            @if (ModuleFragmentWidget.IsModuleFragment(widget.WidgetType))
+                            {
+                                <partial name="_DashboardModuleFragmentWidget" model="new DashboardModuleFragmentWidget(widget.WidgetId, widget.Width, Model.GetModuleFragment(widget.WidgetId))" />
+                            }
+                            else if (widget.Payload == "admin-overview")
                             {
                                 <div class="dashboard-widget__admin-overview">
                                     <partial name="_AdminOverviewMetrics" model="Model.Metrics" />

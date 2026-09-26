@@ -1,0 +1,22 @@
+@model DashboardModuleFragmentWidget
+@using System.Globalization
+
+@{
+    // The module's data-widget-mode suggestion wins for the initial class; without one
+    // the class follows the widget's saved width. Container queries in site.css keep the
+    // fragment helper classes in step with the live width while the widget is resized.
+    var modeClass = Model.Result.ModeClass ?? ModuleFragmentWidget.GetWidthClass(Model.ContentWidth);
+}
+<div class="dashboard-module-fragment @modeClass@(Model.Result.IsLoaded ? string.Empty : " is-unavailable")"
+     data-module-fragment
+     data-module-fragment-widget-id="@Model.WidgetId.ToString(CultureInfo.InvariantCulture)">
+    @if (Model.Result.IsLoaded)
+    {
+        @* Html has been reduced to the module-fragment allowlist by ModuleFragmentHtmlSanitizer. *@
+        @Html.Raw(Model.Result.Html)
+    }
+    else
+    {
+        <div class="dashboard-module-fragment__placeholder">@L["The widget could not be loaded."]</div>
+    }
+</div>
