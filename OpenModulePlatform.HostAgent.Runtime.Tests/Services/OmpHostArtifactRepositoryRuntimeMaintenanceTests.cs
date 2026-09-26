@@ -98,7 +98,14 @@ CREATE TABLE omp.ModuleDefinitionDocuments
     IsApplied bit NOT NULL,
     AppliedUtc datetime2(3) NULL,
     UpdatedUtc datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME()
-);");
+);
+IF OBJECT_ID(N'omp.Modules', N'U') IS NULL
+    CREATE TABLE omp.Modules
+    (
+        ModuleId int NOT NULL PRIMARY KEY,
+        ModuleKey nvarchar(100) NOT NULL,
+        SchemaName nvarchar(128) NULL
+    );");
 
         // The example module's own setup script creates the tables its steps release.
         var setup = OmpRepositoryFiles.ReadRepositoryTextFile("examples", "WebAppModule", "Sql", "1-setup-example-webapp.sql");
@@ -114,7 +121,11 @@ CREATE TABLE omp.ModuleDefinitionDocuments
     {
         using var conn = new SqlConnection(_database.ConnectionString);
         conn.Open();
+        // The import registers the module and its platform-derived schema in omp.Modules; the
+        // executor refuses steps of a module whose registration does not match.
         using var cmd = new SqlCommand(@"
+IF NOT EXISTS (SELECT 1 FROM omp.Modules WHERE ModuleKey = N'example_webapp')
+    INSERT INTO omp.Modules (ModuleId, ModuleKey, SchemaName) VALUES (900, N'example_webapp', N'omp_example_webapp');
 INSERT INTO omp.ModuleDefinitionDocuments (ModuleKey, DefinitionVersion, DefinitionJson, IsApplied, AppliedUtc)
 VALUES (N'example_webapp', N'test', @json, @isApplied, CASE WHEN @isApplied = 1 THEN SYSUTCDATETIME() END);", conn);
         cmd.Parameters.AddWithValue("@json", json);

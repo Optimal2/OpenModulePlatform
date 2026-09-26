@@ -18,14 +18,24 @@ internal static class ModuleRuntimeMaintenanceExecutor
 {
     internal sealed record BlockingRows(string ModuleKey, string StepKey, int Count, string? Description);
 
-    // Latest applied definition per module, the same ordering the compatibility checks use. The
-    // LIKE filter keeps definitions without the section (the platform core definition is large)
-    // off the wire; ReadSteps still decides from the parsed document.
+    // Latest applied definition per module, the same ordering the compatibility checks use, with
+    // the module's registration in omp.Modules. There is deliberately no text pre-filter on the
+    // JSON: System.Text.Json reads a property name spelled with a JSON unicode escape for one of
+    // its letters as the section, so a LIKE filter on the literal name would silently skip steps
+    // the import gate validated. The parsed
+    // document alone decides whether a module declares steps.
     private const string LoadSql = @"
 IF OBJECT_ID(N'omp.ModuleDefinitionDocuments', N'U') IS NOT NULL
 BEGIN
     SELECT applied.ModuleKey,
-           applied.DefinitionJson
+           applied.DefinitionJson,
+           registered.SchemaName AS RegisteredSchemaName,
+           (
+               SELECT COUNT(*)
+               FROM omp.Modules other
+               WHERE other.ModuleKey <> applied.ModuleKey
+                 AND (other.SchemaName = registered.SchemaName OR other.ModuleKey = registered.SchemaName)
+           ) AS OtherClaimants
     FROM
     (
         SELECT ModuleKey,
@@ -38,10 +48,13 @@ BEGIN
         FROM omp.ModuleDefinitionDocuments
         WHERE IsApplied = 1
     ) applied
+    LEFT JOIN omp.Modules registered
+        ON registered.ModuleKey = applied.ModuleKey
     WHERE applied.rn = 1
-      AND applied.DefinitionJson LIKE N'%""runtimeMaintenance""%'
     ORDER BY applied.ModuleKey;
 END;";
+
+    private sealed record AppliedDefinition(string ModuleKey, string DefinitionJson, string? RegisteredSchemaName, int OtherClaimants);
 
     internal static async Task<IReadOnlyList<ModuleRuntimeMaintenance.Step>> LoadStepsAsync(
         SqlConnection conn,
@@ -52,23 +65,62 @@ END;";
         if (!ModuleRuntimeMaintenance.Events.ContainsKey(eventName))
             throw new ArgumentOutOfRangeException(nameof(eventName), eventName, "Unknown runtime maintenance event.");
 
-        var documents = new List<string>();
+        var documents = new List<AppliedDefinition>();
         await using (var cmd = new SqlCommand(LoadSql, conn, tx))
         await using (var rdr = await cmd.ExecuteReaderAsync(ct))
         {
             while (await rdr.ReadAsync(ct))
             {
-                documents.Add(rdr.GetString(1));
+                documents.Add(new AppliedDefinition(
+                    rdr.GetString(0),
+                    rdr.GetString(1),
+                    rdr.IsDBNull(2) ? null : rdr.GetString(2),
+                    rdr.GetInt32(3)));
             }
         }
 
         return documents
-            .SelectMany(ModuleRuntimeMaintenance.ReadSteps)
+            .SelectMany(BoundSteps)
             .Where(step => step.Event == eventName)
             .OrderBy(static step => step.ModuleKey, StringComparer.Ordinal)
             .ThenBy(static step => step.Order)
             .ThenBy(static step => step.Key, StringComparer.Ordinal)
             .ToArray();
+    }
+
+    /// <summary>
+    /// Re-validates one stored definition and binds its steps to the platform's registration of
+    /// the module: the document's moduleKey must be the row's module, omp.Modules must register
+    /// the derived schema for that module, and no other module may register or be named as that
+    /// schema. Any mismatch refuses the whole event rather than running a step against a schema
+    /// the module does not own.
+    /// </summary>
+    private static IReadOnlyList<ModuleRuntimeMaintenance.Step> BoundSteps(AppliedDefinition definition)
+    {
+        var steps = ModuleRuntimeMaintenance.ReadSteps(definition.DefinitionJson);
+        if (steps.Count == 0)
+        {
+            return steps;
+        }
+
+        var schema = steps[0].SchemaName;
+        string? problem = null;
+        if (!string.Equals(steps[0].ModuleKey, definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+            problem = $"the stored document declares moduleKey '{steps[0].ModuleKey}'";
+        else if (definition.RegisteredSchemaName is null)
+            problem = "the module is not registered in omp.Modules";
+        else if (!string.Equals(definition.RegisteredSchemaName, schema, StringComparison.OrdinalIgnoreCase))
+            problem = $"omp.Modules registers schema '{definition.RegisteredSchemaName}', not the derived schema '{schema}'";
+        else if (definition.OtherClaimants != 0)
+            problem = $"another module in omp.Modules claims schema '{schema}'";
+
+        if (problem is not null)
+        {
+            throw new InvalidOperationException(
+                $"{ModuleRuntimeMaintenance.RuleId}: Module '{definition.ModuleKey}' runtime maintenance was blocked: {problem}.");
+        }
+
+        return steps;
     }
 
     /// <summary>Runs every declared step for a mutating event; returns how many steps ran.</summary>

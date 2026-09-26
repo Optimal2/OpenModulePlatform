@@ -84,4 +84,46 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
         Assert.Equal(1, await _fixture.CountBindingsPinnedToAsync(910003));
         Assert.Equal(1, await _fixture.CountLeasesAsync(appInstanceId));
     }
+
+    [Fact]
+    public async Task DeleteArtifactAsync_WhenSectionNameIsJsonEscaped_StillRunsTheStep()
+    {
+        // System.Text.Json reads the escaped name as runtimeMaintenance; a text pre-filter on the
+        // stored JSON must not make a validated definition's steps silently disappear.
+        await _fixture.InsertExampleDefinitionAsync(
+            isApplied: true,
+            rewriteJson: static json => json.Replace("\"runtimeMaintenance\"", "\"\\u0072untimeMaintenance\"", StringComparison.Ordinal));
+        await _fixture.InsertBindingAsync(Guid.NewGuid(), artifactId: 910004);
+
+        await _fixture.CreatePortalRepository().DeleteArtifactAsync(910004, CancellationToken.None);
+
+        Assert.Equal(0, await _fixture.CountBindingsPinnedToAsync(910004));
+    }
+
+    [Fact]
+    public async Task DeleteArtifactAsync_WhenRegisteredSchemaDiffers_RefusesAndRunsNothing()
+    {
+        await _fixture.InsertExampleDefinitionAsync(isApplied: true, registeredSchema: "omp_portal");
+        await _fixture.InsertBindingAsync(Guid.NewGuid(), artifactId: 910005);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _fixture.CreatePortalRepository().DeleteArtifactAsync(910005, CancellationToken.None));
+
+        Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(1, await _fixture.CountBindingsPinnedToAsync(910005));
+    }
+
+    [Fact]
+    public async Task DeleteArtifactAsync_WhenAnotherModuleClaimsTheSchema_RefusesAndRunsNothing()
+    {
+        await _fixture.InsertExampleDefinitionAsync(isApplied: true);
+        await _fixture.RegisterIntruderModuleAsync("omp_example_webapp");
+        await _fixture.InsertBindingAsync(Guid.NewGuid(), artifactId: 910006);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _fixture.CreatePortalRepository().DeleteArtifactAsync(910006, CancellationToken.None));
+
+        Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(1, await _fixture.CountBindingsPinnedToAsync(910006));
+    }
 }

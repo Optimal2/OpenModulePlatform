@@ -618,8 +618,29 @@ the platform operation and rolls the whole transaction back.
 | `path`, `source`, `inlineSql`, `contentEncoding`, `content`, `sha256` | Same meaning and decoding as in `sqlScripts`. `scripts/dev/embed-module-definition-sql.ps1` embeds the file named by `path`, and a package import resolves `path` into `inlineSql` exactly as for `sqlScripts`. |
 
 Any other step property is rejected, so a misspelled field fails the import
-instead of being ignored. A definition with `runtimeMaintenance` must declare
-`module.schemaName`; `omp`, `sys` and `dbo` are not module schemas.
+instead of being ignored.
+
+### Module schema
+
+The schema that runtime maintenance steps may write is derived by the
+platform from the module key and cannot be declared freely: it is always
+`omp_<moduleKey>` (for `example_webapp`, `omp_example_webapp`). A definition
+with `runtimeMaintenance` must declare `module.schemaName` equal to that
+schema; any other value, including another module's schema or a platform
+schema such as `omp_portal`, fails the import. The rule also requires:
+
+- `moduleKey` of letters, digits and underscores, starting with a letter.
+- A key that does not derive the schema of a platform-shipped module
+  (`omp_core`, `omp_portal`, `omp_auth`, `omp_content`, `omp_iframe`).
+- `moduleKey`, `module`, `module.schemaName`, `runtimeMaintenance` and the
+  step properties each appear once. A repeated JSON property would be read
+  differently by the import gate and by SQL `JSON_VALUE`.
+
+When the steps run, the executor also checks the platform's registration of
+the module. The stored document's `moduleKey` must match its
+`omp.ModuleDefinitionDocuments` row. `omp.Modules` must register the derived
+schema for that module, and no other module may register or be named as that
+schema. If any check fails, the event is refused and no step runs.
 
 ### Safety rules
 
@@ -644,9 +665,21 @@ rather than run. Step SQL is parsed with Microsoft ScriptDom and is fail-closed:
 - Every reference to a module table sits in the THEN branch of
   `IF OBJECT_ID(N'<schema>.<table>', ...) IS NOT NULL` (combined with `AND` at
   most), so a step on an installation without the module's tables is a no-op.
-- `UPDATE` and `DELETE` have a `WHERE` clause.
+- `UPDATE` and `DELETE` have a `WHERE` clause, and each one is itself
+  restricted to the event's key. At least one top-level `AND` conjunct of the
+  `WHERE` clause must be `column = @Param`, `column IN (@Param)`,
+  `column IN (subquery restricted by @Param)`,
+  `column = (scalar subquery restricted by @Param)` or an `EXISTS` subquery
+  that is restricted by `@Param` and refers to the outer table. An inner join
+  on the target table whose `ON` condition meets the same rule also counts.
+  `OR`, `NOT`, `NOT IN` and inequalities never count, so
+  `DELETE ... WHERE 1 = 1; SELECT @HostId;` is rejected.
+- `MERGE` has an `ON` condition that meets the same rule and no
+  `WHEN NOT MATCHED BY SOURCE` clause.
 - The step uses the event parameter and does not declare it.
-- A `read-only` step does not modify data.
+- A `read-only` step does not modify data and is exactly one `SELECT` (inside
+  its `IF OBJECT_ID` guard) that is restricted by the event parameter in the
+  same way.
 - The configuration-ownership rule (`OMP-MODULE-SQL-CONFIG-OWNERSHIP`) applies
   as for every other module SQL.
 

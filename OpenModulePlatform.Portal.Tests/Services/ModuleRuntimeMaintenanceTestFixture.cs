@@ -64,15 +64,29 @@ DROP DATABASE [{DatabaseName}];",
         return new OmpAdminRepository(new PortalSqlConnectionFactory(configuration));
     }
 
-    /// <summary>Removes the example definition and every example runtime row.</summary>
-    public Task ResetAsync() => ExecuteAsync(@"
+    /// <summary>A module key the tests register to claim another module's schema.</summary>
+    public const string IntruderModuleKey = "runtime_maintenance_intruder";
+
+    /// <summary>Removes the example definition, its module registrations and every example runtime row.</summary>
+    public Task ResetAsync() => ExecuteAsync($@"
 DELETE FROM omp.ModuleDefinitionDocuments WHERE ModuleKey = N'example_webapp';
+DELETE FROM omp.Modules WHERE ModuleKey IN (N'example_webapp', N'{IntruderModuleKey}');
 DELETE FROM omp_example_webapp.RuntimeBindings WHERE RuntimeBindingId > 0;
 DELETE FROM omp_example_webapp.RuntimeLeases WHERE RuntimeLeaseId > 0;");
 
-    public Task InsertExampleDefinitionAsync(bool isApplied)
+    /// <summary>
+    /// Stores the example definition (optionally rewritten by <paramref name="rewriteJson"/>) and
+    /// registers the module in omp.Modules under <paramref name="registeredSchema"/>, as a
+    /// definition import does.
+    /// </summary>
+    public Task InsertExampleDefinitionAsync(
+        bool isApplied,
+        Func<string, string>? rewriteJson = null,
+        string registeredSchema = "omp_example_webapp")
         => ExecuteAsync(
             @"
+INSERT INTO omp.Modules (ModuleKey, DisplayName, ModuleType, SchemaName)
+VALUES (N'example_webapp', N'Example web app', N'WebApp', @schema);
 INSERT INTO omp.ModuleDefinitionDocuments
     (ModuleKey, DefinitionVersion, FormatVersion, DefinitionJson, DefinitionSha256, SourceName, IsApplied, AppliedUtc)
 VALUES
@@ -80,8 +94,20 @@ VALUES
      CASE WHEN @isApplied = 1 THEN SYSUTCDATETIME() END);",
             cmd =>
             {
-                cmd.Parameters.AddWithValue("@json", OmpRepositoryFiles.ReadRepositoryTextFile("examples", "WebAppModule", "example_webapp.module-definition.json"));
+                var json = OmpRepositoryFiles.ReadRepositoryTextFile("examples", "WebAppModule", "example_webapp.module-definition.json");
+                cmd.Parameters.AddWithValue("@json", rewriteJson is null ? json : rewriteJson(json));
                 cmd.Parameters.AddWithValue("@isApplied", isApplied);
+                cmd.Parameters.AddWithValue("@schema", registeredSchema);
+            });
+
+    /// <summary>Registers another module that claims <paramref name="schema"/>.</summary>
+    public Task RegisterIntruderModuleAsync(string schema)
+        => ExecuteAsync(
+            "INSERT INTO omp.Modules (ModuleKey, DisplayName, ModuleType, SchemaName) VALUES (@key, N'Intruder', N'WebApp', @schema);",
+            cmd =>
+            {
+                cmd.Parameters.AddWithValue("@key", IntruderModuleKey);
+                cmd.Parameters.AddWithValue("@schema", schema);
             });
 
     public Task InsertBindingAsync(Guid appInstanceId, int? artifactId)

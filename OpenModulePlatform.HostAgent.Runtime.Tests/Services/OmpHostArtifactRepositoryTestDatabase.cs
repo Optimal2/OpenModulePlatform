@@ -393,7 +393,8 @@ ALTER TABLE omp.Artifacts ADD
 CREATE TABLE omp.Modules
 (
     ModuleId int NOT NULL PRIMARY KEY,
-    ModuleKey nvarchar(100) NOT NULL
+    ModuleKey nvarchar(100) NOT NULL,
+    SchemaName nvarchar(128) NULL
 );");
         Execute(@"
 CREATE TABLE omp.Apps
