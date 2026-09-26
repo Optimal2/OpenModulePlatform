@@ -106,6 +106,12 @@ from an accident.
 - `0006-config-overlay-artifactversion-minimum.md` - config overlay `artifactVersion` is a
   minimum version (decided and implemented).
 
+### `img/` - screenshots used by the repository README
+
+Portal screenshots from a local development installation (light theme,
+1400x900). Non-public modules are removed from the page and the host name is
+masked before capture.
+
 ### `runbooks/` - what to do when a specific thing has gone wrong
 
 - `schema-ligger-efter-efter-import.md` - the `ConfigSchemaJson` lagging a generation behind

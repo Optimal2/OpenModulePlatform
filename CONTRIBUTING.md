@@ -7,9 +7,16 @@ Thank you for contributing to OpenModulePlatform.
 1. Build the solution locally:
    - `dotnet restore OpenModulePlatform.slnx`
    - `dotnet build OpenModulePlatform.slnx --configuration Release`
-2. Update documentation when behaviour, terminology, or public guidance changes.
-3. Review SQL scripts when schema or bootstrap data changes.
-4. Verify that no secrets, local IDE files, or generated output are included.
+2. Run the local CI gate, `scripts/local-ci.ps1` (it also runs on `git push`
+   once `scripts/setup-hooks.ps1` has activated the tracked hooks).
+3. Update documentation when behaviour, terminology, or public guidance changes.
+4. Review SQL scripts when schema or bootstrap data changes. When SQL owned by
+   a module definition changes, bump that definition's `definitionVersion` and
+   re-embed the SQL with `scripts/dev/embed-module-definition-sql.ps1` in the
+   same change (see [AGENTS.md](AGENTS.md)).
+5. Bump the version of every component whose deployable output changes, with
+   `scripts/omp/bump-version.ps1`.
+6. Verify that no secrets, local IDE files, or generated output are included.
 
 ## Coding and documentation expectations
 

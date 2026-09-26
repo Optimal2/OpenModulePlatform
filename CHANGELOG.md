@@ -284,6 +284,16 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   (observed states 1, 2, 3 and 6), since the process and its in-flight job's
   resource usage exist until the restart.
 
+### Documentation
+
+- **README rewritten.** It now describes what the platform is and is not,
+  shows three Mermaid diagrams derived from the code (component overview, the
+  universal-package flow from build to deploy, and one HostAgent cycle, each
+  with the source files it is based on), adds Portal screenshots under
+  `docs/img/`, a configuration table, and the current quick-start path through
+  the HostAgent-first installer. The stale "HostAgent v1" and "What is still in
+  progress" sections were removed.
+
 ### Fixed
 
 - **The Bootstrapper refresh packages the manifest's configuration files.**
