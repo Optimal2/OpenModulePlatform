@@ -607,12 +607,21 @@ When a platform delete still fails on a foreign key from a table in a module
 schema (`omp_<moduleKey>`, other than a platform-shipped module), no applied
 step released the rows. The delete stays fail-closed - the transaction rolls
 back and nothing is deleted - but the raw SQL error 547 is replaced by a
-`OMP-MODULE-RUNTIME-MAINTENANCE` error that names the module (derived from the
-schema), the blocking table and constraint, and the event, and tells the
-operator to upgrade the module definition. The original `SqlException` is kept
-as the inner exception. A conflict from a platform table (`omp`,
-`omp_content` and the other platform-shipped schemas) or any other error is
-reported unchanged.
+`OMP-MODULE-RUNTIME-MAINTENANCE` error that names the module, the blocking
+table and constraint, and the event, and tells the operator to upgrade the
+module definition. The module is the one `omp.Modules` registers for the
+schema; when no module registers it, the error says the schema belongs to no
+registered module (a schema left behind by a removed module) instead. The
+original `SqlException` is kept as the inner exception. A conflict from a
+platform table (`omp`, `omp_content` and the other platform-shipped schemas)
+or any other error is reported unchanged.
+
+The conflict is recognized by error number 547, not by its English text:
+SQL Server localizes the message, so only the double-quoted names in it are
+read. When the text names no schema-qualified table that can be read, the
+error still gives generic guidance for the event, never the raw SQL error.
+The Portal host, artifact and app-instance edit pages show only the module key
+(or schema) and the event, and write the full error to the Portal log.
 
 ### Upgrade order
 

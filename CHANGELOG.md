@@ -35,6 +35,15 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   rolls back. docs/MODULE_DEFINITIONS.md adds the delete-path/event table and
   the upgrade order. `PlatformDeletePathsModuleSchemaTests` now also catches
   bracket-quoted module schemas (`[omp_x].[T]`).
+- **Blocked deletes show guidance on the page, not a 500.** The Portal host
+  and artifact edit pages now catch the runtime maintenance error from their
+  delete and re-render with the module key (or schema) and event only; the
+  full error goes to the Portal log. Error 547 is recognized by number and
+  read from the quoted names in the localized text, with generic guidance
+  when the table cannot be read. A module schema that `omp.Modules` does not
+  register is reported as a leftover schema instead of asking for a module
+  upgrade. The delete-path guard test also catches double-quoted identifiers
+  (`"omp_x"."T"`).
 
 - **Runtime maintenance steps may read two platform tables.** A module
   table keyed by the platform's `WorkerInstanceId` could not reach the
