@@ -45,7 +45,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
     {
         await using var lease = await CreateService().AcquireUniversalImportLockAsync("tester", CancellationToken.None);
 
-        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        var status = ReadStatusWithDocument();
         Assert.True(status.IsLocked);
         Assert.Equal("omp_portal", status.Document!.ApplicationKey);
         Assert.Equal("tester", status.Document.Owner);
@@ -77,7 +77,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
 
         await using var lease = await CreateService().AcquireUniversalImportLockAsync("tester", CancellationToken.None);
 
-        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        var status = ReadStatusWithDocument();
         Assert.True(status.IsLocked);
         Assert.NotEqual("stale-lock-id", status.Document!.LockId);
     }
@@ -114,7 +114,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
             _root, "stale-lock-id", NullLogger.Instance, CancellationToken.None);
 
         Assert.True(File.Exists(DeploymentLockFile.GetPath(_root)));
-        Assert.Equal("competitor-lock-id", DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
+        Assert.Equal("competitor-lock-id", ReadStatusWithDocument().Document!.LockId);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
         Assert.True(File.Exists(path));
         Assert.Equal(
             "competitor-lock-id",
-            DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
+            ReadStatusWithDocument().Document!.LockId);
     }
 
     /// <summary>
@@ -235,7 +235,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
         Assert.True(File.Exists(path));
         Assert.Equal(
             "foreign-lock-id",
-            DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
+            ReadStatusWithDocument().Document!.LockId);
     }
 
     // The expected verdict travels as a string because the enum is internal to the Portal
@@ -313,7 +313,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
 
         await Task.Delay(500);
 
-        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        var status = ReadStatusWithDocument();
         Assert.Equal("hostagent-lock-id", status.Document!.LockId);
         Assert.Equal(other.UpdatedUtc, status.Document.UpdatedUtc);
 
@@ -368,7 +368,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
         // handle closes must read the foreign document and stop as Lost.
         await Task.Delay(600);
 
-        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        var status = ReadStatusWithDocument();
         Assert.Equal("hostagent-lock-id", status.Document!.LockId);
         Assert.Equal(foreign.UpdatedUtc, status.Document.UpdatedUtc);
 
@@ -397,7 +397,7 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
 
         var path = DeploymentLockFile.GetPath(_root);
         var originalJson = ReadWithRetry(path);
-        var originalUpdatedUtc = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.UpdatedUtc;
+        var originalUpdatedUtc = ReadStatusWithDocument().Document!.UpdatedUtc;
 
         WriteWithRetry(path, "{ this is not valid json");
         await Task.Delay(350);
@@ -529,6 +529,29 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
     /// The renewal loop reads the same file the test writes, and the sharing modes collide,
     /// so both directions retry rather than fail the test for a reason it is not about.
     /// </summary>
+    /// <summary>
+    /// Reads the lock status and retries while the document is unreadable. The renewal
+    /// loop opens the lock file exclusively on every tick, and ReadStatus fails closed
+    /// (Document null) when a read lands inside that window -- measured once in CI, where
+    /// a 50 ms renewal interval made the single read dereference a null document.
+    /// A status without a document after the deadline is returned as-is so the assertion
+    /// that follows reports the real state instead of a timeout.
+    /// </summary>
+    private DeploymentLockStatus ReadStatusWithDocument()
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+            if (status.Document is not null || DateTime.UtcNow >= deadline)
+            {
+                return status;
+            }
+
+            Thread.Sleep(10);
+        }
+    }
+
     private static string ReadWithRetry(string path)
         => RetryFileOperation(() => File.ReadAllText(path));
 
