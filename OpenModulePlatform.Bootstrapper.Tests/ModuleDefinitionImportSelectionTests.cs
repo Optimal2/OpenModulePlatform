@@ -10,8 +10,8 @@ public sealed class ModuleDefinitionImportSelectionTests
     [Fact]
     public void IsSupersededByNewerPackageDefinition_SkipsOlderVersionWhenPackageHasNewerDefinition()
     {
-        var older = CreateDefinition("ibs_packager", "0.3.159");
-        var newer = CreateDefinition("ibs_packager", "0.3.160");
+        var older = CreateDefinition("acme_invoicer", "0.3.159");
+        var newer = CreateDefinition("acme_invoicer", "0.3.160");
         var package = new[] { older, newer };
 
         Assert.True(Program.IsSupersededByNewerPackageDefinition(older, package));
@@ -21,8 +21,8 @@ public sealed class ModuleDefinitionImportSelectionTests
     [Fact]
     public void IsSupersededByNewerPackageDefinition_KeepsSameVersionSoFailedScriptsAreRetried()
     {
-        var definition = CreateDefinition("ibs_packager", "0.3.159");
-        var package = new[] { definition, CreateDefinition("ibs_packager", "0.3.159") };
+        var definition = CreateDefinition("acme_invoicer", "0.3.159");
+        var package = new[] { definition, CreateDefinition("acme_invoicer", "0.3.159") };
 
         Assert.False(Program.IsSupersededByNewerPackageDefinition(definition, package));
     }
@@ -30,7 +30,7 @@ public sealed class ModuleDefinitionImportSelectionTests
     [Fact]
     public void IsSupersededByNewerPackageDefinition_IgnoresNewerDefinitionsForOtherModules()
     {
-        var definition = CreateDefinition("ibs_packager", "0.3.159");
+        var definition = CreateDefinition("acme_invoicer", "0.3.159");
         var package = new[] { definition, CreateDefinition("omp_core", "0.9.0") };
 
         Assert.False(Program.IsSupersededByNewerPackageDefinition(definition, package));
@@ -39,8 +39,8 @@ public sealed class ModuleDefinitionImportSelectionTests
     [Fact]
     public void IsSupersededByNewerPackageDefinition_MatchesModuleKeysCaseInsensitively()
     {
-        var older = CreateDefinition("Ibs_Packager", "0.3.159");
-        var package = new[] { older, CreateDefinition("ibs_packager", "0.3.160") };
+        var older = CreateDefinition("Acme_Invoicer", "0.3.159");
+        var package = new[] { older, CreateDefinition("acme_invoicer", "0.3.160") };
 
         Assert.True(Program.IsSupersededByNewerPackageDefinition(older, package));
     }
@@ -48,8 +48,8 @@ public sealed class ModuleDefinitionImportSelectionTests
     [Fact]
     public void IsSupersededByNewerPackageDefinition_ComparesVersionsNumericallyNotLexically()
     {
-        var older = CreateDefinition("ibs_packager", "0.3.9");
-        var package = new[] { older, CreateDefinition("ibs_packager", "0.3.10") };
+        var older = CreateDefinition("acme_invoicer", "0.3.9");
+        var package = new[] { older, CreateDefinition("acme_invoicer", "0.3.10") };
 
         Assert.True(Program.IsSupersededByNewerPackageDefinition(older, package));
     }

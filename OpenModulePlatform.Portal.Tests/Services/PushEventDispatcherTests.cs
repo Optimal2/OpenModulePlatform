@@ -87,7 +87,7 @@ public sealed class PushEventDispatcherTests
     [InlineData("app", """{"kind":"app","ids":["omp_portal"]}""", "omp-app:omp_portal")]
     // Module targets are delivered to the authenticated group; module clients
     // scope the event by the payload "module" discriminator instead.
-    [InlineData("module", """{"kind":"module","ids":["earkiv_checker"]}""", "omp-authenticated")]
+    [InlineData("module", """{"kind":"module","ids":["acme_invoicer"]}""", "omp-authenticated")]
     public void ResolveTargetGroups_MapsOutboxTargetToSignalRGroup(
         string targetType,
         string targetJson,

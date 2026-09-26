@@ -14,13 +14,13 @@ namespace OpenModulePlatform.Web.Shared.ActivityLog;
 /// </summary>
 public sealed class ActivityLogOptions
 {
-    /// <summary>The module's SQL schema (omp.Modules.SchemaName), e.g. <c>omp_ibs_packager</c>. The table is <c>&lt;schema&gt;.ActivityLog</c>.</summary>
+    /// <summary>The module's SQL schema (omp.Modules.SchemaName), e.g. <c>omp_acme_invoicer</c>. The table is <c>&lt;schema&gt;.ActivityLog</c>.</summary>
     public required string SchemaName { get; init; }
 
-    /// <summary>The module key (omp.Modules.ModuleKey), e.g. <c>ibs_packager</c>.</summary>
+    /// <summary>The module key (omp.Modules.ModuleKey), e.g. <c>acme_invoicer</c>.</summary>
     public required string ModuleKey { get; init; }
 
-    /// <summary>The component key of the writing app, e.g. <c>ibs-packager-web</c>.</summary>
+    /// <summary>The component key of the writing app, e.g. <c>acme-invoicer-web</c>.</summary>
     public required string AppKey { get; init; }
 }
 

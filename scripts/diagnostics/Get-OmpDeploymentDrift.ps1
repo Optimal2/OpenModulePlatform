@@ -292,7 +292,7 @@ ORDER BY h.HostKey;
         # the answer is not obvious: which channel-type BUILD a host is supposed to run
         # is decided by the module's own channel configuration, and the module expresses
         # that decision by writing one enabled requirement row per channel (measured:
-        # 6 rows keyed ibs_packager.channeltype:<ChannelId> plus one legacy
+        # 6 rows keyed acme_invoicer.channeltype:<ChannelId> plus one legacy
         # channel-type:file-drop:<version> row, all 7 pointing at 0.3.109, with 20
         # superseded rows disabled). This query therefore sees exactly what the module
         # declared. What it still cannot see is a channel the module never declared a
@@ -358,7 +358,7 @@ ORDER BY h.HostKey, a.PackageType, a.TargetName;
         # writes omp.AppInstanceRuntimeStates keyed on AppInstanceId alone while the
         # per-instance truth goes to omp.WorkerInstanceRuntimeStates -- measured on
         # a development host: 7 rows in the per-instance table against 2 in the summary one, for
-        # 6 worker instances under ibs_packager_worker. Reading the summary meant one
+        # 6 worker instances under acme_invoicer_worker. Reading the summary meant one
         # worker stuck in Failed(5) was invisible for as long as any sibling reported
         # Running. The summary is now a real aggregation (worst state wins) as well, but
         # the gate reads the per-instance rows because that is where the siblings are.

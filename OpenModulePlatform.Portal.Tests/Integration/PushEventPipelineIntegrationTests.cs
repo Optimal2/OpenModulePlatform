@@ -115,7 +115,7 @@ public sealed class PushEventPipelineIntegrationTests
 
         var receivedEvents = await ConnectAndCollectModuleEventsAsync(
             PushEventPipelineTestFixture.TestUserId,
-            "earkiv_checker",
+            "acme_invoicer",
             waitForDelivery: true);
 
         Assert.True(
@@ -124,8 +124,8 @@ public sealed class PushEventPipelineIntegrationTests
         var pushEvent = Assert.Single(receivedEvents.PushEvents);
         Assert.Equal(PushEventCategory.ModuleStateChanged.Value, pushEvent.GetProperty("category").GetString());
         Assert.Equal("module", pushEvent.GetProperty("targetKind").GetString());
-        Assert.Equal("earkiv_checker", pushEvent.GetProperty("targetValue").GetString());
-        Assert.Equal("earkiv_checker", pushEvent.GetProperty("payload").GetProperty("module").GetString());
+        Assert.Equal("acme_invoicer", pushEvent.GetProperty("targetValue").GetString());
+        Assert.Equal("acme_invoicer", pushEvent.GetProperty("payload").GetProperty("module").GetString());
 
         var row = Assert.Single(receivedEvents.OutboxStatuses.ToArray());
         Assert.Equal("dispatched", row.Status);

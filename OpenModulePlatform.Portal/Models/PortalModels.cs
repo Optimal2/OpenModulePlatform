@@ -709,7 +709,7 @@ public sealed class ArtifactRetentionCandidateRow
 
     /// <summary>
     /// Human-readable, comma-separated list of the sources that protect this
-    /// candidate (e.g. "App instance, omp_ibs_packager.ChannelTypeVersions"),
+    /// candidate (e.g. "App instance, omp_acme_invoicer.ChannelTypeVersions"),
     /// so operators never need the database to see why a version is kept.
     /// </summary>
     public string? ProtectedReferenceSources { get; set; }

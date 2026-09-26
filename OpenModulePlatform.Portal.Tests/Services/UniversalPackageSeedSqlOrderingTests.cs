@@ -22,7 +22,7 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// SELECT TOP 1 ... FROM omp.Artifacts ... ORDER BY ArtifactId DESC. Because
 /// the import applied the definition SQL before registering the package's
 /// artifact rows, the seed saw 0.3.134 while the package carried 0.3.135, and
-/// omp_ibs_packager.ChannelTypeVersions was left one import behind the plugin
+/// omp_acme_invoicer.ChannelTypeVersions was left one import behind the plugin
 /// the worker actually ran. Script execution is gated per definition version,
 /// so an unchanged definition does not re-run on the next import -- the lag
 /// never self-heals.
@@ -132,7 +132,7 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
     /// run", so the definition was Applied with ZERO rows in
     /// omp.ModuleDefinitionSqlExecutions and the seed never recorded the new
     /// artifact version (measured in the customer environments over five
-    /// ibs_packager versions). HostAgent and the bootstrapper run the scripts in
+    /// acme_invoicer versions). HostAgent and the bootstrapper run the scripts in
     /// exactly this state
     /// (OmpHostArtifactRepository.AnyModuleDefinitionScriptWithoutSucceededExecutionAsync);
     /// Portal must too.

@@ -20,8 +20,8 @@ public sealed class ActivityLogEnvelopeTests
         var envelope = new ActivityEnvelope
         {
             Event = "manual_review.approved",
-            Module = "ibs_packager",
-            App = "ibs-packager-web",
+            Module = "acme_invoicer",
+            App = "acme-invoicer-web",
             Outcome = ActivityOutcomes.Ok,
             Summary = "Approved manual review item 4711",
             Subject = new ActivitySubject("manual_review_item", "4711", "sas"),
@@ -44,7 +44,7 @@ public sealed class ActivityLogEnvelopeTests
     public void TryParse_round_trips_version_one_and_keeps_data_opaque()
     {
         const string json = """
-            {"v":1,"event":"job.requeued","module":"ibs_packager","summary":"Requeued job 9","data":{"reason":"retry","attempt":2}}
+            {"v":1,"event":"job.requeued","module":"acme_invoicer","summary":"Requeued job 9","data":{"reason":"retry","attempt":2}}
             """;
 
         var envelope = ActivityLogJson.TryParse(json);
@@ -172,14 +172,14 @@ public sealed class ActivityLogEnvelopeTests
     [Fact]
     public void CreateTableStatement_is_idempotent_and_refuses_odd_identifiers()
     {
-        var ddl = ActivityLogSql.CreateTableStatement("omp_ibs_packager");
+        var ddl = ActivityLogSql.CreateTableStatement("omp_acme_invoicer");
 
-        Assert.Contains("IF OBJECT_ID(N'[omp_ibs_packager].[ActivityLog]', N'U') IS NULL", ddl);
+        Assert.Contains("IF OBJECT_ID(N'[omp_acme_invoicer].[ActivityLog]', N'U') IS NULL", ddl);
         Assert.Contains("CHECK (ISJSON(Entry) = 1)", ddl);
-        Assert.Contains("IX_omp_ibs_packager_ActivityLog_OmpUserId", ddl);
+        Assert.Contains("IX_omp_acme_invoicer_ActivityLog_OmpUserId", ddl);
         Assert.Throws<ArgumentException>(() => ActivityLogSql.CreateTableStatement("omp; DROP TABLE x"));
         Assert.Equal(
-            "INSERT INTO [omp_ibs_packager].[ActivityLog] (LoggedUtc, OmpUserId, Entry) VALUES (SYSUTCDATETIME(), @OmpUserId, @Entry);",
-            ActivityLogSql.InsertStatement("omp_ibs_packager"));
+            "INSERT INTO [omp_acme_invoicer].[ActivityLog] (LoggedUtc, OmpUserId, Entry) VALUES (SYSUTCDATETIME(), @OmpUserId, @Entry);",
+            ActivityLogSql.InsertStatement("omp_acme_invoicer"));
     }
 }

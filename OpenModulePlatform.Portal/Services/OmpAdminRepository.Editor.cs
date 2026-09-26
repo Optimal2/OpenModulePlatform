@@ -2725,7 +2725,7 @@ WHERE ModuleKey = @ModuleKey;";
                 // key + SHA-256) ever ran -- a new definition version always starts
                 // with zero execution rows, so reading "probe healthy" as "nothing to
                 // run" applied the document while its setup/seed data changes never
-                // reached the database (the ibs_packager incident: five versions
+                // reached the database (a production module incident: five versions
                 // applied, zero executions, import reported green). HostAgent and the
                 // bootstrapper run the scripts in exactly this state
                 // (OmpHostArtifactRepository.AnyModuleDefinitionScriptWithoutSucceededExecutionAsync);

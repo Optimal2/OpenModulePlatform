@@ -6,7 +6,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Services;
 /// <summary>
 /// Discovers foreign keys that reference <c>omp.Artifacts(ArtifactId)</c> from tables the
 /// retention SQL does not already handle (typically module-owned schemas such as
-/// <c>omp_ibs_packager</c>), and renders them as extra protected-reference clauses.
+/// <c>omp_acme_invoicer</c>), and renders them as extra protected-reference clauses.
 /// </summary>
 /// <remarks>
 /// Without this, a module table pinning an artifact makes the retention DELETE fail on the

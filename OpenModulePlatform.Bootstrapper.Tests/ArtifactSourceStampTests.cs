@@ -131,7 +131,7 @@ public sealed class ArtifactSourceStampTests : IDisposable
     [Fact]
     public void TryCollectProjectClosure_ExcludesASiblingProjectThatIsNotReferenced()
     {
-        // The heart of R8-P6-3: ibs-packager-worker must not rebuild when the FileDrop channel
+        // The heart of R8-P6-3: acme-invoicer-worker must not rebuild when the FileDrop channel
         // type changes, because it does not reference it.
         var repository = CreateRepository("repo");
         WriteProject(repository, "Sample.Core");

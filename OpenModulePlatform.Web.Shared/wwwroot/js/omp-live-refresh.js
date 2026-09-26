@@ -6,7 +6,7 @@
 // concern so pages only implement how to apply an update:
 //
 //   var handle = window.ompLiveRefresh.subscribe({
-//       module: 'ibs_packager',            // payload.module filter (required)
+//       module: 'acme_invoicer',            // payload.module filter (required)
 //       onRefresh: function (info) { ... } // info.source: 'push' | 'fallback' | 'manual'
 //       // Optional:
 //       // categories: ['module.state-changed'],

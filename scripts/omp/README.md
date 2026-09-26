@@ -51,7 +51,7 @@ interactive double-click flow.
 .\scripts\omp\bump-version.ps1 -ComponentKey omp-portal-web
 .\scripts\omp\bump-version.ps1 -AllComponents -Part minor
 .\scripts\omp\bump-version.ps1 -ModuleKey omp_portal -UpdateModuleMinimums
-.\scripts\omp\bump-version.ps1 -WidgetFile widgets/log-search-widgets.json
+.\scripts\omp\bump-version.ps1 -WidgetFile widgets/acme-invoicer-widgets.json
 .\scripts\omp\bump-version.ps1 -AllWidgets
 ```
 

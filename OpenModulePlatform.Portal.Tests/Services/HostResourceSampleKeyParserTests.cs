@@ -52,8 +52,8 @@ public sealed class HostResourceSampleKeyParserTests
     /// not fail the build; it silently files every memory sample as a CPU sample.
     /// </remarks>
     [Theory]
-    [InlineData("worker.memory.ibs-packager-worker-1", "Worker process", "ibs-packager-worker-1", HostResourceMetricKind.Memory)]
-    [InlineData("worker.ibs-packager-worker-1", "Worker process", "ibs-packager-worker-1", HostResourceMetricKind.Cpu)]
+    [InlineData("worker.memory.acme-invoicer-worker-1", "Worker process", "acme-invoicer-worker-1", HostResourceMetricKind.Memory)]
+    [InlineData("worker.acme-invoicer-worker-1", "Worker process", "acme-invoicer-worker-1", HostResourceMetricKind.Cpu)]
     [InlineData("iis.apppool.state.OMP_portal", "IIS app pool state", "OMP_portal", HostResourceMetricKind.State)]
     [InlineData("iis.apppool.memory.OMP_portal", "IIS app pool", "OMP_portal", HostResourceMetricKind.Memory)]
     [InlineData("iis.apppool.OMP_portal", "IIS app pool", "OMP_portal", HostResourceMetricKind.Cpu)]

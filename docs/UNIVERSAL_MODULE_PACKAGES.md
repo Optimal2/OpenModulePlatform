@@ -119,7 +119,7 @@ same package-level version:
 ```json
 {
   "kind": "dashboard-widget",
-  "path": "widgets/log-search-widgets__0.1.25.json",
+  "path": "widgets/acme-invoicer-widgets__0.1.25.json",
   "version": "0.1.25"
 }
 ```

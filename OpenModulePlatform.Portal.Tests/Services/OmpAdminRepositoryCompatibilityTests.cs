@@ -49,7 +49,7 @@ public sealed class OmpAdminRepositoryCompatibilityTests
         var result = OmpAdminRepository.CreateIncompatibleAutoApplySkipResult(
             "channel-type",
             "Worker",
-            "ibs_packager_worker");
+            "acme_invoicer_worker");
 
         Assert.Equal(0, result.TemplateAppRowsUpdated);
         Assert.Equal(0, result.AppInstanceRowsUpdated);
@@ -57,7 +57,7 @@ public sealed class OmpAdminRepositoryCompatibilityTests
         Assert.Equal(0, result.HostAgentDesiredRowsUpdated);
         Assert.Equal(0, result.TotalRowsUpdated);
         Assert.NotNull(result.AutoApplyInfoMessage);
-        Assert.Contains("ibs_packager_worker", result.AutoApplyInfoMessage, StringComparison.Ordinal);
+        Assert.Contains("acme_invoicer_worker", result.AutoApplyInfoMessage, StringComparison.Ordinal);
         Assert.Contains("channel-type", result.AutoApplyInfoMessage, StringComparison.Ordinal);
         Assert.Contains("compatibility/channel metadata", result.AutoApplyInfoMessage, StringComparison.Ordinal);
         Assert.Contains("Worker", result.AutoApplyInfoMessage, StringComparison.Ordinal);

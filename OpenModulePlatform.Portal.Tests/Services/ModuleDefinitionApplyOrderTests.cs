@@ -28,7 +28,7 @@ public sealed class ModuleDefinitionApplyOrderTests
         Assert.Equal(0, ModuleDefinitionApplyOrder.GetApplyRank("omp_core"));
         Assert.Equal(0, ModuleDefinitionApplyOrder.GetApplyRank("OMP_CORE"));
 
-        foreach (var other in new[] { "omp_auth", "omp_portal", "ibs_packager", "log_search" })
+        foreach (var other in new[] { "omp_auth", "omp_portal", "acme_invoicer", "acme_ledger" })
         {
             Assert.Equal(1, ModuleDefinitionApplyOrder.GetApplyRank(other));
         }

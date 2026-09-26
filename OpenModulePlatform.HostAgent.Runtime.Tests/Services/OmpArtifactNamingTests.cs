@@ -28,7 +28,7 @@ public sealed class OmpArtifactNamingTests
     [Fact]
     public void SanitizePathSegment_keeps_an_ordinary_value_recognizable()
     {
-        Assert.Equal("ibs-packager-web", OmpArtifactNaming.SanitizePathSegment("ibs-packager-web"));
+        Assert.Equal("acme-invoicer-web", OmpArtifactNaming.SanitizePathSegment("acme-invoicer-web"));
         Assert.Equal("0.3.232", OmpArtifactNaming.SanitizePathSegment("0.3.232"));
     }
 
@@ -47,10 +47,10 @@ public sealed class OmpArtifactNamingTests
         // The version is the field an artifact author controls most freely, and the
         // result is used both as a file name and as a zip entry name.
         var fileName = OmpArtifactNaming.CreateArtifactPackageFileName(
-            "ibs_packager",
-            "ibs_packager_web",
+            "acme_invoicer",
+            "acme_invoicer_web",
             "web-app",
-            "ibs-packager-web",
+            "acme-invoicer-web",
             "../../../Windows/System32/evil");
 
         Assert.DoesNotContain("..", fileName, StringComparison.Ordinal);
@@ -64,12 +64,12 @@ public sealed class OmpArtifactNamingTests
     public void CreateArtifactPackageFileName_is_unchanged_for_ordinary_values()
     {
         Assert.Equal(
-            "ibs_packager__ibs_packager_web__web-app__ibs-packager-web__0.3.232.zip",
+            "acme_invoicer__acme_invoicer_web__web-app__acme-invoicer-web__0.3.232.zip",
             OmpArtifactNaming.CreateArtifactPackageFileName(
-                "ibs_packager",
-                "ibs_packager_web",
+                "acme_invoicer",
+                "acme_invoicer_web",
                 "web-app",
-                "ibs-packager-web",
+                "acme-invoicer-web",
                 "0.3.232"));
     }
 }

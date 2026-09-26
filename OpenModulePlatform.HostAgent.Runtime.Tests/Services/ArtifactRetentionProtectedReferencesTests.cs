@@ -18,10 +18,10 @@ public sealed class ArtifactRetentionProtectedReferencesTests
     public void BuildProtectionClauses_SingleReference_RendersUnionClause()
     {
         var result = ArtifactRetentionProtectedReferences.BuildProtectionClauses(
-            [("omp_ibs_packager", "ChannelTypeVersions", "ArtifactId")]);
+            [("omp_acme_invoicer", "ChannelTypeVersions", "ArtifactId")]);
 
         Assert.Contains("UNION ALL", result);
-        Assert.Contains("FROM [omp_ibs_packager].[ChannelTypeVersions] extref", result);
+        Assert.Contains("FROM [omp_acme_invoicer].[ChannelTypeVersions] extref", result);
         Assert.Contains("WHERE extref.[ArtifactId] = ar.ArtifactId", result);
     }
 
