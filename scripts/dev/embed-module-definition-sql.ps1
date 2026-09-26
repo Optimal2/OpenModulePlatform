@@ -105,12 +105,28 @@ foreach ($definitionFile in $definitionFiles) {
     $jsonText = Get-Content -LiteralPath $definitionFile.FullName -Raw -Encoding UTF8
     $document = ConvertFrom-JsonDocument -Json $jsonText -Depth $jsonDepth
 
-    if ($null -eq $document.sqlScripts) {
+    # runtimeMaintenance.steps carry SQL in the same fields as sqlScripts and are
+    # embedded the same way (docs/MODULE_DEFINITIONS.md, "Runtime maintenance steps").
+    $sqlEntries = @()
+    $sqlScripts = Get-OptionalPropertyValue -Object $document -Name 'sqlScripts'
+    if ($null -ne $sqlScripts) {
+        $sqlEntries += @($sqlScripts)
+    }
+
+    $runtimeMaintenance = Get-OptionalPropertyValue -Object $document -Name 'runtimeMaintenance'
+    if ($null -ne $runtimeMaintenance) {
+        $runtimeSteps = Get-OptionalPropertyValue -Object $runtimeMaintenance -Name 'steps'
+        if ($null -ne $runtimeSteps) {
+            $sqlEntries += @($runtimeSteps)
+        }
+    }
+
+    if ($sqlEntries.Count -eq 0) {
         continue
     }
 
     $changed = $false
-    foreach ($script in @($document.sqlScripts)) {
+    foreach ($script in $sqlEntries) {
         if ([string]::IsNullOrWhiteSpace([string]$script.path)) {
             continue
         }

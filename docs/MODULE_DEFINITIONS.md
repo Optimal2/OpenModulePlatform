@@ -32,6 +32,8 @@ The document answers these questions:
   module to be valid
 - which schemas, tables, and seed rows are required for integrity, and which
   SQL seed data is intentionally only sample/demo data
+- which versioned SQL steps release the module's own rows when the platform
+  removes a host, an artifact or an app instance (`runtimeMaintenance`)
 
 ## Storage
 
@@ -546,6 +548,164 @@ letting the artifact import resolve the concrete storage path.
 Platform core definitions may use `"definitionType": "platform-core"` and omit
 the `module` and `apps` sections when the document describes the neutral `omp`
 schema itself rather than an installable module row.
+
+## Runtime maintenance steps
+
+Some platform operations remove rows that module-owned tables reference: an
+orphan host is deleted, an artifact is deleted, or an app instance is deleted.
+The platform does not know a module's tables, so a module that keeps such
+references declares how its own rows let go of them. The optional
+`runtimeMaintenance` section holds versioned SQL steps per platform event.
+HostAgent and Portal run the declared steps generically, in the same
+transaction as the platform delete and before the platform rows are removed.
+When no applied definition declares a step for an event, nothing
+module-specific runs; there is no built-in fallback.
+
+The steps are versioned with the definition: they live in the definition
+document, are stored with it in `omp.ModuleDefinitionDocuments`, and take effect
+only when a definition with a newer `definitionVersion` is applied. The platform
+uses the latest applied definition per module, the same one the artifact
+compatibility checks use.
+
+### Events
+
+| Event | Parameter | Execution | Run by |
+| --- | --- | --- | --- |
+| `host-removed` | `@HostId uniqueidentifier` | `idempotent` | HostAgent orphan-host cleanup, before the host's `omp.WorkerInstances`, `omp.AppInstances` and `omp.Hosts` rows are deleted. |
+| `artifact-removed` | `@ArtifactId int` | `idempotent` | Portal artifact delete, before the `omp.Artifacts` row is deleted. |
+| `app-instance-blocking-count` | `@AppInstanceId uniqueidentifier` | `read-only` | Portal app-instance delete, first. Reports module rows that cannot be unlinked; any count above zero refuses the delete. |
+| `app-instance-removed` | `@AppInstanceId uniqueidentifier` | `idempotent` | Portal app-instance delete, after every blocking count was zero and before the instance's `omp.WorkerInstances` and `omp.AppInstances` rows are deleted. |
+
+The platform binds exactly the one parameter of the event. Each step is sent
+as a parameterized command, which SqlClient executes through `sp_executesql`;
+step SQL never receives concatenated values. An `app-instance-blocking-count`
+step returns one row with a `BlockingCount` column (or the count in the first
+column) and may add a `Description` column, which Portal uses to name the rows
+in the refusal message ("2 example runtime binding(s)"). A step that returns
+no row reports zero.
+
+Steps run ordered by module key, then `order`, then `key`. A failing step fails
+the platform operation and rolls the whole transaction back.
+
+### JSON shape
+
+```json
+"runtimeMaintenance": {
+  "steps": [
+    {
+      "key": "release-leases-on-host-removed",
+      "event": "host-removed",
+      "order": 10,
+      "execution": "idempotent",
+      "path": "examples/WebAppModule/Sql/runtime-maintenance/host-removed.sql",
+      "inlineSql": null,
+      "contentEncoding": "base64-utf8",
+      "content": "...",
+      "sha256": "..."
+    }
+  ]
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `steps` | Required array when the section is present. The section also accepts an optional `description`; any other property is rejected. |
+| `key` | Required, unique within the definition. |
+| `event` | Required, one of the four events above. |
+| `execution` | Required, must equal the event's execution (`idempotent` or `read-only`). |
+| `order` | Optional integer, default `0`. |
+| `description` | Optional text. |
+| `path`, `source`, `inlineSql`, `contentEncoding`, `content`, `sha256` | Same meaning and decoding as in `sqlScripts`. `scripts/dev/embed-module-definition-sql.ps1` embeds the file named by `path`, and a package import resolves `path` into `inlineSql` exactly as for `sqlScripts`. |
+
+Any other step property is rejected, so a misspelled field fails the import
+instead of being ignored. A definition with `runtimeMaintenance` must declare
+`module.schemaName`; `omp`, `sys` and `dbo` are not module schemas.
+
+### Safety rules
+
+Rule ID: `OMP-MODULE-RUNTIME-MAINTENANCE`. The shared validator
+(`shared/ModuleRuntimeMaintenance.cs`) runs in every gate that already checks
+`sqlScripts` - HostAgent zip/folder import, Portal apply/repair and the
+Bootstrapper - through `ModuleDefinitionSqlOwnership.ValidateDocument`, in
+`scripts/omp/Test-ModuleSqlGuards.ps1`, and again when a step is loaded for
+execution, so a definition row edited in the database after import is refused
+rather than run. Step SQL is parsed with Microsoft ScriptDom and is fail-closed:
+
+- Exactly one batch; no `GO`.
+- Only `IF`, `BEGIN`/`END`, `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`,
+  `DECLARE`, `SET @variable` and `SET NOCOUNT`. `EXEC`, dynamic SQL, DDL,
+  transaction control, `TRY`/`CATCH`, `SELECT INTO` and `OUTPUT INTO` are
+  rejected.
+- Writes only to schema-qualified tables in the module's own schema. An alias
+  as the write target is rejected; write the qualified table name.
+- Reads only from the module schema, `omp` and `sys`. Cross-database,
+  linked-server, `OPENROWSET`-style and table-valued-function sources are
+  rejected, as are unqualified names other than CTE names.
+- Every reference to a module table sits in the THEN branch of
+  `IF OBJECT_ID(N'<schema>.<table>', ...) IS NOT NULL` (combined with `AND` at
+  most), so a step on an installation without the module's tables is a no-op.
+- `UPDATE` and `DELETE` have a `WHERE` clause.
+- The step uses the event parameter and does not declare it.
+- A `read-only` step does not modify data.
+- The configuration-ownership rule (`OMP-MODULE-SQL-CONFIG-OWNERSHIP`) applies
+  as for every other module SQL.
+
+`scripts/omp/validate-module-definitions.ps1` and check 16 of
+`scripts/omp/validate-component-versions.ps1` also require every step's
+embedded content and `sha256` to match its `path` file, as for `sqlScripts`.
+
+### Example
+
+The example web app module (`examples/WebAppModule`) declares one step per
+event against its own `RuntimeBindings` and `RuntimeLeases` tables. The SQL
+files are under `examples/WebAppModule/Sql/runtime-maintenance/`:
+
+```sql
+-- host-removed.sql
+IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NOT NULL
+    DELETE FROM omp_example_webapp.RuntimeLeases
+    WHERE HostId = @HostId;
+
+-- artifact-removed.sql
+IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NOT NULL
+    UPDATE omp_example_webapp.RuntimeBindings
+    SET ArtifactId = NULL
+    WHERE ArtifactId = @ArtifactId;
+
+-- app-instance-blocking-count.sql
+IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NOT NULL
+    SELECT COUNT(*) AS BlockingCount,
+           N'example runtime binding(s)' AS Description
+    FROM omp_example_webapp.RuntimeBindings
+    WHERE AppInstanceId = @AppInstanceId;
+
+-- app-instance-removed.sql
+IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NOT NULL
+    DELETE FROM omp_example_webapp.RuntimeLeases
+    WHERE AppInstanceId = @AppInstanceId;
+```
+
+A module whose rows are keyed by worker rows joins the platform catalog, which
+is a read and therefore allowed:
+
+```sql
+IF OBJECT_ID(N'my_module.WorkerLeases', N'U') IS NOT NULL
+    DELETE FROM my_module.WorkerLeases
+    WHERE WorkerInstanceId IN
+    (
+        SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId
+    );
+```
+
+The tests `ModuleRuntimeMaintenanceTests` (validator matrix),
+`OmpHostArtifactRepositoryRuntimeMaintenanceTests` (`host-removed`) and
+`OmpAdminRepositoryRuntimeMaintenanceTests` (the three Portal events) run the
+example definition against a local test database.
+
+Some cleanup SQL for module tables is still hardcoded in the HostAgent and
+Portal delete paths while modules move to declared steps. Those statements are
+marked `transitional: removed once modules declare runtimeMaintenance` and
+will be removed; new modules must use `runtimeMaintenance`.
 
 ## Compatibility Policy
 

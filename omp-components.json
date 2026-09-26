@@ -1,11 +1,11 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.834",
+  "repositoryVersion": "0.3.835",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
-      "definitionVersion": "0.3.222",
+      "definitionVersion": "0.3.223",
       "path": "omp_core.module-definition.json"
     },
     {
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.326",
+      "definitionVersion": "0.3.327",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -30,7 +30,7 @@
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.151",
+      "definitionVersion": "0.3.152",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
@@ -104,8 +104,8 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.768",
-      "minModuleDefinitionVersion": "0.3.316",
+      "version": "0.3.769",
+      "minModuleDefinitionVersion": "0.3.327",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Portal.zip",
@@ -143,8 +143,8 @@
       "appKey": "omp_hostagent",
       "packageType": "host-agent",
       "targetName": "omp-hostagent",
-      "version": "0.3.278",
-      "minModuleDefinitionVersion": "0.3.217",
+      "version": "0.3.279",
+      "minModuleDefinitionVersion": "0.3.223",
       "projectPath": "OpenModulePlatform.HostAgent.WindowsService",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.HostAgent.WindowsService.zip"
@@ -170,7 +170,7 @@
       "projectPath": "OpenModulePlatform.WorkerManager.WindowsService",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerManager.WindowsService.zip",
-      "minModuleDefinitionVersion": "0.3.217"
+      "minModuleDefinitionVersion": "0.3.223"
     },
     {
       "componentKey": "omp-workerprocesshost",
@@ -179,11 +179,11 @@
       "appKey": "omp_workerprocesshost",
       "packageType": "worker-host",
       "targetName": "omp-workerprocesshost",
-      "version": "0.3.65",
+      "version": "0.3.66",
       "projectPath": "OpenModulePlatform.WorkerProcessHost",
       "relativePathTemplate": "omp-workerprocesshost/host/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.WorkerProcessHost.zip",
-      "minModuleDefinitionVersion": "0.3.217"
+      "minModuleDefinitionVersion": "0.3.223"
     },
     {
       "componentKey": "content-webapp",
@@ -224,11 +224,11 @@
       "appKey": "example_webapp_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp",
-      "version": "0.3.303",
+      "version": "0.3.304",
       "projectPath": "examples/WebAppModule/WebApp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppModule.zip",
-      "minModuleDefinitionVersion": "0.3.96"
+      "minModuleDefinitionVersion": "0.3.152"
     },
     {
       "componentKey": "example-webapp-blazor",

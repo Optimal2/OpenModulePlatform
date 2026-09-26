@@ -222,6 +222,49 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         }
     }
 
+    # runtimeMaintenance.steps embed SQL exactly like sqlScripts. Their semantic
+    # safety rules (events, module schema, OBJECT_ID guards) are enforced by the
+    # shared C# validator through scripts/omp/Test-ModuleSqlGuards.ps1.
+    $runtimeMaintenance = Get-OptionalPropertyValue -Object $definition -Name 'runtimeMaintenance'
+    $runtimeSteps = @()
+    if ($null -ne $runtimeMaintenance) {
+        $stepsValue = Get-OptionalPropertyValue -Object $runtimeMaintenance -Name 'steps'
+        if ($null -eq $stepsValue) {
+            Add-ValidationError -Errors $validationErrors -Message "'$relativeDefinitionPath' declares runtimeMaintenance without a steps array."
+        }
+        else {
+            $runtimeSteps = @($stepsValue)
+        }
+    }
+
+    foreach ($step in $runtimeSteps) {
+        if ($null -eq $step) {
+            continue
+        }
+
+        $stepKey = [string](Get-OptionalPropertyValue -Object $step -Name 'key')
+        $stepPathValue = [string](Get-OptionalPropertyValue -Object $step -Name 'path')
+        if ([string]::IsNullOrWhiteSpace($stepPathValue)) {
+            Add-ValidationError -Errors $validationErrors -Message "Runtime maintenance step '$stepKey' in '$relativeDefinitionPath' has no path; keep step SQL in a reviewable .sql file."
+            continue
+        }
+
+        $stepSqlPath = Resolve-RepositoryPath -Path $stepPathValue -BasePath $repositoryRootPath
+        if (-not (Test-Path -LiteralPath $stepSqlPath -PathType Leaf)) {
+            Add-ValidationError -Errors $validationErrors -Message "Runtime maintenance SQL referenced by '$relativeDefinitionPath' was not found: $stepPathValue"
+            continue
+        }
+
+        $stepSqlText = ConvertTo-PortableModuleDefinitionSql -SqlText (Get-Content -LiteralPath $stepSqlPath -Raw -Encoding UTF8)
+        $expectedStepContent = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($stepSqlText))
+        $expectedStepSha256 = Get-Sha256Hex -Text $stepSqlText
+        if (-not [string]::Equals([string](Get-OptionalPropertyValue -Object $step -Name 'contentEncoding'), 'base64-utf8', [StringComparison]::Ordinal) `
+            -or -not [string]::Equals([string](Get-OptionalPropertyValue -Object $step -Name 'content'), $expectedStepContent, [StringComparison]::Ordinal) `
+            -or -not [string]::Equals([string](Get-OptionalPropertyValue -Object $step -Name 'sha256'), $expectedStepSha256, [StringComparison]::OrdinalIgnoreCase)) {
+            Add-ValidationError -Errors $validationErrors -Message "Runtime maintenance step '$stepKey' in '$relativeDefinitionPath' has embedded content or sha256 that does not match '$stepPathValue'. Run scripts/dev/embed-module-definition-sql.ps1."
+        }
+    }
+
     # R12-G4: undeclared tables cannot trigger healing, while declared tables
     # must be created by at least one setup file. Check even an empty union.
     # Columns, indexes, constraints and triggers remain outside this comparison:

@@ -52,3 +52,35 @@ BEGIN
     ON omp_example_webapp.ActivityLog(OmpUserId, LoggedUtc DESC, ActivityLogId DESC);
 END
 GO
+
+-- Runtime rows this module keeps about platform objects. They illustrate the
+-- runtimeMaintenance contract (docs/MODULE_DEFINITIONS.md): the platform never
+-- touches these tables itself; the module's declared steps under
+-- Sql/runtime-maintenance/ release them when a host, an artifact or an app
+-- instance is removed.
+IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_example_webapp.RuntimeBindings
+    (
+        RuntimeBindingId int IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_example_webapp_RuntimeBindings PRIMARY KEY,
+        BindingKey nvarchar(100) NOT NULL,
+        -- NOT NULL: a binding cannot outlive its app instance, so it blocks the delete instead.
+        AppInstanceId uniqueidentifier NOT NULL,
+        -- Nullable: a removed artifact only unpins the binding.
+        ArtifactId int NULL,
+        CreatedUtc datetime2(3) NOT NULL CONSTRAINT DF_omp_example_webapp_RuntimeBindings_CreatedUtc DEFAULT SYSUTCDATETIME()
+    );
+END
+GO
+
+IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_example_webapp.RuntimeLeases
+    (
+        RuntimeLeaseId int IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_example_webapp_RuntimeLeases PRIMARY KEY,
+        AppInstanceId uniqueidentifier NOT NULL,
+        HostId uniqueidentifier NOT NULL,
+        ExpiresUtc datetime2(3) NOT NULL
+    );
+END
+GO

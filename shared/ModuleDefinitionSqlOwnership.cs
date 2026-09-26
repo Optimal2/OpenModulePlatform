@@ -53,6 +53,8 @@ internal static class ModuleDefinitionSqlOwnership
 
     internal static void ValidateDocument(string definitionJson)
     {
+        // Every import gate that checks sqlScripts also checks the runtime maintenance steps.
+        ModuleRuntimeMaintenance.ValidateDocument(definitionJson);
         var module = "<unresolved module>";
         try
         {

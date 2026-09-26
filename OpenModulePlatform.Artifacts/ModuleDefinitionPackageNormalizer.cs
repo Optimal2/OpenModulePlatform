@@ -13,7 +13,8 @@ public static class ModuleDefinitionPackageNormalizer
 
     /// <summary>
     /// Reads external SQL files referenced from <c>sqlScripts[].path</c> and
-    /// stores their text in <c>inlineSql</c>. The source package can therefore
+    /// <c>runtimeMaintenance.steps[].path</c> and stores their text in
+    /// <c>inlineSql</c>. The source package can therefore
     /// keep reviewable .sql files while the imported definition remains
     /// self-contained for Portal and HostAgent repair execution.
     /// </summary>
@@ -27,7 +28,19 @@ public static class ModuleDefinitionPackageNormalizer
             throw new InvalidOperationException("The module definition JSON must be an object.");
         }
 
-        if (rootObject["sqlScripts"] is not JsonArray scripts)
+        var scripts = new List<JsonObject>();
+        if (rootObject["sqlScripts"] is JsonArray sqlScripts)
+        {
+            scripts.AddRange(sqlScripts.OfType<JsonObject>());
+        }
+
+        if (rootObject["runtimeMaintenance"] is JsonObject runtimeMaintenance
+            && runtimeMaintenance["steps"] is JsonArray runtimeSteps)
+        {
+            scripts.AddRange(runtimeSteps.OfType<JsonObject>());
+        }
+
+        if (scripts.Count == 0)
         {
             return rootObject;
         }
@@ -36,7 +49,7 @@ public static class ModuleDefinitionPackageNormalizer
             ?? Path.GetFullPath(packageRoot);
         var fullPackageRoot = Path.GetFullPath(packageRoot);
 
-        foreach (var script in scripts.OfType<JsonObject>())
+        foreach (var script in scripts)
         {
             if (HasSqlContent(script))
             {

@@ -31,9 +31,23 @@ try
         {
             if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                using var definition = JsonDocument.Parse(File.ReadAllText(path));
+                var definitionText = File.ReadAllText(path);
+                using var definition = JsonDocument.Parse(definitionText);
                 var definitionModule = definition.RootElement.GetProperty("moduleKey").GetString();
                 if (string.IsNullOrWhiteSpace(definitionModule)) throw new InvalidOperationException("Missing module key.");
+                if (definition.RootElement.TryGetProperty(ModuleRuntimeMaintenance.SectionName, out _))
+                {
+                    // Runtime maintenance steps have their own, stricter contract (module schema only,
+                    // OBJECT_ID guards, event parameter); the shared validator reports the first breach.
+                    try
+                    {
+                        checkedScripts += ModuleRuntimeMaintenance.ReadSteps(definitionText).Count;
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        results.Add(new(path, definitionModule, "<runtimeMaintenance>", 1, 1, ModuleRuntimeMaintenance.RuleId, "<see diagnostic>", ex.Message));
+                    }
+                }
                 if (!definition.RootElement.TryGetProperty("sqlScripts", out var scripts)) continue;
                 foreach (var script in scripts.EnumerateArray())
                 {

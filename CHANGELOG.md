@@ -8,6 +8,21 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Runtime maintenance steps in module definitions.** A module that keeps
+  references to platform rows declares, in the new optional
+  `runtimeMaintenance` section, versioned SQL steps for the events
+  `host-removed`, `artifact-removed`, `app-instance-blocking-count` and
+  `app-instance-removed`. HostAgent's orphan-host cleanup and the portal's
+  artifact and app-instance deletes run the declared steps of the applied
+  definitions in the same transaction, binding the event's one parameter;
+  without a declared step nothing module-specific runs. Steps pass the rule
+  `OMP-MODULE-RUNTIME-MAINTENANCE` at every import gate and again before
+  they run: one batch, module-schema writes only, `IF OBJECT_ID(...) IS NOT
+  NULL` guards, no `EXEC` or DDL. The example web app module declares one
+  step per event. The module-specific cleanup SQL still hardcoded in those
+  delete paths is marked transitional and goes once modules declare their
+  steps. See docs/MODULE_DEFINITIONS.md, "Runtime maintenance steps".
+
 - **The system log.** What the platform's own processes report at Warn
   and above now goes to one table, `omp.SystemLog`, from every host:
   NLog's database target (async, discard on overflow, the files stay as

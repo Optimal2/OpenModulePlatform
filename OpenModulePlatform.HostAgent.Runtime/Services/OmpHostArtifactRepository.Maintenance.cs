@@ -622,7 +622,9 @@ ORDER BY h.HostKey;";
     /// Deletes an orphan host and all of its dependent rows in an FK-safe order.
     /// Maintenance findings for the host are unlinked (HostId set to NULL) so the
     /// cleanup job can still update the status of the finding that triggered the
-    /// cleanup after the host row is gone.
+    /// cleanup after the host row is gone. Module-owned rows are released first, in the same
+    /// transaction, by the <c>host-removed</c> runtime maintenance steps that applied module
+    /// definitions declare (docs/MODULE_DEFINITIONS.md).
     /// </summary>
     public async Task<int> DeleteOrphanHostAsync(
         Guid hostId,
@@ -661,6 +663,9 @@ IF OBJECT_ID(N'omp.HostAgentJobs', N'U') IS NOT NULL DELETE FROM omp.HostAgentJo
 -- HostAppDeploymentStates, which is why the gap never fired in practice; that makes it a
 -- defensive ordering rather than a live bug, and defensive ordering that does not hold is worse
 -- than none, because the next caller trusts it.
+-- Module-owned rows that reference the host's worker rows are cleared by the module's declared
+-- host-removed runtime maintenance steps, which run before this batch in the same transaction.
+-- transitional: removed once modules declare runtimeMaintenance
 IF OBJECT_ID(N'omp_ibs_packager.ChannelWorkerLeases', N'U') IS NOT NULL
     DELETE FROM omp_ibs_packager.ChannelWorkerLeases
     WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @hostId);
@@ -690,10 +695,26 @@ SELECT @@ROWCOUNT;";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, conn);
-        Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
+        await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+        // Modules declare how their own rows let go of a removed host; the platform only knows
+        // the event. No declared step means nothing module-specific runs.
+        await OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor.RunAsync(
+            conn,
+            tx,
+            OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.HostRemoved,
+            hostId,
+            ct);
+
+        int deleted;
+        await using (var cmd = new SqlCommand(sql, conn, tx))
+        {
+            Add(cmd, "@hostId", SqlDbType.UniqueIdentifier, hostId);
+            deleted = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        await tx.CommitAsync(ct);
+        return deleted;
     }
 
 }

@@ -57,6 +57,13 @@ WHERE NOT EXISTS
       AND idx.name = required.IndexName
 );
 
+-- Runtime rows released by the runtimeMaintenance steps.
+IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NULL
+    SELECT @Missing = @Missing + 1;
+
+IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NULL
+    SELECT @Missing = @Missing + 1;
+
 SELECT
     CAST(CASE WHEN @Missing = 0 THEN 1 ELSE 0 END AS bit) AS IsHealthy,
     CASE

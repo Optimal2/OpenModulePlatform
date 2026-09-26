@@ -1123,7 +1123,7 @@ else {
 # ---------------------------------------------------------------------------
 # Check 16: Embedded sqlScripts freshness.
 # For every module definition listed in omp-components.json, every sqlScripts
-# entry with contentEncoding 'base64-utf8' must carry content/sha256 that match
+# (and runtimeMaintenance.steps) entry with contentEncoding 'base64-utf8' must carry content/sha256 that match
 # the current SQL file bytes on disk, after the same USE/GO prologue stripping
 # applied by the OpenModulePlatform embed tool
 # (scripts/dev/embed-module-definition-sql.ps1). This is a working-tree/HEAD
@@ -1157,7 +1157,14 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
     $definitionText = Remove-Utf8Bom -Text (Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8)
     $definition = ConvertFrom-JsonDocument -Json $definitionText -Depth $jsonDepth
 
-    foreach ($script in @(Get-OptionalPropertyValue -Object $definition -Name 'sqlScripts')) {
+    # runtimeMaintenance.steps embed SQL in the same fields as sqlScripts.
+    $embeddedEntries = @(Get-OptionalPropertyValue -Object $definition -Name 'sqlScripts')
+    $runtimeMaintenance = Get-OptionalPropertyValue -Object $definition -Name 'runtimeMaintenance'
+    if ($null -ne $runtimeMaintenance) {
+        $embeddedEntries += @(Get-OptionalPropertyValue -Object $runtimeMaintenance -Name 'steps')
+    }
+
+    foreach ($script in $embeddedEntries) {
         if ($null -eq $script) {
             continue
         }
