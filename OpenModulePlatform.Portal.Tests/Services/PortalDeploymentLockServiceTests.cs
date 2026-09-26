@@ -526,16 +526,11 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
     }
 
     /// <summary>
-    /// The renewal loop reads the same file the test writes, and the sharing modes collide,
-    /// so both directions retry rather than fail the test for a reason it is not about.
-    /// </summary>
-    /// <summary>
     /// Reads the lock status and retries while the document is unreadable. The renewal
     /// loop opens the lock file exclusively on every tick, and ReadStatus fails closed
     /// (Document null) when a read lands inside that window -- measured once in CI, where
-    /// a 50 ms renewal interval made the single read dereference a null document.
-    /// A status without a document after the deadline is returned as-is so the assertion
-    /// that follows reports the real state instead of a timeout.
+    /// a 50 ms renewal interval made a single read dereference a null document. After the
+    /// deadline the test fails with the observed state instead of a NullReferenceException.
     /// </summary>
     private DeploymentLockStatus ReadStatusWithDocument()
     {
@@ -543,15 +538,23 @@ public sealed class PortalDeploymentLockServiceTests : IDisposable
         while (true)
         {
             var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
-            if (status.Document is not null || DateTime.UtcNow >= deadline)
+            if (status.Document is not null)
             {
                 return status;
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                Assert.Fail($"Lock file had no readable document within 5 s (IsLocked={status.IsLocked}, Diagnostic={status.Diagnostic}).");
             }
 
             Thread.Sleep(10);
         }
     }
-
+    /// <summary>
+    /// The renewal loop reads the same file the test writes, and the sharing modes collide,
+    /// so both directions retry rather than fail the test for a reason it is not about.
+    /// </summary>
     private static string ReadWithRetry(string path)
         => RetryFileOperation(() => File.ReadAllText(path));
 

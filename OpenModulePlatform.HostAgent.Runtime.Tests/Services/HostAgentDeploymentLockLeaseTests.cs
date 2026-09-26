@@ -136,7 +136,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
             CancellationToken.None);
 
         Assert.NotNull(result.Lease);
-        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        var status = ReadStatusWithDocument();
         Assert.True(status.IsLocked);
         Assert.NotEqual("stale-lock-id", status.Document!.LockId);
 
@@ -174,7 +174,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
             _root, "stale-lock-id", NullLogger.Instance, CancellationToken.None);
 
         Assert.True(File.Exists(DeploymentLockFile.GetPath(_root)));
-        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        var status = ReadStatusWithDocument();
         Assert.Equal("competitor-lock-id", status.Document!.LockId);
     }
 
@@ -257,7 +257,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         Assert.True(File.Exists(path));
         Assert.Equal(
             "competitor-lock-id",
-            DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
+            ReadStatusWithDocument().Document!.LockId);
     }
 
     /// <summary>
@@ -311,7 +311,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         Assert.True(File.Exists(path));
         Assert.Equal(
             "foreign-lock-id",
-            DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.LockId);
+            ReadStatusWithDocument().Document!.LockId);
     }
 
     // The expected verdict travels as a string because the enum is internal and this test
@@ -397,7 +397,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         Assert.NotNull(result.Lease);
         var path = DeploymentLockFile.GetPath(_root);
         var originalJson = ReadWithRetry(path);
-        var originalUpdatedUtc = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.UpdatedUtc;
+        var originalUpdatedUtc = ReadStatusWithDocument().Document!.UpdatedUtc;
 
         WriteWithRetry(path, "{ this is not valid json");
         await Task.Delay(350);
@@ -450,7 +450,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
 
         await Task.Delay(500);
 
-        var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+        var status = ReadStatusWithDocument();
         Assert.Equal("other-lock-id", status.Document!.LockId);
         Assert.Equal(other.UpdatedUtc, status.Document.UpdatedUtc);
 
@@ -510,7 +510,7 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         // assumption that a loop is running at all. A renewal holds its exclusive handle
         // for a moment, which fails a colliding ReadStatus closed with a null Document --
         // the condition simply waits that out.
-        var acquiredUpdatedUtc = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document!.UpdatedUtc;
+        var acquiredUpdatedUtc = ReadStatusWithDocument().Document!.UpdatedUtc;
         var loopAlive = await WaitUntilAsync(() =>
             DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow).Document is { } document
             && document.UpdatedUtc > acquiredUpdatedUtc);
@@ -646,6 +646,32 @@ public sealed class HostAgentDeploymentLockLeaseTests : IDisposable
         await result.Lease!.DisposeAsync();
     }
 
+    /// <summary>
+    /// Reads the lock status and retries while the document is unreadable. The renewal
+    /// loop opens the lock file exclusively on every tick, and ReadStatus fails closed
+    /// (Document null) when a read lands inside that window -- measured once in CI, where
+    /// a 50 ms renewal interval made a single read dereference a null document. After the
+    /// deadline the test fails with the observed state instead of a NullReferenceException.
+    /// </summary>
+    private DeploymentLockStatus ReadStatusWithDocument()
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            var status = DeploymentLockFile.ReadStatus(_root, DateTimeOffset.UtcNow);
+            if (status.Document is not null)
+            {
+                return status;
+            }
+
+            if (DateTime.UtcNow >= deadline)
+            {
+                Assert.Fail($"Lock file had no readable document within 5 s (IsLocked={status.IsLocked}, Diagnostic={status.Diagnostic}).");
+            }
+
+            Thread.Sleep(10);
+        }
+    }
     private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
     {
         var deadline = DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(10));
