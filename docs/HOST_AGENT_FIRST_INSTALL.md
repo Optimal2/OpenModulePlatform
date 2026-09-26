@@ -166,8 +166,8 @@ unless that identity is already suitable. Never include secrets in this config.
 
 ### Operator acceptance test
 
-När du verifierar hos kunden kör du själv detta under ett godkänt servicefönster;
-återställ alltid HostAgent och Sentinel efter provet.
+Run this yourself during an approved service window when verifying on a customer host;
+always restore HostAgent and Sentinel after the test.
 
 1. Record `Get-CimInstance Win32_Service` for the exact current HostAgent name.
 2. Stop that HostAgent at least `StartupGraceSeconds` (default two minutes)
