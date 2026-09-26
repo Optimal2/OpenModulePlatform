@@ -383,7 +383,7 @@ ORDER BY h.HostKey, a.PackageType, a.TargetName;
         # has no AppWorkerDefinitions row, so it was covered by nothing at all. Measured
         # before the change: 16 web-app + 5 service-app instances were visible to the
         # scripts, 2 worker + 1 worker-host were not -- 3 of 24 desired app instances that
-        # no check could see, one of them the Contoso worker.
+        # no check could see, one of them a module worker.
         #
         # Placement is resolved the same way OmpWorkerRuntimeRepository resolves it:
         # a direct HostId pin, an active HostDeploymentAssignment for the target host

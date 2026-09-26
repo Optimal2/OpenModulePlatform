@@ -1223,7 +1223,7 @@ public sealed class PortableModulePackageService
         }
 
         // Non-core SQL runs AFTER the artifact loop below, so seed scripts that read
-        // omp.Artifacts (IbsPackager's @Version probe) see the versions this package
+        // omp.Artifacts (a module seed script's @Version probe) see the versions this package
         // carries; the artifact loop only needs the applied definition structure.
 
         var plans = CreateArtifactImportPlans(definition, artifactPaths);

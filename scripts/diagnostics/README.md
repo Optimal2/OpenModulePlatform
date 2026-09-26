@@ -43,3 +43,17 @@ event-log, and optional HTTP probe data for one web application:
   -Url 'https://example.invalid/my-web-app' `
   -OutputPath '.\omp-webapp-my-web-app.json'
 ```
+
+Module-specific checks live outside this repository. Pass one or more scripts
+with `-ModuleCheckScript`, or place them in a `module-checks` folder next to
+the diagnostics script (the folder is gitignored). Each script is dot-sourced
+with `-Config <effective appsettings>` after the shared checks, so it can call
+`Add-Check`, `Get-ConfigValue`, `Invoke-SqlRows` and the other helpers:
+
+```powershell
+param([System.Collections.IDictionary]$Config)
+
+if (-not $Config.Contains('ExampleModule')) { return }
+$schema = [string](Get-ConfigValue -Config $Config -Path 'ExampleModule:DataSchema' -Default 'omp_example_module')
+Add-Check 'Module compatibility' 'ExampleModule data schema' 'Info' "DataSchema=$schema"
+```

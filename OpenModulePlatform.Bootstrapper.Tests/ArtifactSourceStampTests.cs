@@ -83,7 +83,7 @@ public sealed class ArtifactSourceStampTests : IDisposable
     [Fact]
     public void TryCollectProjectClosure_ResolvesACrossRepositoryReferenceThroughAnMsBuildProperty()
     {
-        // The exact shape IbsPackager uses to reach OpenModulePlatform.Web.Shared, and the case
+        // The exact shape a consumer repository uses to reach OpenModulePlatform.Web.Shared, and the case
         // that Path.Join silently broke: the expanded property is already an absolute path.
         var platform = CreateRepository("platform");
         WriteProject(platform, "Platform.Shared");

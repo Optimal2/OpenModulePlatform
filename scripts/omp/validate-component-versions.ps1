@@ -122,6 +122,38 @@ $warnings = [System.Collections.Generic.List[string]]::new()
 $manifestText = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8
 $manifest = ConvertFrom-JsonDocument -Json $manifestText -Depth $jsonDepth
 
+# Optional local overlay naming consumers in repositories outside this one. The
+# public manifest keeps every sharedProjects[].externalConsumers list empty; a
+# gitignored omp-components.external.json with the same sharedProjects shape
+# ({ projectPath, externalConsumers[] }) adds them for this checkout only. See
+# docs/OMP_COMPONENT_MANIFEST.md, "Local external-consumer overlay".
+$externalConsumersByProjectPath = [System.Collections.Generic.Dictionary[string, object[]]]::new([StringComparer]::OrdinalIgnoreCase)
+$externalOverlayPath = Join-Path $repositoryRoot 'omp-components.external.json'
+if (Test-Path -LiteralPath $externalOverlayPath -PathType Leaf) {
+    $externalOverlay = $null
+    try {
+        $externalOverlay = ConvertFrom-JsonDocument -Json (Get-Content -LiteralPath $externalOverlayPath -Raw -Encoding UTF8) -Depth $jsonDepth
+    }
+    catch {
+        Add-ValidationError -Errors $errors -Message "Could not read the external-consumer overlay '$externalOverlayPath': $($_.Exception.Message)"
+    }
+
+    if ($null -ne $externalOverlay) {
+        foreach ($overlayProject in @(Get-OptionalPropertyValue -Object $externalOverlay -Name 'sharedProjects' | Where-Object { $null -ne $_ })) {
+            $overlayProjectPath = [string](Get-OptionalPropertyValue -Object $overlayProject -Name 'projectPath')
+            if ([string]::IsNullOrWhiteSpace($overlayProjectPath)) {
+                continue
+            }
+
+            $overlayConsumers = @(Get-OptionalPropertyValue -Object $overlayProject -Name 'externalConsumers' | Where-Object { $null -ne $_ })
+            if ($externalConsumersByProjectPath.ContainsKey($overlayProjectPath)) {
+                $overlayConsumers = @($externalConsumersByProjectPath[$overlayProjectPath]) + $overlayConsumers
+            }
+            $externalConsumersByProjectPath[$overlayProjectPath] = $overlayConsumers
+        }
+    }
+}
+
 Write-Host 'Validating component versions...'
 Write-Host ''
 
@@ -385,8 +417,8 @@ if ($baseRefAvailable) {
     # missed, no consumer was ever flagged as unbumped, and the script still printed
     # "validation passed" -- the entire cascade check silently disabled. Reachable on a
     # blobless clone, after a rebase or squash, or with a -BaseCommit predating the manifest.
-    # The Contoso sibling already errors on both an unreadable manifest and invalid JSON
-    # (R8-P4-7).
+    # The consumer-repository sibling validators already error on both an unreadable manifest
+    # and invalid JSON (R8-P4-7).
     $baseManifestText = Get-GitFileTextAtRef -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path 'omp-components.json' -Errors $errors -CheckDescription 'The baseline manifest read'
     if ([string]::IsNullOrWhiteSpace($baseManifestText)) {
         Add-ValidationError -Errors $errors -Message "Could not read 'omp-components.json' at '$baseRef'. The cascade and lockstep checks cannot run without a baseline manifest."
@@ -501,8 +533,8 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
 
         # R8-P4-17. The cascade rule stopped at the repository boundary: this loop
         # works out which components consume a shared project, but only OMP's own.
-        # Contoso.Web references Web.Shared straight out of the sibling
-        # repository, and nothing here knew it. The solution still compiles -- the
+        # A module web app in a consumer repository references Web.Shared straight
+        # out of the sibling repository, and nothing here knew it. The solution still compiles -- the
         # reference is by project, not by package -- so the mismatch only surfaced
         # when the host rejected the artifact at import, at the end of a full
         # refresh-and-stage run. That happened three deploys in a row on
@@ -514,7 +546,13 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
         # compares the recorded tree id of this project against the sibling's
         # actual state. The warning here exists so an OMP author learns about the
         # sibling now instead of at the far end of a deploy.
+        #
+        # The public manifest lists no external consumers; they come from the optional
+        # local overlay read at the top of this script and are merged in here.
         $externalConsumers = @(Get-OptionalPropertyValue -Object $sharedProject -Name 'externalConsumers' | Where-Object { $null -ne $_ })
+        if ($externalConsumersByProjectPath.ContainsKey($projectPath)) {
+            $externalConsumers = $externalConsumers + @($externalConsumersByProjectPath[$projectPath])
+        }
         foreach ($externalConsumer in $externalConsumers) {
             $externalRepositoryKey = [string](Get-OptionalPropertyValue -Object $externalConsumer -Name 'repositoryKey')
             $externalComponentKey = [string](Get-OptionalPropertyValue -Object $externalConsumer -Name 'componentKey')

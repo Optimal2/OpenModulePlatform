@@ -27,10 +27,10 @@ public sealed class ServiceAppDeploymentNamingTests
     }
 
     [Theory]
-    [InlineData("OMP.iKrock2.Backend")]
+    [InlineData("OMP.xSample2.Backend")]
     [InlineData("MyCustomService")]
     [InlineData("omp-backend")]
-    [InlineData("iKrock2.Backend")]
+    [InlineData("xSample2.Backend")]
     [InlineData("defaulted")]
     [InlineData("serviceable")]
     [InlineData("application")]
@@ -58,7 +58,7 @@ public sealed class ServiceAppDeploymentNamingTests
     }
 
     [Theory]
-    [InlineData("OMP.iKrock2.Backend")]
+    [InlineData("OMP.xSample2.Backend")]
     [InlineData("MyCustomService")]
     public void ResolveServiceName_UsesConfiguredName_ForNonGenericNames(string installationName)
     {
@@ -119,19 +119,19 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "backend");
         var resolved = new Dictionary<Guid, string>
         {
-            [deployment.AppInstanceId] = "OMP.iKrock2.Backend"
+            [deployment.AppInstanceId] = "OMP.xSample2.Backend"
         };
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             resolved,
             []);
 
@@ -159,15 +159,15 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "backend");
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             new Dictionary<Guid, string>(),
             [new HostRuntimeFootprint(Guid.NewGuid(), "backend", @"E:\OMP\Services\backend")]);
 
@@ -194,15 +194,15 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "backend");
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             new Dictionary<Guid, string>(),
             [new HostRuntimeFootprint(Guid.NewGuid(), "SomethingElse", @"E:\OMP\Services\backend")]);
 
@@ -232,14 +232,14 @@ public sealed class ServiceAppDeploymentNamingTests
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
             installPath: @"E:\OMP\Services\shared-folder",
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "backend");
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
             @"E:\OMP\Services\shared-folder",
             new Dictionary<Guid, string>(),
             []);
@@ -263,21 +263,21 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings(servicesRoot: "E:\\OMP\\Services");
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "backend");
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            Path.Join("nested", "iKrock2.Backend.exe"),
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            Path.Join("nested", "xSample2.Backend.exe"),
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             new Dictionary<Guid, string>(),
             []);
 
         Assert.True(result.ShouldRemoveOldService);
         Assert.True(result.ShouldDeleteOldDirectory);
-        Assert.Equal("iKrock2.Backend.exe", result.ExpectedExecutableFileName);
+        Assert.Equal("xSample2.Backend.exe", result.ExpectedExecutableFileName);
     }
 
     /// <summary>
@@ -291,20 +291,20 @@ public sealed class ServiceAppDeploymentNamingTests
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
             installPath: @"E:\OMP\Services\shared-folder",
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "backend");
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
             @"E:\OMP\Services\shared-folder",
             new Dictionary<Guid, string>(),
             []);
 
         Assert.True(result.ShouldRemoveOldService);
-        Assert.Equal("iKrock2.Backend.exe", result.ExpectedExecutableFileName);
+        Assert.Equal("xSample2.Backend.exe", result.ExpectedExecutableFileName);
     }
 
     [Fact]
@@ -313,18 +313,18 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings();
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend");
+            installationName: "OMP.xSample2.Backend");
         var resolved = new Dictionary<Guid, string>
         {
-            [deployment.AppInstanceId] = "OMP.iKrock2.Backend"
+            [deployment.AppInstanceId] = "OMP.xSample2.Backend"
         };
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             resolved,
             []);
 
@@ -339,25 +339,25 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings();
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend",
-            deployedRuntimeName: "OMP.iKrock2.Backend");
+            installationName: "OMP.xSample2.Backend",
+            deployedRuntimeName: "OMP.xSample2.Backend");
         var resolved = new Dictionary<Guid, string>
         {
-            [deployment.AppInstanceId] = "OMP.iKrock2.Backend"
+            [deployment.AppInstanceId] = "OMP.xSample2.Backend"
         };
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             resolved,
             []);
 
         Assert.False(result.ShouldRemoveOldService);
         Assert.False(result.ShouldDeleteOldDirectory);
-        Assert.Equal("OMP.iKrock2.Backend", result.OldServiceName);
+        Assert.Equal("OMP.xSample2.Backend", result.OldServiceName);
         Assert.NotNull(result.ServiceSkipReason);
     }
 
@@ -369,20 +369,20 @@ public sealed class ServiceAppDeploymentNamingTests
         var otherId = Guid.NewGuid();
         var deployment = CreateDeployment(
             appInstanceId: thisId,
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "backend");
         var resolved = new Dictionary<Guid, string>
         {
-            [thisId] = "OMP.iKrock2.Backend",
+            [thisId] = "OMP.xSample2.Backend",
             [otherId] = "backend"
         };
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             resolved,
             []);
 
@@ -401,19 +401,19 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings(serviceName: hostAgentServiceName);
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: hostAgentServiceName);
         var resolved = new Dictionary<Guid, string>
         {
-            [deployment.AppInstanceId] = "OMP.iKrock2.Backend"
+            [deployment.AppInstanceId] = "OMP.xSample2.Backend"
         };
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             resolved,
             []);
 
@@ -430,19 +430,19 @@ public sealed class ServiceAppDeploymentNamingTests
         var settings = CreateSettings();
         var deployment = CreateDeployment(
             appInstanceId: Guid.NewGuid(),
-            installationName: "OMP.iKrock2.Backend",
+            installationName: "OMP.xSample2.Backend",
             deployedRuntimeName: "OMP.WorkerManager");
         var resolved = new Dictionary<Guid, string>
         {
-            [deployment.AppInstanceId] = "OMP.iKrock2.Backend"
+            [deployment.AppInstanceId] = "OMP.xSample2.Backend"
         };
 
         var result = ServiceAppDeploymentNaming.EvaluateRenameCleanup(
             settings,
             deployment,
-            "iKrock2.Backend.exe",
-            "OMP.iKrock2.Backend",
-            @"E:\OMP\Services\OMP.iKrock2.Backend",
+            "xSample2.Backend.exe",
+            "OMP.xSample2.Backend",
+            @"E:\OMP\Services\OMP.xSample2.Backend",
             resolved,
             []);
 
@@ -455,15 +455,15 @@ public sealed class ServiceAppDeploymentNamingTests
 
     [Theory]
     // Twin matches the canonical executable name (legacy generic-resolution name).
-    [InlineData("iKrock2.Backend", "OMP.iKrock2.Backend", "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe", true)]
+    [InlineData("xSample2.Backend", "OMP.xSample2.Backend", "E:\\OMP\\Services\\OMP.xSample2.Backend\\xSample2.Backend.exe", true)]
     // Twin is the canonical name without its first prefix segment.
-    [InlineData("iKrock2.Backend", "OMP.iKrock2.Backend", null, true)]
+    [InlineData("xSample2.Backend", "OMP.xSample2.Backend", null, true)]
     [InlineData("backend", "OMP.backend", "D:\\apps\\backend\\backend.exe", true)]
     // Same name is never a twin.
-    [InlineData("OMP.iKrock2.Backend", "OMP.iKrock2.Backend", "E:\\x\\iKrock2.Backend.exe", false)]
+    [InlineData("OMP.xSample2.Backend", "OMP.xSample2.Backend", "E:\\x\\xSample2.Backend.exe", false)]
     // Unrelated name with no naming relationship.
-    [InlineData("SomeOtherService", "OMP.iKrock2.Backend", "E:\\x\\iKrock2.Backend.exe", false)]
-    [InlineData("iKrock2.Backend", "OMP.OtherApp.Backend", null, false)]
+    [InlineData("SomeOtherService", "OMP.xSample2.Backend", "E:\\x\\xSample2.Backend.exe", false)]
+    [InlineData("xSample2.Backend", "OMP.OtherApp.Backend", null, false)]
     public void IsLegacyTwinServiceName_MatchesExpected(
         string candidate,
         string canonical,
@@ -483,8 +483,8 @@ public sealed class ServiceAppDeploymentNamingTests
     {
         Assert.False(ServiceAppDeploymentNaming.IsLegacyTwinServiceName(
             candidate!,
-            "OMP.iKrock2.Backend",
-            "E:\\x\\iKrock2.Backend.exe"));
+            "OMP.xSample2.Backend",
+            "E:\\x\\xSample2.Backend.exe"));
     }
 
     private static ServiceAppDeploymentDescriptor CreateDeployment(

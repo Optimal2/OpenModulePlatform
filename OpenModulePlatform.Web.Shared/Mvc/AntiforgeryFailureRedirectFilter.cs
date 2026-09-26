@@ -25,7 +25,7 @@ namespace OpenModulePlatform.Web.Shared.Mvc;
 /// antiforgery result comes from an authorization filter - the page, and therefore its
 /// TempData, never runs.</item>
 /// <item>The rest of the query string is preserved. Dropping all of it also dropped the
-/// page's own state: on the IbsPackager settings page the reload lost <c>?selectedKey=</c>
+/// page's own state: on a module's settings page the reload lost <c>?selectedKey=</c>
 /// and jumped to a different setting than the one the operator had been editing, so the
 /// value they saw afterwards belonged to something else entirely.</item>
 /// </list>

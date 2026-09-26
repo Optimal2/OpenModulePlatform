@@ -4,8 +4,8 @@
     Check 14: cross-repository shared project cascade, for OMP consumer repositories.
 
 .DESCRIPTION
-    Consumer repositories (Contoso, Globex, Fabrikam, Northwind,
-    AdventureWorks, Tailwind, ...) build shared OpenModulePlatform projects
+    Consumer repositories (private module repositories and any other sibling
+    repository that references this one) build shared OpenModulePlatform projects
     such as OpenModulePlatform.Web.Shared straight out of this sibling repository.
     When the shared project changes, the consumer's artifact content changes too --
     and if the consumer releases the new content under an unchanged component

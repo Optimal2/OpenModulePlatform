@@ -197,7 +197,7 @@
 
     // Delegated from the document rather than bound per element at load time. Several
     // pages replace a container's innerHTML on a push event or a 60-second poll --
-    // IbsPackager's manual review list, jobs list and review history all do -- and the
+    // a module's manual review list, jobs list and review history all do -- and the
     // replacement markup carried no listeners, so the confirmation on Force, Reject and
     // Run-again silently stopped appearing within a minute of page load. Those are
     // irreversible actions, which is exactly what the dialog exists to guard (R7-C2).

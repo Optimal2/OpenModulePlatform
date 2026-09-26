@@ -783,7 +783,7 @@ public sealed class ArtifactZipImportService
 
             // The module's own SQL runs AFTER this package's artifact rows are
             // registered. Seed scripts discover "the latest artifact version" from
-            // omp.Artifacts (IbsPackager's @Version probe), and script execution is
+            // omp.Artifacts (a module seed script's @Version probe), and script execution is
             // version-gated, so a seed that ran before the registration recorded the
             // PREVIOUS import's version and never re-ran to correct it (measured on
             // a development host 2026-08-25: ChannelTypeVersions one import behind).

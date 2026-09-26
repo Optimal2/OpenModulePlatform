@@ -26,8 +26,8 @@ public sealed class DesiredWorkerInstance
     /// exactly the case the witness exists to expose.
     ///
     /// Measured before choosing this source: the plugin assembly's own file version is not
-    /// the artifact version and cannot stand in for it. ibs-packager artifact 0.3.109 ships
-    /// IbsPackager.Worker.dll with FileVersion 0.3.115.0 and ProductVersion 0.3.43+sha.
+    /// the artifact version and cannot stand in for it. One module's artifact 0.3.109 ships
+    /// its Worker.dll with FileVersion 0.3.115.0 and ProductVersion 0.3.43+sha.
     /// </remarks>
     public string? ArtifactVersion { get; init; }
 

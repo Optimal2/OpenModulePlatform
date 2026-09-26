@@ -535,7 +535,7 @@ public sealed class StaleSchemaHealTests : IClassFixture<StaleSchemaTestFixture>
             + $"IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'{schemaName}.Items') AND name = N'UX_Items_Name') "
             + $"CREATE UNIQUE INDEX UX_Items_Name ON [{schemaName}].[Items](Name);";
 
-        // Shaped like IbsPackager's 0-validate script: it probes an index, which is precisely
+        // Shaped like a module's 0-validate script: it probes an index, which is precisely
         // what the declared-object list could not express before R12-G3.
         var validateSql = "SET NOCOUNT ON; SELECT CAST(CASE WHEN EXISTS("
             + "SELECT 1 FROM sys.indexes i INNER JOIN sys.tables t ON t.object_id = i.object_id "

@@ -161,7 +161,7 @@ public static class OmpUrlSafety
     /// to <paramref name="fallback"/> when the configured value is missing or unsafe.
     /// </summary>
     /// <remarks>
-    /// R8-P1-5. Three copies of this existed -- two in OpenModulePlatform, one in IbsPackager --
+    /// R8-P1-5. Three copies of this existed -- two in OpenModulePlatform, one in a private module repository --
     /// and all three did nothing but trim and append a slash before the result was rendered as
     /// both an anchor href and an iframe src. R7-E3 settled the principle for omp.Hosts.BaseUrl
     /// but it was never carried here. The trailing slash is skipped when the value already carries

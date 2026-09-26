@@ -61,7 +61,7 @@ internal static class ServiceAppDeploymentNaming
     /// canonical service name for the same logical app. A twin is either the canonical
     /// executable file name without extension (the service name a generic
     /// InstallationName would have produced) or the canonical name with its first
-    /// prefix segment removed (for example 'iKrock2.Backend' vs 'OMP.iKrock2.Backend').
+    /// prefix segment removed (for example 'ExampleModule.Backend' vs 'OMP.ExampleModule.Backend').
     /// Callers must additionally verify that both services point to the same
     /// executable file name before treating the candidate as a duplicate.
     /// </summary>

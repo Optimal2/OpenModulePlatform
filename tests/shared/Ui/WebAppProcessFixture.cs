@@ -17,10 +17,10 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
 {
     private Process? _process;
 
-    /// <summary>Solution file at the repo root, e.g. "LogSearch.slnx".</summary>
+    /// <summary>Solution file at the repo root, e.g. "ExampleModule.slnx".</summary>
     protected abstract string SolutionFileName { get; }
 
-    /// <summary>Web project folder name, e.g. "LogSearch.Web".</summary>
+    /// <summary>Web project folder name, e.g. "ExampleModule.Web".</summary>
     protected abstract string WebProjectName { get; }
 
     /// <summary>

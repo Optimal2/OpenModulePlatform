@@ -70,3 +70,8 @@ coverage/
 .claude/
 
 scripts/deployment/trusted-signing.json
+
+# Optional local overlays that name private consumer repositories and modules.
+# See docs/OMP_COMPONENT_MANIFEST.md ("Local external-consumer overlay").
+/omp-components.external.json
+scripts/diagnostics/module-checks/

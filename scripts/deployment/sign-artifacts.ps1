@@ -31,7 +31,18 @@
     Trusted Signing metadata JSON. See DESCRIPTION for resolution order.
 
 .PARAMETER IncludePattern
-    File name patterns considered first-party and eligible for signing.
+    File name patterns considered first-party and eligible for signing. The
+    default covers this repository's own binaries only.
+
+.PARAMETER AdditionalIncludePattern
+    Extra file name patterns appended to IncludePattern, for example the
+    binaries of modules built in other repositories ('ExampleModule.*.dll').
+
+.PARAMETER ExternalOverlayPath
+    Optional JSON overlay whose codeSigning.includePatterns array is appended to
+    IncludePattern as well. Defaults to omp-components.external.json in the
+    repository root; a missing file is not an error. See
+    docs/OMP_COMPONENT_MANIFEST.md, "Local external-consumer overlay".
 
 .PARAMETER SkipIfUnconfigured
     Exit successfully without signing when no configuration is found. Used by
@@ -45,20 +56,10 @@ param(
         'OpenModulePlatform.*.dll',
         'OpenModulePlatform.*.exe',
         'ODVGateway.*.dll',
-        'ODVGateway.*.exe',
-        'Contoso.*.dll',
-        'Contoso.*.exe',
-        'Northwind.*.dll',
-        'Northwind.*.exe',
-        'Fabrikam.*.dll',
-        'Fabrikam.*.exe',
-        'Globex.*.dll',
-        'Globex.*.exe',
-        'Tailwind.*.dll',
-        'Tailwind.*.exe',
-        'AdventureWorks.*.dll',
-        'AdventureWorks.*.exe'
+        'ODVGateway.*.exe'
     ),
+    [string[]]$AdditionalIncludePattern = @(),
+    [string]$ExternalOverlayPath = '',
     [switch]$SkipIfUnconfigured
 )
 
@@ -237,7 +238,39 @@ foreach ($required in @('Endpoint', 'CodeSigningAccountName', 'CertificateProfil
     }
 }
 
-$targets = @(Get-EligibleFiles -Roots $Path -Patterns $IncludePattern)
+function Get-OverlayIncludePatterns {
+    # Module binaries built in other repositories are named in a local, gitignored
+    # overlay rather than here, so this public script names no private module.
+    param([string]$Explicit)
+
+    $overlayPath = $Explicit
+    if ([string]::IsNullOrWhiteSpace($overlayPath)) {
+        $overlayPath = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'omp-components.external.json'
+    }
+    elseif (-not (Test-Path -LiteralPath $overlayPath -PathType Leaf)) {
+        throw "External overlay was not found: $overlayPath"
+    }
+
+    if (-not (Test-Path -LiteralPath $overlayPath -PathType Leaf)) {
+        return @()
+    }
+
+    $overlay = Get-Content -LiteralPath $overlayPath -Raw | ConvertFrom-Json
+    $codeSigning = $overlay.PSObject.Properties['codeSigning']
+    if ($null -eq $codeSigning -or $null -eq $codeSigning.Value) {
+        return @()
+    }
+
+    $patterns = $codeSigning.Value.PSObject.Properties['includePatterns']
+    if ($null -eq $patterns -or $null -eq $patterns.Value) {
+        return @()
+    }
+
+    return @($patterns.Value | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+}
+
+$effectivePatterns = @($IncludePattern) + @($AdditionalIncludePattern | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) + @(Get-OverlayIncludePatterns -Explicit $ExternalOverlayPath)
+$targets = @(Get-EligibleFiles -Roots $Path -Patterns $effectivePatterns)
 if ($targets.Count -eq 0) {
     Write-Host 'No unsigned first-party binaries were found under the given paths; nothing to sign.'
     exit 0

@@ -11,7 +11,7 @@ Pester tests for scripts/omp/bump-version.ps1.
 .DESCRIPTION
 These tests verify that bumping a component also updates the matching
 compatibleArtifacts.maxVersion entry in the module definition. The
-2026-08-18 IbsPackager import failure showed that leaving this step
+2026-08-18 module import failure showed that leaving this step
 manual lets the artifact version cap drift behind the component version,
 so the host rejects the produced artifact at import time.
 
@@ -239,7 +239,7 @@ Describe 'Bump-Version: a rewritten module definition always carries a version b
         validator goes red and the operator has to discover a second command
         nothing mentions.
 
-        Reproduced 2026-08-28 in iKrock2 under Windows PowerShell 5.1; pinned here
+        Reproduced 2026-08-28 in a consumer repository under Windows PowerShell 5.1; pinned here
         so it cannot come back.
     #>
 

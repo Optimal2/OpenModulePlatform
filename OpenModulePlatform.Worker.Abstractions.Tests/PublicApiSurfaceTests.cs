@@ -16,7 +16,7 @@ namespace OpenModulePlatform.Worker.Abstractions.Tests;
 /// module factory ... Available keys: ." with an empty list, because
 /// IsAssignableFrom matched nothing. The same failure mode was observed twice in
 /// one week (a plugin built against new abstractions loaded by an old host, and
-/// IbsPackager's channel type loaded with a mismatched Abstractions dll), so it
+/// a module's channel type loaded with a mismatched Abstractions dll), so it
 /// is a proven failure mode, not a theoretical one.
 ///
 /// The test does not prevent changing the surface; it forces the question "has

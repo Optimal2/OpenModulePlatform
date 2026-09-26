@@ -17,7 +17,7 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// </summary>
 /// <remarks>
 /// Measured on a development host 2026-08-25 (HostAgent 0.3.221, import of
-/// omp-universal__global__20260825-2202.zip): IbsPackager's seed script
+/// omp-universal__global__20260825-2202.zip): a module's seed script
 /// discovers "the latest channel-type artifact version" with a
 /// SELECT TOP 1 ... FROM omp.Artifacts ... ORDER BY ArtifactId DESC. Because
 /// the import applied the definition SQL before registering the package's
@@ -571,8 +571,8 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
 
     /// <summary>
     /// Builds a universal module package zip whose definition seeds a version
-    /// table from the latest omp.Artifacts row, exactly like IbsPackager's
-    /// 2-initialize-ibspackager.sql @Version discovery, and whose artifact
+    /// table from the latest omp.Artifacts row, exactly like a module's
+    /// initialize script's @Version discovery, and whose artifact
     /// carries a newer version than the database currently holds.
     /// </summary>
     private static string BuildUniversalPackageZip(
@@ -633,7 +633,7 @@ public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSql
         });
         if (includeValidationProbe)
         {
-            // Shaped like IbsPackager's 0-validate script: a healthy probe makes the
+            // Shaped like a module's 0-validate script: a healthy probe makes the
             // repair decision fall to "has every script a succeeded execution?", which
             // is the version gate that made the incident's seed lag permanent.
             var validateSql =

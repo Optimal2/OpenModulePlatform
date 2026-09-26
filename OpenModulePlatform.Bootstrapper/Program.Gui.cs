@@ -4704,7 +4704,7 @@ internal static partial class Program
         /// every component of a repository at once, which cost five deploy rounds per batch and is
         /// exactly what the lockstep validator exists to avoid. Scoping the stamp per component
         /// makes the rebuild decision agree with the cascade rules in
-        /// scripts/omp/validate-component-versions.ps1: change IbsPackager.Runtime and web, worker
+        /// scripts/omp/validate-component-versions.ps1: change a module's shared Runtime project and web, worker
         /// and file-drop all rebuild (they reference it); change only the FileDrop project and
         /// only file-drop rebuilds.
         ///

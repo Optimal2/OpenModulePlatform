@@ -47,7 +47,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   for such a third choice and resolves with "extra" when it is chosen.
   `data-max` and the new `data-min` bound the period: "today", a day
   count from today ("today+30") or a date; the user log, the system log
-  and LogSearch allow 30 days ahead. The calendar's year list stays the
+  and a module log search page allow 30 days ahead. The calendar's year list stays the
   same from one pick to the next (the bounds' years, or ten years either
   side of today). Escape in the popup is Cancel: it closes with nothing
   applied, no question asked; the question comes only for a click

@@ -29,7 +29,7 @@ using OpenModulePlatform.WorkerProcessHost.Services;
 // installation that folder does not exist and must not be created, so a worker that threw during
 // startup logged NOWHERE: the process exited 1 every fifteen seconds and the
 // only trace was WorkerManager observing the exit code. Measured 2026-08-23 on
-// the IbsPackager workers in production.
+// a module's workers in production.
 //
 // A sibling of the artifact folder satisfies both: outside basedir, and on
 // whichever drive HostAgent put the worker host on (D:\Services\WorkerProcessHost

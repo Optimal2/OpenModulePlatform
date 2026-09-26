@@ -264,7 +264,7 @@ jobs:
             $env:DOTNET_ROLL_FORWARD = 'Disable'
             Write-Host "runtime-floor leg: DOTNET_ROLL_FORWARD=Disable, test hosts load exactly runtime ${{ matrix.runtimeFloor }}"
           }
-          # Make the exclusions visible the same way LogSearch does: count the
+          # Make the exclusions visible the same way a consumer repository's CI does: count the
           # tests the filter excludes, so an exclusion never reads as coverage.
           $excludeFilter = 'FullyQualifiedName~Portal.Tests.Integration|FullyQualifiedName~Portal.Tests.Services.OmpHostArtifactRepositoryHostDeploymentLeaseTests|Category=Ui'
           $listOutput = dotnet test OpenModulePlatform.slnx --configuration Release --no-build --filter $excludeFilter --list-tests

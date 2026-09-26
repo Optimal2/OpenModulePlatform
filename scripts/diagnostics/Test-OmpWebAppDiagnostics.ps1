@@ -11,6 +11,12 @@ Windows Event Log entries, and an optional HTTP request.
 
 The script is read-only. It does not mutate IIS, Windows services, SQL data, or
 application files.
+
+Module-specific checks are not part of this script. Pass -ModuleCheckScript, or
+drop scripts into a module-checks folder next to this script; each one is
+dot-sourced with -Config <effective appsettings dictionary> after the shared
+checks and can call Add-Check, Get-ConfigValue, Invoke-SqlRows and the other
+helpers defined here.
 #>
 [CmdletBinding()]
 param(
@@ -24,7 +30,8 @@ param(
     [string]$ZebraClient = '',
     [int]$RecentHours = 24,
     [int]$HttpTimeoutSeconds = 20,
-    [string]$OutputPath = ''
+    [string]$OutputPath = '',
+    [string[]]$ModuleCheckScript = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -602,127 +609,32 @@ function Add-SharedWebConfigChecks {
     Add-Check 'Runtime configuration' 'OMP web prerequisites' $status 'Checks OmpDb and shared auth/DataProtection settings used by the shared topbar.' $data
 }
 
-function Add-ModuleDataStoreChecks {
-    <#
-    .SYNOPSIS
-    Checks the data-store configuration for the optional consumer document-library
-    module. The public OMP diagnostic accepts the generic DocumentLibrary
-    config section (preferred for new deployments). Installations that use a
-    differently-named config section can register it via
-    -ModuleConfigSectionName / -ModuleLegacyConnectionName parameters, or set
-    the values in a per-installation overlay (omp-components.external.json).
-    #>
+function Invoke-ModuleCheckScripts {
     param(
-        [System.Collections.IDictionary]$Config,
-        [string]$ModuleConfigSectionName = 'DocumentLibrary',
-        [string]$ModuleLegacyConnectionName = 'DocumentLibraryDb',
-        [string]$ModuleDefaultSchema = 'omp_consumer_documentlibrary'
+        [System.Collections.IDictionary]$Config
     )
 
-    # Accept the parameter-supplied names first; fall back to the generic public
-    # defaults. Installations can extend the candidate list via the per-install
-    # overlay (omp-components.external.json:dataStoreSectionAliases).
-    $resolvedSectionName = $null
-    $sectionCandidates = @($ModuleConfigSectionName, 'DocumentLibrary')
-    $connectionCandidates = @($ModuleLegacyConnectionName, 'DocumentLibraryDb')
-    $overlayPath = Join-Path $PSScriptRoot '..\..\omp-components.external.json'
-    if (Test-Path -LiteralPath $overlayPath -PathType Leaf) {
+    $scripts = New-Object System.Collections.Generic.List[string]
+    foreach ($explicit in $ModuleCheckScript) {
+        if (-not [string]::IsNullOrWhiteSpace($explicit)) {
+            $scripts.Add($explicit)
+        }
+    }
+    $moduleCheckFolder = Join-Path $PSScriptRoot 'module-checks'
+    if (Test-Path -LiteralPath $moduleCheckFolder -PathType Container) {
+        foreach ($file in (Get-ChildItem -LiteralPath $moduleCheckFolder -Filter '*.ps1' -File | Sort-Object Name)) {
+            $scripts.Add($file.FullName)
+        }
+    }
+
+    foreach ($scriptPath in $scripts) {
         try {
-            $overlay = Get-Content -LiteralPath $overlayPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
-            if ($overlay) {
-                if ($overlay.PSObject.Properties.Match('dataStoreSectionAliases').Count -gt 0) {
-                    $sectionCandidates += @($overlay.dataStoreSectionAliases | Where-Object { $_ })
-                }
-                if ($overlay.PSObject.Properties.Match('dataStoreConnectionAliases').Count -gt 0) {
-                    $connectionCandidates += @($overlay.dataStoreConnectionAliases | Where-Object { $_ })
-                }
-            }
+            # Dot-sourced so the module check sees Add-Check and the other helpers.
+            . $scriptPath -Config $Config
         }
         catch {
-            Write-Warning "omp-components.external.json overlay could not be read: $($_.Exception.Message)"
+            Add-Check 'Module compatibility' "Module check script $([IO.Path]::GetFileName($scriptPath))" 'Fail' $_.Exception.Message
         }
-    }
-    foreach ($candidate in $sectionCandidates) {
-        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
-        if ($Config.Contains($candidate)) {
-            $resolvedSectionName = $candidate
-            break
-        }
-    }
-    if ($null -eq $resolvedSectionName) {
-        return
-    }
-
-    $useLegacy = [bool](Get-ConfigValue -Config $Config -Path "$resolvedSectionName`:UseLegacyDataStore" -Default $false)
-    $dataSchema = [string](Get-ConfigValue -Config $Config -Path "$resolvedSectionName`:DataSchema" -Default '')
-    if ([string]::IsNullOrWhiteSpace($dataSchema)) {
-        $dataSchema = if ($useLegacy) { 'dbo' } else { $ModuleDefaultSchema }
-    }
-
-    $ompDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:OmpDb' -Default '')
-    $legacyConnectionName = $ModuleLegacyConnectionName
-    $legacyDb = ''
-    foreach ($candidate in $connectionCandidates) {
-        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
-        $found = [string](Get-ConfigValue -Config $Config -Path "ConnectionStrings`:$candidate" -Default '')
-        if (-not [string]::IsNullOrWhiteSpace($found)) {
-            $legacyDb = $found
-            $legacyConnectionName = $candidate
-            break
-        }
-    }
-
-    $dataStoreStatus = Resolve-CheckStatus -Condition (-not ($useLegacy -and [string]::IsNullOrWhiteSpace($legacyDb))) -WhenFalse 'Fail'
-    Add-Check 'Module compatibility' 'Data-store configuration' $dataStoreStatus "UseLegacyDataStore=$useLegacy; DataSchema=$dataSchema" ([ordered]@{
-        ModuleType = 'DocumentLibrary'
-        UseLegacyDataStore = $useLegacy
-        DataSchema = $dataSchema
-        HasOmpDbConnectionString = -not [string]::IsNullOrWhiteSpace($ompDb)
-        HasLegacyConnectionString = -not [string]::IsNullOrWhiteSpace($legacyDb)
-        OmpDbConnectionString = Protect-ConnectionString $ompDb
-        LegacyConnectionString = Protect-ConnectionString $legacyDb
-    })
-
-    $connectionToCheck = if ($useLegacy) { $legacyDb } else { $ompDb }
-    if ([string]::IsNullOrWhiteSpace($connectionToCheck)) {
-        return
-    }
-
-    try {
-        $rows = Invoke-SqlRows -ConnectionString $connectionToCheck -Query @'
-DECLARE @schema sysname = @schemaName;
-
-WITH RequiredObjects AS
-(
-    SELECT N'Settings' AS TableName UNION ALL
-    SELECT N'Dokument' UNION ALL
-    SELECT N'Bilder' UNION ALL
-    SELECT N'Blankett' UNION ALL
-    SELECT N'Forvaltning' UNION ALL
-    SELECT N'DokumentForvaltning' UNION ALL
-    SELECT N'Arkiv' UNION ALL
-    SELECT N'DokumentArkiv' UNION ALL
-    SELECT N'DokumentScope' UNION ALL
-    SELECT N'UserSettings'
-)
-SELECT
-    RequiredObjects.TableName,
-    CASE WHEN OBJECT_ID(QUOTENAME(@schema) + N'.' + QUOTENAME(RequiredObjects.TableName), N'U') IS NULL THEN 0 ELSE 1 END AS ExistsInDatabase
-FROM RequiredObjects
-ORDER BY RequiredObjects.TableName;
-'@ -Parameters @{ '@schemaName' = $dataSchema }
-        $missing = @($rows | Where-Object { $_.ExistsInDatabase -ne 1 })
-        $tableStatus = Resolve-CheckStatus -Condition ($missing.Count -eq 0) -WhenFalse 'Warn'
-        Add-Check 'Module compatibility' 'Required data tables' $tableStatus "Checked schema $dataSchema; missing $($missing.Count)." ([ordered]@{
-            ModuleType = 'DocumentLibrary'
-            Objects = $rows
-        })
-    }
-    catch {
-        Add-Check 'Module compatibility' 'Required data tables' 'Fail' $_.Exception.Message ([ordered]@{
-            ModuleType = 'DocumentLibrary'
-            DataSchema = $dataSchema
-        })
     }
 }
 
@@ -1286,7 +1198,7 @@ if (-not [string]::IsNullOrWhiteSpace($targetPath)) {
             RedactedConfig = Redact-ConfigValue -Key 'appsettings' -Value $appConfigInfo.Config
         })
         Add-SharedWebConfigChecks -Path $targetPath -Config $appConfigInfo.Config
-        Add-ModuleDataStoreChecks -Config $appConfigInfo.Config
+        Invoke-ModuleCheckScripts -Config $appConfigInfo.Config
         Add-ModulePrinterConfigChecks -Path $targetPath -Config $appConfigInfo.Config -Client $ZebraClient
     }
     catch {

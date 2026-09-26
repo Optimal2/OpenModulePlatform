@@ -8,9 +8,9 @@ namespace OpenModulePlatform.Web.Shared.Services;
 /// R8-P3-10. Parameterising a search term stops SQL injection but not pattern injection: the
 /// wildcards still live inside the parameter value. A term of <c>%</c> matches every row, and a
 /// term full of <c>%</c> and <c>_</c> turns an indexed prefix search into a scan an anonymous
-/// caller can trigger at will. IbsPackager has escaped its search terms since R2; the four OMP
+/// caller can trigger at will. A private module has escaped its search terms since R2; the four OMP
 /// call sites -- three in RbacAdminRepository and one in MessageService -- never got it, because
-/// the helper was private to IbsPackager's repository. It lives in Web.Shared now so both the
+/// the helper was private to that module's repository. It lives in Web.Shared now so both the
 /// Portal and Web.Shared can use the same one rather than growing a second copy, which is the
 /// defect class this round exists to sweep for.
 /// </remarks>

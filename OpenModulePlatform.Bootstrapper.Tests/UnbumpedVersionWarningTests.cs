@@ -16,7 +16,7 @@ namespace OpenModulePlatform.Bootstrapper.Tests;
 /// Measured 2026-08-23: builds at 08:46 and 10:20 both warned about opendocviewer-web 2.4.63 with
 /// no ODV change between them -- the only ODV commit that day touched scripts/, which the web build
 /// never reads. Unpacking both artifacts showed 60 files, 0 differing in content and 36 differing
-/// only in zip timestamps. In the same two runs a genuine content change in ikrock_web 0.3.36
+/// only in zip timestamps. In the same two runs a genuine content change in a module web app (0.3.36)
 /// produced no warning at all and surfaced only when the host rejected the import. A warning that
 /// is always on for one component teaches the reader to skip it -- including where it is real.
 ///
@@ -27,10 +27,10 @@ public sealed class UnbumpedVersionWarningTests
     [Fact]
     public void ScopedStamp_ReportsAMeasuredSourceChange()
     {
-        var text = ArtifactSourceStamp.BuildUnbumpedVersionWarning("ikrock-web", "0.3.36", hasScopedStamp: true);
+        var text = ArtifactSourceStamp.BuildUnbumpedVersionWarning("example-module-web", "0.3.36", hasScopedStamp: true);
 
         Assert.Contains("source changed", text);
-        Assert.Contains("ikrock-web", text);
+        Assert.Contains("example-module-web", text);
         Assert.Contains("0.3.36", text);
         // The scoped case must not carry the repository-wide caveat; that would blur the finding.
         Assert.DoesNotContain("whole repository", text);

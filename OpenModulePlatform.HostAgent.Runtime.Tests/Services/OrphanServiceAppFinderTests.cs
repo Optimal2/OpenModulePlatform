@@ -470,16 +470,16 @@ public sealed class OrphanServiceAppFinderTests
     {
         using var root = new TempServicesRoot();
         using var externalRoot = new TempServicesRoot();
-        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
-        var twinExePath = Path.Join(externalRoot.Path, "iKrock2.Backend", "iKrock2.Backend.exe");
+        var canonicalPath = Path.Join(root.Path, "OMP.xSample2.Backend");
+        var twinExePath = Path.Join(externalRoot.Path, "xSample2.Backend", "xSample2.Backend.exe");
 
         var deployment = new ServiceAppDeploymentDescriptor
         {
             AppInstanceId = Guid.NewGuid(),
-            AppInstanceKey = "ikrock_backend",
-            InstallationName = "OMP.iKrock2.Backend",
+            AppInstanceKey = "xsample_backend",
+            InstallationName = "OMP.xSample2.Backend",
             ArtifactId = 42,
-            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedRuntimeName = "OMP.xSample2.Backend",
             DeployedTargetPath = canonicalPath
         };
 
@@ -487,15 +487,15 @@ public sealed class OrphanServiceAppFinderTests
         var candidates = new[]
         {
             new ServiceAppServiceCandidate(
-                "OMP.iKrock2.Backend",
+                "OMP.xSample2.Backend",
                 "RUNNING",
-                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
-                "OMP iKrock Backend"),
+                Path.Join(canonicalPath, "xSample2.Backend.exe"),
+                "OMP xSample Backend"),
             new ServiceAppServiceCandidate(
-                "iKrock2.Backend",
+                "xSample2.Backend",
                 "RUNNING",
                 twinExePath,
-                "OMP DESKTOP-TEST iKrock Backend",
+                "OMP DESKTOP-TEST xSample Backend",
                 IsUnderServicesRoot: false)
         };
 
@@ -510,27 +510,27 @@ public sealed class OrphanServiceAppFinderTests
 
         var finding = Assert.Single(findings);
         Assert.Equal(MaintenanceTargetKinds.WindowsService, finding.TargetKind);
-        Assert.Equal("iKrock2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("xSample2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("duplicate-twin", finding.FindingKey, StringComparison.OrdinalIgnoreCase);
         Assert.Equal((byte)95, finding.Confidence);
         Assert.Contains("canonicalServiceName", finding.ActionJson, StringComparison.Ordinal);
-        Assert.Contains("OMP.iKrock2.Backend", finding.ActionJson, StringComparison.Ordinal);
+        Assert.Contains("OMP.xSample2.Backend", finding.ActionJson, StringComparison.Ordinal);
     }
 
     [Fact]
     public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsUnclaimedLegacyTwinUnderServicesRootOnlyOnce()
     {
         using var root = new TempServicesRoot();
-        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
-        var twinPath = Path.Join(root.Path, "iKrock2.Backend");
+        var canonicalPath = Path.Join(root.Path, "OMP.xSample2.Backend");
+        var twinPath = Path.Join(root.Path, "xSample2.Backend");
 
         var deployment = new ServiceAppDeploymentDescriptor
         {
             AppInstanceId = Guid.NewGuid(),
-            AppInstanceKey = "ikrock_backend",
-            InstallationName = "OMP.iKrock2.Backend",
+            AppInstanceKey = "xsample_backend",
+            InstallationName = "OMP.xSample2.Backend",
             ArtifactId = 42,
-            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedRuntimeName = "OMP.xSample2.Backend",
             DeployedTargetPath = canonicalPath
         };
 
@@ -538,15 +538,15 @@ public sealed class OrphanServiceAppFinderTests
         var candidates = new[]
         {
             new ServiceAppServiceCandidate(
-                "OMP.iKrock2.Backend",
+                "OMP.xSample2.Backend",
                 "RUNNING",
-                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
-                "OMP iKrock Backend"),
+                Path.Join(canonicalPath, "xSample2.Backend.exe"),
+                "OMP xSample Backend"),
             new ServiceAppServiceCandidate(
-                "iKrock2.Backend",
+                "xSample2.Backend",
                 "STOPPED",
-                Path.Join(twinPath, "iKrock2.Backend.exe"),
-                "OMP iKrock Backend old")
+                Path.Join(twinPath, "xSample2.Backend.exe"),
+                "OMP xSample Backend old")
         };
 
         var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
@@ -561,34 +561,34 @@ public sealed class OrphanServiceAppFinderTests
         // The twin must be reported exactly once, as a duplicate-twin finding, and the
         // canonical claimed service must never be flagged.
         var finding = Assert.Single(findings);
-        Assert.Equal("iKrock2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("xSample2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("duplicate-twin", finding.FindingKey, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(findings, f => f.TargetIdentifier.Contains("OMP.iKrock2.Backend", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(findings, f => f.TargetIdentifier.Contains("OMP.xSample2.Backend", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public void BuildOrphanServiceAppFindings_ServiceSweep_FlagsTwinClaimedBySameAppDuplicateInstance()
     {
         using var root = new TempServicesRoot();
-        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
-        var twinPath = Path.Join(root.Path, "iKrock2.Backend");
+        var canonicalPath = Path.Join(root.Path, "OMP.xSample2.Backend");
+        var twinPath = Path.Join(root.Path, "xSample2.Backend");
 
         var canonicalDeployment = new ServiceAppDeploymentDescriptor
         {
             AppInstanceId = Guid.NewGuid(),
-            AppInstanceKey = "ikrock_backend",
-            InstallationName = "OMP.iKrock2.Backend",
+            AppInstanceKey = "xsample_backend",
+            InstallationName = "OMP.xSample2.Backend",
             ArtifactId = 42,
-            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedRuntimeName = "OMP.xSample2.Backend",
             DeployedTargetPath = canonicalPath
         };
         var duplicateInstanceDeployment = new ServiceAppDeploymentDescriptor
         {
             AppInstanceId = Guid.NewGuid(),
-            AppInstanceKey = "ikrock_backend_desktop_test",
-            InstallationName = "iKrock2.Backend",
+            AppInstanceKey = "xsample_backend_desktop_test",
+            InstallationName = "xSample2.Backend",
             ArtifactId = 42,
-            DeployedRuntimeName = "iKrock2.Backend",
+            DeployedRuntimeName = "xSample2.Backend",
             DeployedTargetPath = twinPath
         };
 
@@ -596,15 +596,15 @@ public sealed class OrphanServiceAppFinderTests
         var candidates = new[]
         {
             new ServiceAppServiceCandidate(
-                "OMP.iKrock2.Backend",
+                "OMP.xSample2.Backend",
                 "STOPPED",
-                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
-                "OMP iKrock Backend"),
+                Path.Join(canonicalPath, "xSample2.Backend.exe"),
+                "OMP xSample Backend"),
             new ServiceAppServiceCandidate(
-                "iKrock2.Backend",
+                "xSample2.Backend",
                 "RUNNING",
-                Path.Join(twinPath, "iKrock2.Backend.exe"),
-                "OMP DESKTOP-TEST iKrock Backend")
+                Path.Join(twinPath, "xSample2.Backend.exe"),
+                "OMP DESKTOP-TEST xSample Backend")
         };
 
         var findings = HostAgentJobProcessor.BuildOrphanServiceAppFindingsCore(
@@ -617,10 +617,10 @@ public sealed class OrphanServiceAppFinderTests
             CancellationToken.None);
 
         var finding = Assert.Single(findings);
-        Assert.Equal("iKrock2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("xSample2.Backend", finding.TargetIdentifier, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("duplicate-twin", finding.FindingKey, StringComparison.OrdinalIgnoreCase);
         Assert.Equal((byte)80, finding.Confidence);
-        Assert.Contains("ikrock_backend_desktop_test", finding.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("xsample_backend_desktop_test", finding.Detail, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Disable or remove the duplicate AppInstance", finding.RecommendedAction, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -628,25 +628,25 @@ public sealed class OrphanServiceAppFinderTests
     public void BuildOrphanServiceAppFindings_ServiceSweep_SkipsTwinClaimedByDifferentApp()
     {
         using var root = new TempServicesRoot();
-        var canonicalPath = Path.Join(root.Path, "OMP.iKrock2.Backend");
-        var twinPath = Path.Join(root.Path, "iKrock2.Backend");
+        var canonicalPath = Path.Join(root.Path, "OMP.xSample2.Backend");
+        var twinPath = Path.Join(root.Path, "xSample2.Backend");
 
         var canonicalDeployment = new ServiceAppDeploymentDescriptor
         {
             AppInstanceId = Guid.NewGuid(),
-            AppInstanceKey = "ikrock_backend",
-            InstallationName = "OMP.iKrock2.Backend",
+            AppInstanceKey = "xsample_backend",
+            InstallationName = "OMP.xSample2.Backend",
             ArtifactId = 42,
-            DeployedRuntimeName = "OMP.iKrock2.Backend",
+            DeployedRuntimeName = "OMP.xSample2.Backend",
             DeployedTargetPath = canonicalPath
         };
         var otherAppDeployment = new ServiceAppDeploymentDescriptor
         {
             AppInstanceId = Guid.NewGuid(),
             AppInstanceKey = "other_app_instance",
-            InstallationName = "iKrock2.Backend",
+            InstallationName = "xSample2.Backend",
             ArtifactId = 99,
-            DeployedRuntimeName = "iKrock2.Backend",
+            DeployedRuntimeName = "xSample2.Backend",
             DeployedTargetPath = twinPath
         };
 
@@ -654,14 +654,14 @@ public sealed class OrphanServiceAppFinderTests
         var candidates = new[]
         {
             new ServiceAppServiceCandidate(
-                "OMP.iKrock2.Backend",
+                "OMP.xSample2.Backend",
                 "RUNNING",
-                Path.Join(canonicalPath, "iKrock2.Backend.exe"),
-                "OMP iKrock Backend"),
+                Path.Join(canonicalPath, "xSample2.Backend.exe"),
+                "OMP xSample Backend"),
             new ServiceAppServiceCandidate(
-                "iKrock2.Backend",
+                "xSample2.Backend",
                 "RUNNING",
-                Path.Join(twinPath, "iKrock2.Backend.exe"),
+                Path.Join(twinPath, "xSample2.Backend.exe"),
                 "Other App Backend")
         };
 

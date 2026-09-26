@@ -45,8 +45,8 @@
             && targetSegment.toLowerCase().endsWith(`-${packageSegment}`)) {
             targetSegment = targetSegment.slice(0, -1 * (`-${packageSegment}`.length));
         } else if (packageSegment === 'service' && targetSegment.toLowerCase().endsWith('-backend')) {
-            // Match existing installer artifact roots such as ikrock2/backend,
-            // even when the upload target uses the friendlier ikrock2-backend.
+            // Match existing installer artifact roots such as example-module/backend,
+            // even when the upload target uses the friendlier example-module-backend.
             targetSegment = targetSegment.slice(0, -1 * '-backend'.length);
             packageSegment = 'backend';
         }

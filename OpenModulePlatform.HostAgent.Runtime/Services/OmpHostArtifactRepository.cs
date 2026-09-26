@@ -5458,8 +5458,8 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
     /// existing table was invisible to the witness. The import then compared versions alone,
     /// skipped the definition, and the missing object first surfaced as a raw SqlException on
     /// the next write. That is how R4-B1's unique index stood as fixed for four days without
-    /// existing in any database. The kinds supported here are the ones IbsPackager's
-    /// 0-validate-ibspackager.sql actually probes.
+    /// existing in any database. The kinds supported here are the ones a module's
+    /// 0-validate script actually probes.
     /// Twin implementation: OmpAdminRepository.ReadRequiredDatabaseObjects (§4.1) -- Portal
     /// and HostAgent are two separate import paths and both must see the same objects.
     /// </summary>
@@ -5643,7 +5643,7 @@ WHERE ModuleDefinitionDocumentId = @moduleDefinitionDocumentId;";
 
         // Second witness: the module's own validation script. It is embedded in the same
         // definition, it is read-only by contract, and it probes what the author actually
-        // cared about -- IbsPackager's 0-validate script checks columns, indexes,
+        // cared about -- a module's 0-validate script checks columns, indexes,
         // constraints and triggers, none of which the declared-object list carried before
         // R12-G3. Consulting it here is what makes the version-based skip notice a migration
         // that only adds an index to an existing table.

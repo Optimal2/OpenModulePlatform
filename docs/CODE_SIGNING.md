@@ -67,9 +67,14 @@ interactive use, or set the `AZURE_*` service principal variables.
 
 ## What gets signed
 
-Only first-party, not-yet-signed binaries matching the module name patterns in
-`sign-artifacts.ps1` (OpenModulePlatform.*, Contoso.*, Northwind.*,
-Fabrikam.*, Globex.*, Tailwind.*, ODVGateway.*, AdventureWorks.*).
+Only first-party, not-yet-signed binaries matching the name patterns in
+`sign-artifacts.ps1`. The defaults cover this repository's own binaries
+(OpenModulePlatform.*, ODVGateway.*). Binaries of modules built in other
+repositories are added per machine, either with `-AdditionalIncludePattern
+'ExampleModule.*.dll','ExampleModule.*.exe'` or through the
+`codeSigning.includePatterns` array in the optional, gitignored
+`omp-components.external.json` overlay in the repository root (see
+[OMP_COMPONENT_MANIFEST.md](OMP_COMPONENT_MANIFEST.md#local-external-consumer-overlay)).
 Microsoft and third-party dependencies already carry valid signatures and are
 left untouched, which also keeps the signature volume well inside the Basic
 tier quota.

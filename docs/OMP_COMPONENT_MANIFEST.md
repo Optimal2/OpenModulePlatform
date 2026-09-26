@@ -61,6 +61,50 @@ own `version`, and that value is the version that belongs in
   keep multiple widget versions side by side. String entries are still accepted
   for compatibility and use `repositoryVersion` as the widget version when the
   package is built.
+- `sharedProjects` lists projects that other components compile against, with
+  the in-repository `consumers` a change must cascade to. Each entry also
+  carries an `externalConsumers` array for components in other repositories;
+  the public manifest keeps it empty and fills it from the local overlay below.
+
+## Local external-consumer overlay
+
+Components in other repositories (for example a private consumer repository
+whose module web app references `OpenModulePlatform.Web.Shared` by project) are
+not named in this public repository. A checkout that builds alongside such
+repositories may add an optional `omp-components.external.json` next to
+`omp-components.json`. The file is gitignored and has the same `sharedProjects`
+shape, with only `projectPath` and `externalConsumers` required:
+
+```json
+{
+  "sharedProjects": [
+    {
+      "projectPath": "OpenModulePlatform.Web.Shared/OpenModulePlatform.Web.Shared.csproj",
+      "externalConsumers": [
+        {
+          "repositoryKey": "example-module",
+          "repositoryPathHint": "../ExampleModule",
+          "componentKey": "example-module-web"
+        }
+      ]
+    }
+  ],
+  "codeSigning": {
+    "includePatterns": [ "ExampleModule.*.dll", "ExampleModule.*.exe" ]
+  }
+}
+```
+
+- `scripts/omp/validate-component-versions.ps1` merges each entry's
+  `externalConsumers` into the matching manifest entry (by `projectPath`) and
+  warns, when that shared project changed, that the external component must be
+  bumped in its own repository. An unreadable overlay is a validation error; a
+  missing one is not.
+- `scripts/deployment/sign-artifacts.ps1` appends `codeSigning.includePatterns`
+  to its own first-party name patterns (see [CODE_SIGNING.md](CODE_SIGNING.md)).
+
+The overlay with the real entries is kept with the consumer repositories, not
+here.
 
 ## Bumping Versions
 
@@ -80,7 +124,7 @@ The canonical helper keeps everything in sync in one pass: it bumps
 module-definition `definitionVersion` values, referenced dashboard widget
 package versions, and each affected `compatibleArtifacts.maxVersion` in the
 module definitions. The `maxVersion` sync is not optional: the 2026-08-18
-Contoso import failure showed that a stale cap makes the host reject the
+module import failure showed that a stale cap makes the host reject the
 produced artifact at import time.
 
 For a double-click workflow, use `scripts/omp/bump-version.cmd`. It launches the

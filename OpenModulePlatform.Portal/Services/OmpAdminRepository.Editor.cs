@@ -411,7 +411,7 @@ VALUES
     }
 
     /// <remarks>R8-P3-9: reports whether a row was actually removed, so the caller can tell
-    /// "deleted" from "already gone". The IbsPackager half of this landed in R7-C7.</remarks>
+    /// "deleted" from "already gone". The module-repository half of this landed in R7-C7.</remarks>
     public async Task<bool> DeleteAppWorkerDefinitionAsync(int appId, CancellationToken ct)
     {
         await using var conn = _db.Create();
@@ -1911,7 +1911,7 @@ SET DesiredArtifactId = NULL
 WHERE DesiredArtifactId = @ArtifactId;
 
 -- Module-owned cross-schema reference. Guarded by OBJECT_ID so the statement is a no-op on
--- an installation without IbsPackager; the retention job discovers these dynamically, which
+-- an installation without the owning module; the retention job discovers these dynamically, which
 -- is why it protected artifacts the Portal was willing to delete.
 IF OBJECT_ID(N'omp_ibs_packager.ChannelTypeVersions', N'U') IS NOT NULL
 BEGIN
@@ -5414,7 +5414,7 @@ WHERE AppInstanceId = @Id
             ct);
         if (channelCount > 0)
         {
-            blockers.Add($"{channelCount} IbsPackager channel(s)");
+            blockers.Add($"{channelCount} module channel(s)");
         }
 
         var contentCount = await CountOptionalTableRowsAsync(
@@ -5607,8 +5607,8 @@ WHERE AppInstanceId = @Id
     /// alone and skipped the package with a green "package version X is not newer than
     /// installed version Y", and the missing object first surfaced as a raw SqlException on
     /// the next write. That is how R4-B1's unique index stood as fixed for four days without
-    /// existing in any database. The kinds supported here are the ones IbsPackager's
-    /// 0-validate-ibspackager.sql actually probes.
+    /// existing in any database. The kinds supported here are the ones a module's
+    /// 0-validate script actually probes.
     /// Twin implementation: OmpHostArtifactRepository.ReadRequiredDatabaseObjects (§4.1) --
     /// Portal and HostAgent are two separate import paths and both must see the same objects.
     /// </summary>
@@ -6006,7 +6006,7 @@ ORDER BY CASE rp.PrincipalType WHEN N'ADUser' THEN 0 WHEN N'ADGroup' THEN 1 ELSE
 
         // Second witness: the module's own validation script. It is embedded in the same
         // definition, it is read-only by contract, and it probes what the author actually
-        // cared about -- IbsPackager's 0-validate script checks columns, indexes,
+        // cared about -- a module's 0-validate script checks columns, indexes,
         // constraints and triggers, none of which the declared-object list carried before
         // R12-G3. Consulting it here is what makes the quick-import skip gate notice a
         // migration that only adds an index to an existing table.

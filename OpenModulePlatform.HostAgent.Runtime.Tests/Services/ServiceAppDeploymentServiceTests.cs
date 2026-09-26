@@ -250,7 +250,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     {
         var (service, repository, control, deployment, newTargetPath, oldTargetPath) = CreateRenameScenario();
         var oldServiceName = "backend";
-        var newServiceName = "OMP.iKrock2.Backend";
+        var newServiceName = "OMP.xSample2.Backend";
 
         // Simulate a transient sc.exe delete failure on the first attempt.
         var deleteAttempts = 0;
@@ -321,11 +321,11 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.Single(control.DeletedServices, "backend");
         Assert.Null(control.GetServiceState("backend"));
         Assert.True(Directory.Exists(sharedPath));
-        Assert.True(File.Exists(Path.Join(sharedPath, "iKrock2.Backend.exe")));
+        Assert.True(File.Exists(Path.Join(sharedPath, "xSample2.Backend.exe")));
 
         var final = repository.PublishedServiceAppResults[^1].Result;
         Assert.Equal(HostDeploymentStatuses.Succeeded, final.State);
-        Assert.Equal("OMP.iKrock2.Backend", final.RuntimeName);
+        Assert.Equal("OMP.xSample2.Backend", final.RuntimeName);
     }
 
     /// <summary>
@@ -352,7 +352,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
 
         var final = repository.PublishedServiceAppResults[^1].Result;
         Assert.Equal(HostDeploymentStatuses.Succeeded, final.State);
-        Assert.Equal("OMP.iKrock2.Backend", final.RuntimeName);
+        Assert.Equal("OMP.xSample2.Backend", final.RuntimeName);
     }
 
     [Fact]
@@ -374,46 +374,46 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     public void OrphanDuplicateCleanup_RunningOrphan_CanonicalClaimedAndRunning_IsStoppedAndDeleted()
     {
         var control = new FakeWindowsServiceControl();
-        control.SetState("iKrock2.Backend", "RUNNING");
-        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+        control.SetState("xSample2.Backend", "RUNNING");
+        control.SetState("OMP.xSample2.Backend", "RUNNING");
 
         var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
             control,
             CreateGuardrailSettings(),
-            serviceName: "iKrock2.Backend",
+            serviceName: "xSample2.Backend",
             serviceState: "RUNNING",
-            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
-            canonicalServiceName: "OMP.iKrock2.Backend",
+            serviceExecutablePath: "E:\\OMP\\Services\\xSample2.Backend\\xSample2.Backend.exe",
+            canonicalServiceName: "OMP.xSample2.Backend",
             canonicalState: "RUNNING",
-            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
-            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.xSample2.Backend\\xSample2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.xSample2.Backend" },
             out var refusalReason);
 
         Assert.True(deleted);
         Assert.Null(refusalReason);
-        Assert.Single(control.DeletedServices, "iKrock2.Backend");
-        Assert.Null(control.GetServiceState("iKrock2.Backend"));
+        Assert.Single(control.DeletedServices, "xSample2.Backend");
+        Assert.Null(control.GetServiceState("xSample2.Backend"));
         // The canonical service must remain untouched.
-        Assert.Equal("RUNNING", control.GetServiceState("OMP.iKrock2.Backend"));
+        Assert.Equal("RUNNING", control.GetServiceState("OMP.xSample2.Backend"));
     }
 
     [Fact]
     public void OrphanDuplicateCleanup_TwinStillClaimedByAppInstance_IsRefused()
     {
         var control = new FakeWindowsServiceControl();
-        control.SetState("iKrock2.Backend", "RUNNING");
-        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+        control.SetState("xSample2.Backend", "RUNNING");
+        control.SetState("OMP.xSample2.Backend", "RUNNING");
 
         var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
             control,
             CreateGuardrailSettings(),
-            serviceName: "iKrock2.Backend",
+            serviceName: "xSample2.Backend",
             serviceState: "RUNNING",
-            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
-            canonicalServiceName: "OMP.iKrock2.Backend",
+            serviceExecutablePath: "E:\\OMP\\Services\\xSample2.Backend\\xSample2.Backend.exe",
+            canonicalServiceName: "OMP.xSample2.Backend",
             canonicalState: "RUNNING",
-            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
-            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend", "iKrock2.Backend" },
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.xSample2.Backend\\xSample2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.xSample2.Backend", "xSample2.Backend" },
             out var refusalReason);
 
         Assert.False(deleted);
@@ -427,22 +427,22 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     public void OrphanDuplicateCleanup_CanonicalNotRunning_IsRefused(string? canonicalState)
     {
         var control = new FakeWindowsServiceControl();
-        control.SetState("iKrock2.Backend", "RUNNING");
+        control.SetState("xSample2.Backend", "RUNNING");
         if (canonicalState is not null)
         {
-            control.SetState("OMP.iKrock2.Backend", canonicalState);
+            control.SetState("OMP.xSample2.Backend", canonicalState);
         }
 
         var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
             control,
             CreateGuardrailSettings(),
-            serviceName: "iKrock2.Backend",
+            serviceName: "xSample2.Backend",
             serviceState: "RUNNING",
-            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
-            canonicalServiceName: "OMP.iKrock2.Backend",
+            serviceExecutablePath: "E:\\OMP\\Services\\xSample2.Backend\\xSample2.Backend.exe",
+            canonicalServiceName: "OMP.xSample2.Backend",
             canonicalState: canonicalState,
-            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
-            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.xSample2.Backend\\xSample2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.xSample2.Backend" },
             out var refusalReason);
 
         Assert.False(deleted);
@@ -454,17 +454,17 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     public void OrphanDuplicateCleanup_CanonicalNotClaimed_IsRefused()
     {
         var control = new FakeWindowsServiceControl();
-        control.SetState("iKrock2.Backend", "RUNNING");
+        control.SetState("xSample2.Backend", "RUNNING");
 
         var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
             control,
             CreateGuardrailSettings(),
-            serviceName: "iKrock2.Backend",
+            serviceName: "xSample2.Backend",
             serviceState: "RUNNING",
-            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
-            canonicalServiceName: "OMP.iKrock2.Backend",
+            serviceExecutablePath: "E:\\OMP\\Services\\xSample2.Backend\\xSample2.Backend.exe",
+            canonicalServiceName: "OMP.xSample2.Backend",
             canonicalState: "RUNNING",
-            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.xSample2.Backend\\xSample2.Backend.exe",
             claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             out var refusalReason);
 
@@ -480,18 +480,18 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     {
         var control = new FakeWindowsServiceControl();
         control.SetState(targetServiceName, "RUNNING");
-        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+        control.SetState("OMP.xSample2.Backend", "RUNNING");
 
         var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
             control,
             CreateGuardrailSettings(),
             serviceName: targetServiceName,
             serviceState: "RUNNING",
-            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\iKrock2.Backend.exe",
-            canonicalServiceName: "OMP.iKrock2.Backend",
+            serviceExecutablePath: "E:\\OMP\\Services\\xSample2.Backend\\xSample2.Backend.exe",
+            canonicalServiceName: "OMP.xSample2.Backend",
             canonicalState: "RUNNING",
-            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
-            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.xSample2.Backend\\xSample2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.xSample2.Backend" },
             out var refusalReason);
 
         Assert.False(deleted);
@@ -503,19 +503,19 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
     public void OrphanDuplicateCleanup_ExecutableIdentityMismatch_IsRefused()
     {
         var control = new FakeWindowsServiceControl();
-        control.SetState("iKrock2.Backend", "RUNNING");
-        control.SetState("OMP.iKrock2.Backend", "RUNNING");
+        control.SetState("xSample2.Backend", "RUNNING");
+        control.SetState("OMP.xSample2.Backend", "RUNNING");
 
         var deleted = HostAgentJobProcessor.TryCleanupOrphanDuplicateService(
             control,
             CreateGuardrailSettings(),
-            serviceName: "iKrock2.Backend",
+            serviceName: "xSample2.Backend",
             serviceState: "RUNNING",
-            serviceExecutablePath: "E:\\OMP\\Services\\iKrock2.Backend\\OtherApp.exe",
-            canonicalServiceName: "OMP.iKrock2.Backend",
+            serviceExecutablePath: "E:\\OMP\\Services\\xSample2.Backend\\OtherApp.exe",
+            canonicalServiceName: "OMP.xSample2.Backend",
             canonicalState: "RUNNING",
-            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.iKrock2.Backend\\iKrock2.Backend.exe",
-            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.iKrock2.Backend" },
+            canonicalExecutablePath: "E:\\OMP\\Services\\OMP.xSample2.Backend\\xSample2.Backend.exe",
+            claimedServiceNames: new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "OMP.xSample2.Backend" },
             out var refusalReason);
 
         Assert.False(deleted);
@@ -582,8 +582,8 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         var appInstanceId = Guid.NewGuid();
         var appInstanceKey = $"test-app-{appInstanceId:N}";
         var oldServiceName = "backend";
-        var newServiceName = "OMP.iKrock2.Backend";
-        var executableRelativePath = "iKrock2.Backend.exe";
+        var newServiceName = "OMP.xSample2.Backend";
+        var executableRelativePath = "xSample2.Backend.exe";
         var sourcePath = Path.Join(_tempRoot, "source", appInstanceKey);
         var sharedPath = Path.Join(_tempRoot, $"shared-{appInstanceId:N}");
         var newTargetPath = useSharedInstallPath ? sharedPath : Path.Join(_tempRoot, newServiceName);
@@ -602,7 +602,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             AppInstanceId = appInstanceId,
             AppInstanceKey = appInstanceKey,
             ModuleInstanceKey = $"module-{appInstanceId:N}",
-            DisplayName = "OMP iKrock Backend",
+            DisplayName = "OMP xSample Backend",
             ArtifactId = 42,
             Version = "1.0.0",
             SourceLocalPath = sourcePath,

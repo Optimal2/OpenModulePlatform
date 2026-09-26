@@ -43,7 +43,7 @@ internal static class ArtifactSourceStamp
     /// and a warning that is always on for one component teaches the reader to skip it -- on the
     /// component where it is real too. Measured 2026-08-23: two consecutive builds warned about
     /// opendocviewer-web 2.4.63 with no ODV change between them, while a genuine content change in
-    /// ikrock_web 0.3.36 in the same runs produced no warning at all and surfaced only at import.
+    /// a module web app (0.3.36) in the same runs produced no warning at all and surfaced only at import.
     /// </remarks>
     internal static string BuildUnbumpedVersionWarning(string componentKey, string version, bool hasScopedStamp)
     {

@@ -243,7 +243,7 @@ public sealed class ArtifactConfigurationFileWriterTests
             HostId = Guid.NewGuid(),
             HostKey = "test-host",
             AppInstanceId = Guid.NewGuid(),
-            AppInstanceKey = "ikrock_backend",
+            AppInstanceKey = "xsample_backend",
             ModuleInstanceKey = "module-test",
             DisplayName = "Test service app",
             ArtifactId = 42,

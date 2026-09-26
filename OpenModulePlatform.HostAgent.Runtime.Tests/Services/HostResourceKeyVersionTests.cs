@@ -20,9 +20,9 @@ public sealed class HostResourceKeyVersionTests
     [InlineData("OMP.HostAgent.0.3.169", "OMP.HostAgent")]
     [InlineData("OMP.HostAgent.1.2.3.4", "OMP.HostAgent")]
     [InlineData("OMP.WorkerManager", "OMP.WorkerManager")]
-    [InlineData("EArkivChecker", "EArkivChecker")]
+    [InlineData("ContosoChecker", "ContosoChecker")]
     [InlineData("OMP.Service.ExampleServiceAppModule", "OMP.Service.ExampleServiceAppModule")]
-    [InlineData("OMP.iKrock2.Backend", "OMP.iKrock2.Backend")]
+    [InlineData("OMP.xSample2.Backend", "OMP.xSample2.Backend")]
     public void StripTrailingVersion_removes_only_a_trailing_dotted_version(string input, string expected)
     {
         Assert.Equal(expected, HostResourceCollector.StripTrailingVersion(input));

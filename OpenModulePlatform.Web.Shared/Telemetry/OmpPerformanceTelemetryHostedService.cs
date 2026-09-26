@@ -138,7 +138,7 @@ WHEN NOT MATCHED THEN
         // pathological sample -- escaped ExecuteAsync, and .NET's default
         // BackgroundServiceExceptionBehavior.StopHost then stops the entire host process.
         // Telemetry is on by default in every OMP web application, so that one uncaught type
-        // would take down IbsPackager.Web, the Portal and every other consumer without any of
+        // would take down every module web app, the Portal and every other consumer without any of
         // their own code being involved. The two sibling background services already learned
         // this (R3-E4 in PushEventDispatcherHostedService, R5-D1 in HostAgentHostedService);
         // the class remark above has claimed since it was written that every failure path is

@@ -735,7 +735,7 @@ WHERE PermissionId = @PermissionId;";
             // cleared here, while the DeleteRoleAsync sibling above already clears
             // config_settings for its own scope column -- the asymmetry was exact: the role
             // path cleared ConfigRole, the permission path never cleared ConfigPermission.
-            // With IbsPackager installed, SyncIbsPackagerPermissionsAsync creates AppPermissions
+            // With a module installed that syncs its permissions on startup, it creates AppPermissions
             // rows automatically, which made every module permission undeletable (R8-P3-3 /
             // R7-F25).
             await DeleteByPermissionAsync(

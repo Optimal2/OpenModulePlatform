@@ -459,7 +459,7 @@ GO
     /// <summary>
     /// Red before 2026-09-02. The MERGE branch's positional-INSERT probe was
     /// <c>\bINSERT\s*(?!\()</c>; <c>\s*</c> backtracks to zero width, so ANY whitespace
-    /// between INSERT and the column list read as "no column list". IbsPackager and iKrock2
+    /// between INSERT and the column list read as "no column list". Two private module definitions
     /// put <c>INSERT</c> and <c>(</c> on separate lines and were rejected for a pointer write
     /// they no longer contain; OpenDocViewer passed only because it writes <c>INSERT(</c>.
     /// The column list itself was never the problem - the previous probe caught the owned

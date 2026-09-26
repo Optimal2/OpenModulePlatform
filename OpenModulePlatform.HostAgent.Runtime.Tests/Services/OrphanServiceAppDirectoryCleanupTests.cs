@@ -10,7 +10,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
     public void ValidateCleanup_AllowsUnownedOrphanDirectory()
     {
         using var root = new TempDirectory();
-        var orphan = CreateSubDirectory(root.Path, "OMP.iKrock2.Backend");
+        var orphan = CreateSubDirectory(root.Path, "OMP.xSample2.Backend");
 
         var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
             CreateSettings(root.Path),
@@ -26,7 +26,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
     {
         using var root = new TempDirectory();
         using var outside = new TempDirectory();
-        var outsideDirectory = CreateSubDirectory(outside.Path, "OMP.iKrock2.Backend");
+        var outsideDirectory = CreateSubDirectory(outside.Path, "OMP.xSample2.Backend");
 
         var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
             CreateSettings(root.Path),
@@ -80,15 +80,15 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
     public void ValidateCleanup_RefusesDirectoryReferencedByRunningService()
     {
         using var root = new TempDirectory();
-        var orphan = CreateSubDirectory(root.Path, "OMP.iKrock2.Backend");
+        var orphan = CreateSubDirectory(root.Path, "OMP.xSample2.Backend");
 
         var candidates = new[]
         {
             new ServiceAppServiceCandidate(
-                "OMP.iKrock2.Backend",
+                "OMP.xSample2.Backend",
                 "RUNNING",
-                Path.Join(orphan, "iKrock2.Backend.exe"),
-                "OMP iKrock Backend")
+                Path.Join(orphan, "xSample2.Backend.exe"),
+                "OMP xSample Backend")
         };
 
         var refusal = HostAgentJobProcessor.ValidateOrphanServiceAppDirectoryCleanup(
@@ -98,7 +98,7 @@ public sealed class OrphanServiceAppDirectoryCleanupTests
             orphan);
 
         Assert.NotNull(refusal);
-        Assert.Contains("OMP.iKrock2.Backend", refusal, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("OMP.xSample2.Backend", refusal, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -206,7 +206,7 @@ WHERE box_key = @boxKey AND group_key = @oldGroup;";
     }
 
     /// <remarks>R8-P3-9: returns whether a row was actually removed, so the caller can tell
-    /// "deleted" from "already gone" instead of reporting success either way. The IbsPackager half
+    /// "deleted" from "already gone" instead of reporting success either way. The module-repository half
     /// of this was done in R7-C7; the OMP siblings were never carried across.</remarks>
     public async Task<bool> DeleteItemAsync(long linkBoxItemId, CancellationToken ct)
     {
