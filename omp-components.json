@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "repositoryKey": "openmoduleplatform",
-  "repositoryVersion": "0.3.844",
+  "repositoryVersion": "0.3.845",
   "moduleDefinitions": [
     {
       "moduleKey": "omp_core",
@@ -15,7 +15,7 @@
     },
     {
       "moduleKey": "omp_portal",
-      "definitionVersion": "0.3.335",
+      "definitionVersion": "0.3.336",
       "path": "OpenModulePlatform.Portal/omp_portal.module-definition.json"
     },
     {
@@ -30,7 +30,7 @@
     },
     {
       "moduleKey": "example_webapp",
-      "definitionVersion": "0.3.156",
+      "definitionVersion": "0.3.157",
       "path": "examples/WebAppModule/example_webapp.module-definition.json"
     },
     {
@@ -104,7 +104,7 @@
       "appKey": "omp_portal",
       "packageType": "web-app",
       "targetName": "omp-portal",
-      "version": "0.3.777",
+      "version": "0.3.778",
       "minModuleDefinitionVersion": "0.3.327",
       "projectPath": "OpenModulePlatform.Portal",
       "relativePathTemplate": "omp-portal/web/{version}",
@@ -224,7 +224,7 @@
       "appKey": "example_webapp_webapp",
       "packageType": "web-app",
       "targetName": "example-webapp",
-      "version": "0.3.306",
+      "version": "0.3.307",
       "projectPath": "examples/WebAppModule/WebApp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "packageFileTemplate": "payload/OpenModulePlatform.Web.ExampleWebAppModule.zip",
