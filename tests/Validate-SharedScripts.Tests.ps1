@@ -171,6 +171,110 @@ Describe 'validate-shared-scripts: OMP_PLATFORM_ROOT names the platform root' {
     }
 }
 
+Describe 'validate-shared-scripts: an explicitly named root must be a platform checkout' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
+    It 'Fails without -Strict when -PlatformRepositoryRoot names a directory with no canonical scripts' {
+        # Before: every canonical file got its own NOT VERIFIED warning and the run
+        # exited 0, even with -Strict. A root somebody pointed at is a
+        # configuration error, not an unmeasured check.
+        $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformScripts -PlatformManifest '' -PlatformDirectoryName 'NotThePlatform'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match "platform root '[^']*NotThePlatform' is not an OpenModulePlatform checkout") | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails without -Strict when OMP_PLATFORM_ROOT names a directory with no canonical scripts' {
+        $pair = New-Pair -ConsumerBody 'anything' -PlatformBody '' -OmitPlatformScripts -PlatformDirectoryName 'NotThePlatform'
+        try {
+            $result = Invoke-Guard -Pair $pair -OmitPlatformArgument -Environment @{ OMP_PLATFORM_ROOT = $pair.Platform; OpenModulePlatformRoot = $null }
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'is not an OpenModulePlatform checkout') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails when the named root has the scripts but no omp-components.json' {
+        $pair = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content' -PlatformManifest '' -PlatformDirectoryName 'NotThePlatform'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'is not an OpenModulePlatform checkout') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails when the named root has an omp-components.json without repositoryVersion' {
+        $pair = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content' -PlatformManifest '{ "repositoryKey": "openmoduleplatform" }' -PlatformDirectoryName 'NotThePlatform'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'is not an OpenModulePlatform checkout') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+}
+
+Describe 'validate-shared-scripts: a relative platform root is anchored at the consumer' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
+    It 'Resolves a relative OMP_PLATFORM_ROOT against the consumer root, not the current directory' {
+        $pair = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content' -PlatformDirectoryName 'PlatformElsewhere'
+        $annanKatalog = Join-Path $pair.Root 'Unrelated\Deeper'
+        New-Item -ItemType Directory -Path $annanKatalog -Force | Out-Null
+        try {
+            $result = Invoke-Guard -Pair $pair -OmitPlatformArgument -WorkingDirectory $annanKatalog -Environment @{ OMP_PLATFORM_ROOT = '..\PlatformElsewhere'; OpenModulePlatformRoot = $null }
+            $result.Kod | Should -Be 0
+            # The resolved, absolute path is printed so the operator can see what was compared.
+            $result.Output.Contains($pair.Platform) | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Resolves a relative -PlatformRepositoryRoot against the consumer root, not the current directory' {
+        $pair = New-Pair -ConsumerBody 'stale content' -PlatformBody 'canonical content' -PlatformDirectoryName 'PlatformElsewhere'
+        $annanKatalog = Join-Path $pair.Root 'Unrelated\Deeper'
+        New-Item -ItemType Directory -Path $annanKatalog -Force | Out-Null
+        try {
+            $result = Invoke-Guard -Pair $pair -PlatformArgument '..\PlatformElsewhere' -WorkingDirectory $annanKatalog
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'differs from the canonical copy') | Should -Be $true
+            $result.Output.Contains($pair.Platform) | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+}
+
+Describe 'validate-shared-scripts: -PlatformRepositoryRoot outranks OMP_PLATFORM_ROOT' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
+    It 'Compares against the parameter and ignores the environment variable' {
+        # The parameter names a matching checkout, the variable a drifted one: a
+        # guard that let the variable win would exit 1 and name the wrong root.
+        $parameterPar = New-Pair -ConsumerBody 'same content' -PlatformBody 'same content' -PlatformDirectoryName 'PlatformFromParameter'
+        $miljoPar = New-Pair -ConsumerBody 'unused' -PlatformBody 'drifted content' -PlatformDirectoryName 'PlatformFromEnvironment'
+        try {
+            $result = Invoke-Guard -Pair $parameterPar -Environment @{ OMP_PLATFORM_ROOT = $miljoPar.Platform; OpenModulePlatformRoot = $null }
+            $result.Kod | Should -Be 0
+            ($result.Output -match 'PlatformFromParameter') | Should -Be $true
+            ($result.Output -match 'PlatformFromEnvironment') | Should -Be $false
+        }
+        finally {
+            Remove-Pair -Pair $parameterPar
+            Remove-Pair -Pair $miljoPar
+        }
+    }
+}
+
 Describe 'validate-shared-scripts: the exit code is the contract' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')

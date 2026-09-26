@@ -60,6 +60,15 @@
     the NOT VERIFIED warning with exit 0, and pushed shared-script drift that
     then stopped every local push in eight repositories.
 
+    A relative value is resolved against ConsumerRepositoryRoot, not the process
+    current directory, and the resolved path is printed. A root named by this
+    parameter or either environment variable that exists but is not an
+    OpenModulePlatform checkout (a canonical shared script is missing, or
+    omp-components.json lacks repositoryKey/repositoryVersion) fails with exit 1
+    whether or not -Strict is passed: a mis-pointed root is a configuration
+    error, not an unmeasured check. A missing sibling stays a warning without
+    -Strict.
+
 .PARAMETER Strict
     Treat an absent platform repository as a failure instead of an unverified skip.
     Pre-push and local CI gates should pass it; only a plain ad-hoc run, or CI
@@ -132,22 +141,88 @@ function Get-FileSha256 {
     }
 }
 
-$consumerRoot = [System.IO.Path]::GetFullPath($ConsumerRepositoryRoot)
+function Test-PlatformCheckout {
+    <#
+        True when the directory looks like an OpenModulePlatform checkout: every
+        canonical shared script is present and omp-components.json carries a
+        repositoryKey and a repositoryVersion.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Root)
 
+    foreach ($relative in $sharedScripts) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Root ($relative -replace '/', '\')) -PathType Leaf)) {
+            return $false
+        }
+    }
+
+    $manifestPath = Join-Path $Root 'omp-components.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        return $false
+    }
+    try {
+        $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
+    }
+    catch {
+        return $false
+    }
+    foreach ($property in @('repositoryKey', 'repositoryVersion')) {
+        $member = $manifest.PSObject.Properties[$property]
+        if ($null -eq $member -or [string]::IsNullOrWhiteSpace([string]$member.Value)) {
+            return $false
+        }
+    }
+    return $true
+}
+
+$consumerRoot = [System.IO.Path]::GetFullPath($ConsumerRepositoryRoot).TrimEnd('\', '/')
+
+# Where the root came from. Anything but the sibling default was named by
+# somebody, and a named root that is not a platform checkout is a configuration
+# error rather than an unmeasured check.
+$platformSource = '-PlatformRepositoryRoot'
 $platformRoot = $PlatformRepositoryRoot
 if ([string]::IsNullOrWhiteSpace($platformRoot)) {
+    $platformSource = 'OMP_PLATFORM_ROOT'
     $platformRoot = $env:OMP_PLATFORM_ROOT
 }
 if ([string]::IsNullOrWhiteSpace($platformRoot)) {
+    $platformSource = 'OpenModulePlatformRoot'
     $platformRoot = $env:OpenModulePlatformRoot
 }
 if ([string]::IsNullOrWhiteSpace($platformRoot)) {
-    $platformRoot = [System.IO.Path]::GetFullPath((Join-Path $consumerRoot '..\OpenModulePlatform'))
+    $platformSource = 'sibling of the consumer'
+    $platformRoot = '..\OpenModulePlatform'
 }
+$platformRootNamed = $platformSource -ne 'sibling of the consumer'
+
+# A relative root is anchored at the consumer repository, not at whatever the
+# process current directory happens to be. Path.Combine returns an absolute
+# second argument unchanged.
+$platformRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($consumerRoot, $platformRoot)).TrimEnd('\', '/')
+Write-Host "Shared scripts: platform root '$platformRoot' (from $platformSource)."
 
 # The consumer IS the platform repository: nothing to compare against itself.
-if ([System.IO.Path]::GetFullPath($platformRoot) -eq $consumerRoot) {
+if ($platformRoot -eq $consumerRoot) {
     Write-Host 'Shared scripts: this repository is the canonical source; nothing to compare.'
+    exit 0
+}
+
+if ((Test-Path -LiteralPath $platformRoot -PathType Container) -and -not (Test-PlatformCheckout -Root $platformRoot)) {
+    $message = "Shared scripts: platform root '$platformRoot' is not an OpenModulePlatform checkout (expected $($sharedScripts -join ', ') and an omp-components.json with repositoryKey and repositoryVersion)."
+    if ($platformRootNamed) {
+        # Always a failure, -Strict or not: comparing against the wrong
+        # directory would otherwise surface as one NOT VERIFIED warning per
+        # file and exit 0, which reads as green.
+        Write-Host $message
+        Write-Host "Point $platformSource at the root of an OpenModulePlatform checkout."
+        exit 1
+    }
+    if ($Strict) {
+        Write-Host $message
+        Write-Host '-Strict was passed, so an unverifiable check is a failure.'
+        exit 1
+    }
+    Write-Warning "$message The shared scripts were NOT VERIFIED."
     exit 0
 }
 
@@ -172,11 +247,7 @@ foreach ($relative in $sharedScripts) {
     $consumerPath = Join-Path $consumerRoot ($relative -replace '/', '\')
     $platformPath = Join-Path $platformRoot ($relative -replace '/', '\')
 
-    if (-not (Test-Path -LiteralPath $platformPath -PathType Leaf)) {
-        Write-Warning "Shared scripts: NOT VERIFIED - '$relative' does not exist in the platform repository at '$platformPath'."
-        continue
-    }
-
+    # $platformPath exists: Test-PlatformCheckout above requires every shared script.
     if (-not (Test-Path -LiteralPath $consumerPath -PathType Leaf)) {
         $drift += "  - $relative is missing from this repository but is shipped by the platform repository."
         continue
@@ -202,7 +273,8 @@ if ($drift.Count -gt 0) {
     Write-Host "Shared script drift detected against '$platformRoot':"
     foreach ($rad in $drift) {
         Write-Host $rad
-    }    Write-Host 'Copy the canonical file(s) from the platform repository into this one and commit them in the same change.'
+    }
+    Write-Host 'Copy the canonical file(s) from the platform repository into this one and commit them in the same change.'
     Write-Host 'A stale copy looks green locally and only surfaces when a bump behaves differently here than in a neighbouring repository - typically mid-incident.'
     exit 1
 }
