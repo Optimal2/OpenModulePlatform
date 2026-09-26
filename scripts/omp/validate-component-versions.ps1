@@ -27,7 +27,13 @@ param(
     [string]$BaseCommit = '',
 
     [Parameter(Mandatory = $false)]
-    [switch]$SelfTest
+    [switch]$SelfTest,
+
+    # Treat problems in the optional omp-components.external.json overlay
+    # (entries that match no manifest shared project, a missing sharedProjects
+    # array) as errors instead of warnings.
+    [Parameter(Mandatory = $false)]
+    [switch]$Strict
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,7 +135,25 @@ $manifest = ConvertFrom-JsonDocument -Json $manifestText -Depth $jsonDepth
 # docs/OMP_COMPONENT_MANIFEST.md, "Local external-consumer overlay".
 $externalConsumersByProjectPath = [System.Collections.Generic.Dictionary[string, object[]]]::new([StringComparer]::OrdinalIgnoreCase)
 $externalOverlayPath = Join-Path $repositoryRoot 'omp-components.external.json'
+# Set only when the overlay file exists, so the summary can tell "no file" apart
+# from "a file whose entries merged into nothing".
+$externalOverlayMergedCount = $null
+
+# An overlay entry that matches nothing used to be dropped silently, which reads
+# exactly like a correct, empty overlay. Report it; -Strict makes it blocking.
+function Add-ExternalOverlayProblem {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    if ($Strict) {
+        Add-ValidationError -Errors $errors -Message $Message
+    }
+    else {
+        Add-ValidationWarning -Warnings $warnings -Message $Message
+    }
+}
+
 if (Test-Path -LiteralPath $externalOverlayPath -PathType Leaf) {
+    $externalOverlayMergedCount = 0
     $externalOverlay = $null
     try {
         $externalOverlay = ConvertFrom-JsonDocument -Json (Get-Content -LiteralPath $externalOverlayPath -Raw -Encoding UTF8) -Depth $jsonDepth
@@ -139,13 +163,33 @@ if (Test-Path -LiteralPath $externalOverlayPath -PathType Leaf) {
     }
 
     if ($null -ne $externalOverlay) {
-        foreach ($overlayProject in @(Get-OptionalPropertyValue -Object $externalOverlay -Name 'sharedProjects' | Where-Object { $null -ne $_ })) {
+        $manifestSharedProjectPaths = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($manifestSharedProject in @(Get-OptionalPropertyValue -Object $manifest -Name 'sharedProjects' | Where-Object { $null -ne $_ })) {
+            $manifestSharedProjectPath = [string](Get-OptionalPropertyValue -Object $manifestSharedProject -Name 'projectPath')
+            if (-not [string]::IsNullOrWhiteSpace($manifestSharedProjectPath)) {
+                [void]$manifestSharedProjectPaths.Add($manifestSharedProjectPath)
+            }
+        }
+
+        $overlayProjects = Get-OptionalPropertyValue -Object $externalOverlay -Name 'sharedProjects'
+        if ($null -eq $overlayProjects) {
+            Add-ExternalOverlayProblem -Message "The external-consumer overlay '$externalOverlayPath' has no 'sharedProjects' array; no external consumers were merged. Expected { `"sharedProjects`": [ { `"projectPath`": ..., `"externalConsumers`": [ ... ] } ] } (see docs/OMP_COMPONENT_MANIFEST.md)."
+        }
+
+        foreach ($overlayProject in @($overlayProjects | Where-Object { $null -ne $_ })) {
             $overlayProjectPath = [string](Get-OptionalPropertyValue -Object $overlayProject -Name 'projectPath')
             if ([string]::IsNullOrWhiteSpace($overlayProjectPath)) {
+                Add-ExternalOverlayProblem -Message "The external-consumer overlay '$externalOverlayPath' has a sharedProjects entry without 'projectPath'; it was ignored."
+                continue
+            }
+
+            if (-not $manifestSharedProjectPaths.Contains($overlayProjectPath)) {
+                Add-ExternalOverlayProblem -Message "The external-consumer overlay '$externalOverlayPath' names projectPath '$overlayProjectPath', which is not a sharedProjects entry in omp-components.json; its external consumers were ignored."
                 continue
             }
 
             $overlayConsumers = @(Get-OptionalPropertyValue -Object $overlayProject -Name 'externalConsumers' | Where-Object { $null -ne $_ })
+            $externalOverlayMergedCount += $overlayConsumers.Count
             if ($externalConsumersByProjectPath.ContainsKey($overlayProjectPath)) {
                 $overlayConsumers = @($externalConsumersByProjectPath[$overlayProjectPath]) + $overlayConsumers
             }
@@ -1630,6 +1674,10 @@ Write-Host "$checkMark Repository version $repositoryVersionStatus"
 Write-Host "$checkMark $componentVersionCount of $componentCount component versions validated"
 Write-Host "$checkMark $moduleDefinitionVersionSyncCount of $moduleDefinitionCount module definition versions synced"
 Write-Host "$checkMark $moduleMappingCount component-to-module mappings validated"
+
+if ($null -ne $externalOverlayMergedCount) {
+    Write-Host "$checkMark overlay: $externalOverlayMergedCount external consumers from $externalOverlayPath"
+}
 
 if ($consistentSetCount -gt 0) {
     Write-Host "$checkMark $consistentSetCount consistent artifact set(s) validated ($consistentSetErrorCount error(s))"

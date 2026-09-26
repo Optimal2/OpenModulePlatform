@@ -225,3 +225,98 @@ Describe 'Check 11: Web.Shared binary identity comparison function' {
         $result.Result | Should -Be 'Skip'
     }
 }
+
+Describe 'Local external-consumer overlay (omp-components.external.json)' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-ComponentVersions.TestHelpers.ps1')
+
+        $script:validOverlayJson = @'
+{
+  "sharedProjects": [
+    {
+      "projectPath": "SharedLib/SharedLib.csproj",
+      "externalConsumers": [
+        { "repositoryKey": "example-module", "componentKey": "example-module-web" }
+      ]
+    }
+  ]
+}
+'@
+        $script:unmatchedOverlayJson = @'
+{
+  "sharedProjects": [
+    {
+      "projectPath": "Missing/Missing.csproj",
+      "externalConsumers": [
+        { "repositoryKey": "example-module", "componentKey": "example-module-web" }
+      ]
+    }
+  ]
+}
+'@
+    }
+
+    BeforeEach {
+        $script:repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        $script:testRepo = New-OverlayTestRepository -RootPath $script:repoRoot
+    }
+
+    AfterEach {
+        Remove-TemporaryTestRepository -RootPath $script:repoRoot
+    }
+
+    It 'Passes without overlay warnings when no overlay file exists' {
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $script:testRepo.ValidatorPath -BaseCommit $script:testRepo.BaseCommit
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Not -Match 'external-consumer overlay'
+        $result.Output | Should -Not -Match 'is consumed by'
+    }
+
+    It 'Merges a valid overlay, reports the merge count, and warns about the external consumer' {
+        [System.IO.File]::WriteAllText($script:testRepo.OverlayPath, $script:validOverlayJson, [System.Text.Encoding]::UTF8)
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $script:testRepo.ValidatorPath -BaseCommit $script:testRepo.BaseCommit
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'overlay: 1 external consumers from .*omp-components\.external\.json'
+        $result.Output | Should -Match "consumed by 'example-module-web' in the 'example-module' repository"
+    }
+
+    It 'Warns about an overlay entry whose projectPath matches no manifest shared project' {
+        [System.IO.File]::WriteAllText($script:testRepo.OverlayPath, $script:unmatchedOverlayJson, [System.Text.Encoding]::UTF8)
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $script:testRepo.ValidatorPath -BaseCommit $script:testRepo.BaseCommit
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "overlay .*omp-components\.external\.json.* 'Missing/Missing\.csproj'"
+        $result.Output | Should -Match 'overlay: 0 external consumers from'
+    }
+
+    It 'Fails with -Strict when an overlay entry matches no manifest shared project' {
+        [System.IO.File]::WriteAllText($script:testRepo.OverlayPath, $script:unmatchedOverlayJson, [System.Text.Encoding]::UTF8)
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $script:testRepo.ValidatorPath -BaseCommit $script:testRepo.BaseCommit -Strict
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match "'Missing/Missing\.csproj'"
+    }
+
+    It 'Warns when the overlay has no sharedProjects array' {
+        [System.IO.File]::WriteAllText($script:testRepo.OverlayPath, '{ "sharedProject": [] }', [System.Text.Encoding]::UTF8)
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $script:testRepo.ValidatorPath -BaseCommit $script:testRepo.BaseCommit
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match "overlay .*omp-components\.external\.json.* has no 'sharedProjects' array"
+    }
+
+    It 'Fails with the file name when the overlay is not valid JSON' {
+        [System.IO.File]::WriteAllText($script:testRepo.OverlayPath, '{ "sharedProjects": [ ', [System.Text.Encoding]::UTF8)
+
+        $result = Invoke-ValidatorWithOutput -ValidatorPath $script:testRepo.ValidatorPath -BaseCommit $script:testRepo.BaseCommit
+
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'omp-components\.external\.json'
+    }
+}

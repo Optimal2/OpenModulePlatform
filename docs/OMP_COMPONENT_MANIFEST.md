@@ -99,9 +99,33 @@ shape, with only `projectPath` and `externalConsumers` required:
   `externalConsumers` into the matching manifest entry (by `projectPath`) and
   warns, when that shared project changed, that the external component must be
   bumped in its own repository. An unreadable overlay is a validation error; a
-  missing one is not.
+  missing one is not. When the file exists, the summary prints
+  `overlay: N external consumers from <file>`, so an overlay that merged
+  nothing is visible. An overlay without a `sharedProjects` array, an entry
+  without `projectPath`, or an entry whose `projectPath` is not a
+  `sharedProjects` entry in `omp-components.json` produces a warning naming the
+  file and the path; run with `-Strict` to make these errors.
 - `scripts/deployment/sign-artifacts.ps1` appends `codeSigning.includePatterns`
   to its own first-party name patterns (see [CODE_SIGNING.md](CODE_SIGNING.md)).
+
+### Code-signing section
+
+The `codeSigning` section is optional in the file as a whole, but
+`sign-artifacts.ps1` expects it whenever the overlay exists:
+
+```json
+{
+  "codeSigning": {
+    "includePatterns": [ "ExampleModule.*.dll", "ExampleModule.*.exe" ]
+  }
+}
+```
+
+Each entry is a file-name pattern (`-like` syntax) matched against the `.dll`
+and `.exe` files under the paths being signed. If the overlay exists but
+`codeSigning.includePatterns` is missing, misspelled, or empty, the script
+warns that no module binaries from other repositories will be signed; pass
+`-Strict` to make that an error.
 
 The overlay with the real entries is kept with the consumer repositories, not
 here.

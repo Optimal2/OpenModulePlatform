@@ -42,7 +42,12 @@
     Optional JSON overlay whose codeSigning.includePatterns array is appended to
     IncludePattern as well. Defaults to omp-components.external.json in the
     repository root; a missing file is not an error. See
-    docs/OMP_COMPONENT_MANIFEST.md, "Local external-consumer overlay".
+    docs/OMP_COMPONENT_MANIFEST.md, "Local external-consumer overlay". An
+    overlay that exists but has no codeSigning.includePatterns entries (missing
+    section, misspelled key, empty list) produces a warning.
+
+.PARAMETER Strict
+    Turn the missing codeSigning.includePatterns warning into an error.
 
 .PARAMETER SkipIfUnconfigured
     Exit successfully without signing when no configuration is found. Used by
@@ -60,6 +65,7 @@ param(
     ),
     [string[]]$AdditionalIncludePattern = @(),
     [string]$ExternalOverlayPath = '',
+    [switch]$Strict,
     [switch]$SkipIfUnconfigured
 )
 
@@ -256,17 +262,28 @@ function Get-OverlayIncludePatterns {
     }
 
     $overlay = Get-Content -LiteralPath $overlayPath -Raw | ConvertFrom-Json
+
+    # An overlay that exists but carries no usable patterns (section missing,
+    # key misspelled, empty list) used to return nothing silently, so module
+    # binaries named only there shipped unsigned without a word.
+    $result = @()
     $codeSigning = $overlay.PSObject.Properties['codeSigning']
-    if ($null -eq $codeSigning -or $null -eq $codeSigning.Value) {
-        return @()
+    if ($null -ne $codeSigning -and $null -ne $codeSigning.Value) {
+        $patterns = $codeSigning.Value.PSObject.Properties['includePatterns']
+        if ($null -ne $patterns -and $null -ne $patterns.Value) {
+            $result = @($patterns.Value | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+        }
     }
 
-    $patterns = $codeSigning.Value.PSObject.Properties['includePatterns']
-    if ($null -eq $patterns -or $null -eq $patterns.Value) {
-        return @()
+    if ($result.Count -eq 0) {
+        $message = "External overlay '$overlayPath' has no codeSigning.includePatterns entries, so no module binaries from other repositories will be signed. Expected: { `"codeSigning`": { `"includePatterns`": [ `"ExampleModule.*.dll`", `"ExampleModule.*.exe`" ] } } (see docs/OMP_COMPONENT_MANIFEST.md)."
+        if ($Strict) {
+            throw $message
+        }
+        Write-Warning $message
     }
 
-    return @($patterns.Value | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ })
+    return $result
 }
 
 $effectivePatterns = @($IncludePattern) + @($AdditionalIncludePattern | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) + @(Get-OverlayIncludePatterns -Explicit $ExternalOverlayPath)

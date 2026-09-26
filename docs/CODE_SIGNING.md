@@ -74,7 +74,9 @@ repositories are added per machine, either with `-AdditionalIncludePattern
 'ExampleModule.*.dll','ExampleModule.*.exe'` or through the
 `codeSigning.includePatterns` array in the optional, gitignored
 `omp-components.external.json` overlay in the repository root (see
-[OMP_COMPONENT_MANIFEST.md](OMP_COMPONENT_MANIFEST.md#local-external-consumer-overlay)).
+[OMP_COMPONENT_MANIFEST.md](OMP_COMPONENT_MANIFEST.md#code-signing-section)).
+An overlay that exists without `codeSigning.includePatterns` entries produces a
+warning, or an error with `-Strict`.
 Microsoft and third-party dependencies already carry valid signatures and are
 left untouched, which also keeps the signature volume well inside the Basic
 tier quota.

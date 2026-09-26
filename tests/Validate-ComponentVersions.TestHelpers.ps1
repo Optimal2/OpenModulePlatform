@@ -191,3 +191,91 @@ function Invoke-Validator {
 
     return $exitCode
 }
+
+function Invoke-ValidatorWithOutput {
+    <#
+    .SYNOPSIS
+    Runs the validator and returns its exit code together with everything it
+    wrote, so tests can assert on warnings and summary lines.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$ValidatorPath,
+        [Parameter(Mandatory = $false)][string]$BaseCommit = '',
+        [Parameter(Mandatory = $false)][switch]$Strict
+    )
+
+    $arguments = @{}
+    if (-not [string]::IsNullOrWhiteSpace($BaseCommit)) {
+        $arguments['BaseCommit'] = $BaseCommit
+    }
+    if ($Strict) {
+        $arguments['Strict'] = $true
+    }
+
+    $output = ''
+    $exitCode = $null
+    try {
+        $output = & $ValidatorPath @arguments *>&1 | Out-String -Width 4096
+    }
+    catch {
+        $output += $_.Exception.Message
+    }
+    finally {
+        $exitCode = $LASTEXITCODE
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output = $output
+    }
+}
+
+function New-OverlayTestRepository {
+    <#
+    .SYNOPSIS
+    Creates a temporary repository whose manifest declares one shared project
+    (SharedLib) with no in-repository consumers, then commits a change to it.
+    Returns the validator path and the base commit before the change, so
+    Check 7 sees the shared project as changed.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RootPath
+    )
+
+    $validatorPath = New-TemporaryTestRepository -RootPath $RootPath
+
+    $sharedDir = Join-Path $RootPath 'SharedLib'
+    $null = New-Item -ItemType Directory -Path $sharedDir -Force
+    $csprojContent = "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <PropertyGroup>`r`n    <TargetFramework>net8.0</TargetFramework>`r`n  </PropertyGroup>`r`n</Project>`r`n"
+    [System.IO.File]::WriteAllText((Join-Path $sharedDir 'SharedLib.csproj'), $csprojContent, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText((Join-Path $sharedDir 'Shared.cs'), 'class Shared { }', [System.Text.Encoding]::UTF8)
+
+    $manifestPath = Join-Path $RootPath 'omp-components.json'
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $manifest | Add-Member -NotePropertyName sharedProjects -NotePropertyValue @(
+        [pscustomobject]@{
+            projectPath = 'SharedLib/SharedLib.csproj'
+            consumers = @()
+            externalConsumers = @()
+        }
+    )
+    [System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 10), [System.Text.Encoding]::UTF8)
+
+    & git -C $RootPath add -A
+    if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
+    & git -C $RootPath commit -m 'Add shared project' --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+    $baseCommit = (& git -C $RootPath rev-parse HEAD).Trim()
+
+    [System.IO.File]::WriteAllText((Join-Path $sharedDir 'Shared.cs'), 'class Shared { int x; }', [System.Text.Encoding]::UTF8)
+    & git -C $RootPath add -A
+    if ($LASTEXITCODE -ne 0) { throw 'git add failed.' }
+    & git -C $RootPath commit -m 'Change shared project' --quiet
+    if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+
+    return [pscustomobject]@{
+        ValidatorPath = $validatorPath
+        BaseCommit = $baseCommit
+        OverlayPath = (Join-Path $RootPath 'omp-components.external.json')
+    }
+}
