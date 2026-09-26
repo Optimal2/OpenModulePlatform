@@ -84,9 +84,9 @@
       ],
       "externalConsumers": [
         {
-          "repositoryKey": "ibspackager",
-          "repositoryPathHint": "../IbsPackager",
-          "componentKey": "ibs-packager-web"
+          "repositoryKey": "contoso",
+          "repositoryPathHint": "../Contoso",
+          "componentKey": "contoso-web"
         }
       ]
     },
@@ -101,9 +101,9 @@
       ],
       "externalConsumers": [
         {
-          "repositoryKey": "ibspackager",
-          "repositoryPathHint": "../IbsPackager",
-          "componentKey": "ibs-packager-worker"
+          "repositoryKey": "contoso",
+          "repositoryPathHint": "../Contoso",
+          "componentKey": "contoso-worker"
         }
       ]
     }

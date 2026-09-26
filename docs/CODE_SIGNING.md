@@ -1,9 +1,9 @@
 # Code signing with Azure Trusted Signing
 
-Official Optimal2 releases sign every first-party `.exe`/`.dll` with
+Official releases sign every first-party `.exe`/`.dll` with
 [Azure Trusted Signing](https://learn.microsoft.com/azure/trusted-signing/)
-before the binaries are zipped into artifact packages. Signed binaries carry an
-`Optimal2 AB` signature with an RFC 3161 timestamp, are trusted by SmartScreen
+before the binaries are zipped into artifact packages. Signed binaries carry a
+platform-vendor signature with an RFC 3161 timestamp, are trusted by SmartScreen
 and Smart App Control, and remain valid after certificate rotation.
 
 Signing is opt-in: without a configuration file the packaging pipeline runs
@@ -11,12 +11,12 @@ exactly as before and produces unsigned developer builds.
 
 ## One-time Azure setup (operator steps)
 
-1. **Azure subscription** — use or create a subscription owned by Optimal2 AB.
+1. **Azure subscription** — use or create a subscription owned by the platform vendor.
 2. **Create the Trusted Signing account** — Azure Portal → *Trusted Signing
    Accounts* → *Create*. Pick a nearby region (West Europe), Basic SKU
    ($9.99/month, 5 000 signatures/month).
 3. **Identity validation** — in the Trusted Signing account, create a new
-   *Identity validation* of type *Public*. Enter Optimal2 AB's legal name,
+   *Identity validation* of type *Public*. Enter the platform vendor's legal name,
    organisation number, and a verifiable company email. Validation typically
    completes within a few days; respond promptly if the validation team emails.
 4. **Certificate profile** — once validation is complete, create a
@@ -68,8 +68,8 @@ interactive use, or set the `AZURE_*` service principal variables.
 ## What gets signed
 
 Only first-party, not-yet-signed binaries matching the module name patterns in
-`sign-artifacts.ps1` (OpenModulePlatform.*, IbsPackager.*, EArkivChecker.*,
-LogSearch.*, iKrock2.*, VajSkrivare.*, ODVGateway.*, Dokumentbibliotek.*).
+`sign-artifacts.ps1` (OpenModulePlatform.*, Contoso.*, Northwind.*,
+Fabrikam.*, Globex.*, Tailwind.*, ODVGateway.*, AdventureWorks.*).
 Microsoft and third-party dependencies already carry valid signatures and are
 left untouched, which also keeps the signature volume well inside the Basic
 tier quota.
@@ -81,6 +81,6 @@ Get-AuthenticodeSignature <publish-folder>\OpenModulePlatform.HostAgent.WindowsS
 signtool verify /pa /v <publish-folder>\OpenModulePlatform.HostAgent.WindowsService.exe
 ```
 
-A valid official release shows `Status: Valid` with an `Optimal2 AB` signer
+A valid official release shows `Status: Valid` with a platform-vendor signer
 certificate issued by Microsoft's public trust CA and a timestamp from
 `timestamp.acs.microsoft.com`.

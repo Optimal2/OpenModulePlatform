@@ -186,7 +186,7 @@ if (-not $Apply) {
 }
 
 # The refresh rebuilds the installer skeleton and the OMP/ODV payload, but
-# module artifacts from the other source repositories (IbsPackager & co) are
+# module artifacts from the other source repositories (Contoso & co) are
 # produced by the package-object sync - without it the package library keeps
 # serving the previous versions.
 # Long-lived MSBuild nodes (/nodeReuse:true) from the refresh build keep

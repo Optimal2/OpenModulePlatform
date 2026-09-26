@@ -336,8 +336,8 @@ Parameters:
   `scripts/local-ci.ps1` passes its project count. Default 0 disables the
   check.
 
-Consumer repositories (LogSearch, and any future consumer with TRX-producing
-test steps) call THIS copy — from a sibling checkout locally and from the
+Consumer repositories (and any future consumer with TRX-producing test steps)
+call THIS copy — from a sibling checkout locally and from the
 `OpenModulePlatform` checkout in CI — instead of keeping their own, so the
 gate cannot drift per repo.
 

@@ -55,10 +55,10 @@ with a future canonical check. Reserve a number here before using it.
 | 2 | `repositoryVersion` presence and format | static | every repository |
 | 3 | Component `version` presence and format | static | every repository |
 | 4 | Module-definition version sync (manifest = definition file) | static | every repository with module definitions |
-| 4b | Worker plugin host-contract (`minWorkerHostVersion` only on worker/worker-plugin) | static | **measured 2026-09-07: this platform repository and IbsPackager only** — exactly the two manifests that declare `minWorkerHostVersion`. See "Present-but-vacuous is not applied uniformly" below. |
+| 4b | Worker plugin host-contract (`minWorkerHostVersion` only on worker/worker-plugin) | static | **measured 2026-09-07: this platform repository and Contoso only** — exactly the two manifests that declare `minWorkerHostVersion`. See "Present-but-vacuous is not applied uniformly" below. |
 | 5 | Component-to-module mapping integrity | static | every repository with module definitions |
 | 6 | `minModuleDefinitionVersion` sanity (≤ declared definitionVersion) | static | every repository with module definitions |
-| 7 | Shared-project cascade version bumps | base-diff | **bites** only where `sharedProjects` is declared (measured 2026-09-07: this platform repository alone). **Present but vacuous** in seven consumers; **absent by design** in IbsPackager only. See below. |
+| 7 | Shared-project cascade version bumps | base-diff | **bites** only where `sharedProjects` is declared (measured 2026-09-07: this platform repository alone). **Present but vacuous** in seven consumers; **absent by design** in Contoso only. See below. |
 | 8 | Module-definition SQL diff enforcement (material SQL change ⇒ definitionVersion bump) | base-diff | every repository whose definitions own SQL |
 | 8b | `minModuleDefinitionVersion` must not lag a bumped definitionVersion | base-diff | follows Check 8 (OpenDocViewer runs the stricter variant: must EQUAL — a superset that never passes where the canonical rule fails) |
 | 9 | Transitive ProjectReference lockstep bumps | base-diff | every repository (vacuous without intra-repo references) |
@@ -70,7 +70,7 @@ with a future canonical check. Reserve a number here before using it.
 | 15 | Shared-script drift guard (calls `validate-shared-scripts.ps1` here) | cross-repo | consumer validators; this repository is the canonical source and self-skips |
 | 16 | Embedded sqlScripts freshness (embedded content/sha256 = on-disk SQL) | worktree | every repository whose definitions embed SQL |
 | 17 | (repo-local) unconditional artifact-pointer overwrite guard | static SQL scan | exactly one consumer repository |
-| 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | repositories whose module definitions declare `consistentArtifactSets` (currently this platform repository and IbsPackager) |
+| 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | repositories whose module definitions declare `consistentArtifactSets` (currently this platform repository and Contoso) |
 | 19 | (repo-local) runtime cascade-bump | base-diff | exactly one consumer repository |
 
 Checks 7, 8, 9, 11, 12, 13 and 19, and the unnumbered `repositoryVersion`
@@ -89,8 +89,8 @@ follow that rule consistently — and the two exceptions point in **opposite** d
 
 | | Declares the artifact | Check present in validator | Check absent |
 |---|---|---|---|
-| **Check 7** (`sharedProjects`) | OpenModulePlatform only | OpenModulePlatform + 7 consumers (vacuous) | **IbsPackager only** — explicitly "Absent by design" in its own header |
-| **Check 4b** (`minWorkerHostVersion`) | OpenModulePlatform + IbsPackager | exactly those two | **the other 7 consumers** |
+| **Check 7** (`sharedProjects`) | OpenModulePlatform only | OpenModulePlatform + 7 consumers (vacuous) | **Contoso only** — explicitly "Absent by design" in its own header |
+| **Check 4b** (`minWorkerHostVersion`) | OpenModulePlatform + Contoso | exactly those two | **the other 7 consumers** |
 
 So Check 7 is kept present-and-vacuous almost everywhere, while Check 4b is dropped wherever it
 would be vacuous. Both patterns are defensible on their own; having both at once means the phrase

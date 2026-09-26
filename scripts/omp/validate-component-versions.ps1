@@ -385,7 +385,7 @@ if ($baseRefAvailable) {
     # missed, no consumer was ever flagged as unbumped, and the script still printed
     # "validation passed" -- the entire cascade check silently disabled. Reachable on a
     # blobless clone, after a rebase or squash, or with a -BaseCommit predating the manifest.
-    # The IbsPackager sibling already errors on both an unreadable manifest and invalid JSON
+    # The Contoso sibling already errors on both an unreadable manifest and invalid JSON
     # (R8-P4-7).
     $baseManifestText = Get-GitFileTextAtRef -RepositoryRoot $repositoryRoot -BaseRef $baseRef -Path 'omp-components.json' -Errors $errors -CheckDescription 'The baseline manifest read'
     if ([string]::IsNullOrWhiteSpace($baseManifestText)) {
@@ -501,7 +501,7 @@ if ($sharedProjects.Count -gt 0 -and $baseRefAvailable) {
 
         # R8-P4-17. The cascade rule stopped at the repository boundary: this loop
         # works out which components consume a shared project, but only OMP's own.
-        # IbsPackager.Web references Web.Shared straight out of the sibling
+        # Contoso.Web references Web.Shared straight out of the sibling
         # repository, and nothing here knew it. The solution still compiles -- the
         # reference is by project, not by package -- so the mismatch only surfaced
         # when the host rejected the artifact at import, at the end of a full

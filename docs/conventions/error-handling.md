@@ -95,194 +95,194 @@ This document summarizes how each repository currently handles errors, highlight
 
 ---
 
-### IbsPackager (.NET)
+### Contoso (.NET)
 
 #### Custom exception types
 - No domain-specific `*Exception` classes.
 - Standard BCL exceptions:
-  - `InvalidOperationException` for config/runtime preconditions — `IbsPackager.Runtime/Services/IbsBatchWriter.cs:32`, `:37`, `:42`, `:447`, `:457`, `:462`, `:467`, `:475`, `:483`, `:488`, `:496`, `:506`, `:513`; `IbsPackager.Runtime/Services/IbsPackagerRepository.cs:256`, `:415`, `:423`, `:486`, `:1481`, `:1657`; `IbsPackager.ChannelTypes.FileDrop/FileDropChannelOptions.cs:134-396`; `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:43`, `:748`, `:805`, `:859`, `:864`, `:870`, `:918`, `:923`, `:929`, `:1104`, `:1130`, `:1139`, `:1156`, `:1161`, `:1171`, `:1176`, `:1183`, `:1355`, `:1399`, `:1410`, `:1467`, `:1480`, `:1691`, `:1696`.
-  - `ArgumentException` — `IbsPackager.Runtime/Services/IbsPackagerRepository.cs:415`, `:423`; `IbsPackager.ChannelTypes.FileDrop/FileDropIndexFieldExtractor.cs:445`, `:496`, `:861`, `:1107`.
-  - `IOException` / `FileNotFoundException` for IFS/batch file system errors — `IbsPackager.Runtime/Services/IbsBatchWriter.cs:206`, `:231`, `:238`, `:271`, `:302`, `:357`, `:385`; `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:1375`, `:1455`.
-  - `NotSupportedException` — `IbsPackager.Tests/ReconcileChannelTypeArtifactRequirementsTests.cs:433`, `:462`, `:468` and unsupported enum/command cases.
-  - `JsonException` rethrown with localized message — `IbsPackager.Web/Pages/ChannelConfigs/Index.cshtml.cs:470`.
+  - `InvalidOperationException` for config/runtime preconditions — `Contoso.Runtime/Services/ContosoBatchWriter.cs:32`, `:37`, `:42`, `:447`, `:457`, `:462`, `:467`, `:475`, `:483`, `:488`, `:496`, `:506`, `:513`; `Contoso.Runtime/Services/ContosoRepository.cs:256`, `:415`, `:423`, `:486`, `:1481`, `:1657`; `Contoso.ChannelTypes.FileDrop/FileDropChannelOptions.cs:134-396`; `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:43`, `:748`, `:805`, `:859`, `:864`, `:870`, `:918`, `:923`, `:929`, `:1104`, `:1130`, `:1139`, `:1156`, `:1161`, `:1171`, `:1176`, `:1183`, `:1355`, `:1399`, `:1410`, `:1467`, `:1480`, `:1691`, `:1696`.
+  - `ArgumentException` — `Contoso.Runtime/Services/ContosoRepository.cs:415`, `:423`; `Contoso.ChannelTypes.FileDrop/FileDropIndexFieldExtractor.cs:445`, `:496`, `:861`, `:1107`.
+  - `IOException` / `FileNotFoundException` for IFS/batch file system errors — `Contoso.Runtime/Services/ContosoBatchWriter.cs:206`, `:231`, `:238`, `:271`, `:302`, `:357`, `:385`; `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:1375`, `:1455`.
+  - `NotSupportedException` — `Contoso.Tests/ReconcileChannelTypeArtifactRequirementsTests.cs:433`, `:462`, `:468` and unsupported enum/command cases.
+  - `JsonException` rethrown with localized message — `Contoso.Web/Pages/ChannelConfigs/Index.cshtml.cs:470`.
 
 #### Try/catch patterns
 - Mostly specific catches (`SqlException`, `JsonException`, `IOException`, `DbException`, `UnauthorizedAccessException`, `InvalidOperationException`, `ArgumentException`, `FormatException`, `NotSupportedException`, `TimeoutException`, `OperationCanceledException`, `TargetInvocationException`, `ReflectionTypeLoadException`).
 - Filtered broad catches:
-  - `IbsPackager.Runtime/Services/IbsPackagerWorkerEngine.cs:189` — broad `catch (Exception ex)` after many specific catches, used to log/publish channel failure and delay retry.
-  - `IbsPackager.Runtime/Services/IbsPackagerWorkerEngine.cs:217` — `catch (Exception ex) when (ex is DbException or TimeoutException or InvalidOperationException)` for heartbeat failures.
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:704` / `:1308` — filtered broad catches for job-lease renewal and command dispatch.
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:1771` — `catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)` for snapshot capture fallback.
+  - `Contoso.Runtime/Services/ContosoWorkerEngine.cs:189` — broad `catch (Exception ex)` after many specific catches, used to log/publish channel failure and delay retry.
+  - `Contoso.Runtime/Services/ContosoWorkerEngine.cs:217` — `catch (Exception ex) when (ex is DbException or TimeoutException or InvalidOperationException)` for heartbeat failures.
+  - `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:704` / `:1308` — filtered broad catches for job-lease renewal and command dispatch.
+  - `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:1771` — `catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)` for snapshot capture fallback.
 - All rethrows use `throw;`; no `throw ex;` found.
 
 #### Global error handling
-- `IbsPackager.Web/Program.cs` has no explicit `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages`; it relies on `UseOmpWebDefaults`.
-- `IbsPackager.Web/Pages/Error.cshtml.cs` is an `OmpErrorPageModelBase` subclass, so global error rendering is delegated to the shared OMP framework.
+- `Contoso.Web/Program.cs` has no explicit `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages`; it relies on `UseOmpWebDefaults`.
+- `Contoso.Web/Pages/Error.cshtml.cs` is an `OmpErrorPageModelBase` subclass, so global error rendering is delegated to the shared OMP framework.
 
 #### Log vs user-facing
 - `_logger.LogError` / `LogWarning` inside catches:
-  - `IbsPackager.Runtime/Services/IbsPackagerWorkerEngine.cs:251`
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:1219`, `:1327`, `:2038-2084`
-  - `IbsPackager.Runtime/Services/HostAgentRpcClient.cs:96`
+  - `Contoso.Runtime/Services/ContosoWorkerEngine.cs:251`
+  - `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:1219`, `:1327`, `:2038-2084`
+  - `Contoso.Runtime/Services/HostAgentRpcClient.cs:96`
 - User-facing errors use `FeedbackError` / `FeedbackMessage` bound via `[TempData]`:
-  - `IbsPackager.Web/Pages/ManualReview/Viewer.cshtml.cs:211-222`
-  - `IbsPackager.Web/Pages/Jobs/Index.cshtml.cs:91-96`
-  - `IbsPackager.Web/Pages/Lists/Index.cshtml.cs:654`
-  - `IbsPackager.Web/Pages/ChannelConfigs/Index.cshtml.cs:260-269`
+  - `Contoso.Web/Pages/ManualReview/Viewer.cshtml.cs:211-222`
+  - `Contoso.Web/Pages/Jobs/Index.cshtml.cs:91-96`
+  - `Contoso.Web/Pages/Lists/Index.cshtml.cs:654`
+  - `Contoso.Web/Pages/ChannelConfigs/Index.cshtml.cs:260-269`
 - No API controllers / `ProblemDetails` found.
 
 #### Result/Either pattern
 - Lightweight result object:
-  - `IbsPackager.Abstractions/Models/ChannelConfigValidationResult.cs` — `IsValid` + `IReadOnlyList<string> Errors` with `Success()` / `Failed(...)` factories.
-  - `IbsPackager.Runtime/Models/IbsBatchWriteResult.cs` — data carrier for batch write output.
-- `IbsPackager.Runtime/Services/HostAgentRpcClient.cs` returns `HostAgentEnsureArtifactResponse` with `Success`/`ErrorMessage` flags (`:64-68`, `:102-104`).
+  - `Contoso.Abstractions/Models/ChannelConfigValidationResult.cs` — `IsValid` + `IReadOnlyList<string> Errors` with `Success()` / `Failed(...)` factories.
+  - `Contoso.Runtime/Models/ContosoBatchWriteResult.cs` — data carrier for batch write output.
+- `Contoso.Runtime/Services/HostAgentRpcClient.cs` returns `HostAgentEnsureArtifactResponse` with `Success`/`ErrorMessage` flags (`:64-68`, `:102-104`).
 - No `OneOf`, `Either`, error-code enums, discriminated unions, or `Try` usage.
 
 #### Swallowed exceptions
 - Best-effort empty/comment-only catch blocks:
-  - `IbsPackager.Runtime/Services/IbsBatchWriter.cs:366-369` — catches `IOException` and ignores it ("Best effort cleanup only").
-  - `IbsPackager.Runtime/Services/IbsBatchWriter.cs:587-598` — catches `IOException`/`UnauthorizedAccessException`/`NotSupportedException` when setting hidden attribute.
-  - `IbsPackager.Runtime/Services/IbsBatchWriter.cs:614-625` — catches `IOException`/`UnauthorizedAccessException`/`JsonException` in `TryReadBatchMetadata` and returns `null`.
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropLockFiles.cs:93-102`, `:160-169`, `:214-223`, `:294-301` (`Debug.WriteLine` only), `:338-355`, `:377-381` — swallow file/JSON errors.
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropPdfValidator.cs:102-110` — catches `IOException`/`UnauthorizedAccessException` during cleanup and returns.
-  - `IbsPackager.Web/Pages/Jobs/Index.cshtml.cs:113-120` — catches `ArgumentException` in `Path.GetFileName` and returns original path.
+  - `Contoso.Runtime/Services/ContosoBatchWriter.cs:366-369` — catches `IOException` and ignores it ("Best effort cleanup only").
+  - `Contoso.Runtime/Services/ContosoBatchWriter.cs:587-598` — catches `IOException`/`UnauthorizedAccessException`/`NotSupportedException` when setting hidden attribute.
+  - `Contoso.Runtime/Services/ContosoBatchWriter.cs:614-625` — catches `IOException`/`UnauthorizedAccessException`/`JsonException` in `TryReadBatchMetadata` and returns `null`.
+  - `Contoso.ChannelTypes.FileDrop/FileDropLockFiles.cs:93-102`, `:160-169`, `:214-223`, `:294-301` (`Debug.WriteLine` only), `:338-355`, `:377-381` — swallow file/JSON errors.
+  - `Contoso.ChannelTypes.FileDrop/FileDropPdfValidator.cs:102-110` — catches `IOException`/`UnauthorizedAccessException` during cleanup and returns.
+  - `Contoso.Web/Pages/Jobs/Index.cshtml.cs:113-120` — catches `ArgumentException` in `Path.GetFileName` and returns original path.
 - Logged-but-swallowed:
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:2038-2084` — logs warnings but continues after source-archive/lock-file cleanup failures.
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:1571-1586` — logs warnings on command-lock reset failures then rethrows original via `catch { ... throw; }`.
+  - `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:2038-2084` — logs warnings but continues after source-archive/lock-file cleanup failures.
+  - `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:1571-1586` — logs warnings on command-lock reset failures then rethrows original via `catch { ... throw; }`.
 
 ---
 
-### LogSearch (.NET)
+### Fabrikam (.NET)
 
 #### Custom exception types
 - No domain-specific `*Exception` classes.
 - Standard BCL exceptions:
-  - `ArgumentException` / `ArgumentNullException` / `ArgumentOutOfRangeException` — `LogSearch.Runtime/SearchIdentifierNormalizer.cs:10`, `:16`, `:22`, `:27`, `:34`, `:62`; `LogSearch.Runtime/LogSearchRepository.cs:28`, `:37`, `:327-330`, `:408-410`, `:1458`, `:1470`; `LogSearch.Runtime/LogSearchSourceSeeder.cs:13`.
-  - `InvalidOperationException` — `LogSearch.Runtime/LogSearchRepository.cs:279`, `:509`; `LogSearch.Runtime/LogSearchJobProcessor.cs:281`, `:411`; `LogSearch.Runtime/LogSearchReportBuilder.cs:67`; `LogSearch.Runtime/LogSearchConnectionFactory.cs:24`, `:59`, `:76`, `:81`, `:86`, `:91`, `:107`.
+  - `ArgumentException` / `ArgumentNullException` / `ArgumentOutOfRangeException` — `Fabrikam.Runtime/SearchIdentifierNormalizer.cs:10`, `:16`, `:22`, `:27`, `:34`, `:62`; `Fabrikam.Runtime/FabrikamRepository.cs:28`, `:37`, `:327-330`, `:408-410`, `:1458`, `:1470`; `Fabrikam.Runtime/FabrikamSourceSeeder.cs:13`.
+  - `InvalidOperationException` — `Fabrikam.Runtime/FabrikamRepository.cs:279`, `:509`; `Fabrikam.Runtime/FabrikamJobProcessor.cs:281`, `:411`; `Fabrikam.Runtime/FabrikamReportBuilder.cs:67`; `Fabrikam.Runtime/FabrikamConnectionFactory.cs:24`, `:59`, `:76`, `:81`, `:86`, `:91`, `:107`.
   - `DbException` / `TimeoutException` / `SqlException` are caught but not thrown locally.
 
 #### Try/catch patterns
 - Specific catches:
-  - `LogSearch.Web/Pages/Index.cshtml.cs:327` — `catch (ArgumentException)` inside input validation.
-  - `LogSearch.Service/LogSearchWorker.cs:50` — `catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)`.
-  - `LogSearch.Service/LogSearchWorker.cs:54` — `catch (DbException ex)`.
-  - `LogSearch.Service/LogSearchWorker.cs:58` — `catch (TimeoutException ex)`.
-  - `LogSearch.Service/LogSearchWorker.cs:62` — `catch (InvalidOperationException ex)`.
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:103` — `catch (OperationCanceledException) when (!ct.IsCancellationRequested)`.
+  - `Fabrikam.Web/Pages/Index.cshtml.cs:327` — `catch (ArgumentException)` inside input validation.
+  - `Fabrikam.Service/FabrikamWorker.cs:50` — `catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)`.
+  - `Fabrikam.Service/FabrikamWorker.cs:54` — `catch (DbException ex)`.
+  - `Fabrikam.Service/FabrikamWorker.cs:58` — `catch (TimeoutException ex)`.
+  - `Fabrikam.Service/FabrikamWorker.cs:62` — `catch (InvalidOperationException ex)`.
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:103` — `catch (OperationCanceledException) when (!ct.IsCancellationRequested)`.
 - Filtered broad catches:
-  - `LogSearch.Web/Program.cs:20` — `catch (Exception ex) when (IsOptionalSourceSeedingFailure(ex))`.
-  - `LogSearch.Service/LogSearchWorker.cs:96` — `catch (Exception ex) when (ex is not OperationCanceledException)`.
-  - `LogSearch.Service/LogSearchWorker.cs:138` — `catch (Exception ex) when (ex is DbException or TimeoutException or InvalidOperationException)`.
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:120` — `catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)`.
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:151` — `catch (Exception ex) when (ex is not OperationCanceledException)`.
+  - `Fabrikam.Web/Program.cs:20` — `catch (Exception ex) when (IsOptionalSourceSeedingFailure(ex))`.
+  - `Fabrikam.Service/FabrikamWorker.cs:96` — `catch (Exception ex) when (ex is not OperationCanceledException)`.
+  - `Fabrikam.Service/FabrikamWorker.cs:138` — `catch (Exception ex) when (ex is DbException or TimeoutException or InvalidOperationException)`.
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:120` — `catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)`.
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:151` — `catch (Exception ex) when (ex is not OperationCanceledException)`.
 - Transaction rollback catches rethrow with `throw;`:
-  - `LogSearch.Runtime/LogSearchRepository.cs:226-229`, `:296-299`, `:809-812`.
+  - `Fabrikam.Runtime/FabrikamRepository.cs:226-229`, `:296-299`, `:809-812`.
 - No plain `catch (Exception)` without a filter; no `throw ex;`.
 
 #### Global error handling
 - No local middleware, exception filters, `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages`.
 - Web app delegates to shared OMP defaults:
-  - `LogSearch.Web/Program.cs:14` — `app.UseOmpWebDefaults(...)`.
-  - `LogSearch.Web/Pages/Error.cshtml.cs:11` — `OmpErrorPageModelBase`.
-  - `LogSearch.Web/Pages/Status.cshtml.cs:13` — `OmpStatusPageModelBase`.
+  - `Fabrikam.Web/Program.cs:14` — `app.UseOmpWebDefaults(...)`.
+  - `Fabrikam.Web/Pages/Error.cshtml.cs:11` — `OmpErrorPageModelBase`.
+  - `Fabrikam.Web/Pages/Status.cshtml.cs:13` — `OmpStatusPageModelBase`.
 - Windows service host has no global exception handling around startup source seeding:
-  - `LogSearch.Service/Program.cs:25` — `await LogSearchSourceSeeder.ApplyConfiguredSourcesAsync(...)` with no try/catch.
-- Web host guards startup seeding at `LogSearch.Web/Program.cs:16-25`.
+  - `Fabrikam.Service/Program.cs:25` — `await FabrikamSourceSeeder.ApplyConfiguredSourcesAsync(...)` with no try/catch.
+- Web host guards startup seeding at `Fabrikam.Web/Program.cs:16-25`.
 
 #### Log vs user-facing
 - Background worker logs errors and persists job-level error records:
-  - `LogSearch.Service/LogSearchWorker.cs:56`, `:60`, `:64` — `_logger.LogError` for cycle-level failures.
-  - `LogSearch.Service/LogSearchWorker.cs:98` — `_logger.LogError(ex, "LogSearch job {SearchJobId} failed.")` plus `FailJobAsync(..., ex.ToString(), ...)`.
-  - `LogSearch.Service/LogSearchWorker.cs:140` — `_logger.LogWarning` on lease-renewal failures.
+  - `Fabrikam.Service/FabrikamWorker.cs:56`, `:60`, `:64` — `_logger.LogError` for cycle-level failures.
+  - `Fabrikam.Service/FabrikamWorker.cs:98` — `_logger.LogError(ex, "Fabrikam job {SearchJobId} failed.")` plus `FailJobAsync(..., ex.ToString(), ...)`.
+  - `Fabrikam.Service/FabrikamWorker.cs:140` — `_logger.LogWarning` on lease-renewal failures.
 - Job processor logs warnings and stores per-source/per-job error rows:
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:106`, `:122`, `:153` — `_logger.LogWarning` plus `InsertJobErrorAsync`.
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:106`, `:122`, `:153` — `_logger.LogWarning` plus `InsertJobErrorAsync`.
 - Web UI surfaces sanitized, localized messages:
-  - `LogSearch.Web/Pages/JobDetails.cshtml.cs:126-146` — `GetJobLastErrorMessage` / `GetProcessingErrorMessage`.
-  - `LogSearch.Web/Pages/JobDetails.cshtml.cs:148-167` — `GetSourceStatusMessage`.
-  - `LogSearch.Web/Pages/Index.cshtml.cs:80-83`, `:102-104`, `:121-124` — `StatusMessage`.
-- Auth failures return `Forbid()` — `LogSearch.Web/Security/LogSearchPageModel.cs:27-29`, `:42`.
-- Missing resources return `NotFound()` — `LogSearch.Web/Pages/JobDetails.cshtml.cs:68`, `:74`.
+  - `Fabrikam.Web/Pages/JobDetails.cshtml.cs:126-146` — `GetJobLastErrorMessage` / `GetProcessingErrorMessage`.
+  - `Fabrikam.Web/Pages/JobDetails.cshtml.cs:148-167` — `GetSourceStatusMessage`.
+  - `Fabrikam.Web/Pages/Index.cshtml.cs:80-83`, `:102-104`, `:121-124` — `StatusMessage`.
+- Auth failures return `Forbid()` — `Fabrikam.Web/Security/FabrikamPageModel.cs:27-29`, `:42`.
+- Missing resources return `NotFound()` — `Fabrikam.Web/Pages/JobDetails.cshtml.cs:68`, `:74`.
 - No API `ProblemDetails`.
 
 #### Result/Either pattern
 - No `Result<T>`, `OneOf`, `Either`, `Try`, or discriminated unions.
 - Closest patterns:
-  - `LogSearch.Runtime/LogSearchOptionsValidator.cs:72-74` — `ValidateOptionsResult.Success` / `Fail(failures)`.
-  - `LogSearch.Runtime/LogSearchReportBuilder.cs:12`, `:32`, `:38` — tuple return `(Reports, TotalBytes, ExceededMaxBytes)` used as a soft-cap flag.
+  - `Fabrikam.Runtime/FabrikamOptionsValidator.cs:72-74` — `ValidateOptionsResult.Success` / `Fail(failures)`.
+  - `Fabrikam.Runtime/FabrikamReportBuilder.cs:12`, `:32`, `:38` — tuple return `(Reports, TotalBytes, ExceededMaxBytes)` used as a soft-cap flag.
 
 #### Swallowed exceptions
 - No empty `catch { }` blocks.
 - Catches that absorb an exception and continue (intentional):
-  - `LogSearch.Service/LogSearchWorker.cs:54-65` — catches `DbException`/`TimeoutException`/`InvalidOperationException` in the main polling loop, logs, and continues polling.
-  - `LogSearch.Service/LogSearchWorker.cs:138-141` — catches DB/timeout/invalid-operation during lease renewal, logs warning, and continues.
-  - `LogSearch.Service/LogSearchWorker.cs:108-110` — catches `OperationCanceledException` from the lease-renewal task in `finally`.
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:120-135` — catches source-level SQL/timeout/invalid-operation, marks the source failed, logs warning, and continues with remaining sources.
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:151-160` — catches non-cancellation report-generation errors, logs warning, inserts a job error, and continues.
-  - `LogSearch.Web/Program.cs:20-25` — catches optional source-seeding failures, logs, and continues startup by design.
-  - `LogSearch.Web/Pages/Index.cshtml.cs:327-335` — catches `ArgumentException` during validation and converts it to a `ValidationResult`.
+  - `Fabrikam.Service/FabrikamWorker.cs:54-65` — catches `DbException`/`TimeoutException`/`InvalidOperationException` in the main polling loop, logs, and continues polling.
+  - `Fabrikam.Service/FabrikamWorker.cs:138-141` — catches DB/timeout/invalid-operation during lease renewal, logs warning, and continues.
+  - `Fabrikam.Service/FabrikamWorker.cs:108-110` — catches `OperationCanceledException` from the lease-renewal task in `finally`.
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:120-135` — catches source-level SQL/timeout/invalid-operation, marks the source failed, logs warning, and continues with remaining sources.
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:151-160` — catches non-cancellation report-generation errors, logs warning, inserts a job error, and continues.
+  - `Fabrikam.Web/Program.cs:20-25` — catches optional source-seeding failures, logs, and continues startup by design.
+  - `Fabrikam.Web/Pages/Index.cshtml.cs:327-335` — catches `ArgumentException` during validation and converts it to a `ValidationResult`.
 
 ---
 
-### EArkivChecker (.NET)
+### Northwind (.NET)
 
 #### Custom exception types
 - No domain-specific `*Exception` classes.
 - Standard BCL exceptions:
-  - `ArgumentNullException.ThrowIfNull` — `EArkivChecker.Runtime/FolderScanner.cs:12`, `EArkivChecker.Web/Security/EArkivCheckerPermissions.cs:28`, `EArkivChecker.Runtime/EArkivCheckerRepository.cs:704`.
-  - `ArgumentException.ThrowIfNullOrWhiteSpace` — `EArkivCheckerRepository.cs:81`, `:107`, `:108`, `:252-256`, `:351`, `:642`.
-  - `InvalidOperationException` — `EArkivChecker.Runtime/EArkivCheckerConnectionFactory.cs:13`.
-  - `ArgumentOutOfRangeException` — `EArkivCheckerRepository.cs:639`.
-  - `DataException` — `EArkivCheckerRepository.cs:574`.
-- Test-only: `SkipException` — `EArkivChecker.Runtime.Tests/EArkivCheckerRepositoryTierCTests.cs:677`.
+  - `ArgumentNullException.ThrowIfNull` — `Northwind.Runtime/FolderScanner.cs:12`, `Northwind.Web/Security/NorthwindPermissions.cs:28`, `Northwind.Runtime/NorthwindRepository.cs:704`.
+  - `ArgumentException.ThrowIfNullOrWhiteSpace` — `NorthwindRepository.cs:81`, `:107`, `:108`, `:252-256`, `:351`, `:642`.
+  - `InvalidOperationException` — `Northwind.Runtime/NorthwindConnectionFactory.cs:13`.
+  - `ArgumentOutOfRangeException` — `NorthwindRepository.cs:639`.
+  - `DataException` — `NorthwindRepository.cs:574`.
+- Test-only: `SkipException` — `Northwind.Runtime.Tests/NorthwindRepositoryTierCTests.cs:677`.
 
 #### Try/catch patterns
-- `EArkivChecker.Service/EArkivCheckerWorker.cs:31-62` — try around each worker cycle, specific catches for `OperationCanceledException`, `DbException`, `IOException`, `UnauthorizedAccessException`, `InvalidOperationException`, `TimeoutException`, plus a broad `catch (Exception ex) when (ex is not OperationCanceledException)`.
-- `EArkivChecker.Runtime/EArkivCheckerScanProcessor.cs:47-171` — try around the scan run; `OperationCanceledException` rethrown with `throw;`, general `Exception` logged and rethrown with `throw;`.
-- `EArkivCheckerScanProcessor.cs:66-83` — nested try for alarm-notification creation, broad `catch (Exception ex) when (ex is not OperationCanceledException)` logs warning and continues.
-- `EArkivCheckerScanProcessor.cs:194-211` — try around push-event publishing, broad catch logs warning and continues.
-- `EArkivChecker.Runtime/EArkivCheckerRepository.cs:509-588` — try around DB transaction; bare `catch` rolls back and `throw;`.
-- `EArkivChecker.Runtime/FolderScanner.cs:23-150` — try around scan core; `OperationCanceledException` rethrown, file-system exceptions converted to `FolderCheckStatus` results.
+- `Northwind.Service/NorthwindWorker.cs:31-62` — try around each worker cycle, specific catches for `OperationCanceledException`, `DbException`, `IOException`, `UnauthorizedAccessException`, `InvalidOperationException`, `TimeoutException`, plus a broad `catch (Exception ex) when (ex is not OperationCanceledException)`.
+- `Northwind.Runtime/NorthwindScanProcessor.cs:47-171` — try around the scan run; `OperationCanceledException` rethrown with `throw;`, general `Exception` logged and rethrown with `throw;`.
+- `NorthwindScanProcessor.cs:66-83` — nested try for alarm-notification creation, broad `catch (Exception ex) when (ex is not OperationCanceledException)` logs warning and continues.
+- `NorthwindScanProcessor.cs:194-211` — try around push-event publishing, broad catch logs warning and continues.
+- `Northwind.Runtime/NorthwindRepository.cs:509-588` — try around DB transaction; bare `catch` rolls back and `throw;`.
+- `Northwind.Runtime/FolderScanner.cs:23-150` — try around scan core; `OperationCanceledException` rethrown, file-system exceptions converted to `FolderCheckStatus` results.
 - All rethrows use `throw;`; no `throw ex;` observed.
 
 #### Global error handling
-- `EArkivChecker.Web/Program.cs:19` calls `app.UseOmpWebDefaults(...)` from `OpenModulePlatform.Web.Shared`; no explicit `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages`.
-- `EArkivChecker.Web/Pages/Error.cshtml` provides a static localized error page (`@L["The requested page could not be displayed."]`) with no exception details or request ID.
-- `EArkivChecker.Service/Program.cs` has no global exception handler; all service exception control lives inside `EArkivCheckerWorker.ExecuteAsync`.
+- `Northwind.Web/Program.cs:19` calls `app.UseOmpWebDefaults(...)` from `OpenModulePlatform.Web.Shared`; no explicit `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages`.
+- `Northwind.Web/Pages/Error.cshtml` provides a static localized error page (`@L["The requested page could not be displayed."]`) with no exception details or request ID.
+- `Northwind.Service/Program.cs` has no global exception handler; all service exception control lives inside `NorthwindWorker.ExecuteAsync`.
 
 #### Log vs user-facing
 - `_logger.LogError` / `LogWarning` in catches:
-  - `EArkivCheckerWorker.cs:41`, `:45`, `:49`, `:53`, `:57`, `:61`.
-  - `EArkivCheckerScanProcessor.cs:79`, `:150`, `:207`.
-- `_logger.LogWarning` for model-state errors — `EArkivChecker.Web/Pages/Targets.cshtml.cs:146`.
+  - `NorthwindWorker.cs:41`, `:45`, `:49`, `:53`, `:57`, `:61`.
+  - `NorthwindScanProcessor.cs:79`, `:150`, `:207`.
+- `_logger.LogWarning` for model-state errors — `Northwind.Web/Pages/Targets.cshtml.cs:146`.
 - `_logger.LogInformation` for normal worker/notification events.
 - User-facing:
   - `TempData["StatusMessage"]` after CRUD actions in `Targets.cshtml.cs` (`:133-137`, `:241-245`).
-  - `Forbid()` on authorization failures in `EArkivCheckerPageModel.cs:35`, `:48`.
+  - `Forbid()` on authorization failures in `NorthwindPageModel.cs:35`, `:48`.
   - Static localized `Error.cshtml`.
 - No `ProblemDetails` or explicit API error-response payloads.
 
 #### Result/Either pattern
 - No `Result<T>`, `OneOf`, `Either`, `Try`, or discriminated-union library usage.
-- Domain status enums act as result codes: `FolderCheckStatus` and `ScanRunStatus` — `EArkivChecker.Runtime/Models.cs:3-20`.
+- Domain status enums act as result codes: `FolderCheckStatus` and `ScanRunStatus` — `Northwind.Runtime/Models.cs:3-20`.
 - Records such as `TargetScanResult` and `TargetScanPersistenceResult` (`Models.cs:113-130`) carry success/failure state but are not formal Result types.
-- `EArkivChecker.Runtime/EArkivCheckerOptionsValidator.cs:23-25` returns `ValidateOptionsResult`.
+- `Northwind.Runtime/NorthwindOptionsValidator.cs:23-25` returns `ValidateOptionsResult`.
 
 #### Swallowed exceptions
-- `EArkivChecker.Runtime/FolderScanner.cs:262-269` — `catch (UnauthorizedAccessException) { continue; }` and `catch (IOException) { continue; }` while enumerating second-level directories. Silently skips inaccessible subdirectories.
+- `Northwind.Runtime/FolderScanner.cs:262-269` — `catch (UnauthorizedAccessException) { continue; }` and `catch (IOException) { continue; }` while enumerating second-level directories. Silently skips inaccessible subdirectories.
 - `FolderScanner.cs:282-285` — `catch (OverflowException) { return int.MaxValue; }` caps totals instead of failing.
-- `EArkivCheckerWorker.cs:39-62` — logs known exception types and continues the polling loop after a delay.
-- `EArkivCheckerScanProcessor.cs:77-83` and `:205-211` — log warnings and continue when alarm notifications or push-event publishing fail.
-- `EArkivCheckerRepository.cs:584-588` — bare `catch` only rolls back the transaction and rethrows; not swallowed.
+- `NorthwindWorker.cs:39-62` — logs known exception types and continues the polling loop after a delay.
+- `NorthwindScanProcessor.cs:77-83` and `:205-211` — log warnings and continue when alarm notifications or push-event publishing fail.
+- `NorthwindRepository.cs:584-588` — bare `catch` only rolls back the transaction and rethrows; not swallowed.
 
 ---
 
-### Dokumentbibliotek (.NET)
+### AdventureWorks (.NET)
 
 #### Custom exception types
 - No repo-specific `*Exception` classes.
 - Standard framework exceptions:
-  - `InvalidOperationException` for missing settings, missing tables, required fields, invalid identifiers — `Services/DocumentLibrarySettingsService.cs:102`, `:133`; `Services/DocumentLibrarySchemaCache.cs:108`; `Services/DocumentLibraryImageService.cs:235`, `:246`, `:259`, `:457`; `Services/DocumentLibraryFormService.cs:323`, `:328`, `:338`, `:355`, `:404`, `:414`; `Services/DocumentLibraryDocumentService.cs:509`, `:546`; `Services/DocumentLibraryDataStore.cs:26`, `:63`, `:68`.
-  - `ArgumentNullException.ThrowIfNull(...)` — `Services/DocumentLibraryDocumentService.cs:204`, `:309`.
+  - `InvalidOperationException` for missing settings, missing tables, required fields, invalid identifiers — `Services/AdventureWorksSettingsService.cs:102`, `:133`; `Services/AdventureWorksSchemaCache.cs:108`; `Services/AdventureWorksImageService.cs:235`, `:246`, `:259`, `:457`; `Services/AdventureWorksFormService.cs:323`, `:328`, `:338`, `:355`, `:404`, `:414`; `Services/AdventureWorksDocumentService.cs:509`, `:546`; `Services/AdventureWorksDataStore.cs:26`, `:63`, `:68`.
+  - `ArgumentNullException.ThrowIfNull(...)` — `Services/AdventureWorksDocumentService.cs:204`, `:309`.
   - `DirectoryNotFoundException` / `FileNotFoundException` when migration scripts are missing — `Services/DatabaseMigrationService.cs:33`, `:42`.
 
 #### Try/catch patterns
@@ -292,12 +292,12 @@ This document summarizes how each repository currently handles errors, highlight
   - `Controllers/DocumentViewerController.cs:103`.
   - `RazorPages/Program.cs:69`.
 - Specific catches:
-  - `SqlException` filtered by error number for missing user-settings table — `Services/DocumentLibraryUserSettingsService.cs:53`, `:99`.
-  - `JsonException` for corrupt stored settings — `Services/DocumentLibraryUserSettingsService.cs:58`.
-  - `ArgumentException`, `NotSupportedException`, `PathTooLongException` when normalizing image paths — `RazorPages/Infrastructure/DocumentLibraryEndpointMapping.cs:37`.
+  - `SqlException` filtered by error number for missing user-settings table — `Services/AdventureWorksUserSettingsService.cs:53`, `:99`.
+  - `JsonException` for corrupt stored settings — `Services/AdventureWorksUserSettingsService.cs:58`.
+  - `ArgumentException`, `NotSupportedException`, `PathTooLongException` when normalizing image paths — `RazorPages/Infrastructure/AdventureWorksEndpointMapping.cs:37`.
 - Bare `catch` blocks (always rethrow after rollback):
-  - `Services/DocumentLibraryFormService.cs:508`.
-  - `Services/DocumentLibraryDocumentService.cs:667`.
+  - `Services/AdventureWorksFormService.cs:508`.
+  - `Services/AdventureWorksDocumentService.cs:667`.
 - `throw;` is used to preserve stack traces; no `throw ex;` found.
 
 #### Global error handling
@@ -310,7 +310,7 @@ This document summarizes how each repository currently handles errors, highlight
   - `RazorPages/Pages/Settings.cshtml.cs:140-144` — `_logger.LogError` + `ModelState.AddModelError` + `L[...]`.
   - `RazorPages/Pages/Index.cshtml.cs:322-327`, `:345-347`, `:402-408`, `:426-428`, `:496-502`, `:520-522` — `_logger.LogError` + `ModelState.AddModelError` / `ShowNotice`.
 - API controller returns a generic 500 JSON body — `Controllers/DocumentViewerController.cs:105-106`.
-- Non-fatal conditions are logged as warnings and allowed to continue — `Services/DocumentLibraryFormService.cs:376`, `:385`, `:437`, `:446`; `Services/DocumentLibraryDocumentService.cs:482`, `:491`, `:555`, `:564`; `RazorPages/Pages/Index.cshtml.cs:1071`.
+- Non-fatal conditions are logged as warnings and allowed to continue — `Services/AdventureWorksFormService.cs:376`, `:385`, `:437`, `:446`; `Services/AdventureWorksDocumentService.cs:482`, `:491`, `:555`, `:564`; `RazorPages/Pages/Index.cshtml.cs:1071`.
 
 #### Result/Either pattern
 - None found. No `Result<T>`, `OneOf`, `Either<T>`, `Try`, `ProblemDetails`, `ValidationProblem`, or error-code enums.
@@ -318,130 +318,130 @@ This document summarizes how each repository currently handles errors, highlight
 #### Swallowed exceptions
 - No empty `catch { }` blocks.
 - Log-and-continue with fallback (intentional graceful degradation):
-  - `Services/DocumentLibraryUserSettingsService.cs:53-57` and `:99-102` — catch missing-table `SqlException` / `JsonException`, log warning, return `null`.
-  - `RazorPages/Infrastructure/DocumentLibraryEndpointMapping.cs:37-41` — catch path-normalization exceptions, log warning, return `Results.NotFound()`.
+  - `Services/AdventureWorksUserSettingsService.cs:53-57` and `:99-102` — catch missing-table `SqlException` / `JsonException`, log warning, return `null`.
+  - `RazorPages/Infrastructure/AdventureWorksEndpointMapping.cs:37-41` — catch path-normalization exceptions, log warning, return `Results.NotFound()`.
   - `Controllers/DocumentViewerController.cs:103-107` — catch session-build failures, log error, return `StatusCode(500, ...)`.
-- `DocumentLibraryFormService.cs:508` and `DocumentLibraryDocumentService.cs:667` use bare `catch` to roll back transactions and rethrow.
+- `AdventureWorksFormService.cs:508` and `AdventureWorksDocumentService.cs:667` use bare `catch` to roll back transactions and rethrow.
 
 ---
 
-### VajSkrivare (.NET)
+### Tailwind (.NET)
 
 #### Custom exception types
-- `UnknownPrinterDatabaseException` (custom domain exception) — `src/Skrivarkoppling.Web/Infrastructure/Configuration/UnknownPrinterDatabaseException.cs:3`; inherits `InvalidOperationException` and exposes `DatabaseKey`. Thrown at `src/Skrivarkoppling.Web/Infrastructure/Configuration/PrinterDatabaseCatalog.cs:30`.
+- `UnknownPrinterDatabaseException` (custom domain exception) — `src/PrintConnect.Web/Infrastructure/Configuration/UnknownPrinterDatabaseException.cs:3`; inherits `InvalidOperationException` and exposes `DatabaseKey`. Thrown at `src/PrintConnect.Web/Infrastructure/Configuration/PrinterDatabaseCatalog.cs:30`.
 - `InvalidOperationException` used for configuration/validation failures:
-  - `src/Skrivarkoppling.Web/Infrastructure/Configuration/PrinterDatabaseCatalog.cs:37` (no databases configured), `:46` (duplicate key), `:53` (invalid key), `:58` (missing DisplayName), `:63` (missing ConnectionStringName).
-  - `src/Skrivarkoppling.Web/Infrastructure/Data/SqlIdentifier.cs:11` (empty identifier), `:18` (invalid multipart identifier), `:24` (invalid characters).
-  - `src/Skrivarkoppling.Web/Infrastructure/Data/SqlConnectionFactory.cs:18` (missing connection string).
-  - `src/Skrivarkoppling.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:152` (Zebra disabled), `:157` (missing file path), `:387` (missing directory), `:393` (missing file name).
+  - `src/PrintConnect.Web/Infrastructure/Configuration/PrinterDatabaseCatalog.cs:37` (no databases configured), `:46` (duplicate key), `:53` (invalid key), `:58` (missing DisplayName), `:63` (missing ConnectionStringName).
+  - `src/PrintConnect.Web/Infrastructure/Data/SqlIdentifier.cs:11` (empty identifier), `:18` (invalid multipart identifier), `:24` (invalid characters).
+  - `src/PrintConnect.Web/Infrastructure/Data/SqlConnectionFactory.cs:18` (missing connection string).
+  - `src/PrintConnect.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:152` (Zebra disabled), `:157` (missing file path), `:387` (missing directory), `:393` (missing file name).
 - `FileNotFoundException` / `IOException` used for Zebra JSON file problems — `JsonZebraConfigStore.cs:55`, `:122`, `:134`, `:337`, `:344`, `:350`.
 
 #### Try/catch patterns
 - Broad `catch (Exception ex)` used for cross-cutting concerns and consistently rethrows or translates:
-  - `src/Skrivarkoppling.Web/Program.cs:121` — request diagnostics, logs then `throw;`.
-  - `src/Skrivarkoppling.Web/Program.cs:181` — startup catch, writes to bootstrap log then `throw;`.
-  - `src/Skrivarkoppling.Web/Program.cs:209` — API pipeline; converts to JSON response.
-  - `src/Skrivarkoppling.Web/Application/Zebra/ZebraConfigService.cs:76`, `:104`, `:123`, `:187`, `:248`, `:275`, `:302`, `:335`, `:473` — each catches `Exception` only when `IsExpectedException` returns true, then maps to `ServiceResult` failure.
+  - `src/PrintConnect.Web/Program.cs:121` — request diagnostics, logs then `throw;`.
+  - `src/PrintConnect.Web/Program.cs:181` — startup catch, writes to bootstrap log then `throw;`.
+  - `src/PrintConnect.Web/Program.cs:209` — API pipeline; converts to JSON response.
+  - `src/PrintConnect.Web/Application/Zebra/ZebraConfigService.cs:76`, `:104`, `:123`, `:187`, `:248`, `:275`, `:302`, `:335`, `:473` — each catches `Exception` only when `IsExpectedException` returns true, then maps to `ServiceResult` failure.
 - Specific catches for known I/O races in `JsonZebraConfigStore`:
-  - `src/Skrivarkoppling.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:128` — `catch (IOException ex) when (!tempFileCreated)`.
+  - `src/PrintConnect.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:128` — `catch (IOException ex) when (!tempFileCreated)`.
   - `:259` — `catch (FileNotFoundException)`, `:264` — `catch (DirectoryNotFoundException)`, `:335` — `catch (FileNotFoundException ex)`.
 - Specific SQL handling:
-  - `src/Skrivarkoppling.Web/Application/Printers/PrinterService.cs:46`, `:76` — `catch (SqlException ex) when (IsUserCorrectableSqlError(ex))`.
+  - `src/PrintConnect.Web/Application/Printers/PrinterService.cs:46`, `:76` — `catch (SqlException ex) when (IsUserCorrectableSqlError(ex))`.
 - No `throw ex;` usage found; all rethrows use `throw;`.
 
 #### Global error handling
-- Custom request diagnostics middleware — `src/Skrivarkoppling.Web/Program.cs:97`.
-- Custom `/api/*` exception wrapper middleware — `src/Skrivarkoppling.Web/Program.cs:166`.
+- Custom request diagnostics middleware — `src/PrintConnect.Web/Program.cs:97`.
+- Custom `/api/*` exception wrapper middleware — `src/PrintConnect.Web/Program.cs:166`.
   - Disables status-code pages for API requests (`Program.cs:189`).
   - Rethrows client-canceled requests (`Program.cs:205`), otherwise returns JSON errors (`Program.cs:220`).
-- Process-level handlers installed before startup — `src/Skrivarkoppling.Web/Diagnostics/BootstrapDiagnostics.cs:10`:
+- Process-level handlers installed before startup — `src/PrintConnect.Web/Diagnostics/BootstrapDiagnostics.cs:10`:
   - `AppDomain.CurrentDomain.UnhandledException` (`:12`).
   - `TaskScheduler.UnobservedTaskException` (`:17`).
   - `AppDomain.CurrentDomain.ProcessExit` (`:22`).
 - Error page:
-  - `src/Skrivarkoppling.Web/Pages/Error.cshtml:1` delegates to shared OMP `OmpError` component via `OmpErrorPageModelBase`.
-  - `src/Skrivarkoppling.Web/Pages/Status.cshtml:1` uses `OmpStatusPageModelBase`.
+  - `src/PrintConnect.Web/Pages/Error.cshtml:1` delegates to shared OMP `OmpError` component via `OmpErrorPageModelBase`.
+  - `src/PrintConnect.Web/Pages/Status.cshtml:1` uses `OmpStatusPageModelBase`.
 - No repo-owned calls to `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages`; OMP shared middleware likely supplies generic web error handling.
 
 #### Log vs user-facing
-- Request failures logged at `LogError` — `src/Skrivarkoppling.Web/Program.cs:124`.
-- Unexpected API failures logged at `LogError` — `src/Skrivarkoppling.Web/Program.cs:215`.
-- Warning for non-fatal config ambiguity — `src/Skrivarkoppling.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:215`.
+- Request failures logged at `LogError` — `src/PrintConnect.Web/Program.cs:124`.
+- Unexpected API failures logged at `LogError` — `src/PrintConnect.Web/Program.cs:215`.
+- Warning for non-fatal config ambiguity — `src/PrintConnect.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:215`.
 - User-facing errors:
-  - `ModelState.AddModelError(string.Empty, error)` in Razor Page handlers — `src/Skrivarkoppling.Web/Pages/Printers/Edit.cshtml.cs:90`, `src/Skrivarkoppling.Web/Pages/PrinterConnections/Create.cshtml.cs:127`, `src/Skrivarkoppling.Web/Pages/Zebra/Create.cshtml.cs:105`.
+  - `ModelState.AddModelError(string.Empty, error)` in Razor Page handlers — `src/PrintConnect.Web/Pages/Printers/Edit.cshtml.cs:90`, `src/PrintConnect.Web/Pages/PrinterConnections/Create.cshtml.cs:127`, `src/PrintConnect.Web/Pages/Zebra/Create.cshtml.cs:105`.
   - API JSON error bodies with localized messages — `Program.cs:220` (500), `Program.cs:200`/`258`/`271` (404/405).
-  - Localized resource strings for all business/database/Zebra errors in `src/Skrivarkoppling.Web/Resources/Localization.SkrivarkopplingResource.resx` (`:95-136`).
+  - Localized resource strings for all business/database/Zebra errors in `src/PrintConnect.Web/Resources/Localization.PrintConnectResource.resx` (`:95-136`).
 
 #### Result/Either pattern
-- Home-grown `ServiceResult` / `ServiceResult<T>` records — `src/Skrivarkoppling.Web/Application/Common/ServiceResult.cs:3` and `:12`.
+- Home-grown `ServiceResult` / `ServiceResult<T>` records — `src/PrintConnect.Web/Application/Common/ServiceResult.cs:3` and `:12`.
 - Used throughout application services:
-  - `src/Skrivarkoppling.Web/Application/Printers/PrinterService.cs:30`, `:52`, `:82`.
-  - `src/Skrivarkoppling.Web/Application/PrinterConnections/PrinterConnectionService.cs:28`, `:43`, `:60`.
-  - `src/Skrivarkoppling.Web/Application/Zebra/ZebraConfigService.cs` (all public methods return `ServiceResult`/`ServiceResult<T>`).
+  - `src/PrintConnect.Web/Application/Printers/PrinterService.cs:30`, `:52`, `:82`.
+  - `src/PrintConnect.Web/Application/PrinterConnections/PrinterConnectionService.cs:28`, `:43`, `:60`.
+  - `src/PrintConnect.Web/Application/Zebra/ZebraConfigService.cs` (all public methods return `ServiceResult`/`ServiceResult<T>`).
 - Errors are plain localized strings; no error-code enum, `OneOf`, or discriminated union.
 
 #### Swallowed exceptions
 - Best-effort diagnostics suppress all failures intentionally:
-  - `src/Skrivarkoppling.Web/Diagnostics/BootstrapDiagnostics.cs:41`, `:61`, `:77` — empty catch bodies; filter `ShouldSuppressBestEffortDiagnosticsFailure` returns `true` for any exception.
+  - `src/PrintConnect.Web/Diagnostics/BootstrapDiagnostics.cs:41`, `:61`, `:77` — empty catch bodies; filter `ShouldSuppressBestEffortDiagnosticsFailure` returns `true` for any exception.
 - Temporary-file cleanup suppression:
-  - `src/Skrivarkoppling.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:234` — `catch (Exception ex) when (ShouldSuppressTempCleanupFailure(ex))` with empty body.
+  - `src/PrintConnect.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:234` — `catch (Exception ex) when (ShouldSuppressTempCleanupFailure(ex))` with empty body.
 - Backup-race continuation:
-  - `src/Skrivarkoppling.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:259` — `catch (FileNotFoundException)` and `:264` — `catch (DirectoryNotFoundException)` continue without backup.
+  - `src/PrintConnect.Web/Infrastructure/Zebra/JsonZebraConfigStore.cs:259` — `catch (FileNotFoundException)` and `:264` — `catch (DirectoryNotFoundException)` continue without backup.
 
 ---
 
-### iKrock2 (.NET)
+### Globex (.NET)
 
 #### Custom exception types
-- `RegistrationWriteException` — domain-specific write error carrying an HTTP-ish `StatusCode` — `iKrock2.Application/Services/RegistrationWriteException.cs:3`. Thrown by `RegistrationWriteService` for validation/auth/not-found/conflict failures — `iKrock2.Application/Services/RegistrationWriteService.cs:79`, `:157`, `:309`, `:321`, `:342`, `:349`.
-- `InvalidOperationException` used as a guard/unsupported-state exception in application layer — `iKrock2.Application/Services/OmpConnectionFactory.cs:17`, `SqlConnectionFactory.cs:27`/`32`, `IboSyncService.cs:343`/`468`/`479`/`484`, `DashboardRepository.cs:805`/`813`, `WorkOrderExecutor.cs:21`, `WorkOrderRepository.cs:804`/`849`.
-- `TimeoutException` used for SQL app-lock acquisition failure — `iKrock2.Application/Services/WorkOrderRepository.cs:633`.
+- `RegistrationWriteException` — domain-specific write error carrying an HTTP-ish `StatusCode` — `Globex.Application/Services/RegistrationWriteException.cs:3`. Thrown by `RegistrationWriteService` for validation/auth/not-found/conflict failures — `Globex.Application/Services/RegistrationWriteService.cs:79`, `:157`, `:309`, `:321`, `:342`, `:349`.
+- `InvalidOperationException` used as a guard/unsupported-state exception in application layer — `Globex.Application/Services/OmpConnectionFactory.cs:17`, `SqlConnectionFactory.cs:27`/`32`, `IboSyncService.cs:343`/`468`/`479`/`484`, `DashboardRepository.cs:805`/`813`, `WorkOrderExecutor.cs:21`, `WorkOrderRepository.cs:804`/`849`.
+- `TimeoutException` used for SQL app-lock acquisition failure — `Globex.Application/Services/WorkOrderRepository.cs:633`.
 
 #### Try/catch patterns
 - Specific catches first, then broader fallbacks:
-  - `iKrock2.Backend/Services/WorkOrderBackgroundService.cs:41-60` (`OperationCanceledException`, `DbException`, `TimeoutException`, `InvalidOperationException`, then `Exception` excluding `OperationCanceledException`).
+  - `Globex.Backend/Services/WorkOrderBackgroundService.cs:41-60` (`OperationCanceledException`, `DbException`, `TimeoutException`, `InvalidOperationException`, then `Exception` excluding `OperationCanceledException`).
 - Catch-rollback-rethrow using bare `catch`:
-  - `iKrock2.Application/Services/RegistrationWriteService.cs:110-114`, `:165-169`, `:206-210`.
-  - `iKrock2.Application/Services/WorkOrderRepository.cs:79-82`, `:341-344`, `:606-610`.
+  - `Globex.Application/Services/RegistrationWriteService.cs:110-114`, `:165-169`, `:206-210`.
+  - `Globex.Application/Services/WorkOrderRepository.cs:79-82`, `:341-344`, `:606-610`.
 - Filtered fallback catch in web data service:
-  - `iKrock2.Web/Services/IKrock2DataService.cs:330-339` (`OperationCanceledException` vs `Exception` excluding `OperationCanceledException`).
+  - `Globex.Web/Services/GlobexDataService.cs:330-339` (`OperationCanceledException` vs `Exception` excluding `OperationCanceledException`).
 - `throw;` is used correctly; no `throw ex;` found.
 
 #### Global error handling
-- No custom middleware, exception filters, `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages` inside `iKrock2.Web`.
+- No custom middleware, exception filters, `UseExceptionHandler`, `UseDeveloperExceptionPage`, or `UseStatusCodePages` inside `Globex.Web`.
 - Web app delegates to OpenModulePlatform shared defaults:
-  - `iKrock2.Web/Program.cs:13` — `AddOmpWebDefaults`.
-  - `iKrock2.Web/Program.cs:56` — `UseOmpWebDefaults`.
+  - `Globex.Web/Program.cs:13` — `AddOmpWebDefaults`.
+  - `Globex.Web/Program.cs:56` — `UseOmpWebDefaults`.
 - Error/status pages inherit OMP bases:
-  - `iKrock2.Web/Pages/Error.cshtml:1` / `Error.cshtml.cs:9` (`OmpErrorPageModelBase`).
-  - `iKrock2.Web/Pages/Status.cshtml:1` / `Status.cshtml.cs:9` (`OmpStatusPageModelBase`).
-- Backend Windows Service has no global exception handler; per-loop try/catch in `WorkOrderBackgroundService` prevents crashes — `iKrock2.Backend/Services/WorkOrderBackgroundService.cs:30-63`.
+  - `Globex.Web/Pages/Error.cshtml:1` / `Error.cshtml.cs:9` (`OmpErrorPageModelBase`).
+  - `Globex.Web/Pages/Status.cshtml:1` / `Status.cshtml.cs:9` (`OmpStatusPageModelBase`).
+- Backend Windows Service has no global exception handler; per-loop try/catch in `WorkOrderBackgroundService` prevents crashes — `Globex.Backend/Services/WorkOrderBackgroundService.cs:30-63`.
 
 #### Log vs user-facing
-- Backend logs errors with context — `iKrock2.Backend/Services/WorkOrderBackgroundService.cs:47`, `:51`, `:55`, `:59`, `:128`, `:178`.
-- Web data service logs warnings and returns typed responses rather than throwing — `iKrock2.Web/Services/IKrock2DataService.cs:332`, `:337`, `:353`, `:358`, `:363`.
+- Backend logs errors with context — `Globex.Backend/Services/WorkOrderBackgroundService.cs:47`, `:51`, `:55`, `:59`, `:128`, `:178`.
+- Web data service logs warnings and returns typed responses rather than throwing — `Globex.Web/Services/GlobexDataService.cs:332`, `:337`, `:353`, `:358`, `:363`.
 - User-facing messages flow through `WriteOperationResponse.Message` / `WorkOrderQueueResult.Message` and are rendered via `StatusMessage`/`ModelState`:
-  - `iKrock2.Web/Pages/Import/Index.cshtml.cs:118`.
-  - `iKrock2.Web/Pages/Registrations/Index.cshtml.cs:58-60`.
-  - `iKrock2.Web/Pages/Dashboard/Reload.cshtml.cs:95` / `:131-139`.
-  - `iKrock2.Web/Pages/Admin/Index.cshtml.cs:87-89` / `:181-187`.
-- Diagnostics health endpoint returns JSON directly — `iKrock2.Web/Program.cs:58-81`.
+  - `Globex.Web/Pages/Import/Index.cshtml.cs:118`.
+  - `Globex.Web/Pages/Registrations/Index.cshtml.cs:58-60`.
+  - `Globex.Web/Pages/Dashboard/Reload.cshtml.cs:95` / `:131-139`.
+  - `Globex.Web/Pages/Admin/Index.cshtml.cs:87-89` / `:181-187`.
+- Diagnostics health endpoint returns JSON directly — `Globex.Web/Program.cs:58-81`.
 
 #### Result/Either pattern
 - Hand-rolled result records instead of `Result<T>`/`OneOf`/`Either`:
-  - `WriteOperationResponse(bool Success, string? Message, int? RegistrationId)` — `iKrock2.Contracts/WriteOperationResponse.cs:3`.
-  - `WorkOrderQueueResult(...)` with `WorkOrderQueueOutcome` enum — `iKrock2.Application/Models/WorkOrderQueueResult.cs:3`, `WorkOrderQueueOutcome.cs:3`.
+  - `WriteOperationResponse(bool Success, string? Message, int? RegistrationId)` — `Globex.Contracts/WriteOperationResponse.cs:3`.
+  - `WorkOrderQueueResult(...)` with `WorkOrderQueueOutcome` enum — `Globex.Application/Models/WorkOrderQueueResult.cs:3`, `WorkOrderQueueOutcome.cs:3`.
 - Used consistently across the web-to-application boundary to avoid exceptions for expected failures.
 
 #### Swallowed exceptions
-- `IKrock2DataService` swallows non-cancellation exceptions and returns fallback values (`null`, empty list, default response):
-  - `iKrock2.Web/Services/IKrock2DataService.cs:335-339` (reads) and `:361-365` (writes). Risk: database/auth/config failures silently degrade pages without surfacing severity to the user.
+- `GlobexDataService` swallows non-cancellation exceptions and returns fallback values (`null`, empty list, default response):
+  - `Globex.Web/Services/GlobexDataService.cs:335-339` (reads) and `:361-365` (writes). Risk: database/auth/config failures silently degrade pages without surfacing severity to the user.
 - `WorkOrderBackgroundService` swallows `DbException`, `TimeoutException`, `InvalidOperationException`, and unexpected exceptions, then retries after the poll delay:
-  - `iKrock2.Backend/Services/WorkOrderBackgroundService.cs:45-60`. Risk: persistent failures are only visible in logs; retry can continue indefinitely.
+  - `Globex.Backend/Services/WorkOrderBackgroundService.cs:45-60`. Risk: persistent failures are only visible in logs; retry can continue indefinitely.
 - Heartbeat cancellation is intentionally ignored:
-  - `iKrock2.Backend/Services/WorkOrderBackgroundService.cs:150-153` (`catch (OperationCanceledException) { /* expected */ }`).
+  - `Globex.Backend/Services/WorkOrderBackgroundService.cs:150-153` (`catch (OperationCanceledException) { /* expected */ }`).
 - Username resolver falls back to claim name on SQL/IO failures:
-  - `iKrock2.Web/Services/IKrock2UserNameResolver.cs:38-46`. Degraded identity resolution is logged as warning.
+  - `Globex.Web/Services/GlobexUserNameResolver.cs:38-46`. Degraded identity resolution is logged as warning.
 
 ---
 
@@ -600,7 +600,7 @@ This document summarizes how each repository currently handles errors, highlight
 - None observed. No `Result<T>`, `OneOf`, error-code enums, discriminated unions, `Try`, or `Either`. Functions either return values directly or throw plain `Error`s.
 
 #### Swallowed exceptions
-- `pathExists` treats any `fs.access` failure as “does not exist" — `src/lib/fsUtils.js:8-15`. Risk: permission/IO errors are silently ignored.
+- `pathExists` treats any `fs.access` failure as "does not exist" — `src/lib/fsUtils.js:8-15`. Risk: permission/IO errors are silently ignored.
 - `walk` silently skips directories it cannot read — `src/lib/fileInventory.js:79-84`. Risk: unreadable source directories are treated as empty.
 - `git()` silently returns `null` on any git failure — `src/lib/gitInfo.js:23-28`. Risk: missing/outdated git metadata is indistinguishable from a real error.
 - `withTempDir` cleanup logs (but does not throw) when the callback already failed — `test/testUtils.js:26-36`. Risk: temporary directories may be left behind; intentional trade-off to preserve the original test failure.
@@ -612,12 +612,12 @@ This document summarizes how each repository currently handles errors, highlight
 | Repository | Custom exceptions | Catch pattern | Global handling | Log vs user-facing | Result/Either pattern | Notable swallowed exceptions |
 |---|---|---|---|---|---|---|
 | **OpenModulePlatform** | Sparse domain exceptions (`HtmlContentFileException`, `ServerReportException`); heavy BCL use | Specific typed catches + filtered `catch (Exception) when (...)`; `throw;` only | Shared `UseOmpWebDefaults` pipeline (`UseExceptionHandler`, `UseStatusCodePages`, `/error`, `/status`). `OpenModulePlatform.Auth` omits it | `LogError` in catches; Razor `ModelState` + localized messages; minimal-API `Results.BadRequest` | Hand-rolled result records (`UniversalPackageImportResult`, `AppDeploymentResult`) + status enums | Several log-and-continue loops in worker/scheduler code |
-| **IbsPackager** | None; BCL only (`InvalidOperationException`, `IOException`, `JsonException`) | Mostly specific; filtered broad catches in worker/channel; `throw;` only | Delegated to `UseOmpWebDefaults`; no explicit middleware | `LogError`/`LogWarning`; Razor `FeedbackError`/`FeedbackMessage` via `[TempData]` | `ChannelConfigValidationResult` (IsValid/Errors); RPC response DTOs | Many best-effort empty/comment catches in lock-file and batch-cleanup paths |
-| **LogSearch** | None; BCL only | Specific first, filtered broad second; `throw;` only | Delegated to `UseOmpWebDefaults`; service host has no startup guard | Worker persists errors to DB; web UI shows localized status messages; `Forbid()`/`NotFound()` | `ValidateOptionsResult`; tuple soft-cap flags | Worker loops swallow DB/timeout/invalid-operation and continue; service startup seeding unguarded |
-| **EArkivChecker** | None; BCL only | Specific + filtered broad; `throw;` only | Delegated to `UseOmpWebDefaults`; service host has no global handler | `LogError`/`LogWarning`; `TempData["StatusMessage"]`, static `Error.cshtml`, `Forbid()` | Domain status enums (`FolderCheckStatus`, `ScanRunStatus`) + result records | `FolderScanner` silently skips `UnauthorizedAccessException`/`IOException` subdirectories; notification/push failures logged and continued |
-| **Dokumentbibliotek** | None; BCL only | Exception-filter helpers (`Is...Failure`); bare `catch` for rollback; `throw;` only | Delegated to `UseOmpWebDefaults` | Services log + rethrow; pages catch and use `ModelState.AddModelError` / `ShowNotice`; generic 500 JSON | None | Missing-table / corrupt-user-settings caught and returned as `null`; path normalization returns `NotFound` |
-| **VajSkrivare** | One domain exception (`UnknownPrinterDatabaseException`) | Broad but filtered catches in Zebra/API pipeline; specific SQL/IO catches; `throw;` only | Custom API exception wrapper middleware + bootstrap diagnostics + OMP shared error pages | `LogError` for request/API failures; `ModelState.AddModelError`; localized API JSON | Home-grown `ServiceResult` / `ServiceResult<T>` | Bootstrap diagnostics suppress all failures; temp-cleanup and backup-race catches suppressed |
-| **iKrock2** | One domain exception (`RegistrationWriteException`) | Specific + filtered broad; `throw;` only | Delegated to `UseOmpWebDefaults`; backend service has no global handler | Backend `LogError`; web data service returns typed responses; `StatusMessage`/`ModelState` | `WriteOperationResponse`, `WorkOrderQueueResult` + enum | `IKrock2DataService` swallows non-cancellation exceptions and returns defaults; backend retry loop swallows and continues indefinitely |
+| **Contoso** | None; BCL only (`InvalidOperationException`, `IOException`, `JsonException`) | Mostly specific; filtered broad catches in worker/channel; `throw;` only | Delegated to `UseOmpWebDefaults`; no explicit middleware | `LogError`/`LogWarning`; Razor `FeedbackError`/`FeedbackMessage` via `[TempData]` | `ChannelConfigValidationResult` (IsValid/Errors); RPC response DTOs | Many best-effort empty/comment catches in lock-file and batch-cleanup paths |
+| **Fabrikam** | None; BCL only | Specific first, filtered broad second; `throw;` only | Delegated to `UseOmpWebDefaults`; service host has no startup guard | Worker persists errors to DB; web UI shows localized status messages; `Forbid()`/`NotFound()` | `ValidateOptionsResult`; tuple soft-cap flags | Worker loops swallow DB/timeout/invalid-operation and continue; service startup seeding unguarded |
+| **Northwind** | None; BCL only | Specific + filtered broad; `throw;` only | Delegated to `UseOmpWebDefaults`; service host has no global handler | `LogError`/`LogWarning`; `TempData["StatusMessage"]`, static `Error.cshtml`, `Forbid()` | Domain status enums (`FolderCheckStatus`, `ScanRunStatus`) + result records | `FolderScanner` silently skips `UnauthorizedAccessException`/`IOException` subdirectories; notification/push failures logged and continued |
+| **AdventureWorks** | None; BCL only | Exception-filter helpers (`Is...Failure`); bare `catch` for rollback; `throw;` only | Delegated to `UseOmpWebDefaults` | Services log + rethrow; pages catch and use `ModelState.AddModelError` / `ShowNotice`; generic 500 JSON | None | Missing-table / corrupt-user-settings caught and returned as `null`; path normalization returns `NotFound` |
+| **Tailwind** | One domain exception (`UnknownPrinterDatabaseException`) | Broad but filtered catches in Zebra/API pipeline; specific SQL/IO catches; `throw;` only | Custom API exception wrapper middleware + bootstrap diagnostics + OMP shared error pages | `LogError` for request/API failures; `ModelState.AddModelError`; localized API JSON | Home-grown `ServiceResult` / `ServiceResult<T>` | Bootstrap diagnostics suppress all failures; temp-cleanup and backup-race catches suppressed |
+| **Globex** | One domain exception (`RegistrationWriteException`) | Specific + filtered broad; `throw;` only | Delegated to `UseOmpWebDefaults`; backend service has no global handler | Backend `LogError`; web data service returns typed responses; `StatusMessage`/`ModelState` | `WriteOperationResponse`, `WorkOrderQueueResult` + enum | `GlobexDataService` swallows non-cancellation exceptions and returns defaults; backend retry loop swallows and continues indefinitely |
 | **ODVGateway** | One custom exception (`SourcePackPayloadTooLargeException`); `InvalidDataException` for prep/sessiondata | All specific; no `catch (Exception)`; exceptions wrapped or converted to results | **None** — no `UseExceptionHandler`, `UseStatusCodePages`, or exception filters | `LogError`/`LogWarning`; endpoint-local `Results.BadRequest`/`NotFound`/`Json` + HTML status pages | Lightweight result records (`GatewaySessionStoreResult`, `HandoffGuardResult`, `SourcePackPayload`) | `DirectSourceFileResolver` swallows `UnauthorizedAccessException`/IO during probing; `GatewaySessionStore` defensive parsing catches |
 | **OpenDocViewer** | No `extends Error`; domain error factories with discriminator properties | All catches generic (`catch (error)`); some inspect `error.code`; `throw error;` preserved | React Error Boundary + Express final error handlers; **no** `window.onerror` / `unhandledrejection` | `systemLogger.error` POSTs to backend; `ErrorBoundary` shows localized fallback; `ViewerProblemNotice` for session failures | Manual `{ ok: boolean }` objects (`printParse`, `bootConfig`, `portableBundle`) | Pervasive empty/defensive `catch {}` for cleanup/disposal/timers/workers; `userLogger` silently drops fetch failures |
 | **AgentDocMap** | None; plain `Error` throws | Bare `catch { }` for optional I/O; wrap/replace in JSON parse | CLI-level `main().catch(...)` only | `console.error` to stderr; `parseError` field in output map | None | `pathExists`, `walk`, `git()` treat any failure as non-existent/null; `withTempDir` cleanup logs but does not throw |
@@ -627,27 +627,27 @@ This document summarizes how each repository currently handles errors, highlight
 1. **Missing global exception handling**
    - `OpenModulePlatform.Auth` does not call `UseOmpWebDefaults` and has no explicit `UseExceptionHandler` / `UseStatusCodePages`.
    - `ODVGateway` has no global exception middleware at all; unhandled exceptions fall back to ASP.NET Core defaults.
-   - Several backend Windows services (`LogSearch.Service`, `EArkivChecker.Service`, `iKrock2.Backend`) have no global startup exception handler; all resilience is per-loop inside the worker.
+   - Several backend Windows services (`Fabrikam.Service`, `Northwind.Service`, `Globex.Backend`) have no global startup exception handler; all resilience is per-loop inside the worker.
 
 2. **Heavy reliance on swallowed / log-and-continue exceptions**
    - `OpenModulePlatform` worker loops (`WorkerManagerHostedService`, `MaintenanceScanScheduler`) swallow expected failures after logging.
-   - `IbsPackager` has numerous intentional best-effort empty catches in file/lock cleanup.
-   - `LogSearch` worker and job processor swallow DB/timeout/invalid-operation and continue.
-   - `EArkivChecker` silently skips inaccessible directories during enumeration.
-   - `iKrock2` `IKrock2DataService` returns default values after swallowing non-cancellation exceptions.
+   - `Contoso` has numerous intentional best-effort empty catches in file/lock cleanup.
+   - `Fabrikam` worker and job processor swallow DB/timeout/invalid-operation and continue.
+   - `Northwind` silently skips inaccessible directories during enumeration.
+   - `Globex` `GlobexDataService` returns default values after swallowing non-cancellation exceptions.
    - `ODVGateway` `DirectSourceFileResolver` swallows `UnauthorizedAccessException`, masking real permission issues.
    - `OpenDocViewer` has pervasive empty `catch {}` around cleanup and worker termination.
    - `AgentDocMap` treats all I/O/git failures as benign null/false results.
 
 3. **Inconsistent result abstractions**
-   - `VajSkrivare` uses a consistent home-grown `ServiceResult<T>`.
-   - `iKrock2` uses hand-rolled `WriteOperationResponse` / `WorkOrderQueueResult`.
-   - `OpenModulePlatform`, `IbsPackager`, `ODVGateway` use ad-hoc result records for specific flows.
-   - `LogSearch`, `EArkivChecker`, `Dokumentbibliotek`, `AgentDocMap` have no formal result abstraction.
+   - `Tailwind` uses a consistent home-grown `ServiceResult<T>`.
+   - `Globex` uses hand-rolled `WriteOperationResponse` / `WorkOrderQueueResult`.
+   - `OpenModulePlatform`, `Contoso`, `ODVGateway` use ad-hoc result records for specific flows.
+   - `Fabrikam`, `Northwind`, `AdventureWorks`, `AgentDocMap` have no formal result abstraction.
 
 4. **Inconsistent custom exception usage**
    - `OpenModulePlatform` has a few domain exceptions but mostly throws BCL types.
-   - `VajSkrivare` and `iKrock2` each have one meaningful domain exception.
+   - `Tailwind` and `Globex` each have one meaningful domain exception.
    - `ODVGateway` defines one custom exception for payload-too-large.
    - Most other repos use only BCL exceptions.
 
@@ -701,7 +701,7 @@ This document summarizes how each repository currently handles errors, highlight
 
 2. **React Error Boundaries**
    - Keep `ErrorBoundary.jsx` as the last line of defense for render-phase errors.
-   - Provide a clear localized fallback, a reload/reset action, and an optional “copy details” button gated by `exposeStackTraces`.
+   - Provide a clear localized fallback, a reload/reset action, and an optional "copy details" button gated by `exposeStackTraces`.
 
 3. **Try/catch discipline**
    - Avoid bare `catch {}`. At minimum log the failure at `debug`/`warn` level.
@@ -728,34 +728,34 @@ This document summarizes how each repository currently handles errors, highlight
 - **Migration:** Add the shared `UseOmpWebDefaults` pipeline to `OpenModulePlatform.Auth`. Review worker/scheduler log-and-continue catches (`WorkerManagerHostedService`, `MaintenanceScanScheduler`, `WorkerProcessHostedService`) and convert the most operationally significant ones to persisted health-state or circuit-breaker behavior instead of relying only on logs.
 - **Priority:** Medium.
 
-### IbsPackager
+### Contoso
 - **Current state:** No custom exceptions; mostly specific catches; many intentional best-effort swallowed catches in file/lock cleanup.
 - **Migration:** Keep cleanup suppression but add at least a `LogDebug` reason in every empty catch. Adopt the shared OMP web pipeline explicitly if not already fully wired. Consider a lightweight `Result<T>` for config validation instead of `ChannelConfigValidationResult`.
 - **Priority:** Low.
 
-### LogSearch
+### Fabrikam
 - **Current state:** No custom exceptions; good filtered catches; worker swallows DB/timeout/invalid-operation; service startup seeding unguarded.
-- **Migration:** Add a try/catch around `LogSearchSourceSeeder.ApplyConfiguredSourcesAsync` in `LogSearch.Service/Program.cs`. Promote swallowed worker-loop errors to persisted job-state with severity so the UI can surface them. Consider a small `Result<T>` for report-builder soft-cap logic.
+- **Migration:** Add a try/catch around `FabrikamSourceSeeder.ApplyConfiguredSourcesAsync` in `Fabrikam.Service/Program.cs`. Promote swallowed worker-loop errors to persisted job-state with severity so the UI can surface them. Consider a small `Result<T>` for report-builder soft-cap logic.
 - **Priority:** Medium.
 
-### EArkivChecker
+### Northwind
 - **Current state:** No custom exceptions; disciplined per-component handling; `FolderScanner` silently skips inaccessible directories; no service global handler.
-- **Migration:** Add a top-level try/catch in `EArkivChecker.Service/Program.cs` for startup failures. Make `FolderScanner` directory-skip behavior observable (increment a counter or log a warning) so permission problems are detectable.
+- **Migration:** Add a top-level try/catch in `Northwind.Service/Program.cs` for startup failures. Make `FolderScanner` directory-skip behavior observable (increment a counter or log a warning) so permission problems are detectable.
 - **Priority:** Low.
 
-### Dokumentbibliotek
+### AdventureWorks
 - **Current state:** No custom exceptions; exception-filter helpers; services log + rethrow; pages surface localized messages; no result abstraction.
 - **Migration:** Introduce a small `Result<T>`/`OperationResult` for the existing `Is...Failure` filter flows to reduce control-flow by exception. Keep shared OMP web pipeline.
 - **Priority:** Low.
 
-### VajSkrivare
+### Tailwind
 - **Current state:** Custom `ServiceResult<T>`; custom API exception wrapper; bootstrap diagnostics; broad but filtered catches; good localization.
 - **Migration:** Ensure the custom API pipeline and bootstrap diagnostics route into the shared OMP `UseOmpWebDefaults` pipeline consistently (or document why it does not). Reduce the number of broad `catch (Exception)` in `ZebraConfigService` by introducing more specific typed filters where possible.
 - **Priority:** Low.
 
-### iKrock2
-- **Current state:** One custom exception; hand-rolled result records; backend worker swallows and retries indefinitely; `IKrock2DataService` swallows and returns defaults.
-- **Migration:** Add a circuit-breaker / backoff and health-state persistence to `WorkOrderBackgroundService` so persistent failures are not only in logs. Change `IKrock2DataService` to return a `Result<T>` instead of default values, so callers can decide whether to degrade or show an error.
+### Globex
+- **Current state:** One custom exception; hand-rolled result records; backend worker swallows and retries indefinitely; `GlobexDataService` swallows and returns defaults.
+- **Migration:** Add a circuit-breaker / backoff and health-state persistence to `WorkOrderBackgroundService` so persistent failures are not only in logs. Change `GlobexDataService` to return a `Result<T>` instead of default values, so callers can decide whether to degrade or show an error.
 - **Priority:** Medium.
 
 ### ODVGateway
@@ -770,5 +770,5 @@ This document summarizes how each repository currently handles errors, highlight
 
 ### AgentDocMap
 - **Current state:** Simple CLI; plain `Error` throws; bare `catch { }` for optional I/O; no structured logging or result abstraction.
-- **Migration:** Keep simplicity, but distinguish “file does not exist” from permission/IO errors in `fsUtils.js` and `fileInventory.js`. Add a minimal `Result<T>` or `{ ok, error }` return type for `sourceAnalyzer.js` instead of mutating a `parseError` field.
+- **Migration:** Keep simplicity, but distinguish "file does not exist" from permission/IO errors in `fsUtils.js` and `fileInventory.js`. Add a minimal `Result<T>` or `{ ok, error }` return type for `sourceAnalyzer.js` instead of mutating a `parseError` field.
 - **Priority:** Low.

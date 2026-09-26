@@ -1093,7 +1093,7 @@ Every OMP web app that shares sign-in and role switching must use identical valu
   Changing the setting does not strand existing keys, because each key records its own `decryptorType` in the key XML and is decrypted through that rather than through whatever is configured now. What a mismatch actually breaks is a key that cannot be decrypted **in the context where it is read** — a machine-scoped DPAPI key on another node, or a user-scoped key under a different app-pool account.
   Turning protection **off** therefore leaves a *mixed* ring: existing keys stay encrypted and host-bound, new ones are clear text. That matters, because the host-bound keys keep causing `/auth/login` loops if the ring moves or a pool changes account — the very incident class this default change is meant to end. To leave it behind completely, stop all apps, delete the old key files from `DataProtectionKeyPath`, and start again; every user re-authenticates once. `ProtectKeysWithDpapi` defaults to `false` since 2026-08-23 — the key directory's NTFS permissions are the control until one of the two encryption-at-rest modes is configured: an AD group SID as the DPAPI-NG descriptor, or an X.509 certificate thumbprint (`OmpAuth:DataProtectionCertificateThumbprint`) where there is no AD. See "Load-balanced deployments" below for which mode fits which topology.
 
-Affected apps include the Portal, `OpenModulePlatform.Auth`, and every consumer module web app such as IbsPackager, Dokumentbibliotek, EArkivChecker, LogSearch, and VajSkrivare. See `OmpAuthOptions.cs` for the section shape and defaults.
+Affected apps include the Portal, `OpenModulePlatform.Auth`, and every consumer module web app such as Contoso, AdventureWorks, Northwind, Fabrikam, and Tailwind. See `OmpAuthOptions.cs` for the section shape and defaults.
 
 ### Auth cookie vs `omp_active_role` cookie
 
@@ -1106,7 +1106,7 @@ The active-role cookie (`omp_active_role`) is a separate, plain-text cookie that
 
 ### Committed vs runtime appsettings
 
-The committed `appsettings.json` files in the repositories are intentionally neutral. Most apps do not contain an `OmpAuth` section at all; `LogSearch.Web` is a known exception that still uses the same defaults.
+The committed `appsettings.json` files in the repositories are intentionally neutral. Most apps do not contain an `OmpAuth` section at all; apps that do still use the same defaults.
 
 At runtime, HostAgent generates a built-in `appsettings.json` for each deployed web app. That generated file includes an `OmpAuth` section with hardcoded `CookieName`, `ApplicationName`, login/logout/access-denied paths, and a resolved `DataProtectionKeyPath` (from `HostAgent:WebAppDataProtectionKeyPath` or a host-local fallback). This is done in `ArtifactConfigurationFileWriter.cs`.
 
@@ -1327,8 +1327,8 @@ because the shared auth cookie is the whole point of the family:
 
 - **Must share the ring (SSO family):** the Portal, `OpenModulePlatform.Auth`,
   and every module web app that accepts the shared cookie (Content/iFrame web
-  app modules, the example modules, and consumer apps such as IbsPackager,
-  Dokumentbibliotek, EArkivChecker, LogSearch, VajSkrivare). These all run with
+  app modules, the example modules, and consumer apps such as Contoso,
+  AdventureWorks, Northwind, Fabrikam, Tailwind). These all run with
   the same `CookieName`, `ApplicationName`, and `DataProtectionKeyPath` —
   isolation between them would break cross-app sign-in and role switching.
 - **May NOT need the shared ring:** an app that never reads the OMP auth

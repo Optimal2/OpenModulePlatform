@@ -1,8 +1,8 @@
 # HTTP Client Conventions — Cross-Repository Audit
 
-**Scope:** All `omp-odv` repositories.  
-**Date:** 2026-07-16.  
-**Purpose:** Document current HTTP-client usage, divergences, and the recommended standard pattern.  
+**Scope:** All `omp-odv` repositories.
+**Date:** 2026-07-16.
+**Purpose:** Document current HTTP-client usage, divergences, and the recommended standard pattern.
 **Constraint:** Read-only audit; no source changes.
 
 > **Line anchors (note added 2026-09-21).** The `file.cs:NN` references in
@@ -10,17 +10,23 @@
 > drifted since. Resolve every reference by the **symbol or file name**, not by
 > the line number; the same note applies in `configuration.md`.
 
+The private consumer repositories in the OMP+ODV ecosystem are represented
+here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,
+Tailwind, Globex). Per-repo source paths, file:line anchors, and
+product/namespace prefixes are operator-specific deployment data and live in
+the private DEV installation repository, not here.
+
 Repositories audited:
 
 | Repository | Language | Outbound HTTP? |
 |------------|----------|----------------|
 | `OpenModulePlatform` | .NET + browser JS | Yes — HostAgent health monitor, browser `fetch`, SignalR |
-| `IbsPackager` | .NET | No |
-| `LogSearch` | .NET | No |
-| `EArkivChecker` | .NET + browser JS | Yes — browser `fetch` + shared `ompLiveRefresh` subscription |
-| `Dokumentbibliotek` | .NET + browser JS | Yes — browser `fetch` only |
-| `VajSkrivare` | .NET + minimal JS | No |
-| `iKrock2` | .NET + minimal JS | No |
+| `Contoso` | .NET | No |
+| `Fabrikam` | .NET | No |
+| `Northwind` | .NET + browser JS | Yes — browser `fetch` + shared `ompLiveRefresh` subscription |
+| `AdventureWorks` | .NET + browser JS | Yes — browser `fetch` only |
+| `Tailwind (PrintConnect)` | .NET + minimal JS | No |
+| `Globex` | .NET + minimal JS | No |
 | `ODVGateway` | .NET | Yes — remote inline/viewer source proxy |
 | `OpenDocViewer` | JS/npm | Yes — browser `fetch`, `axios`, `navigator.sendBeacon` |
 | `AgentDocMap` | JS/npm | No |
@@ -67,37 +73,35 @@ Repositories audited:
 
 ---
 
-### IbsPackager
+### Contoso
 
 **No outbound HTTP clients.**
 
 - No `HttpClient`, `IHttpClientFactory`, `AddHttpClient`, `HttpWebRequest`, `WebClient`, or REST packages.
-- External communication: SQL Server (`Microsoft.Data.SqlClient`) and named-pipe RPC to the OMP Host Agent (`IbsPackager.Runtime/Services/HostAgentRpcClient.cs:41-47`).
-- JSON: System.Text.Json (e.g. `IbsBatchWriter.cs:580,612`, `StringOrNumberJsonConverter.cs`).
-- URL-like config `OpenDocViewerOptions.BaseUrl` (`IbsPackager.Web/Options/OpenDocViewerOptions.cs:7`) is used only for browser iframe `src` navigation, not outbound HTTP.
+- External communication: SQL Server (`Microsoft.Data.SqlClient`) and named-pipe RPC to the OMP Host Agent (the runtime services call into the host via the shared `HostAgentRpcClient`).
+- JSON: System.Text.Json (e.g. the batch-writer and converter modules under `Contoso.Runtime`).
+- URL-like config `OpenDocViewerOptions.BaseUrl` is used only for browser iframe `src` navigation, not outbound HTTP.
 
 ---
 
-### LogSearch
+### Fabrikam
 
 **No outbound HTTP clients.**
 
 - No `HttpClient`, `IHttpClientFactory`, Polly, or REST packages in any `.csproj`.
-- `LogSearch.Web/Program.cs:9-10` registers only database/repo singletons.
+- The web host `Program.cs` registers only database/repo singletons.
 - All integration is SQL Server–based.
-- `"PortalBaseUrl": "/"` in `LogSearch.Web/appsettings.json:8` is a portal top-bar navigation setting, not an HTTP client base URL.
+- A `PortalBaseUrl` setting in `appsettings.json` is a portal top-bar navigation setting, not an HTTP client base URL.
 
 ---
 
-### EArkivChecker
+### Northwind
 
 **HTTP client creation**
 - C#: no `HttpClient`/`IHttpClientFactory`. Push events go through SQL (`SqlPushEventPublisher`).
-- Browser: standard `fetch` in `EArkivChecker.Web/wwwroot/js/earkiv-checker.js:443-448`
-  (`refreshStatuses`, `credentials: "same-origin"`, `Accept: application/json`) and
-  `ec-target-form.js:64-71`.
+- Browser: standard `fetch` in the module's `wwwroot/js/northwind.js` (`refreshStatuses`, `credentials: "same-origin"`, `Accept: application/json`) and the target-form script.
 - **No SignalR client in this repository.** Re-measured 2026-09-04: the strings `signalR` /
-  `withAutomaticReconnect` do not occur anywhere in EArkivChecker (`.cs`, `.js`, `.cshtml`,
+  `withAutomaticReconnect` do not occur anywhere in Northwind (`.cs`, `.js`, `.cshtml`,
   `.csproj`). The live-refresh transport moved into the shared platform asset
   `OpenModulePlatform.Web.Shared/wwwroot/js/omp-live-refresh.js`, which owns the
   `HubConnectionBuilder` and `withAutomaticReconnect()` (`:388-390`) and exposes
@@ -106,89 +110,84 @@ Repositories audited:
 **Resilience**
 - No C# HTTP resilience.
 - JS: the module subscribes through the shared helper rather than owning a connection --
-  `window.ompLiveRefresh.subscribe({ module, categories, debounceMs, requestPush, fallback, ... })`
-  (`earkiv-checker.js:252-270`). Reconnect behaviour therefore lives in `omp-live-refresh.js`.
+  `window.ompLiveRefresh.subscribe({ module, categories, debounceMs, requestPush, fallback, ... })`.
+  Reconnect behaviour therefore lives in `omp-live-refresh.js`.
   When the shared helper is absent the module degrades to plain polling at the behaviour's
-  fallback interval (`earkiv-checker.js:244-249`) -- an explicit, commented fallback, not an
-  accident.
-- Poll interval: read from the DOM attribute `data-ec-poll-interval-ms`, default 60 000 ms
-  (`earkiv-checker.js:13`), clamped to a 10 000 ms minimum with `0` preserved as "off"
-  (`:42`, `:129`).
+  fallback interval -- an explicit, commented fallback, not an accident.
+- Poll interval: read from a DOM attribute `data-nw-poll-interval-ms`, default 60 000 ms,
+  clamped to a 10 000 ms minimum with `0` preserved as "off".
 
 **Base URL configuration**
-- Status snapshot URL from DOM `data-ec-snapshot-url` (`earkiv-checker.js:7`).
+- Status snapshot URL from DOM `data-nw-snapshot-url`.
 - Live-refresh subscription is addressed by module key + category, not by a URL the module
-  resolves itself (`earkiv-checker.js:252-256`); the connection URL is the shared helper's concern.
-- Server notification URL built from configurable `NotificationRoutePath` (`EArkivCheckerOptions.cs`,
-  `EArkivCheckerRepository.cs`).
+  resolves itself; the connection URL is the shared helper's concern.
+- Server notification URL built from a configurable `NotificationRoutePath`.
 
-> **Anchors re-verified 2026-09-04 (board-prep).** The previous version of this section pointed at
-> `earkiv-checker.js:609-615`, `:389-397`, `:212-221`, `:424-436` and `:254-270` in a file that is
-> now 562 lines long, and described a SignalR client the repository no longer contains. The
-> mechanism did not disappear -- it was centralised into Web.Shared.
+> **Anchors re-verified 2026-09-04 (board-prep).** The mechanism did not disappear --
+> it was centralised into Web.Shared.
 
 **Authentication headers**
 - Browser: same-origin cookie auth.
-- Anti-forgery token on POST: `ec-target-form.js:65,70`.
+- Anti-forgery token on POST.
 - No API-key/Bearer injection.
 
 **JSON serialization**
-- C#: System.Text.Json (`EArkivCheckerScanProcessor.cs:2,11,192`).
-- JS: `response.json()` (`earkiv-checker.js:621`).
+- C#: System.Text.Json.
+- JS: `response.json()`.
 
 **Error handling**
-- JS: `response.ok` check (`earkiv-checker.js:617-619`) with `console.warn` fallback.
-- C# push-publish failures are logged and swallowed (`EArkivCheckerScanProcessor.cs:194-211`).
+- JS: `response.ok` check with `console.warn` fallback.
+- C# push-publish failures are logged and swallowed.
 
 ---
 
-### Dokumentbibliotek
+### AdventureWorks
 
 **HTTP client creation**
 - C#: no outbound `HttpClient`/`IHttpClientFactory`.
-- Browser: `fetch` only in `RazorPages/wwwroot/js/document-library.js:436,748,1076,1322,1802,1864`.
+- Browser: `fetch` only in `RazorPages/wwwroot/js/adventure-works.js` (the document-library equivalent).
 
 **Resilience**
 - No Polly or HTTP retry.
-- JS: only `AbortController` cancellations (`document-library.js:744,1072,1798`).
+- JS: only `AbortController` cancellations.
 
 **Base URL configuration**
-- Front-end uses relative URLs from `window.location.href` / form actions (`document-library.js:431,615,729,1354`).
-- `OpenDocViewerUrl` configurable, defaults to `"/OpenDocViewer/"` (`Models/AppSetting.cs:22`, `Index.cshtml.cs:1060-1077`).
+- Front-end uses relative URLs from `window.location.href` / form actions.
+- `OpenDocViewerUrl` configurable, defaults to `"/OpenDocViewer/"`.
 
 **Authentication headers**
-- Front-end sends only `X-Requested-With: XMLHttpRequest` (`document-library.js:439,751,1079,1325,1807,1869`).
+- Front-end sends only `X-Requested-With: XMLHttpRequest`.
 - Server-side auth via `[Authorize]` / `RequireAuthorization`.
 
 **JSON serialization**
-- C#: System.Text.Json (`Services/DocumentLibraryUserSettingsService.cs:1,11,51,87`).
+- C#: System.Text.Json.
 - JS: parses HTML (`response.text()` + `DOMParser`), not JSON.
 
 **Error handling**
-- JS: `response.ok` check, fallback to full navigation or native form submit (`document-library.js:443-445,756-758,1329-1331,1812-1814`).
-- Inbound controller: generic 500 catch (`DocumentViewerController.cs:103-107`).
+- JS: `response.ok` check, fallback to full navigation or native form submit.
+- Inbound controller: generic 500 catch.
 
 ---
 
-### VajSkrivare
+### Tailwind (PrintConnect)
 
 **No outbound HTTP clients.**
 
-- No `HttpClient`, `IHttpClientFactory`, Polly, or REST packages (`src/Skrivarkoppling.Web/Skrivarkoppling.Web.csproj:12-13` lists only `Dapper` and `Microsoft.Data.SqlClient`).
-- Test-only `HttpClient` via `WebApplicationFactory` in `tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs:46,64`.
-- JSON: System.Text.Json (e.g. `JsonZebraConfigStore.cs:67,99`, API endpoints using `Results.Json` in `Program.cs:200-274`).
+- No `HttpClient`, `IHttpClientFactory`, Polly, or REST packages (`src/PrintConnect.Web/PrintConnect.Web.csproj` lists only `Dapper` and `Microsoft.Data.SqlClient`).
+- Test-only `HttpClient` via `WebApplicationFactory` in the test project.
+- JSON: System.Text.Json (e.g. the JSON config store and API endpoints using `Results.Json` in `Program.cs`).
 
 ---
 
-### iKrock2
+### Globex
 
 **No outbound HTTP clients.**
 
 - No `HttpClient`, `IHttpClientFactory`, Polly, or REST packages.
-- External communication is SQL Server only (`SqlConnectionFactory`, `OmpConnectionFactory`, `IboSyncService`).
-- `MLLPerformanceOptions.BaseUrl` (`iKrock2.Web/Options/MLLPerformanceOptions.cs:24`) is used to build **browser redirect URLs** (`Index.cshtml.cs:83`), not server-side HTTP requests.
-- Credentials are appended as query-string parameters on redirect URLs (`Index.cshtml.cs:109-124`), not HTTP headers.
-- JSON: System.Text.Json (`WorkOrderExecutor.cs`, `Progress.cshtml.cs`).
+- External communication is SQL Server only (`SqlConnectionFactory`, `OmpConnectionFactory`, sync services).
+- A configurable `BaseUrl` option is used to build **browser redirect URLs**, not server-side HTTP requests.
+- Credentials are appended as query-string parameters on redirect URLs, not HTTP headers.
+- JSON: System.Text.Json.
 
 ---
 
@@ -291,12 +290,12 @@ Repositories audited:
 | Repository | HTTP creation | Resilience | Base URL config | Auth headers | JSON serialization | Error handling |
 |------------|---------------|------------|-----------------|--------------|--------------------|----------------|
 | **OpenModulePlatform** | `IHttpClientFactory` named clients (`Program.cs:52-57`) | None for HTTP; per-cycle probe only | Config-driven (`HostAgentSettings.cs:361-421`) | None; optional `Host` header only | System.Text.Json | Manual status range check; no `EnsureSuccessStatusCode` |
-| **IbsPackager** | None | N/A | N/A (only iframe URL) | N/A | System.Text.Json | N/A |
-| **LogSearch** | None | N/A | N/A | N/A | None (SQL/Excel) | N/A |
-| **EArkivChecker** | Browser `fetch` only; no C# client | Shared `ompLiveRefresh` subscription (reconnect owned by Web.Shared) + polling fallback | DOM attributes / config route path | Same-origin cookie; anti-forgery token on POST | System.Text.Json (C#); `response.json()` (JS) | `response.ok` check; C# push failures logged/swallowed |
-| **Dokumentbibliotek** | Browser `fetch` only; no C# client | `AbortController` cancellations only | Relative URLs; configurable ODV path | Same-origin cookie; `X-Requested-With` | System.Text.Json (C#); HTML parsing (JS) | `response.ok` → full navigation fallback |
-| **VajSkrivare** | None | N/A | N/A | N/A | System.Text.Json | N/A (inbound only) |
-| **iKrock2** | None | N/A | Config-driven redirect URLs only | N/A | System.Text.Json | N/A |
+| **Contoso** | None | N/A | N/A (only iframe URL) | N/A | System.Text.Json | N/A |
+| **Fabrikam** | None | N/A | N/A | N/A | None (SQL/Excel) | N/A |
+| **Northwind** | Browser `fetch` only; no C# client | Shared `ompLiveRefresh` subscription (reconnect owned by Web.Shared) + polling fallback | DOM attributes / config route path | Same-origin cookie; anti-forgery token on POST | System.Text.Json (C#); `response.json()` (JS) | `response.ok` check; C# push failures logged/swallowed |
+| **AdventureWorks** | Browser `fetch` only; no C# client | `AbortController` cancellations only | Relative URLs; configurable ODV path | Same-origin cookie; `X-Requested-With` | System.Text.Json (C#); HTML parsing (JS) | `response.ok` → full navigation fallback |
+| **Tailwind (PrintConnect)** | None | N/A | N/A | N/A | System.Text.Json | N/A (inbound only) |
+| **Globex** | None | N/A | Config-driven redirect URLs only | N/A | System.Text.Json | N/A |
 | **ODVGateway** | `IHttpClientFactory` named client (`Program.cs:51`) | Custom manual retry + timeout; no Polly | Config template + request-derived absolute URL | Cookie forwarding (`.ASPXAUTH`, `ASP.NET_SessionId`) | System.Text.Json | `response.IsSuccessStatusCode`; typed status-code returns |
 | **OpenDocViewer** | `fetch` + `axios` + `sendBeacon` | Hand-rolled retry for prefetch/system logs | Runtime config (`__ODV_CONFIG__`) | `x-log-token` (system log); cookie/session (user log) | Manual `JSON.stringify`/`JSON.parse` | Explicit `response.ok`; silent swallow for logs |
 | **AgentDocMap** | None | N/A | N/A | N/A | Built-in JSON | N/A |
@@ -304,12 +303,12 @@ Repositories audited:
 ### Highlighted divergences
 
 1. **`new HttpClient()` anti-pattern** — not found in any repo. ✅
-2. **Missing HTTP resilience** — OpenModulePlatform HostAgent health probe, EArkivChecker, Dokumentbibliotek, and OpenDocViewer have no Polly/standard resilience library; ODVGateway uses custom retry.
+2. **Missing HTTP resilience** — OpenModulePlatform HostAgent health probe, Northwind, AdventureWorks, and OpenDocViewer have no Polly/standard resilience library; ODVGateway uses custom retry.
 3. **No typed clients** — OpenModulePlatform and ODVGateway use named `IHttpClientFactory` clients, not typed clients.
 4. **Hardcoded URLs** — generally absent; exceptions are OpenDocViewer’s relative WASM path and development/sample URLs in docs/configs.
 5. **Inconsistent JS clients** — OpenDocViewer mixes `fetch`, `axios`, and `sendBeacon`.
 6. **Security-relevant TLS override** — OpenModulePlatform exposes a named client that accepts any server certificate.
-7. **Credentials in query string** — iKrock2 appends `repUser`/`repPassword` to redirect URLs for a legacy integration.
+7. **Credentials in query string** — Globex appends credentials to redirect URLs for a legacy integration.
 8. **Unenforced config options** — ODVGateway exposes `MaxConcurrency`/`MaxCount` that are not enforced for remote inline fetches.
 
 ---
@@ -419,10 +418,10 @@ export async function fetchWithRetry(url, options, { maxAttempts = 3, baseDelayM
 | **OpenModulePlatform** | Named `IHttpClientFactory` client; no Polly; manual status check; dangerous-cert named client | Convert `WebAppHealthMonitor` to a typed client; add `AddStandardResilienceHandler` for retry/timeout; replace manual status check with `EnsureSuccessStatusCode` or typed result; gate dangerous-cert handler behind explicit dev flag | Medium |
 | **ODVGateway** | Named client; hand-rolled retry/timeout; unenforced config options; cookie-only auth | Convert to typed client; replace custom retry with Polly / `AddStandardResilienceHandler`; enforce or remove `MaxConcurrency`/`MaxCount`; keep cookie forwarding in a delegating handler | Medium |
 | **OpenDocViewer** | Mixed `fetch`/`axios`/`sendBeacon`; hand-rolled retry; hard-coded relative WASM path; `x-log-token` header only for system log | Consolidate on `fetch` (retain `sendBeacon` for fire-and-forget logs); create one `httpClient.js` wrapper with retry/timeout; move WASM base URL to runtime config; unify auth model if feasible | Medium |
-| **EArkivChecker** | Browser `fetch` only; live refresh via the shared `ompLiveRefresh` helper with polling fallback; no C# HTTP client | Add a small `fetch` wrapper with retry/timeout for status polls; C# remains SQL-only, no change needed | Low |
-| **Dokumentbibliotek** | Browser `fetch` only; `AbortController` cancellations; no retry | Add a small `fetch` wrapper with retry/timeout; keep full-navigation fallback as last resort | Low |
-| **iKrock2** | No HTTP clients; credentials in query string for redirect URLs | No HTTP client migration needed; review security of query-string credential transfer with the customer | Low |
-| **IbsPackager** | No HTTP clients | No migration needed unless future features require outbound HTTP | — |
-| **LogSearch** | No HTTP clients | No migration needed | — |
-| **VajSkrivare** | No HTTP clients | No migration needed | — |
+| **Northwind** | Browser `fetch` only; live refresh via the shared `ompLiveRefresh` helper with polling fallback; no C# HTTP client | Add a small `fetch` wrapper with retry/timeout for status polls; C# remains SQL-only, no change needed | Low |
+| **AdventureWorks** | Browser `fetch` only; `AbortController` cancellations; no retry | Add a small `fetch` wrapper with retry/timeout; keep full-navigation fallback as last resort | Low |
+| **Globex** | No HTTP clients; credentials in query string for redirect URLs | No HTTP client migration needed; review security of query-string credential transfer with the customer | Low |
+| **Contoso** | No HTTP clients | No migration needed unless future features require outbound HTTP | — |
+| **Fabrikam** | No HTTP clients | No migration needed | — |
+| **Tailwind (PrintConnect)** | No HTTP clients | No migration needed | — |
 | **AgentDocMap** | No HTTP clients | No migration needed | — |

@@ -603,23 +603,74 @@ function Add-SharedWebConfigChecks {
 }
 
 function Add-ModuleDataStoreChecks {
+    <#
+    .SYNOPSIS
+    Checks the data-store configuration for the optional consumer document-library
+    module. The public OMP diagnostic accepts the generic DocumentLibrary
+    config section (preferred for new deployments). Installations that use a
+    differently-named config section can register it via
+    -ModuleConfigSectionName / -ModuleLegacyConnectionName parameters, or set
+    the values in a per-installation overlay (omp-components.external.json).
+    #>
     param(
-        [System.Collections.IDictionary]$Config
+        [System.Collections.IDictionary]$Config,
+        [string]$ModuleConfigSectionName = 'DocumentLibrary',
+        [string]$ModuleLegacyConnectionName = 'DocumentLibraryDb',
+        [string]$ModuleDefaultSchema = 'omp_consumer_documentlibrary'
     )
 
-    $hasDocumentLibrarySection = $Config.Contains('DokumentBibliotek')
-    if (-not $hasDocumentLibrarySection) {
+    # Accept the parameter-supplied names first; fall back to the generic public
+    # defaults. Installations can extend the candidate list via the per-install
+    # overlay (omp-components.external.json:dataStoreSectionAliases).
+    $resolvedSectionName = $null
+    $sectionCandidates = @($ModuleConfigSectionName, 'DocumentLibrary')
+    $connectionCandidates = @($ModuleLegacyConnectionName, 'DocumentLibraryDb')
+    $overlayPath = Join-Path $PSScriptRoot '..\..\omp-components.external.json'
+    if (Test-Path -LiteralPath $overlayPath -PathType Leaf) {
+        try {
+            $overlay = Get-Content -LiteralPath $overlayPath -Raw | ConvertFrom-Json -ErrorAction SilentlyContinue
+            if ($overlay) {
+                if ($overlay.PSObject.Properties.Match('dataStoreSectionAliases').Count -gt 0) {
+                    $sectionCandidates += @($overlay.dataStoreSectionAliases | Where-Object { $_ })
+                }
+                if ($overlay.PSObject.Properties.Match('dataStoreConnectionAliases').Count -gt 0) {
+                    $connectionCandidates += @($overlay.dataStoreConnectionAliases | Where-Object { $_ })
+                }
+            }
+        }
+        catch {
+            Write-Warning "omp-components.external.json overlay could not be read: $($_.Exception.Message)"
+        }
+    }
+    foreach ($candidate in $sectionCandidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        if ($Config.Contains($candidate)) {
+            $resolvedSectionName = $candidate
+            break
+        }
+    }
+    if ($null -eq $resolvedSectionName) {
         return
     }
 
-    $useLegacy = [bool](Get-ConfigValue -Config $Config -Path 'DokumentBibliotek:UseLegacyDataStore' -Default $false)
-    $dataSchema = [string](Get-ConfigValue -Config $Config -Path 'DokumentBibliotek:DataSchema' -Default '')
+    $useLegacy = [bool](Get-ConfigValue -Config $Config -Path "$resolvedSectionName`:UseLegacyDataStore" -Default $false)
+    $dataSchema = [string](Get-ConfigValue -Config $Config -Path "$resolvedSectionName`:DataSchema" -Default '')
     if ([string]::IsNullOrWhiteSpace($dataSchema)) {
-        $dataSchema = if ($useLegacy) { 'dbo' } else { 'omp_earkiv_dokumentbibliotek' }
+        $dataSchema = if ($useLegacy) { 'dbo' } else { $ModuleDefaultSchema }
     }
 
     $ompDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:OmpDb' -Default '')
-    $legacyDb = [string](Get-ConfigValue -Config $Config -Path 'ConnectionStrings:DokumentBibliotekDb' -Default '')
+    $legacyConnectionName = $ModuleLegacyConnectionName
+    $legacyDb = ''
+    foreach ($candidate in $connectionCandidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        $found = [string](Get-ConfigValue -Config $Config -Path "ConnectionStrings`:$candidate" -Default '')
+        if (-not [string]::IsNullOrWhiteSpace($found)) {
+            $legacyDb = $found
+            $legacyConnectionName = $candidate
+            break
+        }
+    }
 
     $dataStoreStatus = Resolve-CheckStatus -Condition (-not ($useLegacy -and [string]::IsNullOrWhiteSpace($legacyDb))) -WhenFalse 'Fail'
     Add-Check 'Module compatibility' 'Data-store configuration' $dataStoreStatus "UseLegacyDataStore=$useLegacy; DataSchema=$dataSchema" ([ordered]@{

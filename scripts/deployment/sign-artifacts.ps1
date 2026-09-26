@@ -44,20 +44,20 @@ param(
     [string[]]$IncludePattern = @(
         'OpenModulePlatform.*.dll',
         'OpenModulePlatform.*.exe',
-        'IbsPackager.*.dll',
-        'IbsPackager.*.exe',
-        'EArkivChecker.*.dll',
-        'EArkivChecker.*.exe',
-        'LogSearch.*.dll',
-        'LogSearch.*.exe',
-        'iKrock2.*.dll',
-        'iKrock2.*.exe',
-        'VajSkrivare.*.dll',
-        'VajSkrivare.*.exe',
         'ODVGateway.*.dll',
         'ODVGateway.*.exe',
-        'Dokumentbibliotek.*.dll',
-        'Dokumentbibliotek.*.exe'
+        'Contoso.*.dll',
+        'Contoso.*.exe',
+        'Northwind.*.dll',
+        'Northwind.*.exe',
+        'Fabrikam.*.dll',
+        'Fabrikam.*.exe',
+        'Globex.*.dll',
+        'Globex.*.exe',
+        'Tailwind.*.dll',
+        'Tailwind.*.exe',
+        'AdventureWorks.*.dll',
+        'AdventureWorks.*.exe'
     ),
     [switch]$SkipIfUnconfigured
 )

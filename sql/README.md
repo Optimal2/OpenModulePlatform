@@ -93,13 +93,12 @@ HostAgent-first packager (`scripts/deployment/package-hostagent-first.ps1`).
 
 Modules outside this repository own their schemas in their own repositories and
 follow the same numbered pattern there (verified 2026-08-27):
-`omp_ibs_packager` (IbsPackager), `omp_ikrock` (iKrock2), `omp_log_search`
-(LogSearch), `omp_earkiv_checker` (EArkivChecker) and
-`omp_earkiv_dokumentbibliotek` (Dokumentbibliotek). VajSkrivare is the second
-exception alongside `OpenModulePlatform.Auth`: it owns no schema and its only
-OMP script, `Sql/01_initialize_vajskrivare_metadata.sql`, seeds permissions into
-`omp` — note that it also uses a different file-naming convention (`01_…`) than
-the numbered pattern above.
+`omp_contoso` (Contoso), `omp_globex` (Globex), `omp_fabrikam` (Fabrikam),
+`omp_northwind` (Northwind) and `omp_adventureworks` (AdventureWorks).
+Tailwind is the second exception alongside `OpenModulePlatform.Auth`: it owns
+no schema and its only OMP script, `Sql/01_initialize_tailwind_metadata.sql`,
+seeds permissions into `omp` — note that it also uses a different file-naming
+convention (`01_…`) than the numbered pattern above.
 
 ## Core configuration settings
 

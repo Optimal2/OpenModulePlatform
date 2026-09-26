@@ -479,7 +479,8 @@ the Portal HostDeployments page so operators can fix the overlay before the app
 fails at runtime.
 
 Example for a module whose overlay replaces the entire `appsettings.json` file
-and therefore must provide every required section (based on VajSkrivare):
+and therefore must provide every required section (based on a reference
+consumer module):
 
 ```json
 "artifactConfigurationFiles": [

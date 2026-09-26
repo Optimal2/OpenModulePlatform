@@ -14,7 +14,7 @@ things came out differently from the proposal, and the differences matter:
 | JSON key `sharedProjects` with `external: true` | key **`sharedDependencies`** — a separate array from OMP's own in-repo `sharedProjects` |
 | Declared `expectedRepositoryVersion` / `expectedWebSharedHash` | declared **`treeId`** — git's tree object id for the shared project directory, which changes exactly when the directory's contents change and never otherwise. No deterministic rebuild is needed to compute it, which removes migration consideration 4 below entirely. |
 | Start as **WARN**, consider FORCE later (decision flag (a)) | shipped as **FORCE**: Check 14 is a hard error and blocks the consumer's push. `-Strict` additionally turns "the guard could not run" into an error rather than a warning. |
-| Scope: `OpenModulePlatform.Web.Shared` in five private repos (decision flag (c)) | **six** consumer repos — `IbsPackager`, `LogSearch`, `EArkivChecker`, `Dokumentbibliotek`, `VajSkrivare` **and `iKrock2`** (not listed in this ADR) — and **four** shared projects, not one: `Web.Shared`, `EventPublisher.Abstractions`, `EventPublisher.Sql` and `Worker.Abstractions` (IbsPackager only, for `ibs-packager-worker`). |
+| Scope: `OpenModulePlatform.Web.Shared` in five private repos (decision flag (c)) | **six** private consumer repositories (one of them not listed in this ADR's original proposal) — and **four** shared projects, not one: `Web.Shared`, `EventPublisher.Abstractions`, `EventPublisher.Sql` and `Worker.Abstractions` (one consumer only, for its module worker). |
 
 **One more thing changed after this ADR was written, and it is not in the table because
 nobody proposed it here: the `build:omp-web-shared` job lock no longer exists.** The
@@ -31,7 +31,7 @@ the lock references below as history. (Verified 2026-08-28.)
 
 The rule lives in exactly one place:
 `scripts/omp/validate-shared-dependencies.ps1` in this repository. Consumer
-validators call it as **Check 14** rather than embedding a copy; IbsPackager did
+validators call it as **Check 14** rather than embedding a copy; one consumer did
 keep an inline copy for a while and it drifted from the canonical implementation,
 which is the failure mode the canonical script's header now warns about. To
 re-record after a legitimate cascade, run the consumer's
@@ -54,21 +54,13 @@ a description of the system.
 
 `OpenModulePlatform.Web.Shared` is the canonical OMP web integration library (topbar, role-switch, auth defaults, localization, etc.). It lives in the public `OpenModulePlatform` repository and is consumed inside that repository by Portal, Auth, ContentWebApp, iFrameWebApp, and the example modules. The public repo already records those in-repo consumers in `omp-components.json` under `sharedProjects` and enforces cascade bumps when the Web.Shared source or binary changes.
 
-Five private consumer repositories also build against `OpenModulePlatform.Web.Shared`:
-
-- `IbsPackager`
-- `LogSearch`
-- `EArkivChecker`
-- `Dokumentbibliotek`
-- `VajSkrivare`
-
-Each repository is intentionally independent: it owns its own `omp-components.json`, its own component versions, and its own ported `scripts/validate-component-versions.ps1`. They share no common version-lock file with OpenModulePlatform.
+Several private consumer repositories also build against `OpenModulePlatform.Web.Shared`. Each repository is intentionally independent: it owns its own `omp-components.json`, its own component versions, and its own ported `scripts/validate-component-versions.ps1`. They share no common version-lock file with OpenModulePlatform.
 
 ## Problem
 
 > **Superseded — historical (2026-07-14).** See Status above for what shipped.
 
-A change to `OpenModulePlatform.Web.Shared` in the OpenModulePlatform repository can break or silently alter behavior in the five private consumer web apps. Today there is **no central awareness** that a Web.Shared change in OMP should cascade to those consumers. Each repo's local validators only enforce lockstep inside that repo; none of them compare their declared state against the upstream OMP Web.Shared version or hash.
+A change to `OpenModulePlatform.Web.Shared` in the OpenModulePlatform repository can break or silently alter behavior in the private consumer web apps. Today there is **no central awareness** that a Web.Shared change in OMP should cascade to those consumers. Each repo's local validators only enforce lockstep inside that repo; none of them compare their declared state against the upstream OMP Web.Shared version or hash.
 
 This is a design/documentation gap, not a bug in any single repo. The independence of the consumer repos is intentional and must be preserved, but the absence of cross-repo cascade awareness leaves the operator-dependent on manual tracking and build discipline.
 
@@ -108,51 +100,25 @@ There is also a contract scanner, `scripts/omp/validate-webshared-contracts.ps1`
 
 ### Each private repo consumes Web.Shared via `<ProjectReference>` to OMP source
 
-| Repository | Web.Shared reference path | How `OpenModulePlatformRoot` is resolved |
-|---|---|---|
-| `IbsPackager` | `IbsPackager.Web/IbsPackager.Web.csproj:11` — `$(OpenModulePlatformRoot)\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj` | `Directory.Build.targets:9-10` defaults to sibling `../OpenModulePlatform` |
-| `LogSearch` | `LogSearch.Web/LogSearch.Web.csproj:7` — `$(OpenModulePlatformRoot)\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj` | `Directory.Build.targets:7-8` defaults to sibling `../OpenModulePlatform` |
-| `EArkivChecker` | `EArkivChecker.Web/EArkivChecker.Web.csproj:7` — `$(OpenModulePlatformRoot)\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj` | `Directory.Build.targets:7-8` defaults to sibling `../OpenModulePlatform` |
-| `Dokumentbibliotek` | `RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj:27` — `..\..\OpenModulePlatform\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj` | `Directory.Build.targets:7-8` defaults to sibling `../OpenModulePlatform` |
-| `VajSkrivare` | `src/Skrivarkoppling.Web/Skrivarkoppling.Web.csproj:17` — `..\..\..\OpenModulePlatform\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj` | Hard-coded relative path (no `Directory.Build.targets` override found) |
+The mechanism is uniform: each private consumer repo declares a `<ProjectReference>` against a sibling `OpenModulePlatform` checkout, with `OpenModulePlatformRoot` resolved either by an environment variable or by a sibling-directory `Directory.Build.targets` convention. The exact per-repo paths, file references, and override locations are operator-specific deployment data and live in the private DEV installation repository, not here.
 
-None of the five repos consume Web.Shared as a NuGet package or a copied binary; they all compile against the OMP source tree on the local workstation.
+None of the consumer repos consume Web.Shared as a NuGet package or a copied binary; they all compile against the OMP source tree on the local workstation.
 
 ### No private repo declares Web.Shared in `omp-components.json`
 
-All five `omp-components.json` files have a `components` array and one or more `moduleDefinitions`, but **none of them have a `sharedProjects` section**.
-
-- `IbsPackager/omp-components.json:1-53` — no `sharedProjects`.
-- `LogSearch/omp-components.json:1-47` — no `sharedProjects`.
-- `EArkivChecker/omp-components.json:1-47` — no `sharedProjects`.
-- `Dokumentbibliotek/omp-components.json:1-27` — no `sharedProjects`.
-- `VajSkrivare/omp-components.json:1-27` — no `sharedProjects`.
+All private consumer `omp-components.json` files have a `components` array and one or more `moduleDefinitions`, but **none of them have a `sharedProjects` section**. The exact per-repo manifests are operator-specific deployment data and live in the private DEV installation repository.
 
 Because there is no `sharedProjects` entry, the existing `validate-component-versions.ps1` logic used in OpenModulePlatform cannot be ported verbatim to those repos for Web.Shared.
 
 ### Ported validators explicitly disclaim cross-repo cascade
 
-Three of the five validators explicitly state that consumer repos have no shared-projects cascade:
+The ported validators in the consumer repos explicitly state that consumer repos have no shared-projects cascade. Some carry an inline comment of the form "This script is a simplified counterpart to OpenModulePlatform's validate-component-versions.ps1. Consumer repos have no sharedProjects cascade." in their header or first lines; the exact list of which ones do is operator-specific deployment data and lives in the private DEV installation repository.
 
-- `LogSearch/scripts/validate-component-versions.ps1:16-17`: "This script is a simplified counterpart to OpenModulePlatform's validate-component-versions.ps1. Consumer repos have no sharedProjects cascade."
-- `EArkivChecker/scripts/validate-component-versions.ps1:16-17`: same text.
-- `Dokumentbibliotek/scripts/validate-component-versions.ps1:16-17`: same text.
-
-`VajSkrivare/scripts/validate-component-versions.ps1:1-40` does not contain the same comment, but its logic likewise contains no Web.Shared cascade check.
-
-`IbsPackager/scripts/validate-component-versions.ps1:481-574` has its own **Check 10** for `IbsPackager.Runtime` cascade bumps (`ibs-packager-web`, `ibs-packager-worker`, `file-drop-channel-type`), but there is no equivalent check for `OpenModulePlatform.Web.Shared`.
+One consumer's validator has its own in-repo cascade check for its own runtime library (e.g. a `Check 10` that covers that consumer's `Runtime` project and its module worker / channel-type binaries), but does not check `OpenModulePlatform.Web.Shared` against the consumer's component version.
 
 ### Local CI / pre-push gates are repo-local
 
 Every private repo's `pre-push.ps1` simply calls its own `scripts/local-ci.ps1`:
-
-- `IbsPackager/.githooks/pre-push.ps1:33-43`
-- `LogSearch/.githooks/pre-push.ps1:33-43`
-- `EArkivChecker/.githooks/pre-push.ps1:33-43`
-- `Dokumentbibliotek/.githooks/pre-push.ps1:33-43`
-- `VajSkrivare/.githooks/pre-push.ps1:33-43`
-
-Each `local-ci.ps1` performs two steps:
 
 1. `dotnet build` of that repo's solution, passing `/p:OpenModulePlatformRoot=..\OpenModulePlatform` (or resolving a sibling path).
 2. `scripts/validate-component-versions.ps1 -BaseCommit origin/main` inside that repo.
@@ -161,21 +127,9 @@ The build will naturally pick up whatever Web.Shared source is present in the si
 
 ### AI Orchestrator only serializes shared builds, it does not version-check
 
-`AI-Orchestrator/src/gui/jobConcurrency.ts:24-33` lists the repositories that share OMP web builds:
+`AI-Orchestrator/src/gui/jobConcurrency.ts:24-33` lists the repositories that share OMP web builds. The exact repository-name set is operator-specific deployment data and lives in the private DEV installation repository.
 
-```typescript
-const ompSharedBuildRepoNames = new Set([
-  'openmoduleplatform',
-  'dokumentbibliotek',
-  'logsearch',
-  'earkivchecker',
-  'vajskrivare',
-  'ibspackager',
-  'ikrock2',
-]);
-```
-
-The same file uses `build:omp-web-shared` as an exclusive lock for implementation-mode jobs (`jobResourceLocks`, `usesOmpSharedBuild`, `jobConcurrency.ts:92-94`). This prevents two jobs from building `OpenModulePlatform.Web.Shared` concurrently on the same workstation, but it does **not** verify that each consumer repo has bumped its version after a Web.Shared change.
+The same file used `build:omp-web-shared` as an exclusive lock for implementation-mode jobs (`jobResourceLocks`, `usesOmpSharedBuild`, `jobConcurrency.ts:92-94`). As noted above, that lock was removed on 2026-08-22; concurrent consumer builds are now safe by output isolation. The historical references in this section remain for the record.
 
 ## Gap confirmation
 
@@ -186,7 +140,7 @@ The same file uses `build:omp-web-shared` as an exclusive lock for implementatio
 1. Inside OpenModulePlatform: Web.Shared source changes force in-repo consumer bumps (Check 7).
 2. Inside OpenModulePlatform: Web.Shared binary changes force in-repo consumer bumps (Check 11).
 3. Inside each private repo: component versions are bumped when that component's own project files change.
-4. AI Orchestrator: builds that touch OMP web-shared output are serialized to avoid bin/obj corruption.
+4. AI Orchestrator: builds that touch OMP web-shared output are serialized to avoid bin/obj corruption (history — replaced by output isolation on 2026-08-22).
 
 **What is NOT checked today:**
 
@@ -208,7 +162,7 @@ Each private repo records the Web.Shared version it expects/was last verified ag
 ```json
 {
   "manifestVersion": 1,
-  "repositoryKey": "ibspackager",
+  "repositoryKey": "example-consumer",
   "repositoryVersion": "0.3.40",
   "sharedProjects": [
     {
@@ -217,7 +171,7 @@ Each private repo records the Web.Shared version it expects/was last verified ag
       "expectedSourceRepositoryKey": "openmoduleplatform",
       "expectedRepositoryVersion": "0.3.256",
       "expectedWebSharedHash": "sha256:abc123...",
-      "consumers": [ "ibs-packager-web" ]
+      "consumers": [ "example-module-web" ]
     }
   ],
   "components": [ ... ]
@@ -261,8 +215,8 @@ OpenModulePlatform maintains a read-only registry of known private consumers and
 {
   "knownExternalConsumers": [
     {
-      "repositoryKey": "ibspackager",
-      "componentKey": "ibs-packager-web",
+      "repositoryKey": "example-consumer",
+      "componentKey": "example-module-web",
       "lastVerifiedOmpRepositoryVersion": "0.3.256",
       "lastVerifiedWebSharedHash": "sha256:abc123...",
       "verifiedAt": "2026-07-14"
@@ -302,9 +256,9 @@ A periodic AO job or local script diffs OMP's current Web.Shared against the reg
 
 **(c) SCOPE**
 
-- **All five private repos, opt-in (recommended)**: declare the new section in `IbsPackager`, `LogSearch`, `EArkivChecker`, `Dokumentbibliotek`, and `VajSkrivare`. Repos that have not yet added the section are ignored. This preserves independence while making the gap visible for active consumers.
-- **Opt-in per repo**: each consumer repo decides whether to participate. Same practical effect as "all five, opt-in" at the start, but the policy statement makes clear that participation is voluntary.
-- **Mandate all five immediately**: not recommended because it couples OMP pushes to private-repo state without a transition period.
+- **All known private consumer repos, opt-in (recommended)**: declare the new section in each consumer's `omp-components.json`. Repos that have not yet added the section are ignored. This preserves independence while making the gap visible for active consumers.
+- **Opt-in per repo**: each consumer repo decides whether to participate. Same practical effect as "all known, opt-in" at the start, but the policy statement makes clear that participation is voluntary.
+- **Mandate all known consumers immediately**: not recommended because it couples OMP pushes to private-repo state without a transition period.
 
 ## Migration considerations
 
@@ -312,7 +266,7 @@ A periodic AO job or local script diffs OMP's current Web.Shared against the reg
 2. **Start as WARN.** Run the comparator as a separate AO job or local script for at least one sprint to measure drift before considering FORCE.
 3. **No OpenModulePlatform source changes needed for the ADR itself.** If Mechanism A1 is accepted, the private repos add a `sharedProjects` entry; OpenModulePlatform adds the comparator script/job. Neither change alters Web.Shared source, SQL, or component versions.
 4. **Hash computation must be stable.** If `expectedWebSharedHash` is used, compute it the same way as `scripts/omp/validate-component-versions.ps1:154-185` (deterministic build, identical settings). Otherwise use `repositoryVersion` from OMP's `omp-components.json:4`, which is already bumped on every significant platform change.
-5. **Preserve AI Orchestrator build serialization.** The existing `build:omp-web-shared` exclusive lock in `jobConcurrency.ts` remains unchanged; this ADR adds version awareness, not build orchestration.
+5. **Preserve AI Orchestrator build serialization.** The historical `build:omp-web-shared` exclusive lock in `jobConcurrency.ts` has been removed in favour of output isolation (see Status); this ADR adds version awareness, not build orchestration.
 6. **Manual verification path for customer environments.** If the comparator is not runnable in a customer environment, produce a manual checklist: after deploying a new OMP web-shared artifact, verify each consumer web app was rebuilt against that OMP `repositoryVersion` and its component version was bumped if the binary changed.
 
 ## Consequences
@@ -333,22 +287,8 @@ A periodic AO job or local script diffs OMP's current Web.Shared against the reg
   `scripts/local-ci.ps1`, which runs the validator)
 - `AI-Orchestrator/src/gui/jobConcurrency.ts:24-33`
 - `AI-Orchestrator/src/gui/jobConcurrency.ts:92-94`
-- `IbsPackager/Directory.Build.targets:9-10`
-- `IbsPackager/IbsPackager.Web/IbsPackager.Web.csproj:11`
-- `IbsPackager/omp-components.json:1-53`
-- `IbsPackager/scripts/validate-component-versions.ps1:481-574`
-- `LogSearch/Directory.Build.targets:7-8`
-- `LogSearch/LogSearch.Web/LogSearch.Web.csproj:7`
-- `LogSearch/omp-components.json:1-47`
-- `LogSearch/scripts/validate-component-versions.ps1:16-17`
-- `EArkivChecker/Directory.Build.targets:7-8`
-- `EArkivChecker/EArkivChecker.Web/EArkivChecker.Web.csproj:7`
-- `EArkivChecker/omp-components.json:1-47`
-- `EArkivChecker/scripts/validate-component-versions.ps1:16-17`
-- `Dokumentbibliotek/Directory.Build.targets:7-8`
-- `Dokumentbibliotek/RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj:27`
-- `Dokumentbibliotek/omp-components.json:1-27`
-- `Dokumentbibliotek/scripts/validate-component-versions.ps1:16-17`
-- `VajSkrivare/src/Skrivarkoppling.Web/Skrivarkoppling.Web.csproj:17`
-- `VajSkrivare/omp-components.json:1-27`
-- `VajSkrivare/scripts/validate-component-versions.ps1:1-40`
+
+Per-consumer repository paths, project references, `omp-components.json`
+ranges, validator-script line ranges, and `pre-push.ps1` line ranges are
+operator-specific deployment data and live in the private DEV installation
+repository; they are not reproduced in this public ADR.

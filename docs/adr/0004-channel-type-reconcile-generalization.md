@@ -4,9 +4,9 @@
 
 **Accepted (2026-09-08).** Proposed 2026-07-14. Owner decision: **(a) Option A2** and
 **(b) Option B2** — see "Decision" at the end. The next module that needs the pattern
-(LogSearch, moving from a service app to a worker with channel types) must implement it
-**the same way IbsPackager does**, so the two modules never carry different solutions
-for the same problem; a documented contract/template extracted from IbsPackager is the
+(moving from a service app to a worker with channel types) must implement it
+**the same way Contoso does**, so the two modules never carry different solutions
+for the same problem; a documented contract/template extracted from Contoso is the
 deliverable that makes "the same way" checkable.
 
 ## Context
@@ -14,7 +14,7 @@ deliverable that makes "the same way" checkable.
 OMP modules can declare *channel types* that are bound to a worker process at
 runtime. A channel type may have multiple versions, and each version can point
 to a specific artifact (`ArtifactId`) that HostAgent must provision on the host
-before the worker can start. The canonical example is `IbsPackager`, which
+before the worker can start. The canonical example is `Contoso`, which
 routes files through configurable channels.
 
 HostAgent discovers required artifacts from three sources today:
@@ -34,7 +34,7 @@ the queries that read `FROM omp.HostArtifactRequirements`).
 ## Problem
 
 Campaign AL solved channel-type artifact auto-provisioning only for
-`IbsPackager`. The same exposure exists for every module that maps a
+`Contoso`. The same exposure exists for every module that maps a
 channel-type-version to an `ArtifactId`: when the version mapping, default
 flag, pinned version, channel enabled flag, or desired state changes, the
 module must keep `omp.HostArtifactRequirements` in sync or HostAgent will
@@ -49,16 +49,16 @@ to provision an artifact without pre-registering a host-specific requirement.
 
 ## Current state
 
-### IbsPackager reconcile stored procedure
+### Contoso reconcile stored procedure
 
-`IbsPackager/sql/1-setup-ibspackager.sql:215-293` defines
-`omp_ibs_packager.usp_ReconcileChannelTypeArtifactRequirements`.
+`Contoso/sql/1-setup-contoso.sql:215-293` defines
+`omp_contoso.usp_ReconcileChannelTypeArtifactRequirements`.
 
 The procedure is idempotent and works in three phases:
 
 1. **Compute effective artifact/host for every channel** (`sql:224-243` and
    `sql:261-280`). `ArtifactId` is resolved from
-   `omp_ibs_packager.ChannelTypeVersions` using the rule:
+   `omp_contoso.ChannelTypeVersions` using the rule:
    - pinned version wins if it is enabled;
    - otherwise the enabled default version wins;
    - fallback ordering is `IsDefault DESC, ChannelTypeVersionId DESC`.
@@ -66,7 +66,7 @@ The procedure is idempotent and works in three phases:
    `omp.AppInstances` and `omp.WorkerInstances`.
 2. **Disable stale requirements** (`sql:245-258`). Any existing
    `omp.HostArtifactRequirements` row whose `RequirementKey` starts with
-   `ibs_packager.channeltype:` is disabled when the channel no longer exists, is
+   `contoso.channeltype:` is disabled when the channel no longer exists, is
    disabled, is stopped (`DesiredState <> 1`), has no host, has no effective
    artifact, or whose host/artifact no longer matches.
 3. **Upsert active requirements** (`sql:281-292`). For every enabled, running,
@@ -74,11 +74,11 @@ The procedure is idempotent and works in three phases:
    row in `omp.HostArtifactRequirements` keyed by `(HostId, RequirementKey)`.
 
 The `RequirementKey` format is hard-coded to
-`ibs_packager.channeltype:{ChannelId}` (`sql:239,274`).
+`contoso.channeltype:{ChannelId}` (`sql:239,274`).
 
 ### C# call sites
 
-`IbsPackager.Runtime/Services/IbsPackagerRepository.cs` exposes
+`Contoso.Runtime/Services/ContosoRepository.cs` exposes
 `ReconcileChannelTypeArtifactRequirementsAsync` (`cs:1800-1808`), which simply
 executes the stored procedure. It is called after every mutating channel or
 channel-type operation:
@@ -95,15 +95,15 @@ runs, so the pattern is duplicated between C# and the SP.
 
 ### Portal admin action
 
-`IbsPackager.Web/Pages/Channels/Index.cshtml.cs:113-146` exposes an
+`Contoso.Web/Pages/Channels/Index.cshtml.cs:113-146` exposes an
 `OnPostReconcileAsync` handler that administrators can trigger manually. After
 calling `ReconcileChannelTypeArtifactRequirementsAsync`, it counts how many
-`omp.HostArtifactRequirements` rows with the `ibs_packager.channeltype:` prefix
+`omp.HostArtifactRequirements` rows with the `contoso.channeltype:` prefix
 were updated in the last five seconds and reports that number back to the UI.
 
 ### Integration tests
 
-`IbsPackager.Tests/ReconcileChannelTypeArtifactRequirementsTests.cs:10-497`
+`Contoso.Tests/ReconcileChannelTypeArtifactRequirementsTests.cs:10-497`
 covers the four core reconcile outcomes:
 
 - upsert/requirement for an enabled, running channel (`Tests:325-337`);
@@ -113,25 +113,19 @@ covers the four core reconcile outcomes:
   (`Tests:367-380`).
 
 The tests deploy the procedure by parsing it directly from
-`sql/1-setup-ibspackager.sql` (`Tests:63-107`).
+`sql/1-setup-contoso.sql` (`Tests:63-107`).
 
 ### Other modules
 
 A read-only survey of the OMP+ODV repositories found **no other module** with a
-`ChannelTypeVersions`-style table or a reconcile procedure:
+`ChannelTypeVersions`-style table or a reconcile procedure besides the modules
+that share a sibling repository for their backend service artifact (`sql/2-initialize-*.sql`,
+which uses `omp.HostArtifactRequirements` directly for that backend service but
+does not have channel-type versions or a reconcile SP). The other consumer
+modules do not currently implement this pattern; the pattern can be added per
+the contract in this ADR.
 
-- `OpenDocViewer`: no `ChannelTypeVersions`, `usp_Reconcile`, or
-  `HostArtifactRequirements` references.
-- `LogSearch`: no matches.
-- `EArkivChecker`: no matches.
-- `Dokumentbibliotek`: no matches.
-- `VajSkrivare`: no matches.
-- `ODVGateway`: no matches.
-- `iKrock2`: uses `omp.HostArtifactRequirements` directly in its init script
-  (`iKrock2/sql/2-initialize-ikrock2.sql:243-284`) for its own backend service
-  artifact, but does not have channel-type versions or a reconcile SP.
-
-This means `IbsPackager` is both the first implementation and the template for
+This means `Contoso` is both the first implementation and the template for
 any future module with the same need.
 
 ## Proposals
@@ -161,7 +155,7 @@ Cons:
 
 #### Option A2: Keep per-module, provide a contract/template
 
-Leave the SP and C# code in each module (as in `IbsPackager`). OMP documents the
+Leave the SP and C# code in each module (as in `Contoso`). OMP documents the
 required table shape, `RequirementKey` prefix convention, and the set of call
 sites where reconcile must run. Each module implements its own SP in its own
 schema.
@@ -171,7 +165,7 @@ Pros:
 - Module independence: each module owns its own schema and version-resolution
   rules.
 - No core schema coupling.
-- `IbsPackager` already proves the pattern works end-to-end.
+- `Contoso` already proves the pattern works end-to-end.
 
 Cons:
 
@@ -279,7 +273,7 @@ an emergency path for worker processes that need an artifact before starting
 ## Migration considerations
 
 - If Option A3 is chosen later, the existing
-  `omp_ibs_packager.usp_ReconcileChannelTypeArtifactRequirements` can remain as
+  `omp_contoso.usp_ReconcileChannelTypeArtifactRequirements` can remain as
   a module-specific wrapper or be migrated to the generic core SP.
 - Any generalization must preserve the `RequirementKey` prefix convention
   (`<module>.channeltype:<channel-id>`) so HostAgent and retention logic can
@@ -298,11 +292,11 @@ the next channel-type module must not end up with a different mechanism than the
 
 **(a) Option A2 — keep the reconcile seam per module, with a documented contract/template.**
 Each module with channel types owns its reconcile stored procedure in its own schema
-(as `omp_ibs_packager.usp_ReconcileChannelTypeArtifactRequirements` does today), keeps the
+(as `omp_contoso.usp_ReconcileChannelTypeArtifactRequirements` does today), keeps the
 `RequirementKey` prefix convention `<module>.channeltype:<channel-id>`, and runs reconcile
 at the same call sites (channel save/enable/disable/delete, channel-type version changes,
 the Portal reconcile action, and worker start). OMP core is not changed. The contract and
-template are extracted from IbsPackager into `docs/CHANNEL_TYPE_RECONCILE.md` (table shape,
+template are extracted from Contoso into `docs/CHANNEL_TYPE_RECONCILE.md` (table shape,
 key convention, call sites, disable semantics, the integration-test scenarios that must be
 duplicated per module) so that a second module is a copy of a known-good pattern rather than
 a reinterpretation. Option A3 is reconsidered only when two or three modules carry nearly
@@ -313,4 +307,4 @@ recorded here; the existing `ensureArtifact` RPC remains the emergency path. A h
 channel design, when one is actually proposed, must be additive to the host-bound flow.
 
 Consequence for the next module: its campaign carries the template as a prerequisite and
-"identical to IbsPackager per `docs/CHANNEL_TYPE_RECONCILE.md`" as an acceptance criterion.
+"identical to Contoso per `docs/CHANNEL_TYPE_RECONCILE.md`" as an acceptance criterion.

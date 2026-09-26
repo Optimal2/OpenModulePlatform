@@ -7,6 +7,12 @@
 
 This document records the logging patterns found in the OMP+ODV repositories (source code only; `bin/`, `obj/`, `artifacts/`, `node_modules/`, `dist/` and other build output were excluded from the audit).
 
+The private consumer repositories in the OMP+ODV ecosystem are represented
+here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,
+Tailwind, Globex). Per-repo source paths, line ranges, and product/namespace
+prefixes are operator-specific deployment data and live in the private DEV
+installation repository.
+
 ## 1. Per-repo logging map
 
 ### OpenModulePlatform
@@ -34,115 +40,115 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 - **Correlation IDs:** `OmpRequestCorrelationMiddleware` (`OpenModulePlatform.Web.Shared/Web/OmpRequestCorrelationMiddleware.cs`) resolves or generates an `X-Correlation-ID` per request, stores it in `HttpContext.Items["CorrelationId"]`, echoes it on the response and opens a logging scope with the property `CorrelationId`. It is registered by `UseOmpWebDefaults` (`OmpWebHostingExtensions.cs`, `app.UseOmpRequestCorrelation()`) right after the security headers, so every shared-pipeline app carries it. The Portal, Content and iFrame layouts (checked-in and packaged `appsettings.json`) render it with `${scopeproperty:item=CorrelationId}`; the Auth app runs its own pipeline without the scope. No `Activity.Current.Id` usage. A domain-specific `CorrelationKey` exists separately for push-event outbox deduplication.
   - `OpenModulePlatform.EventPublisher.Abstractions/PushEvent.cs` (`CorrelationKey`)
 
-### IbsPackager
+### Contoso
 
 - **Library:** `Microsoft.Extensions.Logging` / `ILogger<T>` only. No NLog/Serilog/log4net in source.
   - `Directory.Packages.props:10` pins `Microsoft.Extensions.Logging.Abstractions` `10.0.9`
-  - `IbsPackager.Worker/IbsPackagerWorkerFactory.cs:18,22,27,34` receives `ILoggerFactory` from the host
+  - `Contoso.Worker/ContosoWorkerFactory.cs:18,22,27,34` receives `ILoggerFactory` from the host
 - **Configuration:** Standard MEL `Logging:LogLevel` sections only.
-  - `IbsPackager.Web/appsettings.json:5-9`
-  - `IbsPackager/.dev/worker-host/appsettings.json:22-27`
+  - `Contoso.Web/appsettings.json:5-9`
+  - `Contoso/.dev/worker-host/appsettings.json:22-27`
 - **Levels used:** `LogDebug`, `LogInformation`, `LogWarning`, `LogError`. No `LogCritical`.
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:48` (Information), `:64` (Warning), `:1219` (Error)
-  - `IbsPackager.Runtime/Services/IbsPackagerWorkerEngine.cs:52` (Information), `:61` (Warning), `:251` (Error)
+  - `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:48` (Information), `:64` (Warning), `:1219` (Error)
+  - `Contoso.Runtime/Services/ContosoWorkerEngine.cs:52` (Information), `:61` (Warning), `:251` (Error)
 - **Structured logging:** Almost exclusively structured message templates.
-  - `IbsPackager.ChannelTypes.FileDrop/FileDropChannelType.cs:56-60`
+  - `Contoso.ChannelTypes.FileDrop/FileDropChannelType.cs:56-60`
   - One string-only outlier: `FileDropChannelType.cs:1101,1107`
 - **Destinations:** None configured in repo; relies on host-provided MEL providers.
 - **Correlation IDs:** None found.
 
-### LogSearch
+### Fabrikam
 
 - **Library:** NLog bridged through MEL/ILogger.
-  - `LogSearch.Service/Program.cs:3,19-20` (`using NLog.Extensions.Logging;`, `ClearProviders(); AddNLog();`)
-  - `LogSearch.Web/Program.cs:22` uses `app.Logger.LogError(...)`
+  - `Fabrikam.Service/Program.cs:3,19-20` (`using NLog.Extensions.Logging;`, `ClearProviders(); AddNLog();`)
+  - `Fabrikam.Web/Program.cs:22` uses `app.Logger.LogError(...)`
 - **Configuration:** NLog section in service `appsettings.json`; web project delegates to `OpenModulePlatform.Web.Shared` via `AddOmpWebDefaults`.
-  - `LogSearch.Service/appsettings.json:30-66`
-  - `LogSearch.Web/appsettings.json:36-41`
+  - `Fabrikam.Service/appsettings.json:30-66`
+  - `Fabrikam.Web/appsettings.json:36-41`
 - **Levels used:** `Information`, `Warning`, `Error` in source. No Debug/Critical/Trace calls.
-  - `LogSearch.Service/LogSearchWorker.cs:30` (Information), `:93` (Warning), `:56` (Error)
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:106` (Warning), `:191` (Information)
+  - `Fabrikam.Service/FabrikamWorker.cs:30` (Information), `:93` (Warning), `:56` (Error)
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:106` (Warning), `:191` (Information)
 - **Structured logging:** All C# logs use structured templates.
-  - `LogSearch.Service/LogSearchWorker.cs:30`: `"LogSearch worker started as {WorkerId}."`
-  - `LogSearch.Runtime/LogSearchJobProcessor.cs:106`: `"LogSearch source {SourceKey} timed out for job {SearchJobId} after {SourceTimeoutSeconds} second(s)."`
+  - `Fabrikam.Service/FabrikamWorker.cs:30`: `"Fabrikam worker started as {WorkerId}."`
+  - `Fabrikam.Runtime/FabrikamJobProcessor.cs:106`: `"Fabrikam source {SourceKey} timed out for job {SearchJobId} after {SourceTimeoutSeconds} second(s)."`
 - **Destinations:** File + console via NLog in service; web inherits shared platform setup.
-  - `LogSearch.Service/appsettings.json:38-46`
+  - `Fabrikam.Service/appsettings.json:38-46`
 - **Correlation IDs:** None found.
 
-### EArkivChecker
+### Northwind
 
 - **Library:** NLog + MEL/ILogger.
-  - `EArkivChecker.Service/Program.cs:3,27-28` (`using NLog.Extensions.Logging;`, `ClearProviders(); AddNLog();`)
-  - `EArkivChecker.Web/Program.cs:7` uses `AddOmpWebDefaults<EArkivCheckerResource>`
+  - `Northwind.Service/Program.cs:3,27-28` (`using NLog.Extensions.Logging;`, `ClearProviders(); AddNLog();`)
+  - `Northwind.Web/Program.cs:7` uses `AddOmpWebDefaults<NorthwindResource>`
 - **Configuration:** Service NLog in `appsettings.json`; web standard MEL section only.
-  - `EArkivChecker.Service/appsettings.json:13-47`
-  - `EArkivChecker.Web/appsettings.json:27-30`
+  - `Northwind.Service/appsettings.json:13-47`
+  - `Northwind.Web/appsettings.json:27-30`
 - **Levels used:** `Information`, `Warning`, `Error` in code; `Info` thresholds in NLog rules.
-  - `EArkivChecker.Service/EArkivCheckerWorker.cs:27` (Information), `:41` (Error)
-  - `EArkivChecker.Runtime/EArkivCheckerScanProcessor.cs:71` (Information), `:79` (Warning), `:150` (Error)
+  - `Northwind.Service/NorthwindWorker.cs:27` (Information), `:41` (Error)
+  - `Northwind.Runtime/NorthwindScanProcessor.cs:71` (Information), `:79` (Warning), `:150` (Error)
 - **Structured logging:** Structured templates dominate; front-end uses plain `console.warn` strings.
-  - `EArkivChecker.Runtime/EArkivCheckerScanProcessor.cs:71-72`: `"Created {NotificationCount} EArkivChecker alarm notification(s) for target {TargetId}."`
+  - `Northwind.Runtime/NorthwindScanProcessor.cs:71-72`: `"Created {NotificationCount} Northwind alarm notification(s) for target {TargetId}."`
 - **Destinations:** File + console in service; web uses shared OMP NLog defaults.
-  - `EArkivChecker.Service/appsettings.json:21-29,44-47`
+  - `Northwind.Service/appsettings.json:21-29,44-47`
 - **Correlation IDs:** None. `correlationKey` is used only for push-event creation, not logging.
 
-### Dokumentbibliotek
+### AdventureWorks
 
 - **Library:** MEL/ILogger with NLog provider via `OpenModulePlatform.Web.Shared`.
-  - `Services/DocumentLibraryImageService.cs:5`
+  - `Services/AdventureWorksImageService.cs:5`
   - `RazorPages/Program.cs:57` creates a named logger from `ILoggerFactory`
 - **Configuration:** Root `appsettings.json` contains full NLog section and is linked into the web project.
   - `appsettings.json:23-64`
-  - `RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj:11`
+  - `RazorPages/Contoso.Web.AdventureWorks.RazorPages.csproj:11`
 - **Levels used:** `LogDebug`, `LogInformation`, `LogWarning`, `LogError`. No Critical/Trace.
-  - `Services/DocumentLibraryImageService.cs:248` (Debug), `:237` (Information)
-  - `RazorPages/Infrastructure/DocumentLibraryEndpointMapping.cs:21` (Warning)
+  - `Services/AdventureWorksImageService.cs:248` (Debug), `:237` (Information)
+  - `RazorPages/Infrastructure/AdventureWorksEndpointMapping.cs:21` (Warning)
   - `RazorPages/Program.cs:67` (Error)
 - **Structured logging:** Mostly structured; a few plain-string warnings/errors.
-  - Structured: `Services/DocumentLibraryImageService.cs:248`: `"Image upload resolved root folder: {RootFolder}"`
-  - Plain string: `Services/DocumentLibraryFormService.cs:376`: `"CreateFormAsync skipped forvaltning mapping save because mapping tables were not detected."`
+  - Structured: `Services/AdventureWorksImageService.cs:248`: `"Image upload resolved root folder: {RootFolder}"`
+  - Plain string: `Services/AdventureWorksFormService.cs:376`: `"CreateFormAsync skipped forvaltning mapping save because mapping tables were not detected."`
 - **Destinations:** File + console via NLog.
   - `appsettings.json:30-39`
 - **Correlation IDs:** None found.
 
-### VajSkrivare
+### Tailwind (PrintConnect)
 
 - **Library:** MEL/ILogger with NLog provider via `OpenModulePlatform.Web.Shared`.
-  - `src/Skrivarkoppling.Web/appsettings.json:8` (NLog section)
-  - `src/Skrivarkoppling.Web/Program.cs` uses `AddOmpWebDefaults`
+  - `src/PrintConnect.Web/appsettings.json:8` (NLog section)
+  - `src/PrintConnect.Web/Program.cs` uses `AddOmpWebDefaults`
 - **Configuration:** `appsettings.json` contains both MEL and NLog sections; `appsettings.Development.json` overrides levels.
-  - `src/Skrivarkoppling.Web/appsettings.json:2-44`
-  - `src/Skrivarkoppling.Web/appsettings.Development.json:2-6`
+  - `src/PrintConnect.Web/appsettings.json:2-44`
+  - `src/PrintConnect.Web/appsettings.Development.json:2-6`
 - **Levels used:** `Information`, `Warning`, `Error`.
-  - `src/Skrivarkoppling.Web/Program.cs:70` (Information), `:141` (Warning), `:124` (Error)
+  - `src/PrintConnect.Web/Program.cs:70` (Information), `:141` (Warning), `:124` (Error)
 - **Structured logging:** Structured templates throughout `ILogger` calls.
-  - `src/Skrivarkoppling.Web/Program.cs:70`: `"Skrivarkoppling web app started. Environment={Environment}; ContentRoot={ContentRoot}; WebRoot={WebRoot}"`
-  - Bootstrap diagnostics use interpolated strings: `src/Skrivarkoppling.Web/Diagnostics/BootstrapDiagnostics.cs:31`
+  - `src/PrintConnect.Web/Program.cs:70`: `"PrintConnect web app started. Environment={Environment}; ContentRoot={ContentRoot}; WebRoot={WebRoot}"`
+  - Bootstrap diagnostics use interpolated strings: `src/PrintConnect.Web/Diagnostics/BootstrapDiagnostics.cs:31`
 - **Destinations:** NLog file + console; IIS stdout capture; custom bootstrap fallback files.
-  - `src/Skrivarkoppling.Web/appsettings.json:16-24`
-  - `src/Skrivarkoppling.Web/web.config:8`
+  - `src/PrintConnect.Web/appsettings.json:16-24`
+  - `src/PrintConnect.Web/web.config:8`
 - **Correlation IDs:** Uses ASP.NET Core `HttpContext.TraceIdentifier` as request ID.
-  - `src/Skrivarkoppling.Web/Program.cs:107,127,149`
+  - `src/PrintConnect.Web/Program.cs:107,127,149`
 
-### iKrock2
+### Globex
 
 - **Library:** NLog + MEL/ILogger.
   - `Directory.Packages.props:17` pins `NLog.Web.AspNetCore` `6.2.0`
-  - `iKrock2.Backend/Program.cs:14-18` wires NLog
-  - `iKrock2.Web/Program.cs:17` uses `AddOmpWebDefaults<IKrock2Resource>`
+  - `Globex.Backend/Program.cs:14-18` wires NLog
+  - `Globex.Web/Program.cs:17` uses `AddOmpWebDefaults<GlobexResource>`
 - **Configuration:** NLog sections in backend and web `appsettings.json`.
-  - `iKrock2.Backend/appsettings.json:29-65`
-  - `iKrock2.Web/appsettings.json:47-83`
+  - `Globex.Backend/appsettings.json:29-65`
+  - `Globex.Web/appsettings.json:47-83`
 - **Levels used:** `Information`, `Warning`, `Error` in source. No Debug/Critical/Trace.
-  - `iKrock2.Backend/Services/WorkOrderBackgroundService.cs:23` (Information), `:47` (Error), `:178` (Warning)
-  - `iKrock2.Web/Services/IKrock2UserNameResolver.cs:40` (Warning)
-- **Structured logging:** Structured templates dominate; the operation descriptor in `IKrock2DataService` is sometimes built with string concatenation before the log call.
-  - Structured: `iKrock2.Backend/Services/WorkOrderBackgroundService.cs:23`: `"iKrock2 work-order service started on {HostName}."`
-  - Concatenated descriptor: `iKrock2.Web/Services/IKrock2DataService.cs:43,104,251`
+  - `Globex.Backend/Services/WorkOrderBackgroundService.cs:23` (Information), `:47` (Error), `:178` (Warning)
+  - `Globex.Web/Services/GlobexUserNameResolver.cs:40` (Warning)
+- **Structured logging:** Structured templates dominate; the operation descriptor in `GlobexDataService` is sometimes built with string concatenation before the log call.
+  - Structured: `Globex.Backend/Services/WorkOrderBackgroundService.cs:23`: `"Globex work-order service started on {HostName}."`
+  - Concatenated descriptor: `Globex.Web/Services/GlobexDataService.cs:43,104,251`
 - **Destinations:** File + console in both apps.
-  - `iKrock2.Backend/appsettings.json:37-45`
-  - `iKrock2.Web/appsettings.json:55-63`
-- **Correlation IDs:** None. Web adds `X-iKrock2-Web-Node` header (machine name), but it is not a correlation ID.
+  - `Globex.Backend/appsettings.json:37-45`
+  - `Globex.Web/appsettings.json:55-63`
+- **Correlation IDs:** None. Web adds `X-Globex-Web-Node` header (machine name), but it is not a correlation ID.
 
 ### ODVGateway
 
@@ -198,22 +204,22 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 | Repo | Library | Configuration | Levels used | Structured? | Destinations | Correlation/context IDs |
 |---|---|---|---|---|---|---|
 | **OpenModulePlatform** | NLog + MEL/ILogger | `appsettings.json` `"NLog"` sections | Debug/Info/Warning/Error/Critical | Yes (templates), some console strings | File + console | Push-event `CorrelationKey` only |
-| **IbsPackager** | MEL/ILogger only | `appsettings.json` `Logging:LogLevel` only | Debug/Info/Warning/Error | Yes (templates), one string outlier | Host-provided | None |
-| **LogSearch** | NLog + MEL/ILogger | Service `appsettings.json` NLog section; web shared defaults | Info/Warning/Error | Yes | File + console | None |
-| **EArkivChecker** | NLog + MEL/ILogger | Service `appsettings.json` NLog; web MEL only | Info/Warning/Error | Yes (templates); front-end console strings | File + console | None |
-| **Dokumentbibliotek** | NLog + MEL/ILogger (via Web.Shared) | Root `appsettings.json` NLog section | Debug/Info/Warning/Error | Yes; a few plain strings | File + console | None |
-| **VajSkrivare** | NLog + MEL/ILogger (via Web.Shared) | `appsettings.json` NLog section | Info/Warning/Error | Yes; bootstrap strings | File + console + IIS stdout + bootstrap fallback | `HttpContext.TraceIdentifier` |
-| **iKrock2** | NLog + MEL/ILogger | `appsettings.json` NLog sections | Info/Warning/Error | Yes; concatenated descriptors in one service | File + console | None |
+| **Contoso** | MEL/ILogger only | `appsettings.json` `Logging:LogLevel` only | Debug/Info/Warning/Error | Yes (templates), one string outlier | Host-provided | None |
+| **Fabrikam** | NLog + MEL/ILogger | Service `appsettings.json` NLog section; web shared defaults | Info/Warning/Error | Yes | File + console | None |
+| **Northwind** | NLog + MEL/ILogger | Service `appsettings.json` NLog; web MEL only | Info/Warning/Error | Yes (templates); front-end console strings | File + console | None |
+| **AdventureWorks** | NLog + MEL/ILogger (via Web.Shared) | Root `appsettings.json` NLog section | Debug/Info/Warning/Error | Yes; a few plain strings | File + console | None |
+| **Tailwind (PrintConnect)** | NLog + MEL/ILogger (via Web.Shared) | `appsettings.json` NLog section | Info/Warning/Error | Yes; bootstrap strings | File + console + IIS stdout + bootstrap fallback | `HttpContext.TraceIdentifier` |
+| **Globex** | NLog + MEL/ILogger | `appsettings.json` NLog sections | Info/Warning/Error | Yes; concatenated descriptors in one service | File + console | None |
 | **ODVGateway** | MEL/ILogger only | `appsettings.json` `Logging:LogLevel` only | Info/Warning/Error | Yes | Default console/debug only | None |
 | **OpenDocViewer** | Custom `systemLogger`/`userLogger`, `morgan` | `odv.config.js` / `odv.site.config.js` runtime config | debug/info/warn/error (`systemLogger`) | JSON in transit; string in browser console | Browser console, HTTP POST, rolling files | `sessionId`/`iframeId` in user logs |
 | **AgentDocMap** | `console` only | None | log/error/warn | No | stdout/stderr | None |
 
 ### Key divergences
 
-- **.NET library split:** 6 of 8 .NET repos use NLog as the provider; **IbsPackager** and **ODVGateway** rely on plain MEL.
-- **Configuration split:** NLog-based .NET repos configure logging in `appsettings.json`; IbsPackager and ODVGateway only use the MEL `Logging:LogLevel` section.
+- **.NET library split:** 6 of 8 .NET repos use NLog as the provider; **Contoso** and **ODVGateway** rely on plain MEL.
+- **Configuration split:** NLog-based .NET repos configure logging in `appsettings.json`; Contoso and ODVGateway only use the MEL `Logging:LogLevel` section.
 - **JS ecosystem split:** OpenDocViewer has a custom logger + `morgan`; AgentDocMap uses raw `console`.
-- **Correlation IDs:** Only **VajSkrivare** (`TraceIdentifier`) and **OpenDocViewer** (`sessionId`/`iframeId` for user logs) have any request/session context in logs.
+- **Correlation IDs:** Only **Tailwind (PrintConnect)** (`TraceIdentifier`) and **OpenDocViewer** (`sessionId`/`iframeId` for user logs) have any request/session context in logs.
 
 ## 3. Recommended standard pattern
 
@@ -240,7 +246,7 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 
 ## 4. Migration notes per diverging repo
 
-### IbsPackager
+### Contoso
 
 - **Current state:** MEL/ILogger only; no NLog config or package references.
 - **Migration:** Add `NLog.Extensions.Hosting` to the worker/runtime projects and `NLog.Web.AspNetCore` to the web project (or reference `OpenModulePlatform.Web.Shared` and call `AddOmpWebDefaults`). Add `"NLog"` sections to `appsettings.json`, wire `ClearProviders()` + `AddNLog()` in worker/service `Program.cs`, and convert the remaining string-only log call to a template.
@@ -270,5 +276,5 @@ This document records the logging patterns found in the OMP+ODV repositories (so
 
 ### Repos already aligned
 
-- **LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare, iKrock2** already follow the recommended .NET pattern (NLog + MEL/ILogger, `appsettings.json` config, structured templates, file + console).
-- **VajSkrivare** additionally has correlation via `TraceIdentifier`; this is the model other .NET web apps should adopt.
+- **Fabrikam, Northwind, AdventureWorks, Tailwind (PrintConnect), Globex** already follow the recommended .NET pattern (NLog + MEL/ILogger, `appsettings.json` config, structured templates, file + console).
+- **Tailwind (PrintConnect)** additionally has correlation via `TraceIdentifier`; this is the model other .NET web apps should adopt.

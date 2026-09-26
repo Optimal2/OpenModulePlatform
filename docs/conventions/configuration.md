@@ -1,8 +1,8 @@
 # Configuration conventions for OMP+ODV
 
 > **Status 2026-08-27 - read this first.** Sections 1, 2 and 4 are a
-> point-in-time audit from **2026-07-16** (`1aebc6be`, refreshed for
-> EArkivChecker in `8bd8de5d`). Two things about it have gone stale:
+> point-in-time audit from **2026-07-16** (`1aebc6be`, refreshed for one
+> consumer in `8bd8de5d`). Two things about it have gone stale:
 >
 > 1. **The `file.cs:NN` line anchors are no longer reliable.** They were correct
 >    on 2026-07-16 and a great many of them have since drifted - spot-checked
@@ -22,9 +22,16 @@ It is the configuration counterpart to `logging.md` and `unit-testing.md`.
 
 Audited repositories (all under the local workspace root):
 
-- .NET (8): OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker,
-  Dokumentbibliotek, VajSkrivare, iKrock2, ODVGateway
+- .NET (8): OpenModulePlatform, Contoso (example module), Fabrikam (example
+  module), Northwind (example module), AdventureWorks (example module),
+  Tailwind (example module), Globex (example module), ODVGateway
 - JS/npm (2): OpenDocViewer, AgentDocMap
+
+The example modules above are placeholders for the actual private consumer
+repositories in the OMP+ODV ecosystem; per-repo paths, file paths, line
+ranges, and PSD1 file names are operator-specific deployment data and live in
+the private DEV installation repository, not here. The structural patterns
+described below apply unchanged to those real consumers.
 
 ## 1. Per-repo configuration map
 
@@ -97,163 +104,163 @@ Audited repositories (all under the local workspace root):
   via `OpenModulePlatform.Web.Shared/Services/OmpConfigurationService.cs:8`);
   the Bootstrapper keeps its own non-IConfiguration `BootstrapConfig` model.
 
-### IbsPackager (.NET 10, private OMP module)
+### Contoso (.NET 10, example OMP module)
 
-- **Config sources:** `IbsPackager.Web/appsettings.json:2-27` (empty `OmpDb`)
+- **Config sources:** `Contoso.Web/appsettings.json:2-27` (empty `OmpDb`)
   + `appsettings.Development.json`; dev worker-host config
   (`.dev/worker-host/appsettings.json:11-20`); PSD1 installer configs —
-  committed sample `scripts/deployment/ibspackager.config.sample.psd1`, real
+  committed sample `scripts/deployment/contoso.config.sample.psd1`, real
   `*.local.psd1` gitignored (`.gitignore:8-10`); install-generated
-  `appsettings.Production.json` (`scripts/deployment/install-ibspackager.ps1:799`);
+  `appsettings.Production.json` (`scripts/deployment/install-contoso.ps1:799`);
   CLI-arg overrides to OMP WorkerProcessHost (`.dev/run-worker.ps1:67-73`);
   channel configuration as JSON stored in the database
-  (`IbsPackager.Web/Pages/Channels/Index.cshtml.cs`, e.g. the serialise/deserialise points at
+  (`Contoso.Web/Pages/Channels/Index.cshtml.cs`, e.g. the serialise/deserialise points at
   `:70`, `:1355` and `:1738`). **Corrected 2026-09-04:** this used to point at
   `Pages/Channels/Edit.cshtml.cs:288`. That page was folded into the combined channel admin
   page; `Edit.cshtml.cs` is now an 18-line redirect stub that only preserves old links, so the
   old anchor pointed 270 lines past the end of the file.
-- **IOptions usage:** `builder.AddOmpWebDefaults<IbsPackagerResource>("WebApp")`
-  (`IbsPackager.Web/Program.cs:8`); `services.Configure<OpenDocViewerOptions>`
-  (`IbsPackager.Web/Program.cs:9`); `IOptions<T>` in page models. The worker
+- **IOptions usage:** `builder.AddOmpWebDefaults<ContosoResource>("WebApp")`
+  (`Contoso.Web/Program.cs:8`); `services.Configure<OpenDocViewerOptions>`
+  (`Contoso.Web/Program.cs:9`); `IOptions<T>` in page models. The worker
   uses **manual section binding** instead of the options pattern
-  (`IbsPackager.Worker/IbsPackagerWorkerFactory.cs:42-55`).
+  (`Contoso.Worker/ContosoWorkerFactory.cs:42-55`).
 - **Validation:** none — no `ValidateOnStart`, no `IValidateOptions<T>`;
   manual `Validate()` methods only.
 - **Connection strings:** `ConnectionStrings:OmpDb` resolved centrally
-  (`IbsPackager.Runtime/Services/SqlConnectionFactory.cs:15-24`, throws when
+  (`Contoso.Runtime/Services/SqlConnectionFactory.cs:15-24`, throws when
   empty); built from PSD1 values at install time
-  (`scripts/deployment/install-ibspackager.ps1:749-767`).
+  (`scripts/deployment/install-contoso.ps1:749-767`).
 - **Secrets:** none committed; sample psd1 carries empty placeholders
-  (`scripts/deployment/ibspackager.config.sample.psd1:32-38`); installer warns
-  on plaintext `RunAsPassword` (`install-ibspackager.ps1:357-362`).
+  (`scripts/deployment/contoso.config.sample.psd1:32-38`); installer warns
+  on plaintext `RunAsPassword` (`install-contoso.ps1:357-362`).
 - **Options classes:** `OpenDocViewerOptions`, `HostAgentRpcOptions`,
-  `FileDropChannelOptions`; naming outlier `IbsPackagerRuntimeSettings`.
+  `FileDropChannelOptions`; naming outlier `ContosoRuntimeSettings`.
 - **Overlay relationship:** full OMP module (`omp-components.json`,
-  `ibs_packager.module-definition.json`); **produces** config overlays during
+  `contoso.module-definition.json`); **produces** config overlays during
   packaging (`scripts/omp/build-repository-objects.ps1:587,773`) but its own
   runtime config arrives via install-generated `appsettings.Production.json`,
   not HostAgent overlays.
 - **Divergences:** multiple competing config patterns in one repo (IOptions,
   manual binding, direct `GetConnectionString`, JSON-from-DB, PSD1, CLI args).
 
-### LogSearch (.NET 10, OMP module)
+### Fabrikam (.NET 10, OMP module)
 
-- **Config sources:** `LogSearch.Service/appsettings.json:1-67` (incl. inline
-  NLog) + Development variant; `LogSearch.Web/appsettings.json:1-42` +
+- **Config sources:** `Fabrikam.Service/appsettings.json:1-67` (incl. inline
+  NLog) + Development variant; `Fabrikam.Web/appsettings.json:1-42` +
   Development variant; OMP config overlays generate the deployed
   `appsettings.json` for both apps (see below). No `.env`, no psd1.
 - **IOptions usage:** single extension point
-  `services.AddLogSearchOptions(configuration)` →
-  `AddOptions<LogSearchOptions>().Bind(...).ValidateOnStart()` with an
-  `IValidateOptions<LogSearchOptions>` singleton
-  (`LogSearch.Runtime/LogSearchOptionsServiceCollectionExtensions.cs:13-18`,
-  validator `LogSearch.Runtime/LogSearchOptionsValidator.cs:5-75`).
+  `services.AddFabrikamOptions(configuration)` →
+  `AddOptions<FabrikamOptions>().Bind(...).ValidateOnStart()` with an
+  `IValidateOptions<FabrikamOptions>` singleton
+  (`Fabrikam.Runtime/FabrikamOptionsServiceCollectionExtensions.cs:13-18`,
+  validator `Fabrikam.Runtime/FabrikamOptionsValidator.cs:5-75`).
   `IOptions<T>` injected uniformly; `WebAppOptions` via
-  `AddOmpWebDefaults("WebApp")` (`LogSearch.Web/Program.cs:7`).
+  `AddOmpWebDefaults("WebApp")` (`Fabrikam.Web/Program.cs:7`).
 - **Connection strings:** `ConnectionStrings:OmpDb` resolved in
-  `LogSearch.Runtime/LogSearchConnectionFactory.cs:21-25` with a three-tier
+  `Fabrikam.Runtime/FabrikamConnectionFactory.cs:21-25` with a three-tier
   source-database indirection: DB row override →
-  `LogSearch:SourceConnectionStringTemplate` with `{server}`/`{database}`
-  placeholders (`LogSearchConnectionFactory.cs:50-53`) → derived from `OmpDb`
+  `Fabrikam:SourceConnectionStringTemplate` with `{server}`/`{database}`
+  placeholders (`FabrikamConnectionFactory.cs:50-53`) → derived from `OmpDb`
   via `SqlConnectionStringBuilder` (`:62-68`). Guardrails reject SQL
   credentials in overrides/templates (`:71-95`). Overlays carry HostAgent
   tokens such as `{{Omp.Json.ConnectionStrings.OmpDb}}`
   (`scripts/omp/build-host-profile-objects.ps1:269`).
 - **Secrets:** none committed; credential-free policy enforced in code
-  (`LogSearchConnectionFactory.cs:74-77`); `Password=` strings in
-  `LogSearch.Tests/LogSearchConnectionFactoryTests.cs:25,39` are deliberate
+  (`FabrikamConnectionFactory.cs:74-77`); `Password=` strings in
+  `Fabrikam.Tests/FabrikamConnectionFactoryTests.cs:25,39` are deliberate
   negative test fixtures.
-- **Options classes:** `LogSearchOptions` (`SectionName` const,
-  `LogSearch.Runtime/LogSearchOptions.cs:5`) with nested
-  `LogSearchSourceDatabaseOptions` (`LogSearchOptions.cs:89-104`).
+- **Options classes:** `FabrikamOptions` (`SectionName` const,
+  `Fabrikam.Runtime/FabrikamOptions.cs:5`) with nested
+  `FabrikamSourceDatabaseOptions` (`FabrikamOptions.cs:89-104`).
 - **Overlay relationship:** full OMP module and an exemplary **overlay
   producer**: `scripts/omp/build-host-profile-objects.ps1:321-355` converts
   host-profile data into `omp-config-overlay` documents whose
   `configurationFiles[].relativePath` is `appsettings.json`; overlay version is
   a sha256 fingerprint of inputs (`build-host-profile-objects.ps1:429`).
 - **Divergences:** defaults are triplicated (options consts
-  `LogSearchOptions.cs:7-44`, both appsettings files, overlay generator
+  `FabrikamOptions.cs:7-44`, both appsettings files, overlay generator
   `build-host-profile-objects.ps1:253-264`); the overlay emits an unused
   `Worker` section (`build-host-profile-objects.ps1:295-300`) and both
   `Portal` and `WebApp` sections although only `WebApp` is bound.
 
-### EArkivChecker (.NET 10, private OMP module)
+### Northwind (.NET 10, example OMP module)
 
-- **Config sources:** `EArkivChecker.Web/appsettings.json` +
-  `EArkivChecker.Service/appsettings.json:1-50` (inline NLog `:13-49`), each
+- **Config sources:** `Northwind.Web/appsettings.json` +
+  `Northwind.Service/appsettings.json:1-50` (inline NLog `:13-49`), each
   with a Development variant; `appsettings.Local.json` documented as a
   personal overlay (`docs/DEV-SETUP.md:128`, gitignored `.gitignore:368`) and
   loaded in both hosts right after `appsettings.{Environment}.json`
-  (`EArkivChecker.Web/Program.cs:8`, `EArkivChecker.Service/Program.cs:10`);
+  (`Northwind.Web/Program.cs:8`, `Northwind.Service/Program.cs:10`);
   monitored folders are DB rows, not config.
-- **IOptions usage:** `AddEArkivCheckerOptions(...)` extension
-  (`EArkivChecker.Runtime/EArkivCheckerOptionsServiceCollectionExtensions.cs:9-19`)
-  with `.Bind(...)` in both hosts (`EArkivChecker.Web/Program.cs:12`,
-  `EArkivChecker.Service/Program.cs:12`); `IOptions<T>` injection;
+- **IOptions usage:** `AddNorthwindOptions(...)` extension
+  (`Northwind.Runtime/NorthwindOptionsServiceCollectionExtensions.cs:9-19`)
+  with `.Bind(...)` in both hosts (`Northwind.Web/Program.cs:12`,
+  `Northwind.Service/Program.cs:12`); `IOptions<T>` injection;
   `WebAppOptions` via `AddOmpWebDefaults("WebApp")`
-  (`EArkivChecker.Web/Program.cs:10`).
-- **Validation:** `IValidateOptions<EArkivCheckerOptions>`
-  (`EArkivChecker.Runtime/EArkivCheckerOptionsValidator.cs`) registered by
-  `AddEArkivCheckerOptions(...)` with `.ValidateOnStart()` — fail-fast at
+  (`Northwind.Web/Program.cs:10`).
+- **Validation:** `IValidateOptions<NorthwindOptions>`
+  (`Northwind.Runtime/NorthwindOptionsValidator.cs`) registered by
+  `AddNorthwindOptions(...)` with `.ValidateOnStart()` — fail-fast at
   startup in both hosts.
 - **Connection strings:** `ConnectionStrings:OmpDb` resolved eagerly at
-  startup; both hosts construct `EArkivCheckerConnectionFactory` from
+  startup; both hosts construct `NorthwindConnectionFactory` from
   `builder.Configuration.GetConnectionString("OmpDb")` and the factory takes
   the resolved string with a missing-value guard
-  (`EArkivChecker.Runtime/EArkivCheckerConnectionFactory.cs:9-17`) — no
+  (`Northwind.Runtime/NorthwindConnectionFactory.cs:9-17`) — no
   `IConfiguration` in the Runtime layer. Real values arrive only via
   HostAgent overlay of `appsettings.json`.
 - **Secrets:** none committed; Integrated Security only.
-- **Options classes:** `EArkivCheckerOptions`
-  (`EArkivChecker.Runtime/EArkivCheckerOptions.cs:3-5`, `SectionName` const).
+- **Options classes:** `NorthwindOptions`
+  (`Northwind.Runtime/NorthwindOptions.cs:3-5`, `SectionName` const).
 - **Overlay relationship:** consumer-side only; overlays are deliberately not
   committed (`scripts/omp/README.md:94-97`); packaging accepts
   `-ConfigOverlayFile` (`scripts/omp/build-repository-objects.ps1:39,587,773`).
-- **Divergences:** the `EArkivChecker` section is duplicated across both
+- **Divergences:** the `Northwind` section is duplicated across both
   appsettings files with overlapping keys.
 
-### Dokumentbibliotek (.NET 10, single web project, OMP module)
+### AdventureWorks (.NET 10, single web project, OMP module)
 
 - **Config sources:** `appsettings.json` at **repo root**, linked into the
-  project (`RazorPages/OpenModulePlatform.Web.eArkivDokumentbibliotek.RazorPages.csproj:11`);
+  project (`RazorPages/Contoso.Web.AdventureWorks.RazorPages.csproj:11`);
   `RazorPages/appsettings.Development.json`; gitignored
   `appsettings.Local.json` (`.gitignore:14`). No env vars are read in repo
   code; no site-config JS.
-- **IOptions usage:** `services.Configure<DokumentBibliotekOptions>(GetSection("DokumentBibliotek"))`
+- **IOptions usage:** `services.Configure<AdventureWorksOptions>(GetSection("AdventureWorks"))`
   (`RazorPages/Program.cs:39`); `WebAppOptions` via
   `AddOmpWebDefaults("Portal")` (`RazorPages/Program.cs:11`).
-  `IOptions<T>` in most consumers but `IOptionsMonitor<DokumentBibliotekOptions>`
-  in a singleton (`Services/DocumentLibraryPathMapper.cs:8-22`) — two
+  `IOptions<T>` in most consumers but `IOptionsMonitor<AdventureWorksOptions>`
+  in a singleton (`Services/AdventureWorksPathMapper.cs:8-22`) — two
   consumption patterns for one options type.
-- **Validation:** none for `DokumentBibliotekOptions`.
+- **Validation:** none for `AdventureWorksOptions`.
 - **Connection strings:** `ConnectionStrings:OmpDb` via the OMP shared
-  `SqlConnectionFactory`; optional legacy `DokumentBibliotekDb` read directly
-  with a fail-fast guard (`Services/DocumentLibraryDataStore.cs:23-27`).
+  `SqlConnectionFactory`; optional legacy `AdventureWorksDb` read directly
+  with a fail-fast guard (`Services/AdventureWorksDataStore.cs:23-27`).
 - **Secrets:** none committed; Integrated Security only.
-- **Options classes:** `DokumentBibliotekOptions` (`Models/AppSetting.cs:15`);
+- **Options classes:** `AdventureWorksOptions` (`Models/AppSetting.cs:15`);
   note that `Models/AppSetting.cs:5` is a DTO for **DB-stored settings**
-  (`Services/DocumentLibrarySettingsService.cs:16-61`), so the app has two
+  (`Services/AdventureWorksSettingsService.cs:16-61`), so the app has two
   config layers (JSON + database).
 - **Overlay relationship:** the module definition documents the runtime
   configuration contract HostAgent overlays must satisfy
-  (`earkiv_dokumentbibliotek.module-definition.json:240-277`); AGENTS.md
+  (`adventure_works.module-definition.json:240-277`); AGENTS.md
   codifies that host-specific config comes from overlays, not hardcoded values.
 - **Divergences:** direct `IConfiguration` reads bypass the options class in
-  `Services/DocumentLibraryImageService.cs:431-432` (`WebImageRootPrefix` is
+  `Services/AdventureWorksImageService.cs:431-432` (`WebImageRootPrefix` is
   not even declared on the options class); three-layer image-root resolution
   (DB setting → config keys → hardcoded fallback `"Images"`,
-  `DocumentLibraryImageService.cs:426-447`).
+  `AdventureWorksImageService.cs:426-447`).
 
-### VajSkrivare (.NET 10, OMP module "Skrivarkoppling")
+### Tailwind (.NET 10, OMP module "PrintConnect")
 
-- **Config sources:** `src/Skrivarkoppling.Web/appsettings.json`
+- **Config sources:** `src/PrintConnect.Web/appsettings.json`
   (environment-neutral template, inline NLog `:8-44`) +
   `appsettings.Development.json`; **no committed Production file** — the
   deployed `appsettings.json` is HostAgent-generated; `web.config` (IIS
   hosting only); `launchSettings.json`.
 - **IOptions usage:** exemplary —
   `AddOptions<PrinterDatabaseCatalogOptions>().Bind(...).Validate(...).ValidateOnStart()`
-  (`src/Skrivarkoppling.Web/Program.cs:36-40`) and the same for
+  (`src/PrintConnect.Web/Program.cs:36-40`) and the same for
   `ZebraConfigOptions` (`Program.cs:51-57`); `WebAppOptions` via
   `AddOmpWebDefaults("Portal")` (`Program.cs:33`). `IOptions<T>` everywhere.
 - **Connection strings:** named indirection — each
@@ -269,37 +276,37 @@ Audited repositories (all under the local workspace root):
 - **Overlay relationship:** the module definition declares
   `artifactConfigurationFiles` for `appsettings.json` with
   `"contentSource": "host-agent-generated"` and `requiredRootSections`
-  (`vajskrivare.module-definition.json:33-50`) — the overlay replaces the
+  (`printconnect.module-definition.json:33-50`) — the overlay replaces the
   whole file; module SQL disables legacy `appsettings.Production.json`
-  overlays (`Sql/01_initialize_vajskrivare_metadata.sql:65-94`).
+  overlays (`Sql/01_initialize_printconnect_metadata.sql:65-94`).
 - **Divergences:** orphaned keys — `ZebraConfig:BackupRetentionCount/Days`
   (`appsettings.json:81-82`) have no matching properties on
   `ZebraConfigOptions`; one direct `GetSection("Portal").Get<WebAppOptions>()`
   for startup logging (`Program.cs:75`) bypasses DI.
 
-### iKrock2 (.NET 10, OMP module)
+### Globex (.NET 10, OMP module)
 
-- **Config sources:** `iKrock2.Web/appsettings.json` +
-  `iKrock2.Backend/appsettings.json`, each with Development variants (inline
+- **Config sources:** `Globex.Web/appsettings.json` +
+  `Globex.Backend/appsettings.json`, each with Development variants (inline
   NLog in both); install-generated `appsettings.Production.json`
-  (`scripts/deployment/install-ikrock2.ps1:704-705`); committed sample psd1
-  (`scripts/deployment/ikrock2.config.sample.psd1`) + gitignored
+  (`scripts/deployment/install-globex.ps1:704-705`); committed sample psd1
+  (`scripts/deployment/globex.config.sample.psd1`) + gitignored
   `*.local.psd1` (`.gitignore:29`).
 - **IOptions usage:** `services.Configure<T>` for `BackendOptions`
-  (`iKrock2.Backend/Program.cs:21`), `BackendClientOptions`
-  (`iKrock2.Web/Program.cs:32`), and `SqlServerOptions`/`WorkOrderOptions`/
-  `OmpDatabaseOptions` (`iKrock2.Application/DependencyInjection/IKrock2ApplicationServiceCollectionExtensions.cs:14-19`);
+  (`Globex.Backend/Program.cs:21`), `BackendClientOptions`
+  (`Globex.Web/Program.cs:32`), and `SqlServerOptions`/`WorkOrderOptions`/
+  `OmpDatabaseOptions` (`Globex.Application/DependencyInjection/GlobexApplicationServiceCollectionExtensions.cs:14-19`);
   `WebAppOptions` via `AddOmpWebDefaults("Portal")`
-  (`iKrock2.Web/Program.cs:17`). `IOptions<T>` only.
+  (`Globex.Web/Program.cs:17`). `IOptions<T>` only.
 - **Validation:** none — misconfiguration surfaces as
   `InvalidOperationException` at first connection
-  (`iKrock2.Application/Services/SqlConnectionFactory.cs:25-33`).
+  (`Globex.Application/Services/SqlConnectionFactory.cs:25-33`).
 - **Connection strings:** `ConnectionStrings:OmpDb` copied into
-  `OmpDatabaseOptions` (`IKrock2ApplicationServiceCollectionExtensions.cs:18`);
+  `OmpDatabaseOptions` (`GlobexApplicationServiceCollectionExtensions.cs:18`);
   per-catalog strings composed from `SqlServer:HostConnectionString` via
   `SqlConnectionStringBuilder.InitialCatalog`
-  (`iKrock2.Application/Services/SqlConnectionFactory.cs:23-41`); installer
-  builds the production string from psd1 (`install-ikrock2.ps1:214`).
+  (`Globex.Application/Services/SqlConnectionFactory.cs:23-41`); installer
+  builds the production string from psd1 (`install-globex.ps1:214`).
 - **Secrets:** committed files clean; **risk on disk:** a gitignored local
   deployment profile can hold a plaintext production service-account password,
   and the same profile can set `IncludeConfigInPackage = $true`, which would
@@ -310,15 +317,15 @@ Audited repositories (all under the local workspace root):
   `XxxOptions` naming, but section names do not mirror class names
   (`"Backend"` binds two different classes in the two apps).
 - **Overlay relationship:** full OMP module (`omp-components.json:5-38`,
-  `ikrock.module-definition.json`), but runtime config is delivered by the
+  `globex.module-definition.json`), but runtime config is delivered by the
   installer writing `appsettings.Production.json`, not by HostAgent overlays.
 - **Divergences:** stale HTTP config — the backend Kestrel API was removed but
   `BackendClientOptions.BaseUrl = http://localhost:5088`
-  (`iKrock2.Web/Options/BackendClientOptions.cs:5`) and dependent health
+  (`Globex.Web/Options/BackendClientOptions.cs:5`) and dependent health
   checks remain; **hardcoded customer URLs and test data in C#**
-  (`iKrock2.Web/Pages/MLLPerformance/Index.cshtml.cs:23-28,41-49`);
+  (`Globex.Web/Pages/MLLPerformance/Index.cshtml.cs:23-28,41-49`);
   `Configuration["key"]` read deep in a page model (`Index.cshtml.cs:118`);
-  dead DI overload (`IKrock2ApplicationServiceCollectionExtensions.cs:24-33`).
+  dead DI overload (`GlobexApplicationServiceCollectionExtensions.cs:24-33`).
 
 ### ODVGateway (.NET 10 minimal API, OMP module, no database)
 
@@ -408,12 +415,12 @@ Audited repositories (all under the local workspace root):
 | Repo | Config sources | Options pattern | Startup validation | Connection strings | Secrets | Overlay role |
 |---|---|---|---|---|---|---|
 | OpenModulePlatform | appsettings + Dev, bootstrap.json, psd1, overlays | `XxxOptions` (web) / `XxxSettings` (services), `IOptions<T>`/`IOptionsMonitor<T>` | ~~Only `WebAppOptions`~~ -> **`WebAppOptions`, `OmpAuthOptions`, `HostAgentSettings`, `WorkerManagerSettings`, `WorkerProcessSettings`** (`IValidateOptions` + `ValidateOnStart`, 2026-08-27) | `OmpDb` via per-project `SqlConnectionFactory`; bootstrap token replacement | None committed; `enc:aesgcm:v1:` + DPAPI store | Platform (produces/applies overlays) |
-| IbsPackager | appsettings + Dev, psd1 installer, generated Production.json, CLI args, DB channel JSON | Mixed: `IOptions<T>` (web) + manual binding (worker) | ~~None~~ -> **Yes** - `ValidateOnStart` in `IbsPackager.Web/Program.cs` (2026-08-27) | `OmpDb` via `SqlConnectionFactory`; installer-built | None committed; gitignored local psd1 | Produces overlays; consumes none |
-| LogSearch | appsettings + Dev, generated overlay appsettings | `XxxOptions` + `IOptions<T>`, uniform | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` + 3-tier source-DB indirection with credential guardrails | None committed; policy-enforced | Exemplary producer of generated appsettings overlays |
-| EArkivChecker | appsettings + Dev + Local.json | `XxxOptions` + `IOptions<T>` | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` via factory taking the resolved string | None committed | Consumer (overlays not committed) |
-| Dokumentbibliotek | root-linked appsettings + Dev + Local.json | `XxxOptions`; mixed `IOptions<T>`/`IOptionsMonitor<T>` | ~~None~~ -> **Yes** - `IValidateOptions` + `ValidateOnStart` in `RazorPages/Program.cs` (2026-08-27) | `OmpDb` shared factory + legacy direct read | None committed | Consumer; contract documented in module definition |
-| VajSkrivare | appsettings template + Dev; HostAgent-generated production file | `XxxOptions` + `SectionName` consts + `IOptions<T>` | Yes — `Validate(...)` + `ValidateOnStart` | Named indirection (`ConnectionStringName`) | None committed | Full overlay replacement of appsettings.json |
-| iKrock2 | appsettings + Dev, psd1, generated Production.json | `XxxOptions` + `IOptions<T>` | ~~None~~ -> **Yes** - four `ValidateOnStart` registrations in `iKrock2.Application/DependencyInjection/IKrock2ApplicationServiceCollectionExtensions.cs` (2026-08-27) | `OmpDb` → options; per-catalog composition | Plaintext password in gitignored prod psd1 that `IncludeConfigInPackage=$true` may bundle | None at runtime (installer-written config) |
+| Contoso | appsettings + Dev, psd1 installer, generated Production.json, CLI args, DB channel JSON | Mixed: `IOptions<T>` (web) + manual binding (worker) | ~~None~~ -> **Yes** - `ValidateOnStart` in `Contoso.Web/Program.cs` (2026-08-27) | `OmpDb` via `SqlConnectionFactory`; installer-built | None committed; gitignored local psd1 | Produces overlays; consumes none |
+| Fabrikam | appsettings + Dev, generated overlay appsettings | `XxxOptions` + `IOptions<T>`, uniform | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` + 3-tier source-DB indirection with credential guardrails | None committed; policy-enforced | Exemplary producer of generated appsettings overlays |
+| Northwind | appsettings + Dev + Local.json | `XxxOptions` + `IOptions<T>` | Yes — `IValidateOptions` + `ValidateOnStart` | `OmpDb` via factory taking the resolved string | None committed | Consumer (overlays not committed) |
+| AdventureWorks | root-linked appsettings + Dev + Local.json | `XxxOptions`; mixed `IOptions<T>`/`IOptionsMonitor<T>` | ~~None~~ -> **Yes** - `IValidateOptions` + `ValidateOnStart` in `RazorPages/Program.cs` (2026-08-27) | `OmpDb` shared factory + legacy direct read | None committed | Consumer; contract documented in module definition |
+| Tailwind | appsettings template + Dev; HostAgent-generated production file | `XxxOptions` + `SectionName` consts + `IOptions<T>` | Yes — `Validate(...)` + `ValidateOnStart` | Named indirection (`ConnectionStringName`) | None committed | Full overlay replacement of appsettings.json |
+| Globex | appsettings + Dev, psd1, generated Production.json | `XxxOptions` + `IOptions<T>` | ~~None~~ -> **Yes** - four `ValidateOnStart` registrations in `Globex.Application/DependencyInjection/GlobexApplicationServiceCollectionExtensions.cs` (2026-08-27) | `OmpDb` → options; per-catalog composition | Plaintext password in gitignored prod psd1 that `IncludeConfigInPackage=$true` may bundle | None at runtime (installer-written config) |
 | ODVGateway | appsettings + Dev + generated Smoke | Single root `XxxOptions` + nested; startup snapshot + `IOptionsMonitor<T>` | Manual (trusted roots only) | None (no DB) | None committed | Site-local appsettings via overlays |
 | OpenDocViewer | executable JS config + site config merge, dotenv (log servers), vite env, URL params | Central accessor + typed getters (JS analog) | Normalizing getters with clamps | None (endpoint URLs instead) | Placeholder token only; real token via service env | Receives `odv.site.config.js` as artifact config file |
 | AgentDocMap | CLI args only | Plain options object (JS) | Manual CLI validation | None | None | None |
@@ -421,11 +428,11 @@ Audited repositories (all under the local workspace root):
 Key divergences:
 
 1. ~~**Validation coverage is the widest gap.** Only OMP Web.Shared
-   (`WebAppOptions`), LogSearch, EArkivChecker and VajSkrivare validate
-   options at startup. IbsPackager, Dokumentbibliotek, iKrock2 and ODVGateway
+   (`WebAppOptions`), Fabrikam, Northwind and Tailwind validate
+   options at startup. Contoso, AdventureWorks, Globex and ODVGateway
    fail late (first use / first connection) instead of at startup.~~
-   **Largely closed - re-measured 2026-08-27.** IbsPackager, Dokumentbibliotek
-   and iKrock2 have all adopted `ValidateOnStart`, and OMP extended coverage
+   **Largely closed - re-measured 2026-08-27.** Contoso, AdventureWorks
+   and Globex have all adopted `ValidateOnStart`, and OMP extended coverage
    from one options class to five. **ODVGateway is the only .NET repo left
    without `ValidateOnStart`**, and it validates trusted roots manually by
    design (it has no database). Note that adopting `ValidateOnStart` is not the
@@ -433,17 +440,17 @@ Key divergences:
    of the gate, not its breadth.
 2. **Connection-string style is consistent in shape** (`ConnectionStrings:OmpDb`
    + factory) **but delivery differs:** HostAgent overlay-generated appsettings
-   (LogSearch, VajSkrivare, Dokumentbibliotek, EArkivChecker) vs
-   installer-written `appsettings.Production.json` (IbsPackager, iKrock2, OMP
+   (Fabrikam, Tailwind, AdventureWorks, Northwind) vs
+   installer-written `appsettings.Production.json` (Contoso, Globex, OMP
    services via Bootstrapper).
 3. **Raw `IConfiguration` reads deep in services** bypass the options pattern
-   in Dokumentbibliotek (`DocumentLibraryImageService.cs:431-432`) and iKrock2
+   in AdventureWorks (`AdventureWorksImageService.cs:431-432`) and Globex
    (`Pages/MLLPerformance/Index.cshtml.cs:118`).
-4. **iKrock2 is the largest outlier:** stale backend HTTP config, hardcoded
+4. **Globex is the largest outlier:** stale backend HTTP config, hardcoded
    customer URLs/test data in C#, and a password-bearing psd1 that may be
    bundled into packages.
 5. **Naming split is deliberate in OMP** (`XxxOptions` web vs `XxxSettings`
-   services) but accidental elsewhere (`IbsPackagerRuntimeSettings` outlier).
+   services) but accidental elsewhere (`ContosoRuntimeSettings` outlier).
 6. **The two JS repos use entirely different models** (executable merged JS
    config vs CLI-args-only) — appropriate to their shapes (browser SPA vs CLI).
 
@@ -452,7 +459,7 @@ Key divergences:
 ### .NET standard
 
 The dominant — and recommended — pattern, already implemented by OMP
-Web.Shared, LogSearch and VajSkrivare:
+Web.Shared, Fabrikam and Tailwind:
 
 1. **Sources:** committed `appsettings.json` holds environment-neutral
    defaults (localhost/LocalDB dev connection strings or empty placeholders);
@@ -463,18 +470,18 @@ Web.Shared, LogSearch and VajSkrivare:
    `XxxSettings` remains acceptable for OMP-style Windows services/workers.
 3. **Registration:** `AddOptions<T>().Bind(GetSection(T.SectionName))` +
    `ValidateOnStart()`, with either an `IValidateOptions<T>` implementation
-   (LogSearch model — preferred for cross-field rules) or inline
-   `Validate(...)` delegates (VajSkrivare model — fine for simple rules).
+   (Fabrikam model — preferred for cross-field rules) or inline
+   `Validate(...)` delegates (Tailwind model — fine for simple rules).
 4. **Consumption:** inject `IOptions<T>` (transient/scoped consumers) or
    `IOptionsMonitor<T>` (singletons that should observe reloads). No
    `Configuration["key"]` reads outside `Program.cs` and factory classes.
 5. **Connection strings:** `ConnectionStrings:OmpDb`, resolved once in a
    single factory per app; named indirection (`ConnectionStringName`) when an
-   app talks to multiple databases (VajSkrivare model).
+   app talks to multiple databases (Tailwind model).
 6. **Host-specific values:** never committed. They arrive as OMP HostAgent
    config overlays / host configurations (`docs/CONFIG_OVERLAYS.md`), with
    placeholder tokens such as `{{Omp.Json.ConnectionStrings.OmpDb}}` resolved
-   by HostAgent at apply time (LogSearch model). Installer-written
+   by HostAgent at apply time (Fabrikam model). Installer-written
    `appsettings.Production.json` remains acceptable for Bootstrapper-managed
    services, but overlay-generated appsettings is the target for module apps.
 7. **Secrets:** none in committed files; installer/overlay injection,
@@ -511,18 +518,18 @@ the pattern new OMP modules (examples, shared helpers) already teach.
   document when `omp.config_settings` should be preferred over appsettings.
 - Priority: Medium.
 
-### IbsPackager (Medium)
+### Contoso (Medium)
 
-- Current: ~~no options validation;~~ `IbsPackager.Web/Program.cs` validates on
+- Current: ~~no options validation;~~ `Contoso.Web/Program.cs` validates on
   start (2026-08-27); the worker still uses manual section binding; runtime
   config only from installer-generated Production.json.
 - Migration: convert the **worker** binding to
   `AddOptions<T>().Bind(...).ValidateOnStart()` - still outstanding, the web host
   is the part that landed; long-term,
-  move module appsettings delivery to HostAgent overlays like LogSearch.
+  move module appsettings delivery to HostAgent overlays like Fabrikam.
 - Priority: Medium.
 
-### LogSearch (Low)
+### Fabrikam (Low)
 
 - Current: exemplary pattern, but defaults triplicated across options consts,
   appsettings and the overlay generator; overlay emits unused `Worker` and
@@ -531,30 +538,30 @@ the pattern new OMP modules (examples, shared helpers) already teach.
   generate appsettings from it); drop unused sections from overlay output.
 - Priority: Low.
 
-### EArkivChecker (Done)
+### Northwind (Done)
 
-- Done (EArkivChecker `5b9e6e8`): `IValidateOptions<EArkivCheckerOptions>` +
-  `ValidateOnStart()` via `AddEArkivCheckerOptions(...)` in both hosts;
+- Done (Northwind `5b9e6e8`): `IValidateOptions<NorthwindOptions>` +
+  `ValidateOnStart()` via `AddNorthwindOptions(...)` in both hosts;
   `appsettings.Local.json` now loaded in both hosts;
-  `EArkivCheckerConnectionFactory` takes the resolved `OmpDb` connection
+  `NorthwindConnectionFactory` takes the resolved `OmpDb` connection
   string instead of `IConfiguration`.
-- Remaining: the `EArkivChecker` section is still duplicated across both host
+- Remaining: the `Northwind` section is still duplicated across both host
   appsettings files with overlapping keys.
 - Migration: extract the shared defaults (for example into the Runtime layer
   or a generated overlay) so each host only carries host-specific overrides.
 - Priority: Low.
 
-### Dokumentbibliotek (Medium)
+### AdventureWorks (Medium)
 
 - Current: ~~no validation;~~ `RazorPages/Program.cs` validates on start
   (2026-08-27); `WebImageRootPrefix` read via raw `IConfiguration`
   and absent from the options class; mixed `IOptions`/`IOptionsMonitor`.
-- Migration: ~~add `ValidateOnStart()` for `DokumentBibliotekOptions`;~~ done. Move all
-  `DokumentBibliotek:*` keys onto the options class; standardize on
+- Migration: ~~add `ValidateOnStart()` for `AdventureWorksOptions`;~~ done. Move all
+  `AdventureWorks:*` keys onto the options class; standardize on
   `IOptionsMonitor` for singletons or `IOptions` elsewhere.
 - Priority: Medium.
 
-### VajSkrivare (Low)
+### Tailwind (Low)
 
 - Current: near-exemplary; orphaned `ZebraConfig:BackupRetention*` keys;
   one direct `GetSection(...).Get<WebAppOptions>()` for startup logging.
@@ -562,7 +569,7 @@ the pattern new OMP modules (examples, shared helpers) already teach.
   startup-log read through injected options.
 - Priority: Low.
 
-### iKrock2 (High)
+### Globex (High)
 
 - Current: stale backend HTTP client config; hardcoded customer URLs and test
   data in C#; deep `Configuration["key"]` read; ~~no validation~~ (four

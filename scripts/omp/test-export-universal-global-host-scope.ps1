@@ -126,8 +126,8 @@ try {
 
     # The proven 2026-07-24 problem: host-specific overlays (always hostKey-bound)
     # sitting in the GLOBAL object root.
-    Write-TextFile -Path (Join-Path $objectRoot 'config-overlays\local-vajskrivare-appsettings.json') -Text '{ "hostKey": "localhost", "overlayVersion": "1.0.0" }'
-    Write-TextFile -Path (Join-Path $objectRoot 'config-overlays\customer-test-vajskrivare-appsettings.json') -Text '{ "hostKey": "test-host.example.com", "overlayVersion": "1.0.0" }'
+    Write-TextFile -Path (Join-Path $objectRoot 'config-overlays\local-tailwind-appsettings.json') -Text '{ "hostKey": "localhost", "overlayVersion": "1.0.0" }'
+    Write-TextFile -Path (Join-Path $objectRoot 'config-overlays\customer-test-tailwind-appsettings.json') -Text '{ "hostKey": "test-host.example.com", "overlayVersion": "1.0.0" }'
     Write-TextFile -Path (Join-Path $objectRoot 'host-configs\customer-test-host.json') -Text '{ "hostKey": "test-host.example.com", "configurationVersion": "1.0.0" }'
 
     $globalZip = Join-Path $testRoot 'global.zip'

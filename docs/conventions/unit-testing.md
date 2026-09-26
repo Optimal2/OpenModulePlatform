@@ -6,8 +6,14 @@ every repository), section 2 the standard, section 3 the work that is still open
 the dated history of how the document got here. Do not add dated "superseded" layers to sections
 1-3 again; update the numbers in place and add a line to the changelog.
 
-Repos covered: OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker, Dokumentbibliotek,
-VajSkrivare, iKrock2, ODVGateway (.NET); OpenDocViewer, AgentDocMap (JS/npm).
+The private consumer repositories in the OMP+ODV ecosystem are represented
+here by generic placeholder names (Contoso, Fabrikam, Northwind, AdventureWorks,
+Tailwind, Globex). Per-repo source paths, line ranges, and product/namespace
+prefixes are operator-specific deployment data and live in the private DEV
+installation repository.
+
+Repos covered: OpenModulePlatform, Contoso, Fabrikam, Northwind, AdventureWorks,
+Tailwind, Globex, ODVGateway (.NET); OpenDocViewer, AgentDocMap (JS/npm).
 
 ## 1. Current state (measured 2026-09-06)
 
@@ -23,12 +29,12 @@ Read from every repository's `Directory.Packages.props` on the same day (ODVGate
 | `xunit.runner.visualstudio` | **4.0.0** | all eight |
 | `Xunit.SkippableFact` | **1.5.85** | the seven CPM repos (ODVGateway does not use it) |
 | `Microsoft.Playwright` | **1.62.0** | the seven repos with a `*.UiTests` project (all but ODVGateway) |
-| `coverlet.collector` | **10.0.1** | six repos; **not** VajSkrivare, **not** ODVGateway |
+| `coverlet.collector` | **10.0.1** | six repos; **not** Tailwind, **not** ODVGateway |
 | `Microsoft.AspNetCore.Mvc.Testing` | 10.0.12 | where web-host tests exist |
 | `vitest` | `^4.1.11` | OpenDocViewer (`package.json`) |
 | `node:test` | built in | AgentDocMap (no test dependencies at all) |
 
-`global.json` pins the SDK in every .NET repo except VajSkrivare. When these numbers drift again,
+`global.json` pins the SDK in every .NET repo except Tailwind. When these numbers drift again,
 fix this table first: duplicating a version in seven places is what let the document go stale.
 
 ### 1.2 Per-repo state
@@ -39,12 +45,12 @@ pre-push hook. "CI" is `.github/workflows/ci.yml`.
 | Repo | Test projects on `origin/main` | Framework | Pins | Local gate runs tests | CI runs tests |
 |---|---|---|---|---|---|
 | **OpenModulePlatform** | 8 xUnit projects (`Bootstrapper.Tests`, `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`, `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`) + 14 Pester 5 suites in `tests/*.Tests.ps1` | xUnit + Playwright; Pester 5 (5.9.1) | CPM | Yes: `dotnet test` per project, Pester suites, zero-execution TRX gate | Yes: `dotnet test` (Integration, lease and `Category=Ui` excluded by filter), Pester suites, TRX gate |
-| **IbsPackager** | 4 (`IbsPackager.Tests`, `IbsPackager.ChannelTypes.FileDrop.Tests`, `IbsPackager.ChannelTypes.ImageCompose.Tests`, `IbsPackager.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No (build + validate only) |
-| **LogSearch** | 2 (`LogSearch.Tests`, `LogSearch.UiTests`) | xUnit + Playwright | CPM | Yes | No |
-| **EArkivChecker** | 3 (`EArkivChecker.Runtime.Tests`, `EArkivChecker.Web.Tests`, `EArkivChecker.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No |
-| **Dokumentbibliotek** | 2 (`tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests`, `...UiTests`) | xUnit + Playwright | CPM | Yes | No |
-| **VajSkrivare** | 2 (`tests/Skrivarkoppling.Web.Tests`, `tests/Skrivarkoppling.Web.UiTests`) | xUnit + Playwright | CPM; no coverlet; no `global.json` | Yes | No |
-| **iKrock2** | 2 (`iKrock2.Application.Tests`, `iKrock2.UiTests`) | xUnit + Playwright | CPM | Yes (`dotnet test iKrock2.slnx --no-build --filter "Category!=Ui"`) | No |
+| **Contoso** | 4 (`Contoso.Tests`, `Contoso.ChannelTypes.FileDrop.Tests`, `Contoso.ChannelTypes.ImageCompose.Tests`, `Contoso.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No (build + validate only) |
+| **Fabrikam** | 2 (`Fabrikam.Tests`, `Fabrikam.UiTests`) | xUnit + Playwright | CPM | Yes | No |
+| **Northwind** | 3 (`Northwind.Runtime.Tests`, `Northwind.Web.Tests`, `Northwind.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No |
+| **AdventureWorks** | 2 (`tests/Contoso.Web.AdventureWorks.Tests`, `...UiTests`) | xUnit + Playwright | CPM | Yes | No |
+| **Tailwind (PrintConnect)** | 2 (`tests/PrintConnect.Web.Tests`, `tests/PrintConnect.Web.UiTests`) | xUnit + Playwright | CPM; no coverlet; no `global.json` | Yes | No |
+| **Globex** | 2 (`Globex.Application.Tests`, `Globex.UiTests`) | xUnit + Playwright | CPM | Yes (`dotnet test Globex.slnx --no-build --filter "Category!=Ui"`) | No |
 | **ODVGateway** | 1 (`tests/ODVGateway.Tests`) + end-to-end smoke script `scripts/smoke-test.ps1` | xUnit | Inline in the test csproj; no CPM; no solution file | Yes (`dotnet test` + smoke) | Smoke script only |
 | **OpenDocViewer** | vitest suite under `src/**/__tests__/` and `public/__tests__/` | vitest | `package.json` + lockfile | `npm test` | Yes (`npm test`, `ci.yml:71`) |
 | **AgentDocMap** | `test/*.test.js` | node:test | engines + lockfile | `npm test` | Yes (`npm run validate`, `ci.yml:42`) |
@@ -126,19 +132,18 @@ in the per-repo table.
 These are the patterns the standard in section 2 points at; the file references are from the
 2026-07-15 audit and are kept because the patterns have not changed.
 
-- **DB-test gating (IbsPackager, EArkivChecker):** `[SkippableFact]` + connection string from an
-  environment variable (`IBSPACKAGER_TEST_CONNECTION_STRING`,
-  `EARKIVCHECKER_TEST_CONNECTION_STRING`) with a localhost default; `SkipException` when the
+- **DB-test gating (Contoso, Northwind):** `[SkippableFact]` + connection string from an
+  environment variable (`CONTOSO_TEST_CONNECTION_STRING`,
+  `NORTHWIND_TEST_CONNECTION_STRING`) with a localhost default; `SkipException` when the
   database or schema is absent; the procedure or schema under test is self-deployed from the
   repo's own `sql/` setup script; GUID-suffixed rows or a uniquely named per-class database with
-  cleanup on dispose. EArkivChecker pairs this with OMP's Tier C/D class naming
-  (`EArkivCheckerRepositoryTierCTests.cs`, `FolderScannerTierDTests.cs`) and is the cleanest Tier C
-  pattern in the family.
+  cleanup on dispose. Northwind pairs this with OMP's Tier C/D class naming
+  and is the cleanest Tier C pattern in the family.
 - **Hand-written fakes instead of a mock library:** `NullLogger<T>.Instance` and small stubs
-  (`TestConfiguration : IConfiguration`, `NoChangeToken`) in IbsPackager; `Options.Create(...)`
-  hand-wiring in iKrock2; `FakeZebraConfigService` in VajSkrivare.
-- **Web-host tests without a database:** VajSkrivare's `WebApplicationFactory<Program>` +
-  in-memory configuration overrides (`tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs`).
+  (`TestConfiguration : IConfiguration`, `NoChangeToken`) in Contoso; `Options.Create(...)`
+  hand-wiring in Globex; `FakeZebraConfigService` in Tailwind (PrintConnect).
+- **Web-host tests without a database:** Tailwind (PrintConnect)'s `WebApplicationFactory<Program>` +
+  in-memory configuration overrides (`tests/PrintConnect.Web.Tests/ApiAnonymityTests.cs`).
 - **End-to-end smoke as a gate:** ODVGateway's `scripts/smoke-test.ps1` builds the app, launches
   the real Kestrel process with an `appsettings.Smoke.json` overlay and checks `/health`,
   security headers and sanitized error responses, in both the local gate and CI.
@@ -179,7 +184,7 @@ gate.**
   interface rather than introducing Moq or testing private members via reflection.
 - **Assertions:** plain xUnit `Assert.*`. Do not add FluentAssertions.
 - **Unit vs integration:** OMP's Tier suffix naming - `*TierDTests` for pure in-memory tests,
-  `*TierCTests` for tests needing real SQL Server - **combined with** IbsPackager's gating:
+  `*TierCTests` for tests needing real SQL Server - **combined with** Contoso's gating:
   `[SkippableFact]` + connection string from `<REPO>_TEST_CONNECTION_STRING` with a localhost
   default, skipping cleanly when the database/schema is absent. DB tests create/drop their own
   uniquely named database or GUID-suffixed rows and never touch shared data. Tier D tests must
@@ -220,11 +225,11 @@ done and recorded in the changelog.
 
 | Repo | Remaining | Priority |
 |---|---|---|
-| VajSkrivare | Add `coverlet.collector` 10.0.1 to `Directory.Packages.props`; add a `global.json` SDK pin (the only repo without one, so it floats to the build host's SDK). Keep the `tests/` folder layout - renaming is low-value churn. | Low |
+| Tailwind (PrintConnect) | Add `coverlet.collector` 10.0.1 to `Directory.Packages.props`; add a `global.json` SDK pin (the only repo without one, so it floats to the build host's SDK). Keep the `tests/` folder layout - renaming is low-value churn. | Low |
 | ODVGateway | Introduce `Directory.Packages.props` (the only .NET repo without CPM) and a `.slnx` grouping `src/ODVGateway` and `tests/ODVGateway.Tests`; keep the smoke script as the e2e gate. | Low-Medium |
 | OpenModulePlatform | Adopt `[SkippableFact]` + env-var gating for Tier C tests so `dotnet test` passes on machines without SQL Server (CI currently sidesteps this with a `--filter`, tracked in `docs/TEST_DEBT.md`). `coverlet.collector` is referenced by every test project since 2026-09-21 (UiTests and Web.Shared.Analyzers.Tests were the two missing). | Low |
-| iKrock2 | Replace the two test classes that reach private static production methods via reflection (`StatusCodeParsingTests.cs`, `CollisionSearchFilterQueryParserTests.cs`, noted in the 2026-07-15 audit; not re-measured) with public-API tests. | Low |
-| IbsPackager | Optionally rename `IbsPackager.Tests` to `IbsPackager.Runtime.Tests` to match the `<ProjectUnderTest>.Tests` convention (it tests `IbsPackager.Runtime`). | Very low |
+| Globex | Replace the two test classes that reach private static production methods via reflection (`StatusCodeParsingTests.cs`, `CollisionSearchFilterQueryParserTests.cs`, noted in the 2026-07-15 audit; not re-measured) with public-API tests. | Low |
+| Contoso | Optionally rename `Contoso.Tests` to `Contoso.Runtime.Tests` to match the `<ProjectUnderTest>.Tests` convention (it tests `Contoso.Runtime`). | Very low |
 | AgentDocMap | Deduplicate the local `withTempDir` copy in `test/secretSafety.test.js` by importing `test/testUtils.js`. | Very low |
 | Consumer .NET repos | GitHub CI is build + validate only; tests run in the local gate. Consider a Tier D-only `dotnet test` step. | Low |
 
@@ -238,7 +243,7 @@ dated banners inside the audit body; they were consolidated into sections 1-3 on
   `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0,
   `coverlet.collector` 10.0.1, `Microsoft.Playwright` 1.62.0, `Xunit.SkippableFact` 1.5.85; the
   comparison matrix and the recommended-standard pins had still quoted the July values
-  (18.7.0 / 3.1.5 / 1.4.13). Measured test-project counts per repo (IbsPackager 4, EArkivChecker 3,
+  (18.7.0 / 3.1.5 / 1.4.13). Measured test-project counts per repo (Contoso 4, Northwind 3,
   every other .NET repo 2, ODVGateway 1) and that every local gate runs `dotnet test`.
 - **2026-09-04** - `tests/` holds eight Pester suites (`ArtifactPackageWorkerHostRoundTrip`,
   `Assert-LegSdk`, `Assert-RunnerSignature`, `Assert-TestsExecuted`, `Bump-Version`,
@@ -257,11 +262,11 @@ dated banners inside the audit body; they were consolidated into sections 1-3 on
 - **2026-08-31** - Runner/core compatibility baseline decided: runner-only upgrade to
   `xunit.runner.visualstudio` 4.0.0 on `xunit` 2.9.3, `Xunit.SkippableFact` 1.5.85,
   `Microsoft.Playwright` 1.62.0 (rationale in section 2.1).
-- **2026-08-27** - VajSkrivare adopted CPM (`Directory.Packages.props`, Test.Sdk 18.9.0, runner
-  3.1.5 at the time) and added `Skrivarkoppling.Web.UiTests`; no testless repos left. ODVGateway
+- **2026-08-27** - Tailwind (PrintConnect) adopted CPM (`Directory.Packages.props`, Test.Sdk 18.9.0, runner
+  3.1.5 at the time) and added the UI tests project; no testless repos left. ODVGateway
   became the only .NET repo without CPM. First status banner added to this document.
-- **2026-08-22** - Every repo has automated tests: `LogSearch.Tests` + `LogSearch.UiTests`,
-  `tests/OpenModulePlatform.Web.eArkivDokumentbibliotek.Tests` + `...UiTests`,
+- **2026-08-22** - Every repo has automated tests: `Fabrikam.Tests` + `Fabrikam.UiTests`,
+  `tests/Contoso.Web.AdventureWorks.Tests` + `...UiTests`,
   `tests/ODVGateway.Tests`. OpenDocViewer's CI runs `npm test`.
 - **2026-08-19** - The family standardized on two-tier testing: xUnit unit tests plus xUnit +
   Microsoft.Playwright UI tests (`*.UiTests`), with shared tooling in
@@ -270,8 +275,8 @@ dated banners inside the audit body; they were consolidated into sections 1-3 on
   `--filter` whose exclusions are registered in `docs/TEST_DEBT.md`.
 - **2026-07-15** - Original audit (source code only; `bin/`, `obj/`, `artifacts/`, `node_modules/`,
   `dist/` excluded). Findings at the time: OpenModulePlatform had 3 test projects (~270 methods)
-  plus two Pester files; LogSearch, Dokumentbibliotek and ODVGateway had no tests; family pins were
+  plus two Pester files; Fabrikam, AdventureWorks and ODVGateway had no tests; family pins were
   `Microsoft.NET.Test.Sdk` 18.7.0, `xunit.runner.visualstudio` 3.1.5, `Xunit.SkippableFact`
-  1.4.13; VajSkrivare pinned inline (no CPM) at Test.Sdk 17.14.0 / runner 2.8.2; only AgentDocMap
-  ran tests in GitHub CI; iKrock2's `local-ci.ps1` carried a stale Swedish TODO instead of
+  1.4.13; Tailwind pinned inline (no CPM) at Test.Sdk 17.14.0 / runner 2.8.2; only AgentDocMap
+  ran tests in GitHub CI; Globex's `local-ci.ps1` carried a stale Swedish TODO instead of
   `dotnet test`. The audit also established the standard in section 2, which has held.

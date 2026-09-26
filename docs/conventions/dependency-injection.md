@@ -15,8 +15,8 @@ from the audit). It is the DI counterpart to `configuration.md`,
 
 Audited repositories (all under the local workspace root, all .NET 10):
 
-- OpenModulePlatform, IbsPackager, LogSearch, EArkivChecker,
-  Dokumentbibliotek, VajSkrivare, iKrock2, ODVGateway
+- OpenModulePlatform, Contoso, Fabrikam, Northwind,
+  AdventureWorks, Tailwind, Globex, ODVGateway
 
 No repository uses a `Startup.cs`; every host uses top-level-statements
 minimal hosting. No repository uses `TryAdd*` for application services, and
@@ -173,143 +173,143 @@ registrations.
   `examples/WorkerAppModule/WorkerApp/ExampleWorkerAppModuleFactory.cs:13`
   is the reference `IWorkerModuleFactory` plugin implementation.
 
-### IbsPackager (.NET 10, private OMP module)
+### Contoso (.NET 10, private OMP module)
 
-- **Registration location:** single host `IbsPackager.Web/Program.cs`
-  (22 lines): `AddOmpWebDefaults<IbsPackagerResource>("WebApp")` (`:8`),
+- **Registration location:** single host `Contoso.Web/Program.cs`
+  (22 lines): `AddOmpWebDefaults<ContosoResource>("WebApp")` (`:8`),
   the `OpenDocViewerOptions` options chain (`:9-15`), and one module
-  extension `AddIbsPackagerServices(this IServiceCollection, IConfiguration)`
+  extension `AddContosoServices(this IServiceCollection, IConfiguration)`
   (`:16`; implementation
-  `IbsPackager.Runtime/DependencyInjection/IbsPackagerServiceCollectionExtensions.cs:9`)
-  registering three singletons (`IbsPackagerConnectionFactory`,
-  `IbsPackagerRepository`, `ConfigSchemaValidator`).
+  `Contoso.Runtime/DependencyInjection/ContosoServiceCollectionExtensions.cs:9`)
+  registering three singletons (`ContosoConnectionFactory`,
+  `ContosoRepository`, `ConfigSchemaValidator`).
 - **Lifetimes:** all singleton, no scoped/transient. Safe because the
   repository is stateless with per-call connections
-  (`IbsPackager.Runtime/Services/IbsPackagerRepository.cs:16-19`); singleton
+  (`Contoso.Runtime/Services/ContosoRepository.cs:16-19`); singleton
   is a deliberate decision per §3.2 (see §4) — the worker plugin constructs
-  the repository manually (`IbsPackagerWorkerFactory.cs:20-21`) and
+  the repository manually (`ContosoWorkerFactory.cs:20-21`) and
   channel-type factories resolve it scope-free
   (`FileDropChannelTypeFactory.cs:237`), so scoped would break those paths.
   The former name collision with the OMP shared `SqlConnectionFactory` is
-  resolved by the rename to `IbsPackagerConnectionFactory`
-  (`IbsPackager.Runtime/Services/IbsPackagerConnectionFactory.cs:6`), still
+  resolved by the rename to `ContosoConnectionFactory`
+  (`Contoso.Runtime/Services/ContosoConnectionFactory.cs:6`), still
   reading `ConnectionStrings:OmpDb`.
 - **Module/plugin pattern:** web side uses only the OMP shared defaults.
-  Worker side is an OMP plugin: `IbsPackagerWorkerFactory :
-  IWorkerModuleFactory` (`IbsPackager.Worker/IbsPackagerWorkerFactory.cs:11`)
+  Worker side is an OMP plugin: `ContosoWorkerFactory :
+  IWorkerModuleFactory` (`Contoso.Worker/ContosoWorkerFactory.cs:11`)
   manually news up the whole object graph (`:15-38`) — the host owns the
   container. A second plugin level loads channel types from DB-driven
   metadata through a custom `AssemblyLoadContext`
-  (`IbsPackager.Runtime/Services/ChannelTypeLoader.cs:17-63`), with
+  (`Contoso.Runtime/Services/ChannelTypeLoader.cs:17-63`), with
   factories receiving `IServiceProvider`
-  (`IbsPackager.Abstractions/Contracts/IIbsChannelTypeFactory.cs:16`).
+  (`Contoso.Abstractions/Contracts/IContosoChannelTypeFactory.cs:16`).
 - **Hosted services:** none (background work runs as the OMP worker plugin).
 - **Options:** `WebAppOptions` validated via OMP defaults;
   `OpenDocViewerOptions` now uses
   `AddOptions<T>().Bind(...).Validate(...).ValidateOnStart()` with a minimal
-  non-empty `BaseUrl` rule (`IbsPackager.Web/Program.cs:9-15`);
+  non-empty `BaseUrl` rule (`Contoso.Web/Program.cs:9-15`);
   `HostAgentRpcOptions` still bypasses the options pattern (manual section
-  binding in `IbsPackagerWorkerFactory.cs:40-58`, rules in
-  `IbsPackager.Runtime/Models/HostAgentRpcOptions.cs:27-33`) but
+  binding in `ContosoWorkerFactory.cs:40-58`, rules in
+  `Contoso.Runtime/Models/HostAgentRpcOptions.cs:27-33`) but
   `Validate()` is now invoked at worker startup
-  (`IbsPackagerWorkerFactory.cs:55`).
+  (`ContosoWorkerFactory.cs:55`).
 - **HTTP clients:** none (outbound RPC is named-pipe based,
-  `IbsPackager.Runtime/Services/HostAgentRpcClient.cs:15`).
+  `Contoso.Runtime/Services/HostAgentRpcClient.cs:15`).
 
-### LogSearch (.NET 10, OMP module)
+### Fabrikam (.NET 10, OMP module)
 
 - **Registration location:** inline per host, plus one shared options
-  extension. Web: `LogSearch.Web/Program.cs:5-10`
-  (`AddOmpWebDefaults<LogSearchResource>("WebApp")` `:7`,
-  `AddLogSearchOptions` `:8`, singletons `LogSearchConnectionFactory` `:9`
-  and `LogSearchRepository` `:10`) plus a post-build startup seeder
-  (`:18`). Service: `LogSearch.Service/Program.cs:5-19` (all singleton
-  `:8-13`, `AddHostedService<LogSearchWorker>` `:14`,
-  `AddWindowsService("OMP.LogSearch")` `:16-19`).
+  extension. Web: `Fabrikam.Web/Program.cs:5-10`
+  (`AddOmpWebDefaults<FabrikamResource>("WebApp")` `:7`,
+  `AddFabrikamOptions` `:8`, singletons `FabrikamConnectionFactory` `:9`
+  and `FabrikamRepository` `:10`) plus a post-build startup seeder
+  (`:18`). Service: `Fabrikam.Service/Program.cs:5-19` (all singleton
+  `:8-13`, `AddHostedService<FabrikamWorker>` `:14`,
+  `AddWindowsService("OMP.Fabrikam")` `:16-19`).
 - **Lifetimes:** all singleton in both hosts. The Service host registers
   concrete + interface with forwarding factories (`:9`, `:11`); the Web
   host registers concretes only and pages inject the concrete
-  `LogSearchRepository` (e.g. `LogSearch.Web/Pages/Index.cshtml.cs:22`) —
+  `FabrikamRepository` (e.g. `Fabrikam.Web/Pages/Index.cshtml.cs:22`) —
   an intra-repo inconsistency. Interfaces exist primarily for test fakes
-  (`LogSearch.Tests/Fakes/`).
+  (`Fabrikam.Tests/Fakes/`).
 - **Module/plugin pattern:** `AddOmpWebDefaults` only; no runtime plugin
   loading (module packaging is declarative via
-  `log_search.module-definition.json`).
+  `fabrikam.module-definition.json`).
 - **Extension methods:** one, options-only, shared by both hosts:
-  `AddLogSearchOptions` returning `OptionsBuilder<T>`
-  (`LogSearch.Runtime/LogSearchOptionsServiceCollectionExtensions.cs:9`).
+  `AddFabrikamOptions` returning `OptionsBuilder<T>`
+  (`Fabrikam.Runtime/FabrikamOptionsServiceCollectionExtensions.cs:9`).
   Naming convention: method `Add<Feature>Options`, file
   `<Feature>OptionsServiceCollectionExtensions.cs`, placed in the Runtime
   library.
-- **Hosted services:** `LogSearchWorker : BackgroundService`
-  (`LogSearch.Service/LogSearchWorker.cs:7`), registered
-  `LogSearch.Service/Program.cs:14`.
-- **Options:** exemplary — `AddOptions<LogSearchOptions>().Bind(...).ValidateOnStart()`
-  with singleton `IValidateOptions<LogSearchOptions>`
-  (`LogSearchOptionsServiceCollectionExtensions.cs:13-18`, validator
-  `LogSearch.Runtime/LogSearchOptionsValidator.cs:5`); consumed uniformly
+- **Hosted services:** `FabrikamWorker : BackgroundService`
+  (`Fabrikam.Service/FabrikamWorker.cs:7`), registered
+  `Fabrikam.Service/Program.cs:14`.
+- **Options:** exemplary — `AddOptions<FabrikamOptions>().Bind(...).ValidateOnStart()`
+  with singleton `IValidateOptions<FabrikamOptions>`
+  (`FabrikamOptionsServiceCollectionExtensions.cs:13-18`, validator
+  `Fabrikam.Runtime/FabrikamOptionsValidator.cs:5`); consumed uniformly
   as `IOptions<T>`.
 - **HTTP clients:** none. Tests bypass DI (`Options.Create`, e.g.
-  `LogSearch.Tests/LogSearchConnectionFactoryTests.cs:12`).
+  `Fabrikam.Tests/FabrikamConnectionFactoryTests.cs:12`).
 
-### EArkivChecker (.NET 10, private OMP module)
+### Northwind (.NET 10, private OMP module)
 
 - **Registration location:** inline in both hosts, with the same
   registration block **duplicated verbatim** between
-  `EArkivChecker.Web/Program.cs:12-15` and
-  `EArkivChecker.Service/Program.cs:12-14,21` — the clearest candidate for
-  a shared extension. Web adds `AddOmpWebDefaults<EArkivCheckerResource>("WebApp")`
+  `Northwind.Web/Program.cs:12-15` and
+  `Northwind.Service/Program.cs:12-14,21` — the clearest candidate for
+  a shared extension. Web adds `AddOmpWebDefaults<NorthwindResource>("WebApp")`
   (`:10`) and `AddOmpPushEventDispatcher()` (`:11`); Service adds
-  `AddHostedService<EArkivCheckerWorker>` (`:26`) and
-  `AddWindowsService("OMP.EArkivChecker")` (`:28-31`).
+  `AddHostedService<NorthwindWorker>` (`:26`) and
+  `AddWindowsService("OMP.Northwind")` (`:28-31`).
 - **Lifetimes:** all singleton, no scoped/transient anywhere — safe
   because every service is stateless by design (per-call connections,
-  `EArkivChecker.Runtime/EArkivCheckerRepository.cs:23`). The connection
+  `Northwind.Runtime/NorthwindRepository.cs:23`). The connection
   factory is a pre-built instance registered with a fail-fast guard
-  (`EArkivChecker.Web/Program.cs:13-14`,
-  `EArkivChecker.Runtime/EArkivCheckerConnectionFactory.cs:11-14`).
+  (`Northwind.Web/Program.cs:13-14`,
+  `Northwind.Runtime/NorthwindConnectionFactory.cs:11-14`).
   Service registers concrete + interface forwarding (`Program.cs:21-24`);
-  Web registers concretes only (same intra-repo split as LogSearch).
+  Web registers concretes only (same intra-repo split as Fabrikam).
 - **Module/plugin pattern:** `AddOmpWebDefaults`/`UseOmpWebDefaults`
-  (`EArkivChecker.Web/Program.cs:10,19`); no runtime plugin loading
+  (`Northwind.Web/Program.cs:10,19`); no runtime plugin loading
   (manifest-driven packaging, `omp-components.json:5-46`).
 - **Extension methods:** one, options-only:
-  `AddEArkivCheckerOptions(this IServiceCollection, IConfiguration)`
+  `AddNorthwindOptions(this IServiceCollection, IConfiguration)`
   returning `OptionsBuilder<T>`
-  (`EArkivChecker.Runtime/EArkivCheckerOptionsServiceCollectionExtensions.cs:9`)
-  — same naming convention as LogSearch.
-- **Hosted services:** `EArkivCheckerWorker : BackgroundService`
-  (`EArkivChecker.Service/EArkivCheckerWorker.cs:7`), registered
-  `EArkivChecker.Service/Program.cs:26`.
-- **Options:** `AddOptions<EArkivCheckerOptions>().Bind(...).ValidateOnStart()`
-  + singleton `IValidateOptions<EArkivCheckerOptions>`
-  (`EArkivCheckerOptionsServiceCollectionExtensions.cs:13-18`, manual rule
-  accumulation in `EArkivChecker.Runtime/EArkivCheckerOptionsValidator.cs:5-26`).
+  (`Northwind.Runtime/NorthwindOptionsServiceCollectionExtensions.cs:9`)
+  — same naming convention as Fabrikam.
+- **Hosted services:** `NorthwindWorker : BackgroundService`
+  (`Northwind.Service/NorthwindWorker.cs:7`), registered
+  `Northwind.Service/Program.cs:26`.
+- **Options:** `AddOptions<NorthwindOptions>().Bind(...).ValidateOnStart()`
+  + singleton `IValidateOptions<NorthwindOptions>`
+  (`NorthwindOptionsServiceCollectionExtensions.cs:13-18`, manual rule
+  accumulation in `Northwind.Runtime/NorthwindOptionsValidator.cs:5-26`).
   Caveat: consumers snapshot `options.Value` in constructors (e.g.
-  `EArkivChecker.Service/EArkivCheckerWorker.cs:20`), so
+  `Northwind.Service/NorthwindWorker.cs:20`), so
   `reloadOnChange: true` on the JSON overlays never propagates; no
   `IOptionsMonitor<T>` anywhere.
 - **HTTP clients:** none. Tests bypass DI with `Options.Create`.
 
-### Dokumentbibliotek (.NET 10, single web app, OMP module)
+### AdventureWorks (.NET 10, single web app, OMP module)
 
 - **Registration location:** single composition root
-  `RazorPages/Program.cs`: `AddOmpWebDefaults<eArkivDokumentbibliotekResource>("Portal")`
+  `RazorPages/Program.cs`: `AddOmpWebDefaults<AdventureWorksResource>("Portal")`
   (`:11`), conditional CORS (`:25-35`), `AddControllers` (`:37`), options
   + services (`:39-54`). No `IServiceCollection` extensions in the repo;
   one `WebApplication` extension for endpoints
-  (`MapDocumentLibraryRuntimeEndpoints`,
-  `RazorPages/Infrastructure/DocumentLibraryEndpointMapping.cs:11`, called
+  (`MapAdventureWorksRuntimeEndpoints`,
+  `RazorPages/Infrastructure/AdventureWorksEndpointMapping.cs:11`, called
   at `Program.cs:82`).
 - **Lifetimes:** the OMP-web-style mix — scoped data services
-  (`DocumentLibraryDataStore` `:44`, six `IDocumentLibrary*`/
+  (`AdventureWorksDataStore` `:44`, six `IAdventureWorks*`/
   `IDatabaseMigrationService` interface registrations `:46-51`) and
-  singleton infrastructure (`DocumentLibrarySchemaCache` `:45`,
-  `DocumentLibraryPathMapper` `:52`, `IOpenDocViewerBundleBuilder` `:53`,
+  singleton infrastructure (`AdventureWorksSchemaCache` `:45`,
+  `AdventureWorksPathMapper` `:52`, `IOpenDocViewerBundleBuilder` `:53`,
   `FileExtensionContentTypeProvider` `:54`). Textbook scope bridging:
-  singleton `DocumentLibrarySchemaCache` injects `IServiceProvider` and
+  singleton `AdventureWorksSchemaCache` injects `IServiceProvider` and
   creates a scope per cache refresh
-  (`Services/DocumentLibrarySchemaCache.cs:53-54`) — no captive
+  (`Services/AdventureWorksSchemaCache.cs:53-54`) — no captive
   dependency. Minor redundancy: `AddMemoryCache()` is called both by
   `AddOmpWebDefaults` and at `Program.cs:38`.
 - **Module/plugin pattern:** `AddOmpWebDefaults`/`UseOmpWebDefaults`
@@ -318,21 +318,21 @@ registrations.
   with a manual scope before `app.Run()` (`Program.cs:58-73`), gated by
   `RunMigrationsOnStartup`.
 - **Options:** fully validated — singleton
-  `IValidateOptions<DokumentBibliotekOptions>` (`Program.cs:39`,
-  implementation `Services/DokumentBibliotekOptionsValidator.cs:11-44`)
-  plus `AddOptions<DokumentBibliotekOptions>().Bind(...).ValidateOnStart()`
+  `IValidateOptions<AdventureWorksOptions>` (`Program.cs:39`,
+  implementation `Services/AdventureWorksOptionsValidator.cs:11-44`)
+  plus `AddOptions<AdventureWorksOptions>().Bind(...).ValidateOnStart()`
   (`Program.cs:40-43`). Mixed consumption by design:
-  `IOptionsMonitor<DokumentBibliotekOptions>` in the singleton
-  `DocumentLibraryPathMapper` (`Services/DocumentLibraryPathMapper.cs:8-13`),
+  `IOptionsMonitor<AdventureWorksOptions>` in the singleton
+  `AdventureWorksPathMapper` (`Services/AdventureWorksPathMapper.cs:8-13`),
   `IOptions<T>` elsewhere. (Note: `configuration.md` predates this
   validation; it is present now.)
 - **HTTP clients:** none.
 
-### VajSkrivare (.NET 10, single web app, OMP module "Skrivarkoppling")
+### Tailwind (.NET 10, single web app, OMP module "PrintConnect")
 
 - **Registration location:** single file
-  `src/Skrivarkoppling.Web/Program.cs`:
-  `AddOmpWebDefaults<SkrivarkopplingResource>("Portal")` (`:33`), options
+  `src/PrintConnect.Web/Program.cs`:
+  `AddOmpWebDefaults<TailwindResource>("Portal")` (`:33`), options
   (`:36-40`, `:51-57`) and eight service registrations (`:42-60`) inline;
   `UseOmpWebDefaults` at `:177`. No extension methods declared in the
   repo.
@@ -347,7 +347,7 @@ registrations.
   dependencies; singletons take only options and logging.
 - **Module/plugin pattern:** `AddOmpWebDefaults` only; no plugin loading
   (packaged via `omp-components.json:5-25`,
-  `vajskrivare.module-definition.json`).
+  `tailwind.module-definition.json`).
 - **Hosted services:** none.
 - **Options:** both module options use the full chain
   `AddOptions<T>().Bind(...).Validate(...).ValidateOnStart()` with
@@ -359,50 +359,50 @@ registrations.
   consumption. One non-DI read for startup logging
   (`Program.cs:75`).
 - **HTTP clients:** none. Tests use `WebApplicationFactory` with a scoped
-  fake override (`tests/Skrivarkoppling.Web.Tests/ApiAnonymityTests.cs:36-39`).
+  fake override (`tests/PrintConnect.Web.Tests/ApiAnonymityTests.cs:36-39`).
 
-### iKrock2 (.NET 10, OMP module)
+### Globex (.NET 10, OMP module)
 
 - **Registration location:** the only consumer repo with a **module-level
-  registration extension**: `AddIKrock2Application(this IServiceCollection,
+  registration extension**: `AddGlobexApplication(this IServiceCollection,
   IConfiguration)`
-  (`iKrock2.Application/DependencyInjection/IKrock2ApplicationServiceCollectionExtensions.cs:10-57`,
+  (`Globex.Application/DependencyInjection/GlobexApplicationServiceCollectionExtensions.cs:10-57`,
   private service block `:59-75`), called by both hosts —
-  `iKrock2.Web/Program.cs:28` (after `AddOmpWebDefaults<IKrock2Resource>("Portal")`
-  `:13`) and `iKrock2.Backend/Program.cs` (`Host.CreateDefaultBuilder` +
+  `Globex.Web/Program.cs:28` (after `AddOmpWebDefaults<GlobexResource>("Portal")`
+  `:13`) and `Globex.Backend/Program.cs` (`Host.CreateDefaultBuilder` +
   `UseWindowsService` + `UseNLog`, `ConfigureServices` `:9-24`). Web adds
-  two scoped services (`IKrock2DataService` `:45`,
-  `IKrock2UserNameResolver` `:46`).
+  two scoped services (`GlobexDataService` `:45`,
+  `GlobexUserNameResolver` `:46`).
 - **Lifetimes:** twelve singletons in the extension (`:61-72`) — safe
   because repositories are stateless with per-call connections
-  (`iKrock2.Application/Services/SqlConnectionFactory.cs:35-40`) — plus
+  (`Globex.Application/Services/SqlConnectionFactory.cs:35-40`) — plus
   the two scoped web services (a deliberate per-request choice; both
   depend only on singletons). No captive dependencies.
 - **Module/plugin pattern:** `AddOmpWebDefaults`/`UseOmpWebDefaults`
-  (`iKrock2.Web/Program.cs:13,56`) + the module extension; no runtime
+  (`Globex.Web/Program.cs:13,56`) + the module extension; no runtime
   plugin loading.
 - **Extension methods:** exactly one — convention: file
   `{X}ServiceCollectionExtensions.cs` in a `DependencyInjection/` folder,
   method `Add{Product}Application`, returns `IServiceCollection`.
 - **Hosted services:** `WorkOrderBackgroundService : BackgroundService`
-  (`iKrock2.Backend/Services/WorkOrderBackgroundService.cs:11`),
-  registered `iKrock2.Backend/Program.cs:23`.
+  (`Globex.Backend/Services/WorkOrderBackgroundService.cs:11`),
+  registered `Globex.Backend/Program.cs:23`.
 - **Options:** `SqlServerOptions`, `WorkOrderOptions` and
   `OmpDatabaseOptions` all use
   `AddOptions<T>().Bind(...).Validate(...).ValidateOnStart()`
-  (`IKrock2ApplicationServiceCollectionExtensions.cs:14-54` — note
+  (`GlobexApplicationServiceCollectionExtensions.cs:14-54` — note
   `OmpDatabaseOptions` binds via a `Configure` lambda reading
   `GetConnectionString("OmpDb")` `:47-50` instead of a section);
-  `MLLPerformanceOptions` validated in `iKrock2.Web/Program.cs:29-44`.
+  `MLLPerformanceOptions` validated in `Globex.Web/Program.cs:29-44`.
   **Divergence:** `BackendOptions` is `Configure<T>` only, unvalidated,
   and appears dead — no `IOptions<BackendOptions>` consumer exists
-  (`iKrock2.Backend/Program.cs:21`,
-  `iKrock2.Backend/Options/BackendOptions.cs:3`). (Note:
+  (`Globex.Backend/Program.cs:21`,
+  `Globex.Backend/Options/BackendOptions.cs:3`). (Note:
   `configuration.md` predates the validation chains; they are present
   now.)
 - **HTTP clients:** none. One deliberate service-locator exception:
-  `HttpContext.RequestServices.GetRequiredService<IKrock2UserNameResolver>()`
-  in the page-model base (`iKrock2.Web/Pages/IKrock2PageModel.cs:36-39`).
+  `HttpContext.RequestServices.GetRequiredService<GlobexUserNameResolver>()`
+  in the page-model base (`Globex.Web/Pages/GlobexPageModel.cs:36-39`).
 
 ### ODVGateway (.NET 10 minimal API, OMP module by packaging only, no database)
 
@@ -441,42 +441,42 @@ registrations.
 | Repo | Registration location | Lifetimes | Extension methods | Hosted services | Options pattern | HTTP clients |
 |---|---|---|---|---|---|---|
 | OpenModulePlatform | Hub extension (`OmpWebHostingExtensions`) + inline per host | Scoped web services + singleton infra; services all-singleton; 1 transient (`IClaimsTransformation`) | `AddOmp*`/`UseOmp*` on `WebApplicationBuilder`/`IServiceCollection` in `Extensions/` | 5 `BackgroundService` (push dispatcher, WorkerManager, WorkerProcess, HostAgent ×2, MaintenanceScan) | `ValidateOnStart` for web options and all three service settings (validators adapt the retained `Validate()` rules); `IOptionsMonitor` in long-lived services | Named clients in HostAgent only (`"PortalHealth"` ×2) |
-| IbsPackager | Module extension (`AddIbsPackagerServices`) + thin `Program.cs` | All singleton (3) | `AddIbsPackagerServices` (`DependencyInjection/`) | None | OMP-validated `WebAppOptions`; `OpenDocViewerOptions` validated; worker manual binding + startup `Validate()` | None |
-| LogSearch | Inline per host + shared options extension | All singleton; concrete+interface forwarding in Service only | `AddLogSearchOptions` (`*OptionsServiceCollectionExtensions.cs`) | 1 (`LogSearchWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>` — exemplary | None |
-| EArkivChecker | Inline, **duplicated block** across 2 hosts | All singleton; concrete+interface forwarding in Service only | `AddEArkivCheckerOptions` (same convention as LogSearch) | 1 (`EArkivCheckerWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>`; eager `.Value` snapshots defeat `reloadOnChange` | None |
-| Dokumentbibliotek | Inline `Program.cs` | Scoped data services + singleton infra (OMP-web mix) | None (endpoint-mapping ext only) | None (imperative startup migration) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>`; deliberate `IOptions`/`IOptionsMonitor` split | None |
-| VajSkrivare | Inline `Program.cs` | Interface-based; scoped data layer + singleton stores | None in repo | None | `AddOptions+Bind+Validate(...)+ValidateOnStart` (delegates) for both module options | None |
-| iKrock2 | **Module extension** `AddIKrock2Application` + small inline per host | 12 singletons (extension) + 2 scoped (Web) | `AddIKrock2Application` (`DependencyInjection/{X}ServiceCollectionExtensions.cs`) | 1 (`WorkOrderBackgroundService`) | `ValidateOnStart` for 4 types; `BackendOptions` unvalidated **and dead** | None |
+| Contoso | Module extension (`AddContosoServices`) + thin `Program.cs` | All singleton (3) | `AddContosoServices` (`DependencyInjection/`) | None | OMP-validated `WebAppOptions`; `OpenDocViewerOptions` validated; worker manual binding + startup `Validate()` | None |
+| Fabrikam | Inline per host + shared options extension | All singleton; concrete+interface forwarding in Service only | `AddFabrikamOptions` (`*OptionsServiceCollectionExtensions.cs`) | 1 (`FabrikamWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>` — exemplary | None |
+| Northwind | Inline, **duplicated block** across 2 hosts | All singleton; concrete+interface forwarding in Service only | `AddNorthwindOptions` (same convention as Fabrikam) | 1 (`NorthwindWorker`) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>`; eager `.Value` snapshots defeat `reloadOnChange` | None |
+| AdventureWorks | Inline `Program.cs` | Scoped data services + singleton infra (OMP-web mix) | None (endpoint-mapping ext only) | None (imperative startup migration) | `AddOptions+Bind+ValidateOnStart` + `IValidateOptions<T>`; deliberate `IOptions`/`IOptionsMonitor` split | None |
+| Tailwind | Inline `Program.cs` | Interface-based; scoped data layer + singleton stores | None in repo | None | `AddOptions+Bind+Validate(...)+ValidateOnStart` (delegates) for both module options | None |
+| Globex | **Module extension** `AddGlobexApplication` + small inline per host | 12 singletons (extension) + 2 scoped (Web) | `AddGlobexApplication` (`DependencyInjection/{X}ServiceCollectionExtensions.cs`) | 1 (`WorkOrderBackgroundService`) | `ValidateOnStart` for 4 types; `BackendOptions` unvalidated **and dead** | None |
 | ODVGateway | Inline `Program.cs` only | All singleton (9) | None | None | `Configure<T>` + manual pre-build validation; no `ValidateOnStart`; mixed `IOptions`/`IOptionsMonitor` | 1 named client, unconfigured |
 
 Key divergences:
 
 1. **Three registration styles coexist.** (a) Centralized extension:
-   OMP Web.Shared (`AddOmpWebDefaults`), iKrock2 (`AddIKrock2Application`),
-   IbsPackager (`AddIbsPackagerServices`), LogSearch/EArkivChecker
+   OMP Web.Shared (`AddOmpWebDefaults`), Globex (`AddGlobexApplication`),
+   Contoso (`AddContosoServices`), Fabrikam/Northwind
    (options-only extensions). (b) Fully inline
-   `Program.cs`: Dokumentbibliotek, VajSkrivare, ODVGateway,
+   `Program.cs`: AdventureWorks, Tailwind, ODVGateway,
    and all OMP service hosts. (c) Duplicated inline blocks across sibling
-   hosts: EArkivChecker (Web/Service share an identical block).
+   hosts: Northwind (Web/Service share an identical block).
 2. **Lifetime philosophy splits the fleet.** Scoped per-request data
-   access (OMP web, Dokumentbibliotek, VajSkrivare) vs all-singleton with
-   stateless services and per-call connections (IbsPackager, LogSearch,
-   EArkivChecker, iKrock2 Application, ODVGateway, OMP services). Both are
+   access (OMP web, AdventureWorks, Tailwind) vs all-singleton with
+   stateless services and per-call connections (Contoso, Fabrikam,
+   Northwind, Globex Application, ODVGateway, OMP services). Both are
    internally consistent and free of captive dependencies, but a module
    copying patterns across repos can pick the wrong one for its shape.
 3. **Concrete vs interface registration is inconsistent even within one
-   repo.** LogSearch and EArkivChecker register interfaces (with
+   repo.** Fabrikam and Northwind register interfaces (with
    forwarding) only in their Service hosts while their Web hosts inject
-   concretes; IbsPackager/iKrock2 inject concretes everywhere;
-   VajSkrivare/Dokumentbibliotek are interface-based throughout.
+   concretes; Contoso/Globex inject concretes everywhere;
+   Tailwind/AdventureWorks are interface-based throughout.
 4. **Options validation coverage is the widest gap.** `ValidateOnStart` is
    present for: OMP `WebAppOptions`, `OmpAuthOptions`,
    `ArtifactUploadOptions`, `ContentWebAppModuleOptions`, all OMP service
    settings (`HostAgentSettings`, `WorkerManagerSettings`,
    `WorkerProcessSettings` — singleton `IValidateOptions<T>` adapters over
    the retained `Validate()` methods the no-DI Bootstrapper still calls
-   directly), LogSearch, EArkivChecker, Dokumentbibliotek, VajSkrivare,
-   iKrock2 (4 of 5 types), IbsPackager (`OpenDocViewerOptions`; its
+   directly), Fabrikam, Northwind, AdventureWorks, Tailwind,
+   Globex (4 of 5 types), Contoso (`OpenDocViewerOptions`; its
    `HostAgentRpcOptions` keeps manual binding with `Validate()` at worker
    startup).
    Missing for: OMP push-event options (deliberate — out-of-range values
@@ -486,27 +486,27 @@ Key divergences:
    consumers in monitor-based services (`ContentTypeMapper.cs:10` in
    ODVGateway); `WorkerProcessHostedService.cs:31` keeps `IOptions<T>`
    deliberately (settings are static for the child-process lifetime);
-   EArkivChecker snapshots `.Value` everywhere despite
+   Northwind snapshots `.Value` everywhere despite
    `reloadOnChange: true` on its JSON overlays.
 6. **HTTP clients barely exist.** Only OMP HostAgent (two named clients,
    one with a custom TLS handler) and ODVGateway (one named client with no
    configuration). Every other repo has no outbound HTTP.
 7. **Extension naming has three local conventions** — `AddOmp*`
    (platform), `Add<Feature>Options` in
-   `<Feature>OptionsServiceCollectionExtensions.cs` (LogSearch,
-   EArkivChecker), `Add{Product}Application` in
-   `DependencyInjection/{X}ServiceCollectionExtensions.cs` (iKrock2) —
+   `<Feature>OptionsServiceCollectionExtensions.cs` (Fabrikam,
+   Northwind), `Add{Product}Application` in
+   `DependencyInjection/{X}ServiceCollectionExtensions.cs` (Globex) —
    plus repos with no extensions at all.
-8. **Notable single-instance smells:** iKrock2's dead `BackendOptions`
-   registration; Dokumentbibliotek's duplicated `AddMemoryCache()`;
-   ODVGateway's unconfigured named HttpClient. (Resolved: IbsPackager's
+8. **Notable single-instance smells:** Globex's dead `BackendOptions`
+   registration; AdventureWorks's duplicated `AddMemoryCache()`;
+   ODVGateway's unconfigured named HttpClient. (Resolved: Contoso's
    `SqlConnectionFactory` name collision — renamed to
-   `IbsPackagerConnectionFactory`.)
+   `ContosoConnectionFactory`.)
 
 ## 3. Recommended standard pattern
 
-The recommended pattern generalizes what OMP Web.Shared, LogSearch,
-EArkivChecker (options) and iKrock2 (module services) already do. It
+The recommended pattern generalizes what OMP Web.Shared, Fabrikam,
+Northwind (options) and Globex (module services) already do. It
 optimizes for: one obvious place to look per host, no duplicated
 registration blocks, fail-fast configuration, and lifetimes that match the
 host shape.
@@ -530,13 +530,13 @@ host shape.
   extension from the shared Runtime/Application library, plus
   `AddHostedService<{Module}Worker>()`. Both hosts of a module must share
   the extension so registration blocks are never duplicated
-  (EArkivChecker is the counter-example today).
+  (Northwind is the counter-example today).
 - **Extension placement and naming:** put extensions in the module's
   Runtime/Application library (so every host can call them), in a file
   named `{Module}ServiceCollectionExtensions.cs` (optionally under a
-  `DependencyInjection/` folder for larger modules, iKrock2 style).
+  `DependencyInjection/` folder for larger modules, Globex style).
   Methods: `Add{Module}Services` for the service block,
-  `Add{Module}Options` for options-only composition (LogSearch style);
+  `Add{Module}Options` for options-only composition (Fabrikam style);
   return `IServiceCollection`/`OptionsBuilder<T>` for chaining. Platform
   cross-cutting extensions keep the `AddOmp*`/`UseOmp*` prefix on
   `WebApplicationBuilder` in `OpenModulePlatform.Web.Shared/Extensions/`.
@@ -544,20 +544,20 @@ host shape.
 ### 3.2 Lifetime conventions
 
 - **Scoped** — default for per-request data-access and business services
-  in web apps (OMP Web.Shared `:182-188`, Dokumentbibliotek, VajSkrivare
+  in web apps (OMP Web.Shared `:182-188`, AdventureWorks, Tailwind
   model). Razor Pages, minimal-API handlers and controllers are scoped
   consumers.
 - **Singleton** — stateless infrastructure (connection factories,
   validators, hashers), caches and process-wide coordination state
-  (`DocumentLibrarySchemaCache`, `JsonZebraConfigStore`), and **everything
+  (`AdventureWorksSchemaCache`, `JsonZebraConfigStore`), and **everything
   in plain worker/Windows-Service hosts** where there are no requests and
   services are stateless with per-call connections (WorkerManager,
-  HostAgent, LogSearch.Service model).
+  HostAgent, Fabrikam.Service model).
 - **Transient** — rare; framework contracts that require it
   (`IClaimsTransformation`) and short-lived per-resolution objects.
 - **Never let a singleton capture a scoped service.** Bridge with
   `IServiceProvider`/`IServiceScopeFactory` + `CreateScope()` at the point
-  of use (`DocumentLibrarySchemaCache.cs:53-54` is the reference).
+  of use (`AdventureWorksSchemaCache.cs:53-54` is the reference).
 - When both a concrete type and its interface must resolve to one
   instance, register the concrete first and forward the interface:
   `AddSingleton<Foo>(); AddSingleton<IFoo>(sp => sp.GetRequiredService<Foo>())`
@@ -577,9 +577,9 @@ services.AddOptions<TOptions>()
 ```
 
 - Prefer an `IValidateOptions<TOptions>` implementation (registered as
-  singleton) for cross-field or non-trivial rules (LogSearch/EArkivChecker
+  singleton) for cross-field or non-trivial rules (Fabrikam/Northwind
   model); inline `Validate(...)` delegates are fine for simple rules
-  (VajSkrivare/iKrock2 model). `ValidateOnStart()` is **required** — fail
+  (Tailwind/Globex model). `ValidateOnStart()` is **required** — fail
   at startup, not at first use.
 - Consume `IOptions<T>` by default. Use `IOptionsMonitor<T>` only in
   singletons that must observe reloads — and then use it consistently
@@ -632,72 +632,72 @@ SPI, HostAgent) already teaches.
 - Priority: Low (options validation complete; only the Portal inline
   block remains).
 
-### IbsPackager (Low)
+### Contoso (Low)
 
-- Current: `AddIbsPackagerServices` extension in `IbsPackager.Runtime`
+- Current: `AddContosoServices` extension in `Contoso.Runtime`
   (thin `Program.cs`: shared defaults + options + module extension);
   `OpenDocViewerOptions` on `AddOptions+Bind+ValidateOnStart` (minimal
   non-empty `BaseUrl` rule); module factory renamed to
-  `IbsPackagerConnectionFactory` (collision removed); worker keeps manual
+  `ContosoConnectionFactory` (collision removed); worker keeps manual
   `HostAgentRpcOptions` binding but calls `Validate()` at startup.
-- Decision (applied): keep `IbsPackagerRepository` singleton per §3.2 —
+- Decision (applied): keep `ContosoRepository` singleton per §3.2 —
   sealed and stateless with per-call connections; the worker plugin
-  constructs it manually (`IbsPackagerWorkerFactory.cs:20-21`) and
+  constructs it manually (`ContosoWorkerFactory.cs:20-21`) and
   channel-type factories resolve it scope-free
   (`FileDropChannelTypeFactory.cs:237`), so a scoped registration would
   break those paths and buy nothing. Recorded in a comment at the
-  registration site (`IbsPackagerServiceCollectionExtensions.cs`).
+  registration site (`ContosoServiceCollectionExtensions.cs`).
 - Migration: none remaining.
 - Priority: Low (complete).
 
-### LogSearch (Low)
+### Fabrikam (Low)
 
 - Current: exemplary options pattern; only inconsistency is
   interface-forwarding in Service vs concrete-only injection in Web.
 - Migration: pick one style (concrete-only is fine given fakes exist) and
   apply to both hosts; optionally fold the two singleton registrations
-  into `AddLogSearchServices`.
+  into `AddFabrikamServices`.
 - Priority: Low.
 
-### EArkivChecker (Low)
+### Northwind (Low)
 
 - Current: identical registration block duplicated across Web and Service;
   eager `.Value` snapshots make `reloadOnChange` inert; same
-  concrete/interface split as LogSearch.
-- Migration: extract `AddEArkivCheckerRuntime` in `EArkivChecker.Runtime`
+  concrete/interface split as Fabrikam.
+- Migration: extract `AddNorthwindRuntime` in `Northwind.Runtime`
   and call it from both hosts; either switch long-lived consumers to
   `IOptionsMonitor<T>` or drop `reloadOnChange: true`; unify
   concrete/interface style.
 - Priority: Low.
 
-### Dokumentbibliotek (Low)
+### AdventureWorks (Low)
 
 - Current: already close to the standard (validated options, scoped data
   services, correct scope bridging); registrations are a flat inline list;
   duplicated `AddMemoryCache()` call.
-- Migration: extract `AddDokumentBibliotekServices`; remove the redundant
+- Migration: extract `AddAdventureWorksServices`; remove the redundant
   `AddMemoryCache()`; keep the deliberate `IOptions`/`IOptionsMonitor`
   split but document it.
 - Priority: Low.
 
-### VajSkrivare (Low)
+### Tailwind (Low)
 
 - Current: near-standard — interface-based scoped data layer, both options
   fully validated; only the missing module extension and one non-DI
   options read for startup logging.
-- Migration: extract `AddSkrivarkopplingServices`; route the startup-log
+- Migration: extract `AddPrintConnectServices`; route the startup-log
   read through the bound options.
 - Priority: Low.
 
-### iKrock2 (Medium)
+### Globex (Medium)
 
-- Current: the model repo for module extensions (`AddIKrock2Application`);
+- Current: the model repo for module extensions (`AddGlobexApplication`);
   validation on 4 of 5 options types; `BackendOptions` is unvalidated and
   dead; scoped web services depend only on singletons (deliberate but
   unremarked).
 - Migration: delete the dead `BackendOptions` registration (or wire and
   validate it); add `ValidateOnStart` if it is revived; document why
-  `IKrock2DataService`/`IKrock2UserNameResolver` are scoped.
+  `GlobexDataService`/`GlobexUserNameResolver` are scoped.
 - Priority: Medium (dead config misleads operators; otherwise low).
 
 ### ODVGateway (Low)

@@ -80,7 +80,7 @@ The canonical helper keeps everything in sync in one pass: it bumps
 module-definition `definitionVersion` values, referenced dashboard widget
 package versions, and each affected `compatibleArtifacts.maxVersion` in the
 module definitions. The `maxVersion` sync is not optional: the 2026-08-18
-IbsPackager import failure showed that a stale cap makes the host reject the
+Contoso import failure showed that a stale cap makes the host reject the
 produced artifact at import time.
 
 For a double-click workflow, use `scripts/omp/bump-version.cmd`. It launches the

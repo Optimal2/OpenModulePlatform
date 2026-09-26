@@ -42,8 +42,8 @@ independently.
 On a local install a FileDrop channel (`local_file_drop_test`) threw a
 `MissingMethodException`. The deployed set was mixed: the web app and worker
 had been bumped (to `0.3.30` / `0.3.18`) but the deployed
-`IbsPackager.ChannelTypes.FileDrop` runtime remained an older binary built
-against a previous `IbsPackager.Runtime`. The channel assembly loaded, but the
+`Contoso.ChannelTypes.FileDrop` runtime remained an older binary built
+against a previous `Contoso.Runtime`. The channel assembly loaded, but the
 method signature it expected no longer existed in the newer shared runtime.
 
 The immediate fix is an **operator redeploy** (rebuild and deploy a mutually
@@ -169,9 +169,9 @@ declares one or more **consistent artifact sets** for the module. Example shape:
       "setKey": "default",
       "description": "Mutually consistent web, service, and FileDrop runtime.",
       "expectedArtifacts": [
-        { "appKey": "ibs_packager_web", "packageType": "web-app", "targetName": "ibs-packager-web" },
-        { "appKey": "ibs_packager_worker", "packageType": "worker", "targetName": "ibs-packager-worker" },
-        { "appKey": "ibs_packager_filedrop", "packageType": "channel-type", "targetName": "filedrop" }
+        { "appKey": "contoso_web", "packageType": "web-app", "targetName": "contoso-web" },
+        { "appKey": "contoso_worker", "packageType": "worker", "targetName": "contoso-worker" },
+        { "appKey": "contoso_filedrop", "packageType": "channel-type", "targetName": "filedrop" }
       ],
       "versionMatchRule": "exact"
     }
@@ -203,7 +203,7 @@ Extend `omp-artifact-package.json` to include build provenance:
     "repositoryVersion": "0.3.242",
     "buildId": "20260713.1",
     "builtAgainst": {
-      "IbsPackager.Runtime": "0.3.30"
+      "Contoso.Runtime": "0.3.30"
     }
   }
 }
