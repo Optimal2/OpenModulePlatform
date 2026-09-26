@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Services/PortalDashboardService.cs
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
@@ -36,11 +37,16 @@ public sealed class PortalDashboardService
 
     private readonly SqlConnectionFactory _db;
     private readonly AppCatalogService _catalog;
+    private readonly ILogger<PortalDashboardService> _logger;
 
-    public PortalDashboardService(SqlConnectionFactory db, AppCatalogService catalog)
+    public PortalDashboardService(
+        SqlConnectionFactory db,
+        AppCatalogService catalog,
+        ILogger<PortalDashboardService> logger)
     {
         _db = db;
         _catalog = catalog;
+        _logger = logger;
     }
 
     public async Task<DashboardPreferences> GetPreferencesAsync(int userId, CancellationToken ct)
@@ -150,6 +156,20 @@ ORDER BY uaw.order_priority,
             if (!definitions.TryGetValue(widgetId, out var definition))
             {
                 continue;
+            }
+
+            if (!ModuleFragmentWidget.IsModuleFragment(definition.WidgetType)
+                && !IsKnownPortalPayload(definition.Payload))
+            {
+                // A widget row whose payload the Portal no longer renders (for example a
+                // module-owned dashboard widget that moved to its own module repository)
+                // is kept but ignored: it renders as an empty widget and is logged at
+                // Debug so the operator can clean up the orphaned row if desired.
+                _logger.LogDebug(
+                    "Dashboard widget '{WidgetKey}' (widget_id {WidgetId}) has an unrecognized payload '{Payload}' and renders as an empty widget.",
+                    definition.WidgetKey,
+                    widgetId,
+                    definition.Payload);
             }
 
             widgets.Add(new DashboardActiveWidget
@@ -810,6 +830,16 @@ ORDER BY w.title,
         cmd.Parameters.Add("@content_scale", SqlDbType.Int).Value = Clamp(update.ContentScale, MinWidgetContentScale, MaxWidgetContentScale);
         cmd.Parameters.Add("@hide_titlebar_when_viewing", SqlDbType.Bit).Value = update.HideTitlebarWhenViewing;
     }
+
+    private static bool IsKnownPortalPayload(string? payload)
+        => payload switch
+        {
+            "admin-overview" or "blank-rectangle" or "portal-entry-favorites" or "portal-entry-list"
+                or "portal-entry-combolist" or "portal-navbar-links" or "notification-feed"
+                or "message-conversations" or "content-pages" or "user-roles" or "music-player"
+                or "weekday-date" => true,
+            _ => false
+        };
 
     internal static int GetDefaultWidgetWidth(DashboardWidgetDefinition definition)
     {
