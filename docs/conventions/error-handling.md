@@ -449,8 +449,8 @@ This document summarizes how each repository currently handles errors, highlight
 
 #### Custom exception types
 - `SourcePackPayloadTooLargeException` (inherits `InvalidOperationException`) — `src/ODVGateway/Program.cs:1341`.
-- `InvalidDataException` for empty/malformed prep payload — `src/ODVGateway/Services/WebClientPrepReader.cs:27`, `:31`, `:59`.
-- `InvalidDataException` for empty decoded sessiondata — `src/ODVGateway/Services/WebClientSessionDataDecoder.cs:24`.
+- `InvalidDataException` for empty/malformed prep payload — the external viewer prep-payload reader (see the ODVGateway repository documentation).
+- `InvalidDataException` for empty decoded sessiondata — the external viewer session-data decoder.
 - `InvalidOperationException` for startup `TrustedSourceRoots` validation failures — `src/ODVGateway/Program.cs:1248`, `:1252`.
 
 #### Try/catch patterns
@@ -477,8 +477,8 @@ This document summarizes how each repository currently handles errors, highlight
 #### Result/Either pattern
 - Lightweight result records:
   - `GatewaySessionStoreResult` — `src/ODVGateway/Services/GatewaySessionStore.cs:237`.
-  - `HandoffGuardResult` — `src/ODVGateway/Services/WebClientHandoffGuard.cs:164`.
-  - `WebClientFallbackUrlResult` — `src/ODVGateway/Services/WebClientFallbackUrlBuilder.cs:13`.
+  - `HandoffGuardResult` — the external viewer handoff guard.
+  - The fallback URL result record — the external viewer fallback URL builder.
   - `SourcePackPayload` record with `Ok`/`Error`/`Bytes`/`ContentStream` — `src/ODVGateway/Program.cs:1349`.
 - No `OneOf`, `FluentResults`, `Either`, `Try<T>`, or discriminated-union libraries.
 

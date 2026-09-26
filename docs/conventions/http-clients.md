@@ -207,12 +207,12 @@ Repositories audited:
 - Config: `RequestTimeoutMs` default 15 s, `RetryCount` default 2, `RetryBaseDelayMs` default 150 (`Options/ODVGatewayOptions.cs:116-120`).
 - Retryable status codes helper: `IsRetryableProxyStatusCode` (`Program.cs:1265-1270`) — `408`, `429`, `>=500`.
 - Linear backoff helper: `DelayProxyRetryAsync` (`Program.cs:1257-1263`).
-- Concurrency limiter only for WebClient source proxy (`Services/WebClientSourceProxyLimiter.cs`, default 14).
+- Concurrency limiter only for the external viewer source proxy (default 14; see the ODVGateway repository documentation).
 
 **Base URL configuration**
 - No hardcoded remote endpoints.
-- WebClient fallback URL template configurable (`Options/ODVGatewayOptions.cs:64`, `appsettings.json:35`).
-- `WebClientFallbackUrlBuilder.cs:45-70` resolves template against current request scheme/host/path.
+- The external viewer fallback URL template is configurable (`Options/ODVGatewayOptions.cs:64`, `appsettings.json:35`).
+- The fallback URL builder resolves the template against the current request scheme/host/path (see the ODVGateway repository documentation).
 - Same-host guard: `RequireSameHost` default `true`, `AllowedHosts` (`Options/ODVGatewayOptions.cs:56-58`).
 
 **Authentication headers**
@@ -222,7 +222,7 @@ Repositories audited:
 
 **JSON serialization**
 - System.Text.Json only.
-- `WebClientPrepReader.cs:9-12`, `WebClientSessionDataDecoder.cs:9-12`, `OpenDocViewerIndexRenderer.cs:9-15`.
+- The external viewer prep-payload reader and session-data decoder, and `OpenDocViewerIndexRenderer.cs:9-15`.
 - Custom `FlexibleStringJsonConverter.cs`.
 
 **Error handling**
