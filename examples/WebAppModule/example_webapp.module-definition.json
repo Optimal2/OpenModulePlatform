@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_webapp",
-  "definitionVersion": "0.3.155",
+  "definitionVersion": "0.3.156",
   "module": {
     "displayName": "Example WebApp",
     "moduleType": "WebAppModule",
@@ -27,7 +27,7 @@
       "targetName": "example-webapp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.305"
+      "maxVersion": "0.3.306"
     }
   ],
   "sqlScripts": [
@@ -150,7 +150,7 @@
         "schema": "omp_example_webapp",
         "name": "RuntimeWorkerLeases",
         "source": "examples/WebAppModule/Sql/1-setup-example-webapp.sql",
-        "purpose": "Example runtime leases keyed by the platform's WorkerInstanceId, released through omp.WorkerInstances."
+        "purpose": "Example runtime leases keyed by the platform\u0027s WorkerInstanceId, released through omp.WorkerInstances."
       }
     ],
     "requiredOmpRows": {
