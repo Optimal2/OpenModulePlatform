@@ -955,6 +955,27 @@ keys (see "Foreign key conflicts from a module table" and "Upgrade order").
 module schema in every quoting form (`omp_x.T`, `[omp_x].[T]`, `[ omp_x ].T`,
 `omp_x.[T]`).
 
+## Module-fragment dashboard widgets
+
+A module can declare a `module-fragment` dashboard widget whose payload names an
+HTML fragment the module serves itself; the Portal fetches that fragment
+server-side with the user's OMP cookies and embeds the sanitized markup. A
+fragment endpoint therefore has one extra requirement beyond an ordinary module
+page: it must answer **401** for a request without a valid OMP cookie, not
+redirect to the login page. The Portal's server-side fetch treats a redirect as
+"unavailable" and shows the neutral placeholder, so a 302 would hide "not signed
+in" behind "not signed in or no permission" and leave the widget dead even when
+the user is only not logged in.
+
+The shared web defaults install a fallback authorization policy that redirects
+unauthenticated requests to the login page before a page model runs. A fragment
+page therefore marks its page model `[AllowAnonymous]` to opt out of that
+redirect and enforces the permission itself in its handler: return
+`Unauthorized()` (401) when the user is not authenticated and `Forbid()` when a
+signed-in user lacks the permission. The example web app module's
+`examples/WebAppModule/WebApp/Pages/Widgets/Overview.cshtml.cs` is the reference
+implementation.
+
 ## Compatibility Policy
 
 Compatibility ranges are not release automation. They are guard rails for
@@ -1041,6 +1062,12 @@ Applying a definition can temporarily make currently selected artifacts
 incompatible. Portal blocks that by default and shows the affected references.
 The admin can explicitly allow the temporary mismatch when the next operational
 step is to upload or select the matching artifact versions.
+
+Dashboard widget rows whose payload the Portal no longer recognizes (for example
+a widget that moved to its own module repository) are kept intentionally: they
+render as an empty widget and are logged at Debug level, once per row per
+process. The Portal does not auto-clean them; an operator can remove them
+manually under Admin → DashboardWidgets.
 
 ## Compatibility Example
 
