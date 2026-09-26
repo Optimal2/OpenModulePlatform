@@ -25,43 +25,51 @@ public sealed class ExampleWidgetFragmentTests(
         Skip.IfNot(playwright.Available, playwright.UnavailableReason);
         Skip.IfNot(app.Available, app.UnavailableReason);
 
-        await using var context = await playwright.Browser!.NewContextAsync();
-        var page = await context.NewPageAsync();
-        var response = await page.GotoAsync(
-            app.BaseUrl + "/widgets/overview",
-            new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-        Assert.NotNull(response);
-        Assert.True(response.Status == 200, $"/widgets/overview answered {response.Status}, expected 200");
-
-        var html = await page.ContentAsync();
-        Assert.Contains("Example Web App Module", html, StringComparison.Ordinal);
-        Assert.Contains("Active configurations", html, StringComparison.Ordinal);
-        Assert.Contains("Open configurations", html, StringComparison.Ordinal);
-
-        // The fragment links are relative so the Portal can rewrite them against the
-        // module's own address; an absolute or protocol-relative link would escape.
-        var hrefs = await page.EvalOnSelectorAllAsync<string[]>(
-            "a[href]",
-            "els => els.map(e => e.getAttribute('href'))");
-        Assert.True(hrefs.Length > 0, "the widget renders no links");
-        foreach (var href in hrefs)
+        // The fragment must carry the same culture-independent markers in every
+        // supported locale: the server renders localized text (sv-SE by default), so
+        // asserting English strings would fail on a sv-SE machine. Assert the element
+        // structure and data attributes the Portal depends on instead, once per locale.
+        foreach (var locale in new[] { "en-US", "sv-SE" })
         {
-            Assert.False(
-                href.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-                    || href.StartsWith("//", StringComparison.Ordinal),
-                $"the widget emitted a non-relative link: {href}");
-        }
+            await using var context = await playwright.Browser!.NewContextAsync(
+                new BrowserNewContextOptions { Locale = locale });
+            var page = await context.NewPageAsync();
+            var response = await page.GotoAsync(
+                app.BaseUrl + "/widgets/overview",
+                new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+            Assert.NotNull(response);
+            Assert.True(response.Status == 200, $"/widgets/overview answered {response.Status}, expected 200");
 
-        // Nothing the Portal sanitizer would strip may come from the fragment itself.
-        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("<iframe", html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("javascript:", html, StringComparison.OrdinalIgnoreCase);
-        var onAttributes = await page.EvalOnSelectorAllAsync<string[]>(
-            "*",
-            "els => els.flatMap(e => [...e.attributes].map(a => a.name).filter(n => n.toLowerCase().startsWith('on')))");
-        Assert.True(
-            onAttributes.Length == 0,
-            "the widget emitted inline event handlers:\n - " + string.Join("\n - ", onAttributes));
+            var html = await page.ContentAsync();
+            Assert.Contains("class=\"example-widget\"", html, StringComparison.Ordinal);
+            Assert.Contains("data-module-key=\"example_webapp\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"configurations\"", html, StringComparison.Ordinal);
+
+            // The fragment links are relative so the Portal can rewrite them against the
+            // module's own address; an absolute or protocol-relative link would escape.
+            var hrefs = await page.EvalOnSelectorAllAsync<string[]>(
+                "a[href]",
+                "els => els.map(e => e.getAttribute('href'))");
+            Assert.True(hrefs.Length > 0, "the widget renders no links");
+            foreach (var href in hrefs)
+            {
+                Assert.False(
+                    href.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                        || href.StartsWith("//", StringComparison.Ordinal),
+                    $"the widget emitted a non-relative link: {href}");
+            }
+
+            // Nothing the Portal sanitizer would strip may come from the fragment itself.
+            Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<iframe", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("javascript:", html, StringComparison.OrdinalIgnoreCase);
+            var onAttributes = await page.EvalOnSelectorAllAsync<string[]>(
+                "*",
+                "els => els.flatMap(e => [...e.attributes].map(a => a.name).filter(n => n.toLowerCase().startsWith('on')))");
+            Assert.True(
+                onAttributes.Length == 0,
+                "the widget emitted inline event handlers:\n - " + string.Join("\n - ", onAttributes));
+        }
     }
 
     [SkippableFact]
