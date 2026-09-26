@@ -30,6 +30,29 @@ public sealed class ModuleRuntimeMaintenanceTests
             Assert.Equal("example_webapp", step.ModuleKey);
             Assert.Equal("omp_example_webapp", step.SchemaName);
         });
+
+        // Module rows keyed by the platform's WorkerInstanceId reach the removed host or app
+        // instance through the platform read allow-list.
+        Assert.Contains("FROM omp.WorkerInstances WHERE HostId = @HostId", Single(steps, ModuleRuntimeMaintenance.HostRemoved).Sql, StringComparison.Ordinal);
+        Assert.Contains("FROM omp.WorkerInstances WHERE AppInstanceId = @AppInstanceId", Single(steps, ModuleRuntimeMaintenance.AppInstanceRemoved).Sql, StringComparison.Ordinal);
+    }
+
+    private static ModuleRuntimeMaintenance.Step Single(IEnumerable<ModuleRuntimeMaintenance.Step> steps, string eventName)
+        => Assert.Single(steps, step => step.Event == eventName);
+
+    [Fact]
+    public void ReadablePlatformTables_AreExactlyTheDocumentedAllowList()
+    {
+        var actual = ModuleRuntimeMaintenance.ReadablePlatformTables
+            .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+            .Select(static pair => $"{pair.Key} ({string.Join(", ", pair.Value.Order(StringComparer.Ordinal))})");
+
+        Assert.Equal(
+            [
+                "omp.AppInstances (AppInstanceId, ArtifactId, HostId)",
+                "omp.WorkerInstances (AppInstanceId, ArtifactId, HostId, WorkerInstanceId)",
+            ],
+            actual);
     }
 
     [Fact]
@@ -99,7 +122,6 @@ END;"
             { "platform table write", notGuard, ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'omp.WorkerInstances', N'U') IS NOT NULL DELETE FROM omp.WorkerInstances WHERE HostId = @HostId;" },
             { "other module write", notGuard, ModuleRuntimeMaintenance.HostRemoved, "IF OBJECT_ID(N'other_module.Leases', N'U') IS NOT NULL DELETE FROM other_module.Leases WHERE HostId = @HostId;" },
             { "other module read", "may only reference the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE HostId IN (SELECT h.HostId FROM other_module.Hosts h WHERE h.HostId = @HostId);" },
-            { "platform read", "may only reference the module schema", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.Leases WHERE WorkerId IN (SELECT w.WorkerInstanceId FROM omp.WorkerInstances w WHERE w.HostId = @HostId);" },
             { "no OBJECT_ID guard", "is not allowed at the top level", ModuleRuntimeMaintenance.HostRemoved, $"DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
             { "IS NULL guard", notGuard, ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NULL DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
             { "OR guard", notGuard, ModuleRuntimeMaintenance.HostRemoved, $"IF OBJECT_ID(N'{Schema}.Leases', N'U') IS NOT NULL OR 1 = 1 DELETE FROM {Schema}.Leases WHERE HostId = @HostId;" },
@@ -193,6 +215,82 @@ END;"
     [Theory]
     [MemberData(nameof(Bypasses))]
     public void RoundThreeBypass_IsRejected(string description, string expectedReason, string eventName, string sql)
+    {
+        var error = ModuleRuntimeMaintenance.ValidateStepSql(sql, Schema, ModuleRuntimeMaintenance.Events[eventName]);
+
+        Assert.True(error is not null, $"Expected '{description}' to be rejected.");
+        Assert.Contains(expectedReason, error, StringComparison.Ordinal);
+    }
+
+    // Round 4: module tables keyed by the platform's WorkerInstanceId find their rows through one
+    // allow-listed platform table in the IN subquery. Round 3 refused every platform reference.
+    public static TheoryData<string, string, string> PlatformReads()
+    {
+        const string guard = $"IF OBJECT_ID(N'{Schema}.WorkerLeases', N'U') IS NOT NULL ";
+        return new()
+        {
+            { "host-removed via WorkerInstances", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId);" },
+            { "app-instance-removed via WorkerInstances", ModuleRuntimeMaintenance.AppInstanceRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @AppInstanceId);" },
+            { "alias-qualified UPDATE", ModuleRuntimeMaintenance.HostRemoved, guard + $"UPDATE {Schema}.WorkerLeases SET WorkerInstanceId = NULL, ReleasedUtc = SYSUTCDATETIME() WHERE WorkerInstanceId IN (SELECT w.WorkerInstanceId FROM omp.WorkerInstances w WHERE w.HostId = @HostId);" },
+            { "bracketed names", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE WorkerInstanceId IN (SELECT [WorkerInstanceId] FROM [omp].[WorkerInstances] WHERE [HostId] = @HostId);" },
+            { "extra filters on allow-listed columns", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE ExpiresUtc < GETUTCDATE() AND WorkerInstanceId IN (SELECT w.WorkerInstanceId FROM omp.WorkerInstances w WHERE w.HostId = @HostId AND w.ArtifactId IS NOT NULL AND w.ArtifactId IN (1, 2));" },
+            { "artifact-removed via WorkerInstances", ModuleRuntimeMaintenance.ArtifactRemoved, guard + $"UPDATE {Schema}.WorkerLeases SET ReleasedUtc = GETUTCDATE() WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE ArtifactId = @ArtifactId);" },
+            { "host-removed via AppInstances", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE AppInstanceId IN (SELECT a.AppInstanceId FROM omp.AppInstances a WHERE a.HostId = @HostId);" },
+            { "artifact-removed via AppInstances", ModuleRuntimeMaintenance.ArtifactRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE AppInstanceId IN (SELECT AppInstanceId FROM omp.AppInstances WHERE @ArtifactId = ArtifactId);" },
+            { "read-only count via WorkerInstances", ModuleRuntimeMaintenance.AppInstanceBlockingCount, guard + $"SELECT COUNT(*) AS BlockingCount FROM {Schema}.WorkerLeases WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @AppInstanceId);" },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(PlatformReads))]
+    public void AllowListedPlatformRead_IsAccepted(string description, string eventName, string sql)
+    {
+        var error = ModuleRuntimeMaintenance.ValidateStepSql(sql, Schema, ModuleRuntimeMaintenance.Events[eventName]);
+
+        Assert.True(error is null, $"Expected '{description}' to be accepted: {error}");
+    }
+
+    public static TheoryData<string, string, string, string> PlatformReadRefusals()
+    {
+        const string guard = $"IF OBJECT_ID(N'{Schema}.WorkerLeases', N'U') IS NOT NULL ";
+        const string write = $"DELETE FROM {Schema}.WorkerLeases WHERE WorkerInstanceId IN ";
+        const string notListed = "may only reference the module schema";
+        return new()
+        {
+            { "no WHERE in the subquery", "must have a WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.WorkerInstances);" },
+            { "no parameter binding in the subquery", "The subquery WHERE clause must contain HostId = @HostId", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId IS NOT NULL);" },
+            { "binding on another column", "must bind HostId = @HostId", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE WorkerInstanceId = @HostId);" },
+            { "omp.Users", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT u.UserId FROM omp.Users u WHERE u.HostId = @HostId);" },
+            { "omp.Hosts", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE HostId IN (SELECT h.HostId FROM omp.Hosts h WHERE h.HostId = @HostId);" },
+            { "omp.Artifacts", notListed, ModuleRuntimeMaintenance.ArtifactRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE ArtifactId IN (SELECT a.ArtifactId FROM omp.Artifacts a WHERE a.ArtifactId = @ArtifactId);" },
+            { "platform module schema", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT x.WorkerInstanceId FROM omp_portal.WorkerInstances x WHERE x.HostId = @HostId);" },
+            { "sys.tables", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT t.object_id FROM sys.tables t WHERE t.object_id = @HostId);" },
+            { "schema spelled in another case", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM OMP.WorkerInstances WHERE HostId = @HostId);" },
+            { "table spelled in another case", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.workerinstances WHERE HostId = @HostId);" },
+            { "platform table as DELETE target", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + "DELETE FROM omp.WorkerInstances WHERE HostId = @HostId;" },
+            { "platform table as UPDATE target", notListed, ModuleRuntimeMaintenance.HostRemoved, guard + "UPDATE omp.WorkerInstances SET ArtifactId = NULL WHERE HostId = @HostId;" },
+            { "platform table counted by the read-only step", notListed, ModuleRuntimeMaintenance.AppInstanceBlockingCount, guard + "SELECT COUNT(*) AS BlockingCount FROM omp.WorkerInstances WHERE AppInstanceId = @AppInstanceId;" },
+            { "platform table in the write's FROM", "A FROM clause or join on the write is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases FROM omp.WorkerInstances w WHERE w.HostId = @HostId;" },
+            { "two levels", "Only one level of IN subquery", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT w.WorkerInstanceId FROM omp.WorkerInstances w WHERE w.HostId = @HostId AND w.AppInstanceId IN (SELECT a.AppInstanceId FROM omp.AppInstances a WHERE a.HostId = @HostId));" },
+            { "JOIN in the subquery", "must read exactly one table", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT w.WorkerInstanceId FROM omp.WorkerInstances w INNER JOIN omp.AppInstances a ON a.AppInstanceId = w.AppInstanceId WHERE a.HostId = @HostId);" },
+            { "comma join in the subquery", "must read exactly one table", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT w.WorkerInstanceId FROM omp.WorkerInstances w, omp.AppInstances a WHERE w.HostId = @HostId);" },
+            { "selected column outside the allow-list", "must select exactly one allow-listed column", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceKey FROM omp.WorkerInstances WHERE HostId = @HostId);" },
+            { "filter column outside the allow-list", "only the allow-listed columns", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId AND IsEnabled = 1);" },
+            { "column of AppInstances outside its allow-list", "only the allow-listed columns", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE AppInstanceId IN (SELECT AppInstanceId FROM omp.AppInstances WHERE HostId = @HostId AND ModuleInstanceId IS NOT NULL);" },
+            { "column qualified by the outer table", "only the allow-listed columns", ModuleRuntimeMaintenance.HostRemoved, guard + write + $"(SELECT w.WorkerInstanceId FROM omp.WorkerInstances w WHERE w.HostId = @HostId AND WorkerLeases.ExpiresUtc IS NULL);" },
+            { "OR in the subquery", "is not allowed in a runtime maintenance WHERE clause", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId OR 1 = 1);" },
+            { "inequality against the parameter", "only the allow-listed columns", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId AND AppInstanceId <> @HostId);" },
+            { "table hint", "Table hints", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM omp.WorkerInstances WITH (NOLOCK) WHERE HostId = @HostId);" },
+            { "cross-database platform table", "Cross-database", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT WorkerInstanceId FROM OtherDb.omp.WorkerInstances WHERE HostId = @HostId);" },
+            { "NOT IN", "InPredicate is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE WorkerInstanceId NOT IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId);" },
+            { "EXISTS", "ExistsPredicate is not allowed", ModuleRuntimeMaintenance.HostRemoved, guard + $"DELETE FROM {Schema}.WorkerLeases WHERE WorkerInstanceId = WorkerInstanceId AND EXISTS (SELECT 1 FROM omp.WorkerInstances WHERE HostId = @HostId);" },
+            { "DISTINCT", "DISTINCT, TOP", ModuleRuntimeMaintenance.HostRemoved, guard + write + "(SELECT DISTINCT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId);" },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(PlatformReadRefusals))]
+    public void PlatformReadOutsideTheAllowList_IsRejected(string description, string expectedReason, string eventName, string sql)
     {
         var error = ModuleRuntimeMaintenance.ValidateStepSql(sql, Schema, ModuleRuntimeMaintenance.Events[eventName]);
 

@@ -83,6 +83,50 @@ public sealed class OmpHostArtifactRepositoryRuntimeMaintenanceTests : IDisposab
         Assert.True(_database.HostExists(hostId));
     }
 
+    [Fact]
+    public async Task DeleteOrphanHostAsync_ReleasesModuleRowsKeyedByTheHostsWorkerInstances()
+    {
+        // The example step reads omp.WorkerInstances through the platform read allow-list.
+        InsertExampleDefinition(isApplied: true);
+        var removedHostId = _database.InsertHost("runtime-maintenance-workers", environment: null);
+        var removedWorker = InsertWorkerInstance(removedHostId);
+        var otherWorker = InsertWorkerInstance(hostId: null);
+        InsertWorkerLease(removedWorker);
+        InsertWorkerLease(otherWorker);
+
+        var deleted = await _repository.DeleteOrphanHostAsync(removedHostId, CancellationToken.None);
+
+        Assert.Equal(1, deleted);
+        Assert.Equal(0, CountWorkerLeases(removedWorker));
+        Assert.Equal(1, CountWorkerLeases(otherWorker));
+    }
+
+    [Fact]
+    public async Task DeleteOrphanHostAsync_WhenStoredStepReadsPlatformTableOutsideTheAllowList_RefusesAndKeepsRows()
+    {
+        // The stored step was edited after import to read omp.Hosts, which the allow-list does
+        // not name. The executor validates the same grammar as the import and refuses it.
+        var definition = JsonNode.Parse(ReadExampleDefinition())!;
+        var step = definition["runtimeMaintenance"]!["steps"]!.AsArray()
+            .Single(node => (string?)node!["event"] == "host-removed")!;
+        step["inlineSql"] = @"IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NOT NULL
+    DELETE FROM omp_example_webapp.RuntimeLeases
+    WHERE HostId IN (SELECT h.HostId FROM omp.Hosts h WHERE h.HostId = @HostId);";
+        step["content"] = null;
+        step["contentEncoding"] = null;
+        InsertDefinition(definition.ToJsonString(), isApplied: true);
+        var hostId = _database.InsertHost("runtime-maintenance-platform-read", environment: null);
+        InsertLease(hostId);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _repository.DeleteOrphanHostAsync(hostId, CancellationToken.None));
+
+        Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("References omp.Hosts", ex.Message, StringComparison.Ordinal);
+        Assert.True(_database.HostExists(hostId));
+        Assert.Equal(1, CountLeases(hostId));
+    }
+
     private static string ReadExampleDefinition()
         => OmpRepositoryFiles.ReadRepositoryTextFile("examples", "WebAppModule", "example_webapp.module-definition.json");
 
@@ -150,6 +194,40 @@ VALUES (NEWID(), @hostId, DATEADD(minute, 5, SYSUTCDATETIME()));", conn);
         conn.Open();
         using var cmd = new SqlCommand("SELECT COUNT(*) FROM omp_example_webapp.RuntimeLeases WHERE HostId = @hostId;", conn);
         cmd.Parameters.AddWithValue("@hostId", hostId);
+        return (int)cmd.ExecuteScalar()!;
+    }
+
+    private Guid InsertWorkerInstance(Guid? hostId)
+    {
+        var workerInstanceId = Guid.NewGuid();
+        using var conn = new SqlConnection(_database.ConnectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "INSERT INTO omp.WorkerInstances (WorkerInstanceId, AppInstanceId, HostId) VALUES (@workerInstanceId, NEWID(), @hostId);",
+            conn);
+        cmd.Parameters.AddWithValue("@workerInstanceId", workerInstanceId);
+        cmd.Parameters.AddWithValue("@hostId", (object?)hostId ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+        return workerInstanceId;
+    }
+
+    private void InsertWorkerLease(Guid workerInstanceId)
+    {
+        using var conn = new SqlConnection(_database.ConnectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(@"
+INSERT INTO omp_example_webapp.RuntimeWorkerLeases (WorkerInstanceId, ExpiresUtc)
+VALUES (@workerInstanceId, DATEADD(minute, 5, SYSUTCDATETIME()));", conn);
+        cmd.Parameters.AddWithValue("@workerInstanceId", workerInstanceId);
+        cmd.ExecuteNonQuery();
+    }
+
+    private int CountWorkerLeases(Guid workerInstanceId)
+    {
+        using var conn = new SqlConnection(_database.ConnectionString);
+        conn.Open();
+        using var cmd = new SqlCommand("SELECT COUNT(*) FROM omp_example_webapp.RuntimeWorkerLeases WHERE WorkerInstanceId = @workerInstanceId;", conn);
+        cmd.Parameters.AddWithValue("@workerInstanceId", workerInstanceId);
         return (int)cmd.ExecuteScalar()!;
     }
 

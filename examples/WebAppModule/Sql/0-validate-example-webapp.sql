@@ -64,6 +64,9 @@ IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NULL
 IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NULL
     SELECT @Missing = @Missing + 1;
 
+IF OBJECT_ID(N'omp_example_webapp.RuntimeWorkerLeases', N'U') IS NULL
+    SELECT @Missing = @Missing + 1;
+
 SELECT
     CAST(CASE WHEN @Missing = 0 THEN 1 ELSE 0 END AS bit) AS IsHealthy,
     CASE

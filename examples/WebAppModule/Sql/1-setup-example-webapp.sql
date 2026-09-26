@@ -84,3 +84,17 @@ BEGIN
     );
 END
 GO
+
+-- Keyed by the platform's WorkerInstanceId rather than by a host or an app
+-- instance, so its host-removed and app-instance-removed steps find the rows
+-- through omp.WorkerInstances, one of the platform tables a step may read.
+IF OBJECT_ID(N'omp_example_webapp.RuntimeWorkerLeases', N'U') IS NULL
+BEGIN
+    CREATE TABLE omp_example_webapp.RuntimeWorkerLeases
+    (
+        RuntimeWorkerLeaseId int IDENTITY(1,1) NOT NULL CONSTRAINT PK_omp_example_webapp_RuntimeWorkerLeases PRIMARY KEY,
+        WorkerInstanceId uniqueidentifier NOT NULL,
+        ExpiresUtc datetime2(3) NOT NULL
+    );
+END
+GO

@@ -23,6 +23,23 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   delete paths is marked transitional and goes once modules declare their
   steps. See docs/MODULE_DEFINITIONS.md, "Runtime maintenance steps".
 
+- **Runtime maintenance steps may read two platform tables.** A module
+  table keyed by the platform's `WorkerInstanceId` could not reach the
+  removed host or app instance under the allow-list grammar, which refused
+  every `omp` reference. A step may now read exactly one platform table, in
+  the one-level IN subquery form `<column> IN (SELECT <column> FROM
+  omp.WorkerInstances WHERE HostId = @HostId)`, from the platform read
+  allow-list: `omp.WorkerInstances` (`WorkerInstanceId`, `AppInstanceId`,
+  `HostId`, `ArtifactId`) and `omp.AppInstances` (`AppInstanceId`, `HostId`,
+  `ArtifactId`). The subquery must bind the column named by the event
+  parameter (`HostId = @HostId`) and may use no other column; a platform
+  table anywhere else - write target, the write's `FROM`, a join, the
+  counted table, a second level - is still refused, at import and again
+  before the step runs. The example web app module gains
+  `RuntimeWorkerLeases` and releases it through `omp.WorkerInstances` on
+  `host-removed` and `app-instance-removed`. See docs/MODULE_DEFINITIONS.md,
+  "Platform read allow-list".
+
 - **The system log.** What the platform's own processes report at Warn
   and above now goes to one table, `omp.SystemLog`, from every host:
   NLog's database target (async, discard on overflow, the files stay as

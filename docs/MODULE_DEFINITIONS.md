@@ -679,8 +679,13 @@ where     := conjunct { AND conjunct }            -- parentheses allowed;
 binding   := <column> = @Param                    -- either operand order
            | <column> IN ( SELECT <a>.<column> FROM <schema>.<table2> <a>
                            WHERE inner )          -- one level
+           | <column> IN ( SELECT <pcolumn> FROM <platform> [<p>]
+                           WHERE pinner )         -- one level
 inner     := like where, with every column written <a>.<column>,
              at least one <a>.<column> = @Param, and no further subquery
+pinner    := like where, with every column a <pcolumn> of <platform>
+             (written <pcolumn> or <p>.<pcolumn>), at least one
+             <Param-column> = @Param, and no further subquery
 filter    := operand <op> operand                 -- <op>: = <> != < > <= >=
            | <column> IS [NOT] NULL
            | <column> IN ( constant { , constant } )
@@ -693,13 +698,21 @@ constant  := <number> | -<number> | N'<text>' | '<text>' | NULL
 - `<schema>` is always the module schema `omp_<moduleKey>` (see "Module
   schema"). Every table a statement names, including `<table2>` in a
   subquery, must be named by an enclosing guard; guards nest.
+- `<platform>` is a table of the platform read allow-list below and
+  `<pcolumn>` one of its allow-listed columns. `<Param-column>` is the event
+  parameter's name without `@` (`HostId`, `ArtifactId`, `AppInstanceId`), so a
+  platform subquery binds `HostId = @HostId`, never `WorkerInstanceId = @HostId`.
+  A platform table needs no guard; the platform always has it.
 - `@Param` is the event's one parameter (`@HostId`, `@ArtifactId` or
   `@AppInstanceId`). It may appear only as the right- or left-hand side of a
   binding. It can never be assigned, compared with `<>`, or used in a `SET`.
 - Outer columns are unqualified and belong to the written or counted table,
-  which has no alias. Subquery columns are qualified by the subquery table's
-  alias or name, which must differ from the written table's name, so a column
-  missing from the inner table cannot silently resolve to the outer one.
+  which has no alias. Module-schema subquery columns are qualified by the
+  subquery table's alias or name, which must differ from the written table's
+  name, so a column missing from the inner table cannot silently resolve to
+  the outer one. Platform subquery columns may also be unqualified: only
+  allow-listed columns are accepted, every one of them exists in that table,
+  so none can resolve to the outer table.
 - An `idempotent` event (`host-removed`, `artifact-removed`,
   `app-instance-removed`) contains at least one `DELETE` or `UPDATE` and no
   `SELECT`. The `read-only` event (`app-instance-blocking-count`) is exactly
@@ -744,14 +757,72 @@ Everything else is refused at import and at execution, including:
 - Function calls other than `COUNT(*)` in the `count` form, `OBJECT_ID` in a
   guard, and `GETUTCDATE()`/`SYSUTCDATETIME()` as constants.
 - Tables outside the module schema, including `omp` and `sys`, and
-  cross-database or linked-server names.
+  cross-database or linked-server names - except an allow-listed platform
+  table as the one table of an IN subquery.
+- A platform table as the `DELETE` or `UPDATE` target, in the write's `FROM`,
+  as the counted table of the read-only step, or in any other position than
+  the platform IN subquery.
+- A platform subquery without `WHERE <Param-column> = @Param`, one bound on
+  another column, one that names a column outside the allow-list, one that
+  joins a second table, or one that nests another subquery.
 - Several statements where any one of them is not an allowed form, for
   example a bound `DELETE` followed by an unbound one.
 
-A module whose rows are keyed only by platform rows (for example a worker
-instance id) cannot join `omp.WorkerInstances` to find them. Store the event's
-key (`HostId`, `AppInstanceId`, `ArtifactId`) in the module's own table, or
-keep a module-owned mapping table, and bind on that.
+#### Platform read allow-list
+
+Module rows are often keyed by platform rows rather than by the event's key:
+a table keyed by the platform's `WorkerInstanceId` cannot name the removed
+host directly. Such a step finds its rows through the platform, in one IN
+subquery over exactly one of these tables, using only these columns:
+
+| Platform table | Allow-listed columns |
+| --- | --- |
+| `omp.WorkerInstances` | `WorkerInstanceId`, `AppInstanceId`, `HostId`, `ArtifactId` |
+| `omp.AppInstances` | `AppInstanceId`, `HostId`, `ArtifactId` |
+
+The list is the constant `ModuleRuntimeMaintenance.ReadablePlatformTables`;
+the test `ReadablePlatformTables_AreExactlyTheDocumentedAllowList` fails when
+the constant changes without this table. Names are matched exactly as spelled
+here (`omp`, not `OMP`); brackets are allowed. The steps run before the
+platform deletes or unlinks these rows, in the same transaction, so the
+removed host's, artifact's or app instance's rows are still there to be read.
+`omp.Hosts` and `omp.Artifacts` are deliberately not on the list: their only
+link column is the event key itself, so reading them adds nothing that
+`<column> = @Param` does not already say.
+
+A complete `host-removed` step for a module table keyed by `WorkerInstanceId`:
+
+```sql
+-- Event host-removed: the platform binds the HostId parameter (uniqueidentifier).
+IF OBJECT_ID(N'omp_my_module.WorkerLeases', N'U') IS NOT NULL
+    DELETE FROM omp_my_module.WorkerLeases
+    WHERE WorkerInstanceId IN
+    (
+        SELECT WorkerInstanceId
+        FROM omp.WorkerInstances
+        WHERE HostId = @HostId
+    );
+```
+
+The same form serves `app-instance-removed` (`WHERE AppInstanceId =
+@AppInstanceId`), `artifact-removed` (`WHERE ArtifactId = @ArtifactId`) and,
+inside `SELECT COUNT(*) AS BlockingCount`, the read-only
+`app-instance-blocking-count`. Refused, for example:
+
+```sql
+-- No binding: would release every worker's rows.
+WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances)
+-- Not allow-listed: omp.Users, omp.Hosts, omp_portal.<table>, sys.tables.
+WHERE UserId IN (SELECT u.UserId FROM omp.Users u WHERE u.HostId = @HostId)
+-- Column outside the allow-list.
+WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances
+                           WHERE HostId = @HostId AND IsEnabled = 1)
+-- Join, and a platform table as the write target.
+WHERE WorkerInstanceId IN (SELECT w.WorkerInstanceId FROM omp.WorkerInstances w
+                           INNER JOIN omp.AppInstances a ON a.AppInstanceId = w.AppInstanceId
+                           WHERE a.HostId = @HostId)
+DELETE FROM omp.WorkerInstances WHERE HostId = @HostId;
+```
 
 ### Module key letter case
 
@@ -785,14 +856,20 @@ embedded content and `sha256` to match its `path` file, as for `sqlScripts`.
 ### Example
 
 The example web app module (`examples/WebAppModule`) declares one step per
-event against its own `RuntimeBindings` and `RuntimeLeases` tables. The SQL
-files are under `examples/WebAppModule/Sql/runtime-maintenance/`:
+event against its own `RuntimeBindings`, `RuntimeLeases` and
+`RuntimeWorkerLeases` tables. `RuntimeWorkerLeases` is keyed by the platform's
+`WorkerInstanceId`, so its rows are found through `omp.WorkerInstances`. The
+SQL files are under `examples/WebAppModule/Sql/runtime-maintenance/`:
 
 ```sql
 -- host-removed.sql
 IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NOT NULL
     DELETE FROM omp_example_webapp.RuntimeLeases
     WHERE HostId = @HostId;
+
+IF OBJECT_ID(N'omp_example_webapp.RuntimeWorkerLeases', N'U') IS NOT NULL
+    DELETE FROM omp_example_webapp.RuntimeWorkerLeases
+    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE HostId = @HostId);
 
 -- artifact-removed.sql
 IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NOT NULL
@@ -811,6 +888,10 @@ IF OBJECT_ID(N'omp_example_webapp.RuntimeBindings', N'U') IS NOT NULL
 IF OBJECT_ID(N'omp_example_webapp.RuntimeLeases', N'U') IS NOT NULL
     DELETE FROM omp_example_webapp.RuntimeLeases
     WHERE AppInstanceId = @AppInstanceId;
+
+IF OBJECT_ID(N'omp_example_webapp.RuntimeWorkerLeases', N'U') IS NOT NULL
+    DELETE FROM omp_example_webapp.RuntimeWorkerLeases
+    WHERE WorkerInstanceId IN (SELECT WorkerInstanceId FROM omp.WorkerInstances WHERE AppInstanceId = @AppInstanceId);
 ```
 
 The tests `ModuleRuntimeMaintenanceTests` (validator matrix),

@@ -59,6 +59,21 @@ internal static class ModuleRuntimeMaintenance
         "omp_core", "omp_portal", "omp_auth", "omp_content", "omp_iframe",
     };
 
+    /// <summary>
+    /// The platform read allow-list: the only platform tables a step may name, and only as the one
+    /// table of an IN subquery, with only these columns. Module rows keyed by the platform's
+    /// WorkerInstanceId or AppInstanceId find the removed host, artifact or app instance through
+    /// them; the steps run before the platform deletes these rows, in the same transaction.
+    /// Names are matched exactly as spelled here. Documented verbatim in
+    /// docs/MODULE_DEFINITIONS.md, "Platform read allow-list".
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> ReadablePlatformTables =
+        new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+        {
+            ["omp.WorkerInstances"] = new HashSet<string>(StringComparer.Ordinal) { "WorkerInstanceId", "AppInstanceId", "HostId", "ArtifactId" },
+            ["omp.AppInstances"] = new HashSet<string>(StringComparer.Ordinal) { "AppInstanceId", "HostId", "ArtifactId" },
+        };
+
     private static readonly Regex ModuleKeyPattern = new("^[A-Za-z][A-Za-z0-9_]{0,99}$", RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -277,14 +292,20 @@ END;
     /// count     := SELECT COUNT(*) AS BlockingCount [, N'text' AS Description]
     ///              FROM schema.table WHERE where                              -- read-only event only
     /// where     := conjunct [AND conjunct]*, at least one binding conjunct
-    /// binding   := column = @Param | column IN (SELECT a.column FROM schema.table2 a WHERE inner)
+    /// binding   := column = @Param
+    ///            | column IN (SELECT a.column FROM schema.table2 a WHERE inner)
+    ///            | column IN (SELECT pcolumn FROM platform [p] WHERE pinner)
     /// inner     := like where, columns qualified by a, no further subquery
+    /// pinner    := like where, only pcolumns (unqualified or qualified by p), no further
+    ///              subquery, and the binding is exactly Param-column = @Param
     /// filter    := operand {= | &lt;&gt; | &lt; | &gt; | &lt;= | &gt;=} operand | column IS [NOT] NULL | column IN (constant, ...)
     /// operand   := column | constant
     /// value     := constant
     /// constant  := number | -number | N'text' | 'text' | NULL | GETUTCDATE() | SYSUTCDATETIME()
     /// </code>
-    /// schema is the module schema; every table must be named by an enclosing guard.
+    /// schema is the module schema; every schema table must be named by an enclosing guard.
+    /// platform is a table of <see cref="ReadablePlatformTables"/> and pcolumn one of its columns,
+    /// spelled exactly; Param-column is the event parameter's name without '@'.
     /// </summary>
     private sealed class StepGrammar(string moduleSchema, EventContract contract)
     {
@@ -415,7 +436,7 @@ END;
             {
                 if (!Is<AssignmentSetClause>(clause)
                     || clause is not AssignmentSetClause { Variable: null, Column: { } column, AssignmentKind: AssignmentKind.Equals } assignment
-                    || !IsColumn(column, qualifier: null))
+                    || !IsColumn(column, Scope.Outer))
                 {
                     Fail(clause, "SET must assign an unqualified column of the target table with '='; assigning variables is not allowed");
                     return;
@@ -502,7 +523,7 @@ END;
         {
             table = null!;
             if (spec.FromClause is not { TableReferences.Count: 1 } from || !Is<NamedTableReference>(from.TableReferences[0]))
-                return Fail(spec, $"The query must read exactly one table of the module schema '{moduleSchema}'; joins are not allowed");
+                return Fail(spec, $"The query must read exactly one table of the module schema '{moduleSchema}' (an IN subquery may read one allow-listed platform table instead); joins are not allowed");
             table = (NamedTableReference)from.TableReferences[0];
             return OwnTable(table, aliasAllowed, isTarget);
         }
@@ -516,7 +537,7 @@ END;
                 return Fail(table, $"Table '{name.BaseIdentifier.Value}' must be qualified with the module schema '{moduleSchema}'");
             var qualified = $"{name.SchemaIdentifier.Value}.{name.BaseIdentifier.Value}";
             if (!name.SchemaIdentifier.Value.Equals(moduleSchema, StringComparison.OrdinalIgnoreCase))
-                return Fail(table, $"References {qualified}; runtime maintenance steps may only reference the module schema '{moduleSchema}'");
+                return Fail(table, $"References {qualified}; runtime maintenance steps may only reference the module schema '{moduleSchema}', and read the platform only through the IN subquery over {string.Join(" or ", ReadablePlatformTables.Keys)}");
             if (table.TableHints.Count != 0 || table.TableSampleClause is not null || table.TemporalClause is not null)
                 return Fail(table, "Table hints, TABLESAMPLE and FOR SYSTEM_TIME are not allowed");
             if (table.Alias is not null && !aliasAllowed)
@@ -541,20 +562,31 @@ END;
                 return;
             }
 
-            Restricts(where.SearchCondition, qualifier: null);
+            Restricts(where.SearchCondition, Scope.Outer);
         }
 
-        // qualifier null: the outer WHERE, where the only table in scope is the target and columns
-        // are unqualified. Otherwise the IN subquery, whose columns must name its own table, so a
-        // column missing from the inner table cannot silently resolve to the outer one.
-        private bool Restricts(BooleanExpression condition, string? qualifier)
+        /// <summary>
+        /// The columns a WHERE clause may use. The outer WHERE sees only the target and uses
+        /// unqualified columns. A module-schema subquery must qualify its columns with the
+        /// subquery table, so a column missing from the inner table cannot silently resolve to the
+        /// outer one. A platform subquery may also use unqualified columns, because it is limited
+        /// to <see cref="Columns"/>, which all exist in that table and so resolve to it.
+        /// </summary>
+        private sealed record Scope(string? Qualifier, string? Table = null, IReadOnlySet<string>? Columns = null, string? BindingColumn = null)
+        {
+            internal static readonly Scope Outer = new((string?)null);
+
+            internal string ColumnList => Columns is null ? string.Empty : string.Join(", ", Columns.Order(StringComparer.Ordinal));
+        }
+
+        private bool Restricts(BooleanExpression condition, Scope scope)
         {
             var conjuncts = new List<BooleanExpression>();
             if (!Flatten(condition, conjuncts)) return false;
             var bound = false;
             foreach (var conjunct in conjuncts)
             {
-                switch (Conjunct(conjunct, qualifier))
+                switch (Conjunct(conjunct, scope))
                 {
                     case null:
                         return false;
@@ -564,10 +596,12 @@ END;
                 }
             }
 
-            return bound || Fail(condition, qualifier is null
-                ? $"The WHERE clause must restrict the rows by the event parameter: column = {Param} or column IN (SELECT a.column FROM {moduleSchema}.<table> a WHERE a.column = {Param}), combined with AND"
-                : $"The subquery WHERE clause must contain {qualifier}.column = {Param}, combined with AND");
+            return bound || Fail(condition, scope.Qualifier is null
+                ? $"The WHERE clause must restrict the rows by the event parameter: column = {Param}, column IN (SELECT a.column FROM {moduleSchema}.<table> a WHERE a.column = {Param}) or column IN (SELECT column FROM <allow-listed platform table> WHERE {ParamColumn} = {Param}), combined with AND"
+                : $"The subquery WHERE clause must contain {scope.BindingColumn ?? scope.Qualifier + ".column"} = {Param}, combined with AND");
         }
+
+        private string ParamColumn => Param.TrimStart('@');
 
         private bool Flatten(BooleanExpression expression, List<BooleanExpression> into)
         {
@@ -586,32 +620,43 @@ END;
         }
 
         // true: binds the rows to the parameter; false: an allowed filter; null: refused.
-        private bool? Conjunct(BooleanExpression condition, string? qualifier)
+        private bool? Conjunct(BooleanExpression condition, Scope scope)
         {
             switch (condition)
             {
                 case BooleanComparisonExpression comparison when Is<BooleanComparisonExpression>(comparison):
-                    if (comparison.ComparisonType == BooleanComparisonType.Equals
-                        && ((IsColumn(comparison.FirstExpression, qualifier) && IsParameter(comparison.SecondExpression))
-                            || (IsColumn(comparison.SecondExpression, qualifier) && IsParameter(comparison.FirstExpression))))
-                        return true;
+                    var boundColumn = comparison.ComparisonType != BooleanComparisonType.Equals ? null
+                        : IsColumn(comparison.FirstExpression, scope) && IsParameter(comparison.SecondExpression) ? comparison.FirstExpression
+                        : IsColumn(comparison.SecondExpression, scope) && IsParameter(comparison.FirstExpression) ? comparison.SecondExpression
+                        : null;
+                    if (boundColumn is not null)
+                    {
+                        // A platform table is bound only by the column the event parameter names,
+                        // so HostId = @HostId, never WorkerInstanceId = @HostId.
+                        return scope.BindingColumn is null || ColumnName(boundColumn).Equals(scope.BindingColumn, StringComparison.Ordinal)
+                            ? true
+                            : Refuse(comparison, $"A subquery over {scope.Table} must bind {scope.BindingColumn} = {Param}");
+                    }
+
                     if (comparison.ComparisonType is BooleanComparisonType.Equals or BooleanComparisonType.NotEqualToBrackets
                             or BooleanComparisonType.NotEqualToExclamation or BooleanComparisonType.LessThan
                             or BooleanComparisonType.GreaterThan or BooleanComparisonType.LessThanOrEqualTo
                             or BooleanComparisonType.GreaterThanOrEqualTo
-                        && IsOperand(comparison.FirstExpression, qualifier) && IsOperand(comparison.SecondExpression, qualifier))
+                        && IsOperand(comparison.FirstExpression, scope) && IsOperand(comparison.SecondExpression, scope))
                         return false;
                     break;
-                case BooleanIsNullExpression isNull when Is<BooleanIsNullExpression>(isNull) && IsColumn(isNull.Expression, qualifier):
+                case BooleanIsNullExpression isNull when Is<BooleanIsNullExpression>(isNull) && IsColumn(isNull.Expression, scope):
                     return false;
-                case InPredicate { NotDefined: false } inPredicate when Is<InPredicate>(inPredicate) && IsColumn(inPredicate.Expression, qualifier):
+                case InPredicate { NotDefined: false } inPredicate when Is<InPredicate>(inPredicate) && IsColumn(inPredicate.Expression, scope):
                     if (inPredicate.Subquery is null)
                         return inPredicate.Values.Count > 0 && inPredicate.Values.All(IsConstant) ? false : Refuse(inPredicate, "IN (...) may list constants only");
-                    if (qualifier is not null) return Refuse(inPredicate, "Only one level of IN subquery is allowed");
+                    if (scope.Qualifier is not null) return Refuse(inPredicate, "Only one level of IN subquery is allowed");
                     return Subquery(inPredicate.Subquery) ? true : null;
             }
 
-            return Refuse(condition, $"Condition {condition.GetType().Name} is not allowed; a condition is column = {Param}, column IN (subquery), a comparison of the table's columns with constants, column IS [NOT] NULL or column IN (constants)");
+            return Refuse(condition, scope.Columns is null
+                ? $"Condition {condition.GetType().Name} is not allowed; a condition is column = {Param}, column IN (subquery), a comparison of the table's columns with constants, column IS [NOT] NULL or column IN (constants)"
+                : $"Condition {condition.GetType().Name} is not allowed; a subquery over {scope.Table} may use only the allow-listed columns ({scope.ColumnList}): {scope.BindingColumn} = {Param}, comparisons with constants, IS [NOT] NULL or IN (constants)");
         }
 
         private bool? Refuse(TSqlFragment node, string message)
@@ -623,18 +668,65 @@ END;
         private bool Subquery(ScalarSubquery subquery)
         {
             if (!Is<QuerySpecification>(subquery.QueryExpression) || subquery.Collation is not null)
-                return Fail(subquery, $"The IN subquery must be SELECT a.column FROM {moduleSchema}.<table> a WHERE a.column = {Param}");
+                return Fail(subquery, $"The IN subquery must be SELECT a.column FROM {moduleSchema}.<table> a WHERE a.column = {Param}, or SELECT column FROM <allow-listed platform table> WHERE {ParamColumn} = {Param}");
             var spec = (QuerySpecification)subquery.QueryExpression;
-            if (!PlainQuery(spec) || !SingleTable(spec, aliasAllowed: true, isTarget: false, out var table)) return false;
-            var exposed = table.Alias?.Value ?? table.SchemaObject.BaseIdentifier.Value;
-            if (exposed.Equals(targetName, StringComparison.OrdinalIgnoreCase))
+            if (!PlainQuery(spec)) return false;
+
+            NamedTableReference table;
+            Scope scope;
+            if (spec.FromClause is { TableReferences.Count: 1 } from
+                && Is<NamedTableReference>(from.TableReferences[0])
+                && ReadablePlatformTable((NamedTableReference)from.TableReferences[0]) is { } platform)
+            {
+                table = (NamedTableReference)from.TableReferences[0];
+                if (!PlatformTable(table, platform.Name, platform.Columns)) return false;
+                scope = new Scope(Exposed(table), platform.Name, platform.Columns, ParamColumn);
+            }
+            else
+            {
+                if (!SingleTable(spec, aliasAllowed: true, isTarget: false, out table)) return false;
+                scope = new Scope(Exposed(table));
+            }
+
+            if (scope.Qualifier!.Equals(targetName, StringComparison.OrdinalIgnoreCase))
                 return Fail(table, "Give the subquery table an alias that differs from the written table's name");
-            if (spec.SelectElements.Count != 1 || !IsNamed(spec.SelectElements[0], null, out var column) || !IsColumn(column, exposed))
-                return Fail(spec, $"The IN subquery must select exactly one column qualified by '{exposed}'");
+            if (spec.SelectElements.Count != 1 || !IsNamed(spec.SelectElements[0], null, out var column) || !IsColumn(column, scope))
+            {
+                return Fail(spec, scope.Columns is null
+                    ? $"The IN subquery must select exactly one column qualified by '{scope.Qualifier}'"
+                    : $"The IN subquery must select exactly one allow-listed column of {scope.Table} ({scope.ColumnList})");
+            }
+
             if (spec.WhereClause is not { Cursor: null } where)
-                return Fail(spec, $"The IN subquery must have a WHERE clause with {exposed}.column = {Param}");
-            return Restricts(where.SearchCondition, exposed);
+                return Fail(spec, $"The IN subquery must have a WHERE clause with {scope.BindingColumn ?? scope.Qualifier + ".column"} = {Param}");
+            return Restricts(where.SearchCondition, scope);
         }
+
+        private static string Exposed(NamedTableReference table) => table.Alias?.Value ?? table.SchemaObject.BaseIdentifier.Value;
+
+        // The allow-list entry for a table named exactly schema.table as spelled in
+        // ReadablePlatformTables, or null. Any other spelling is not a platform read and falls
+        // through to the module-schema rules, which refuse it.
+        private static (string Name, IReadOnlySet<string> Columns)? ReadablePlatformTable(NamedTableReference table)
+        {
+            var name = table.SchemaObject;
+            if (name.SchemaIdentifier is null) return null;
+            var qualified = $"{name.SchemaIdentifier.Value}.{name.BaseIdentifier.Value}";
+            return ReadablePlatformTables.TryGetValue(qualified, out var columns) ? (qualified, columns) : null;
+        }
+
+        private bool PlatformTable(NamedTableReference table, string qualified, IReadOnlySet<string> columns)
+        {
+            var name = table.SchemaObject;
+            if (name.ServerIdentifier is not null || name.DatabaseIdentifier is not null)
+                return Fail(table, "Cross-database and linked-server references are not allowed");
+            if (table.TableHints.Count != 0 || table.TableSampleClause is not null || table.TemporalClause is not null)
+                return Fail(table, "Table hints, TABLESAMPLE and FOR SYSTEM_TIME are not allowed");
+            if (!columns.Contains(ParamColumn))
+                return Fail(table, $"{qualified} has no allow-listed column {ParamColumn}, so it cannot be bound to event '{contract.Name}'");
+            return true;
+        }
+
 
         private static bool IsNamed(SelectElement element, string? alias, out ScalarExpression expression)
         {
@@ -659,22 +751,27 @@ END;
                 && call.UniqueRowFilter == UniqueRowFilter.NotSpecified
                 && call.FunctionName.Value.Equals(name, StringComparison.OrdinalIgnoreCase);
 
-        private static bool IsColumn(ScalarExpression? expression, string? qualifier)
+        private static bool IsColumn(ScalarExpression? expression, Scope scope)
         {
             if (!Is<ColumnReferenceExpression>(expression)) return false;
             var column = (ColumnReferenceExpression)expression!;
             if (column.ColumnType != ColumnType.Regular || column.Collation is not null || column.MultiPartIdentifier is null) return false;
             var identifiers = column.MultiPartIdentifier.Identifiers;
-            return qualifier is null
-                ? identifiers.Count == 1
-                : identifiers.Count == 2 && identifiers[0].Value.Equals(qualifier, StringComparison.OrdinalIgnoreCase);
+            var unqualified = identifiers.Count == 1 && (scope.Qualifier is null || scope.Columns is not null);
+            var qualified = scope.Qualifier is not null && identifiers.Count == 2
+                && identifiers[0].Value.Equals(scope.Qualifier, StringComparison.OrdinalIgnoreCase);
+            if (!unqualified && !qualified) return false;
+            return scope.Columns is null || scope.Columns.Contains(identifiers[^1].Value);
         }
+
+        private static string ColumnName(ScalarExpression column)
+            => ((ColumnReferenceExpression)column).MultiPartIdentifier.Identifiers[^1].Value;
 
         private bool IsParameter(ScalarExpression? expression)
             => Is<VariableReference>(expression) && ((VariableReference)expression!).Name.Equals(Param, StringComparison.OrdinalIgnoreCase);
 
-        private static bool IsOperand(ScalarExpression? expression, string? qualifier)
-            => IsColumn(expression, qualifier) || IsConstant(expression);
+        private static bool IsOperand(ScalarExpression? expression, Scope scope)
+            => IsColumn(expression, scope) || IsConstant(expression);
 
         private static bool IsConstant(ScalarExpression? expression)
         {
