@@ -51,8 +51,11 @@ observed state.
 - Not a finished product. The repository is on the `0.3.x` line
   ([SECURITY.md](SECURITY.md) lists what is supported); treat it as a baseline
   you evaluate and harden, not as turnkey production software.
-- Not a place for customer code. The repository holds neutral platform code,
-  first-party modules, and neutral examples only.
+- Not a place for customer code. The repository holds neutral platform core,
+  example modules, and a few first-party module hooks: dashboard widgets in the
+  Portal that read the tables of first-party modules maintained outside this
+  repository. Each hook checks that its module's tables exist and renders an
+  empty widget when they do not, so the Portal runs without those modules.
 
 ## Architecture
 
