@@ -1164,6 +1164,11 @@
   <data name="The host could not be deleted." xml:space="preserve">
     <value>Värden kunde inte tas bort.</value>
   </data>
+  <data name="The runtime maintenance step of module '{0}' failed for event '{1}'. Nothing was deleted; the Portal log has the details." xml:space="preserve"><value>Körningsunderhållet i modulen '{0}' misslyckades för händelsen '{1}'. Inget togs bort; detaljerna finns i Portalens logg.</value></data>
+  <data name="Module '{0}' still has rows that reference this item and declares no runtime maintenance step for event '{1}' that releases them. Upgrade the module, then retry. Nothing was deleted." xml:space="preserve"><value>Modulen '{0}' har fortfarande rader som refererar till den här posten och deklarerar inget körningsunderhållssteg för händelsen '{1}' som släpper dem. Uppgradera modulen och försök igen. Inget togs bort.</value></data>
+  <data name="Schema '{0}' belongs to no registered module (a leftover schema?) and still has rows that reference this item. Clean up the schema, then retry. Nothing was deleted." xml:space="preserve"><value>Schemat '{0}' tillhör ingen registrerad modul (ett kvarlämnat schema?) och har fortfarande rader som refererar till den här posten. Städa schemat och försök igen. Inget togs bort.</value></data>
+  <data name="Runtime maintenance for event '{0}' was refused because a module definition could not be validated. Nothing was deleted; the Portal log has the details." xml:space="preserve"><value>Körningsunderhållet för händelsen '{0}' nekades eftersom en moduldefinition inte kunde valideras. Inget togs bort; detaljerna finns i Portalens logg.</value></data>
+  <data name="Another table still references this item. If a module owns that table, it needs a runtime maintenance step for event '{0}'. Nothing was deleted; the Portal log has the details." xml:space="preserve"><value>En annan tabell refererar fortfarande till den här posten. Om en modul äger tabellen behöver den ett körningsunderhållssteg för händelsen '{0}'. Inget togs bort; detaljerna finns i Portalens logg.</value></data>
   <data name="The host is still referenced by data that Portal cannot detach automatically." xml:space="preserve">
     <value>Värden refereras fortfarande av data som portalen inte kan koppla loss automatiskt.</value>
   </data>

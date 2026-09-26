@@ -181,6 +181,16 @@ public sealed class HostEditModel : OmpPortalPageModel
 
             return Page();
         }
+        catch (InvalidOperationException ex)
+        {
+            // A module's runtime maintenance stopped the delete (host-removed step failed, or a
+            // module table still references the host): show which module and event, not a 500.
+            await LoadAsync(ct);
+            await LoadHostInputAsync(Input.HostId, ct);
+            SetTitles("Edit host");
+            ModelState.AddModelError(string.Empty, DeleteBlockedMessage(ex, "The host could not be deleted."));
+            return Page();
+        }
     }
 
     private async Task LoadAsync(CancellationToken ct)

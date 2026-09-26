@@ -94,7 +94,10 @@ END;";
         var bound = Bind(documents, eventName);
         if (bound.Failures.Count != 0)
         {
-            throw new InvalidOperationException(
+            throw new ModuleRuntimeMaintenanceException(
+                ModuleRuntimeMaintenanceFailure.EventRefused,
+                eventName,
+                moduleKey: null,
                 $"{ModuleRuntimeMaintenance.RuleId}: Event '{eventName}' was refused; runtime maintenance failed for "
                 + $"{bound.Failures.Count} module(s) and no step ran: "
                 + string.Join(" | ", bound.Failures.Select(static failure => $"[{failure.ModuleKey}] {failure.Reason}")));
@@ -281,49 +284,129 @@ END;";
         return null;
     }
 
-    // SQL Server error 547 for a DELETE or UPDATE that a referencing row blocks. The table named is
-    // the referencing table, schema-qualified and unbracketed.
+    // SQL Server error 547 for a DELETE or UPDATE that a referencing row blocks. The number is the
+    // same on every server; the message text is localized, so only the double-quoted names in it
+    // (constraint, database, schema-qualified table) are relied on, never the English wording.
     private const int ConstraintConflictErrorNumber = 547;
 
-    private static readonly System.Text.RegularExpressions.Regex ReferenceConflictPattern = new(
-        "REFERENCE constraint \"(?<constraint>[^\"]+)\"\\..*?table \"(?<schema>[^\".]+)\\.(?<table>[^\"]+)\"",
-        System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Singleline);
+    private static readonly System.Text.RegularExpressions.Regex QuotedNamePattern = new(
+        "\"(?<name>[^\"]+)\"",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    // The module that registers the schema; omp.Modules.SchemaName is required.
+    private const string RegisteredModuleSql = @"
+SELECT TOP (1) ModuleKey
+FROM omp.Modules
+WHERE SchemaName = @schema
+ORDER BY ModuleKey;";
 
     /// <summary>
-    /// Turns a foreign key conflict raised by a platform delete into guidance when the blocking
-    /// rows live in a module schema (<c>omp_&lt;moduleKey&gt;</c>, not a platform-shipped one):
-    /// the module owns rows that reference the removed platform row and no applied
-    /// <c>runtimeMaintenance</c> step for <paramref name="eventName"/> released them. Returns
-    /// <see langword="null"/> for every other error, which the caller rethrows unchanged. Nothing
-    /// is mutated; the caller's transaction still rolls back.
+    /// A foreign key conflict (error 547) raised by a platform delete. <see cref="Schema"/> is
+    /// <see langword="null"/> when the conflicting table could not be read from the error text.
     /// </summary>
-    internal static InvalidOperationException? DescribeModuleForeignKeyConflict(SqlException ex, string eventName)
-        => DescribeModuleForeignKeyConflict(ex.Number, ex.Message, eventName, ex);
+    internal sealed record ForeignKeyConflict(string? Schema, string? Table, string? Constraint)
+    {
+        /// <summary>The module key the schema derives (<c>omp_&lt;moduleKey&gt;</c>).</summary>
+        public string? DerivedModuleKey => Schema?[ModuleRuntimeMaintenance.ModuleSchemaPrefix.Length..];
+    }
 
-    internal static InvalidOperationException? DescribeModuleForeignKeyConflict(
-        int errorNumber,
-        string message,
-        string eventName,
-        Exception? inner = null)
+    /// <summary>
+    /// Classifies error <paramref name="errorNumber"/>. Returns <see langword="null"/> for every
+    /// error the caller rethrows unchanged: another error number, an English CHECK constraint
+    /// conflict, and a conflict whose table is in a platform or non-module schema. A conflict in a
+    /// module schema carries its names; one whose table cannot be read from the (possibly
+    /// localized) text carries none, so the caller still gives guidance instead of the raw error.
+    /// </summary>
+    internal static ForeignKeyConflict? ParseForeignKeyConflict(int errorNumber, string message)
     {
         if (errorNumber != ConstraintConflictErrorNumber)
             return null;
 
-        var match = ReferenceConflictPattern.Match(message);
-        if (!match.Success)
+        // The one 547 that is not a reference: a CHECK constraint on the changed row itself.
+        if (message.Contains("CHECK constraint", StringComparison.Ordinal))
             return null;
 
-        var schema = match.Groups["schema"].Value;
+        var names = QuotedNamePattern.Matches(message)
+            .Select(static match => match.Groups["name"].Value)
+            .ToArray();
+
+        // The table is the schema-qualified name, after the constraint and the database.
+        var tableName = names.LastOrDefault(static name => SplitQualified(name) is not null);
+        if (tableName is null)
+            return new ForeignKeyConflict(null, null, null);
+
+        var (schema, table) = SplitQualified(tableName)!.Value;
         if (!schema.StartsWith(ModuleRuntimeMaintenance.ModuleSchemaPrefix, StringComparison.OrdinalIgnoreCase)
+            || schema.Length == ModuleRuntimeMaintenance.ModuleSchemaPrefix.Length
             || ModuleRuntimeMaintenance.IsPlatformModuleSchema(schema))
         {
             return null;
         }
 
-        var moduleKey = schema[ModuleRuntimeMaintenance.ModuleSchemaPrefix.Length..];
-        if (moduleKey.Length == 0)
+        var constraint = names.FirstOrDefault(name => !string.Equals(name, tableName, StringComparison.Ordinal));
+        return new ForeignKeyConflict(schema, table, constraint);
+    }
+
+    private static (string Schema, string Table)? SplitQualified(string name)
+    {
+        var dot = name.IndexOf('.', StringComparison.Ordinal);
+        if (dot <= 0 || dot == name.Length - 1 || name.IndexOf('.', dot + 1) >= 0 || name.Any(char.IsWhiteSpace))
+            return null;
+        return (name[..dot], name[(dot + 1)..]);
+    }
+
+    /// <summary>
+    /// Turns a foreign key conflict raised by a platform delete into guidance when the blocking
+    /// rows live in a module schema (<c>omp_&lt;moduleKey&gt;</c>, not a platform-shipped one), or
+    /// when the error text does not say where they live. The schema is looked up in omp.Modules on
+    /// the caller's connection: a registered module is named with the event it has to declare; a
+    /// schema no module registers is reported as such. Returns <see langword="null"/> for every
+    /// other error, which the caller rethrows unchanged. Nothing is mutated; the caller's
+    /// transaction still rolls back.
+    /// </summary>
+    internal static async Task<ModuleRuntimeMaintenanceException?> DescribeModuleForeignKeyConflictAsync(
+        SqlConnection conn,
+        SqlTransaction? tx,
+        SqlException ex,
+        string eventName,
+        CancellationToken ct)
+    {
+        var error = ex.Errors.Cast<SqlError>().FirstOrDefault(static e => e.Number == ConstraintConflictErrorNumber);
+        var conflict = error is null
+            ? ParseForeignKeyConflict(ex.Number, ex.Message)
+            : ParseForeignKeyConflict(error.Number, error.Message);
+        if (conflict is null)
             return null;
 
+        string? registeredModuleKey = null;
+        if (conflict.Schema is not null)
+        {
+            try
+            {
+                await using var cmd = new SqlCommand(RegisteredModuleSql, conn, tx);
+                cmd.Parameters.Add(new SqlParameter("@schema", SqlDbType.NVarChar, 128) { Value = conflict.Schema });
+                registeredModuleKey = await cmd.ExecuteScalarAsync(ct) as string;
+            }
+            catch (SqlException)
+            {
+                // The lookup only chooses the wording; when it cannot run, name the derived key.
+                registeredModuleKey = conflict.DerivedModuleKey;
+            }
+        }
+
+        return DescribeForeignKeyConflict(conflict, eventName, registeredModuleKey, ex);
+    }
+
+    /// <summary>
+    /// Words the guidance for <paramref name="conflict"/>. <paramref name="registeredModuleKey"/> is
+    /// the omp.Modules key that owns the schema, or <see langword="null"/> when no module does.
+    /// </summary>
+    internal static ModuleRuntimeMaintenanceException DescribeForeignKeyConflict(
+        ForeignKeyConflict conflict,
+        string eventName,
+        string? registeredModuleKey,
+        Exception? inner = null)
+    {
         var removed = eventName switch
         {
             ModuleRuntimeMaintenance.HostRemoved => "host",
@@ -332,17 +415,104 @@ END;";
             _ => "platform row",
         };
 
-        return new InvalidOperationException(
-            $"{ModuleRuntimeMaintenance.RuleId}: Module '{moduleKey}' (schema {schema}) has rows in "
-            + $"{schema}.{match.Groups["table"].Value} that reference the {removed} being removed "
-            + $"(constraint '{match.Groups["constraint"].Value}'). The module's applied definition declares no "
+        if (conflict.Schema is null)
+        {
+            return new ModuleRuntimeMaintenanceException(
+                ModuleRuntimeMaintenanceFailure.UnidentifiedReference,
+                eventName,
+                moduleKey: null,
+                $"{ModuleRuntimeMaintenance.RuleId}: Rows in another table still reference the {removed} being removed "
+                + $"(SQL error {ConstraintConflictErrorNumber}); the error text does not name the table in a form that can be read. "
+                + $"If a module owns that table, its applied definition declares no runtimeMaintenance step for event '{eventName}' "
+                + "that releases them: upgrade the module definition to a version that declares one, then retry. Nothing was deleted.",
+                inner);
+        }
+
+        var rows = $"{conflict.Schema}.{conflict.Table}";
+        var constraint = conflict.Constraint is null ? string.Empty : $" (constraint '{conflict.Constraint}')";
+        if (registeredModuleKey is null)
+        {
+            return new ModuleRuntimeMaintenanceException(
+                ModuleRuntimeMaintenanceFailure.UnregisteredSchemaRows,
+                eventName,
+                moduleKey: null,
+                $"{ModuleRuntimeMaintenance.RuleId}: Rows in {rows} reference the {removed} being removed{constraint}, "
+                + $"but schema {conflict.Schema} belongs to no registered module -- a schema left behind by a removed module? "
+                + "No runtime maintenance step can release those rows: clean up the leftover schema, then retry. Nothing was deleted.",
+                inner,
+                conflict.Schema);
+        }
+
+        return new ModuleRuntimeMaintenanceException(
+            ModuleRuntimeMaintenanceFailure.UnreleasedModuleRows,
+            eventName,
+            registeredModuleKey,
+            $"{ModuleRuntimeMaintenance.RuleId}: Module '{registeredModuleKey}' (schema {conflict.Schema}) has rows in "
+            + $"{rows} that reference the {removed} being removed{constraint}. The module's applied definition declares no "
             + $"runtimeMaintenance step for event '{eventName}' that releases them: upgrade the module definition "
             + "to a version that declares one, then retry. Nothing was deleted.",
-            inner);
+            inner,
+            conflict.Schema);
     }
 
-    private static InvalidOperationException StepFailed(ModuleRuntimeMaintenance.Step step, SqlException ex)
+    private static ModuleRuntimeMaintenanceException StepFailed(ModuleRuntimeMaintenance.Step step, SqlException ex)
         => new(
+            ModuleRuntimeMaintenanceFailure.StepFailed,
+            step.Event,
+            step.ModuleKey,
             $"{ModuleRuntimeMaintenance.RuleId}: Runtime maintenance step '{step.Key}' of module '{step.ModuleKey}' failed for event '{step.Event}': {ex.Message}",
-            ex);
+            ex,
+            step.SchemaName);
+}
+
+/// <summary>What stopped a platform change in runtime maintenance.</summary>
+internal enum ModuleRuntimeMaintenanceFailure
+{
+    /// <summary>An applied definition could not be validated, so no step ran for the event.</summary>
+    EventRefused,
+
+    /// <summary>A declared step of <see cref="ModuleRuntimeMaintenanceException.ModuleKey"/> failed.</summary>
+    StepFailed,
+
+    /// <summary>A registered module's rows still reference the removed row and no step released them.</summary>
+    UnreleasedModuleRows,
+
+    /// <summary>Rows in a module schema that no registered module owns still reference the removed row.</summary>
+    UnregisteredSchemaRows,
+
+    /// <summary>A foreign key blocked the delete and the error text did not say which table.</summary>
+    UnidentifiedReference,
+}
+
+/// <summary>
+/// A platform change stopped by module runtime maintenance. <see cref="Exception.Message"/> is the
+/// full diagnostic for logs; the other properties are what a user interface may show -- the
+/// failure, the event and the module key or schema, never SQL or error text.
+/// </summary>
+internal sealed class ModuleRuntimeMaintenanceException : InvalidOperationException
+{
+    public ModuleRuntimeMaintenanceException(
+        ModuleRuntimeMaintenanceFailure failure,
+        string eventName,
+        string? moduleKey,
+        string message,
+        Exception? inner = null,
+        string? schemaName = null)
+        : base(message, inner)
+    {
+        Failure = failure;
+        EventName = eventName;
+        ModuleKey = moduleKey;
+        SchemaName = schemaName;
+    }
+
+    public ModuleRuntimeMaintenanceFailure Failure { get; }
+
+    public string EventName { get; }
+
+    /// <summary>The registered module involved, when there is exactly one.</summary>
+    public string? ModuleKey { get; }
+
+    /// <summary>The module schema involved, when known.</summary>
+    public string? SchemaName { get; }
 }

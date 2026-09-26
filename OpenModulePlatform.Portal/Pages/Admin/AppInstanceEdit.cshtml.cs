@@ -222,7 +222,11 @@ public sealed class AppInstanceEditModel : OmpPortalPageModel
                 TemplateControl = await _repo.GetTemplateManagedAppInstanceInfoAsync(Input.AppInstanceId, ct);
             }
 
-            ModelState.AddModelError(string.Empty, PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
+            ModelState.AddModelError(
+                string.Empty,
+                ex is OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceException
+                    ? DeleteBlockedMessage(ex, "The app instance could not be deleted.")
+                    : PortalTextLocalizer.Display(PortalLocalizer, ex.Message));
             return Page();
         }
     }

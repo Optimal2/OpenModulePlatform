@@ -702,11 +702,22 @@ SELECT @@ROWCOUNT;";
             {
                 deleted = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
             }
-            catch (SqlException ex) when (OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor
-                .DescribeModuleForeignKeyConflict(ex, OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.HostRemoved) is { } guidance)
+            catch (SqlException ex)
             {
                 // A module table still references the host and no declared host-removed step
                 // released it: name the module instead of surfacing the raw FK error.
+                var guidance = await OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor
+                    .DescribeModuleForeignKeyConflictAsync(
+                        conn,
+                        tx,
+                        ex,
+                        OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.HostRemoved,
+                        ct);
+                if (guidance is null)
+                {
+                    throw;
+                }
+
                 throw guidance;
             }
         }

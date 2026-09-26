@@ -113,7 +113,7 @@ CREATE TABLE omp_other_module.RuntimeLeases (HostId uniqueidentifier NOT NULL);"
         InsertDefinition(tampered, isApplied: true);
         var hostId = _database.InsertHost("runtime-maintenance-tampered", environment: null);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _repository.DeleteOrphanHostAsync(hostId, CancellationToken.None));
 
         Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
@@ -155,7 +155,7 @@ CREATE TABLE omp_other_module.RuntimeLeases (HostId uniqueidentifier NOT NULL);"
         var hostId = _database.InsertHost("runtime-maintenance-platform-read", environment: null);
         InsertLease(hostId);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _repository.DeleteOrphanHostAsync(hostId, CancellationToken.None));
 
         Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);

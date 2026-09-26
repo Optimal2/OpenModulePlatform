@@ -76,7 +76,7 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
         var hostId = await _fixture.InsertHostAsync();
         await _fixture.InsertHostLeaseAsync(hostId);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _fixture.CreatePortalRepository().DeleteHostAsync(hostId, CancellationToken.None));
 
         Assert.StartsWith("OMP-MODULE-RUNTIME-MAINTENANCE: Module 'example_webapp' (schema omp_example_webapp)", ex.Message, StringComparison.Ordinal);
@@ -96,7 +96,7 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
         await _fixture.InsertBindingAsync(appInstanceId, artifactId: null);
         await _fixture.InsertLeaseAsync(appInstanceId);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _fixture.CreatePortalRepository().DeleteAppInstanceAsync(appInstanceId, CancellationToken.None));
 
         Assert.Contains("2 example runtime binding(s)", ex.Message, StringComparison.Ordinal);
@@ -180,7 +180,7 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
         await _fixture.InsertExampleDefinitionAsync(isApplied: true, registeredSchema: "omp_portal");
         await _fixture.InsertBindingAsync(Guid.NewGuid(), artifactId: 910005);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _fixture.CreatePortalRepository().DeleteArtifactAsync(910005, CancellationToken.None));
 
         Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
@@ -194,7 +194,7 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
         await _fixture.RegisterIntruderModuleAsync("omp_example_webapp");
         await _fixture.InsertBindingAsync(Guid.NewGuid(), artifactId: 910006);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _fixture.CreatePortalRepository().DeleteArtifactAsync(910006, CancellationToken.None));
 
         Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
@@ -225,7 +225,7 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
             """);
         await _fixture.InsertBindingAsync(Guid.NewGuid(), artifactId: 910007);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _fixture.CreatePortalRepository().DeleteArtifactAsync(910007, CancellationToken.None));
 
         Assert.StartsWith("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
@@ -243,7 +243,7 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
         await _fixture.InsertExampleDefinitionAsync(isApplied: true, registeredModuleKey: "Example_WebApp");
         await _fixture.InsertBindingAsync(Guid.NewGuid(), artifactId: 910008);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
             () => _fixture.CreatePortalRepository().DeleteArtifactAsync(910008, CancellationToken.None));
 
         Assert.Contains("OMP-MODULE-RUNTIME-MAINTENANCE", ex.Message, StringComparison.Ordinal);
@@ -291,6 +291,114 @@ public sealed class OmpAdminRepositoryRuntimeMaintenanceTests
             CancellationToken.None));
 
         Assert.Contains("OMP-MODULE-KEY-CASE", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeleteHostAsync_WhenSchemaBelongsToNoRegisteredModule_SaysSoAndDeletesNothing()
+    {
+        // Fas 2 r3, info 1: the schema is only a name until omp.Modules says a module owns it. With
+        // no registration there is no definition to upgrade; the guidance says the schema is orphaned.
+        await _fixture.AddLeaseHostForeignKeyAsync();
+        var hostId = await _fixture.InsertHostAsync();
+        await _fixture.InsertHostLeaseAsync(hostId);
+
+        var ex = await Assert.ThrowsAnyAsync<InvalidOperationException>(
+            () => _fixture.CreatePortalRepository().DeleteHostAsync(hostId, CancellationToken.None));
+
+        Assert.Contains("schema omp_example_webapp belongs to no registered module", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Module 'example_webapp'", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("upgrade the module definition", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(1, await _fixture.CountHostsAsync(hostId));
+    }
+
+    [Fact]
+    public async Task HostEditDelete_WhenModuleTableBlocksTheDelete_ShowsModuleAndEventOnThePage()
+    {
+        // Fas 2 r3, F1: the guidance DeleteHostAsync throws is an InvalidOperationException. The
+        // page answered it with a 500; it now re-renders with the module key and the event only.
+        await _fixture.InsertExampleDefinitionAsync(
+            isApplied: true,
+            rewriteJson: static json =>
+            {
+                var definition = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+                Assert.True(definition.Remove("runtimeMaintenance"));
+                return definition.ToJsonString();
+            });
+        await _fixture.AddLeaseHostForeignKeyAsync();
+        var hostId = await _fixture.InsertHostAsync();
+        await _fixture.InsertHostLeaseAsync(hostId);
+        var page = WithPageContext(new OpenModulePlatform.Portal.Pages.Admin.HostEditModel(
+            AnonymousOptions(), null!, _fixture.CreatePortalRepository()));
+        page.Input.HostId = hostId;
+
+        var result = await page.OnPostDelete(CancellationToken.None);
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.RazorPages.PageResult>(result);
+        var error = Assert.Single(page.ModelState[string.Empty]!.Errors).ErrorMessage;
+        Assert.Contains("Module 'example_webapp'", error, StringComparison.Ordinal);
+        Assert.Contains("'host-removed'", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeLeases", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("FK_", error, StringComparison.Ordinal);
+        Assert.Equal(1, await _fixture.CountHostsAsync(hostId));
+    }
+
+    [Fact]
+    public async Task ArtifactEditDelete_WhenRuntimeMaintenanceIsRefused_ShowsTheEventOnThePage()
+    {
+        // Fas 2 r3, F1: a refused artifact-removed event is an InvalidOperationException too.
+        const string broken = ModuleRuntimeMaintenanceTestFixture.BrokenModuleKeyA;
+        await _fixture.InsertAppliedDocumentAsync(
+            broken,
+            $$$"""
+            {"moduleKey":"{{{broken}}}","module":{"schemaName":"omp_{{{broken}}}"},
+             "runtimeMaintenance":{"steps":[{"key":"s","event":"artifact-removed","execution":"idempotent","inlineSql":"TRUNCATE TABLE omp_{{{broken}}}.Leases;"}]}}
+            """);
+        var page = WithPageContext(new OpenModulePlatform.Portal.Pages.Admin.ArtifactEditModel(
+            AnonymousOptions(),
+            null!,
+            _fixture.CreatePortalRepository(),
+            Microsoft.Extensions.Options.Options.Create(new OpenModulePlatform.Portal.Options.ArtifactUploadOptions())));
+        page.Input.ArtifactId = 910009;
+
+        var result = await page.OnPostDelete(CancellationToken.None);
+
+        Assert.IsType<Microsoft.AspNetCore.Mvc.RazorPages.PageResult>(result);
+        var error = Assert.Single(page.ModelState[string.Empty]!.Errors).ErrorMessage;
+        Assert.Contains("'artifact-removed' was refused", error, StringComparison.Ordinal);
+        Assert.DoesNotContain(ModuleRuntimeMaintenanceTestFixture.BrokenModuleKeyA, error, StringComparison.Ordinal);
+    }
+
+    private static Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> AnonymousOptions()
+        => Microsoft.Extensions.Options.Options.Create(new OpenModulePlatform.Web.Shared.Options.WebAppOptions { AllowAnonymous = true });
+
+    // The page runs outside the host: a request with logging and resx localization, as Program
+    // adds, read in the neutral (English) culture whatever the machine's UI language is.
+    private static TPage WithPageContext<TPage>(TPage page)
+        where TPage : Microsoft.AspNetCore.Mvc.RazorPages.PageModel
+    {
+        System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        Microsoft.Extensions.DependencyInjection.LoggingServiceCollectionExtensions.AddLogging(services);
+        Microsoft.Extensions.DependencyInjection.LocalizationServiceCollectionExtensions.AddLocalization(
+            services,
+            options => options.ResourcesPath = "Resources");
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+        {
+            RequestServices = Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions.BuildServiceProvider(services),
+        };
+        var modelState = new Microsoft.AspNetCore.Mvc.ModelBinding.ModelStateDictionary();
+        page.PageContext = new Microsoft.AspNetCore.Mvc.RazorPages.PageContext(
+            new Microsoft.AspNetCore.Mvc.ActionContext(
+                httpContext,
+                new Microsoft.AspNetCore.Routing.RouteData(),
+                new Microsoft.AspNetCore.Mvc.RazorPages.CompiledPageActionDescriptor(),
+                modelState))
+        {
+            ViewData = new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(
+                new Microsoft.AspNetCore.Mvc.ModelBinding.EmptyModelMetadataProvider(),
+                modelState),
+        };
+        return page;
     }
 }
 

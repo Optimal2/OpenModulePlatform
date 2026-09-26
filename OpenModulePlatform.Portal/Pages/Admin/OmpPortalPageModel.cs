@@ -1,4 +1,6 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/OmpPortalPageModel.cs
+using System.Globalization;
+using OpenModulePlatform.ModuleDefinitions;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Security;
 using OpenModulePlatform.Web.Shared.Options;
@@ -76,5 +78,48 @@ public abstract class OmpPortalPageModel : OmpSecurePageModel<PortalResource>
         ViewData["IsPortalAdmin"] = permissions.Contains(OmpPortalPermissions.Admin);
         ViewData["PortalPermissions"] = permissions;
         return null;
+    }
+
+    /// <summary>
+    /// The operator message for a delete that module runtime maintenance stopped: the module key
+    /// or schema and the event, never the SQL or error text, which goes to the log instead. Any
+    /// other <see cref="InvalidOperationException"/> shows <paramref name="fallbackKey"/>.
+    /// </summary>
+    protected string DeleteBlockedMessage(InvalidOperationException ex, string fallbackKey)
+    {
+        HttpContext.RequestServices.GetService<ILoggerFactory>()?
+            .CreateLogger(GetType())
+            .LogWarning(ex, "Delete refused: {Reason}", ex.Message);
+
+        if (ex is not ModuleRuntimeMaintenanceException blocked)
+        {
+            return T(fallbackKey);
+        }
+
+        return blocked.Failure switch
+        {
+            ModuleRuntimeMaintenanceFailure.StepFailed when blocked.ModuleKey is not null => string.Format(
+                CultureInfo.CurrentCulture,
+                T("The runtime maintenance step of module '{0}' failed for event '{1}'. Nothing was deleted; the Portal log has the details."),
+                blocked.ModuleKey,
+                blocked.EventName),
+            ModuleRuntimeMaintenanceFailure.UnreleasedModuleRows when blocked.ModuleKey is not null => string.Format(
+                CultureInfo.CurrentCulture,
+                T("Module '{0}' still has rows that reference this item and declares no runtime maintenance step for event '{1}' that releases them. Upgrade the module, then retry. Nothing was deleted."),
+                blocked.ModuleKey,
+                blocked.EventName),
+            ModuleRuntimeMaintenanceFailure.UnregisteredSchemaRows when blocked.SchemaName is not null => string.Format(
+                CultureInfo.CurrentCulture,
+                T("Schema '{0}' belongs to no registered module (a leftover schema?) and still has rows that reference this item. Clean up the schema, then retry. Nothing was deleted."),
+                blocked.SchemaName),
+            ModuleRuntimeMaintenanceFailure.EventRefused => string.Format(
+                CultureInfo.CurrentCulture,
+                T("Runtime maintenance for event '{0}' was refused because a module definition could not be validated. Nothing was deleted; the Portal log has the details."),
+                blocked.EventName),
+            _ => string.Format(
+                CultureInfo.CurrentCulture,
+                T("Another table still references this item. If a module owns that table, it needs a runtime maintenance step for event '{0}'. Nothing was deleted; the Portal log has the details."),
+                blocked.EventName),
+        };
     }
 }

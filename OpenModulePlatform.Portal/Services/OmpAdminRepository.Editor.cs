@@ -1447,6 +1447,8 @@ SELECT @affected;";
         await using var tx = (SqlTransaction)await conn.BeginTransactionAsync(ct);
 
         var affected = await WithModuleForeignKeyGuidanceAsync(
+            conn,
+            tx,
             OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.HostRemoved,
             async () =>
             {
@@ -1463,7 +1465,8 @@ SELECT @affected;";
                 // return value -- that is the SUM across the whole batch and would report success as
                 // soon as the host had a single child row (R8-P3-9).
                 return await cmd.ExecuteScalarAsync(ct);
-            });
+            },
+            ct);
         await tx.CommitAsync(ct);
         return affected is int rows && rows > 0;
     }
@@ -1474,15 +1477,26 @@ SELECT @affected;";
     /// maintenance event it has to declare. Any other error propagates unchanged; the caller's
     /// transaction is rolled back either way.
     /// </summary>
-    private static async Task<T> WithModuleForeignKeyGuidanceAsync<T>(string eventName, Func<Task<T>> delete)
+    private static async Task<T> WithModuleForeignKeyGuidanceAsync<T>(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string eventName,
+        Func<Task<T>> delete,
+        CancellationToken ct)
     {
         try
         {
             return await delete();
         }
-        catch (SqlException ex) when (OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor
-            .DescribeModuleForeignKeyConflict(ex, eventName) is { } guidance)
+        catch (SqlException ex)
         {
+            var guidance = await OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenanceExecutor
+                .DescribeModuleForeignKeyConflictAsync(conn, tx, ex, eventName, ct);
+            if (guidance is null)
+            {
+                throw;
+            }
+
             throw guidance;
         }
     }
@@ -1954,6 +1968,8 @@ SELECT @affected;";
         try
         {
             var affected = await WithModuleForeignKeyGuidanceAsync(
+                conn,
+                tx,
                 OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.ArtifactRemoved,
                 async () =>
                 {
@@ -1967,7 +1983,8 @@ SELECT @affected;";
                     await using var cmd = new SqlCommand(sql, conn, tx);
                     Add(cmd, "@ArtifactId", artifactId);
                     return await cmd.ExecuteScalarAsync(ct);
-                });
+                },
+                ct);
             await tx.CommitAsync(ct);
             return affected is int rows && rows > 0;
         }
@@ -5327,6 +5344,8 @@ VALUES
         Guid appInstanceId,
         CancellationToken ct)
         => WithModuleForeignKeyGuidanceAsync(
+            conn,
+            tx,
             OpenModulePlatform.ModuleDefinitions.ModuleRuntimeMaintenance.AppInstanceRemoved,
             async () =>
             {
@@ -5337,7 +5356,8 @@ VALUES
                     "DELETE FROM omp.AppInstances WHERE AppInstanceId = @Id;",
                     appInstanceId,
                     ct);
-            });
+            },
+            ct);
 
     /// <summary>
     /// Clears every row that references an app instance, in FK order, so the caller can delete the

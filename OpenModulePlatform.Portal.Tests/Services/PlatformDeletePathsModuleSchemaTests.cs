@@ -35,6 +35,9 @@ public sealed partial class PlatformDeletePathsModuleSchemaTests
     [InlineData("DELETE FROM [ omp_x ].T WHERE HostId = @HostId;")]
     [InlineData("DELETE FROM omp_x.[T] WHERE HostId = @HostId;")]
     [InlineData("SELECT COUNT(*) FROM [omp_x] . [T];")]
+    [InlineData("DELETE FROM \"omp_x\".\"T\" WHERE HostId = @HostId;")]
+    [InlineData("DELETE FROM \"omp_x\".T WHERE HostId = @HostId;")]
+    [InlineData("DELETE FROM omp_x.\"T\" WHERE HostId = @HostId;")]
     public void Pattern_FindsModuleSchemaInEveryQuotingForm(string sql)
     {
         Assert.Equal(["omp_x"], ForeignSchemas(sql));
@@ -44,6 +47,7 @@ public sealed partial class PlatformDeletePathsModuleSchemaTests
     [InlineData("DELETE FROM omp.Hosts WHERE HostId = @HostId;")]
     [InlineData("DELETE FROM [omp].[Hosts] WHERE HostId = @HostId;")]
     [InlineData("SELECT COUNT(*) FROM [omp_content].[contents];")]
+    [InlineData("DELETE FROM \"omp\".\"T\" WHERE HostId = @HostId;")]
     [InlineData("-- the omp_x module releases its own rows")]
     public void Pattern_AllowsSchemasOwnedByThisRepositoryAndPlainText(string sql)
     {
@@ -57,7 +61,8 @@ public sealed partial class PlatformDeletePathsModuleSchemaTests
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    // A schema-qualified name in any quoting form: omp_x.T, [omp_x].[T], [ omp_x ].T, omp_x.[T].
-    [GeneratedRegex(@"\[?\s*\b(?<schema>omp_[A-Za-z0-9_]+)\s*\]?\s*\.\s*\[?\s*[A-Za-z]", RegexOptions.CultureInvariant)]
+    // A schema-qualified name in any quoting form: omp_x.T, [omp_x].[T], [ omp_x ].T, omp_x.[T],
+    // "omp_x"."T" (QUOTED_IDENTIFIER), and mixes of them.
+    [GeneratedRegex(@"[""\[]?\s*\b(?<schema>omp_[A-Za-z0-9_]+)\s*[""\]]?\s*\.\s*[""\[]?\s*[A-Za-z]", RegexOptions.CultureInvariant)]
     private static partial Regex QualifiedModuleSchemaPattern();
 }

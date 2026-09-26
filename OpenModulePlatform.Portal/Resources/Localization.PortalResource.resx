@@ -1155,6 +1155,11 @@
   <data name="The host could not be deleted." xml:space="preserve">
     <value>The host could not be deleted.</value>
   </data>
+  <data name="The runtime maintenance step of module '{0}' failed for event '{1}'. Nothing was deleted; the Portal log has the details." xml:space="preserve"><value>The runtime maintenance step of module '{0}' failed for event '{1}'. Nothing was deleted; the Portal log has the details.</value></data>
+  <data name="Module '{0}' still has rows that reference this item and declares no runtime maintenance step for event '{1}' that releases them. Upgrade the module, then retry. Nothing was deleted." xml:space="preserve"><value>Module '{0}' still has rows that reference this item and declares no runtime maintenance step for event '{1}' that releases them. Upgrade the module, then retry. Nothing was deleted.</value></data>
+  <data name="Schema '{0}' belongs to no registered module (a leftover schema?) and still has rows that reference this item. Clean up the schema, then retry. Nothing was deleted." xml:space="preserve"><value>Schema '{0}' belongs to no registered module (a leftover schema?) and still has rows that reference this item. Clean up the schema, then retry. Nothing was deleted.</value></data>
+  <data name="Runtime maintenance for event '{0}' was refused because a module definition could not be validated. Nothing was deleted; the Portal log has the details." xml:space="preserve"><value>Runtime maintenance for event '{0}' was refused because a module definition could not be validated. Nothing was deleted; the Portal log has the details.</value></data>
+  <data name="Another table still references this item. If a module owns that table, it needs a runtime maintenance step for event '{0}'. Nothing was deleted; the Portal log has the details." xml:space="preserve"><value>Another table still references this item. If a module owns that table, it needs a runtime maintenance step for event '{0}'. Nothing was deleted; the Portal log has the details.</value></data>
   <data name="The host is still referenced by data that Portal cannot detach automatically." xml:space="preserve">
     <value>The host is still referenced by data that Portal cannot detach automatically.</value>
   </data>

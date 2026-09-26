@@ -165,6 +165,15 @@ public sealed class ArtifactEditModel : OmpPortalPageModel
 
             return Page();
         }
+        catch (InvalidOperationException ex)
+        {
+            // A module's runtime maintenance stopped the delete (artifact-removed step failed, or
+            // a module table still references the artifact): show which module and event, not a 500.
+            await LoadArtifactForEditAsync(artifactId, ct);
+            SetTitles("Edit artifact");
+            ModelState.AddModelError(string.Empty, DeleteBlockedMessage(ex, "The artifact could not be deleted."));
+            return Page();
+        }
     }
 
     public async Task<IActionResult> OnGetDownloadPackage(int id, CancellationToken ct)
