@@ -5,8 +5,11 @@ using Microsoft.Extensions.Logging;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
+using System.Collections.Concurrent;
 using System.Data;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace OpenModulePlatform.Portal.Services;
 
@@ -38,6 +41,10 @@ public sealed class PortalDashboardService
     private readonly SqlConnectionFactory _db;
     private readonly AppCatalogService _catalog;
     private readonly ILogger<PortalDashboardService> _logger;
+
+    // Debug logging of orphaned widget rows is deliberately rate-limited to once per
+    // widget row per process, so a user's dashboard load cannot spam the log.
+    private static readonly ConcurrentDictionary<int, byte> LoggedOrphanWidgetIds = new();
 
     public PortalDashboardService(
         SqlConnectionFactory db,
@@ -158,18 +165,19 @@ ORDER BY uaw.order_priority,
                 continue;
             }
 
-            if (!ModuleFragmentWidget.IsModuleFragment(definition.WidgetType)
-                && !IsKnownPortalPayload(definition.Payload))
+            if (IsOrphanedWidget(definition) && LoggedOrphanWidgetIds.TryAdd(widgetId, 0))
             {
                 // A widget row whose payload the Portal no longer renders (for example a
                 // module-owned dashboard widget that moved to its own module repository)
                 // is kept but ignored: it renders as an empty widget and is logged at
-                // Debug so the operator can clean up the orphaned row if desired.
+                // Debug so the operator can clean up the orphaned row if desired. The
+                // payload itself is never logged - old module keys must not leak into the
+                // log - only its length and a short hash, once per widget row per process.
                 _logger.LogDebug(
-                    "Dashboard widget '{WidgetKey}' (widget_id {WidgetId}) has an unrecognized payload '{Payload}' and renders as an empty widget.",
-                    definition.WidgetKey,
+                    "Dashboard widget (widget_id {WidgetId}) of type '{WidgetType}' has an unrecognized payload ({PayloadFingerprint}) and renders as an empty widget.",
                     widgetId,
-                    definition.Payload);
+                    definition.WidgetType,
+                    PayloadFingerprint(definition.Payload!));
             }
 
             widgets.Add(new DashboardActiveWidget
@@ -829,6 +837,29 @@ ORDER BY w.title,
         cmd.Parameters.Add("@string_data", SqlDbType.NVarChar, 20).Value = CleanStringData(update.StringData) ?? (object)DBNull.Value;
         cmd.Parameters.Add("@content_scale", SqlDbType.Int).Value = Clamp(update.ContentScale, MinWidgetContentScale, MaxWidgetContentScale);
         cmd.Parameters.Add("@hide_titlebar_when_viewing", SqlDbType.Bit).Value = update.HideTitlebarWhenViewing;
+    }
+
+    /// <summary>
+    /// True when a widget definition carries a payload the Portal no longer renders.
+    /// A null or empty payload is never an orphan: portal widget types that do not use
+    /// a payload legitimately store NULL, and flagging those would label ordinary rows
+    /// as leftovers. Module-fragment widgets are never orphans either - their payload
+    /// is parsed by <see cref="ModuleFragmentWidget"/>, not by this switch.
+    /// </summary>
+    internal static bool IsOrphanedWidget(DashboardWidgetDefinition definition)
+        => !string.IsNullOrWhiteSpace(definition.Payload)
+           && !ModuleFragmentWidget.IsModuleFragment(definition.WidgetType)
+           && !IsKnownPortalPayload(definition.Payload);
+
+    /// <summary>
+    /// A short, stable stand-in for a payload in log output: its length plus the first
+    /// bytes of its SHA-256. Never contains the payload text, so private module keys
+    /// cannot leak through the Debug log.
+    /// </summary>
+    internal static string PayloadFingerprint(string payload)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return $"{payload.Length}:{Convert.ToHexString(hash)[..8]}";
     }
 
     private static bool IsKnownPortalPayload(string? payload)
