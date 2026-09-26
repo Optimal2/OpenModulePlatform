@@ -3,6 +3,7 @@ using OpenModulePlatform.Web.ExampleWebAppModule.Services;
 using OpenModulePlatform.Web.ExampleWebAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +20,15 @@ namespace OpenModulePlatform.Web.ExampleWebAppModule.Pages.Widgets;
 /// and a signed-in user without the permission answers 403, which the Portal shows as
 /// its neutral placeholder either way.
 /// </remarks>
+/// <remarks>
+/// Fragment endpoints under <c>/widgets/</c> must answer 401 (not redirect to the
+/// login page) for a request without a valid OMP cookie, so the Portal's server-side
+/// fetch can tell "not signed in" apart from "no permission". The shared fallback
+/// authorization policy would redirect the cookieless request before this page model
+/// runs, so the page opts out with <see cref="AllowAnonymousAttribute"/> and enforces
+/// the permission itself in <see cref="OnGet"/> instead (see docs/MODULE_DEFINITIONS.md).
+/// </remarks>
+[AllowAnonymous]
 public sealed class OverviewModel : ExampleWebAppModulePageModel
 {
     private readonly ExampleWebAppModuleAdminRepository _repo;
