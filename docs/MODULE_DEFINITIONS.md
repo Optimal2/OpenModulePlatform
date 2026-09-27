@@ -1008,11 +1008,16 @@ for those denials. Ordinary pages retain their normal challenge behavior.
 
 Do **not** use `[AllowAnonymous]` on a fragment or its base class, or apply
 `AllowAnonymous()` through endpoint conventions: it bypasses authorization,
-including this policy. The former `[AllowAnonymous]` plus handler guard pattern
-is discouraged because deleting or forgetting the guard silently renders a 200.
-No per-handler guard is needed with the attribute. Do not replace the registered
-`IAuthorizationMiddlewareResultHandler` after `AddOmpModuleFragments`; applications
-with a custom handler must compose the fragment denial behavior into it.
+including this policy. This is enforced mechanically: when the host starts,
+`AddOmpModuleFragments` validates every mapped endpoint and **fails startup**
+with an `InvalidOperationException` naming each endpoint that carries both the
+fragment policy and AllowAnonymous (attribute or convention), so the silent-200
+mistake cannot reach a browser. The former `[AllowAnonymous]` plus handler guard
+pattern is discouraged because deleting or forgetting the guard silently renders
+a 200. No per-handler guard is needed with the attribute. Do not replace the
+registered `IAuthorizationMiddlewareResultHandler` after `AddOmpModuleFragments`;
+applications with a custom handler must compose the fragment denial behavior
+into it.
 
 **Enforcement must be enabled:** `Portal:AllowAnonymous=false` (or the section
 passed to `AddOmpWebDefaults`). The example's Development configuration explicitly
@@ -1035,7 +1040,9 @@ every module artifact that includes it when updating it.
 `ModuleFragmentAuthorizationTests` runs a real Razor Page with the attribute and
 no handler guard in Chromium. It covers 401/403/200, empty denial bodies, expired
 and rejected cookies, requests with/without the Portal marker, and unchanged
-ordinary-page redirects. Storage is replaced with test data, so no database is
+ordinary-page redirects, plus the host-startup failure for endpoints that combine
+the fragment policy with AllowAnonymous (Razor attribute and minimal-API
+convention). Storage is replaced with test data, so no database is
 required. GitHub CI runs it in the independent `module-fragment-ui` job with a
 15-minute timeout and no dependencies that delay other jobs; missing Chromium or
 startup errors fail the job instead of skipping tests. The normal local CI gate

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
@@ -143,6 +144,69 @@ public sealed class ModuleFragmentAuthorizationTests
         {
             await app.StopAsync();
         }
+    }
+
+    [Fact]
+    public async Task Fragment_combined_with_AllowAnonymous_fails_host_startup()
+    {
+        var builder = CreateFragmentAppBuilder(
+            "Production",
+            configureRazorPages: options => options.RootDirectory = "/ConflictPages");
+        builder.Services.Configure<WebAppOptions>(options => options.AllowAnonymous = false);
+
+        var app = builder.Build();
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapRazorPages();
+        // Same mistake through endpoint conventions instead of an attribute.
+        app.MapGet("/fragment-conflict", () => "conflicting fragment")
+            .WithMetadata(new OmpModuleFragmentAttribute("example.view"))
+            .AllowAnonymous();
+        // Anonymous without the fragment attribute stays legal.
+        app.MapGet("/legacy", () => "unguarded").AllowAnonymous();
+
+        try
+        {
+            var error = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => app.StartAsync());
+            // The Razor page and the minimal API endpoint must both be named in the failure.
+            Assert.Contains("FragmentAnonymous", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/fragment-conflict", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            await app.DisposeAsync();
+        }
+    }
+
+
+    private static WebApplicationBuilder CreateFragmentAppBuilder(
+        string environmentName,
+        Action<RazorPagesOptions>? configureRazorPages = null,
+        Action<WebAppOptions>? configureWebApp = null)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ApplicationName = typeof(ModuleFragmentAuthorizationTests).Assembly.GetName().Name,
+            EnvironmentName = environmentName
+        });
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Services.AddRazorPages(configureRazorPages ?? (_ => { }))
+            .ConfigureApplicationPartManager(parts => parts.ApplicationParts.Clear())
+            .AddApplicationPart(typeof(ModuleFragmentAuthorizationTests).Assembly);
+        builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        builder.Services.AddOptions<WebAppOptions>().Bind(builder.Configuration.GetSection(WebAppOptions.DefaultSectionName));
+        builder.Services.Configure<WebAppOptions>(configureWebApp ?? (_ => { }));
+        builder.Services.AddAuthentication(OmpAuthDefaults.AuthenticationScheme)
+            .AddCookie(OmpAuthDefaults.AuthenticationScheme, options =>
+            {
+                options.Cookie.Name = OmpAuthDefaults.CookieName;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.None;
+            });
+        builder.Services.AddAuthorization(options => options.FallbackPolicy = options.DefaultPolicy);
+        builder.Services.AddOmpModuleFragments();
+        builder.Services.AddScoped<IOmpModuleFragmentPermissions, TestPermissions>();
+        return builder;
     }
 
     private sealed class TestPermissions : IOmpModuleFragmentPermissions

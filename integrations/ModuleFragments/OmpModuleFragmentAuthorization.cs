@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Web.Shared.Options;
@@ -12,7 +15,8 @@ namespace OpenModulePlatform.Web.ModuleFragments;
 
 /// <summary>
 /// Protects an HTML fragment before its handler runs. Permissions within one attribute
-/// are alternatives; multiple attributes must all pass. Never combine with AllowAnonymous.
+/// are alternatives; multiple attributes must all pass. Never combine with AllowAnonymous:
+/// <see cref="OmpModuleFragmentStartupFilter"/> fails host startup for such endpoints.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
 public sealed class OmpModuleFragmentAttribute : AuthorizeAttribute
@@ -50,7 +54,43 @@ public static class OmpModuleFragmentExtensions
         services.AddScoped<IOmpModuleFragmentPermissions, RbacFragmentPermissions>();
         services.AddScoped<IAuthorizationHandler, FragmentAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler, FragmentAuthorizationResultHandler>();
+        services.AddSingleton<IStartupFilter, OmpModuleFragmentStartupFilter>();
         return services;
+    }
+}
+
+/// <summary>
+/// Fails host startup when an endpoint combines the fragment policy with AllowAnonymous
+/// (attribute or endpoint convention). AllowAnonymous short-circuits authorization
+/// middleware, so such an endpoint would silently serve the fragment to anyone.
+/// </summary>
+internal sealed class OmpModuleFragmentStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+        => app =>
+        {
+            next(app);
+            // The composite EndpointDataSource is wired from the application's route
+            // builder while the request pipeline is composed, so the endpoints are
+            // complete here but the server has not started accepting requests yet.
+            ThrowOnConflictingEndpoints(app.ApplicationServices.GetRequiredService<EndpointDataSource>());
+        };
+
+    internal static void ThrowOnConflictingEndpoints(EndpointDataSource endpoints)
+    {
+        var conflicts = endpoints.Endpoints
+            .Where(endpoint => endpoint.Metadata.GetMetadata<OmpModuleFragmentAttribute>() is not null
+                && endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null)
+            .Select(endpoint => endpoint.DisplayName)
+            .ToArray();
+
+        if (conflicts.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "Endpoint(s) combine [OmpModuleFragment] with AllowAnonymous, which bypasses the "
+                + $"module-fragment policy and would serve the fragment to anyone: {string.Join(", ", conflicts)}. "
+                + "Remove AllowAnonymous from the fragment endpoint.");
+        }
     }
 }
 
