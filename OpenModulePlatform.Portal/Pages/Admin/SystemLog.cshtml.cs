@@ -73,8 +73,16 @@ public sealed class SystemLogModel : OmpPortalPageModel
         SetTitles("System log");
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxSystemLogTake);
         // Bare values are calendar inputs; explicit instants are converted for the picker.
-        From = AsCalendarInput(From);
-        To = AsCalendarInput(To);
+        try
+        {
+            From = AsCalendarInput(From);
+            To = AsCalendarInput(To);
+        }
+        catch (ArgumentException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            return Page();
+        }
         if (To is { } toDay && !Request.Query["To"].ToString().Contains('T'))
         {
             To = toDay.Date.AddHours(23).AddMinutes(59);
@@ -130,7 +138,8 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
     private DateTime? AsCalendarInput(DateTime? value)
         => value is { Kind: not DateTimeKind.Unspecified } instant
-            ? _time.ToDisplayTime(instant.ToUniversalTime()).DateTime
+            // Let OmpTime reject Local rather than silently using the machine zone.
+            ? _time.ToDisplayTime(instant).DateTime
             : value;
 
     /// <summary>The value the picker's hidden inputs carry for a bound.</summary>

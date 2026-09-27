@@ -125,6 +125,11 @@ The system-log and activity-log pickers now describe local calendar dates. Old
 bare-date bookmarks therefore follow the configured zone after upgrade. Explicit
 system-log instants are converted for the picker. Raw log detail timestamps are
 formatted for display; raw log payloads and exported portable objects stay intact.
+System-log filter values with `DateTimeKind.Local` produce a model validation
+error before any log query. Only UTC instants are converted for the picker;
+unspecified values remain calendar input. Rejecting `Local` preserves the helper
+contract instead of silently using the server's machine zone or reinterpreting
+an instant as wall time in the configured zone.
 
 ## Consumer migration (separate phase)
 
