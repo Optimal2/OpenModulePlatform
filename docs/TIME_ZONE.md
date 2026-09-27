@@ -51,7 +51,7 @@ No local-calendar daily scheduler was found in the platform or examples.
 Additional presentation sites found in the completeness pass (baseline lines):
 `OpenModulePlatform.Web.Shared/Components/Layout/PortalTopBar.razor:743`,
 Portal `Pages/Admin/ModuleDefinitions.cshtml:114,362`,
-`ModuleDefinitionEdit.cshtml:39,113`, `WorkerRuntime.cshtml`, `Workers.cshtml`,
+`ModuleDefinitionEdit.cshtml:39,113`, `WorkerRuntime.cshtml:63,66,70`, `Workers.cshtml:181,184,188`,
 `_HostResourceChart.cshtml:34`, and Content `Pages/Admin/Index.cshtml:90`.
 The banner editor's `datetime-local` fields previously accepted UTC wall time
 (`Pages/Admin/Banners.cshtml.cs:269–291`); these are calendar inputs, while the
@@ -109,6 +109,8 @@ earlier registered version, not necessarily from the active deployment.
 - Topbar JavaScript exposes `window.OmpTime.formatUtc`. It reads the layout's
   `omp-time-zone` meta element or the shared topbar's `data-omp-time-zone` value.
   ISO API values without an offset are treated as UTC. No browser-zone fallback.
+  Include the meta element in layouts even when the topbar is disabled. The
+  date picker reads the same zone for Today/Now and relative calendar limits.
 
 The system-log and activity-log pickers now describe local calendar dates. Old
 bare-date bookmarks therefore follow the configured zone after upgrade. Explicit
@@ -141,3 +143,16 @@ the focused presentation/calendar suite passed, including:
 - `2026-01-14T23:30:00Z` → `2026-01-15 00:30:00 CET`.
 - Spring/fall DST boundaries, missing and repeated minutes, UTC defaults and SQL
   unspecified kinds, plus rolling period presets.
+
+Run the focused tests with:
+
+```powershell
+dotnet test OpenModulePlatform.Portal.Tests --filter 'FullyQualifiedName~PresentationTimeTests|FullyQualifiedName~PeriodPresetsTests'
+node --test tests/time-presentation.test.cjs
+```
+
+The focused .NET suite contains 16 cases, including a skipped-midnight boundary.
+The three Node tests use a Los Angeles browser zone with a Stockholm platform
+zone, covering both timestamp rendering and the calendar picker. An actual
+Portal process launched with `--OmpTime:TimeZoneId=Invalid/Zone` also exits with
+code 1 before accepting requests and identifies `OmpTime:TimeZoneId` in its error.
