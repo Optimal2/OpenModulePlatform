@@ -3230,4 +3230,6 @@
   <data name="Time" xml:space="preserve"><value>Tid</value></data>
   <data name="Starts at" xml:space="preserve"><value>Startar</value></data>
   <data name="Expires at" xml:space="preserve"><value>Upphör</value></data>
+  <data name="Select a valid local time in {0}. The selected time does not exist or is not a calendar value." xml:space="preserve"><value>Välj en giltig lokal tid i {0}. Den valda tiden finns inte eller är inte ett kalendervärde.</value></data>
+  <data name="If a clock time occurs twice when daylight saving time ends, the first occurrence is used." xml:space="preserve"><value>Om ett klockslag förekommer två gånger när sommartiden slutar används den första förekomsten.</value></data>
 </root>

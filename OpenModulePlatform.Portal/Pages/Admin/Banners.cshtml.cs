@@ -255,6 +255,21 @@ public sealed class BannersModel : OmpPortalPageModel
         {
             ModelState.AddModelError(nameof(Input.ExpiresAt), P("Expires at must be after starts at."));
         }
+
+        ValidateCalendarInput(Input.StartsAt, "Input.StartsAt");
+        ValidateCalendarInput(Input.ExpiresAt, "Input.ExpiresAt");
+    }
+
+    private void ValidateCalendarInput(DateTime? value, string field)
+    {
+        try
+        {
+            _ = ToUtcOffset(value);
+        }
+        catch (ArgumentException)
+        {
+            ModelState.AddModelError(field, _portalLocalizer["Select a valid local time in {0}. The selected time does not exist or is not a calendar value.", _time.TimeZoneId]);
+        }
     }
 
     private IReadOnlyList<BannerTargetRequest> ToTargets()
@@ -269,9 +284,10 @@ public sealed class BannersModel : OmpPortalPageModel
             .ToArray();
     }
 
+    // Scheduled instants (both start and expiry) use the earliest occurrence.
     private DateTimeOffset? ToUtcOffset(DateTime? value)
         => value.HasValue
-            ? new DateTimeOffset(_time.ToUtc(value.Value))
+            ? new DateTimeOffset(_time.ToUtc(value.Value, upperBound: false))
             : null;
 
     private InputModel ToInput(BannerEditData row)

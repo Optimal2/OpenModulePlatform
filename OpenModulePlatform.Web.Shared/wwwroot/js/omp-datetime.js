@@ -35,12 +35,21 @@
     var panelSizeWatch = null;
     var panelInput = null;
     var panelToggle = null;
+    var warnedMissingZone = false;
 
     // Return a wall-clock carrier so existing UTC-field calendar arithmetic stays
     // independent of both browser DST and the browser's selected time zone.
     function calendarNow(instant) {
-        var source = document.querySelector('meta[name="omp-time-zone"], [data-omp-time-zone]');
-        var zone = source ? (source.getAttribute('content') || source.getAttribute('data-omp-time-zone')) : 'UTC';
+        var meta = document.querySelector('meta[name="omp-time-zone"]');
+        var zone = meta && (meta.getAttribute('content') || '').trim();
+        if (!zone) {
+            var source = document.querySelector('[data-omp-time-zone]');
+            zone = (source && (source.getAttribute('data-omp-time-zone') || '').trim()) || 'UTC';
+            if (!warnedMissingZone) {
+                console.warn('Missing omp-time-zone metadata; date picker is using ' + zone + '. Include the server time zone in the layout.');
+                warnedMissingZone = true;
+            }
+        }
         var parts = new Intl.DateTimeFormat('en-GB-u-ca-iso8601-nu-latn', {
             timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
             hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'

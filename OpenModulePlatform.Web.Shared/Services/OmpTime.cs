@@ -1,6 +1,8 @@
 using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace OpenModulePlatform.Web.Shared.Services;
 
@@ -11,8 +13,15 @@ public sealed class OmpTime
     private readonly TimeZoneInfo _zone;
     private readonly TimeProvider _clock;
     private readonly bool _centralEuropean;
+    private readonly ILogger<OmpTime>? _logger;
+    private readonly bool _rejectLocalPresentation;
 
     public OmpTime(string timeZoneId = "UTC", TimeProvider? clock = null)
+        : this(timeZoneId, clock, null, rejectLocalPresentation: true)
+    {
+    }
+
+    internal OmpTime(string timeZoneId, TimeProvider? clock, ILogger<OmpTime>? logger, bool rejectLocalPresentation)
     {
         try
         {
@@ -29,6 +38,8 @@ public sealed class OmpTime
 
         TimeZoneId = timeZoneId;
         _clock = clock ?? TimeProvider.System;
+        _logger = logger;
+        _rejectLocalPresentation = rejectLocalPresentation;
         TimeZoneInfo.TryConvertIanaIdToWindowsId(timeZoneId, out var windowsId);
         _centralEuropean = windowsId is "W. Europe Standard Time" or "Central Europe Standard Time" or "Central European Standard Time" or "Romance Standard Time";
     }
@@ -37,7 +48,8 @@ public sealed class OmpTime
     public DateOnly Today => DateOnly.FromDateTime(ToDisplayTime(_clock.GetUtcNow()).DateTime);
 
     public string UtcIso(DateTime? utc)
-        => utc is { } value ? ToDisplayTime(value).UtcDateTime.ToString("O", CultureInfo.InvariantCulture) : string.Empty;
+        => utc is { } value && !MarkInvalidPresentation(value)
+            ? ToDisplayTime(value).UtcDateTime.ToString("O", CultureInfo.InvariantCulture) : string.Empty;
 
     public DateTimeOffset ToDisplayTime(DateTimeOffset instant) => TimeZoneInfo.ConvertTime(instant, _zone);
 
@@ -53,10 +65,19 @@ public sealed class OmpTime
     }
 
     public string Format(DateTime? utc, string format = "yyyy-MM-dd HH:mm:ss", IFormatProvider? culture = null)
-        => utc is { } value ? FormatDisplay(ToDisplayTime(value), format, culture) : string.Empty;
+        => utc is { } value ? Format(value, format, culture) : string.Empty;
 
     public string Format(DateTime utc, string format = "yyyy-MM-dd HH:mm:ss", IFormatProvider? culture = null)
-        => FormatDisplay(ToDisplayTime(utc), format, culture);
+        => MarkInvalidPresentation(utc) ? "[Invalid time: Local]" : FormatDisplay(ToDisplayTime(utc), format, culture);
+
+    // Only text presentation may degrade. Conversions always reject Local values,
+    // and an invalid value must never acquire a plausible timestamp or sort key.
+    private bool MarkInvalidPresentation(DateTime value)
+    {
+        if (value.Kind != DateTimeKind.Local || _rejectLocalPresentation || _logger is null) return false;
+        _logger.LogWarning("Rejected DateTimeKind.Local in time presentation for {TimeZoneId}; expected UTC or SQL UTC with Unspecified kind.", TimeZoneId);
+        return true;
+    }
 
     public string Format(DateTimeOffset utc, string format = "yyyy-MM-dd HH:mm:ss", IFormatProvider? culture = null)
         => FormatDisplay(ToDisplayTime(utc), format, culture);
@@ -110,8 +131,15 @@ public static class OmpTimeServiceExtensions
     /// <summary>Validate eagerly during startup; a configured invalid zone never falls back to UTC.</summary>
     public static IServiceCollection AddOmpTime(this IServiceCollection services, IConfiguration configuration)
     {
-        var time = new OmpTime(configuration[OmpTime.ConfigurationKey] ?? "UTC");
-        services.AddSingleton(time);
+        var timeZoneId = configuration[OmpTime.ConfigurationKey] ?? "UTC";
+        _ = new OmpTime(timeZoneId); // Keep configuration validation eager.
+        services.AddSingleton(provider =>
+        {
+            var environment = provider.GetService<IHostEnvironment>();
+            var hostedPresentation = environment is not null && (environment.IsProduction() || environment.IsStaging());
+            return new OmpTime(timeZoneId, null, provider.GetService<ILogger<OmpTime>>(),
+                rejectLocalPresentation: !hostedPresentation);
+        });
         return services;
     }
 }

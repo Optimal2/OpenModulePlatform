@@ -94,6 +94,10 @@ earlier registered version, not necessarily from the active deployment.
 - Inject `OmpTime`. `Format(utc)` and `ToDisplayTime(utc)` accept UTC instants.
   SQL `DateTimeKind.Unspecified` is interpreted as UTC; `Local` is rejected so
   the server's machine zone cannot silently change a stored timestamp.
+  In hosted Production/Staging, `Format` instead shows `[Invalid time: Local]`
+  and `UtcIso` returns an empty sort key, logging a warning for each rejected
+  value. Development, test environments and direct construction keep fail-fast
+  behavior. `ToDisplayTime` always rejects `Local`, in every environment.
 - `Today` comes from the configured zone and an injectable `TimeProvider`.
 - `StartOfDayUtc(date)` creates query boundaries. For an inclusive calendar
   range, use the start of the following calendar day as an exclusive upper
@@ -101,6 +105,8 @@ earlier registered version, not necessarily from the active deployment.
 - `ToUtc(wallTime)` accepts unspecified calendar input. Nonexistent clock
   times are rejected; ambiguous filter lower bounds use the first occurrence,
   upper bounds use the last. Banner input uses the first occurrence.
+  Missing banner times produce field validation errors; both start and expiry
+  choose the earliest occurrence of a repeated minute.
 - Central European zones use CET/CEST according to the instant's offset.
   Other server-rendered zones use explicit UTC offsets; no abbreviation is
   guessed. Browser text uses Intl's short zone label with an explicit IANA zone.
@@ -111,6 +117,9 @@ earlier registered version, not necessarily from the active deployment.
   ISO API values without an offset are treated as UTC. No browser-zone fallback.
   Include the meta element in layouts even when the topbar is disabled. The
   date picker reads the same zone for Today/Now and relative calendar limits.
+  Missing or empty meta content causes one console warning per page, using
+  `data-omp-time-zone` if available, otherwise UTC. Invalid configured zone
+  identifiers still fail explicitly.
 
 The system-log and activity-log pickers now describe local calendar dates. Old
 bare-date bookmarks therefore follow the configured zone after upgrade. Explicit

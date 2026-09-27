@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "content_webapp",
-  "definitionVersion": "0.3.159",
+  "definitionVersion": "0.3.160",
   "module": {
     "displayName": "Content Web App",
     "moduleType": "WebAppModule",
@@ -27,7 +27,7 @@
       "targetName": "content-webapp",
       "relativePathTemplate": "content-webapp/web/{version}",
       "minVersion": "0.3.12",
-      "maxVersion": "0.3.314"
+      "maxVersion": "0.3.315"
     }
   ],
   "sqlScripts": [
