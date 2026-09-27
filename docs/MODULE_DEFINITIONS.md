@@ -1001,6 +1001,13 @@ public sealed class OverviewModel : PageModel
 The named policy explicitly authenticates the `OmpAuth` scheme and checks the
 current user's effective RBAC permissions before running the handler. At least
 one listed permission must match; multiple fragment attributes must all pass.
+`WebApp:PermissionMode` deliberately does **not** apply to fragments: the
+any-of/all-of composition is stated by the endpoint itself (permissions inside
+one attribute are alternatives, stacked attributes are conjunctive), so an
+operator flipping the global mode cannot silently reverse what a fragment
+requires. Stacking two attributes is the fragment equivalent of
+`RequireAllAsync`; a single attribute with several permissions matches
+`RequireAnyAsync`.
 Missing, invalid, expired or rejected sessions receive **401**. Authenticated
 users without a listed permission receive **403**. Both responses have an empty
 body, no redirect and `Cache-Control: no-store`; status-page rendering is disabled

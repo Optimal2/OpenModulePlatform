@@ -17,8 +17,11 @@ namespace OpenModulePlatform.Web.ModuleFragments;
 
 /// <summary>
 /// Protects an HTML fragment before its handler runs. Permissions within one attribute
-/// are alternatives; multiple attributes must all pass. Never combine with AllowAnonymous:
-/// <see cref="OmpModuleFragmentStartupFilter"/> fails host startup for such endpoints.
+/// are alternatives; multiple attributes must all pass. <see cref="WebAppOptions.PermissionMode"/>
+/// deliberately does not apply here: the endpoint's own attribute composition states its
+/// contract, so a global mode flip cannot silently reverse what a fragment requires.
+/// Never combine with AllowAnonymous: <see cref="OmpModuleFragmentStartupFilter"/> fails
+/// host startup for such endpoints.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
 public sealed class OmpModuleFragmentAttribute : AuthorizeAttribute
