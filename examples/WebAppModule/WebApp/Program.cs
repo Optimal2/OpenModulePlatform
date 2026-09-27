@@ -4,12 +4,14 @@ using OpenModulePlatform.Web.ExampleWebAppModule.Services;
 using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Extensions;
 using OpenModulePlatform.Web.Shared.OpenDocViewer;
+using OpenModulePlatform.Web.ModuleFragments;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Shared defaults include the common web logging setup (NLog),
 // so new modules can focus on services/pages and use ILogger<T> where needed.
 builder.AddOmpWebDefaults<ExampleWebAppModuleResource>(optionsSectionName: "Portal");
+builder.Services.AddOmpModuleFragments();
 builder.Services.Configure<OpenDocViewerExampleOptions>(
     builder.Configuration.GetSection(OpenDocViewerExampleOptions.DefaultSectionName));
 builder.Services.AddScoped<ExampleWebAppModuleAdminRepository>();

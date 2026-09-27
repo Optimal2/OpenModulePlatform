@@ -1,10 +1,13 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <!-- Compile fixture pages without merging the referenced apps' wwwroot assets. -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.Auth\OpenModulePlatform.Auth.csproj" />
+    <ProjectReference Include="..\examples\WebAppModule\WebApp\OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Portal\OpenModulePlatform.Portal.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Web.iFrameWebAppModule\OpenModulePlatform.Web.iFrameWebAppModule.csproj" />
   </ItemGroup>

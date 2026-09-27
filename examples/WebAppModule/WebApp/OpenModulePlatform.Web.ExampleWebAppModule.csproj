@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\OpenModulePlatform.Web.Shared\OpenModulePlatform.Web.Shared.csproj" />
+    <Compile Include="..\..\..\integrations\ModuleFragments\OmpModuleFragmentAuthorization.cs" Link="Security\OmpModuleFragmentAuthorization.cs" />
   </ItemGroup>
 
   <ItemGroup>

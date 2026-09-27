@@ -17,6 +17,27 @@ permissions:
   contents: read
 
 jobs:
+  module-fragment-ui:
+    # Independent of the matrix/gates: Chromium verifies the HTTP/rendering contract
+    # without SQL Server. A browser/startup failure fails this job, never skips it.
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - name: Build fragment UI tests
+        run: dotnet build OpenModulePlatform.UiTests --configuration Release
+      - name: Install Chromium
+        shell: pwsh
+        run: '& "./OpenModulePlatform.UiTests/bin/Release/net10.0/playwright.ps1" install chromium'
+      - name: Verify fragment authorization in Chromium
+        run: dotnet test OpenModulePlatform.UiTests --configuration Release --no-build --filter FullyQualifiedName~ModuleFragmentAuthorizationTests --logger trx --results-directory TestResults/fragment-ui
+      - name: Require executed UI tests
+        shell: pwsh
+        run: '& "./scripts/omp/assert-tests-executed.ps1" -ResultsDirectory TestResults/fragment-ui -SuiteName "Module fragment authorization" -RequirePerFile'
+
   version-matrix:
     # The .NET versions CI claims to support are derived from the repository's
     # own version files (global.json SDK pin + committed target frameworks),

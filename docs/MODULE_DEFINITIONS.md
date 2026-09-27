@@ -976,14 +976,76 @@ redirect to the login page. The Portal's server-side fetch treats a redirect as
 in" behind "not signed in or no permission" and leave the widget dead even when
 the user is only not logged in.
 
-The shared web defaults install a fallback authorization policy that redirects
-unauthenticated requests to the login page before a page model runs. A fragment
-page therefore marks its page model `[AllowAnonymous]` to opt out of that
-redirect and enforces the permission itself in its handler: return
-`Unauthorized()` (401) when the user is not authenticated and `Forbid()` when a
-signed-in user lacks the permission. The example web app module's
-`examples/WebAppModule/WebApp/Pages/Widgets/Overview.cshtml.cs` is the reference
-implementation.
+Use the opt-in shared integration in
+`integrations/ModuleFragments/OmpModuleFragmentAuthorization.cs`. Source-link that
+file into the module web project (as in
+`examples/WebAppModule/WebApp/OpenModulePlatform.Web.ExampleWebAppModule.csproj`),
+then register it **after** `AddOmpWebDefaults` and before `builder.Build()`:
+
+```csharp
+using OpenModulePlatform.Web.ModuleFragments;
+
+builder.Services.AddOmpModuleFragments();
+```
+
+Mark the Razor PageModel class (not its handler method) or MVC controller/action:
+
+```csharp
+[OmpModuleFragment("ExampleWebAppModule.View", "ExampleWebAppModule.Admin")]
+public sealed class OverviewModel : PageModel
+{
+    public IActionResult OnGet() => Page();
+}
+```
+
+The named policy explicitly authenticates the `OmpAuth` scheme and checks the
+current user's effective RBAC permissions before running the handler. At least
+one listed permission must match; multiple fragment attributes must all pass.
+Missing, invalid, expired or rejected sessions receive **401**. Authenticated
+users without a listed permission receive **403**. Both responses have an empty
+body, no redirect and `Cache-Control: no-store`; status-page rendering is disabled
+for those denials. Ordinary pages retain their normal challenge behavior.
+
+Do **not** use `[AllowAnonymous]` on a fragment or its base class, or apply
+`AllowAnonymous()` through endpoint conventions: it bypasses authorization,
+including this policy. The former `[AllowAnonymous]` plus handler guard pattern
+is discouraged because deleting or forgetting the guard silently renders a 200.
+No per-handler guard is needed with the attribute. Do not replace the registered
+`IAuthorizationMiddlewareResultHandler` after `AddOmpModuleFragments`; applications
+with a custom handler must compose the fragment denial behavior into it.
+
+**Enforcement must be enabled:** `Portal:AllowAnonymous=false` (or the section
+passed to `AddOmpWebDefaults`). The example's Development configuration explicitly
+sets `AllowAnonymous=true` for unauthenticated demos; in that mode permission
+enforcement is bypassed and the 401/403 guarantee does **not** apply. Override it
+to `false` when checking authentication, and never use that bypass in production.
+
+The Portal sends `X-OMP-Dashboard-Fragment: 1` and forwards only the configured OMP
+auth cookie (including chunks), active-role and culture cookies. The marker is
+not authentication and is not required by the policy; direct requests have the
+same protection. Portal fetches do not follow redirects and treat non-success
+responses as unavailable, showing a neutral placeholder.
+
+This integration is source-linked rather than added to `OpenModulePlatform.Web.Shared`:
+adoption changes only the module artifact that includes it, without forcing a
+lockstep rebuild of every existing shared-web consumer. It uses existing public
+OMP authentication/RBAC APIs. Keep the linked source in version tracking and bump
+every module artifact that includes it when updating it.
+
+`ModuleFragmentAuthorizationTests` runs a real Razor Page with the attribute and
+no handler guard in Chromium. It covers 401/403/200, empty denial bodies, expired
+and rejected cookies, requests with/without the Portal marker, and unchanged
+ordinary-page redirects. Storage is replaced with test data, so no database is
+required. GitHub CI runs it in the independent `module-fragment-ui` job with a
+15-minute timeout and no dependencies that delay other jobs; missing Chromium or
+startup errors fail the job instead of skipping tests. The normal local CI gate
+continues to exclude UI suites. Run this additional gate locally with:
+
+```powershell
+dotnet build OpenModulePlatform.UiTests --configuration Release
+& "./OpenModulePlatform.UiTests/bin/Release/net10.0/playwright.ps1" install chromium
+dotnet test OpenModulePlatform.UiTests --configuration Release --no-build --filter FullyQualifiedName~ModuleFragmentAuthorizationTests
+```
 
 ## Compatibility Policy
 

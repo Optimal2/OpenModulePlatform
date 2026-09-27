@@ -3,7 +3,8 @@ using OpenModulePlatform.Web.ExampleWebAppModule.Services;
 using OpenModulePlatform.Web.ExampleWebAppModule.ViewModels;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Services;
-using Microsoft.AspNetCore.Authorization;
+using OpenModulePlatform.Web.ModuleFragments;
+using OpenModulePlatform.Web.ExampleWebAppModule.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -21,14 +22,10 @@ namespace OpenModulePlatform.Web.ExampleWebAppModule.Pages.Widgets;
 /// its neutral placeholder either way.
 /// </remarks>
 /// <remarks>
-/// Fragment endpoints under <c>/widgets/</c> must answer 401 (not redirect to the
-/// login page) for a request without a valid OMP cookie, so the Portal's server-side
-/// fetch can tell "not signed in" apart from "no permission". The shared fallback
-/// authorization policy would redirect the cookieless request before this page model
-/// runs, so the page opts out with <see cref="AllowAnonymousAttribute"/> and enforces
-/// the permission itself in <see cref="OnGet"/> instead (see docs/MODULE_DEFINITIONS.md).
+/// The fragment policy enforces authentication and permissions before the handler runs,
+/// returning an empty 401/403 response instead of login or status-page HTML.
 /// </remarks>
-[AllowAnonymous]
+[OmpModuleFragment(ExampleWebAppModulePermissions.View, ExampleWebAppModulePermissions.Admin)]
 public sealed class OverviewModel : ExampleWebAppModulePageModel
 {
     private readonly ExampleWebAppModuleAdminRepository _repo;
@@ -46,15 +43,6 @@ public sealed class OverviewModel : ExampleWebAppModulePageModel
 
     public async Task<IActionResult> OnGet(CancellationToken ct)
     {
-        var guard = await RequireViewAsync(ct);
-        if (guard is not null)
-        {
-            // The Portal fetches this fragment server-side with the user's OMP cookie.
-            // A request without an authenticated user must answer 401 (no cookie), not
-            // 403, so the caller can tell "not signed in" apart from "no permission".
-            return User.Identity?.IsAuthenticated == true ? guard : Unauthorized();
-        }
-
         Overview = await _repo.GetOverviewAsync(ct);
         return Page();
     }
