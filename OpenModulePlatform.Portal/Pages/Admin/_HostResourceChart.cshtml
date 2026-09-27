@@ -1,3 +1,4 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Models.ChartViewModel
 
 <section class="card section-card section-card--wide host-resource-chart-card">
@@ -31,7 +32,7 @@
             @Html.Raw(Model.Svg)
         </div>
         <p class="muted small-text">
-            @L["From {0} to {1}.", Model.Stats.EarliestUtc.ToString("u"), Model.Stats.NewestUtc.ToString("u")]
+            @L["From {0} to {1}.", OmpTime.Format(Model.Stats.EarliestUtc), OmpTime.Format(Model.Stats.NewestUtc)]
         </p>
     }
     else

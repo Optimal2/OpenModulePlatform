@@ -1,3 +1,4 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using OpenModulePlatform.Portal.Localization
 @using OpenModulePlatform.Portal.Models
 @using OpenModulePlatform.Web.Shared.Navigation
@@ -46,7 +47,7 @@
                             <span class="dashboard-notification-feed__title">@notification.Title</span>
                             <span class="dashboard-notification-feed__content">@notification.Content</span>
                             <span class="dashboard-notification-feed__meta">
-                                @notification.CreatedAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
+                                @OmpTime.Format(notification.CreatedAt)
                             </span>
                         </span>
                     </button>

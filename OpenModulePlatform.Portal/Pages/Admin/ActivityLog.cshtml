@@ -1,4 +1,5 @@
 @page "/admin/activitylog"
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using System.Globalization
 @using OpenModulePlatform.Web.Shared.ActivityLog
 @model OpenModulePlatform.Portal.Pages.Admin.ActivityLogModel
@@ -17,6 +18,8 @@
     </div>
 </section>
 
+<div asp-validation-summary="All" class="field-validation-error"></div>
+<p class="muted">@OmpTime.TimeZoneId</p>
 <section class="card top-gap">
     @* One row: row search, user, modules, period and Clear, then Rows on the
        right. Every choice applies as soon as it is made: the page script
@@ -103,7 +106,7 @@
             </details>
         }
         @{
-            var presetToday = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+            var presetToday = OmpTime.Today;
             var presetTodayIso = presetToday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
         <span data-omp-daterange data-range-name="Range" data-from-name="From" data-to-name="To"
@@ -179,7 +182,7 @@
                 </colgroup>
                 <thead>
                     <tr>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Time UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Time"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["User"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Module"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Event"]</button></th>
@@ -194,7 +197,7 @@
                     var detailId = $"activity-detail-{row.ModuleKey}-{row.ActivityLogId}";
                     <tr data-activity-row data-search="@row.Entry">
                         <td data-sort-value="@row.LoggedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)">
-                            <code>@ActivityLogModel.FormatUtc(row.LoggedUtc)</code>
+                            <code>@OmpTime.Format(row.LoggedUtc)</code>
                         </td>
                         <td data-sort-value="@(row.UserDisplayName ?? string.Empty)">
                             @if (row.OmpUserId.HasValue)

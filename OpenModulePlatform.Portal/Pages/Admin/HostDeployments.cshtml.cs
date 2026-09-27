@@ -20,6 +20,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     private const string PortalDeploymentApplicationKey = "Portal";
 
     private readonly IHostEnvironment _environment;
+    private readonly OmpTime _time;
     private readonly OmpAdminRepository _repo;
     private readonly IStringLocalizer<PortalResource> _portalLocalizer;
     private readonly ILogger<HostDeploymentsModel> _logger;
@@ -33,7 +34,8 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         IStringLocalizer<PortalResource> portalLocalizer,
         IHostEnvironment environment,
         ILogger<HostDeploymentsModel> logger,
-        ActivityLogWriter activityLog)
+        ActivityLogWriter activityLog,
+        OmpTime time)
         : base(options, rbac)
     {
         _environment = environment;
@@ -41,6 +43,7 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
         _portalLocalizer = portalLocalizer;
         _logger = logger;
         _activityLog = activityLog;
+        _time = time;
     }
 
     public IReadOnlyList<HostAppDeploymentStateRow> AppDeploymentStates { get; private set; } = [];
@@ -443,18 +446,18 @@ public sealed class HostDeploymentsModel : OmpPortalPageModel
     {
         var owner = lockStatus.Document?.Owner;
         var reason = lockStatus.Document?.Reason;
-        var expiresUtc = lockStatus.Document?.ExpiresUtc.UtcDateTime.ToString("u");
+        var expires = lockStatus.Document is { } document ? _time.Format(document.ExpiresUtc) : null;
 
         if (!string.IsNullOrWhiteSpace(owner)
             && !string.IsNullOrWhiteSpace(reason)
-            && !string.IsNullOrWhiteSpace(expiresUtc))
+            && !string.IsNullOrWhiteSpace(expires))
         {
             return _portalLocalizer[
-                "Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires UTC: {3}.",
+                "Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires: {3}.",
                 PortalDeploymentApplicationKey,
                 owner,
                 reason,
-                expiresUtc].Value;
+                expires].Value;
         }
 
         if (!string.IsNullOrWhiteSpace(lockStatus.Diagnostic))

@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Admin.DashboardWidgetsModel
 
 <section class="page-header">
@@ -145,7 +146,7 @@
                                 }
                             }
                         </td>
-                        <td data-sort-value="@row.ModifiedUtc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">@row.ModifiedUtc.ToLocalTime().ToString("g")</td>
+                        <td data-sort-value="@row.ModifiedUtc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">@OmpTime.Format(row.ModifiedUtc)</td>
                         <td class="actions-col">
                             <a class="action-link admin-icon-button admin-icon-button--edit"
                                asp-page="/Admin/DashboardWidgets"

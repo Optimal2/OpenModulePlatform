@@ -15,6 +15,7 @@
 @inject Microsoft.Extensions.Logging.ILogger<PortalTopBar> Logger
 @inject Microsoft.Extensions.Localization.IStringLocalizer<SharedResource> L
 @inject IHttpContextAccessor HttpContextAccessor
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @implements IDisposable
 
 @* data-portal-topbar-unread-count below: the mark-all control needs a server-rendered unread
@@ -28,6 +29,7 @@
 {
     <div class="portal-topbar"
          data-portal-topbar-root
+         data-omp-time-zone="@OmpTime.TimeZoneId"
          data-portal-topbar-unread-count="@_portalTopBar.UnreadNotificationCount"
          data-favorite-toggle-url="@_portalTopBar.FavoriteToggleUrl"
          data-add-favorite-text="@L[_portalTopBar.AddFavoriteTextKey]"
@@ -329,7 +331,7 @@
                                           class="portal-topbar__notification-form@(notification.IsUnread ? " is-unread" : " is-read")"
                                           data-portal-topbar-notification-form
                                           data-notification-id="@notification.NotificationId"
-                                          data-notification-created-at="@notification.CreatedAt.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
+                                          data-notification-created-at="@OmpTime.UtcIso(notification.CreatedAt)"
                                           data-enhance="false">
                                         <input type="hidden" name="notificationId" value="@notification.NotificationId" />
                                         <button type="submit"
@@ -737,10 +739,10 @@
         return "/";
     }
 
-    private static string MessageTimeText(DateTime? value)
+    private string MessageTimeText(DateTime? value)
         => value is null
             ? string.Empty
-            : value.Value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture);
+            : OmpTime.Format(value.Value);
 
     private static string NotificationCallerText(PortalTopBarNotification notification)
     {

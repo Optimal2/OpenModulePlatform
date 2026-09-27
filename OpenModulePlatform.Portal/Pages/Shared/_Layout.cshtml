@@ -1,3 +1,4 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using OpenModulePlatform.Web.Shared.Navigation
 @using OpenModulePlatform.Web.Shared.Options
 @inject OpenModulePlatform.Portal.Services.PortalUserSettingsService PortalUserSettingsService
@@ -81,6 +82,7 @@
 <!doctype html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
+    <meta name="omp-time-zone" content="@OmpTime.TimeZoneId" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>@documentTitle</title>

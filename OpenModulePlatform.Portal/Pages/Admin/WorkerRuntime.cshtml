@@ -1,6 +1,7 @@
 @* Legacy route retained for compatibility. Requests redirect to /admin/workers. *@
 @* File: OpenModulePlatform.Portal/Pages/Admin/WorkerRuntime.cshtml *@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Admin.WorkerRuntimeModel
 
 <section class="page-header">
@@ -60,14 +61,14 @@ else
                 </td>
                 <td>@row.ProcessId</td>
                 <td>
-                    <div>@row.LastSeenUtc?.ToString("u")</div>
+                    <div>@OmpTime.Format(row.LastSeenUtc)</div>
                     @if (row.StartedUtc.HasValue)
                     {
-                        <div class="muted small-text">@L["Started"]: @row.StartedUtc.Value.ToString("u")</div>
+                        <div class="muted small-text">@L["Started"]: @OmpTime.Format(row.StartedUtc.Value)</div>
                     }
                 </td>
                 <td>
-                    <div>@row.LastExitUtc?.ToString("u")</div>
+                    <div>@OmpTime.Format(row.LastExitUtc)</div>
                     @if (row.LastExitCode.HasValue)
                     {
                         <div class="muted small-text">@L["Exit code"]: @row.LastExitCode.Value</div>

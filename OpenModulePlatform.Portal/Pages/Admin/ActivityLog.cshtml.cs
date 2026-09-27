@@ -23,11 +23,13 @@ public sealed class ActivityLogModel : OmpPortalPageModel
     private static readonly JsonSerializerOptions PrettyJson = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     private readonly OmpAdminRepository _repo;
+    private readonly OmpTime _time;
 
-    public ActivityLogModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
+    public ActivityLogModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo, OmpTime time)
         : base(options, rbac)
     {
         _repo = repo;
+        _time = time;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -73,7 +75,7 @@ public sealed class ActivityLogModel : OmpPortalPageModel
         // The repository caps the read; the page shows the same number so the
         // note and the Rows select never claim more than is fetched.
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxActivityLogTake);
-        (From, To) = PeriodPresets.Apply(Range, From, To);
+        (From, To) = PeriodPresets.Apply(Range, From, To, _time.Today);
 
         AvailableModules = await _repo.GetActivityLogModulesAsync(ct);
         Users = await _repo.GetActivityLogUsersAsync(ct);
@@ -87,8 +89,8 @@ public sealed class ActivityLogModel : OmpPortalPageModel
         {
             UserIds = UserIds.Where(id => id > 0).ToList(),
             ModuleKeys = Modules.Where(key => !string.IsNullOrWhiteSpace(key)).ToList(),
-            FromUtc = From?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
-            ToUtc = To?.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+            FromUtc = From is { } from ? _time.StartOfDayUtc(from) : null,
+            ToUtc = To is { } to ? _time.StartOfDayUtc(to.AddDays(1)) : null,
             Text = Q,
             Take = Take
         };
@@ -97,9 +99,6 @@ public sealed class ActivityLogModel : OmpPortalPageModel
         Entries = rows.Select(ActivityLogEntryView.From).ToList();
         return Page();
     }
-
-    public static string FormatUtc(DateTime value)
-        => value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
     public static string Pretty(JsonElement element)
         => JsonSerializer.Serialize(element, PrettyJson);

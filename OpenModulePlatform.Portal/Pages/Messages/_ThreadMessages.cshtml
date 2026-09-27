@@ -1,3 +1,4 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Messages.ThreadModel
 @using OpenModulePlatform.Web.Shared.Web
 @{
@@ -51,7 +52,7 @@
                        sender is the participant the line is about. *@
                     <div class="portal-message-thread__system" data-message-id="@message.MessageId">
                         <span>@message.SenderDisplayName @message.Content</span>
-                        <time>@message.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)</time>
+                        <time>@OmpTime.Format(message.CreatedAt)</time>
                     </div>
                     continue;
                 }
@@ -77,10 +78,10 @@
                     <div class="portal-message-thread__bubble">
                         <div class="portal-message-thread__meta">
                             <strong>@message.SenderDisplayName</strong>
-                            <span>@message.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)</span>
+                            <span>@OmpTime.Format(message.CreatedAt)</span>
                             @if (!message.IsDeleted && message.EditedAt is { } editedAt)
                             {
-                                <span class="portal-message-thread__edited" title="@editedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)">@L["Edited"]</span>
+                                <span class="portal-message-thread__edited" title="@OmpTime.Format(editedAt)">@L["Edited"]</span>
                             }
                             @if (message.CanEdit)
                             {
@@ -115,7 +116,7 @@
                             @* Not text anyone wrote: an icon, italics and a muted dashed bubble
                                (see the CSS) tell it apart from a message that says "deleted". *@
                             <p class="portal-message-thread__deleted"
-                               title="@message.DeletedAt!.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.CurrentCulture)">
+                               title="@OmpTime.Format(message.DeletedAt!.Value)">
                                 <span class="portal-message-thread__deleted-icon" aria-hidden="true"></span>
                                 @L["This message was deleted"]
                             </p>

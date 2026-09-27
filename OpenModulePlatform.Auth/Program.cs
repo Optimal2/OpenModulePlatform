@@ -14,6 +14,7 @@ using OpenModulePlatform.Web.Shared.Web;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddOmpTime(builder.Configuration);
 var authWebAppOptions = new WebAppOptions
 {
     DefaultCulture = "sv-SE",

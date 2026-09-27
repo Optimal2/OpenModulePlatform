@@ -15,14 +15,13 @@ internal static class PeriodPresets
     public static bool IsPreset(string? key)
         => key is "all" or "today" or "7d" or "30d" or "90d";
 
-    public static (DateOnly? From, DateOnly? To) Apply(string? key, DateOnly? from, DateOnly? to)
+    public static (DateOnly? From, DateOnly? To) Apply(string? key, DateOnly? from, DateOnly? to, DateOnly today)
     {
         if (string.IsNullOrWhiteSpace(key))
         {
             return (from, to);
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         return key switch
         {
             "all" => (null, null),

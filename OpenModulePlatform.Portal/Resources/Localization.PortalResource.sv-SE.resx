@@ -3227,7 +3227,7 @@
   <data name="Should run" xml:space="preserve"><value>Ska köra</value></data>
   <data name="Should stop" xml:space="preserve"><value>Ska stoppa</value></data>
   <data name="Unmanaged" xml:space="preserve"><value>Ohanterad</value></data>
-  <data name="Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires UTC: {3}." xml:space="preserve"><value>Återvinning av app-poolen är blockerad eftersom ett driftsättningslås är aktivt för {0}. Ägare: {1}. Orsak: {2}. Går ut UTC: {3}.</value></data>
+  <data name="Application-pool recycle is blocked because a deployment lock is active for {0}. Owner: {1}. Reason: {2}. Expires: {3}." xml:space="preserve"><value>Återvinning av app-poolen är blockerad eftersom ett driftsättningslås är aktivt för {0}. Ägare: {1}. Orsak: {2}. Går ut: {3}.</value></data>
   <data name="Application-pool recycle is blocked because the deployment lock state could not be cleared safely for {0}. {1}" xml:space="preserve"><value>Återvinning av app-poolen är blockerad eftersom driftsättningslåsets tillstånd inte kunde rensas säkert för {0}. {1}</value></data>
   <data name="Application-pool recycle is blocked because a deployment lock is active for {0}. Wait for the current deployment to finish or for the lock to expire." xml:space="preserve"><value>Återvinning av app-poolen är blockerad eftersom ett driftsättningslås är aktivt för {0}. Vänta tills den pågående driftsättningen är klar eller tills låset går ut.</value></data>
   <data name="The host no longer exists; nothing was changed." xml:space="preserve"><value>Värden finns inte längre; ingenting ändrades.</value></data>
@@ -3413,4 +3413,19 @@
   <data name="No process has reported anything at warning level or above yet." xml:space="preserve"><value>Ingen process har rapporterat något på varningsnivå eller högre ännu.</value></data>
   <data name="The widget could not be loaded." xml:space="preserve"><value>Widgeten kunde inte laddas.</value></data>
   <data name="Loading..." xml:space="preserve"><value>Laddar...</value></data>
+  <data name="Assigned" xml:space="preserve"><value>Tilldelad</value></data>
+  <data name="Requested" xml:space="preserve"><value>Begärd</value></data>
+  <data name="Last login" xml:space="preserve"><value>Senaste inloggning</value></data>
+  <data name="Last used" xml:space="preserve"><value>Senast använd</value></data>
+  <data name="Last sampled" xml:space="preserve"><value>Senaste prov</value></data>
+  <data name="Last checked" xml:space="preserve"><value>Senast kontrollerad</value></data>
+  <data name="Last applied" xml:space="preserve"><value>Senast applicerad</value></data>
+  <data name="Last provisioned" xml:space="preserve"><value>Senast provisionerad</value></data>
+  <data name="Last success" xml:space="preserve"><value>Senaste lyckade</value></data>
+  <data name="Last failure" xml:space="preserve"><value>Senaste fel</value></data>
+  <data name="Sample bucket" xml:space="preserve"><value>Bucket</value></data>
+  <data name="First sampled" xml:space="preserve"><value>Första provtagning</value></data>
+  <data name="Time" xml:space="preserve"><value>Tid</value></data>
+  <data name="Starts at" xml:space="preserve"><value>Startar</value></data>
+  <data name="Expires at" xml:space="preserve"><value>Upphör</value></data>
 </root>

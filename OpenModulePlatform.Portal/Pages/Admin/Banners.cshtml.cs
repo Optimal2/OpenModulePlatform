@@ -15,6 +15,7 @@ public sealed class BannersModel : OmpPortalPageModel
     private const string TargetModeGlobal = "global";
     private const string TargetModeRoles = "roles";
 
+    private readonly OmpTime _time;
     private readonly BannerService _banners;
     private readonly IStringLocalizer<PortalResource> _portalLocalizer;
 
@@ -22,10 +23,12 @@ public sealed class BannersModel : OmpPortalPageModel
         IOptions<WebAppOptions> options,
         RbacService rbac,
         BannerService banners,
+        OmpTime time,
         IStringLocalizer<PortalResource> portalLocalizer)
         : base(options, rbac)
     {
         _banners = banners;
+        _time = time;
         _portalLocalizer = portalLocalizer;
     }
 
@@ -103,8 +106,8 @@ public sealed class BannersModel : OmpPortalPageModel
                         Input.Content,
                         Input.Status,
                         Input.Level,
-                        ToUtcOffset(Input.StartsAtUtc),
-                        ToUtcOffset(Input.ExpiresAtUtc),
+                        ToUtcOffset(Input.StartsAt),
+                        ToUtcOffset(Input.ExpiresAt),
                         ToTargets()),
                     ct);
 
@@ -123,8 +126,8 @@ public sealed class BannersModel : OmpPortalPageModel
                     Input.Content,
                     Input.Status,
                     Input.Level,
-                    ToUtcOffset(Input.StartsAtUtc),
-                    ToUtcOffset(Input.ExpiresAtUtc)),
+                    ToUtcOffset(Input.StartsAt),
+                    ToUtcOffset(Input.ExpiresAt)),
                 ToTargets(),
                 ct);
 
@@ -248,9 +251,9 @@ public sealed class BannersModel : OmpPortalPageModel
             ModelState.AddModelError(nameof(Input.TargetMode), P("Select a valid target."));
         }
 
-        if (Input.StartsAtUtc.HasValue && Input.ExpiresAtUtc.HasValue && Input.ExpiresAtUtc.Value <= Input.StartsAtUtc.Value)
+        if (Input.StartsAt.HasValue && Input.ExpiresAt.HasValue && Input.ExpiresAt.Value <= Input.StartsAt.Value)
         {
-            ModelState.AddModelError(nameof(Input.ExpiresAtUtc), P("Expires at must be after starts at."));
+            ModelState.AddModelError(nameof(Input.ExpiresAt), P("Expires at must be after starts at."));
         }
     }
 
@@ -266,12 +269,12 @@ public sealed class BannersModel : OmpPortalPageModel
             .ToArray();
     }
 
-    private static DateTimeOffset? ToUtcOffset(DateTime? value)
+    private DateTimeOffset? ToUtcOffset(DateTime? value)
         => value.HasValue
-            ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc))
+            ? new DateTimeOffset(_time.ToUtc(value.Value))
             : null;
 
-    private static InputModel ToInput(BannerEditData row)
+    private InputModel ToInput(BannerEditData row)
     {
         var roleIds = row.Targets
             .Where(target => string.Equals(target.TargetType, BannerService.TargetRole, StringComparison.OrdinalIgnoreCase))
@@ -287,8 +290,8 @@ public sealed class BannersModel : OmpPortalPageModel
             Content = row.Content,
             Status = row.Status,
             Level = row.Level,
-            StartsAtUtc = row.StartsAtUtc,
-            ExpiresAtUtc = row.ExpiresAtUtc,
+            StartsAt = row.StartsAtUtc is { } starts ? _time.ToDisplayTime(starts).DateTime : null,
+            ExpiresAt = row.ExpiresAtUtc is { } expires ? _time.ToDisplayTime(expires).DateTime : null,
             TargetMode = roleIds.Count > 0 ? TargetModeRoles : TargetModeGlobal,
             SelectedRoleIds = roleIds
         };
@@ -314,11 +317,11 @@ public sealed class BannersModel : OmpPortalPageModel
         [Display(Name = "Level")]
         public int Level { get; set; } = BannerService.LevelAnnouncement;
 
-        [Display(Name = "Starts at (UTC)")]
-        public DateTime? StartsAtUtc { get; set; }
+        [Display(Name = "Starts at")]
+        public DateTime? StartsAt { get; set; }
 
-        [Display(Name = "Expires at (UTC)")]
-        public DateTime? ExpiresAtUtc { get; set; }
+        [Display(Name = "Expires at")]
+        public DateTime? ExpiresAt { get; set; }
 
         [Display(Name = "Banner targets")]
         public string TargetMode { get; set; } = TargetModeGlobal;

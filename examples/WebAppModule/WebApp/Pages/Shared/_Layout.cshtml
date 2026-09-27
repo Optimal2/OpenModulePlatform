@@ -1,7 +1,9 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @* File: OpenModulePlatform.Web.ExampleWebAppModule/Pages/Shared/_Layout.cshtml *@
 <!doctype html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
+    <meta name="omp-time-zone" content="@OmpTime.TimeZoneId" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>@ViewData["Title"]</title>

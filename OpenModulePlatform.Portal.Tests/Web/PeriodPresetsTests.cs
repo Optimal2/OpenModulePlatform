@@ -10,23 +10,23 @@ namespace OpenModulePlatform.Portal.Tests.Web;
 /// </summary>
 public sealed class PeriodPresetsTests
 {
-    private static readonly DateOnly Today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+    private static readonly DateOnly Today = new(2026, 9, 25);
 
     [Fact]
     public void RollingKeys_ResolveFromToday()
     {
-        Assert.Equal((Today, Today), PeriodPresets.Apply("today", null, null));
-        Assert.Equal((Today.AddDays(-6), Today), PeriodPresets.Apply("7d", null, null));
-        Assert.Equal((Today.AddDays(-29), Today), PeriodPresets.Apply("30d", null, null));
-        Assert.Equal((Today.AddDays(-89), Today), PeriodPresets.Apply("90d", null, null));
+        Assert.Equal((Today, Today), PeriodPresets.Apply("today", null, null, Today));
+        Assert.Equal((Today.AddDays(-6), Today), PeriodPresets.Apply("7d", null, null, Today));
+        Assert.Equal((Today.AddDays(-29), Today), PeriodPresets.Apply("30d", null, null, Today));
+        Assert.Equal((Today.AddDays(-89), Today), PeriodPresets.Apply("90d", null, null, Today));
     }
 
     [Fact]
     public void KnownKey_WinsOverTheDatesThatTravelWithIt()
     {
         var stale = new DateOnly(2020, 1, 1);
-        Assert.Equal((Today.AddDays(-6), Today), PeriodPresets.Apply("7d", stale, stale));
-        Assert.Equal(((DateOnly?)null, (DateOnly?)null), PeriodPresets.Apply("all", stale, stale));
+        Assert.Equal((Today.AddDays(-6), Today), PeriodPresets.Apply("7d", stale, stale, Today));
+        Assert.Equal(((DateOnly?)null, (DateOnly?)null), PeriodPresets.Apply("all", stale, stale, Today));
     }
 
     [Theory]
@@ -38,6 +38,6 @@ public sealed class PeriodPresetsTests
     {
         var from = new DateOnly(2026, 3, 1);
         var to = new DateOnly(2026, 3, 9);
-        Assert.Equal((from, to), PeriodPresets.Apply(key, from, to));
+        Assert.Equal((from, to), PeriodPresets.Apply(key, from, to, Today));
     }
 }

@@ -1840,7 +1840,7 @@
             return '';
         }
 
-        return date.toLocaleString();
+        return window.OmpTime.formatUtc(value);
     }
 
     function setDashboardNotificationLazyState(feed, loading, ended) {

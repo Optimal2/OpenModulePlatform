@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Admin.BannersModel
 
 <section class="page-header">
@@ -57,15 +58,15 @@
             </div>
 
             <div class="form-field">
-                <label asp-for="Input.StartsAtUtc"></label>
-                <input asp-for="Input.StartsAtUtc" type="datetime-local" />
-                <span asp-validation-for="Input.StartsAtUtc" class="field-validation-error"></span>
+                <label asp-for="Input.StartsAt"></label> <span class="muted">@OmpTime.TimeZoneId</span>
+                <input asp-for="Input.StartsAt" type="datetime-local" />
+                <span asp-validation-for="Input.StartsAt" class="field-validation-error"></span>
             </div>
 
             <div class="form-field">
-                <label asp-for="Input.ExpiresAtUtc"></label>
-                <input asp-for="Input.ExpiresAtUtc" type="datetime-local" />
-                <span asp-validation-for="Input.ExpiresAtUtc" class="field-validation-error"></span>
+                <label asp-for="Input.ExpiresAt"></label> <span class="muted">@OmpTime.TimeZoneId</span>
+                <input asp-for="Input.ExpiresAt" type="datetime-local" />
+                <span asp-validation-for="Input.ExpiresAt" class="field-validation-error"></span>
             </div>
         </div>
 
@@ -206,8 +207,8 @@
                             <td data-sort-value="@row.DisplayState">@Model.StateText(row.DisplayState)</td>
                             <td data-sort-value="@(targets.Count == 0 ? "none" : string.Join(";", targets))">@(string.IsNullOrWhiteSpace(row.TargetSummary) ? L["No targets"] : row.TargetSummary)</td>
                             <td class="small-text" data-sort-value="@(row.StartsAtUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">
-                                <div>@L["Starts"]: @(row.StartsAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
-                                <div>@L["Expires"]: @(row.ExpiresAtUtc?.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture) ?? L["None"])</div>
+                                <div>@L["Starts"]: @(row.StartsAtUtc.HasValue ? OmpTime.Format(row.StartsAtUtc) : L["None"])</div>
+                                <div>@L["Expires"]: @(row.ExpiresAtUtc.HasValue ? OmpTime.Format(row.ExpiresAtUtc) : L["None"])</div>
                             </td>
                             <td class="admin-action-cell">
                                 <div class="admin-icon-actions">

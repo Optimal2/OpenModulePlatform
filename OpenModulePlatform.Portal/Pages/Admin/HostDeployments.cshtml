@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.HostDeploymentsModel
 @{
@@ -79,7 +80,7 @@
                     |
                     @L["Reason"]: @lockStatus.Document.Reason
                     |
-                    @L["Expires UTC"]: @lockStatus.Document.ExpiresUtc.UtcDateTime.ToString("u")
+                    @L["Expires"]: @OmpTime.Format(lockStatus.Document.ExpiresUtc.UtcDateTime)
                 </div>
             }
             else if (!string.IsNullOrWhiteSpace(lockStatus.Diagnostic))
@@ -175,22 +176,22 @@
                             }
                             @if (row.LastProbeUtc.HasValue)
                             {
-                                <div class="muted">@L["Last checked UTC"]: @row.LastProbeUtc.Value.ToString("u")</div>
+                                <div class="muted">@L["Last checked"]: @OmpTime.Format(row.LastProbeUtc.Value)</div>
                             }
                             @if (row.LastSuccessUtc.HasValue)
                             {
-                                <div class="muted">@L["Last success UTC"]: @row.LastSuccessUtc.Value.ToString("u")</div>
+                                <div class="muted">@L["Last success"]: @OmpTime.Format(row.LastSuccessUtc.Value)</div>
                             }
                             @if (row.LastFailureUtc.HasValue)
                             {
-                                <div class="muted">@L["Last failure UTC"]: @row.LastFailureUtc.Value.ToString("u")</div>
+                                <div class="muted">@L["Last failure"]: @OmpTime.Format(row.LastFailureUtc.Value)</div>
                             }
                         </td>
                         <td>@row.ConsecutiveFailures</td>
                         <td data-sort-value="@(row.LastActionUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture) ?? "")">
                             @if (row.LastActionUtc.HasValue)
                             {
-                                <div>@row.LastActionUtc.Value.ToString("u")</div>
+                                <div>@OmpTime.Format(row.LastActionUtc.Value)</div>
                             }
                             @if (!string.IsNullOrWhiteSpace(row.LastActionMessage))
                             {
@@ -287,8 +288,8 @@
                         <th>@L["Runtime match"]</th>
                         <th>@L["Differences"]</th>
                         <th>@L["HostAgent"]</th>
-                        <th>@L["Last checked UTC"]</th>
-                        <th>@L["Last applied UTC"]</th>
+                        <th>@L["Last checked"]</th>
+                        <th>@L["Last applied"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -306,7 +307,7 @@
                             }
                             @if (row.HostLastSeenUtc.HasValue)
                             {
-                                <div class="muted">@L["Last seen"]: @row.HostLastSeenUtc.Value.ToString("u")</div>
+                                <div class="muted">@L["Last seen"]: @OmpTime.Format(row.HostLastSeenUtc.Value)</div>
                             }
                         </td>
                         <td><span class="pill">@L[HostDeploymentsModel.FormatHostDriftStatus(row)]</span></td>
@@ -370,11 +371,11 @@
                             }
                             @if (row.HostAgentLastSeenUtc.HasValue)
                             {
-                                <div class="muted">@L["Last seen"]: @row.HostAgentLastSeenUtc.Value.ToString("u")</div>
+                                <div class="muted">@L["Last seen"]: @OmpTime.Format(row.HostAgentLastSeenUtc.Value)</div>
                             }
                         </td>
-                        <td>@row.LastCheckedUtc?.ToString("u")</td>
-                        <td>@row.LastAppliedUtc?.ToString("u")</td>
+                        <td data-sort-value="@OmpTime.UtcIso(row.LastCheckedUtc)">@OmpTime.Format(row.LastCheckedUtc)</td>
+                        <td data-sort-value="@OmpTime.UtcIso(row.LastAppliedUtc)">@OmpTime.Format(row.LastAppliedUtc)</td>
                     </tr>
                     @if (hostDriftDetails.Count > 0)
                     {
@@ -429,11 +430,11 @@
                                                         }
                                                         @if (detail.LastCheckedUtc.HasValue)
                                                         {
-                                                            <div class="muted">@L["Last checked UTC"]: @detail.LastCheckedUtc.Value.ToString("u")</div>
+                                                            <div class="muted">@L["Last checked"]: @OmpTime.Format(detail.LastCheckedUtc.Value)</div>
                                                         }
                                                         @if (detail.LastAppliedUtc.HasValue)
                                                         {
-                                                            <div class="muted">@L["Last applied UTC"]: @detail.LastAppliedUtc.Value.ToString("u")</div>
+                                                            <div class="muted">@L["Last applied"]: @OmpTime.Format(detail.LastAppliedUtc.Value)</div>
                                                         }
                                                         @if (!string.IsNullOrWhiteSpace(detail.IdentityCheckStatus))
                                                         {
@@ -522,7 +523,7 @@
                                 }
                                 @if (row.RuntimeLastSeenUtc.HasValue)
                                 {
-                                    <div class="muted">@L["Last seen"]: @row.RuntimeLastSeenUtc.Value.ToString("u")</div>
+                                    <div class="muted">@L["Last seen"]: @OmpTime.Format(row.RuntimeLastSeenUtc.Value)</div>
                                 }
                             }
                         </td>
@@ -602,7 +603,7 @@
                                 }
                                 @if (row.TargetRuntimeLastSeenUtc.HasValue)
                                 {
-                                    <div class="muted">@L["Target last seen"]: @row.TargetRuntimeLastSeenUtc.Value.ToString("u")</div>
+                                    <div class="muted">@L["Target last seen"]: @OmpTime.Format(row.TargetRuntimeLastSeenUtc.Value)</div>
                                 }
                                 @if (!string.IsNullOrWhiteSpace(row.TargetRuntimeStatusMessage))
                                 {
@@ -659,8 +660,8 @@
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App instance"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Artifact"]</button></th>
                         <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last checked UTC"]</button></th>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last applied UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last checked"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last applied"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Target path"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Runtime"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Identity"]</button></th>
@@ -684,8 +685,8 @@
                             <div class="muted">@row.PackageType</div>
                         </td>
                         <td data-sort-value="@row.DeploymentState"><span class="pill">@L[HostDeploymentsModel.FormatHostDeploymentStatus(row.DeploymentState)]</span></td>
-                        <td>@row.LastCheckedUtc?.ToString("u")</td>
-                        <td>@row.LastAppliedUtc?.ToString("u")</td>
+                        <td data-sort-value="@OmpTime.UtcIso(row.LastCheckedUtc)">@OmpTime.Format(row.LastCheckedUtc)</td>
+                        <td data-sort-value="@OmpTime.UtcIso(row.LastAppliedUtc)">@OmpTime.Format(row.LastAppliedUtc)</td>
                         <td><code>@row.TargetPath</code></td>
                         <td><code>@row.RuntimeName</code></td>
                         <td>
@@ -706,7 +707,7 @@
                                 }
                                 @if (row.IdentityRepairRequestedUtc.HasValue)
                                 {
-                                    <div class="muted">@L["Repair requested"]: @row.IdentityRepairRequestedUtc.Value.ToString("u")</div>
+                                    <div class="muted">@L["Repair requested"]: @OmpTime.Format(row.IdentityRepairRequestedUtc.Value)</div>
                                 }
                             }
                         </td>
@@ -816,7 +817,7 @@
                             <div class="muted small-text"><code>@row.WorkerTypeKey</code></div>
                         </td>
                         <td>@row.ProcessId</td>
-                        <td>@row.LastSeenUtc?.ToString("u")</td>
+                        <td data-sort-value="@OmpTime.UtcIso(row.LastSeenUtc)">@OmpTime.Format(row.LastSeenUtc)</td>
                         <td class="small-text">@row.StatusMessage</td>
                     </tr>
                 }
@@ -1039,8 +1040,8 @@
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["App"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Artifact"]</button></th>
                         <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last checked UTC"]</button></th>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last provisioned UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last checked"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last provisioned"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Local path"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Error"]</button></th>
                     </tr>
@@ -1059,8 +1060,8 @@
                             <div class="muted">@row.TargetName</div>
                         </td>
                         <td data-sort-value="@row.ProvisioningState"><span class="pill">@L[HostDeploymentsModel.FormatArtifactProvisioningStatus(row.ProvisioningState)]</span></td>
-                        <td>@row.LastCheckedUtc?.ToString("u")</td>
-                        <td>@row.LastProvisionedUtc?.ToString("u")</td>
+                        <td data-sort-value="@OmpTime.UtcIso(row.LastCheckedUtc)">@OmpTime.Format(row.LastCheckedUtc)</td>
+                        <td data-sort-value="@OmpTime.UtcIso(row.LastProvisionedUtc)">@OmpTime.Format(row.LastProvisionedUtc)</td>
                         <td><code>@row.LocalPath</code></td>
                         <td>
                             @if (string.IsNullOrWhiteSpace(row.LastError))

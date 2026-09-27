@@ -1,3 +1,22 @@
+// Shared with dashboard feeds. Never let the browser's own zone choose the calendar.
+window.OmpTime = {
+    formatUtc: function (value) {
+        if (!value) return '';
+        var source = document.querySelector('meta[name="omp-time-zone"], [data-omp-time-zone]');
+        var zone = source ? (source.getAttribute('content') || source.getAttribute('data-omp-time-zone')) : 'UTC';
+        // SQL-backed API values may be ISO strings without a suffix. They still represent UTC.
+        var raw = String(value);
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(raw)) raw += 'Z';
+        var date = new Date(raw);
+        if (Number.isNaN(date.getTime())) return '';
+        var options = { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' };
+        var display = new Intl.DateTimeFormat(document.documentElement.lang || undefined, options).format(date);
+        var suffix = new Intl.DateTimeFormat('en-GB', { timeZone: zone, timeZoneName: 'short' })
+            .formatToParts(date).find(function (part) { return part.type === 'timeZoneName'; }).value;
+        return display + ' ' + suffix;
+    }
+};
+
 (function () {
     // This shared asset is intentionally authored for the modern browser baseline
     // required by OMP's fetch/ResizeObserver-based top bar. It is served directly,
@@ -988,7 +1007,7 @@
             return '';
         }
 
-        return date.toLocaleString();
+        return window.OmpTime.formatUtc(value);
     }
 
     function createMessageConversationLink(list, item) {

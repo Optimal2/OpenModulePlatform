@@ -1,3 +1,4 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using OpenModulePlatform.Portal.Localization
 @using OpenModulePlatform.Portal.Models
 @model DashboardMessageConversationWidget
@@ -26,7 +27,7 @@
                     @if (conversation.LastMessageAt is DateTime lastMessageAt)
                     {
                         <span class="dashboard-chat-list__meta">
-                            @lastMessageAt.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
+                            @OmpTime.Format(lastMessageAt)
                         </span>
                     }
                 </span>

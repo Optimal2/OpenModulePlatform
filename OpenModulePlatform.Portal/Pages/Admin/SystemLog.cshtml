@@ -1,4 +1,5 @@
 @page "/admin/systemlog"
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using System.Globalization
 @model OpenModulePlatform.Portal.Pages.Admin.SystemLogModel
 
@@ -16,6 +17,8 @@
     </div>
 </section>
 
+<div asp-validation-summary="All" class="field-validation-error"></div>
+<p class="muted">@OmpTime.TimeZoneId</p>
 <section class="card top-gap">
     @* The user log's bar, with process and level in place of user and module.
        It shares that page's script and classes on purpose: the same ids and
@@ -96,7 +99,7 @@
             </div>
         </details>
         @{
-            var presetToday = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+            var presetToday = OmpTime.Today;
             var presetTodayIso = presetToday.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
         <span data-omp-daterange data-range-name="Range" data-from-name="From" data-to-name="To"
@@ -155,7 +158,7 @@
                 </colgroup>
                 <thead>
                     <tr>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Time UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Time"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Process"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Level"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Logger"]</button></th>
@@ -168,10 +171,10 @@
                     var detailId = $"systemlog-detail-{row.SystemLogId}";
                     var hasDetail = !string.IsNullOrWhiteSpace(row.Exception) || !string.IsNullOrWhiteSpace(row.CorrelationId) || row.Message.Length > 200 || row.Message.Contains('\n');
                     // The time stamp is searchable too, so "13:11" narrows the loaded rows to that minute.
-                    var searchText = string.Join(' ', SystemLogModel.FormatUtc(row.LoggedUtc), row.HostName, row.ProcessName, row.Level, row.Logger, row.Message, row.Exception ?? string.Empty, row.CorrelationId ?? string.Empty);
+                    var searchText = string.Join(' ', OmpTime.Format(row.LoggedUtc), row.HostName, row.ProcessName, row.Level, row.Logger, row.Message, row.Exception ?? string.Empty, row.CorrelationId ?? string.Empty);
                     <tr data-activity-row data-search="@searchText">
                         <td data-sort-value="@row.LoggedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)">
-                            <code>@SystemLogModel.FormatUtc(row.LoggedUtc)</code>
+                            <code>@OmpTime.Format(row.LoggedUtc)</code>
                         </td>
                         <td data-sort-value="@row.ProcessName">
                             <div>@row.ProcessName</div>
@@ -225,7 +228,7 @@
                                     </dl>
                                 </div>
                                 <div class="activity-detail__rawpanel" hidden>
-                                    <pre class="activity-detail__json">@row.LoggedUtc.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) @row.HostName @row.ProcessName @row.Level @row.Logger
+                                    <pre class="activity-detail__json">@OmpTime.Format(row.LoggedUtc, "yyyy-MM-dd HH:mm:ss.fff") @row.HostName @row.ProcessName @row.Level @row.Logger
 @row.Message@(string.IsNullOrWhiteSpace(row.Exception) ? string.Empty : "\n" + row.Exception)</pre>
                                 </div>
                             </td>

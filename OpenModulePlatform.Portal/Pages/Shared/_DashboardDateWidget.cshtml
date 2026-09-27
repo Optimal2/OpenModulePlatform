@@ -1,11 +1,12 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using System.Globalization
 @using OpenModulePlatform.Portal.Localization
 @model bool
 @inject Microsoft.Extensions.Localization.IStringLocalizer<PortalResource> L
 
 @{
-    var now = DateTime.Now;
-    var culture = CultureInfo.GetCultureInfo("sv-SE");
+    var now = OmpTime.ToDisplayTime(DateTimeOffset.UtcNow).DateTime;
+    var culture = CultureInfo.CurrentCulture;
     var weekNumber = ISOWeek.GetWeekOfYear(now);
     var weekday = culture.TextInfo.ToTitleCase(now.ToString("dddd", culture));
     var date = now.ToString("d MMMM yyyy", culture);

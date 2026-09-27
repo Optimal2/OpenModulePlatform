@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "moduleKey": "example_webapp",
-  "definitionVersion": "0.3.158",
+  "definitionVersion": "0.3.159",
   "module": {
     "displayName": "Example WebApp",
     "moduleType": "WebAppModule",
@@ -27,7 +27,7 @@
       "targetName": "example-webapp",
       "relativePathTemplate": "example-webapp/web/{version}",
       "minVersion": "0.3.4",
-      "maxVersion": "0.3.308"
+      "maxVersion": "0.3.309"
     }
   ],
   "sqlScripts": [

@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Admin.ArtifactsModel
 @using System.Globalization
 
@@ -56,7 +57,7 @@ else
                 <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Target"]</button></th>
                 <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Relative path"]</button></th>
                 <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Enabled"]</button></th>
-                <th scope="col" data-sort-type="date" data-sort-default="descending"><button type="button" class="sortable-list__button">@L["Created UTC"]</button></th>
+                <th scope="col" data-sort-type="date" data-sort-default="descending"><button type="button" class="sortable-list__button">@L["Created"]</button></th>
                 <th scope="col">@L["Actions"]</th>
             </tr>
         </thead>
@@ -70,7 +71,7 @@ else
                 <td>@row.TargetName</td>
                 <td><code>@row.RelativePath</code></td>
                 <td data-sort-value="@(row.IsEnabled ? "1" : "0")"><span class="pill">@(row.IsEnabled ? L["Enabled"] : L["Disabled"])</span></td>
-                <td data-sort-value="@row.CreatedUtc.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture)">@row.CreatedUtc.ToUniversalTime().ToString("u", CultureInfo.InvariantCulture)</td>
+                <td data-sort-value="@OmpTime.UtcIso(row.CreatedUtc)">@OmpTime.Format(row.CreatedUtc)</td>
                 <td class="admin-action-cell">
                     <a class="action-link admin-icon-button admin-icon-button--edit"
                        href="~/admin/artifactedit?id=@row.ArtifactId"

@@ -25,17 +25,20 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
     private const string PortalSettingValueField = "PortalSettingInput.SettingValue";
     private const int ValuePreviewLength = 120;
 
+    private readonly OmpTime _time;
     private readonly OmpUserAdminRepository _repo;
     private readonly PortalUserSettingsAdminRepository _portalSettings;
 
     public EditModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
+        OmpTime time,
         OmpUserAdminRepository repo,
         PortalUserSettingsAdminRepository portalSettings)
         : base(options, rbac)
     {
         _repo = repo;
+        _time = time;
         _portalSettings = portalSettings;
     }
 
@@ -535,7 +538,7 @@ public sealed class EditModel : Pages.Admin.OmpPortalPageModel
 
     public string FormatUtc(DateTime? value)
         => value.HasValue
-            ? value.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+            ? _time.Format(value.Value)
             : T("Never");
 
     public string PortalSettingValueKindText(byte valueKind)

@@ -1,4 +1,5 @@
 @page "/messages"
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Messages.IndexModel
 @using OpenModulePlatform.Web.Shared.Web
 
@@ -62,7 +63,7 @@ else
                     <span class="portal-messages-list__preview">@(row.LastMessagePreview ?? L["No messages"].Value)</span>
                     @if (row.LastMessageAt.HasValue)
                     {
-                        <span class="portal-messages-list__meta">@row.LastMessageAt.Value.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</span>
+                        <span class="portal-messages-list__meta">@OmpTime.Format(row.LastMessageAt.Value)</span>
                     }
                 </span>
             </a>

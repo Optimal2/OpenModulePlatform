@@ -114,4 +114,5 @@
   <data name="Unknown user" xml:space="preserve">
     <value>unknown</value>
   </data>
+  <data name="Created" xml:space="preserve"><value>Created</value></data>
 </root>

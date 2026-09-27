@@ -63,6 +63,7 @@ public static class OmpWebHostingExtensions
         where TAppResource : class
     {
         builder.AddOmpWebLogging();
+        builder.Services.AddOmpTime(builder.Configuration);
 
         builder.Services.AddSingleton<IValidateOptions<WebAppOptions>, WebAppOptionsValidator>();
 

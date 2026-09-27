@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Admin.ModuleDefinitionEditModel
 
 <section class="page-header">
@@ -35,8 +36,8 @@
             <strong>@(Model.Definition.SourceName ?? L["Unknown"].Value)</strong>
         </div>
         <div>
-            <span>@L["Updated UTC"]</span>
-            <strong>@Model.Definition.UpdatedUtc.ToString("u")</strong>
+            <span>@L["Updated"]</span>
+            <strong>@OmpTime.Format(Model.Definition.UpdatedUtc)</strong>
         </div>
     </section>
 
@@ -110,7 +111,7 @@
                             <span class="pill">@L[row.Status]</span>
                         </td>
                         <td>
-                            @(row.LastCompletedUtc?.ToString("u") ?? L["Never"].Value)
+                            @(row.LastCompletedUtc.HasValue ? OmpTime.Format(row.LastCompletedUtc) : L["Never"].Value)
                         </td>
                         <td>
                             <div>@L[row.StatusMessage]</div>

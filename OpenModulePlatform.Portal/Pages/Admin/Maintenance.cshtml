@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.MaintenanceModel
 
@@ -123,7 +124,7 @@
                             <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host"]</button></th>
                             <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
                             <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Safety"]</button></th>
-                            <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last seen UTC"]</button></th>
+                            <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Last seen"]</button></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -173,7 +174,7 @@
                                 <div>@L["Severity"]: @row.Severity</div>
                                 <div>@L["Confidence"]: @row.Confidence%</div>
                             </td>
-                            <td data-sort-value="@row.LastSeenUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">@row.LastSeenUtc.ToString("u")</td>
+                            <td data-sort-value="@row.LastSeenUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">@OmpTime.Format(row.LastSeenUtc)</td>
                         </tr>
                         @if (hasDetail)
                         {
@@ -253,10 +254,10 @@
                         <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Job"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Host"]</button></th>
                         <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Status"]</button></th>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Requested UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Requested"]</button></th>
                         <th scope="col" data-sort-type="number"><button type="button" class="sortable-list__button">@L["Attempts"]</button></th>
                         <th scope="col" data-sort-type="text"><button type="button" class="sortable-list__button">@L["Claimed by"]</button></th>
-                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Completed UTC"]</button></th>
+                        <th scope="col" data-sort-type="date"><button type="button" class="sortable-list__button">@L["Completed"]</button></th>
                         <th scope="col">@L["Message"]</th>
                     </tr>
                 </thead>
@@ -277,7 +278,7 @@
                         </td>
                         <td data-sort-value="@row.Status"><span class="pill">@L[MaintenanceModel.FormatHostAgentJobStatus(row.Status)]</span></td>
                         <td data-sort-value="@row.RequestedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">
-                            <div>@row.RequestedUtc.ToString("u")</div>
+                            <div>@OmpTime.Format(row.RequestedUtc)</div>
                             @if (!string.IsNullOrWhiteSpace(row.RequestedBy))
                             {
                                 <div class="muted">@row.RequestedBy</div>
@@ -294,14 +295,14 @@
                                 <code>@row.ClaimedByServiceName</code>
                                 @if (row.ClaimedUtc.HasValue)
                                 {
-                                    <div class="muted">@row.ClaimedUtc.Value.ToString("u")</div>
+                                    <div class="muted">@OmpTime.Format(row.ClaimedUtc.Value)</div>
                                 }
                             }
                         </td>
                         <td data-sort-value="@row.CompletedUtc?.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)">
                             @if (row.CompletedUtc.HasValue)
                             {
-                                @row.CompletedUtc.Value.ToString("u")
+                                @OmpTime.Format(row.CompletedUtc.Value)
                             }
                             else
                             {
@@ -483,7 +484,7 @@ else
                             <tr>
                                 <td><code>@row.ArtifactId</code></td>
                                 <td>@row.Version</td>
-                                <td>@row.CreatedUtc.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)</td>
+                                <td data-sort-value="@OmpTime.UtcIso(row.CreatedUtc)">@OmpTime.Format(row.CreatedUtc)</td>
                                 <td>@row.RetentionRank / @row.TotalVersions</td>
                                 <td>
                                     @if (row.IsProtected)

@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Admin.HostDeploymentAssignmentsModel
 
 <section class="page-header">
@@ -22,7 +23,7 @@ else
                 <th>@L["Host role"]</th>
                 <th>@L["Active"]</th>
                 <th>@L["Assigned by"]</th>
-                <th>@L["Assigned UTC"]</th>
+                <th>@L["Assigned"]</th>
             </tr>
         </thead>
         <tbody>
@@ -33,7 +34,7 @@ else
                 <td><code>@row.HostTemplateKey</code></td>
                 <td><span class="pill">@(row.IsActive ? L["Active"] : L["Inactive"])</span></td>
                 <td>@row.AssignedBy</td>
-                <td>@row.AssignedUtc.ToString("u")</td>
+                <td data-sort-value="@OmpTime.UtcIso(row.AssignedUtc)">@OmpTime.Format(row.AssignedUtc)</td>
             </tr>
         }
         </tbody>

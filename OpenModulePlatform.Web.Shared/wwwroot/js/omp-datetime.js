@@ -4,8 +4,8 @@
 // value="ISO"> and the enhancement moves the name to a hidden input that
 // keeps the canonical ISO value, turns the visible input into a masked
 // digit-by-digit field, and adds a popup with a calendar and a time grid.
-// All values are treated as wall-clock text (the UTC convention lives in
-// the labels); "Now"/"Today" insert the current UTC time on purpose.
+// Values are calendar text in the configured zone. UTC Date objects below
+// are calendar arithmetic carriers, never persisted instants.
 (function () {
     "use strict";
 
@@ -36,10 +36,25 @@
     var panelInput = null;
     var panelToggle = null;
 
+    // Return a wall-clock carrier so existing UTC-field calendar arithmetic stays
+    // independent of both browser DST and the browser's selected time zone.
+    function calendarNow(instant) {
+        var source = document.querySelector('meta[name="omp-time-zone"], [data-omp-time-zone]');
+        var zone = source ? (source.getAttribute('content') || source.getAttribute('data-omp-time-zone')) : 'UTC';
+        var parts = new Intl.DateTimeFormat('en-GB-u-ca-iso8601-nu-latn', {
+            timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+        }).formatToParts(instant || new Date());
+        var values = {};
+        parts.forEach(function (part) { values[part.type] = part.value; });
+        return new Date(Date.UTC(+values.year, +values.month - 1, +values.day,
+            +values.hour, +values.minute, +values.second));
+    }
+
     function pad(value) { return String(value).padStart(2, "0"); }
 
     function monthNames() {
-        var formatter = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: "long" });
+        var formatter = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { month: "long", timeZone: "UTC" });
         var names = [];
         for (var month = 0; month < 12; month++) {
             names.push(formatter.format(new Date(Date.UTC(2024, month, 1))));
@@ -48,7 +63,7 @@
     }
 
     function weekdayNames() {
-        var formatter = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { weekday: "short" });
+        var formatter = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { weekday: "short", timeZone: "UTC" });
         var names = [];
         // 2024-01-01 is a Monday.
         for (var day = 1; day <= 7; day++) {
@@ -243,7 +258,7 @@
         if (text !== null) { st.digits[offset] = text[0]; st.digits[offset + 1] = text[1]; }
         if (minute !== null) { var mm = pad(minute); st.digits[offset + 2] = mm[0]; st.digits[offset + 3] = mm[1]; }
         if (st.mode === "datetime" && st.digits.slice(0, 8).some(function (ch) { return ch === ""; })) {
-            var now = new Date();
+            var now = calendarNow();
             var t = String(now.getUTCFullYear()) + pad(now.getUTCMonth() + 1) + pad(now.getUTCDate());
             for (var i = 0; i < 8; i++) { st.digits[i] = t[i]; }
         }
@@ -367,7 +382,7 @@
         if (!panel) { return; }
         panel.textContent = "";
         var parts = selectedParts(st);
-        var now = new Date();
+        var now = calendarNow();
         var shownYear = st.shownYear;
         var shownMonth = st.shownMonth;
 
@@ -531,7 +546,7 @@
         var nowButton = document.createElement("button");
         nowButton.type = "button"; nowButton.className = "omp-datetime-panel__action"; nowButton.textContent = st.mode === "date" ? texts.today : texts.now;
         nowButton.addEventListener("click", function () {
-            var current = new Date();
+            var current = calendarNow();
             st.shownYear = current.getUTCFullYear();
             st.shownMonth = current.getUTCMonth() + 1;
             if (st.mode === "time") {
@@ -585,7 +600,7 @@
     function openPanel(st) {
         closePanel();
         var parts = selectedParts(st);
-        var now = new Date();
+        var now = calendarNow();
         st.shownYear = parts.year || now.getUTCFullYear();
         st.shownMonth = parts.month || now.getUTCMonth() + 1;
         st.openSnapshot = st.hidden.value;
@@ -828,13 +843,13 @@
         // today, so the calendar, Today and the arrows always have somewhere
         // to go, and a floor above the cap folds to the cap. Both are
         // opt-in - without them the picker points anywhere.
-        function todayIsoUtc() {
-            var now = new Date();
+        function todayIsoInZone() {
+            var now = calendarNow();
             return now.getUTCFullYear() + "-" + pad(now.getUTCMonth() + 1) + "-" + pad(now.getUTCDate());
         }
         function parseLimit(raw) {
             raw = (raw || "").trim();
-            var today = todayIsoUtc();
+            var today = todayIsoInZone();
             if (raw === "today") { return today; }
             var relative = /^today([+-])(\d{1,4})$/.exec(raw);
             if (relative) {
@@ -846,7 +861,7 @@
         }
         function maxIso() {
             var cap = parseLimit(container.getAttribute("data-max"));
-            var today = todayIsoUtc();
+            var today = todayIsoInZone();
             return cap && cap < today ? today : cap;
         }
         function minIso() {
@@ -1036,7 +1051,7 @@
             };
             // Today is a quick pick of its own: the current day as the period,
             // a draft like a preset; lit while that is the period or the draft.
-            var todayIsoNow = function () { return new Date().toISOString().slice(0, 10); };
+            var todayIsoNow = function () { return calendarNow().toISOString().slice(0, 10); };
             var todayButton = document.createElement("button");
             todayButton.type = "button";
             todayButton.className = "omp-daterange-panel__preset omp-daterange-panel__preset--today";
@@ -1047,7 +1062,7 @@
             };
             todayButton.classList.toggle("omp-daterange-panel__preset--active", todayButton._ompIsOn());
             todayButton.addEventListener("click", function () {
-                var current = new Date();
+                var current = calendarNow();
                 var todayIso = todayIsoNow();
                 cal.year = current.getUTCFullYear();
                 cal.month = current.getUTCMonth() + 1;
@@ -1121,7 +1136,7 @@
                     arrow.setAttribute("aria-label", step[2] + " (" + labelText + ")");
                     arrow.addEventListener("click", function () {
                         var current = state(input).hidden.value;
-                        var base = /^\d{4}-\d{2}-\d{2}/.test(current) ? dayOf(current) : new Date().toISOString().slice(0, 10);
+                        var base = /^\d{4}-\d{2}-\d{2}/.test(current) ? dayOf(current) : calendarNow().toISOString().slice(0, 10);
                         var date = new Date(base + "T00:00:00Z");
                         date.setUTCDate(date.getUTCDate() + step[0]);
                         var iso = date.toISOString().slice(0, 10);
@@ -1163,7 +1178,7 @@
             var initialIso = seedFrom || seedTo;
             var initial = /^\d{4}-\d{2}-\d{2}/.test(initialIso || "")
                 ? { year: +initialIso.slice(0, 4), month: +initialIso.slice(5, 7) }
-                : { year: new Date().getUTCFullYear(), month: new Date().getUTCMonth() + 1 };
+                : { year: calendarNow().getUTCFullYear(), month: calendarNow().getUTCMonth() + 1 };
             var cal = { year: initial.year, month: initial.month, pendingStart: null, hoverIso: null };
 
             function isoOfCell(cellDate) {
@@ -1220,7 +1235,7 @@
                     previewFrom = cal.pendingStart < cal.hoverIso ? cal.pendingStart : cal.hoverIso;
                     previewTo = cal.pendingStart < cal.hoverIso ? cal.hoverIso : cal.pendingStart;
                 }
-                var now = new Date();
+                var now = calendarNow();
                 var max = maxIso();
                 var maxYear = max ? +max.slice(0, 4) : 0;
                 var maxMonth = max ? +max.slice(5, 7) : 0;
@@ -1253,7 +1268,7 @@
                 // The year list stays the same from one pick to the next: the
                 // bounds' years when they are set, otherwise ten years to
                 // either side of today; the shown year is always in it.
-                var todayYear = +todayIsoUtc().slice(0, 4);
+                var todayYear = +todayIsoInZone().slice(0, 4);
                 var firstYear = min ? minYear : todayYear - 10;
                 var lastYear = max ? maxYear : todayYear + 10;
                 if (cal.year < firstYear) { firstYear = cal.year; }
@@ -1575,7 +1590,7 @@
         if (st && st.applyPreset) { st.applyPreset(key); }
     }
 
-    window.ompDatetime = { init: init, applyRangePreset: applyRangePreset };
+    window.ompDatetime = { init: init, applyRangePreset: applyRangePreset, calendarNow: calendarNow };
 
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () { init(document); });

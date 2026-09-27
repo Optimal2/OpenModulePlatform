@@ -1,4 +1,5 @@
 @page "/configurations"
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @inherits ExampleWebAppBlazorModuleComponentBase
 @inject ExampleWebAppBlazorModuleAdminRepository Repo
 
@@ -35,7 +36,7 @@ else
                 <tr>
                     <th>@L["ConfigId"]</th>
                     <th>@L["Comment"]</th>
-                    <th>@L["Created UTC"]</th>
+                    <th>@L["Created"]</th>
                     <th></th>
                 </tr>
             </thead>
@@ -45,7 +46,7 @@ else
                 <tr>
                     <td><span class="pill">@row.ConfigId</span></td>
                     <td>@row.Comment</td>
-                    <td>@row.CreatedUtc.ToString("u")</td>
+                    <td data-sort-value="@OmpTime.UtcIso(row.CreatedUtc)">@OmpTime.Format(row.CreatedUtc)</td>
                     <td>
                         <NavLink class="action-link" href='@($"configurations/edit/{row.ConfigId}")'>@L["Edit"]</NavLink>
                     </td>

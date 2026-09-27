@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @using OpenModulePlatform.Web.Shared.Navigation
 @model OpenModulePlatform.Portal.Pages.Admin.HostResourcesModel
 
@@ -133,7 +134,7 @@
                             </div>
                             @if (host.HostLastSeenUtc.HasValue)
                             {
-                                <div class="muted top-gap-sm">@L["Host last seen"]: @host.HostLastSeenUtc.Value.ToString("u")</div>
+                                <div class="muted top-gap-sm">@L["Host last seen"]: @OmpTime.Format(host.HostLastSeenUtc.Value)</div>
                             }
                         </div>
                     }
@@ -192,7 +193,7 @@
                                             <th><a class="@Model.SortClass("cpu")" href="@Url.Content(Model.SortLink("cpu"))">@L["CPU"] <span aria-hidden="true">@Model.SortIndicator("cpu")</span></a></th>
                                             <th><a class="@Model.SortClass("memory")" href="@Url.Content(Model.SortLink("memory"))">@L["Memory"] <span aria-hidden="true">@Model.SortIndicator("memory")</span></a></th>
                                             <th><a class="@Model.SortClass("samples")" href="@Url.Content(Model.SortLink("samples"))">@L["Samples"] <span aria-hidden="true">@Model.SortIndicator("samples")</span></a></th>
-                                            <th><a class="@Model.SortClass("lastSampledUtc")" href="@Url.Content(Model.SortLink("lastSampledUtc"))">@L["Last sampled UTC"] <span aria-hidden="true">@Model.SortIndicator("lastSampledUtc")</span></a></th>
+                                            <th><a class="@Model.SortClass("lastSampledUtc")" href="@Url.Content(Model.SortLink("lastSampledUtc"))">@L["Last sampled"] <span aria-hidden="true">@Model.SortIndicator("lastSampledUtc")</span></a></th>
                                             <th><a class="@Model.SortClass("state")" href="@Url.Content(Model.SortLink("state"))">@L["State"] <span aria-hidden="true">@Model.SortIndicator("state")</span></a></th>
                                             <th>@L["Actions"]</th>
                                         </tr>
@@ -255,7 +256,7 @@
                                             <td>
                                                 @if (group.LastSampledUtc.HasValue)
                                                 {
-                                                    @group.LastSampledUtc.Value.ToString("u")
+                                                    @OmpTime.Format(group.LastSampledUtc.Value)
                                                 }
                                                 else
                                                 {

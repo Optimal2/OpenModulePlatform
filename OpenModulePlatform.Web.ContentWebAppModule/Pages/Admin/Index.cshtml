@@ -1,5 +1,6 @@
 @* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Admin/Index.cshtml *@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin.IndexModel
 
 <div class="page-header">
@@ -87,7 +88,7 @@ else
                 </td>
                 <td>@(string.IsNullOrWhiteSpace(row.AccessSummary) ? L["No role access"].Value : row.AccessSummary)</td>
                 <td>
-                    <div>@row.UpdatedAtUtc.ToString("u")</div>
+                    <div>@OmpTime.Format(row.UpdatedAtUtc)</div>
                     <div class="muted">@row.UpdatedBy</div>
                 </td>
                 <td class="grid-actions">

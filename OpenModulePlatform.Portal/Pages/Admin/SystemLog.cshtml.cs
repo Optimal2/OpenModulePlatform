@@ -20,11 +20,13 @@ public sealed class SystemLogModel : OmpPortalPageModel
     private const int DefaultTake = 200;
 
     private readonly OmpAdminRepository _repo;
+    private readonly OmpTime _time;
 
-    public SystemLogModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo)
+    public SystemLogModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo, OmpTime time)
         : base(options, rbac)
     {
         _repo = repo;
+        _time = time;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -33,11 +35,11 @@ public sealed class SystemLogModel : OmpPortalPageModel
     [BindProperty(SupportsGet = true)]
     public string[] Levels { get; set; } = [];
 
-    /// <summary>Start of the period, UTC, to the minute (yyyy-MM-ddTHH:mm); the picker sets whole days unless a time is typed.</summary>
+    /// <summary>Start in the configured calendar zone, to the minute; the picker sets whole days unless a time is typed.</summary>
     [BindProperty(SupportsGet = true)]
     public DateTime? From { get; set; }
 
-    /// <summary>End of the period, UTC, inclusive to the minute.</summary>
+    /// <summary>End in the configured calendar zone, inclusive to the minute.</summary>
     [BindProperty(SupportsGet = true)]
     public DateTime? To { get; set; }
 
@@ -70,12 +72,9 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
         SetTitles("System log");
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxSystemLogTake);
-        // The bounds are UTC wall-clock minutes. A value with an offset (a
-        // hand-written "Z" in the address) is converted rather than relabelled,
-        // and a bound written as a bare day (a bookmark from the days-only
-        // page) spans that whole day.
-        From = AsUtc(From);
-        To = AsUtc(To);
+        // Bare values are calendar inputs; explicit instants are converted for the picker.
+        From = AsCalendarInput(From);
+        To = AsCalendarInput(To);
         if (To is { } toDay && !Request.Query["To"].ToString().Contains('T'))
         {
             To = toDay.Date.AddHours(23).AddMinutes(59);
@@ -85,20 +84,42 @@ public sealed class SystemLogModel : OmpPortalPageModel
         // a custom period, and an unknown key leaves them alone.
         if (PeriodPresets.IsPreset(Range))
         {
-            var (presetFrom, presetTo) = PeriodPresets.Apply(Range, null, null);
-            From = presetFrom?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-            To = presetTo?.ToDateTime(new TimeOnly(23, 59), DateTimeKind.Utc);
+            var (presetFrom, presetTo) = PeriodPresets.Apply(Range, null, null, _time.Today);
+            From = presetFrom?.ToDateTime(TimeOnly.MinValue);
+            To = presetTo?.ToDateTime(new TimeOnly(23, 59));
         }
 
         AvailableProcesses = await _repo.GetSystemLogProcessesAsync(ct);
+
+        DateTime? fromUtc;
+        DateTime? toUtc;
+        try
+        {
+            var wholeDays = PeriodPresets.IsPreset(Range);
+            fromUtc = From is { } from
+                ? wholeDays || !Request.Query["From"].ToString().Contains('T')
+                    ? _time.StartOfDayUtc(DateOnly.FromDateTime(from))
+                    : _time.ToUtc(from)
+                : null;
+            toUtc = To is { } to
+                ? wholeDays || !Request.Query["To"].ToString().Contains('T')
+                    ? _time.StartOfDayUtc(DateOnly.FromDateTime(to).AddDays(1))
+                    : _time.ToUtc(to, upperBound: true).AddMinutes(1)
+                : null;
+        }
+        catch (ArgumentException ex)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            return Page();
+        }
 
         var filter = new SystemLogFilter
         {
             Processes = Processes.Where(p => !string.IsNullOrWhiteSpace(p)).ToList(),
             Levels = Levels.Where(l => !string.IsNullOrWhiteSpace(l)).ToList(),
-            FromUtc = From is { } fromValue ? DateTime.SpecifyKind(fromValue, DateTimeKind.Utc) : null,
+            FromUtc = fromUtc,
             // Inclusive to the minute: the bound is the start of the next one.
-            ToUtc = To is { } toValue ? DateTime.SpecifyKind(toValue, DateTimeKind.Utc).AddMinutes(1) : null,
+            ToUtc = toUtc,
             Text = Q,
             Take = Take
         };
@@ -107,11 +128,10 @@ public sealed class SystemLogModel : OmpPortalPageModel
         return Page();
     }
 
-    public static string FormatUtc(DateTime value)
-        => value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-
-    private static DateTime? AsUtc(DateTime? value)
-        => value is { } v ? (v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : DateTime.SpecifyKind(v, DateTimeKind.Utc)) : null;
+    private DateTime? AsCalendarInput(DateTime? value)
+        => value is { Kind: not DateTimeKind.Unspecified } instant
+            ? _time.ToDisplayTime(instant.ToUniversalTime()).DateTime
+            : value;
 
     /// <summary>The value the picker's hidden inputs carry for a bound.</summary>
     public static string FieldValue(DateTime? value)

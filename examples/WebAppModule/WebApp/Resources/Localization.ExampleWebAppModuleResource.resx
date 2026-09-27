@@ -108,4 +108,5 @@
     <value>OpenDocViewer sample document</value>
   </data><data name="No supported files were selected." xml:space="preserve">
     <value>No supported files were selected.</value>
-  </data></root>
+  </data>  <data name="Created" xml:space="preserve"><value>Created</value></data>
+</root>

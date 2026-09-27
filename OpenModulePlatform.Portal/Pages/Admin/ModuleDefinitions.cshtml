@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Portal.Pages.Admin.ModuleDefinitionsModel
 @using OpenModulePlatform.Web.Shared.Navigation
 
@@ -84,7 +85,7 @@
                         <th>@L["Applied version"]</th>
                         <th>@L["Stored versions"]</th>
                         <th>@L["Integrity"]</th>
-                        <th>@L["Applied UTC"]</th>
+                        <th>@L["Applied"]</th>
                         <th>@L["Actions"]</th>
                     </tr>
                 </thead>
@@ -111,7 +112,7 @@
                                 <span class="integrity-pill integrity-pill--neutral">@L["Not checked"]</span>
                             }
                         </td>
-                        <td>@(row.AppliedUtc?.ToString("u") ?? L["Unknown"].Value)</td>
+                        <td>@(row.AppliedUtc.HasValue ? OmpTime.Format(row.AppliedUtc) : L["Unknown"].Value)</td>
                         <td class="admin-action-cell">
                             <a class="action-link admin-icon-button admin-icon-button--clarify"
                                href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId"
@@ -346,7 +347,7 @@ else
                 <th>@L["Format"]</th>
                 <th>@L["Artifact slots"]</th>
                 <th>@L["State"]</th>
-                <th>@L["Updated UTC"]</th>
+                <th>@L["Updated"]</th>
                 <th>@L["Actions"]</th>
             </tr>
         </thead>
@@ -359,7 +360,7 @@ else
                 <td>@row.FormatVersion</td>
                 <td>@row.CompatibleArtifactSlotCount</td>
                 <td><span class="pill">@(row.IsApplied ? L["Applied"] : L["Stored"])</span></td>
-                <td>@row.UpdatedUtc.ToString("u")</td>
+                <td data-sort-value="@OmpTime.UtcIso(row.UpdatedUtc)">@OmpTime.Format(row.UpdatedUtc)</td>
                 <td class="admin-action-cell">
                     <a class="action-link admin-icon-button admin-icon-button--clarify"
                        href="~/admin/moduledefinitionedit?id=@row.ModuleDefinitionDocumentId"

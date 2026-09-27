@@ -10,15 +10,18 @@ namespace OpenModulePlatform.Portal.Pages.Admin.Users;
 
 public sealed class IndexModel : Pages.Admin.OmpPortalPageModel
 {
+    private readonly OmpTime _time;
     private readonly OmpUserAdminRepository _repo;
 
     public IndexModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
+        OmpTime time,
         OmpUserAdminRepository repo)
         : base(options, rbac)
     {
         _repo = repo;
+        _time = time;
     }
 
     public IReadOnlyList<OmpUserListRow> Rows { get; private set; } = [];
@@ -41,7 +44,7 @@ public sealed class IndexModel : Pages.Admin.OmpPortalPageModel
 
     public string FormatUtc(DateTime? value)
         => value.HasValue
-            ? value.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+            ? _time.Format(value.Value)
             : T("Never");
 
     private static string AccountStatusLabelKey(int status)

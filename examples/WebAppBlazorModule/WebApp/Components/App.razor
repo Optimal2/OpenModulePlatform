@@ -1,8 +1,10 @@
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @inject NavigationManager NavigationManager
 
 <!DOCTYPE html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
 <head>
+    <meta name="omp-time-zone" content="@OmpTime.TimeZoneId" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="@NavigationManager.BaseUri" />

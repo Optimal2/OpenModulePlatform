@@ -1,4 +1,5 @@
 @page
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Web.ExampleServiceAppModule.Pages.AppInstances.IndexModel
 
 <div class="page-header">
@@ -42,7 +43,7 @@ else
                 <td>@row.DesiredState</td>
                 <td>@row.ArtifactVersion</td>
                 <td>@row.ConfigId</td>
-                <td>@row.LastSeenUtc?.ToString("u")</td>
+                <td data-sort-value="@OmpTime.UtcIso(row.LastSeenUtc)">@OmpTime.Format(row.LastSeenUtc)</td>
                 <td><a class="action-link" href="~/appinstances/edit?appInstanceId=@row.AppInstanceId">@L["Edit"]</a></td>
             </tr>
         }

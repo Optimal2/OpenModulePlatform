@@ -62,17 +62,17 @@
                 <input value="@Model.UserRow.UserId" readonly />
             </div>
             <div class="form-field">
-                <label>@L["Created UTC"]</label>
+                <label>@L["Created"]</label>
                 <input value="@Model.FormatUtc(Model.UserRow.CreatedAt)" readonly />
             </div>
             <div class="form-field">
-                <label>@L["Updated UTC"]</label>
+                <label>@L["Updated"]</label>
                 <input value="@Model.FormatUtc(Model.UserRow.UpdatedAt)" readonly />
             </div>
         </div>
         <div class="field-grid field-grid--2">
             <div class="form-field">
-                <label>@L["Last login UTC"]</label>
+                <label>@L["Last login"]</label>
                 <input value="@Model.FormatUtc(Model.UserRow.LastLoginAt)" readonly />
             </div>
             <div class="form-field">
@@ -219,7 +219,7 @@
                         <th>@L["Type"]</th>
                         <th>@L["Default value"]</th>
                         <th>@L["User value"]</th>
-                        <th>@L["Updated UTC"]</th>
+                        <th>@L["Updated"]</th>
                         <th>@L["Actions"]</th>
                     </tr>
                 </thead>
@@ -270,8 +270,8 @@
                         <th>@L["Provider"]</th>
                         <th>@L["Provider user key"]</th>
                         <th>@L["Status"]</th>
-                        <th>@L["Created UTC"]</th>
-                        <th>@L["Last used UTC"]</th>
+                        <th>@L["Created"]</th>
+                        <th>@L["Last used"]</th>
                         <th>@L["Actions"]</th>
                     </tr>
                 </thead>

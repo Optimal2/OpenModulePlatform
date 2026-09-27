@@ -1,5 +1,6 @@
 @* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Admin/Edit.cshtml *@
 @page "{contentId:guid?}"
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @model OpenModulePlatform.Web.ContentWebAppModule.Pages.Admin.EditModel
 
 @section Styles {
@@ -228,9 +229,9 @@
             <dt>@L["Content ID"]</dt>
             <dd><code>@Model.Input.ContentId</code></dd>
             <dt>@L["Created"]</dt>
-            <dd>@Model.Input.CreatedAtUtc?.ToString("u") <span class="muted">@Model.Input.CreatedBy</span></dd>
+            <dd>@OmpTime.Format(Model.Input.CreatedAtUtc) <span class="muted">@Model.Input.CreatedBy</span></dd>
             <dt>@L["Updated"]</dt>
-            <dd>@Model.Input.UpdatedAtUtc?.ToString("u") <span class="muted">@Model.Input.UpdatedBy</span></dd>
+            <dd>@OmpTime.Format(Model.Input.UpdatedAtUtc) <span class="muted">@Model.Input.UpdatedBy</span></dd>
         </dl>
     </section>
 }
