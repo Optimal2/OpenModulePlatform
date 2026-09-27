@@ -1033,8 +1033,12 @@ example's Development configuration sets it), with a startup warning, and the
 401/403 guarantee does **not** apply while it is active. Outside Development the
 bypass is **refused** — permissions are enforced as if `AllowAnonymous` were
 `false`, and startup logs a warning saying so — unless
-`WebApp:AllowAnonymousOutsideDevelopment=true` explicitly opts in for a demo or
-test environment (also logged at startup). This refusal applies to the
+`AllowAnonymousOutsideDevelopment=true` explicitly opts in for a demo or
+test environment (also logged at startup). Set both options in the section passed
+to `AddOmpWebDefaults`: `Portal` in the example app, or `WebApp` when using the
+default section. For example, the example app's explicit override is
+`Portal:AllowAnonymousOutsideDevelopment=true`; a value in an unrelated section
+does not enable the bypass. This refusal applies to the
 module-fragment policy only; the app-wide fallback-policy behavior of
 `AllowAnonymous` in `AddOmpWebDefaults` is unchanged. Override `AllowAnonymous` to
 `false` when checking authentication, and never enable the bypass in production.

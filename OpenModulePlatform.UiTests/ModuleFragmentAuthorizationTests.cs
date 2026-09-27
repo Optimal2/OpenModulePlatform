@@ -227,17 +227,23 @@ public sealed class ModuleFragmentAuthorizationTests
         }
     }
 
-    [Fact]
-    public async Task Anonymous_bypass_outside_Development_requires_explicit_opt_in()
+    [Theory]
+    [InlineData("WebApp", "WebApp", 200)]
+    [InlineData("Portal", "Portal", 200)]
+    [InlineData("Portal", "WebApp", 401)]
+    [InlineData("WebApp", "Portal", 401)]
+    public async Task Anonymous_bypass_outside_Development_requires_explicit_opt_in(
+        string optionsSectionName, string overrideSectionName, int expectedStatus)
     {
         // Set through configuration so the flag travels the same binding path a
-        // deployed app uses (WebApp section), not just a typed options lambda.
+        // deployed app uses, including apps that choose a custom options section.
         var builder = CreateFragmentAppBuilder(
             "Production",
-            configureWebApp: options => options.AllowAnonymous = true);
+            configureWebApp: options => options.AllowAnonymous = true,
+            optionsSectionName: optionsSectionName);
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["WebApp:AllowAnonymousOutsideDevelopment"] = "true"
+            [$"{overrideSectionName}:AllowAnonymousOutsideDevelopment"] = "true"
         });
         var logs = new CapturedLogs();
         builder.Services.AddSingleton<ILoggerProvider>(logs);
@@ -252,8 +258,9 @@ public sealed class ModuleFragmentAuthorizationTests
             .Get<IServerAddressesFeature>()!.Addresses.Single();
         try
         {
-            Assert.Equal(200, await GetStatusAsync(address, "/fragment"));
-            Assert.Contains(logs.Warnings, message => message.Contains("AllowAnonymousOutsideDevelopment"));
+            Assert.Equal(expectedStatus, await GetStatusAsync(address, "/fragment"));
+            Assert.Contains(logs.Warnings, message => message.Contains(expectedStatus == 200
+                ? "bypassed outside" : "refused and permissions are enforced"));
         }
         finally
         {
@@ -339,7 +346,8 @@ public sealed class ModuleFragmentAuthorizationTests
     private static WebApplicationBuilder CreateFragmentAppBuilder(
         string environmentName,
         Action<RazorPagesOptions>? configureRazorPages = null,
-        Action<WebAppOptions>? configureWebApp = null)
+        Action<WebAppOptions>? configureWebApp = null,
+        string optionsSectionName = WebAppOptions.DefaultSectionName)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -351,7 +359,7 @@ public sealed class ModuleFragmentAuthorizationTests
             .ConfigureApplicationPartManager(parts => parts.ApplicationParts.Clear())
             .AddApplicationPart(typeof(ModuleFragmentAuthorizationTests).Assembly);
         builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
-        builder.Services.AddOptions<WebAppOptions>().Bind(builder.Configuration.GetSection(WebAppOptions.DefaultSectionName));
+        builder.Services.AddOptions<WebAppOptions>().Bind(builder.Configuration.GetSection(optionsSectionName));
         builder.Services.Configure<WebAppOptions>(configureWebApp ?? (_ => { }));
         builder.Services.AddAuthentication(OmpAuthDefaults.AuthenticationScheme)
             .AddCookie(OmpAuthDefaults.AuthenticationScheme, options =>

@@ -96,15 +96,16 @@ internal sealed class OmpModuleFragmentStartupFilter : IStartupFilter
         if (OmpModuleFragmentBypass.IsHonored(options, environment))
         {
             logger.LogWarning(environment.IsDevelopment()
-                ? "WebApp:AllowAnonymous=true: module-fragment permission enforcement is bypassed (development bypass)."
-                : "WebApp:AllowAnonymousOutsideDevelopment=true: module-fragment permission enforcement is "
+                ? "AllowAnonymous=true: module-fragment permission enforcement is bypassed (development bypass)."
+                : "AllowAnonymousOutsideDevelopment=true: module-fragment permission enforcement is "
                     + "bypassed outside the Development environment.");
         }
         else
         {
             logger.LogWarning(
-                "WebApp:AllowAnonymous=true outside the Development environment: the module-fragment bypass is "
-                + "refused and permissions are enforced. Set WebApp:AllowAnonymousOutsideDevelopment=true only "
+                "AllowAnonymous=true outside the Development environment: the module-fragment bypass is "
+                + "refused and permissions are enforced. Set AllowAnonymousOutsideDevelopment=true in the "
+                + "options section passed to AddOmpWebDefaults only "
                 + "for demo or test environments that must keep the bypass.");
         }
     }
