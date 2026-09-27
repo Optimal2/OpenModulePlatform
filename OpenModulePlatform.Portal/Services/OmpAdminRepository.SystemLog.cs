@@ -37,7 +37,13 @@ public sealed class SystemLogRow
     public string? CorrelationId { get; init; }
 }
 
-public sealed partial class OmpAdminRepository
+public interface ISystemLogReader
+{
+    Task<IReadOnlyList<string>> GetSystemLogProcessesAsync(CancellationToken ct);
+    Task<IReadOnlyList<SystemLogRow>> SearchSystemLogAsync(SystemLogFilter filter, CancellationToken ct);
+}
+
+public sealed partial class OmpAdminRepository : ISystemLogReader
 {
     public const int MaxSystemLogTake = 1000;
 

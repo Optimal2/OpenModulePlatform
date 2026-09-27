@@ -28,6 +28,7 @@ builder.AddOmpPushEventDispatcher();
 builder.Services.AddScoped<AppCatalogService>();
 builder.Services.AddSingleton<LocalPasswordHasher>();
 builder.Services.AddScoped<OmpAdminRepository>();
+builder.Services.AddScoped<ISystemLogReader>(services => services.GetRequiredService<OmpAdminRepository>());
 // The Portal's own activity log: admin events (maintenance, roles, package
 // imports, host actions) go to omp_portal.ActivityLog in the shared envelope
 // and show up in the activity viewer next to every module's entries.
@@ -144,4 +145,3 @@ static void ConfigureAspNetCoreTempDirectory(string tempRoot)
 
     Environment.SetEnvironmentVariable("ASPNETCORE_TEMP", tempRoot);
 }
-

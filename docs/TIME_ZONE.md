@@ -125,11 +125,26 @@ The system-log and activity-log pickers now describe local calendar dates. Old
 bare-date bookmarks therefore follow the configured zone after upgrade. Explicit
 system-log instants are converted for the picker. Raw log detail timestamps are
 formatted for display; raw log payloads and exported portable objects stay intact.
-System-log filter values with `DateTimeKind.Local` produce a model validation
-error before any log query. Only UTC instants are converted for the picker;
-unspecified values remain calendar input. Rejecting `Local` preserves the helper
-contract instead of silently using the server's machine zone or reinterpreting
-an instant as wall time in the configured zone.
+System-log `From` and `To` query parameters bind as strings, preserving the wire
+representation instead of relying on a model-bound `DateTime.Kind`. Accepted
+formats are ISO dates (`yyyy-MM-dd`) and ISO date-times with `T`, hours and
+minutes, optional seconds and up to seven fractional second digits. Date-times
+with `Z` or an explicit `+/-HH:mm` offset are parsed as `DateTimeOffset` instants.
+Their exact UTC values supply the query boundaries, including the chosen
+occurrence of a repeated clock hour; only the picker display is converted to
+`OmpTime:TimeZoneId`. Encode a URL's plus sign as `%2B`.
+
+Zone-free date-times are calendar input in the configured zone. Missing minutes
+are invalid; repeated minutes use the first occurrence for `From` and the last
+for `To`. A date-only range uses the start of the first day and the start of the
+day after the last, so DST days may span 23 or 25 hours. Timed `To` values keep
+the existing inclusive-minute convention: the exclusive query bound is exactly
+one minute after the supplied time, including for explicit instants. Known
+period presets override valid supplied boundaries with configured calendar days.
+Empty bounds are unrestricted. Invalid syntax, nonexistent calendar times and
+out-of-range boundaries produce a localized date/time validation message. The
+process list is still loaded, but no log search executes when validation fails.
+The shared helper's rejection of machine-local `DateTime` values is unchanged.
 
 ## Consumer migration (separate phase)
 
@@ -162,10 +177,19 @@ Run the focused tests with:
 
 ```powershell
 dotnet test OpenModulePlatform.Portal.Tests --filter 'FullyQualifiedName~PresentationTimeTests|FullyQualifiedName~PeriodPresetsTests'
+dotnet test OpenModulePlatform.Portal.Tests --filter FullyQualifiedName~SystemLogCalendarInputTests
 node --test tests/time-presentation.test.cjs
 ```
 
 The focused .NET suite contains 16 cases, including a skipped-midnight boundary.
+The system-log query-binding suite adds 19 cases using MVC binder providers and
+real query-string decoding, with a recording log reader. Its initial 14-case
+regression run failed six cases (exit 1); after the fix all 14 passed (exit 0).
+The extended suite covers explicit offsets through repeated clock hours,
+fractional seconds, 23/25-hour calendar days, missing minutes, presets, empty
+bounds, invalid formats, localized errors and process-list availability without
+a log search. This Windows validation does not change the machine time zone;
+it does not claim a two-machine-zone execution.
 The three Node tests use a Los Angeles browser zone with a Stockholm platform
 zone, covering both timestamp rendering and the calendar picker. An actual
 Portal process launched with `--OmpTime:TimeZoneId=Invalid/Zone` also exits with

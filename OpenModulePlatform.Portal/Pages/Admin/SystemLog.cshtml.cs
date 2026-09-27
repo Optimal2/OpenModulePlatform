@@ -1,6 +1,7 @@
 // File: OpenModulePlatform.Portal/Pages/Admin/SystemLog.cshtml.cs
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.Options;
@@ -19,10 +20,10 @@ public sealed class SystemLogModel : OmpPortalPageModel
 {
     private const int DefaultTake = 200;
 
-    private readonly OmpAdminRepository _repo;
+    private readonly ISystemLogReader _repo;
     private readonly OmpTime _time;
 
-    public SystemLogModel(IOptions<WebAppOptions> options, RbacService rbac, OmpAdminRepository repo, OmpTime time)
+    public SystemLogModel(IOptions<WebAppOptions> options, RbacService rbac, ISystemLogReader repo, OmpTime time)
         : base(options, rbac)
     {
         _repo = repo;
@@ -36,12 +37,19 @@ public sealed class SystemLogModel : OmpPortalPageModel
     public string[] Levels { get; set; } = [];
 
     /// <summary>Start in the configured calendar zone, to the minute; the picker sets whole days unless a time is typed.</summary>
-    [BindProperty(SupportsGet = true)]
+    [BindNever]
     public DateTime? From { get; set; }
 
     /// <summary>End in the configured calendar zone, inclusive to the minute.</summary>
-    [BindProperty(SupportsGet = true)]
+    [BindNever]
     public DateTime? To { get; set; }
+
+    // Preserve the wire representation: DateTime binding can discard the offset.
+    [BindProperty(Name = "From", SupportsGet = true)]
+    public string? FromInput { get; set; }
+
+    [BindProperty(Name = "To", SupportsGet = true)]
+    public string? ToInput { get; set; }
 
     [BindProperty(SupportsGet = true)]
     public string? Q { get; set; }
@@ -72,21 +80,12 @@ public sealed class SystemLogModel : OmpPortalPageModel
 
         SetTitles("System log");
         Take = Take <= 0 ? DefaultTake : Math.Min(Take, OmpAdminRepository.MaxSystemLogTake);
-        // Bare values are calendar inputs; explicit instants are converted for the picker.
-        try
-        {
-            From = AsCalendarInput(From);
-            To = AsCalendarInput(To);
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            return Page();
-        }
-        if (To is { } toDay && !Request.Query["To"].ToString().Contains('T'))
-        {
-            To = toDay.Date.AddHours(23).AddMinutes(59);
-        }
+        AvailableProcesses = await _repo.GetSystemLogProcessesAsync(ct);
+        var fromUtc = ResolveBound(FromInput, nameof(From), upperBound: false, out var fromCalendar);
+        var toUtc = ResolveBound(ToInput, nameof(To), upperBound: true, out var toCalendar);
+        From = fromCalendar;
+        To = toCalendar;
+        if (!ModelState.IsValid) return Page();
 
         // A preset key resolves to whole days; typed times only travel with
         // a custom period, and an unknown key leaves them alone.
@@ -95,30 +94,8 @@ public sealed class SystemLogModel : OmpPortalPageModel
             var (presetFrom, presetTo) = PeriodPresets.Apply(Range, null, null, _time.Today);
             From = presetFrom?.ToDateTime(TimeOnly.MinValue);
             To = presetTo?.ToDateTime(new TimeOnly(23, 59));
-        }
-
-        AvailableProcesses = await _repo.GetSystemLogProcessesAsync(ct);
-
-        DateTime? fromUtc;
-        DateTime? toUtc;
-        try
-        {
-            var wholeDays = PeriodPresets.IsPreset(Range);
-            fromUtc = From is { } from
-                ? wholeDays || !Request.Query["From"].ToString().Contains('T')
-                    ? _time.StartOfDayUtc(DateOnly.FromDateTime(from))
-                    : _time.ToUtc(from)
-                : null;
-            toUtc = To is { } to
-                ? wholeDays || !Request.Query["To"].ToString().Contains('T')
-                    ? _time.StartOfDayUtc(DateOnly.FromDateTime(to).AddDays(1))
-                    : _time.ToUtc(to, upperBound: true).AddMinutes(1)
-                : null;
-        }
-        catch (ArgumentException ex)
-        {
-            ModelState.AddModelError(string.Empty, ex.Message);
-            return Page();
+            fromUtc = presetFrom is { } start ? _time.StartOfDayUtc(start) : null;
+            toUtc = presetTo is { } end ? _time.StartOfDayUtc(end.AddDays(1)) : null;
         }
 
         var filter = new SystemLogFilter
@@ -136,11 +113,48 @@ public sealed class SystemLogModel : OmpPortalPageModel
         return Page();
     }
 
-    private DateTime? AsCalendarInput(DateTime? value)
-        => value is { Kind: not DateTimeKind.Unspecified } instant
-            // Let OmpTime reject Local rather than silently using the machine zone.
-            ? _time.ToDisplayTime(instant).DateTime
-            : value;
+    private DateTime? ResolveBound(string? input, string field, bool upperBound, out DateTime? calendar)
+    {
+        calendar = null;
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        input = input.Trim();
+        try
+        {
+            // Every instant format requires an explicit zone; AssumeUniversal only
+            // supplies the offset for the literal Z. No machine-local default is used.
+            string[] instantFormats = ["yyyy-MM-dd'T'HH:mmzzz", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz",
+                "yyyy-MM-dd'T'HH:mm'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"];
+            if (DateTimeOffset.TryParseExact(input, instantFormats, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal, out var instant))
+            {
+                calendar = _time.ToDisplayTime(instant).DateTime;
+                // Keep the original occurrence during a repeated clock hour.
+                return upperBound ? instant.UtcDateTime.AddMinutes(1) : instant.UtcDateTime;
+            }
+
+            string[] calendarFormats = ["yyyy-MM-dd", "yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF"];
+            if (DateTime.TryParseExact(input, calendarFormats, CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var wallTime))
+            {
+                calendar = wallTime;
+                if (input.Length == 10)
+                {
+                    var date = DateOnly.FromDateTime(wallTime);
+                    if (upperBound) calendar = wallTime.AddHours(23).AddMinutes(59);
+                    return _time.StartOfDayUtc(upperBound ? date.AddDays(1) : date);
+                }
+                var utc = _time.ToUtc(wallTime, upperBound);
+                return upperBound ? utc.AddMinutes(1) : utc;
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Missing calendar minutes and out-of-range boundaries are input errors.
+        }
+
+        ModelState.AddModelError(field, PortalLocalizer["Enter a valid date and time."]);
+        return null;
+    }
 
     /// <summary>The value the picker's hidden inputs carry for a bound.</summary>
     public static string FieldValue(DateTime? value)

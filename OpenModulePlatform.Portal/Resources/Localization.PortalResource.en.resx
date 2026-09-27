@@ -1164,4 +1164,5 @@
   <data name="Time" xml:space="preserve"><value>Time</value></data>
   <data name="Starts at" xml:space="preserve"><value>Starts at</value></data>
   <data name="Expires at" xml:space="preserve"><value>Expires at</value></data>
+  <data name="Enter a valid date and time." xml:space="preserve"><value>Enter a valid date and time.</value></data>
 </root>
