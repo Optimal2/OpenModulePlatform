@@ -9,7 +9,10 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Playwright;
 using OpenModulePlatform.Web.ModuleFragments;
@@ -179,6 +182,159 @@ public sealed class ModuleFragmentAuthorizationTests
         }
     }
 
+    [Fact]
+    public async Task Anonymous_bypass_is_refused_outside_Development_without_explicit_opt_in()
+    {
+        var logs = new CapturedLogs();
+        var appHost = await StartFragmentAppAsync(
+            "Production",
+            configureWebApp: options => options.AllowAnonymous = true,
+            logs);
+        try
+        {
+            Assert.Equal(401, await GetStatusAsync(appHost.Address, "/fragment"));
+            Assert.Equal(403, await GetStatusAsync(appHost.Address, "/fragment",
+                ProtectFragmentTicket(appHost.App, "unrelated.permission")));
+            Assert.Equal(200, await GetStatusAsync(appHost.Address, "/fragment",
+                ProtectFragmentTicket(appHost.App, "example.view")));
+            Assert.Contains(logs.Warnings, message => message.Contains("AllowAnonymous"));
+        }
+        finally
+        {
+            await appHost.App.StopAsync();
+            await appHost.App.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Anonymous_bypass_is_honored_in_Development_with_startup_warning()
+    {
+        var logs = new CapturedLogs();
+        var appHost = await StartFragmentAppAsync(
+            "Development",
+            configureWebApp: options => options.AllowAnonymous = true,
+            logs);
+        try
+        {
+            // The development bypass renders the fragment without any session.
+            Assert.Equal(200, await GetStatusAsync(appHost.Address, "/fragment"));
+            Assert.Contains(logs.Warnings, message => message.Contains("AllowAnonymous"));
+        }
+        finally
+        {
+            await appHost.App.StopAsync();
+            await appHost.App.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Anonymous_bypass_outside_Development_requires_explicit_opt_in()
+    {
+        // Set through configuration so the flag travels the same binding path a
+        // deployed app uses (WebApp section), not just a typed options lambda.
+        var builder = CreateFragmentAppBuilder(
+            "Production",
+            configureWebApp: options => options.AllowAnonymous = true);
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["WebApp:AllowAnonymousOutsideDevelopment"] = "true"
+        });
+        var logs = new CapturedLogs();
+        builder.Services.AddSingleton<ILoggerProvider>(logs);
+
+        var app = builder.Build();
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapRazorPages();
+        await app.StartAsync();
+        var address = app.Services.GetRequiredService<IServer>().Features
+            .Get<IServerAddressesFeature>()!.Addresses.Single();
+        try
+        {
+            Assert.Equal(200, await GetStatusAsync(address, "/fragment"));
+            Assert.Contains(logs.Warnings, message => message.Contains("AllowAnonymousOutsideDevelopment"));
+        }
+        finally
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+        }
+    }
+
+    private readonly record struct FragmentAppHost(WebApplication App, string Address);
+
+    private static async Task<FragmentAppHost> StartFragmentAppAsync(
+        string environmentName,
+        Action<WebAppOptions>? configureWebApp,
+        CapturedLogs logs)
+    {
+        var builder = CreateFragmentAppBuilder(environmentName, configureWebApp: configureWebApp);
+        builder.Services.AddSingleton<ILoggerProvider>(logs);
+
+        var app = builder.Build();
+        app.UseRouting();
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.MapRazorPages();
+        await app.StartAsync();
+        var address = app.Services.GetRequiredService<IServer>().Features
+            .Get<IServerAddressesFeature>()!.Addresses.Single();
+        return new FragmentAppHost(app, address);
+    }
+
+    private static async Task<int> GetStatusAsync(string address, string path, string? cookie = null)
+    {
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, address + path);
+        if (cookie is not null)
+        {
+            request.Headers.TryAddWithoutValidation("Cookie", $"{OmpAuthDefaults.CookieName}={cookie}");
+        }
+        using var response = await client.SendAsync(request);
+        return (int)response.StatusCode;
+    }
+
+    private static string ProtectFragmentTicket(WebApplication app, string? permission = null)
+    {
+        var cookieOptions = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(OmpAuthDefaults.AuthenticationScheme);
+        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, "fragment-test-user") };
+        if (permission is not null)
+        {
+            claims.Add(new("permission", permission));
+        }
+        var ticket = new AuthenticationTicket(
+            new ClaimsPrincipal(new ClaimsIdentity(claims, OmpAuthDefaults.AuthenticationScheme)),
+            new AuthenticationProperties { ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(5) },
+            OmpAuthDefaults.AuthenticationScheme);
+        return cookieOptions.TicketDataFormat.Protect(ticket);
+    }
+
+    private sealed class CapturedLogs : ILoggerProvider
+    {
+        public List<string> Warnings { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new CapturedLogger(this);
+
+        public void Dispose() { }
+
+        private sealed class CapturedLogger(CapturedLogs owner) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                if (logLevel >= LogLevel.Warning)
+                {
+                    owner.Warnings.Add(formatter(state, exception));
+                }
+            }
+        }
+    }
 
     private static WebApplicationBuilder CreateFragmentAppBuilder(
         string environmentName,
@@ -205,6 +361,11 @@ public sealed class ModuleFragmentAuthorizationTests
             });
         builder.Services.AddAuthorization(options => options.FallbackPolicy = options.DefaultPolicy);
         builder.Services.AddOmpModuleFragments();
+        // Replace the default RBAC permission source so the fixture needs no database.
+        // RemoveAll rather than a second AddScoped: the Development environment
+        // validates every service descriptor at build time and would try to
+        // construct the default (database-backed) implementation.
+        builder.Services.RemoveAll<IOmpModuleFragmentPermissions>();
         builder.Services.AddScoped<IOmpModuleFragmentPermissions, TestPermissions>();
         return builder;
     }

@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Web.Shared.Options;
 using OpenModulePlatform.Web.Shared.Security;
@@ -69,12 +71,40 @@ internal sealed class OmpModuleFragmentStartupFilter : IStartupFilter
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
         => app =>
         {
+            WarnAboutAnonymousBypass(app.ApplicationServices);
             next(app);
             // The composite EndpointDataSource is wired from the application's route
             // builder while the request pipeline is composed, so the endpoints are
             // complete here but the server has not started accepting requests yet.
             ThrowOnConflictingEndpoints(app.ApplicationServices.GetRequiredService<EndpointDataSource>());
         };
+
+    private static void WarnAboutAnonymousBypass(IServiceProvider services)
+    {
+        var options = services.GetRequiredService<IOptions<WebAppOptions>>().Value;
+        if (!options.AllowAnonymous)
+        {
+            return;
+        }
+
+        var logger = services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("OpenModulePlatform.Web.ModuleFragments");
+        var environment = services.GetRequiredService<IHostEnvironment>();
+        if (OmpModuleFragmentBypass.IsHonored(options, environment))
+        {
+            logger.LogWarning(environment.IsDevelopment()
+                ? "WebApp:AllowAnonymous=true: module-fragment permission enforcement is bypassed (development bypass)."
+                : "WebApp:AllowAnonymousOutsideDevelopment=true: module-fragment permission enforcement is "
+                    + "bypassed outside the Development environment.");
+        }
+        else
+        {
+            logger.LogWarning(
+                "WebApp:AllowAnonymous=true outside the Development environment: the module-fragment bypass is "
+                + "refused and permissions are enforced. Set WebApp:AllowAnonymousOutsideDevelopment=true only "
+                + "for demo or test environments that must keep the bypass.");
+        }
+    }
 
     internal static void ThrowOnConflictingEndpoints(EndpointDataSource endpoints)
     {
@@ -94,6 +124,16 @@ internal sealed class OmpModuleFragmentStartupFilter : IStartupFilter
     }
 }
 
+/// <summary>
+/// The WebApp:AllowAnonymous development bypass: honored in the Development environment
+/// only, unless WebApp:AllowAnonymousOutsideDevelopment explicitly opts in.
+/// </summary>
+internal static class OmpModuleFragmentBypass
+{
+    public static bool IsHonored(WebAppOptions options, IHostEnvironment environment)
+        => options.AllowAnonymous && (environment.IsDevelopment() || options.AllowAnonymousOutsideDevelopment);
+}
+
 internal sealed class FragmentRequirement : IAuthorizationRequirement;
 
 internal sealed class RbacFragmentPermissions(RbacService rbac) : IOmpModuleFragmentPermissions
@@ -104,6 +144,7 @@ internal sealed class RbacFragmentPermissions(RbacService rbac) : IOmpModuleFrag
 
 internal sealed class FragmentAuthorizationHandler(
     IOptions<WebAppOptions> options,
+    IHostEnvironment environment,
     IOmpModuleFragmentPermissions permissions) : AuthorizationHandler<FragmentRequirement>
 {
     protected override async Task HandleRequirementAsync(
@@ -120,8 +161,11 @@ internal sealed class FragmentAuthorizationHandler(
             return;
         }
 
-        // Match the existing explicit development bypass. This is NOT an enforced mode.
-        if (options.Value.AllowAnonymous)
+        // The explicit development bypass: honored in Development only, and outside
+        // Development only when WebApp:AllowAnonymousOutsideDevelopment opts in. Elsewhere
+        // it is refused (never an enforced mode) and permissions are checked for real;
+        // startup logged which of the two applies.
+        if (OmpModuleFragmentBypass.IsHonored(options.Value, environment))
         {
             context.Succeed(requirement);
             return;

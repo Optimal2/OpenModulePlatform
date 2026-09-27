@@ -1020,10 +1020,17 @@ applications with a custom handler must compose the fragment denial behavior
 into it.
 
 **Enforcement must be enabled:** `Portal:AllowAnonymous=false` (or the section
-passed to `AddOmpWebDefaults`). The example's Development configuration explicitly
-sets `AllowAnonymous=true` for unauthenticated demos; in that mode permission
-enforcement is bypassed and the 401/403 guarantee does **not** apply. Override it
-to `false` when checking authentication, and never use that bypass in production.
+passed to `AddOmpWebDefaults`). The `AllowAnonymous=true` bypass is scoped to the
+Development environment: it is honored there for unauthenticated demos (the
+example's Development configuration sets it), with a startup warning, and the
+401/403 guarantee does **not** apply while it is active. Outside Development the
+bypass is **refused** — permissions are enforced as if `AllowAnonymous` were
+`false`, and startup logs a warning saying so — unless
+`WebApp:AllowAnonymousOutsideDevelopment=true` explicitly opts in for a demo or
+test environment (also logged at startup). This refusal applies to the
+module-fragment policy only; the app-wide fallback-policy behavior of
+`AllowAnonymous` in `AddOmpWebDefaults` is unchanged. Override `AllowAnonymous` to
+`false` when checking authentication, and never enable the bypass in production.
 
 The Portal sends `X-OMP-Dashboard-Fragment: 1` and forwards only the configured OMP
 auth cookie (including chunks), active-role and culture cookies. The marker is
@@ -1042,8 +1049,10 @@ no handler guard in Chromium. It covers 401/403/200, empty denial bodies, expire
 and rejected cookies, requests with/without the Portal marker, and unchanged
 ordinary-page redirects, plus the host-startup failure for endpoints that combine
 the fragment policy with AllowAnonymous (Razor attribute and minimal-API
-convention). Storage is replaced with test data, so no database is
-required. GitHub CI runs it in the independent `module-fragment-ui` job with a
+convention) and the environment scoping of the `AllowAnonymous` bypass (refused
+outside Development, honored in Development, honored elsewhere only behind
+`AllowAnonymousOutsideDevelopment`, each with a startup warning). Storage is
+replaced with test data, so no database is required. GitHub CI runs it in the independent `module-fragment-ui` job with a
 15-minute timeout and no dependencies that delay other jobs; missing Chromium or
 startup errors fail the job instead of skipping tests. The normal local CI gate
 continues to exclude UI suites. Run this additional gate locally with:

@@ -86,6 +86,16 @@ public sealed class WebAppOptions
     public TopBarPollingOptions TopBarPolling { get; set; } = new();
     public ToastPollingOptions ToastPolling { get; set; } = new();
     public bool AllowAnonymous { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="AllowAnonymous"/> may disable
+    /// permission enforcement outside the Development environment. The module-fragment
+    /// authorization policy refuses the AllowAnonymous bypass in non-Development
+    /// environments unless this flag is set explicitly. Only demo and test environments
+    /// should ever enable it; never production.
+    /// </summary>
+    public bool AllowAnonymousOutsideDevelopment { get; set; }
+
     public bool UseForwardedHeaders { get; set; }
     public PermissionMode PermissionMode { get; set; } = PermissionMode.Any;
     public bool ForwardedHeadersTrustAllProxies { get; set; }
