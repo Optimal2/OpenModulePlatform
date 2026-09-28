@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace OpenModulePlatform.Bootstrapper;
 
 /// <summary>Why a package-library module definition file was flagged.</summary>
@@ -31,8 +33,17 @@ internal enum PackageLibraryDefinitionProblem
     /// definition-file rename looks like when the version was not bumped - the
     /// sync loop copies by file name, so the lingering old copy is never
     /// overwritten, and the package would ship both files for the same module.
+    /// One finding per module key, naming every file that declares it.
     /// </summary>
     Duplicate,
+
+    /// <summary>
+    /// A moduleDefinitions entry in a source repository manifest lacks moduleKey,
+    /// definitionVersion or path. Blocking: the sync skips such an entry, so the
+    /// library file it should own is never updated and would otherwise read as
+    /// an orphan with advice that does not apply (the repository IS configured).
+    /// </summary>
+    IncompleteSource,
 }
 
 /// <summary>One module definition file as it sits in the package library.</summary>
@@ -51,6 +62,24 @@ internal sealed record PackageLibrarySourceDefinition(
     string ModuleKey,
     string DefinitionVersion,
     string RepositoryKey);
+
+/// <summary>
+/// A moduleDefinitions entry the sync cannot use because a required field is empty.
+/// </summary>
+/// <param name="RepositoryKey">The manifest's repository.</param>
+/// <param name="Index">Zero-based position in the manifest's moduleDefinitions array.</param>
+/// <param name="ModuleKey">moduleKey as written, or empty.</param>
+/// <param name="MissingFields">The empty fields, for example "definitionVersion, path".</param>
+internal sealed record PackageLibraryIncompleteSourceEntry(
+    string RepositoryKey,
+    int Index,
+    string ModuleKey,
+    string MissingFields);
+
+/// <summary>A configured developer source root that the resolution dropped.</summary>
+/// <param name="Path">The configured path.</param>
+/// <param name="Reason">Why it is not part of the resolved source set.</param>
+internal sealed record SkippedDeveloperSourceRoot(string Path, string Reason);
 
 /// <summary>One flagged package-library definition file.</summary>
 /// <param name="FileName">Library file name, used to name the offender.</param>
@@ -75,7 +104,8 @@ internal sealed record PackageLibraryDefinitionFinding(
     public bool Blocks =>
         Problem is PackageLibraryDefinitionProblem.Stale
             or PackageLibraryDefinitionProblem.Unreadable
-            or PackageLibraryDefinitionProblem.Duplicate;
+            or PackageLibraryDefinitionProblem.Duplicate
+            or PackageLibraryDefinitionProblem.IncompleteSource;
 }
 
 /// <summary>
@@ -104,12 +134,26 @@ internal static class PackageLibraryDefinitionGate
 {
     public static IReadOnlyList<PackageLibraryDefinitionFinding> Evaluate(
         IReadOnlyList<PackageLibraryDefinition> libraryDefinitions,
-        IReadOnlyList<PackageLibrarySourceDefinition> sourceDefinitions)
+        IReadOnlyList<PackageLibrarySourceDefinition> sourceDefinitions,
+        IReadOnlyList<PackageLibraryIncompleteSourceEntry>? incompleteSourceEntries = null)
     {
         ArgumentNullException.ThrowIfNull(libraryDefinitions);
         ArgumentNullException.ThrowIfNull(sourceDefinitions);
+        incompleteSourceEntries ??= [];
 
         var findings = new List<PackageLibraryDefinitionFinding>();
+        foreach (var entry in incompleteSourceEntries)
+        {
+            findings.Add(new PackageLibraryDefinitionFinding(
+                $"{entry.RepositoryKey} omp-components.json moduleDefinitions[{entry.Index}]",
+                entry.ModuleKey,
+                PackageVersion: string.Empty,
+                SourceVersion: null,
+                entry.RepositoryKey,
+                PackageLibraryDefinitionProblem.IncompleteSource,
+                OtherFileName: entry.MissingFields));
+        }
+
         foreach (var libraryDefinition in libraryDefinitions)
         {
             if (!string.IsNullOrWhiteSpace(libraryDefinition.ReadError)
@@ -131,6 +175,14 @@ internal static class PackageLibraryDefinitionGate
             var newestSource = FindNewestOwningSource(libraryDefinition.ModuleKey, sourceDefinitions);
             if (newestSource is null)
             {
+                if (incompleteSourceEntries.Any(entry =>
+                        string.Equals(entry.ModuleKey, libraryDefinition.ModuleKey, StringComparison.OrdinalIgnoreCase)))
+                {
+                    // A configured repository does claim this module; its entry is
+                    // incomplete and already blocks. ORPHAN advice would mislead.
+                    continue;
+                }
+
                 findings.Add(new PackageLibraryDefinitionFinding(
                     libraryDefinition.FileName,
                     libraryDefinition.ModuleKey,
@@ -153,45 +205,31 @@ internal static class PackageLibraryDefinitionGate
             }
         }
 
-        // Two readable library files that declare the same module key: the
-        // version comparison above cannot catch a rename that kept its version,
-        // because neither copy is older than the source. Both files would ship.
-        // Files without a readable identity are already blocked as Unreadable.
-        foreach (var libraryDefinition in libraryDefinitions)
+        // Two or more readable library files that declare the same module key:
+        // the version comparison above cannot catch a rename that kept its
+        // version, because neither copy is older than the source. Every file
+        // would ship. One finding per module key, so the count is the number of
+        // modules to clean up, not the number of files involved. Files without
+        // a readable identity are already blocked as Unreadable.
+        var duplicateGroups = libraryDefinitions
+            .Where(definition => string.IsNullOrWhiteSpace(definition.ReadError)
+                && !string.IsNullOrWhiteSpace(definition.ModuleKey)
+                && !string.IsNullOrWhiteSpace(definition.DefinitionVersion))
+            .GroupBy(definition => definition.ModuleKey!, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1);
+        foreach (var group in duplicateGroups)
         {
-            if (!string.IsNullOrWhiteSpace(libraryDefinition.ReadError)
-                || string.IsNullOrWhiteSpace(libraryDefinition.ModuleKey)
-                || string.IsNullOrWhiteSpace(libraryDefinition.DefinitionVersion))
-            {
-                continue;
-            }
-
-            PackageLibraryDefinition? other = null;
-            foreach (var candidate in libraryDefinitions)
-            {
-                if (ReferenceEquals(candidate, libraryDefinition)
-                    || string.IsNullOrWhiteSpace(candidate.ModuleKey)
-                    || !string.Equals(candidate.ModuleKey, libraryDefinition.ModuleKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                other = candidate;
-                break;
-            }
-
-            if (other is not null)
-            {
-                findings.Add(new PackageLibraryDefinitionFinding(
-                    libraryDefinition.FileName,
-                    libraryDefinition.ModuleKey,
-                    libraryDefinition.DefinitionVersion,
-                    SourceVersion: null,
-                    RepositoryKey: null,
-                    PackageLibraryDefinitionProblem.Duplicate,
-                    OtherFileName: other.FileName,
-                    OtherVersion: other.DefinitionVersion));
-            }
+            var first = group.First();
+            var others = group.Skip(1).ToArray();
+            findings.Add(new PackageLibraryDefinitionFinding(
+                first.FileName,
+                first.ModuleKey!,
+                first.DefinitionVersion!,
+                SourceVersion: null,
+                RepositoryKey: null,
+                PackageLibraryDefinitionProblem.Duplicate,
+                OtherFileName: string.Join(", ", others.Select(other => other.FileName)),
+                OtherVersion: string.Join(", ", others.Select(other => other.DefinitionVersion))));
         }
 
         return findings;
@@ -199,11 +237,20 @@ internal static class PackageLibraryDefinitionGate
 
     public static IReadOnlyList<string> DescribeFindings(
         IReadOnlyList<PackageLibraryDefinitionFinding> findings,
-        int checkedCount)
+        int checkedCount,
+        IReadOnlyList<SkippedDeveloperSourceRoot>? skippedSourceRoots = null)
     {
         ArgumentNullException.ThrowIfNull(findings);
+        skippedSourceRoots ??= [];
 
         var lines = new List<string>();
+        // Listed first: a dropped root is the usual reason a module below reads
+        // as ORPHAN, and nothing else in the output names the dropped path.
+        foreach (var skipped in skippedSourceRoots)
+        {
+            lines.Add($"  SKIPPED source root {skipped.Path}: {skipped.Reason}; module definitions it owns are not checked against it.");
+        }
+
         foreach (var finding in findings)
         {
             switch (finding.Problem)
@@ -230,7 +277,15 @@ internal static class PackageLibraryDefinitionGate
                 case PackageLibraryDefinitionProblem.Duplicate:
                     lines.Add(
                         $"  DUPLICATE {finding.ModuleKey}: {finding.FileName} ({finding.PackageVersion}) and {finding.OtherFileName} "
-                        + $"({finding.OtherVersion}) both declare this module key; the package would ship both. Remove the leftover file.");
+                        + $"({finding.OtherVersion}) declare the same module key; the package would ship every copy. Remove the leftover file(s).");
+                    break;
+
+                case PackageLibraryDefinitionProblem.IncompleteSource:
+                    lines.Add(
+                        $"  BROKEN  {finding.FileName}"
+                        + (string.IsNullOrWhiteSpace(finding.ModuleKey) ? string.Empty : $" ({finding.ModuleKey})")
+                        + $": {finding.OtherFileName} is empty; the refresh skips this entry, so the library copy it should own "
+                        + "is never updated. Complete the entry in the manifest.");
                     break;
             }
         }
@@ -239,11 +294,104 @@ internal static class PackageLibraryDefinitionGate
         var orphaned = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Orphan);
         var unreadable = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Unreadable);
         var duplicate = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Duplicate);
+        var incomplete = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.IncompleteSource);
         lines.Add(
-            $"Package library definitions: {checkedCount} file(s) checked; {stale} stale, {orphaned} orphaned, {unreadable} unreadable, {duplicate} duplicate.");
+            $"Package library definitions: {checkedCount} file(s) checked; {stale} stale, {orphaned} orphaned, {unreadable} unreadable, "
+            + $"{duplicate} duplicate, {incomplete} incomplete source entry(ies); {skippedSourceRoots.Count} configured source root(s) skipped.");
 
         return lines;
     }
+
+    /// <summary>
+    /// The moduleDefinitions entries of one manifest that the sync skips because
+    /// moduleKey, definitionVersion or path is empty (or the entry is not an
+    /// object). The sync reads the same fields the same way, so this is exactly
+    /// the set it drops.
+    /// </summary>
+    public static IReadOnlyList<PackageLibraryIncompleteSourceEntry> FindIncompleteManifestEntries(
+        JsonNode? manifest,
+        string repositoryKey)
+    {
+        if (GetProperty(manifest, "moduleDefinitions") is not JsonArray items)
+        {
+            return [];
+        }
+
+        var entries = new List<PackageLibraryIncompleteSourceEntry>();
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index];
+            var missing = new List<string>();
+            foreach (var field in (string[])["moduleKey", "definitionVersion", "path"])
+            {
+                if (string.IsNullOrWhiteSpace(GetString(item, field)))
+                {
+                    missing.Add(field);
+                }
+            }
+
+            if (missing.Count > 0)
+            {
+                entries.Add(new PackageLibraryIncompleteSourceEntry(
+                    repositoryKey,
+                    index,
+                    GetString(item, "moduleKey"),
+                    string.Join(", ", missing)));
+            }
+        }
+
+        return entries;
+    }
+
+    /// <summary>
+    /// The configured developer source roots that are not part of the resolved
+    /// source set, each with the reason. A root configured twice (also with a
+    /// different case or a trailing separator) is one root, not a skip.
+    /// </summary>
+    public static IReadOnlyList<SkippedDeveloperSourceRoot> FindSkippedSourceRoots(
+        IEnumerable<string> configuredRoots,
+        IReadOnlyList<string> resolvedRoots,
+        Func<string, bool> directoryExists,
+        Func<string, bool> hasManifest)
+    {
+        ArgumentNullException.ThrowIfNull(configuredRoots);
+        ArgumentNullException.ThrowIfNull(resolvedRoots);
+
+        var resolved = new HashSet<string>(resolvedRoots.Select(NormalizeSourceRoot), StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var skipped = new List<SkippedDeveloperSourceRoot>();
+        foreach (var configuredRoot in configuredRoots)
+        {
+            var root = NormalizeSourceRoot(configuredRoot);
+            if (!seen.Add(root) || resolved.Contains(root))
+            {
+                continue;
+            }
+
+            var reason = !directoryExists(root)
+                ? "folder not found"
+                : !hasManifest(root)
+                    ? "no omp-components.json"
+                    : "not used because no configured root is an OpenModulePlatform source repository";
+            skipped.Add(new SkippedDeveloperSourceRoot(root, reason));
+        }
+
+        return skipped;
+    }
+
+    /// <summary>Full path without a trailing separator, so one folder has one spelling.</summary>
+    public static string NormalizeSourceRoot(string root)
+        => Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+
+    private static JsonNode? GetProperty(JsonNode? node, string propertyName)
+        => node is JsonObject obj
+            ? obj.FirstOrDefault(property => property.Key.Equals(propertyName, StringComparison.OrdinalIgnoreCase)).Value
+            : null;
+
+    private static string GetString(JsonNode? node, string propertyName)
+        => GetProperty(node, propertyName) is JsonValue value && value.TryGetValue<string>(out var text)
+            ? text.Trim()
+            : string.Empty;
 
     private static PackageLibrarySourceDefinition? FindNewestOwningSource(
         string moduleKey,
@@ -274,7 +422,8 @@ internal static class PackageLibraryDefinitionGate
 /// <summary>The gate's result for one package library.</summary>
 internal sealed record PackageLibraryDefinitionGateReport(
     int CheckedCount,
-    IReadOnlyList<PackageLibraryDefinitionFinding> Findings)
+    IReadOnlyList<PackageLibraryDefinitionFinding> Findings,
+    IReadOnlyList<SkippedDeveloperSourceRoot>? SkippedSourceRoots = null)
 {
     public int StaleCount =>
         Findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Stale);
@@ -288,9 +437,12 @@ internal sealed record PackageLibraryDefinitionGateReport(
     public int DuplicateCount =>
         Findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Duplicate);
 
+    public int IncompleteSourceCount =>
+        Findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.IncompleteSource);
+
     /// <summary>Findings that must stop the package build.</summary>
     public int BlockingCount => Findings.Count(finding => finding.Blocks);
 
     public IReadOnlyList<string> Describe() =>
-        PackageLibraryDefinitionGate.DescribeFindings(Findings, CheckedCount);
+        PackageLibraryDefinitionGate.DescribeFindings(Findings, CheckedCount, SkippedSourceRoots);
 }

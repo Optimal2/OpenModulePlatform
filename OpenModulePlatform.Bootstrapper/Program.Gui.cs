@@ -1995,7 +1995,7 @@ internal static partial class Program
                 {
                     Report(
                         "> Refusing to build the universal package: module definition file(s) in the package library are older "
-                        + "than their source repositories, duplicated, or unreadable. The package would ship outdated or unverified definitions.");
+                        + "than their source repositories, duplicated, unreadable, or declared by an incomplete source manifest entry. The package would ship outdated or unverified definitions.");
                     return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
                 }
             }
@@ -2425,7 +2425,7 @@ internal static partial class Program
                         {
                             Console.WriteLine(
                                 "> Refusing to create the universal package: module definition file(s) in the package library are older "
-                                + "than their source repositories, duplicated, or unreadable. The package would ship outdated or unverified definitions.");
+                                + "than their source repositories, duplicated, unreadable, or declared by an incomplete source manifest entry. The package would ship outdated or unverified definitions.");
                             return 1;
                         }
                     }
@@ -3303,7 +3303,10 @@ internal static partial class Program
             // build; orphans are listed every run but stay non-blocking, because
             // a source root whose repository is not cloned locally is dropped
             // silently and must not brick the sync on machines with fewer clones.
-            var libraryReport = await EvaluatePackageLibraryDefinitionsAsync(sourceDefinitions);
+            var libraryReport = await EvaluatePackageLibraryDefinitionsAsync(
+                sourceDefinitions,
+                FindIncompleteManifestEntries(manifests),
+                FindSkippedDeveloperSourceRoots(sourceRoots));
             foreach (var line in libraryReport.Describe())
             {
                 lines.Add(line);
@@ -5663,11 +5666,22 @@ ORDER BY ar.ArtifactId DESC;
             var gateDefinitions = gateManifests
                 .SelectMany(manifest => ReadManifestModuleDefinitions(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
                 .ToArray();
-            return await EvaluatePackageLibraryDefinitionsAsync(gateDefinitions);
+            return await EvaluatePackageLibraryDefinitionsAsync(
+                gateDefinitions,
+                FindIncompleteManifestEntries(gateManifests),
+                FindSkippedDeveloperSourceRoots(gateSourceRoots));
         }
 
+        private static IReadOnlyList<PackageLibraryIncompleteSourceEntry> FindIncompleteManifestEntries(
+            IReadOnlyList<DeveloperManifest> manifests)
+            => manifests
+                .SelectMany(manifest => PackageLibraryDefinitionGate.FindIncompleteManifestEntries(manifest.Json, manifest.RepositoryKey))
+                .ToArray();
+
         private async Task<PackageLibraryDefinitionGateReport> EvaluatePackageLibraryDefinitionsAsync(
-            IReadOnlyList<ManifestModuleDefinition> sourceDefinitions)
+            IReadOnlyList<ManifestModuleDefinition> sourceDefinitions,
+            IReadOnlyList<PackageLibraryIncompleteSourceEntry> incompleteSourceEntries,
+            IReadOnlyList<SkippedDeveloperSourceRoot> skippedSourceRoots)
         {
             var libraryRoot = ResolvePackageModuleDefinitionsRoot(_payloadRoot);
             var libraryDefinitions = new List<PackageLibraryDefinition>();
@@ -5709,8 +5723,8 @@ ORDER BY ar.ArtifactId DESC;
                     definition.DefinitionVersion,
                     definition.RepositoryKey))
                 .ToArray();
-            var findings = PackageLibraryDefinitionGate.Evaluate(libraryDefinitions, sources);
-            return new PackageLibraryDefinitionGateReport(libraryDefinitions.Count, findings);
+            var findings = PackageLibraryDefinitionGate.Evaluate(libraryDefinitions, sources, incompleteSourceEntries);
+            return new PackageLibraryDefinitionGateReport(libraryDefinitions.Count, findings, skippedSourceRoots);
         }
 
         private string? FindAvailableArtifactPackage(ManifestComponent component)
@@ -5991,8 +6005,11 @@ ORDER BY ar.ArtifactId DESC;
 
         private IReadOnlyList<string> ResolveDeveloperSourceRoots(bool throwIfMissing)
         {
+            // Normalized and distinct: a root configured twice is read, pulled
+            // and counted once.
             var configuredRoots = ParseConfiguredDeveloperSourceRoots(_config.DeveloperSource.SourceRoot)
-                .Select(Path.GetFullPath)
+                .Select(PackageLibraryDefinitionGate.NormalizeSourceRoot)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (configuredRoots.Length > 0)
             {
@@ -6016,6 +6033,18 @@ ORDER BY ar.ArtifactId DESC;
                 ? []
                 : [primarySourceRoot];
         }
+
+        /// <summary>
+        /// The configured developer source roots that <see cref="ResolveDeveloperSourceRoots"/>
+        /// left out of <paramref name="resolvedRoots"/>, so the gate can name them
+        /// instead of letting the modules they own read as unexplained orphans.
+        /// </summary>
+        private IReadOnlyList<SkippedDeveloperSourceRoot> FindSkippedDeveloperSourceRoots(IReadOnlyList<string> resolvedRoots)
+            => PackageLibraryDefinitionGate.FindSkippedSourceRoots(
+                ParseConfiguredDeveloperSourceRoots(_config.DeveloperSource.SourceRoot),
+                resolvedRoots,
+                Directory.Exists,
+                root => File.Exists(Path.Join(root, "omp-components.json")));
 
         private static IEnumerable<string> ParseConfiguredDeveloperSourceRoots(string value)
             => value
@@ -6054,41 +6083,6 @@ ORDER BY ar.ArtifactId DESC;
             // no BOM and plain Encoding.UTF8 would add one on the first save.
             var json = JsonSerializer.Serialize(_config, JsonOptions);
             await AtomicJsonFile.WriteAsync(_configPath, json + Environment.NewLine, new UTF8Encoding(false));
-        }
-
-        private static int CompareVersionText(string left, string right)
-        {
-            if (Version.TryParse(left, out var leftVersion) && Version.TryParse(right, out var rightVersion))
-            {
-                return leftVersion.CompareTo(rightVersion);
-            }
-
-            var leftParts = left.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
-            var rightParts = right.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
-            var count = Math.Max(leftParts.Length, rightParts.Length);
-            for (var index = 0; index < count; index++)
-            {
-                var leftPart = index < leftParts.Length ? leftParts[index] : "0";
-                var rightPart = index < rightParts.Length ? rightParts[index] : "0";
-                if (int.TryParse(leftPart, out var leftNumber) && int.TryParse(rightPart, out var rightNumber))
-                {
-                    var numberComparison = leftNumber.CompareTo(rightNumber);
-                    if (numberComparison != 0)
-                    {
-                        return numberComparison;
-                    }
-
-                    continue;
-                }
-
-                var textComparison = string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
-                if (textComparison != 0)
-                {
-                    return textComparison;
-                }
-            }
-
-            return 0;
         }
 
         private async Task UninstallAsync(bool removeRuntimeFiles, bool removeDatabaseObjects)

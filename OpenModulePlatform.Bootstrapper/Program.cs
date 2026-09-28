@@ -1115,6 +1115,11 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
 
     // Internal for PackageLibraryDefinitionGate, which needs the exact version
     // semantics the sync and status views use.
+    //
+    // Precedence follows SemVer 2.0 for the parts OMP versions use: build
+    // metadata after '+' is ignored, and a release outranks its own
+    // prereleases (1.2.3 > 1.2.3-rc1). The core may have any number of dotted
+    // parts; missing trailing parts count as 0.
     internal static int CompareVersionText(string left, string right)
     {
         if (Version.TryParse(left, out var leftVersion) && Version.TryParse(right, out var rightVersion))
@@ -1122,32 +1127,71 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
             return leftVersion.CompareTo(rightVersion);
         }
 
-        var leftParts = left.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
-        var rightParts = right.Split(['.', '-', '+'], StringSplitOptions.RemoveEmptyEntries);
+        var (leftCore, leftPrerelease) = SplitVersionText(left);
+        var (rightCore, rightPrerelease) = SplitVersionText(right);
+        var leftParts = leftCore.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        var rightParts = rightCore.Split('.', StringSplitOptions.RemoveEmptyEntries);
         var count = Math.Max(leftParts.Length, rightParts.Length);
         for (var index = 0; index < count; index++)
         {
-            var leftPart = index < leftParts.Length ? leftParts[index] : "0";
-            var rightPart = index < rightParts.Length ? rightParts[index] : "0";
-            if (int.TryParse(leftPart, out var leftNumber) && int.TryParse(rightPart, out var rightNumber))
+            var comparison = CompareVersionIdentifier(
+                index < leftParts.Length ? leftParts[index] : "0",
+                index < rightParts.Length ? rightParts[index] : "0");
+            if (comparison != 0)
             {
-                var numberComparison = leftNumber.CompareTo(rightNumber);
-                if (numberComparison != 0)
-                {
-                    return numberComparison;
-                }
-
-                continue;
-            }
-
-            var textComparison = string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
-            if (textComparison != 0)
-            {
-                return textComparison;
+                return comparison;
             }
         }
 
-        return 0;
+        if (leftPrerelease is null || rightPrerelease is null)
+        {
+            // Equal cores: the side without a prerelease tag is the release.
+            return (leftPrerelease is null ? 1 : 0) - (rightPrerelease is null ? 1 : 0);
+        }
+
+        // Prerelease identifiers compare one by one; when every shared one is
+        // equal, the longer list is newer (1.2.3-alpha.1 > 1.2.3-alpha).
+        var leftIdentifiers = leftPrerelease.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        var rightIdentifiers = rightPrerelease.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        var shared = Math.Min(leftIdentifiers.Length, rightIdentifiers.Length);
+        for (var index = 0; index < shared; index++)
+        {
+            var comparison = CompareVersionIdentifier(leftIdentifiers[index], rightIdentifiers[index]);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+        }
+
+        return leftIdentifiers.Length.CompareTo(rightIdentifiers.Length);
+    }
+
+    private static (string Core, string? Prerelease) SplitVersionText(string value)
+    {
+        var buildStart = value.IndexOf('+');
+        var withoutBuild = buildStart >= 0 ? value[..buildStart] : value;
+        var prereleaseStart = withoutBuild.IndexOf('-');
+        return prereleaseStart >= 0
+            ? (withoutBuild[..prereleaseStart], withoutBuild[(prereleaseStart + 1)..])
+            : (withoutBuild, null);
+    }
+
+    private static int CompareVersionIdentifier(string left, string right)
+    {
+        var leftIsNumber = long.TryParse(left, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var leftNumber);
+        var rightIsNumber = long.TryParse(right, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var rightNumber);
+        if (leftIsNumber && rightIsNumber)
+        {
+            return leftNumber.CompareTo(rightNumber);
+        }
+
+        // SemVer: numeric identifiers have lower precedence than text ones.
+        if (leftIsNumber != rightIsNumber)
+        {
+            return leftIsNumber ? -1 : 1;
+        }
+
+        return string.Compare(left, right, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class VersionTextComparer : IComparer<string>
