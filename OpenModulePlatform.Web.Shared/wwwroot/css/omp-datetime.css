@@ -523,10 +523,18 @@
    out when one is; the popup was placed with that room from the start. */
 .omp-daterange--minute .omp-daterange-panel {
     grid-template-columns: max-content max-content max-content;
+    /* No column gap: the second column carries its own, and the time
+       column's is part of what folds, so a folded column leaves nothing. */
+    column-gap: 0;
+}
+
+.omp-daterange--minute .omp-daterange-panel__fields {
+    margin-left: 14px;
 }
 
 .omp-daterange-panel__time-host {
     width: 206px;
+    margin-left: 14px;
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -536,7 +544,7 @@
 
 .omp-daterange-panel__time-host--collapsed {
     width: 0;
-    margin-left: -14px;
+    margin-left: 0;
     opacity: 0;
     pointer-events: none;
 }
@@ -556,9 +564,14 @@
 
 .omp-daterange-panel__time-title {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 4px 8px;
+}
+
+.omp-daterange-panel__time-done {
+    flex: none;
 }
 
 .omp-daterange-panel__time-done {
@@ -658,6 +671,11 @@
 @media (max-width: 900px) {
     .omp-daterange--minute .omp-daterange-panel {
         grid-template-columns: max-content max-content;
+        column-gap: 14px;
+    }
+
+    .omp-daterange--minute .omp-daterange-panel__fields {
+        margin-left: 0;
     }
 
     .omp-daterange--minute .omp-daterange-panel__time-host {

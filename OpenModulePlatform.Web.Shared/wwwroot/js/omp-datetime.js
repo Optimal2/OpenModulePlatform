@@ -10,8 +10,8 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Tillämpa", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Du har osparade ändringar.", save: "Spara", discard: "Spara inte", keepEditing: "Fortsätt redigera", timeHint: "Klicka i Från eller Till för att välja tid.", timeDone: "Klar" }
-        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Apply", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "You have unsaved changes.", save: "Save", discard: "Don't save", keepEditing: "Continue editing", timeHint: "Click in From or To to pick a time.", timeDone: "Done" };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Tillämpa", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Du har osparade ändringar.", save: "Spara", discard: "Spara inte", keepEditing: "Fortsätt redigera", timeDone: "Klar" }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Apply", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "You have unsaved changes.", save: "Save", discard: "Don't save", keepEditing: "Continue editing", timeDone: "Done" };
 
     // The year placeholder follows the page language; its four letters keep
     // the slot positions identical across languages. Segments are digit-index
@@ -1618,12 +1618,14 @@
             if (minutePrecision) {
                 rangePanel.appendChild(timeHost);
                 renderRangeTime();
-                // The room the folded column will take when it opens; none
-                // on a narrow window, where it folds under the calendar.
+                // The room the column still has to grow: its full width less
+                // what it takes right now (measured, so a placement made in
+                // the middle of the fold-out comes out the same as before and
+                // after it); none on a narrow window, where it folds under.
                 rangePanel._ompGrowth = function () {
-                    if (!timeHost.classList.contains("omp-daterange-panel__time-host--collapsed")) { return 0; }
                     if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) { return 0; }
-                    return timeColumnWidth;
+                    var taken = timeHost.getBoundingClientRect().width + (parseFloat(window.getComputedStyle(timeHost).marginLeft) || 0);
+                    return Math.max(0, timeColumnWidth - taken);
                 };
             }
 
