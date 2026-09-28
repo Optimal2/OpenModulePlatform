@@ -1,4 +1,6 @@
 using System.Data;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using OpenModulePlatform.Artifacts;
@@ -11,14 +13,13 @@ public sealed partial class OmpHostArtifactRepository
     /// <summary>Maintenance finding category for widgets a HostAgent import skipped.</summary>
     public const string DashboardWidgetImportSkippedCategory = "DashboardWidgetImportSkipped";
 
-    private const string MissingWidgetKeyIdentifier = "(missing widgetKey)";
-
     /// <summary>
     /// Records the outcome of one dashboard widget file in <c>omp.MaintenanceFindings</c>:
     /// every skipped widget becomes (or stays) an open finding that Portal Maintenance shows
     /// under dashboard widget readiness, and an open finding for a widget key that this
-    /// import stored is closed. Without the maintenance schema this is a no-op, so the
-    /// widget import itself never depends on it.
+    /// import stored is closed. Keyless skips are grouped by source and close only after
+    /// that source imports without any skips. Without the maintenance schema this is a
+    /// no-op, so the widget import itself never depends on it.
     /// </summary>
     public async Task RecordDashboardWidgetImportFindingsAsync(
         IReadOnlyCollection<string> importedWidgetKeys,
@@ -26,10 +27,9 @@ public sealed partial class OmpHostArtifactRepository
         string sourceName,
         CancellationToken ct)
     {
-        if (importedWidgetKeys.Count == 0 && skippedWidgets.Count == 0)
-        {
-            return;
-        }
+        var sourceHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourceName)));
+        // Parentheses cannot occur in a portable widget key, keeping the two identities disjoint.
+        var sourceFindingKey = $"{DashboardWidgetImportSkippedCategory}:(source):{sourceHash}";
 
         const string resolveSql = @"
 IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
@@ -37,11 +37,14 @@ IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
 
 UPDATE omp.MaintenanceFindings
 SET Status = @cleanedStatus,
-    ResultMessage = N'A later import stored this dashboard widget.',
+    ResultMessage = CASE WHEN FindingKey = @sourceFindingKey
+        THEN N'A later import of this source completed without skipped widgets.'
+        ELSE N'A later import stored this dashboard widget.' END,
     UpdatedUtc = SYSUTCDATETIME()
 WHERE Category = @category
   AND Status IN (@openStatus, @failedStatus)
-  AND TargetIdentifier IN (SELECT CAST(value AS nvarchar(1000)) FROM OPENJSON(@widgetKeysJson));";
+  AND (TargetIdentifier IN (SELECT CAST(value AS nvarchar(1000)) FROM OPENJSON(@widgetKeysJson))
+       OR (@sourceSucceeded = 1 AND FindingKey = @sourceFindingKey));";
 
         // An ignored finding stays ignored: the operator chose not to act on it.
         const string upsertSql = @"
@@ -77,28 +80,33 @@ WHEN NOT MATCHED THEN
 
         try
         {
-            if (importedWidgetKeys.Count > 0)
+            if (importedWidgetKeys.Count > 0 || skippedWidgets.Count == 0)
             {
                 await using var cmd = new SqlCommand(resolveSql, conn, tx);
                 Add(cmd, "@category", SqlDbType.NVarChar, 100, DashboardWidgetImportSkippedCategory);
                 Add(cmd, "@widgetKeysJson", SqlDbType.NVarChar, -1, JsonSerializer.Serialize(importedWidgetKeys));
+                Add(cmd, "@sourceFindingKey", SqlDbType.NVarChar, 450, sourceFindingKey);
+                Add(cmd, "@sourceSucceeded", SqlDbType.Bit, skippedWidgets.Count == 0);
                 Add(cmd, "@openStatus", SqlDbType.TinyInt, MaintenanceFindingStatuses.Open);
                 Add(cmd, "@failedStatus", SqlDbType.TinyInt, MaintenanceFindingStatuses.Failed);
                 Add(cmd, "@cleanedStatus", SqlDbType.TinyInt, MaintenanceFindingStatuses.Cleaned);
                 await cmd.ExecuteNonQueryAsync(ct);
             }
 
-            foreach (var skip in skippedWidgets)
+            foreach (var skips in skippedWidgets.GroupBy(skip => skip.WidgetKey?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase))
             {
+                var isKeyless = skips.Key.Length == 0;
                 var targetIdentifier = Truncate(
-                    string.IsNullOrWhiteSpace(skip.WidgetKey) ? MissingWidgetKeyIdentifier : skip.WidgetKey.Trim(),
+                    isKeyless ? $"(missing widgetKey) {sourceName}" : skips.Key,
                     1000);
                 await using var cmd = new SqlCommand(upsertSql, conn, tx);
-                Add(cmd, "@findingKey", SqlDbType.NVarChar, 450, Truncate($"{DashboardWidgetImportSkippedCategory}:{targetIdentifier}", 450));
+                Add(cmd, "@findingKey", SqlDbType.NVarChar, 450, isKeyless
+                    ? sourceFindingKey
+                    : Truncate($"{DashboardWidgetImportSkippedCategory}:{targetIdentifier}", 450));
                 Add(cmd, "@category", SqlDbType.NVarChar, 100, DashboardWidgetImportSkippedCategory);
                 Add(cmd, "@targetIdentifier", SqlDbType.NVarChar, 1000, targetIdentifier);
                 Add(cmd, "@title", SqlDbType.NVarChar, 300, "Dashboard widget skipped during HostAgent import");
-                Add(cmd, "@detail", SqlDbType.NVarChar, -1, skip.Reason);
+                Add(cmd, "@detail", SqlDbType.NVarChar, -1, string.Join(Environment.NewLine, skips.Select(skip => skip.Reason)));
                 Add(cmd, "@recommendedAction", SqlDbType.NVarChar, 300,
                     "Upgrade HostAgent and Portal to a version that supports this widget definition, then re-import the package.");
                 Add(cmd, "@safetyNotes", SqlDbType.NVarChar, -1, $"Source file: {sourceName}. No stored widget was changed.");

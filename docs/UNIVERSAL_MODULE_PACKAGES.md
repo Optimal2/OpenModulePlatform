@@ -509,8 +509,18 @@ with valid siblings. HostAgent also counts every skipped widget in the `dashboar
 item result (`skipped (invalid): N`, with each widget key and reason) and records it as an
 open maintenance finding (category `DashboardWidgetImportSkipped`). **Dashboard widget
 readiness** lists these skipped widgets with their reason until a later import of the same
-widget key succeeds through HostAgent or Portal; the finding can also be ignored from the
-maintenance findings list. After upgrading to an importer that supports the type,
+widget key succeeds through HostAgent or Portal. Both importers mark open or failed findings
+as cleaned; Portal does so in the same transaction that stores the widget. A skipped Portal
+write does not resolve a finding, and ignored findings stay ignored.
+
+HostAgent groups skips without a widget key into one finding per package key and relative
+file path, preserving all reasons from that file's latest import. A later HostAgent import
+of the same source closes that finding only when no widgets are skipped as invalid. Package
+versions are excluded from this identity; packages without a `packageKey` use the archive
+filename instead, which must remain stable for automatic resolution. The legacy shared
+`(missing widgetKey)` finding has no reliable source history and must be reviewed and ignored
+manually after re-importing the affected sources. Findings can be ignored from the maintenance
+findings list. After upgrading to an importer that supports the type,
 explicitly re-import the package. Skipped widgets are not automatically retried. These
 checks apply to the upgraded importer; an already running older binary cannot enforce them.
 

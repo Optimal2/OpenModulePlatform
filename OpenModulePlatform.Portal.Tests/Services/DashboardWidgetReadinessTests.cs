@@ -89,8 +89,10 @@ public sealed class DashboardWidgetReadinessTests : IAsyncLifetime
         Assert.Equal(6, (int)(await unchanged.ExecuteScalarAsync())!);
     }
 
-    [Fact]
-    public async Task Readiness_ListsWidgetsSkippedByHostAgentImport_UntilTheSameKeyIsStoredLater()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PortalImport_ClosesSkippedFindingsOnlyForStoredKeys(bool updateExisting)
     {
         await using var conn = new SqlConnection(_connectionString);
         await conn.OpenAsync();
@@ -99,9 +101,11 @@ public sealed class DashboardWidgetReadinessTests : IAsyncLifetime
             IF SCHEMA_ID(N'omp') IS NULL EXEC(N'CREATE SCHEMA omp');
             CREATE TABLE omp_portal.widgets
             (
-                widget_id int NOT NULL PRIMARY KEY, widget_key nvarchar(200) NULL,
+                widget_id int IDENTITY(1,1) NOT NULL PRIMARY KEY, widget_key nvarchar(200) NULL,
                 widget_version nvarchar(50) NULL, widget_type nvarchar(50) NOT NULL,
-                payload nvarchar(4000) NULL, is_enabled bit NOT NULL,
+                payload nvarchar(4000) NULL, is_enabled bit NOT NULL DEFAULT 1,
+                title nvarchar(200) NOT NULL DEFAULT N'Example', description nvarchar(1000) NULL,
+                module_key nvarchar(100) NULL, author nvarchar(200) NULL,
                 modified_at datetime2(3) NOT NULL DEFAULT SYSUTCDATETIME()
             );
             CREATE TABLE omp.MaintenanceFindings
@@ -109,15 +113,21 @@ public sealed class DashboardWidgetReadinessTests : IAsyncLifetime
                 MaintenanceFindingId bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
                 FindingKey nvarchar(450) NOT NULL UNIQUE, Category nvarchar(100) NOT NULL,
                 TargetIdentifier nvarchar(1000) NOT NULL, Detail nvarchar(max) NULL,
-                Status tinyint NOT NULL, LastSeenUtc datetime2(3) NOT NULL
+                Status tinyint NOT NULL, LastSeenUtc datetime2(3) NOT NULL,
+                ResultMessage nvarchar(max) NULL, UpdatedUtc datetime2(3) NULL
             );
-            INSERT omp_portal.widgets (widget_id, widget_key, widget_version, widget_type, payload, is_enabled, modified_at) VALUES
-              (1, N'example:valid', N'1.0.0', N'portal', N'admin-overview', 1, '2026-01-01');
+            CREATE TABLE omp.Permissions (PermissionId int PRIMARY KEY, Name nvarchar(200));
+            CREATE TABLE omp.Roles (RoleId int PRIMARY KEY, Name nvarchar(200));
+            CREATE TABLE omp_portal.widget_permissions (widget_id int NOT NULL, permission_id int NULL, role_id int NULL);
+            INSERT omp_portal.widgets (widget_key, widget_version, widget_type, payload, is_enabled, modified_at) VALUES
+              (N'example:valid', N'2.0.0', N'portal', N'admin-overview', 1, '2026-01-01');
             INSERT omp.MaintenanceFindings (FindingKey, Category, TargetIdentifier, Detail, Status, LastSeenUtc) VALUES
               (N'DashboardWidgetImportSkipped:example:future', N'DashboardWidgetImportSkipped', N'example:future',
                N'unsupported widgetType future-widget', 0, '2026-02-01'),
               (N'DashboardWidgetImportSkipped:example:ignored', N'DashboardWidgetImportSkipped', N'example:ignored', N'ignored', 1, '2026-02-01'),
-              (N'Other:example:future', N'HostAgentLeftover', N'example:future', N'other category', 0, '2026-02-01');
+              (N'Other:example:future', N'HostAgentLeftover', N'example:future', N'other category', 0, '2026-02-01'),
+              (N'failed', N'DashboardWidgetImportSkipped', N'example:future', N'failed', 4, '2026-02-01'),
+              (N'ignored', N'DashboardWidgetImportSkipped', N'example:future', N'ignored', 1, '2026-02-01');
             """, conn);
         await setup.ExecuteNonQueryAsync();
 
@@ -132,13 +142,65 @@ public sealed class DashboardWidgetReadinessTests : IAsyncLifetime
         Assert.Equal("unsupported widgetType future-widget", skipped.SkipReason);
         Assert.Equal(new DateTime(2026, 2, 1), skipped.SkippedUtc);
 
-        // A Portal import stores the same key after the skip; the HostAgent finding stays
-        // open but the widget no longer needs attention.
-        await using var repaired = new SqlCommand("""
-            INSERT omp_portal.widgets (widget_id, widget_key, widget_version, widget_type, payload, is_enabled, modified_at)
-            VALUES (2, N'example:future', N'1.0.0', N'portal', NULL, 1, '2026-03-01');
-            """, conn);
-        await repaired.ExecuteNonQueryAsync();
+        if (updateExisting)
+        {
+            await using var existing = new SqlCommand("""
+                INSERT omp_portal.widgets (widget_key, widget_version, widget_type, payload, is_enabled)
+                VALUES (N'example:future', N'0.0.0', N'portal', NULL, 1);
+                """, conn);
+            await existing.ExecuteNonQueryAsync();
+            // An unrelated row write must not silently hide an open finding.
+            Assert.Single(await repository.GetDashboardWidgetReadinessIssuesAsync(CancellationToken.None));
+        }
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes("""
+            {"format":"omp.portal.dashboard.widgets","formatVersion":1,"widgets":[
+              {"widgetKey":"example:future","widgetVersion":"1.0.0","title":"Example","widgetType":"portal",
+               "payload":"admin-overview","permissionNames":[],"roleNames":[]}]}
+            """));
+        var result = await new PortalDashboardWidgetPackageService(new SqlConnectionFactory(configuration))
+            .ImportAsync(stream, "example.widgets.json", replaceExistingWidgets: true, quickImport: false, CancellationToken.None);
+        Assert.Equal(1, result.CreatedCount + result.UpdatedCount);
         Assert.Empty(await repository.GetDashboardWidgetReadinessIssuesAsync(CancellationToken.None));
+        await using var status = new SqlCommand("""
+            SELECT COUNT(*) FROM omp.MaintenanceFindings
+            WHERE Category = N'DashboardWidgetImportSkipped' AND TargetIdentifier = N'example:future'
+              AND Status = 3 AND ResultMessage IS NOT NULL AND UpdatedUtc IS NOT NULL;
+            """, conn);
+        Assert.Equal(2, (int)(await status.ExecuteScalarAsync())!);
+        await using var preserved = new SqlCommand("""
+            SELECT COUNT(*) FROM omp.MaintenanceFindings
+            WHERE (Status = 1) OR (Category = N'HostAgentLeftover' AND Status = 0);
+            """, conn);
+        Assert.Equal(3, (int)(await preserved.ExecuteScalarAsync())!);
+
+        await using var reopen = new SqlCommand("""
+            UPDATE omp.MaintenanceFindings SET Status = 0 WHERE Status = 3;
+            INSERT omp.MaintenanceFindings (FindingKey, Category, TargetIdentifier, Detail, Status, LastSeenUtc)
+            VALUES (N'newer', N'DashboardWidgetImportSkipped', N'example:valid', N'keep newer widget', 0, '2026-02-01');
+            """, conn);
+        await reopen.ExecuteNonQueryAsync();
+        using var olderStream = new MemoryStream(Encoding.UTF8.GetBytes("""
+            {"format":"omp.portal.dashboard.widgets","formatVersion":1,"widgets":[
+              {"widgetKey":"example:valid","widgetVersion":"1.0.0","title":"Example","widgetType":"portal",
+               "payload":"admin-overview","permissionNames":[],"roleNames":[]}]}
+            """));
+        var service = new PortalDashboardWidgetPackageService(new SqlConnectionFactory(configuration));
+        var skippedResult = await service.ImportAsync(olderStream, "example.widgets.json", false, true, CancellationToken.None);
+        Assert.Equal(1, skippedResult.SkippedCount);
+        Assert.Equal(3, (await repository.GetDashboardWidgetReadinessIssuesAsync(CancellationToken.None)).Count);
+
+        // The first widget would resolve its findings, but the second causes the entire import to roll back.
+        using var failingStream = new MemoryStream(Encoding.UTF8.GetBytes("""
+            {"format":"omp.portal.dashboard.widgets","formatVersion":1,"widgets":[
+              {"widgetKey":"example:future","widgetVersion":"2.0.0","title":"Example","widgetType":"portal",
+               "payload":"admin-overview","permissionNames":[],"roleNames":[]},
+              {"widgetKey":"example:valid","widgetVersion":"2.0.0","title":"Changed","widgetType":"portal",
+               "payload":"admin-overview","permissionNames":[],"roleNames":[]}]}
+            """));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ImportAsync(
+            failingStream, "example.widgets.json", false, false, CancellationToken.None));
+        Assert.Equal(3, (await repository.GetDashboardWidgetReadinessIssuesAsync(CancellationToken.None)).Count);
+        Assert.Equal(0, (int)(await status.ExecuteScalarAsync())!);
     }
 }

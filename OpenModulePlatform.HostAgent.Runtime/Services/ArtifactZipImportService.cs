@@ -911,7 +911,8 @@ public sealed class ArtifactZipImportService
 
         foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.DashboardWidget))
         {
-            itemResults.Add(await ImportUniversalDashboardWidgetItemAsync(item, cancellationToken));
+            itemResults.Add(await ImportUniversalDashboardWidgetItemAsync(
+                item, cancellationToken, package.PackageKey ?? package.SourceName));
         }
 
         foreach (var item in package.Items.Where(static item => item.Kind == UniversalModulePackageItemKind.WidgetRuntimeData))
@@ -1138,7 +1139,8 @@ public sealed class ArtifactZipImportService
     // the findings write and the item result without building a whole package zip.
     internal async Task<UniversalHostAgentImportItemResult> ImportUniversalDashboardWidgetItemAsync(
         PortableUniversalModulePackageItem item,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? packageIdentity = null)
     {
         try
         {
@@ -1146,7 +1148,10 @@ public sealed class ArtifactZipImportService
             var reader = new DashboardWidgetPackageReader(_logger);
             var widgets = await reader.ReadAsync(stream, item.SourceName, cancellationToken);
             var result = await _repository.SaveImportedDashboardWidgetsAsync(widgets, cancellationToken);
-            await RecordDashboardWidgetImportFindingsAsync(widgets, item.SourceName, cancellationToken);
+            // Package keys survive version upgrades; extraction paths and package versions do not.
+            // Keep the full relative path so equal basenames in separate folders stay separate.
+            var sourceName = JsonSerializer.Serialize(new[] { packageIdentity, item.Path.Replace('\\', '/') });
+            await RecordDashboardWidgetImportFindingsAsync(widgets, sourceName, cancellationToken);
             return new UniversalHostAgentImportItemResult(
                 "dashboard-widget",
                 item.Path,

@@ -1,3 +1,4 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -86,6 +87,60 @@ public sealed class DashboardWidgetImportSkippedWidgetTests : IDisposable
     }
 
     [Fact]
+    public async Task KeylessSkips_AreIsolatedBySource_AndCloseOnlyAfterASkipFreeImport()
+    {
+        var invalid = MixedDocument("portal").Replace("example:future", "");
+        await ImportAsync(invalid, "widgets/first/example.widgets.json");
+        await ImportAsync(invalid, "widgets/second/example.widgets.json");
+        await ImportAsync(invalid, "widgets/first/example.widgets.json");
+        var findings = _database.GetMaintenanceFindings();
+        Assert.Equal(2, findings.Count);
+        Assert.All(findings, finding => Assert.Equal(MaintenanceFindingStatuses.Open, finding.Status));
+
+        // Even a keyed skip prevents resolving an earlier keyless skip for this source.
+        await ImportAsync(MixedDocument("future-widget"), "widgets/first/example.widgets.json");
+        Assert.All(_database.GetMaintenanceFindings(), finding => Assert.Equal(MaintenanceFindingStatuses.Open, finding.Status));
+        await ImportAsync(MixedDocument("portal"), "widgets/first/example.widgets.json");
+        findings = _database.GetMaintenanceFindings();
+        Assert.Equal(MaintenanceFindingStatuses.Cleaned, findings[0].Status);
+        Assert.Equal(MaintenanceFindingStatuses.Open, findings[1].Status);
+        await ImportAsync(invalid, "widgets/first/example.widgets.json");
+        Assert.Equal(MaintenanceFindingStatuses.Open, _database.GetMaintenanceFindings()[0].Status);
+    }
+
+    [Fact]
+    public async Task KeylessSkips_AreIsolatedByPackage_AndIgnoredFindingsStayIgnored()
+    {
+        var invalid = MixedDocument("portal").Replace("example:future", "");
+        await ImportAsync(invalid, packageIdentity: "example-package-a");
+        await ImportAsync(invalid, packageIdentity: "example-package-b");
+        Assert.Equal(2, _database.GetMaintenanceFindings().Count);
+        await ImportAsync(MixedDocument("portal"), packageIdentity: "example-package-a");
+        var findings = _database.GetMaintenanceFindings();
+        Assert.Equal(MaintenanceFindingStatuses.Cleaned, findings[0].Status);
+        Assert.Equal(MaintenanceFindingStatuses.Open, findings[1].Status);
+
+        await using var conn = _database.CreateFactory().Create();
+        await conn.OpenAsync();
+        await using var ignore = new SqlCommand("UPDATE omp.MaintenanceFindings SET Status = 1;", conn);
+        await ignore.ExecuteNonQueryAsync();
+        await ImportAsync(invalid, packageIdentity: "example-package-a");
+        await ImportAsync(MixedDocument("portal"), packageIdentity: "example-package-b");
+        Assert.All(_database.GetMaintenanceFindings(), finding => Assert.Equal(MaintenanceFindingStatuses.Ignored, finding.Status));
+    }
+
+    [Fact]
+    public async Task MultipleKeylessSkips_PreserveEveryReasonInOneSourceFinding()
+    {
+        await _repository.RecordDashboardWidgetImportFindingsAsync([], [
+            new PortableDashboardWidgetSkip("", "first reason"),
+            new PortableDashboardWidgetSkip(" ", "second reason")], "widgets/example.widgets.json", CancellationToken.None);
+        var finding = Assert.Single(_database.GetMaintenanceFindings());
+        Assert.Contains("first reason", finding.Detail, StringComparison.Ordinal);
+        Assert.Contains("second reason", finding.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ImportMessage_NamesEachSkippedWidgetWithItsReason()
     {
         var message = ArtifactZipImportService.BuildDashboardWidgetImportMessage(
@@ -98,18 +153,19 @@ public sealed class DashboardWidgetImportSkippedWidgetTests : IDisposable
             message);
     }
 
-    private async Task<ArtifactZipImportService.UniversalHostAgentImportItemResult> ImportAsync(string json)
+    private async Task<ArtifactZipImportService.UniversalHostAgentImportItemResult> ImportAsync(
+        string json, string sourcePath = "widgets/example.widgets.json", string? packageIdentity = null)
     {
         var path = Path.Combine(_tempDirectory, $"{Guid.NewGuid():N}.widgets.json");
         await File.WriteAllTextAsync(path, json);
         return await _service.ImportUniversalDashboardWidgetItemAsync(
             new PortableUniversalModulePackageItem(
                 UniversalModulePackageItemKind.DashboardWidget,
-                "widgets/example.widgets.json",
+                sourcePath,
                 path,
                 "example.widgets.json",
                 "1.0.0"),
-            CancellationToken.None);
+            CancellationToken.None, packageIdentity);
     }
 
     private static string MixedDocument(string futureWidgetType)

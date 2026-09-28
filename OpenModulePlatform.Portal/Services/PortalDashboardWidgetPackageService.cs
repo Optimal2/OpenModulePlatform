@@ -327,6 +327,8 @@ WHERE widget_id = @widget_id;";
                     result.CreatedCount++;
                     result.PermissionRowCount += permissionIds.Count + roleIds.Count;
                 }
+
+                await ResolveSkippedWidgetFindingAsync(conn, tx, normalized.WidgetKey, ct);
             }
 
             await tx.CommitAsync(ct);
@@ -537,6 +539,33 @@ WHERE w.widget_id = @widget_id;";
 
         return snapshot
             ?? throw new InvalidOperationException($"Dashboard widget {widgetId} was not found.");
+    }
+
+    private static async Task ResolveSkippedWidgetFindingAsync(
+        SqlConnection conn,
+        SqlTransaction tx,
+        string widgetKey,
+        CancellationToken ct)
+    {
+        const string sql = """
+            IF OBJECT_ID(N'omp.MaintenanceFindings', N'U') IS NULL
+                RETURN;
+
+            UPDATE omp.MaintenanceFindings
+            SET Status = @cleanedStatus,
+                ResultMessage = N'A later import stored this dashboard widget.',
+                UpdatedUtc = SYSUTCDATETIME()
+            WHERE Category = @category
+              AND Status IN (@openStatus, @failedStatus)
+              AND TargetIdentifier = @widgetKey;
+            """;
+        await using var cmd = new SqlCommand(sql, conn, tx);
+        cmd.Parameters.Add("@category", SqlDbType.NVarChar, 100).Value = OmpAdminRepository.DashboardWidgetImportSkippedCategory;
+        cmd.Parameters.Add("@widgetKey", SqlDbType.NVarChar, 200).Value = widgetKey;
+        cmd.Parameters.Add("@openStatus", SqlDbType.TinyInt).Value = MaintenanceFindingStatuses.Open;
+        cmd.Parameters.Add("@failedStatus", SqlDbType.TinyInt).Value = MaintenanceFindingStatuses.Failed;
+        cmd.Parameters.Add("@cleanedStatus", SqlDbType.TinyInt).Value = MaintenanceFindingStatuses.Cleaned;
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task<int> InsertWidgetAsync(

@@ -17,8 +17,6 @@ public sealed partial class OmpAdminRepository
     /// </summary>
     public async Task<IReadOnlyList<DashboardWidgetReadinessIssue>> GetDashboardWidgetReadinessIssuesAsync(CancellationToken ct)
     {
-        // A skipped widget is also hidden once a Portal import has stored the same key
-        // after the skip, because only HostAgent imports close these findings.
         const string sql = """
             SELECT widget_id, widget_key, widget_version, is_enabled, payload
             FROM omp_portal.widgets
@@ -33,10 +31,6 @@ public sealed partial class OmpAdminRepository
                 FROM omp.MaintenanceFindings finding
                 WHERE finding.Category = @category
                   AND finding.Status = 0
-                  AND NOT EXISTS (
-                      SELECT 1 FROM omp_portal.widgets widget
-                      WHERE widget.widget_key = finding.TargetIdentifier
-                        AND widget.modified_at > finding.LastSeenUtc)
                 ORDER BY finding.LastSeenUtc DESC, finding.MaintenanceFindingId DESC;
             """;
         await using var conn = _db.Create();
