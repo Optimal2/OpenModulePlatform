@@ -10,8 +10,8 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Tillämpa", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Du har osparade ändringar.", save: "Spara", discard: "Spara inte", keepEditing: "Fortsätt redigera", timeHint: "Klicka i Från eller Till för att välja tid." }
-        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Apply", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "You have unsaved changes.", save: "Save", discard: "Don't save", keepEditing: "Continue editing", timeHint: "Click in From or To to pick a time." };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Tillämpa", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Du har osparade ändringar.", save: "Spara", discard: "Spara inte", keepEditing: "Fortsätt redigera", timeHint: "Klicka i Från eller Till för att välja tid.", timeDone: "Klar" }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Apply", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "You have unsaved changes.", save: "Save", discard: "Don't save", keepEditing: "Continue editing", timeHint: "Click in From or To to pick a time.", timeDone: "Done" };
 
     // The year placeholder follows the page language; its four letters keep
     // the slot positions identical across languages. Segments are digit-index
@@ -774,10 +774,11 @@
     // the trigger field or with nothing in particular focused is Confirm;
     // the popup's buttons keep Enter for themselves. A click on a date
     // field arms it (a warm outline): the next calendar click sets that
-    // field alone and disarms; a quick pick, Reset or arming the other
-    // field disarms it too, and a click within the armed field just moves
-    // the caret; otherwise the calendar's two-click logic (first click
-    // starts, second ends) stands. data-apply-text and
+    // field alone and disarms; a quick pick, Reset, arming the other field
+    // or the time column's Done button disarms it too, and a click within
+    // the armed field just moves the caret; otherwise the calendar's
+    // two-click logic (first click starts, second ends) stands.
+    // data-apply-text and
     // data-cancel-text name the two buttons (Apply/Cancel by default).
     // data-precision="minute" gives the two fields a time as well (the
     // datetime mask, values yyyy-mm-ddThh:mm): quick picks and calendar
@@ -1219,8 +1220,18 @@
                 var time = document.createElement("div");
                 time.className = "omp-datetime-panel__time";
                 var timeTitle = document.createElement("div");
-                timeTitle.className = "omp-datetime-panel__time-title";
-                timeTitle.textContent = texts.time + " · " + (armedInput._ompRowLabel || "");
+                timeTitle.className = "omp-datetime-panel__time-title omp-daterange-panel__time-title";
+                var titleText = document.createElement("span");
+                titleText.textContent = texts.time + " · " + (armedInput._ompRowLabel || "");
+                timeTitle.appendChild(titleText);
+                // Done leaves the armed mode without changing anything: the
+                // way out after a click in the wrong field.
+                var done = document.createElement("button");
+                done.type = "button";
+                done.className = "omp-daterange-panel__time-done";
+                done.textContent = texts.timeDone;
+                done.addEventListener("click", function () { disarm(); });
+                timeTitle.appendChild(done);
                 time.appendChild(timeTitle);
                 var hours = document.createElement("div");
                 hours.className = "omp-datetime-panel__hours";
