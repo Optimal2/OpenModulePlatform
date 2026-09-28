@@ -2,41 +2,54 @@ using System.Text;
 
 namespace OpenModulePlatform.Bootstrapper;
 
-/// <summary>One component as the pre-stage gate sees it.</summary>
-/// <param name="ComponentKey">Manifest key, used to name the offender.</param>
+/// <summary>One artifact of the rebuilt package as the pre-stage gate sees it.</summary>
+/// <param name="ComponentKey">Target / component key, used to name the offender.</param>
 /// <param name="SourceVersion">Version the rebuilt package declares.</param>
 /// <param name="InstalledVersion">
-/// Version registered in the local host state, or null when the component is not
-/// installed yet or the host state could not be read.
+/// Version of the artifact row registered for the same app, package type and
+/// target at <paramref name="SourceVersion"/>, or null when no such row exists.
 /// </param>
-/// <param name="ContentChanged">
-/// Whether the rebuilt package content differs from what is installed.
+/// <param name="PackageSha256">
+/// SHA-256 of the artifact content in the rebuilt package, measured exactly as the
+/// host agent import measures it, or null when it was not (or could not be) measured.
 /// </param>
+/// <param name="RegisteredSha256">omp.Artifacts.Sha256 of the registered row, or null.</param>
+/// <param name="Identity">Human-readable artifact identity for messages.</param>
+/// <param name="MeasurementFailure">Why <paramref name="PackageSha256"/> could not be measured.</param>
 internal sealed record PreStageComponent(
     string ComponentKey,
     string SourceVersion,
     string? InstalledVersion,
-    bool ContentChanged);
+    string? PackageSha256,
+    string? RegisteredSha256,
+    string? Identity = null,
+    string? MeasurementFailure = null)
+{
+    /// <summary>Whether both hashes are known and differ.</summary>
+    public bool ContentChanged
+        => !string.IsNullOrWhiteSpace(PackageSha256)
+           && !string.IsNullOrWhiteSpace(RegisteredSha256)
+           && !string.Equals(PackageSha256.Trim(), RegisteredSha256.Trim(), StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>The gate's decision, and why.</summary>
 internal sealed record PreStageVerdict(bool MayProceed, string Message);
 
 /// <summary>
-/// Refuses to stage a rebuilt package whose content changed while its registered
-/// version stayed the same.
+/// Refuses to stage a rebuilt package whose artifact content differs from what is
+/// already registered under the same version.
 /// </summary>
 /// <remarks>
-/// The host agent auto-applies only a HIGHER version. Staging changed content
-/// under an unchanged version therefore produces one of two bad outcomes: the
-/// new content is silently ignored, or it is imported under an identity that no
-/// longer describes it - and every later comparison against that version is
-/// wrong, including the ones an operator uses to decide whether a deploy is
-/// needed at all.
+/// The host agent import identifies an artifact by app, version, package type and
+/// target, and refuses one whose content SHA-256 differs from omp.Artifacts.Sha256
+/// under that identity ("The artifact content has changed under the same version").
+/// Staging such a package only moves the failure from here to the import log.
 ///
-/// Until 2026-09-02 this was a warning against the previous local source stamp
-/// rather than a gate, and a warning is something a script walks straight past.
-/// The source stamp is still useful as an early local signal, but it is not a
-/// substitute for asking the host state what is actually registered.
+/// Until 2026-09-28 the gate compared version numbers only and was fed the
+/// developer source status "DIFF" as its content signal. "DIFF" actually means
+/// "source version is older than the installed one", so the gate never saw a
+/// same-version content change and passed packages the import then rejected.
+/// It now compares the same measure the import uses.
 ///
 /// The decision lives here as a pure function so it can be proven, rather than
 /// inline in the refresh path where it could only be reasoned about.
@@ -67,6 +80,7 @@ internal static class PreStageVersionGate
         }
 
         var blocked = new List<PreStageComponent>();
+        var unmeasured = new List<PreStageComponent>();
         var unknownVersion = new List<PreStageComponent>();
 
         foreach (var component in components)
@@ -78,45 +92,69 @@ internal static class PreStageVersionGate
                 continue;
             }
 
-            if (!component.ContentChanged)
-            {
-                continue;
-            }
-
-            // Not installed yet: nothing is being overwritten, so there is no
-            // registered identity to contradict.
-            if (string.IsNullOrWhiteSpace(component.InstalledVersion))
-            {
-                continue;
-            }
-
-            if (string.Equals(
+            // Not registered at this version: nothing is being overwritten, so
+            // there is no registered identity to contradict.
+            if (string.IsNullOrWhiteSpace(component.InstalledVersion)
+                || !string.Equals(
                     component.InstalledVersion.Trim(),
                     component.SourceVersion.Trim(),
                     StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Registered without a hash: the import adopts the existing row.
+            if (string.IsNullOrWhiteSpace(component.RegisteredSha256))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(component.PackageSha256))
+            {
+                unmeasured.Add(component);
+                continue;
+            }
+
+            if (component.ContentChanged)
             {
                 blocked.Add(component);
             }
         }
 
-        if (blocked.Count == 0 && unknownVersion.Count == 0)
+        if (blocked.Count == 0 && unmeasured.Count == 0 && unknownVersion.Count == 0)
         {
-            return new PreStageVerdict(true, "Pre-stage version check passed.");
+            return new PreStageVerdict(true, "Pre-stage content check passed.");
         }
 
         var message = new StringBuilder();
-        message.Append("Refusing to stage: the package content changed while the registered version stayed the same.");
+        message.Append("Refusing to stage: the artifact content has changed under the same version, ")
+               .Append("so the host agent import would reject it.");
 
         foreach (var component in blocked)
         {
             message.Append(Environment.NewLine)
                    .Append("  - ")
                    .Append(component.ComponentKey)
-                   .Append(" is registered as ")
-                   .Append(component.InstalledVersion)
-                   .Append(" and the rebuilt package still declares ")
-                   .Append(component.SourceVersion)
-                   .Append(", but its content differs.");
+                   .Append(": ")
+                   .Append(component.Identity ?? component.SourceVersion)
+                   .Append(" is registered with SHA-256 ")
+                   .Append(component.RegisteredSha256)
+                   .Append(" but the package content has SHA-256 ")
+                   .Append(component.PackageSha256)
+                   .Append('.');
+        }
+
+        foreach (var component in unmeasured)
+        {
+            message.Append(Environment.NewLine)
+                   .Append("  - ")
+                   .Append(component.ComponentKey)
+                   .Append(": ")
+                   .Append(component.Identity ?? component.SourceVersion)
+                   .Append(" is already registered, but the package content could not be measured")
+                   .Append(string.IsNullOrWhiteSpace(component.MeasurementFailure)
+                       ? "."
+                       : $" ({component.MeasurementFailure.Trim()}).");
         }
 
         foreach (var component in unknownVersion)
@@ -134,8 +172,8 @@ internal static class PreStageVersionGate
                    ? string.Join(",", blocked.Select(component => component.ComponentKey))
                    : "<component>")
                .Append(Environment.NewLine)
-               .Append("The host agent auto-applies only a higher version, so staging this as-is would ")
-               .Append("either ignore the new content or register it under a version that no longer describes it.");
+               .Append("An artifact identity is its version plus the SHA-256 of its content; the same version ")
+               .Append("cannot be registered twice with different content.");
 
         return new PreStageVerdict(false, message.ToString());
     }

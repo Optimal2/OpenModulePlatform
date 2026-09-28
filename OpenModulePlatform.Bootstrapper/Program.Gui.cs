@@ -2017,28 +2017,27 @@ internal static partial class Program
             Report($"> Universal module package: {result.PackagePath}");
             Report($"> Items: {result.ItemCount}");
 
-            // ---- Pre-stage gate: the registered version must not contradict the content ----
-            // The host agent auto-applies only a HIGHER version, so staging changed
-            // content under an unchanged registered version either ignores the new
-            // content or registers it under an identity that no longer describes it.
-            // This used to be a warning against the previous local source stamp, and a
-            // warning is something a script walks straight past.
+            // ---- Pre-stage gate: the registered content must not contradict the package ----
+            // The host agent import identifies an artifact by app, version, package
+            // type and target, and rejects one whose content SHA-256 differs from
+            // omp.Artifacts.Sha256 under that identity. The gate measures every
+            // artifact package in the built universal package with the import's own
+            // extractor and hash, so it refuses exactly what the import would refuse.
             //
-            // 'DIFF' is precisely "same version, different content" in the developer
-            // source status vocabulary (see CombineDeveloperSourceStatus); 'UPDATE' is
-            // the normal bumped flow and 'NORMALIZED' is path-only drift that is
-            // explicitly never promoted to an update.
-            var preStageStatus = await CheckDeveloperSourceStatusAsync();
+            // It used to be fed the developer source status 'DIFF' as its content
+            // signal. That status comes from CompareInstalledVersion and means "the
+            // source version is OLDER than the installed one" - never "same version,
+            // different content" - so same-version content changes passed the gate
+            // and were only caught by the import.
+            var preStageMeasurement = await MeasurePreStageArtifactContentAsync(result.PackagePath);
             var preStageVerdict = PreStageVersionGate.Evaluate(
-                preStageStatus.Components
-                    .Select(component => new PreStageComponent(
-                        component.ComponentKey,
-                        component.SourceVersion,
-                        component.InstalledVersion,
-                        component.Status == "DIFF"))
-                    .ToArray(),
-                preStageStatus.DatabaseChecked,
-                preStageStatus.DatabaseFailure);
+                preStageMeasurement.Components,
+                preStageMeasurement.DatabaseChecked,
+                preStageMeasurement.DatabaseFailure);
+            Report(
+                $"> Pre-stage content check: {preStageMeasurement.Components.Count} artifact package(s), "
+                + $"{preStageMeasurement.Components.Count(component => !string.IsNullOrWhiteSpace(component.PackageSha256))} "
+                + "compared with the SHA-256 already registered under the same version.");
 
             if (!preStageVerdict.MayProceed)
             {
@@ -5450,6 +5449,69 @@ internal static partial class Program
 
         private static string GetTextSha256Hex(string text)
             => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+
+        private sealed record PreStageMeasurement(
+            IReadOnlyList<PreStageComponent> Components,
+            bool DatabaseChecked,
+            string? DatabaseFailure);
+
+        private async Task<PreStageMeasurement> MeasurePreStageArtifactContentAsync(string universalPackagePath)
+        {
+            var workRoot = Path.Join(Path.GetTempPath(), "omp-prestage-content-check");
+            try
+            {
+                await using var connection = new SqlConnection(BuildConnectionString(_config.Sql, _config.Sql.Database));
+                await connection.OpenAsync();
+                var components = await PreStageArtifactContentProbe.MeasureAsync(
+                    universalPackagePath,
+                    (identity, cancellationToken) => FindRegisteredArtifactAsync(connection, identity, cancellationToken),
+                    workRoot,
+                    CancellationToken.None);
+                return new PreStageMeasurement(components, true, null);
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException)
+            {
+                return new PreStageMeasurement([], false, ex.Message);
+            }
+        }
+
+        // Same identity lookup as the host agent import
+        // (OmpHostArtifactRepository.FindImportedArtifactByIdentityAsync), reached
+        // through the module/app keys the artifact package file name declares.
+        private static async Task<PreStageRegisteredArtifact?> FindRegisteredArtifactAsync(
+            SqlConnection connection,
+            PreStageArtifactIdentity identity,
+            CancellationToken cancellationToken)
+        {
+            await using var command = new SqlCommand(
+                """
+SELECT TOP (1) ar.Version, ar.Sha256
+FROM omp.Artifacts ar
+INNER JOIN omp.Apps a ON a.AppId = ar.AppId
+INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
+WHERE m.ModuleKey = @moduleKey
+  AND a.AppKey = @appKey
+  AND ar.Version = @version
+  AND ar.PackageType = @packageType
+  AND ar.TargetName = @targetName
+ORDER BY ar.ArtifactId;
+""",
+                connection);
+            command.Parameters.AddWithValue("@moduleKey", identity.ModuleKey);
+            command.Parameters.AddWithValue("@appKey", identity.AppKey);
+            command.Parameters.AddWithValue("@version", identity.Version);
+            command.Parameters.AddWithValue("@packageType", identity.PackageType);
+            command.Parameters.AddWithValue("@targetName", identity.TargetName);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return null;
+            }
+
+            return new PreStageRegisteredArtifact(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1));
+        }
 
         private async Task<DeveloperDatabaseStatusResult> AppendDatabaseStatusAsync(
             IReadOnlyList<ManifestModuleDefinition> sourceDefinitions,

@@ -350,6 +350,22 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Same source, same version, same artifact SHA-256 for web apps.** The
+  SDK writes a `Last-Modified` header per static web asset into
+  `<app>.staticwebassets.endpoints.json`, taken from file system timestamps,
+  so a fresh checkout published a different artifact under an unchanged
+  version and the import refused it ("The artifact content has changed under
+  the same version"). `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
+  (imported by `Directory.Build.targets`) pins those values in the publish
+  manifest. Repositories that publish web projects referencing
+  `OpenModulePlatform.Web.Shared` should import the same file. All web-app
+  components were bumped because their published manifest changes once.
+- **The Bootstrapper pre-stage gate compares content, not only versions.**
+  The gate was fed the developer source status `DIFF`, which means "source
+  older than installed", so a same-version content change always passed it.
+  It now extracts every artifact package in the built universal package, hashes
+  it like the host agent import does and compares with `omp.Artifacts.Sha256`
+  for the same app, version, package type and target.
 - **The Bootstrapper refresh packages the manifest's configuration files.**
   The selective build handed the artifact writer an empty configuration-files
   list, so an artifact built by `--refresh-and-stage-package` carried no

@@ -13,4 +13,11 @@
     </ProjectReference>
   </ItemGroup>
 
+  <!--
+    Keep the published static web assets endpoints manifest free of file system
+    timestamps, so the same source at the same version gives the same artifact
+    SHA-256 regardless of when or where it was checked out.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)build\OpenModulePlatform.DeterministicStaticWebAssets.targets" />
+
 </Project>

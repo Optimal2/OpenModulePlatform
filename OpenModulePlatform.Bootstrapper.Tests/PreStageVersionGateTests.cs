@@ -11,16 +11,28 @@ namespace OpenModulePlatform.Bootstrapper.Tests;
 /// wrong.
 ///
 /// Until 2026-09-02 this was a warning against the previous local source stamp,
-/// not a gate, and a warning is something a script walks straight past.
+/// not a gate, and a warning is something a script walks straight past. Until
+/// 2026-09-28 the gate compared version numbers only; it now compares the
+/// artifact content SHA-256 with omp.Artifacts.Sha256, the import's own measure.
 /// </summary>
 public sealed class PreStageVersionGateTests
 {
+    private const string RegisteredHash = "bfe3d888b86668a9f366f75ab925bd75022c0e954db0e79175cdcd93154d0814";
+    private const string ChangedHash = "0ea481797484110551cbbac602846b5c8a79e5fe8806ee4cfa875b4f90c9382f";
+
+    // contentChanged: the package hash differs from the registered hash of the same
+    // identity. The registered hash is always present unless a test says otherwise.
     private static PreStageComponent Component(
         string key,
         string sourceVersion,
         string? installedVersion,
         bool contentChanged)
-        => new(key, sourceVersion, installedVersion, contentChanged);
+        => new(
+            key,
+            sourceVersion,
+            installedVersion,
+            contentChanged ? ChangedHash : RegisteredHash,
+            installedVersion is null ? null : RegisteredHash);
 
     [Fact]
     public void UnchangedVersionWithChangedContentIsBlocked()
@@ -71,7 +83,7 @@ public sealed class PreStageVersionGateTests
     {
         // This is the normal, correct flow and must not be slowed down.
         var verdict = PreStageVersionGate.Evaluate(
-            [Component("omp-portal-web", "0.3.625", "0.3.624", contentChanged: true)],
+            [Component("omp-portal-web", "0.3.625", null, contentChanged: true)],
             databaseChecked: true,
             databaseFailure: null);
 
@@ -151,5 +163,66 @@ public sealed class PreStageVersionGateTests
             databaseFailure: null);
 
         Assert.False(verdict.MayProceed);
+    }
+    [Fact]
+    public void TheMeasuredIncidentIsRefusedWithBothHashesInTheMessage()
+    {
+        // Measured 2026-09-28: content-webapp 0.3.316 was registered with one
+        // SHA-256 and the rebuilt package carried another. The old gate was fed the
+        // developer source status, which is "OK" for equal versions, and passed it.
+        var verdict = PreStageVersionGate.Evaluate(
+            [new PreStageComponent("content-webapp", "0.3.316", "0.3.316", ChangedHash, RegisteredHash)],
+            databaseChecked: true,
+            databaseFailure: null);
+
+        Assert.False(verdict.MayProceed);
+        Assert.Contains("changed under the same version", verdict.Message, StringComparison.Ordinal);
+        Assert.Contains(RegisteredHash, verdict.Message, StringComparison.Ordinal);
+        Assert.Contains(ChangedHash, verdict.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheVersionStatusVocabularyNeverSignalsSameVersionContentChange()
+    {
+        // Why the gate cannot be fed CompareInstalledVersion: equal versions are
+        // "OK" and "DIFF" means the source is older than what is installed.
+        Assert.Equal("OK", Program.CompareInstalledVersion("0.3.316", "0.3.316"));
+        Assert.Equal("DIFF", Program.CompareInstalledVersion("0.3.317", "0.3.316"));
+    }
+
+    [Fact]
+    public void AHashCaseDifferenceIsNotAContentChange()
+    {
+        var verdict = PreStageVersionGate.Evaluate(
+            [new PreStageComponent("content-webapp", "0.3.316", "0.3.316", RegisteredHash.ToUpperInvariant(), RegisteredHash)],
+            databaseChecked: true,
+            databaseFailure: null);
+
+        Assert.True(verdict.MayProceed);
+    }
+
+    [Fact]
+    public void ARegisteredRowWithoutAHashProceedsBecauseTheImportAdoptsIt()
+    {
+        var verdict = PreStageVersionGate.Evaluate(
+            [new PreStageComponent("content-webapp", "0.3.316", "0.3.316", null, null)],
+            databaseChecked: true,
+            databaseFailure: null);
+
+        Assert.True(verdict.MayProceed);
+    }
+
+    [Fact]
+    public void ARegisteredArtifactWhosePackageCouldNotBeMeasuredIsRefused()
+    {
+        // Absence of a measurement must never read as a passing measurement.
+        var verdict = PreStageVersionGate.Evaluate(
+            [new PreStageComponent("content-webapp", "0.3.316", "0.3.316", null, RegisteredHash, MeasurementFailure: "corrupt zip")],
+            databaseChecked: true,
+            databaseFailure: null);
+
+        Assert.False(verdict.MayProceed);
+        Assert.Contains("could not be measured", verdict.Message, StringComparison.Ordinal);
+        Assert.Contains("corrupt zip", verdict.Message, StringComparison.Ordinal);
     }
 }
