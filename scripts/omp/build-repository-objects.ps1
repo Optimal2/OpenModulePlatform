@@ -596,6 +596,10 @@ function Assert-ConfigurationMappingsHaveNoLiteralConnectionStrings {
 
     foreach ($mapping in $Mappings) {
         $equalsIndex = $mapping.IndexOf('=')
+        if ($equalsIndex -le 0 -or $equalsIndex -eq ($mapping.Length - 1)) {
+            throw "Configuration mapping for component '$ComponentKey' must use relative-path=source-path syntax: $mapping"
+        }
+
         $relativePath = $mapping.Substring(0, $equalsIndex)
         $sourcePath = $mapping.Substring($equalsIndex + 1)
         Assert-OmpConfigurationFileHasNoLiteralConnectionStrings `

@@ -815,6 +815,8 @@ internal static class ArtifactConfigurationFileWriter
 
     private static bool IsLiveOmpConnectionStringValue(JsonNode? value, string ompConnectionString)
     {
+        // Explicit null and empty entries are foreign values, matching the packaging
+        // guard. Older packages are repaired here; omitting the key is the opt-out.
         if (value is not JsonValue jsonValue || !jsonValue.TryGetValue<string>(out var text))
         {
             return false;

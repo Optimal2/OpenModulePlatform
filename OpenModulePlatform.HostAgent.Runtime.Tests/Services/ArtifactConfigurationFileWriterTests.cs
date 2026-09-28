@@ -339,6 +339,49 @@ public sealed class ArtifactConfigurationFileWriterTests
         Assert.Null(root["ConnectionStrings"]);
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\"\"")]
+    public void ExplicitNullOrEmptyOmpDb_IsReplacedAndReportedForWebAndService(string value)
+    {
+        var overlay = CreateOverlay("{ \"ConnectionStrings\": { \"OmpDb\": " + value + " } }");
+        var web = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
+            [overlay], CreateWebDeployment(), LiveConnectionString, new HostAgentSettings(), out var webReplaced);
+        var service = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+            [overlay], CreateDeployment(), LiveConnectionString, new HostAgentSettings(), out var serviceReplaced);
+
+        Assert.True(webReplaced);
+        Assert.True(serviceReplaced);
+        foreach (var result in new[] { web, service })
+        {
+            var root = JsonNode.Parse(Assert.Single(result).FileContent)!.AsObject();
+            Assert.Equal(LiveConnectionString, root["ConnectionStrings"]!["OmpDb"]!.GetValue<string>());
+        }
+    }
+
+    [Fact]
+    public void EnvironmentOverlay_ProtectedConnectionIsPreservedForWebAndService()
+    {
+        var overlay = new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 2,
+            ArtifactId = 42,
+            RelativePath = "appsettings.Production.json",
+            FileContent = """{ "ConnectionStrings": { "OmpDb": "dpapi:opaque-test-payload" } }"""
+        };
+        var web = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
+            [overlay], CreateWebDeployment(), LiveConnectionString, new HostAgentSettings(), out var webReplaced);
+        var service = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+            [overlay], CreateDeployment(), LiveConnectionString, new HostAgentSettings(), out var serviceReplaced);
+
+        Assert.False(webReplaced);
+        Assert.False(serviceReplaced);
+        foreach (var result in new[] { web, service })
+        {
+            Assert.Same(overlay, Assert.Single(result, file => file.RelativePath == overlay.RelativePath));
+        }
+    }
+
     private static WebAppDeploymentDescriptor CreateWebDeployment()
         => new()
         {

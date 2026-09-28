@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
@@ -30,6 +31,34 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         {
             // Best-effort cleanup of temp test artifacts.
         }
+    }
+
+    [Fact]
+    public async Task ArtifactWithLiteralOmpDb_WarnsOncePerArtifactVersion()
+    {
+        var logger = new CaptureLogger();
+        var (service, repository, _, deployment, _) = CreateScenario(logger: logger);
+        repository.ArtifactConfigurationFiles.Add(new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 1,
+            ArtifactId = deployment.ArtifactId,
+            RelativePath = "appsettings.json",
+            FileContent = """{ "ConnectionStrings": { "OmpDb": null } }"""
+        });
+
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        await service.DeployDesiredServiceAppsAsync(deployment.HostKey, CancellationToken.None);
+        Assert.Single(logger.ConnectionWarnings);
+
+        var (nextVersion, _) = CreateAlreadyAppliedDeployment(version: "1.0.1");
+        repository.DesiredServiceAppDeployments.Clear();
+        repository.DesiredServiceAppDeployments.Add(nextVersion);
+        await service.DeployDesiredServiceAppsAsync(nextVersion.HostKey, CancellationToken.None);
+        await service.DeployDesiredServiceAppsAsync(nextVersion.HostKey, CancellationToken.None);
+        Assert.Equal(2, logger.ConnectionWarnings.Count);
+        Assert.Contains("1.0.1", logger.ConnectionWarnings[1], StringComparison.Ordinal);
+        Assert.All(logger.ConnectionWarnings, message =>
+            Assert.DoesNotContain(repository.GetConfiguredConnectionString(), message, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1105,7 +1134,8 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         bool startAfterDeployment = true,
         string? contentSha256 = null,
         string? deployedContentSha256 = null,
-        Action<HostAgentSettings>? configure = null)
+        Action<HostAgentSettings>? configure = null,
+        ILogger<ServiceAppDeploymentService>? logger = null)
     {
         var settings = new HostAgentSettings
         {
@@ -1127,7 +1157,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             optionsMonitor,
             repository,
             credentialStore,
-            NullLogger<ServiceAppDeploymentService>.Instance,
+            logger ?? NullLogger<ServiceAppDeploymentService>.Instance,
             control);
 
         var (deployment, targetPath) = CreateAlreadyAppliedDeployment(contentSha256, deployedContentSha256);
@@ -1166,7 +1196,8 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
 
     private (ServiceAppDeploymentDescriptor Deployment, string TargetPath) CreateAlreadyAppliedDeployment(
         string? contentSha256 = null,
-        string? deployedContentSha256 = null)
+        string? deployedContentSha256 = null,
+        string version = "1.0.0")
     {
         var appInstanceId = Guid.NewGuid();
         var appInstanceKey = $"test-app-{appInstanceId:N}";
@@ -1191,7 +1222,7 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
             AppKey = "test-service",
             DisplayName = serviceName,
             ArtifactId = 42,
-            Version = "1.0.0",
+            Version = version,
             SourceLocalPath = sourcePath,
             ContentSha256 = contentSha256,
             InstallPath = targetPath,
@@ -1204,6 +1235,21 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         };
 
         return (deployment, targetPath);
+    }
+
+    private sealed class CaptureLogger : ILogger<ServiceAppDeploymentService>
+    {
+        public List<string> ConnectionWarnings { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var message = formatter(state, exception);
+            if (logLevel == LogLevel.Warning && message.Contains("ConnectionStrings:OmpDb", StringComparison.Ordinal))
+            {
+                ConnectionWarnings.Add(message);
+            }
+        }
     }
 
     private sealed class FakeWindowsServiceControl : IWindowsServiceControl

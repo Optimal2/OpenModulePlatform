@@ -161,6 +161,28 @@ host actually runs. Anything that must follow the environment rather than the
 build belongs in a config overlay keyed on `hostKey` - see the `artifactVersion`
 warning above.
 
+## Live OMP connection scope
+
+HostAgent's `ForceLiveOmpConnectionString` protects `ConnectionStrings:OmpDb`
+only in the configuration row whose `relativePath` is `appsettings.json`
+(case-insensitive). After overlays have been applied, a web app gets the live
+connection in that file; a service app's existing `OmpDb` entry is replaced.
+An explicit `null` or empty string is a foreign value in either case and is
+replaced with a warning once per artifact ID and version. Neither value means
+"inherit": omit the key to avoid declaring a connection, or use the
+`{{Omp.Json.ConnectionStrings.OmpDb}}` placeholder. The artifact packaging guard
+rejects both null and empty connection entries, just as it rejects literals;
+runtime replacement keeps already-shipped packages deployable.
+
+An overlay in a separate environment file such as
+`appsettings.Production.json` is deliberately left untouched by this safeguard.
+Protected connections (DPAPI) are delivered through these environment files,
+and replacing their values would discard that protected configuration. With
+standard .NET configuration ordering, the environment file can override
+`appsettings.json`; the safeguard therefore does not guarantee the final
+effective connection across all configuration providers. Deliver protected or
+environment-specific connections as host overlays, not artifact-owned literals.
+
 ## Config Overlay Package Zip
 
 Use a zip package when the overlay contains JavaScript, HTML, XML, or other text

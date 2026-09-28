@@ -16,6 +16,12 @@ Describe 'Artifact configuration ConnectionStrings guard' {
         $repositoryRoot = Split-Path -Parent $PSScriptRoot
         . (Join-Path $scriptsRoot 'runtime-configuration-files.ps1')
         $builderScript = Join-Path $scriptsRoot 'build-repository-objects.ps1'
+        $builderAst = [System.Management.Automation.Language.Parser]::ParseFile($builderScript, [ref]$null, [ref]$null)
+        $guard = $builderAst.Find({ param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Assert-ConfigurationMappingsHaveNoLiteralConnectionStrings'
+        }, $true)
+        . ([scriptblock]::Create($guard.Extent.Text))
 
         $literalSettings = '{ "ConnectionStrings": { "OmpDb": "Data Source=localhost;Initial Catalog=OpenModulePlatform;Integrated Security=true;" } }'
         $placeholderSettings = '{ "ConnectionStrings": { "OmpDb": "{{Omp.Json.ConnectionStrings.OmpDb}}" }, "Title": "x" }'
@@ -82,6 +88,26 @@ Describe 'Artifact configuration ConnectionStrings guard' {
 
         $names = @(Get-OmpLiteralConnectionStringName -Content '{ "connectionStrings": { "ompDb": "Server=x", "ModuleDb": "{{Omp.Json.ConnectionStrings.OmpDb}}", "Extra": "" } }' -Description 'test')
         $names | Should -Be @('connectionStrings:ompDb', 'connectionStrings:Extra')
+    }
+
+    It 'Rejects malformed configuration mapping <Mapping> with an actionable build error' -TestCases @(
+        @{ Mapping = 'appsettings.json' },
+        @{ Mapping = '=source.json' },
+        @{ Mapping = 'appsettings.json=' }
+    ) {
+        param($Mapping)
+        { Assert-ConfigurationMappingsHaveNoLiteralConnectionStrings -ComponentKey 'fake-web' -Mappings @($Mapping) } |
+            Should -Throw -ExpectedMessage "*component 'fake-web'*relative-path=source-path*$Mapping*"
+    }
+
+    It 'Rejects explicit null and empty OmpDb values consistently' -TestCases @(
+        @{ Value = 'null' },
+        @{ Value = '""' }
+    ) {
+        param($Value)
+        $content = '{ "ConnectionStrings": { "OmpDb": ' + $Value + ' } }'
+        { Assert-OmpConfigurationFileHasNoLiteralConnectionStrings -ComponentKey 'fake-web' -RelativePath 'appsettings.json' -Content $content } |
+            Should -Throw -ExpectedMessage '*ConnectionStrings:OmpDb*'
     }
 
     It 'Fails the build for a component whose configuration source file sets a literal connection string' {

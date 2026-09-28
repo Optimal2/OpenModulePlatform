@@ -48,7 +48,7 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeployDesiredWebAppsAsync_ArtifactWithLiteralOmpDb_WritesLiveConnectionAndWarnsOncePerArtifact()
+    public async Task DeployDesiredWebAppsAsync_ArtifactWithLiteralOmpDb_WritesLiveConnectionAndWarnsOncePerArtifactVersion()
     {
         const string packagedConnectionString = "Data Source=localhost;Initial Catalog=OpenModulePlatform;Integrated Security=true;";
         var logger = new CaptureLogger<WebAppDeploymentService>();
@@ -81,6 +81,17 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         Assert.Contains(descriptor.ArtifactId.ToString(System.Globalization.CultureInfo.InvariantCulture), warning.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(packagedConnectionString, warning.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(repository.GetConfiguredConnectionString(), warning.Message, StringComparison.Ordinal);
+
+        var nextVersion = CreateWebAppDeploymentDescriptor(out _, version: "1.0.1");
+        repository.DesiredWebAppDeployments.Clear();
+        repository.DesiredWebAppDeployments.Add(nextVersion);
+        await service.DeployDesiredWebAppsAsync(nextVersion.HostKey, CancellationToken.None);
+        await service.DeployDesiredWebAppsAsync(nextVersion.HostKey, CancellationToken.None);
+        warnings = logger.Entries
+            .Where(entry => entry.Level == LogLevel.Warning && entry.Message.Contains("ConnectionStrings:OmpDb", StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(2, warnings.Count);
+        Assert.Contains("1.0.1", warnings[1].Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -430,7 +441,8 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     private WebAppDeploymentDescriptor CreateWebAppDeploymentDescriptor(
         out string moduleInstanceKey,
         string? contentSha256 = null,
-        string? deployedContentSha256 = null)
+        string? deployedContentSha256 = null,
+        string version = "1.0.0")
     {
         moduleInstanceKey = "test-module-instance";
         var tempRoot = CreateTempDirectory();
@@ -450,7 +462,7 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
             ModuleInstanceKey = moduleInstanceKey,
             DisplayName = "Test App",
             ArtifactId = 1,
-            Version = "1.0.0",
+            Version = version,
             SourceLocalPath = sourcePath,
             ContentSha256 = contentSha256,
             InstallPath = targetPath,

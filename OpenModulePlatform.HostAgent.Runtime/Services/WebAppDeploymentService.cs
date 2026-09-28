@@ -27,8 +27,8 @@ public sealed class WebAppDeploymentService
     private readonly Func<HostAgentSettings, WebAppDeploymentDescriptor, string?, CancellationToken, Task> _deploymentHealthCheck;
 
     // Artifacts already warned about for a replaced literal ConnectionStrings:OmpDb. The
-    // replacement runs every deployment cycle; the warning is meant once per artifact.
-    private readonly ConcurrentDictionary<int, byte> _replacedOmpConnectionStringArtifactIds = new();
+    // replacement runs every deployment cycle; warn again for each artifact version.
+    private readonly ConcurrentDictionary<(int ArtifactId, string Version), byte> _replacedOmpConnectionStringArtifacts = new();
 
     public WebAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -191,13 +191,14 @@ public sealed class WebAppDeploymentService
                 settings,
                 out var replacedOmpConnectionString);
             if (replacedOmpConnectionString
-                && _replacedOmpConnectionStringArtifactIds.TryAdd(deployment.ArtifactId, 0))
+                && _replacedOmpConnectionStringArtifacts.TryAdd((deployment.ArtifactId, deployment.Version), 0))
             {
                 // Never log the value: it is a connection string and may carry credentials.
                 _logger.LogWarning(
-                    "Web app artifact configuration set ConnectionStrings:OmpDb to a value other than the live OMP connection; the live connection was written instead. Package the artifact with the Omp.Json.ConnectionStrings.OmpDb placeholder instead.AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}",
+                    "Web app artifact configuration set ConnectionStrings:OmpDb to a value other than the live OMP connection; the live connection was written instead. Package the artifact with the Omp.Json.ConnectionStrings.OmpDb placeholder instead. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}",
                     deployment.AppInstanceId,
-                    deployment.ArtifactId);
+                    deployment.ArtifactId,
+                    deployment.Version);
             }
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,

@@ -202,7 +202,9 @@ function Get-OmpLiteralConnectionStringName {
         }
 
         foreach ($entry in @($section.Value.PSObject.Properties)) {
-            if ($null -ne $entry.Value -and -not (Test-OmpConfigurationPlaceholderValue -Value $entry.Value)) {
+            # An explicit null is not an omitted key: like an empty string it
+            # overrides configuration and the HostAgent treats it as foreign.
+            if (-not (Test-OmpConfigurationPlaceholderValue -Value $entry.Value)) {
                 $names.Add(('{0}:{1}' -f $section.Name, $entry.Name))
             }
         }
