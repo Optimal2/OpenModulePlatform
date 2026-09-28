@@ -8,7 +8,8 @@ namespace OpenModulePlatform.Bootstrapper.Tests;
 /// it keeps shipping in every universal package at whatever version it happens to
 /// carry. The gate walks the library instead - every definition file in
 /// data/global/module-definitions must be owned by a configured source
-/// repository and must not be older than that source.
+/// repository, must not be older than that source, and must be the only file
+/// declaring its module key.
 /// </summary>
 public sealed class PackageLibraryDefinitionGateTests
 {
@@ -120,6 +121,78 @@ public sealed class PackageLibraryDefinitionGateTests
         var finding = Assert.Single(findings);
         Assert.Equal(PackageLibraryDefinitionProblem.Stale, finding.Problem);
         Assert.Equal("demo-old.module-definition.json", finding.FileName);
+    }
+
+    [Fact]
+    public void ARenameThatKeepsItsVersionIsFlaggedAsDuplicate()
+    {
+        // The version comparison cannot catch a rename without a version bump:
+        // neither copy is older than the source, but the package would ship
+        // both files for the same module. Both participants are flagged.
+        var findings = PackageLibraryDefinitionGate.Evaluate(
+            [
+                Library("demo-old.module-definition.json", "demo", "1.2.6"),
+                Library("demo.module-definition.json", "demo", "1.2.6"),
+            ],
+            [Source("demo", "1.2.6")]);
+
+        Assert.Equal(2, findings.Count);
+        Assert.All(findings, finding => Assert.Equal(PackageLibraryDefinitionProblem.Duplicate, finding.Problem));
+        Assert.All(findings, finding => Assert.True(finding.Blocks));
+        var oldCopy = findings.Single(finding => finding.FileName == "demo-old.module-definition.json");
+        Assert.Equal("demo.module-definition.json", oldCopy.OtherFileName);
+        Assert.Equal("1.2.6", oldCopy.OtherVersion);
+    }
+
+    [Fact]
+    public void ADuplicateModuleKeyIsDescribedWithBothFileNames()
+    {
+        var findings = PackageLibraryDefinitionGate.Evaluate(
+            [
+                Library("demo-old.module-definition.json", "demo", "1.2.6"),
+                Library("demo.module-definition.json", "demo", "1.2.6"),
+            ],
+            [Source("demo", "1.2.6")]);
+
+        var lines = PackageLibraryDefinitionGate.DescribeFindings(findings, checkedCount: 2);
+
+        Assert.Contains(
+            lines,
+            line => line.Contains("DUPLICATE", StringComparison.Ordinal)
+                && line.Contains("demo-old.module-definition.json", StringComparison.Ordinal)
+                && line.Contains("demo.module-definition.json", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("2 duplicate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ABlankModuleKeyWithoutAReadErrorIsUnreadableAndNamedByItsFile()
+    {
+        // A file that parses but carries no identity must not read as a
+        // passing check; the file name is the only name left to report.
+        var findings = PackageLibraryDefinitionGate.Evaluate(
+            [new PackageLibraryDefinition("empty.module-definition.json", ModuleKey: "", DefinitionVersion: "1.2.3")],
+            [Source("demo", "1.2.6")]);
+
+        var finding = Assert.Single(findings);
+        Assert.Equal(PackageLibraryDefinitionProblem.Unreadable, finding.Problem);
+        Assert.True(finding.Blocks);
+        Assert.Equal("empty.module-definition.json", finding.ModuleKey);
+    }
+
+    [Fact]
+    public void TheReportCountsDuplicatesAmongTheBlockers()
+    {
+        var report = new PackageLibraryDefinitionGateReport(
+            2,
+            PackageLibraryDefinitionGate.Evaluate(
+                [
+                    Library("demo-old.module-definition.json", "demo", "1.2.6"),
+                    Library("demo.module-definition.json", "demo", "1.2.6"),
+                ],
+                [Source("demo", "1.2.6")]));
+
+        Assert.Equal(2, report.DuplicateCount);
+        Assert.Equal(2, report.BlockingCount);
     }
 
     [Fact]

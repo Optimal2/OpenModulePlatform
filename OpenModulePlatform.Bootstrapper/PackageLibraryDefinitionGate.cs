@@ -25,6 +25,14 @@ internal enum PackageLibraryDefinitionProblem
     /// whose identity cannot be verified must not read as a passing check.
     /// </summary>
     Unreadable,
+
+    /// <summary>
+    /// Another library file declares the same module key. Blocking: this is what a
+    /// definition-file rename looks like when the version was not bumped - the
+    /// sync loop copies by file name, so the lingering old copy is never
+    /// overwritten, and the package would ship both files for the same module.
+    /// </summary>
+    Duplicate,
 }
 
 /// <summary>One module definition file as it sits in the package library.</summary>
@@ -45,17 +53,29 @@ internal sealed record PackageLibrarySourceDefinition(
     string RepositoryKey);
 
 /// <summary>One flagged package-library definition file.</summary>
+/// <param name="FileName">Library file name, used to name the offender.</param>
+/// <param name="ModuleKey">moduleKey the finding is about.</param>
+/// <param name="PackageVersion">definitionVersion read from the file, or empty.</param>
+/// <param name="SourceVersion">The owning source's version, for Stale findings.</param>
+/// <param name="RepositoryKey">The owning source repository, when known.</param>
+/// <param name="Problem">Why the file was flagged.</param>
+/// <param name="OtherFileName">The other file in a Duplicate finding.</param>
+/// <param name="OtherVersion">Its definition version, when known.</param>
 internal sealed record PackageLibraryDefinitionFinding(
     string FileName,
     string ModuleKey,
     string PackageVersion,
     string? SourceVersion,
     string? RepositoryKey,
-    PackageLibraryDefinitionProblem Problem)
+    PackageLibraryDefinitionProblem Problem,
+    string? OtherFileName = null,
+    string? OtherVersion = null)
 {
     /// <summary>Whether this finding must stop the package build.</summary>
     public bool Blocks =>
-        Problem is PackageLibraryDefinitionProblem.Stale or PackageLibraryDefinitionProblem.Unreadable;
+        Problem is PackageLibraryDefinitionProblem.Stale
+            or PackageLibraryDefinitionProblem.Unreadable
+            or PackageLibraryDefinitionProblem.Duplicate;
 }
 
 /// <summary>
@@ -68,15 +88,17 @@ internal sealed record PackageLibraryDefinitionFinding(
 /// source roots is never visited by that loop - it keeps shipping in every
 /// universal package at whatever version it happens to carry, without ever being
 /// updated. The same blind spot exists for a library file that lingers under an
-/// old name after a repository renamed its definition file.
+/// old name after a repository renamed its definition file; a rename without a
+/// version bump is caught by the duplicate check instead.
 ///
 /// This gate walks the library instead: every definition file in
 /// data/global/module-definitions must be owned by a configured source
-/// repository and must not be older than that source. Stale and unreadable
-/// findings block the package build; orphaned files are listed on every run with
-/// the two ways to resolve them. Orphans stay non-blocking because a source root
-/// whose repository is not cloned locally is dropped silently, and blocking on
-/// that would make every sync fail on machines that simply have fewer clones.
+/// repository and must not be older than that source. Stale, duplicate and
+/// unreadable findings block the package build; orphaned files are listed on
+/// every run with the two ways to resolve them. Orphans stay non-blocking
+/// because a source root whose repository is not cloned locally is dropped
+/// silently, and blocking on that would make every sync fail on machines that
+/// simply have fewer clones.
 /// </remarks>
 internal static class PackageLibraryDefinitionGate
 {
@@ -131,6 +153,47 @@ internal static class PackageLibraryDefinitionGate
             }
         }
 
+        // Two readable library files that declare the same module key: the
+        // version comparison above cannot catch a rename that kept its version,
+        // because neither copy is older than the source. Both files would ship.
+        // Files without a readable identity are already blocked as Unreadable.
+        foreach (var libraryDefinition in libraryDefinitions)
+        {
+            if (!string.IsNullOrWhiteSpace(libraryDefinition.ReadError)
+                || string.IsNullOrWhiteSpace(libraryDefinition.ModuleKey)
+                || string.IsNullOrWhiteSpace(libraryDefinition.DefinitionVersion))
+            {
+                continue;
+            }
+
+            PackageLibraryDefinition? other = null;
+            foreach (var candidate in libraryDefinitions)
+            {
+                if (ReferenceEquals(candidate, libraryDefinition)
+                    || string.IsNullOrWhiteSpace(candidate.ModuleKey)
+                    || !string.Equals(candidate.ModuleKey, libraryDefinition.ModuleKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                other = candidate;
+                break;
+            }
+
+            if (other is not null)
+            {
+                findings.Add(new PackageLibraryDefinitionFinding(
+                    libraryDefinition.FileName,
+                    libraryDefinition.ModuleKey,
+                    libraryDefinition.DefinitionVersion,
+                    SourceVersion: null,
+                    RepositoryKey: null,
+                    PackageLibraryDefinitionProblem.Duplicate,
+                    OtherFileName: other.FileName,
+                    OtherVersion: other.DefinitionVersion));
+            }
+        }
+
         return findings;
     }
 
@@ -163,14 +226,21 @@ internal static class PackageLibraryDefinitionGate
                         $"  BROKEN  {finding.FileName}: moduleKey/definitionVersion could not be read; the file ships in every "
                         + "universal package unverified.");
                     break;
+
+                case PackageLibraryDefinitionProblem.Duplicate:
+                    lines.Add(
+                        $"  DUPLICATE {finding.ModuleKey}: {finding.FileName} ({finding.PackageVersion}) and {finding.OtherFileName} "
+                        + $"({finding.OtherVersion}) both declare this module key; the package would ship both. Remove the leftover file.");
+                    break;
             }
         }
 
         var stale = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Stale);
         var orphaned = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Orphan);
         var unreadable = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Unreadable);
+        var duplicate = findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Duplicate);
         lines.Add(
-            $"Package library definitions: {checkedCount} file(s) checked; {stale} stale, {orphaned} orphaned, {unreadable} unreadable.");
+            $"Package library definitions: {checkedCount} file(s) checked; {stale} stale, {orphaned} orphaned, {unreadable} unreadable, {duplicate} duplicate.");
 
         return lines;
     }
@@ -214,6 +284,9 @@ internal sealed record PackageLibraryDefinitionGateReport(
 
     public int UnreadableCount =>
         Findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Unreadable);
+
+    public int DuplicateCount =>
+        Findings.Count(finding => finding.Problem == PackageLibraryDefinitionProblem.Duplicate);
 
     /// <summary>Findings that must stop the package build.</summary>
     public int BlockingCount => Findings.Count(finding => finding.Blocks);

@@ -1975,21 +1975,7 @@ internal static partial class Program
             PackageLibraryDefinitionGateReport? libraryGate;
             try
             {
-                var gateSourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: false);
-                if (gateSourceRoots.Count == 0)
-                {
-                    // No source roots locally (operator machine without clones):
-                    // the same rule that keeps orphans non-blocking applies here.
-                    libraryGate = null;
-                }
-                else
-                {
-                    var gateManifests = await ReadDeveloperManifestsAsync(gateSourceRoots);
-                    var gateDefinitions = gateManifests
-                        .SelectMany(manifest => ReadManifestModuleDefinitions(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
-                        .ToArray();
-                    libraryGate = await EvaluatePackageLibraryDefinitionsAsync(gateDefinitions);
-                }
+                libraryGate = await TryEvaluatePackageLibraryGateAsync();
             }
             catch (Exception ex) when (ex is IOException or JsonException or SystemException)
             {
@@ -2005,11 +1991,11 @@ internal static partial class Program
                     Report("> " + line.TrimStart());
                 }
 
-                if (libraryGate.StaleCount > 0 || libraryGate.UnreadableCount > 0)
+                if (libraryGate.BlockingCount > 0)
                 {
                     Report(
                         "> Refusing to build the universal package: module definition file(s) in the package library are older "
-                        + "than their source repositories or unreadable. The package would ship outdated or unverified definitions.");
+                        + "than their source repositories, duplicated, or unreadable. The package would ship outdated or unverified definitions.");
                     return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
                 }
             }
@@ -2410,8 +2396,41 @@ internal static partial class Program
                 "Universal module package created.",
                 "Universal module package was created with warnings. Review the log for details.",
                 "Universal module package creation failed.",
-                () =>
+                async () =>
                 {
+                    // The GUI build path uses the same package library as
+                    // --refresh-and-stage-package, so the same pre-build gate
+                    // applies: a definition older than its source, a duplicate
+                    // module key, or an unreadable file must be refused here
+                    // too, not only in the CLI flow.
+                    PackageLibraryDefinitionGateReport? libraryGate;
+                    try
+                    {
+                        libraryGate = await TryEvaluatePackageLibraryGateAsync();
+                    }
+                    catch (Exception ex) when (ex is IOException or JsonException or SystemException)
+                    {
+                        Console.WriteLine(
+                            $"> Refusing to create the package: the package-library definition gate could not read the configured sources ({ex.Message}).");
+                        return 1;
+                    }
+
+                    if (libraryGate is not null)
+                    {
+                        foreach (var line in libraryGate.Describe())
+                        {
+                            Console.WriteLine("> " + line.TrimStart());
+                        }
+
+                        if (libraryGate.BlockingCount > 0)
+                        {
+                            Console.WriteLine(
+                                "> Refusing to create the universal package: module definition file(s) in the package library are older "
+                                + "than their source repositories, duplicated, or unreadable. The package would ship outdated or unverified definitions.");
+                            return 1;
+                        }
+                    }
+
                     var result = CreateUniversalPackageZip(request);
                     Console.WriteLine($"> Universal module package: {result.PackagePath}");
                     Console.WriteLine($"> Package key: {request.PackageKey}");
@@ -2423,7 +2442,7 @@ internal static partial class Program
                         Console.WriteLine($"  {item.Kind,-18} {item.PackagePath}");
                     }
 
-                    return Task.FromResult(0);
+                    return 0;
                 });
         }
 
@@ -3280,8 +3299,9 @@ internal static partial class Program
             // so a library file whose owning repository is not part of
             // developerSource.sourceRoot is never visited - it keeps shipping in
             // every universal package at whatever version it happens to carry.
-            // Stale and unreadable library files count as warnings and stop the
-            // refresh; orphans are listed every run but stay non-blocking, because
+            // Stale, duplicate and unreadable library files count as warnings,
+            // which the refresh-and-stage flow turns into a refused package
+            // build; orphans are listed every run but stay non-blocking, because
             // a source root whose repository is not cloned locally is dropped
             // silently and must not brick the sync on machines with fewer clones.
             var libraryReport = await EvaluatePackageLibraryDefinitionsAsync(sourceDefinitions);
@@ -5560,6 +5580,30 @@ ORDER BY ar.ArtifactId DESC;
         /// it against the configured source repositories through
         /// <see cref="PackageLibraryDefinitionGate"/>.
         /// </summary>
+        /// <summary>
+        /// Evaluates the package-library definition gate for a package build.
+        /// Returns null when no developer source roots are configured locally
+        /// (operator machine without clones) - the same rule that keeps orphans
+        /// non-blocking applies to the whole gate. Throws when the configured
+        /// sources cannot be read; callers must treat that as a refusal.
+        /// </summary>
+        private async Task<PackageLibraryDefinitionGateReport?> TryEvaluatePackageLibraryGateAsync()
+        {
+            var gateSourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: false);
+            if (gateSourceRoots.Count == 0)
+            {
+                // No source roots locally (operator machine without clones):
+                // the same rule that keeps orphans non-blocking applies here.
+                return null;
+            }
+
+            var gateManifests = await ReadDeveloperManifestsAsync(gateSourceRoots);
+            var gateDefinitions = gateManifests
+                .SelectMany(manifest => ReadManifestModuleDefinitions(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                .ToArray();
+            return await EvaluatePackageLibraryDefinitionsAsync(gateDefinitions);
+        }
+
         private async Task<PackageLibraryDefinitionGateReport> EvaluatePackageLibraryDefinitionsAsync(
             IReadOnlyList<ManifestModuleDefinition> sourceDefinitions)
         {
@@ -5567,22 +5611,29 @@ ORDER BY ar.ArtifactId DESC;
             var libraryDefinitions = new List<PackageLibraryDefinition>();
             if (Directory.Exists(libraryRoot))
             {
+                // AllDirectories: the package build collects module definitions
+                // recursively, so the gate must see the same set of files it
+                // would ship - a definition hidden in a subfolder must not
+                // dodge the check while still being packaged.
                 foreach (var path in Directory
-                             .EnumerateFiles(libraryRoot, "*.json", SearchOption.TopDirectoryOnly)
+                             .EnumerateFiles(libraryRoot, "*.json", SearchOption.AllDirectories)
                              .Order(StringComparer.OrdinalIgnoreCase))
                 {
+                    // Relative to the library root: top-level files keep their
+                    // plain names, subfolder files name their subfolder.
+                    var displayName = Path.GetRelativePath(libraryRoot, path);
                     try
                     {
                         var identity = await ReadModuleDefinitionIdentityAsync(path);
                         libraryDefinitions.Add(new PackageLibraryDefinition(
-                            Path.GetFileName(path),
+                            displayName,
                             identity.ModuleKey,
                             identity.DefinitionVersion));
                     }
-                    catch (Exception ex) when (ex is JsonException or InvalidOperationException or IOException)
+                    catch (Exception ex) when (ex is JsonException or InvalidOperationException or IOException or UnauthorizedAccessException)
                     {
                         libraryDefinitions.Add(new PackageLibraryDefinition(
-                            Path.GetFileName(path),
+                            displayName,
                             ModuleKey: null,
                             DefinitionVersion: null,
                             ReadError: ex.Message));
