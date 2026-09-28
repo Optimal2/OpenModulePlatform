@@ -840,7 +840,9 @@ public sealed class WebAppDeploymentService
                 settings,
                 appPoolName,
                 identity);
-            EnsurePortalAppPoolFilesystemAccess(targetPath, appPoolName, identity, _logger);
+            ApplyAppPoolDirectoryGrants(
+                PlanRootApplicationDirectoryGrants(targetPath, appPoolName, identity),
+                _logger);
             EnsureIisSite(settings, targetPath, appPoolName);
             return;
         }
@@ -851,14 +853,74 @@ public sealed class WebAppDeploymentService
             settings,
             rootAppPoolName,
             rootIdentity);
-        EnsurePortalAppPoolFilesystemAccess(siteRootPath, rootAppPoolName, rootIdentity, _logger);
-        EnsureIisSite(settings, siteRootPath, rootAppPoolName);
+        var childIdentity = await ResolveIisAppPoolIdentityAsync(settings, deployment, appPoolName, cancellationToken);
         EnsureAppPool(
             settings,
             appPoolName,
-            await ResolveIisAppPoolIdentityAsync(settings, deployment, appPoolName, cancellationToken));
+            childIdentity);
+        ApplyAppPoolDirectoryGrants(
+            PlanChildApplicationDirectoryGrants(
+                siteRootPath,
+                rootAppPoolName,
+                rootIdentity,
+                targetPath,
+                appPoolName,
+                childIdentity),
+            _logger);
+        EnsureIisSite(settings, siteRootPath, rootAppPoolName);
         EnsureIisChildApplication(settings, iisAppName, appPath, targetPath, appPoolName);
     }
+
+    /// <summary>
+    /// Filesystem rights HostAgent ensures for an IIS site-root application. The Portal keeps
+    /// its existing Modify on the whole site root; <c>logs\</c> is listed explicitly so the
+    /// directory NLog writes to (<c>${basedir}/logs</c>) exists even before the first request.
+    /// </summary>
+    internal static IReadOnlyList<AppPoolDirectoryGrant> PlanRootApplicationDirectoryGrants(
+        string targetPath,
+        string appPoolName,
+        HostAgentIisAppPoolIdentitySettings identity)
+    {
+        var accountNames = ResolveAppPoolFilesystemAccountNames(appPoolName, identity).ToList();
+        return
+        [
+            new AppPoolDirectoryGrant(targetPath, appPoolName, accountNames, "M", Required: true),
+            new AppPoolDirectoryGrant(GetWebAppLogDirectory(targetPath), appPoolName, accountNames, "M", Required: false)
+        ];
+    }
+
+    /// <summary>
+    /// Filesystem rights HostAgent ensures for an IIS child application. The child app pool
+    /// gets Modify on its own <c>logs\</c> only - never on the rest of the application
+    /// directory, which stays read-only for the running site.
+    /// </summary>
+    internal static IReadOnlyList<AppPoolDirectoryGrant> PlanChildApplicationDirectoryGrants(
+        string siteRootPath,
+        string rootAppPoolName,
+        HostAgentIisAppPoolIdentitySettings rootIdentity,
+        string targetPath,
+        string appPoolName,
+        HostAgentIisAppPoolIdentitySettings identity)
+    {
+        return
+        [
+            new AppPoolDirectoryGrant(
+                siteRootPath,
+                rootAppPoolName,
+                ResolveAppPoolFilesystemAccountNames(rootAppPoolName, rootIdentity).ToList(),
+                "M",
+                Required: true),
+            new AppPoolDirectoryGrant(
+                GetWebAppLogDirectory(targetPath),
+                appPoolName,
+                ResolveAppPoolFilesystemAccountNames(appPoolName, identity).ToList(),
+                "M",
+                Required: false)
+        ];
+    }
+
+    private static string GetWebAppLogDirectory(string targetPath)
+        => Path.Join(targetPath, "logs");
 
     private static void EnsureIisSite(
         HostAgentSettings settings,
@@ -986,29 +1048,77 @@ public sealed class WebAppDeploymentService
         CommitIisChanges(serverManager);
     }
 
-    private static void EnsurePortalAppPoolFilesystemAccess(
-        string portalPath,
-        string appPoolName,
-        HostAgentIisAppPoolIdentitySettings identity,
+    private static void ApplyAppPoolDirectoryGrants(
+        IEnumerable<AppPoolDirectoryGrant> grants,
         ILogger logger)
     {
-        Directory.CreateDirectory(portalPath);
-        var accountNames = ResolveAppPoolFilesystemAccountNames(appPoolName, identity).ToList();
-        if (accountNames.Count == 0)
+        foreach (var grant in grants)
+        {
+            if (grant.Required)
+            {
+                EnsureRequiredAppPoolDirectoryGrant(grant, logger);
+            }
+            else
+            {
+                TryEnsureAppPoolDirectoryGrant(grant, logger);
+            }
+        }
+    }
+
+    private static void EnsureRequiredAppPoolDirectoryGrant(AppPoolDirectoryGrant grant, ILogger logger)
+    {
+        Directory.CreateDirectory(grant.Path);
+        if (grant.AccountNames.Count == 0)
         {
             return;
         }
 
-        if (!TryGrantDirectoryAccess(portalPath, accountNames, "M", out var error))
+        if (!TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out var error))
         {
             throw new InvalidOperationException(
-                $"Could not grant Modify access to Portal path '{portalPath}' for IIS app pool '{appPoolName}'. {error}");
+                $"Could not grant Modify access to Portal path '{grant.Path}' for IIS app pool '{grant.AppPoolName}'. {error}");
         }
 
         logger.LogDebug(
             "Ensured Portal filesystem Modify access. Path={Path}, AppPoolName={AppPoolName}",
-            portalPath,
-            appPoolName);
+            grant.Path,
+            grant.AppPoolName);
+    }
+
+    // A missing log directory must not fail the deployment: the application itself runs
+    // without it. It must not be silent either, because NLog drops file targets it cannot
+    // create without any visible error, so the failure is logged as a warning.
+    internal static void TryEnsureAppPoolDirectoryGrant(AppPoolDirectoryGrant grant, ILogger logger)
+    {
+        var identity = grant.AccountNames.Count == 0
+            ? $@"IIS AppPool\{grant.AppPoolName}"
+            : string.Join(", ", grant.AccountNames);
+        var error = "No app pool identity could be resolved.";
+        try
+        {
+            Directory.CreateDirectory(grant.Path);
+            if (grant.AccountNames.Count > 0
+                && TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out error))
+            {
+                logger.LogDebug(
+                    "Ensured web app log directory Modify access. Path={Path}, AppPoolName={AppPoolName}, Identity={Identity}",
+                    grant.Path,
+                    grant.AppPoolName,
+                    identity);
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {
+            error = ex.Message;
+        }
+
+        logger.LogWarning(
+            "Could not ensure Modify access on the web app log directory; the application's file logging may fail silently. Path={Path}, AppPoolName={AppPoolName}, Identity={Identity}, Error={Error}",
+            grant.Path,
+            grant.AppPoolName,
+            identity,
+            error);
     }
 
     private static bool TryGrantDirectoryAccess(

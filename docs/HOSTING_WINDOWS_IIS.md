@@ -50,6 +50,42 @@ It is useful when you need IIS-level rewrite or redirect rules, reverse-proxy st
 Official download:
 - https://www.iis.net/downloads/microsoft/url-rewrite
 
+## Application pool filesystem rights
+
+OMP web applications log with NLog to `${basedir}/logs`, that is a `logs\`
+directory inside the deployed application directory. NLog does not report a
+file target it cannot create, so a missing or read-only `logs\` directory makes
+file logging fail silently.
+
+When HostAgent manages the IIS site (`HostAgent:EnsureIisSite`), every web app
+deployment that changes the application (site root and child applications)
+ensures these rights with `icacls` and object/container inheritance:
+
+| Directory | Identity | Right | On failure |
+| --- | --- | --- | --- |
+| Site root (`HostAgent:PortalPhysicalPath`) | Portal app pool | Modify | Deployment fails |
+| `<application directory>\logs` | That application's app pool | Modify | Warning, deployment continues |
+
+The identity is the configured app pool user when one is set, otherwise the
+virtual account `IIS AppPool\<app pool name>`. For a child application,
+HostAgent creates `logs\` when it is missing and grants the child app pool
+Modify on that directory only; the rest of the application directory keeps its
+existing, inherited rights. The grant is idempotent and does not remove or
+change any other access control entry. `logs\` is excluded from the deployment
+mirror, so existing log files survive redeployments.
+
+If the grant fails, HostAgent logs the warning `Could not ensure Modify access
+on the web app log directory` with the path, app pool name, identity and the
+`icacls` error. To grant the right manually, run as an administrator:
+
+```powershell
+icacls "<application directory>\logs" /grant "IIS AppPool\<app pool name>:(OI)(CI)(M)"
+```
+
+An application that is already deployed receives the grant at its next
+deployment. When HostAgent does not manage the IIS site, create `logs\` and
+grant the right as part of the site setup.
+
 ## Load-balanced IIS deployments
 
 When multiple IIS servers serve the same OMP DNS name, configure every Portal
