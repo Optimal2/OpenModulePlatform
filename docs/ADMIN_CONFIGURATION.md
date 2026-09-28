@@ -315,11 +315,33 @@ The request target is chosen so that a client cannot steer it:
 1. `ModuleFragmentWidgets:InternalBaseUrl`, when configured (scheme and
    authority only; the path always comes from the module registration).
 2. The module's registered absolute address, when it is on another host.
-3. Otherwise this server's own local endpoint (`localhost` and the port the
-   request arrived on) with the public host name as the `Host` header.
+3. For an HTTPS request, the operator-configured
+   `Portal:PortalTopBar:PortalBaseUrl`, when it is an absolute HTTPS URL without
+   user information. Only its scheme and authority are used; the module's path
+   is preserved. The incoming `Host` and raw `X-Forwarded-Host` do not choose
+   this network destination.
+4. Otherwise this server's own local endpoint (`localhost` and the port the
+   request arrived on) with the incoming host name as the `Host` header. .NET
+   also uses this header for TLS SNI and certificate name validation. Merely
+   testing `https://localhost` without that header is not an equivalent check.
 
 Configure `InternalBaseUrl` when the Portal runs behind a TLS-terminating proxy
-or cannot reach its own public binding through `localhost`.
+or cannot reach its own public binding through `localhost`, and no usable
+configured HTTPS Portal origin is available. It is also useful when multiple
+hosts behind a load balancer need an explicit internal entry point. This is
+one override for all fragment requests, including registered remote modules:
+the selected endpoint must route every module path. For example,
+`https://portal.example.com` uses that origin's DNS name for TLS and its normal
+certificate trust chain. A configured HTTP endpoint forwards identity cookies
+without TLS; use it only on a trusted loopback/private hop by operator choice.
+An HTTPS Portal URL never implicitly falls back to a configured HTTP Portal URL.
+
+Certificate validation stays enabled. TLS failures log the target authority,
+effective TLS host and underlying exception reason; the widget shows only the
+neutral placeholder. Repair name mismatches, missing trust chains or routing
+at the configured endpoint; do not disable validation. See
+[IIS fragment routing](HOSTING_WINDOWS_IIS.md#module-fragment-widgets-over-https)
+for configuration and verification steps.
 
 Portal settings (`appsettings.json`, all optional):
 

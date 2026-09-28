@@ -89,6 +89,67 @@ fronts several applications through the same DNS name, use equivalent
 application-specific checks for those applications instead of a single
 site-wide node check.
 
+## Module-fragment widgets over HTTPS
+
+The Portal fetches module-owned dashboard fragments server-side with the user's
+shared OMP identity cookie. For HTTPS, set the existing operator-owned Portal
+origin when local loopback routing does not represent the public binding:
+
+```json
+{
+  "Portal": {
+    "PortalTopBar": {
+      "PortalBaseUrl": "https://portal.example.com"
+    }
+  }
+}
+```
+
+The fragment client uses this configured HTTPS authority, preserving the module
+registration's path, after checking `ModuleFragmentWidgets:InternalBaseUrl` and
+the module's registered remote address. Incoming `Host` and raw forwarded
+headers never select this remote destination. With the default relative Portal
+URL (`/`), the fallback remains `localhost` at the incoming connection's local
+port; the explicit HTTP Host header also supplies .NET's TLS SNI and certificate
+name. A direct `https://localhost` probe without that header tests a different
+TLS identity and may fail even when the fragment request works.
+
+Use `ModuleFragmentWidgets:InternalBaseUrl` when TLS terminates before the local
+listener, the public origin cannot be resolved/reached from the Portal server,
+or multiple hosts behind a load balancer require a specific internal route:
+
+```json
+{
+  "ModuleFragmentWidgets": {
+    "InternalBaseUrl": "https://fragments.example.com"
+  }
+}
+```
+
+This overrides all fragment destinations, including registered remote modules.
+Only its authority is used, so that endpoint must route all registered module
+paths. Its certificate must cover its configured DNS name and be trusted by the
+Portal process. An explicit HTTP override is appropriate only for an
+operator-approved trusted hop: authentication cookies travel without TLS there.
+The Portal does not disable certificate checks or silently downgrade HTTPS.
+Keep shared Data Protection keys and trusted forwarded-header settings aligned
+across nodes as described above.
+
+After applying configuration and the updated `omp-portal-web` artifact, an
+operator can verify the dashboard with an authorized module-fragment widget:
+
+1. Confirm the configured entry point reaches the module path from the Portal
+   server and its HTTPS certificate covers that entry point's name.
+2. Wait for the fragment cache window (30 seconds by default), then reload the
+   dashboard. The fragment should render without a login redirect.
+3. If the neutral placeholder remains, inspect Portal warnings. A
+   `TLS/certificate` warning includes target authority, effective TLS host and
+   the underlying reason. Fix name mismatch, expiry or trust-chain errors at
+   the endpoint; no private certificate details are exposed in the widget UI.
+
+See [module-owned widgets](ADMIN_CONFIGURATION.md#module-owned-widgets-module-fragment)
+for routing precedence, caching, limits and the `InternalBaseUrl` override.
+
 ## Blazor Server behind IIS and load balancers
 
 OMP Blazor Server modules use ASP.NET Core SignalR for interactive circuits.

@@ -421,6 +421,73 @@ public sealed class ModuleFragmentWidgetTests
     }
 
     [Theory]
+    [InlineData("http://127.0.0.1:5000/ignored", "https://module.example/sample", "http://127.0.0.1:5000/sample/widgets/overview")]
+    [InlineData(null, "https://module.example/sample", "https://module.example/sample/widgets/overview")]
+    [InlineData(null, "https://untrusted.example/sample", "https://portal.example/sample/widgets/overview")]
+    public void Https_TargetPrecedence_UsesOnlyOperatorConfiguredRemoteOrigins(
+        string? internalBaseUrl, string moduleHref, string expected)
+    {
+        var context = CreateContext(host: "untrusted.example");
+        context.Request.Scheme = "https";
+        context.Request.Headers["X-Forwarded-Host"] = "other-untrusted.example";
+        context.Connection.LocalPort = 0; // Public origin also works behind a proxy.
+
+        var target = PortalModuleFragmentService.BuildTarget(context, moduleHref, "/widgets/overview",
+            new ModuleFragmentWidgetOptions { InternalBaseUrl = internalBaseUrl }, "https://portal.example/portal");
+
+        Assert.NotNull(target);
+        Assert.Equal(expected, target.RequestUri.AbsoluteUri);
+        Assert.Null(target.HostHeader);
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("//untrusted.example")]
+    [InlineData("http://portal.example")]
+    [InlineData("https://user:password@portal.example")]
+    [InlineData("not a URL")]
+    public void Https_WithoutUsableConfiguredOrigin_KeepsNetworkDestinationOnLoopback(string configuredOrigin)
+    {
+        var context = CreateContext(host: "untrusted.example");
+        context.Request.Scheme = "https";
+
+        var target = PortalModuleFragmentService.BuildTarget(context, "https://untrusted.example/sample", "/widgets/overview",
+            new ModuleFragmentWidgetOptions(), configuredOrigin);
+
+        Assert.NotNull(target);
+        Assert.Equal("https://localhost:8088/sample/widgets/overview", target.RequestUri.AbsoluteUri);
+        Assert.Equal("untrusted.example", target.HostHeader);
+    }
+
+    [Fact]
+    public void Http_ConfiguredHttpsPortalOrigin_DoesNotChangeLocalRouting()
+    {
+        var target = PortalModuleFragmentService.BuildTarget(CreateContext(), "/sample", "/widgets/overview",
+            new ModuleFragmentWidgetOptions(), "https://portal.example");
+
+        Assert.NotNull(target);
+        Assert.Equal("http://localhost:8088/sample/widgets/overview", target.RequestUri.AbsoluteUri);
+    }
+
+    [Theory]
+    [InlineData("https", "untrusted.example:443", null, "https://localhost:8088/sample/widgets/overview")]
+    [InlineData("https", "untrusted.example:443", "https://portal.example", "https://portal.example/sample/widgets/overview")]
+    [InlineData("http", "untrusted.example:80", null, "http://localhost:8088/sample/widgets/overview")]
+    public void Fetch_DefaultPortInClientHost_IsNotMistakenForRegisteredRemoteOrigin(
+        string scheme, string host, string? configuredOrigin, string expected)
+    {
+        var context = CreateContext(host: host);
+        context.Request.Scheme = scheme;
+        var href = AppLinkBuilder.ResolveHref(context.Request, App());
+
+        var target = PortalModuleFragmentService.BuildTarget(context, href!, "/widgets/overview",
+            new ModuleFragmentWidgetOptions(), configuredOrigin);
+
+        Assert.NotNull(target);
+        Assert.Equal(expected, target.RequestUri.AbsoluteUri);
+    }
+
+    [Theory]
     [InlineData(HttpStatusCode.Found)]
     [InlineData(HttpStatusCode.Forbidden)]
     [InlineData(HttpStatusCode.InternalServerError)]
@@ -645,6 +712,7 @@ public sealed class ModuleFragmentWidgetTests
             new MemoryCache(new MemoryCacheOptions()),
             new StaticOptionsMonitor<ModuleFragmentWidgetOptions>(options),
             Microsoft.Extensions.Options.Options.Create(new OmpAuthOptions()),
+            Microsoft.Extensions.Options.Options.Create(new WebAppOptions()),
             NullLogger<PortalModuleFragmentService>.Instance);
 
     private sealed record CapturedRequest(string Uri, string? Host, string? Cookie, string? FragmentHeader);

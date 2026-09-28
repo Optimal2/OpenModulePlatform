@@ -33,6 +33,8 @@ public sealed class ModuleFragmentWidgetOptions
     /// Optional scheme and authority the Portal uses for its own server-side request
     /// instead of the public address, for example when the public host name is not
     /// resolvable from the server. The path always comes from the module's registration.
+    /// This overrides every fragment destination, including registered remote modules;
+    /// the endpoint must route all module paths. HTTPS uses normal certificate validation.
     /// </summary>
     public string? InternalBaseUrl { get; set; }
 

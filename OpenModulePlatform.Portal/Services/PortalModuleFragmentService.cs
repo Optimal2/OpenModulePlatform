@@ -30,9 +30,14 @@ namespace OpenModulePlatform.Portal.Services;
 ///
 /// The request goes to <see cref="ModuleFragmentWidgetOptions.InternalBaseUrl"/> when
 /// configured, to the module's registered absolute address when it has one, and
-/// otherwise to this server's own local endpoint with the public host name only as the
-/// Host header - never to a host taken from the incoming request, which a client
-/// controls.
+/// for HTTPS to the operator-configured absolute HTTPS Portal base URL when available.
+/// GetPublicBaseUrl() is NOT a trusted configured origin: it includes the incoming
+/// Host header. Using it as a network destination would allow Host injection/SSRF and
+/// disclose the forwarded auth cookie. Without a configured origin, keep the network
+/// destination on localhost; the Host header selects the local virtual host and .NET
+/// also uses it for TLS SNI/certificate name validation. It never selects a remote host.
+/// Certificate validation is never bypassed. TLS-terminating proxies or bindings that
+/// are not reachable locally require an operator-configured origin or InternalBaseUrl.
 /// </remarks>
 public sealed class PortalModuleFragmentService
 {
@@ -45,6 +50,7 @@ public sealed class PortalModuleFragmentService
     private readonly IMemoryCache _cache;
     private readonly IOptionsMonitor<ModuleFragmentWidgetOptions> _options;
     private readonly IOptions<OmpAuthOptions> _authOptions;
+    private readonly IOptions<WebAppOptions> _webAppOptions;
     private readonly ILogger<PortalModuleFragmentService> _logger;
 
     public PortalModuleFragmentService(
@@ -52,12 +58,14 @@ public sealed class PortalModuleFragmentService
         IMemoryCache cache,
         IOptionsMonitor<ModuleFragmentWidgetOptions> options,
         IOptions<OmpAuthOptions> authOptions,
+        IOptions<WebAppOptions> webAppOptions,
         ILogger<PortalModuleFragmentService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _cache = cache;
         _options = options;
         _authOptions = authOptions;
+        _webAppOptions = webAppOptions;
         _logger = logger;
     }
 
@@ -138,7 +146,8 @@ public sealed class PortalModuleFragmentService
                 continue;
             }
 
-            var target = BuildTarget(httpContext, moduleBaseHref, config.FragmentPath, options);
+            var target = BuildTarget(httpContext, moduleBaseHref, config.FragmentPath, options,
+                _webAppOptions.Value.PortalTopBar.PortalBaseUrl);
             if (target is null)
             {
                 _logger.LogWarning(
@@ -257,6 +266,18 @@ public sealed class PortalModuleFragmentService
                 fetch.AppKey);
             return ModuleFragmentResult.Unavailable;
         }
+        catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.SecureConnectionError)
+        {
+            _logger.LogWarning(
+                ex,
+                "Dashboard module fragment for widget {WidgetId} (app {AppKey}) failed TLS/certificate validation at {Authority} (TLS host {TlsHost}). Reason: {Reason}",
+                fetch.WidgetId,
+                fetch.AppKey,
+                fetch.Target.RequestUri.GetLeftPart(UriPartial.Authority),
+                fetch.Target.HostHeader ?? fetch.Target.RequestUri.Authority,
+                ex.GetBaseException().Message);
+            return ModuleFragmentResult.Unavailable;
+        }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(
@@ -310,7 +331,8 @@ public sealed class PortalModuleFragmentService
         HttpContext httpContext,
         string moduleBaseHref,
         string fragmentPath,
-        ModuleFragmentWidgetOptions options)
+        ModuleFragmentWidgetOptions options,
+        string? configuredPortalBaseUrl = null)
     {
         var request = httpContext.Request;
         string basePath;
@@ -326,9 +348,15 @@ public sealed class PortalModuleFragmentService
             // AppLinkBuilder builds relative registrations from the request's own scheme
             // and host; only an address that differs from those came from the module's
             // registration (omp.AppInstances / omp.Hosts) and may be requested directly.
+            // Normalize BOTH authorities: Uri removes explicit default ports. Comparing
+            // against raw Host would misclassify a client host ending in :443/:80 as a
+            // registered remote origin and let it steer the authenticated request.
+            var requestOrigin = Uri.TryCreate(request.GetPublicBaseUrl(), UriKind.Absolute, out var incoming)
+                ? incoming.GetLeftPart(UriPartial.Authority)
+                : null;
             if (!string.Equals(
                     absolute.GetLeftPart(UriPartial.Authority),
-                    request.GetPublicBaseUrl(),
+                    requestOrigin,
                     StringComparison.OrdinalIgnoreCase))
             {
                 registeredOrigin = new Uri(absolute.GetLeftPart(UriPartial.Authority));
@@ -352,6 +380,18 @@ public sealed class PortalModuleFragmentService
         if (registeredOrigin is not null)
         {
             return new FragmentRequestTarget(new Uri(registeredOrigin, relative), HostHeader: null);
+        }
+
+        // The shared options validator also allows relative URLs and non-HTTP schemes
+        // for navigation. Only an explicit HTTPS origin can replace local HTTPS here;
+        // never downgrade identity cookies to HTTP or use a client-supplied authority.
+        if (request.IsHttps
+            && Uri.TryCreate(configuredPortalBaseUrl, UriKind.Absolute, out var publicBase)
+            && publicBase.Scheme == Uri.UriSchemeHttps
+            && string.IsNullOrEmpty(publicBase.UserInfo))
+        {
+            return new FragmentRequestTarget(
+                new Uri(publicBase.GetLeftPart(UriPartial.Authority) + relative), HostHeader: null);
         }
 
         var localPort = httpContext.Connection.LocalPort;
