@@ -518,8 +518,9 @@
 }
 
 /* With minute precision the popup has a third column at the right: the
-   hour and minute grid for the armed field, a hint while none is. It is
-   always there, at the grid's width, so the popup never grows or moves. */
+   hour and minute grid for the armed field. Folded to nothing while no
+   field is armed (its share of the column gap taken back too), it folds
+   out when one is; the popup was placed with that room from the start. */
 .omp-daterange--minute .omp-daterange-panel {
     grid-template-columns: max-content max-content max-content;
 }
@@ -529,10 +530,28 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    overflow: hidden;
+    transition: width 160ms ease, margin-left 160ms ease, opacity 160ms ease;
+}
+
+.omp-daterange-panel__time-host--collapsed {
+    width: 0;
+    margin-left: -14px;
+    opacity: 0;
+    pointer-events: none;
 }
 
 .omp-daterange-panel__time-host .omp-datetime-panel__time {
+    width: 206px;
+    box-sizing: border-box;
     align-self: stretch;
+    flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .omp-daterange-panel__time-host {
+        transition: none;
+    }
 }
 
 .omp-daterange-panel__time-title {
@@ -563,13 +582,7 @@
     outline: none;
 }
 
-.omp-daterange-panel__time-hint {
-    margin: 0;
-    padding: 10px 8px;
-    color: var(--text-muted, #5b667a);
-    font-size: 12px;
-    line-height: 1.4;
-}
+
 
 /* Base look for the embedded fields, at zero specificity so a host input
    class handed in via data-field-class always wins. */
@@ -650,7 +663,12 @@
     .omp-daterange--minute .omp-daterange-panel__time-host {
         grid-column: 1 / -1;
         width: auto;
-        margin-top: 8px;
+        margin: 8px 0 0;
+        transition: none;
+    }
+
+    .omp-daterange--minute .omp-daterange-panel__time-host--collapsed {
+        display: none;
     }
 }
 

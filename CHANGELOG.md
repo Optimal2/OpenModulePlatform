@@ -110,12 +110,13 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   save and Continue editing. `data-precision="minute"` gives the two
   fields a time (yyyy-mm-dd hh:mm): quick picks and calendar clicks set
   whole days, the time is typed or, while a field is armed, clicked in
-  the hour and minute grid in a third column at the right (always there
-  with minute precision on a wide window, so the popup keeps one width;
-  it folds under the calendar on narrower ones); a click within the
-  armed field keeps it armed, and the column's Done button leaves the
-  armed mode without changing anything. The system log page uses it and
-  its row search now matches the time stamp too.
+  the hour and minute grid in a third column that folds out at the right
+  when a field is clicked and away again when none is armed (the popup is
+  placed with room for it from the start, so it never moves; on narrower
+  windows it folds under the calendar); a click within the armed field
+  keeps it armed, and the column's Done button leaves the armed mode
+  without changing anything. The system log page uses it and its row
+  search now matches the time stamp too.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today

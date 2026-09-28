@@ -344,18 +344,24 @@
         // move back when the page widens.
         popup.style.left = (popup._ompBaseLeft || 0) + "px";
         var rect = popup.getBoundingClientRect();
+        // A popup that may still grow to the right (the period popup's time
+        // column, folded until a field is clicked) is placed with that room
+        // counted in, so it does not move when the column opens.
+        var growth = typeof popup._ompGrowth === "function" ? popup._ompGrowth() : 0;
+        var width = rect.width + growth;
+        var right = rect.right + growth;
         var limit = document.documentElement.clientWidth - 8;
-        if (rect.right <= limit) { aimCaret(popup); return; }
+        if (right <= limit) { aimCaret(popup); return; }
         // First choice: hang from the field's right edge instead, so the
         // popup still visibly belongs to its field rather than to whatever
         // sits to the left of it. Otherwise shift just far enough.
         var host = popup.offsetParent || popup.parentElement;
         var hostRect = host ? host.getBoundingClientRect() : rect;
-        var endLeft = hostRect.width - rect.width;
+        var endLeft = hostRect.width - width;
         if (host && hostRect.right <= limit && hostRect.left + endLeft >= 8) {
             popup.style.left = endLeft + "px";
         } else {
-            var overflow = rect.right - limit;
+            var overflow = right - limit;
             popup.style.left = ((popup._ompBaseLeft || 0) - Math.min(overflow, Math.max(0, rect.left - 8))) + "px";
         }
         aimCaret(popup);
@@ -784,8 +790,9 @@
     // datetime mask, values yyyy-mm-ddThh:mm): quick picks and calendar
     // clicks set whole days, 00:00 to 23:59, and the time is typed or, while
     // a field is armed, clicked in the hour and minute grid in a third
-    // column at the right (the column is always there with minute
-    // precision, so the popup keeps one width and one place). The
+    // column that folds out at the right when a field is clicked and folds
+    // away again when none is armed (the popup is placed with room for it
+    // from the start, so it does not move when the column opens). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -1195,11 +1202,12 @@
             // field's popup shows under the calendar while a field is armed
             // and sets that field's time; a day click still sets its day.
             // With minute precision a third column at the right holds the
-            // hour and minute grid for the armed field, and a hint while no
-            // field is armed. The column is always there, so the popup keeps
-            // one width and its place does not have to allow for growth.
+            // hour and minute grid for the armed field. It is folded (no
+            // width) while no field is armed and folds out when one is; the
+            // popup is placed with that room counted in (see _ompGrowth).
             var timeHost = document.createElement("div");
-            timeHost.className = "omp-daterange-panel__time-host";
+            timeHost.className = "omp-daterange-panel__time-host omp-daterange-panel__time-host--collapsed";
+            var timeColumnWidth = 206 + 14;
             // A cell click re-renders the grid (through the field's change),
             // which would drop keyboard focus to body; the clicked cell is
             // remembered and focused again in the new grid.
@@ -1209,12 +1217,10 @@
                 if (!minutePrecision) { return; }
                 if (!armedInput) {
                     gridFocus = null;
-                    var hint = document.createElement("p");
-                    hint.className = "omp-daterange-panel__time-hint";
-                    hint.textContent = texts.timeHint;
-                    timeHost.appendChild(hint);
+                    timeHost.classList.add("omp-daterange-panel__time-host--collapsed");
                     return;
                 }
+                timeHost.classList.remove("omp-daterange-panel__time-host--collapsed");
                 var st = state(armedInput);
                 var parts = selectedParts(st);
                 var time = document.createElement("div");
@@ -1612,6 +1618,13 @@
             if (minutePrecision) {
                 rangePanel.appendChild(timeHost);
                 renderRangeTime();
+                // The room the folded column will take when it opens; none
+                // on a narrow window, where it folds under the calendar.
+                rangePanel._ompGrowth = function () {
+                    if (!timeHost.classList.contains("omp-daterange-panel__time-host--collapsed")) { return 0; }
+                    if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) { return 0; }
+                    return timeColumnWidth;
+                };
             }
 
             container.appendChild(rangePanel);
