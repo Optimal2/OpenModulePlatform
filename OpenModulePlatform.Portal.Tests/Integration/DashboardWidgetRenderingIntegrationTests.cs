@@ -169,7 +169,25 @@ public sealed class DashboardWidgetRenderingIntegrationTests
             new TempDataDictionary(httpContext, services.GetRequiredService<ITempDataProvider>()),
             writer,
             new HtmlHelperOptions());
-        await viewResult.View.RenderAsync(viewContext);
+        // The partial is rendered outside the request pipeline, so no request
+        // localization runs and the localizer follows the thread's culture:
+        // the machine's. The assertions read the English texts, so the render
+        // pins English (a Swedish workstation rendered "Kontroll av
+        // dashboardwidgetar" and failed every text assertion).
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        var uiCulture = System.Globalization.CultureInfo.CurrentUICulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+            System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+            await viewResult.View.RenderAsync(viewContext);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+            System.Globalization.CultureInfo.CurrentUICulture = uiCulture;
+        }
+
         return writer.ToString();
     }
 }
