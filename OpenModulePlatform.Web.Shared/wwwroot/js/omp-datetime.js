@@ -1194,10 +1194,15 @@
             timeHost.className = "omp-daterange-panel__time-host";
             timeHost.hidden = true;
             fields.appendChild(timeHost);
+            // A cell click re-renders the grid (through the field's change),
+            // which would drop keyboard focus to body; the clicked cell is
+            // remembered and focused again in the new grid.
+            var gridFocus = null;
             function renderRangeTime() {
                 timeHost.textContent = "";
                 if (!minutePrecision || !armedInput) {
                     timeHost.hidden = true;
+                    gridFocus = null;
                     return;
                 }
                 var st = state(armedInput);
@@ -1217,7 +1222,8 @@
                         button.className = "omp-datetime-panel__cell";
                         button.textContent = pad(value);
                         if (parts.hour === value) { button.classList.add("omp-datetime-panel__cell--selected"); }
-                        button.addEventListener("click", function () { setTimePart(st, value, parts.minute === null ? 0 : null); });
+                        button.addEventListener("click", function () { gridFocus = { kind: "hour", value: value }; setTimePart(st, value, parts.minute === null ? 0 : null); });
+                        if (gridFocus && gridFocus.kind === "hour" && gridFocus.value === value) { button.setAttribute("data-grid-focus", ""); }
                         hours.appendChild(button);
                     })(hour);
                 }
@@ -1236,12 +1242,17 @@
                     button.className = "omp-datetime-panel__cell";
                     button.textContent = ":" + pad(value);
                     if (parts.minute === value) { button.classList.add("omp-datetime-panel__cell--selected"); }
-                    button.addEventListener("click", function () { setTimePart(st, parts.hour === null ? 0 : null, value); });
+                    button.addEventListener("click", function () { gridFocus = { kind: "minute", value: value }; setTimePart(st, parts.hour === null ? 0 : null, value); });
+                    if (gridFocus && gridFocus.kind === "minute" && gridFocus.value === value) { button.setAttribute("data-grid-focus", ""); }
                     minutes.appendChild(button);
                 });
                 time.appendChild(minutes);
                 timeHost.appendChild(time);
                 timeHost.hidden = false;
+                var refocus = timeHost.querySelector("[data-grid-focus]");
+                if (refocus && (document.activeElement === document.body || !document.activeElement || !document.activeElement.isConnected)) {
+                    refocus.focus({ preventScroll: true });
+                }
             }
 
             var initialIso = seedFrom || seedTo;

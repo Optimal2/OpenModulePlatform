@@ -517,11 +517,17 @@
     width: 196px;
 }
 
-/* The hour and minute grid under the calendar while a field is armed. */
+/* The hour and minute grid under the calendar while a field is armed;
+   hidden, it takes no room (the display rule would otherwise beat the
+   hidden attribute). */
 .omp-daterange-panel__time-host {
     display: flex;
     justify-content: center;
     margin-top: 8px;
+}
+
+.omp-daterange-panel__time-host[hidden] {
+    display: none;
 }
 
 /* Base look for the embedded fields, at zero specificity so a host input
