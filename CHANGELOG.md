@@ -112,8 +112,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   whole days, the time is typed or, while a field is armed, clicked in
   the hour and minute grid in a third column that folds out at the right
   when a field is clicked and away again when none is armed (the popup is
-  placed with room for it from the start, so it never moves; on narrower
-  windows it folds under the calendar); a click within the armed field
+  placed with room for it from the start, so it never moves, and the
+  column stands exactly as tall as the calendar; on narrower windows it
+  folds under the calendar); a click within the armed field
   keeps it armed, and the column's Done button leaves the armed mode
   without changing anything. The system log page uses it and its row
   search now matches the time stamp too.

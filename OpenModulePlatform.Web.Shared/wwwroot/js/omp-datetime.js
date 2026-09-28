@@ -1279,6 +1279,10 @@
                     if (gridFocus && gridFocus.kind === "minute" && gridFocus.value === value) { button.setAttribute("data-grid-focus", ""); }
                     minutes.appendChild(button);
                 });
+                // The block's share of the column's height is its row count
+                // (six cells to a row), so its cells come out as tall as the
+                // hours' whatever the number of cells.
+                minutes.style.flexGrow = String(Math.ceil(minuteValues.length / 6));
                 time.appendChild(minutes);
                 timeHost.appendChild(time);
                 var refocus = timeHost.querySelector("[data-grid-focus]");
