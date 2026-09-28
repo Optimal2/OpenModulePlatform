@@ -99,7 +99,13 @@ public sealed class ModuleFragmentTlsTests
     {
         var services = new ServiceCollection();
         services.AddMemoryCache();
-        services.AddOptions<ModuleFragmentWidgetOptions>().Configure(options => options.CacheSeconds = 0);
+        services.AddOptions<ModuleFragmentWidgetOptions>().Configure(options =>
+        {
+            options.CacheSeconds = 0;
+            // Exercise certificate validation even under parallel suite load.
+            // The production request budget is not the behavior under test here.
+            options.TimeoutMilliseconds = 10000;
+        });
         services.AddOptions<OmpAuthOptions>();
         services.AddOptions<WebAppOptions>().Configure(options => options.PortalTopBar.PortalBaseUrl = portalBaseUrl);
         services.AddSingleton<IHttpClientFactory>(new ClientFactory(handler));

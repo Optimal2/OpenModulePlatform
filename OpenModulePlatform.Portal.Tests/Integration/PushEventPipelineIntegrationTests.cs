@@ -252,7 +252,13 @@ public sealed class PushEventPipelineIntegrationTests
             {
                 if (waitForDelivery && !pushEvents.IsEmpty)
                 {
-                    break;
+                    // SignalR delivery can precede the dispatcher's outbox update.
+                    // Wait for both observations; SQL is not a delivery fallback.
+                    var statuses = await _fixture.GetOutboxStatusesAsync();
+                    if (statuses.Count > 0 && statuses.All(row => row.Status == "dispatched"))
+                    {
+                        break;
+                    }
                 }
 
                 await Task.Delay(100);
