@@ -109,8 +109,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   unsaved question reads "You have unsaved changes." with Save, Don't
   save and Continue editing. `data-precision="minute"` gives the two
   fields a time (yyyy-mm-dd hh:mm): quick picks and calendar clicks set
-  whole days, the time is typed; the system log page uses it and its row
-  search now matches the time stamp too.
+  whole days, the time is typed or, while a field is armed, clicked in
+  the hour and minute grid that shows under the calendar; the system log
+  page uses it and its row search now matches the time stamp too.
 
 - **The period popup: quick picks on the left, everything else through
   Confirm.** The rail has a heading ("Quick picks") and ends with a Today

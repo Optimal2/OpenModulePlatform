@@ -780,7 +780,9 @@
     // data-cancel-text name the two buttons (Apply/Cancel by default).
     // data-precision="minute" gives the two fields a time as well (the
     // datetime mask, values yyyy-mm-ddThh:mm): quick picks and calendar
-    // clicks set whole days, 00:00 to 23:59, and the time is typed. The
+    // clicks set whole days, 00:00 to 23:59, and the time is typed or, while
+    // a field is armed, clicked in the hour and minute grid that then shows
+    // under the calendar. The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -996,6 +998,7 @@
                     cal.hoverIso = null;
                     renderRangeCalendar();
                 }
+                renderRangeTime();
             }
             function disarm() { if (armedInput) { arm(null); } }
             // What the fields held when the popup opened (set once the
@@ -1105,6 +1108,7 @@
                 row.appendChild(caption);
                 var input = document.createElement("input");
                 input.id = "omp-daterange-field-" + (++rangeSerial);
+                input._ompRowLabel = labelText;
                 caption.htmlFor = input.id;
                 input.setAttribute("data-omp-datetime", minutePrecision ? "datetime" : "date");
                 // The shared range calendar below serves both fields; the
@@ -1183,6 +1187,62 @@
             var calHost = document.createElement("div");
             calHost.className = "omp-datetime-panel__calendar";
             fields.appendChild(calHost);
+            // With minute precision, the hour and minute grid of the single
+            // field's popup shows under the calendar while a field is armed
+            // and sets that field's time; a day click still sets its day.
+            var timeHost = document.createElement("div");
+            timeHost.className = "omp-daterange-panel__time-host";
+            timeHost.hidden = true;
+            fields.appendChild(timeHost);
+            function renderRangeTime() {
+                timeHost.textContent = "";
+                if (!minutePrecision || !armedInput) {
+                    timeHost.hidden = true;
+                    return;
+                }
+                var st = state(armedInput);
+                var parts = selectedParts(st);
+                var time = document.createElement("div");
+                time.className = "omp-datetime-panel__time";
+                var timeTitle = document.createElement("div");
+                timeTitle.className = "omp-datetime-panel__time-title";
+                timeTitle.textContent = texts.time + " · " + (armedInput._ompRowLabel || "");
+                time.appendChild(timeTitle);
+                var hours = document.createElement("div");
+                hours.className = "omp-datetime-panel__hours";
+                for (var hour = 0; hour < 24; hour++) {
+                    (function (value) {
+                        var button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "omp-datetime-panel__cell";
+                        button.textContent = pad(value);
+                        if (parts.hour === value) { button.classList.add("omp-datetime-panel__cell--selected"); }
+                        button.addEventListener("click", function () { setTimePart(st, value, parts.minute === null ? 0 : null); });
+                        hours.appendChild(button);
+                    })(hour);
+                }
+                time.appendChild(hours);
+                var minutes = document.createElement("div");
+                minutes.className = "omp-datetime-panel__minutes";
+                var minuteValues = [];
+                for (var m = 0; m < 60; m += 5) { minuteValues.push(m); }
+                if (parts.minute !== null && minuteValues.indexOf(parts.minute) < 0) {
+                    minuteValues.push(parts.minute);
+                    minuteValues.sort(function (a, b) { return a - b; });
+                }
+                minuteValues.forEach(function (value) {
+                    var button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "omp-datetime-panel__cell";
+                    button.textContent = ":" + pad(value);
+                    if (parts.minute === value) { button.classList.add("omp-datetime-panel__cell--selected"); }
+                    button.addEventListener("click", function () { setTimePart(st, parts.hour === null ? 0 : null, value); });
+                    minutes.appendChild(button);
+                });
+                time.appendChild(minutes);
+                timeHost.appendChild(time);
+                timeHost.hidden = false;
+            }
 
             var initialIso = seedFrom || seedTo;
             var initial = /^\d{4}-\d{2}-\d{2}/.test(initialIso || "")
@@ -1366,6 +1426,7 @@
                 cal.pendingStart = null;
                 cal.hoverIso = null;
                 renderRangeCalendar();
+                renderRangeTime();
                 edited();
             });
             calHost.addEventListener("click", function (event) {

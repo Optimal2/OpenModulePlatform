@@ -517,6 +517,13 @@
     width: 196px;
 }
 
+/* The hour and minute grid under the calendar while a field is armed. */
+.omp-daterange-panel__time-host {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+}
+
 /* Base look for the embedded fields, at zero specificity so a host input
    class handed in via data-field-class always wins. */
 :where(.omp-daterange-panel__row) :where(.omp-datetime__input) {
