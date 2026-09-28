@@ -539,25 +539,51 @@
     grid-column: 1;
 }
 
+/* The column is set off from the fields the way the rail is: the same
+   line, at the same distance (a 14px gap, the line, 14px of padding).
+   It spans all three rows so the line runs the column's full height,
+   like the rail's, and hands the rows on to the grid it holds (a
+   subgrid), so the time grid still sits in the calendar's row alone.
+   The width is the border box: padding, line and the 206px grid; all
+   of it folds with the column. */
 .omp-daterange-panel__time-host {
-    width: 206px;
+    box-sizing: border-box;
+    width: 221px;
     margin-left: 14px;
-    display: flex;
-    flex-direction: column;
+    padding-left: 14px;
+    border-left: 1px solid var(--border, #d7deea);
+    display: grid;
+    grid-template-rows: subgrid;
     align-items: stretch;
     overflow: hidden;
-    transition: width 160ms ease, margin-left 160ms ease, opacity 160ms ease;
+    transition: width 160ms ease, margin-left 160ms ease, padding-left 160ms ease, border-left-width 160ms ease, opacity 160ms ease;
 }
 
 /* Placed after the rule for the column's children, which it is one of. */
 .omp-daterange--minute .omp-daterange-panel__time-host {
     grid-column: 2;
+    grid-row: 1 / -1;
+}
+
+.omp-daterange-panel__time-host .omp-datetime-panel__time {
     grid-row: 2;
+}
+
+/* Without subgrid the column takes the calendar's row alone (the line
+   is then as tall as the calendar). */
+@supports not (grid-template-rows: subgrid) {
+    .omp-daterange--minute .omp-daterange-panel__time-host {
+        grid-row: 2;
+        display: flex;
+        flex-direction: column;
+    }
 }
 
 .omp-daterange-panel__time-host--collapsed {
     width: 0;
     margin-left: 0;
+    padding-left: 0;
+    border-left-width: 0;
     opacity: 0;
     pointer-events: none;
 }
@@ -701,8 +727,9 @@
     cursor: default;
 }
 
-/* Between a phone and a wide window the three columns do not fit: the time
-   column then takes a row of its own under the rail and the calendar. */
+/* Between a phone and a wide window the columns do not fit: the time grid
+   then takes a row of its own under the footer, set off by a line above
+   it instead of at its left. */
 @media (max-width: 900px) {
     .omp-daterange--minute .omp-daterange-panel__fields {
         grid-template-columns: max-content;
@@ -711,8 +738,13 @@
     .omp-daterange--minute .omp-daterange-panel__time-host {
         grid-column: 1;
         grid-row: 4;
+        display: flex;
+        flex-direction: column;
         width: auto;
         margin: 0;
+        padding: 8px 0 0;
+        border-left: 0;
+        border-top: 1px solid var(--border, #d7deea);
         transition: none;
     }
 

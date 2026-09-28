@@ -1209,7 +1209,9 @@
             // that room counted in (see _ompGrowth).
             var timeHost = document.createElement("div");
             timeHost.className = "omp-daterange-panel__time-host omp-daterange-panel__time-host--collapsed";
-            var timeColumnWidth = 206 + 14;
+            // The column's full room: its 14px gap, then its border box (the
+            // 14px of padding, the 1px line and the 206px grid), as in the CSS.
+            var timeColumnWidth = 14 + 14 + 1 + 206;
             // A cell click re-renders the grid (through the field's change),
             // which would drop keyboard focus to body; the clicked cell is
             // remembered and focused again in the new grid.
