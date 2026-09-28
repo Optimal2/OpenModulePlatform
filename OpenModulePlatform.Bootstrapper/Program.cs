@@ -1113,7 +1113,9 @@ ORDER BY AppliedUtc DESC, UpdatedUtc DESC, ModuleDefinitionDocumentId DESC;";
         return entries;
     }
 
-    private static int CompareVersionText(string left, string right)
+    // Internal for PackageLibraryDefinitionGate, which needs the exact version
+    // semantics the sync and status views use.
+    internal static int CompareVersionText(string left, string right)
     {
         if (Version.TryParse(left, out var leftVersion) && Version.TryParse(right, out var rightVersion))
         {

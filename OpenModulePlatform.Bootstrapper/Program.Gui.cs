@@ -1965,6 +1965,55 @@ internal static partial class Program
                 return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
             }
 
+            // ---- Pre-build gate: package library definitions vs configured source repositories ----
+            // The sync step updates library definitions from the sources, but the
+            // package build is where an outdated definition becomes shipping
+            // content (--skip-refresh, or a library file the sync loop cannot
+            // reach, such as one left behind by a renamed definition file). A
+            // package that would carry a definition older than its source is
+            // refused here rather than staged.
+            PackageLibraryDefinitionGateReport? libraryGate;
+            try
+            {
+                var gateSourceRoots = ResolveDeveloperSourceRoots(throwIfMissing: false);
+                if (gateSourceRoots.Count == 0)
+                {
+                    // No source roots locally (operator machine without clones):
+                    // the same rule that keeps orphans non-blocking applies here.
+                    libraryGate = null;
+                }
+                else
+                {
+                    var gateManifests = await ReadDeveloperManifestsAsync(gateSourceRoots);
+                    var gateDefinitions = gateManifests
+                        .SelectMany(manifest => ReadManifestModuleDefinitions(manifest.Json, manifest.SourceRoot, manifest.RepositoryKey))
+                        .ToArray();
+                    libraryGate = await EvaluatePackageLibraryDefinitionsAsync(gateDefinitions);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or JsonException or SystemException)
+            {
+                // Absence of a measurement must never read as a passing measurement.
+                Report($"> Refusing to build: the package-library definition gate could not read the configured sources ({ex.Message}).");
+                return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
+            }
+
+            if (libraryGate is not null)
+            {
+                foreach (var line in libraryGate.Describe())
+                {
+                    Report("> " + line.TrimStart());
+                }
+
+                if (libraryGate.StaleCount > 0 || libraryGate.UnreadableCount > 0)
+                {
+                    Report(
+                        "> Refusing to build the universal package: module definition file(s) in the package library are older "
+                        + "than their source repositories or unreadable. The package would ship outdated or unverified definitions.");
+                    return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
+                }
+            }
+
             var version = DateTime.Now.ToString("yyyyMMdd-HHmm");
             var exportsRoot = Path.Join(_payloadRoot, "exports");
             Directory.CreateDirectory(exportsRoot);
@@ -3225,6 +3274,25 @@ internal static partial class Program
                     lines.Add($"  OK      {definition.ModuleKey}: package file already matches source.");
                     unchanged++;
                 }
+            }
+
+            // Reverse direction of the loop above: it iterates SOURCE definitions,
+            // so a library file whose owning repository is not part of
+            // developerSource.sourceRoot is never visited - it keeps shipping in
+            // every universal package at whatever version it happens to carry.
+            // Stale and unreadable library files count as warnings and stop the
+            // refresh; orphans are listed every run but stay non-blocking, because
+            // a source root whose repository is not cloned locally is dropped
+            // silently and must not brick the sync on machines with fewer clones.
+            var libraryReport = await EvaluatePackageLibraryDefinitionsAsync(sourceDefinitions);
+            foreach (var line in libraryReport.Describe())
+            {
+                lines.Add(line);
+            }
+
+            if (libraryReport.BlockingCount > 0)
+            {
+                warnings += libraryReport.BlockingCount;
             }
 
             lines.Add(string.Empty);
@@ -5485,6 +5553,51 @@ ORDER BY ar.ArtifactId DESC;
         {
             var fileName = Path.GetFileName(definition.Path);
             return Path.Join(ResolvePackageModuleDefinitionsRoot(_payloadRoot), fileName);
+        }
+
+        /// <summary>
+        /// Reads every module definition file in the package library and evaluates
+        /// it against the configured source repositories through
+        /// <see cref="PackageLibraryDefinitionGate"/>.
+        /// </summary>
+        private async Task<PackageLibraryDefinitionGateReport> EvaluatePackageLibraryDefinitionsAsync(
+            IReadOnlyList<ManifestModuleDefinition> sourceDefinitions)
+        {
+            var libraryRoot = ResolvePackageModuleDefinitionsRoot(_payloadRoot);
+            var libraryDefinitions = new List<PackageLibraryDefinition>();
+            if (Directory.Exists(libraryRoot))
+            {
+                foreach (var path in Directory
+                             .EnumerateFiles(libraryRoot, "*.json", SearchOption.TopDirectoryOnly)
+                             .Order(StringComparer.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        var identity = await ReadModuleDefinitionIdentityAsync(path);
+                        libraryDefinitions.Add(new PackageLibraryDefinition(
+                            Path.GetFileName(path),
+                            identity.ModuleKey,
+                            identity.DefinitionVersion));
+                    }
+                    catch (Exception ex) when (ex is JsonException or InvalidOperationException or IOException)
+                    {
+                        libraryDefinitions.Add(new PackageLibraryDefinition(
+                            Path.GetFileName(path),
+                            ModuleKey: null,
+                            DefinitionVersion: null,
+                            ReadError: ex.Message));
+                    }
+                }
+            }
+
+            var sources = sourceDefinitions
+                .Select(definition => new PackageLibrarySourceDefinition(
+                    definition.ModuleKey,
+                    definition.DefinitionVersion,
+                    definition.RepositoryKey))
+                .ToArray();
+            var findings = PackageLibraryDefinitionGate.Evaluate(libraryDefinitions, sources);
+            return new PackageLibraryDefinitionGateReport(libraryDefinitions.Count, findings);
         }
 
         private string? FindAvailableArtifactPackage(ManifestComponent component)
