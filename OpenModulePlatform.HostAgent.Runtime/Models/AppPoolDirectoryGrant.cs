@@ -5,10 +5,12 @@ namespace OpenModulePlatform.HostAgent.Runtime.Models;
 /// deployment. <see cref="AccountNames" /> are tried in order and the first one icacls accepts
 /// receives <see cref="Permission" /> with object and container inheritance. A
 /// <see cref="Required" /> grant fails the deployment; any other grant only logs a warning.
+/// <see cref="RootPath" /> is the inclusive deployment-root boundary for path checks.
 /// </summary>
 internal sealed record AppPoolDirectoryGrant(
     string Path,
     string AppPoolName,
     IReadOnlyList<string> AccountNames,
     string Permission,
-    bool Required);
+    bool Required,
+    string RootPath);

@@ -21,7 +21,8 @@ public sealed class WebAppDirectoryGrantPlanTests
             AppPoolIdentity,
             target,
             "OMP_Example",
-            AppPoolIdentity);
+            AppPoolIdentity,
+            Path.Join("C:", "omp", "webapps"));
 
         Assert.Collection(
             grants,
@@ -31,6 +32,7 @@ public sealed class WebAppDirectoryGrantPlanTests
                 Assert.Equal([@"IIS AppPool\OpenModulePlatform"], root.AccountNames);
                 Assert.Equal("M", root.Permission);
                 Assert.True(root.Required);
+                Assert.Equal(Path.GetFullPath(siteRoot), root.RootPath);
             },
             logs =>
             {
@@ -39,6 +41,7 @@ public sealed class WebAppDirectoryGrantPlanTests
                 Assert.Equal([@"IIS AppPool\OMP_Example"], logs.AccountNames);
                 Assert.Equal("M", logs.Permission);
                 Assert.False(logs.Required);
+                Assert.Equal(Path.GetFullPath(Path.Join("C:", "omp", "webapps")), logs.RootPath);
             });
         Assert.DoesNotContain(grants, grant => string.Equals(grant.Path, target, StringComparison.OrdinalIgnoreCase));
     }
@@ -51,7 +54,8 @@ public sealed class WebAppDirectoryGrantPlanTests
         var grants = WebAppDeploymentService.PlanRootApplicationDirectoryGrants(
             target,
             "OpenModulePlatform",
-            AppPoolIdentity);
+            AppPoolIdentity,
+            Path.Join("C:", "omp", "webapps"));
 
         Assert.Collection(
             grants,
@@ -59,6 +63,7 @@ public sealed class WebAppDirectoryGrantPlanTests
             {
                 Assert.Equal(target, root.Path);
                 Assert.True(root.Required);
+                Assert.Equal(Path.GetFullPath(target), root.RootPath);
             },
             logs =>
             {
@@ -66,7 +71,26 @@ public sealed class WebAppDirectoryGrantPlanTests
                 Assert.Equal([@"IIS AppPool\OpenModulePlatform"], logs.AccountNames);
                 Assert.Equal("M", logs.Permission);
                 Assert.False(logs.Required);
+                Assert.Equal(Path.GetFullPath(target), logs.RootPath);
             });
+    }
+
+    [Theory]
+    [InlineData("webapps", "webapps/example", "webapps")]
+    [InlineData("webapps/", "webapps/example", "webapps")]
+    [InlineData("webapps", "webapps", "webapps")]
+    [InlineData("webapps", "webapps-other/example", "webapps-other/example")]
+    [InlineData("webapps", "portal", "portal")]
+    [InlineData("", "portal", "portal")]
+    public void RootApplication_SelectsConfiguredBoundaryOrExplicitApplicationRoot(
+        string configuredRoot, string applicationPath, string expectedRoot)
+    {
+        var basePath = Path.GetFullPath(Path.GetTempPath());
+        var grants = WebAppDeploymentService.PlanRootApplicationDirectoryGrants(
+            Path.Join(basePath, applicationPath), "OMP_Example", AppPoolIdentity,
+            configuredRoot.Length == 0 ? string.Empty : Path.Join(basePath, configuredRoot));
+
+        Assert.All(grants, grant => Assert.Equal(Path.GetFullPath(Path.Join(basePath, expectedRoot)), grant.RootPath));
     }
 
     [Theory]
@@ -80,7 +104,8 @@ public sealed class WebAppDirectoryGrantPlanTests
             AppPoolIdentity,
             Path.Join("C:", "omp", "webapps", "example"),
             "OMP_Example",
-            new HostAgentIisAppPoolIdentitySettings { UserName = userName });
+            new HostAgentIisAppPoolIdentitySettings { UserName = userName },
+            Path.Join("C:", "omp", "webapps"));
 
         Assert.Equal(
             [@"CONTOSO\svc-example", @"IIS AppPool\OMP_Example"],
@@ -93,7 +118,8 @@ public sealed class WebAppDirectoryGrantPlanTests
         var grants = WebAppDeploymentService.PlanChildApplicationDirectoryGrants(
             Path.Join("C:", "omp", "portal"), "OpenModulePlatform", AppPoolIdentity,
             Path.Join("C:", "omp", "webapps", "example"), "OMP_Example",
-            new HostAgentIisAppPoolIdentitySettings { UserName = " svc-example@contoso.example " });
+            new HostAgentIisAppPoolIdentitySettings { UserName = " svc-example@contoso.example " },
+            Path.Join("C:", "omp", "webapps"));
 
         Assert.Equal(
             [@"CONTOSO\svc-example", "svc-example@contoso.example", @"IIS AppPool\OMP_Example"],
@@ -111,7 +137,7 @@ public sealed class WebAppDirectoryGrantPlanTests
             var calls = 0;
 
             WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(
-                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false),
+                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false, tempRoot.FullName),
                 logger,
                 (fileName, arguments) =>
                 {
@@ -147,7 +173,7 @@ public sealed class WebAppDirectoryGrantPlanTests
             var logger = new CapturingLogger();
             var calls = 0;
             WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(
-                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false),
+                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false, tempRoot.FullName),
                 logger,
                 (fileName, arguments) =>
                 {
@@ -195,7 +221,7 @@ public sealed class WebAppDirectoryGrantPlanTests
             var logger = new CapturingLogger();
             var calls = 0;
             WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(
-                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false),
+                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false, tempRoot.FullName),
                 logger,
                 (_, _) =>
                 {
@@ -237,7 +263,7 @@ public sealed class WebAppDirectoryGrantPlanTests
             var logger = new CapturingLogger();
 
             WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(
-                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false),
+                new AppPoolDirectoryGrant(logsPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: false, tempRoot),
                 logger);
 
             var entry = Assert.Single(logger.Entries);
@@ -271,7 +297,6 @@ public sealed class WebAppDirectoryGrantPlanTests
         var redirectedPath = linkWebAppsRoot
             ? Path.Join(targetPath, "example", required ? "content" : "logs")
             : Path.Join(targetPath, required ? "content" : "logs");
-        var linkCreated = false;
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(linkPath)!);
@@ -281,28 +306,9 @@ public sealed class WebAppDirectoryGrantPlanTests
                 Directory.CreateDirectory(redirectedPath);
             }
 
-            var startInfo = new ProcessStartInfo("cmd.exe")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            foreach (var argument in new[] { "/c", "mklink", "/J", linkPath, targetPath })
-            {
-                startInfo.ArgumentList.Add(argument);
-            }
-
-            using (var process = Process.Start(startInfo)!)
-            {
-                Assert.True(process.WaitForExit(10_000), "Junction creation timed out.");
-                linkCreated = Directory.Exists(linkPath);
-                Assert.Equal(0, process.ExitCode);
-            }
-
-            Assert.True(File.GetAttributes(linkPath).HasFlag(FileAttributes.ReparsePoint));
+            CreateJunction(linkPath, targetPath);
             var grant = new AppPoolDirectoryGrant(
-                grantPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: required);
+                grantPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: required, webAppsRoot);
             var logger = new CapturingLogger();
             var calls = 0;
             HostAgentProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
@@ -336,12 +342,153 @@ public sealed class WebAppDirectoryGrantPlanTests
         }
         finally
         {
-            if (linkCreated)
+            if (Directory.Exists(linkPath))
             {
                 Directory.Delete(linkPath);
             }
 
             tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DirectoryGrants_AllowJunctionAboveConfiguredRoot(bool directoryExists)
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "NTFS junctions require Windows.");
+        var tempRoot = Directory.CreateTempSubdirectory("omp-grant-ancestor-");
+        var linkPath = Path.Join(tempRoot.FullName, "linked-parent");
+        var targetPath = Path.Join(tempRoot.FullName, "target");
+        try
+        {
+            Directory.CreateDirectory(targetPath);
+            CreateJunction(linkPath, targetPath);
+            var webAppsRoot = Path.Join(linkPath, "webapps");
+            Directory.CreateDirectory(webAppsRoot);
+            var applicationPath = Path.Join(webAppsRoot, "example");
+            if (directoryExists)
+            {
+                Directory.CreateDirectory(Path.Join(applicationPath, "logs"));
+            }
+
+            var grants = WebAppDeploymentService.PlanRootApplicationDirectoryGrants(
+                applicationPath, "OMP_Example", AppPoolIdentity, webAppsRoot);
+            var logger = new CapturingLogger();
+            var calls = new List<string>();
+            HostAgentProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
+            {
+                Assert.Equal("icacls.exe", fileName);
+                Assert.True(Directory.Exists(arguments[0]));
+                Assert.Equal([arguments[0], "/grant", @"IIS AppPool\OMP_Example:(OI)(CI)(M)", "/L"], arguments);
+                calls.Add(arguments[0]);
+                return new HostAgentProcessResult(0, string.Empty, string.Empty);
+            }
+
+            WebAppDeploymentService.EnsureRequiredAppPoolDirectoryGrant(grants[0], logger, RunProcess);
+            WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(grants[1], logger, RunProcess);
+
+            Assert.Equal([applicationPath, Path.Join(applicationPath, "logs")], calls);
+            Assert.Equal(2, logger.Entries.Count);
+            Assert.All(logger.Entries, entry => Assert.Equal(LogLevel.Debug, entry.Level));
+            Assert.True(Directory.Exists(Path.Join(targetPath, "webapps", "example", "logs")));
+        }
+        finally
+        {
+            if (Directory.Exists(linkPath))
+            {
+                Directory.Delete(linkPath);
+            }
+
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [SkippableTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DirectoryGrant_RejectsJunctionAtGrantDirectory(bool required)
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "NTFS junctions require Windows.");
+        var tempRoot = Directory.CreateTempSubdirectory("omp-grant-leaf-");
+        var webAppsRoot = Path.Join(tempRoot.FullName, "webapps");
+        var applicationPath = Path.Join(webAppsRoot, "example");
+        var linkPath = required ? applicationPath : Path.Join(applicationPath, "logs");
+        var targetPath = Path.Join(tempRoot.FullName, "target");
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(linkPath)!);
+            Directory.CreateDirectory(targetPath);
+            CreateJunction(linkPath, targetPath);
+            var grants = WebAppDeploymentService.PlanRootApplicationDirectoryGrants(
+                applicationPath, "OMP_Example", AppPoolIdentity, webAppsRoot);
+            var logger = new CapturingLogger();
+            var calls = 0;
+            HostAgentProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
+            {
+                calls++;
+                return new HostAgentProcessResult(0, string.Empty, string.Empty);
+            }
+
+            if (required)
+            {
+                var error = Assert.Throws<IOException>(() =>
+                    WebAppDeploymentService.EnsureRequiredAppPoolDirectoryGrant(grants[0], logger, RunProcess));
+                Assert.Contains("reparse point", error.Message);
+                Assert.Contains(linkPath, error.Message);
+            }
+            else
+            {
+                WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(grants[1], logger, RunProcess);
+                var entry = Assert.Single(logger.Entries);
+                Assert.Equal(LogLevel.Warning, entry.Level);
+                Assert.Contains("reparse point", entry.Message);
+                Assert.Contains(linkPath, entry.Message);
+            }
+
+            Assert.Equal(0, calls);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(targetPath));
+        }
+        finally
+        {
+            if (Directory.Exists(linkPath))
+            {
+                Directory.Delete(linkPath);
+            }
+
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    private static void CreateJunction(string linkPath, string targetPath)
+    {
+        var startInfo = new ProcessStartInfo("cmd.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var argument in new[] { "/c", "mklink", "/J", linkPath, targetPath })
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo)!;
+        try
+        {
+            Assert.True(process.WaitForExit(10_000), "Junction creation timed out.");
+            Assert.Equal(0, process.ExitCode);
+            Assert.True(File.GetAttributes(linkPath).HasFlag(FileAttributes.ReparsePoint));
+        }
+        finally
+        {
+            // Stop creation before the caller's finally removes the link, even on timeout.
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(10_000);
+            }
         }
     }
 

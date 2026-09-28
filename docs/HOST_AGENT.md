@@ -261,6 +261,20 @@ managed sites and applications. That makes anonymous requests execute as the app
 pool identity instead of the machine-level IUSR account, which keeps static
 apps and ASP.NET apps on the same filesystem permission model.
 
+App-pool directory grants check for reparse points from `HostAgent:WebAppsRoot`
+down to the application or its `logs` directory, including the configured root.
+For a Portal or explicit absolute installation outside that tree, the application
+directory itself is the boundary. Ancestors above the boundary are managed by
+the administrator and may be junctions or mounted volumes. A reparse point
+inside the checked path stops a required Portal grant with an error; an optional
+log-directory grant emits a Warning, skips the grant, and lets deployment continue.
+
+These checks run before directory creation and again before `icacls`, but are
+not atomic with those operations. A local principal with directory write/rename
+rights can replace a path in that TOCTOU window. `icacls /L` limits traversal of
+a replaced leaf link; it does not prevent replacement of an ancestor directory.
+Deployment-directory ACLs must therefore restrict who can change those paths.
+
 ## Rolling upgrades in multi-host installations
 
 Cross-host deployment coordination is controlled by the global configuration

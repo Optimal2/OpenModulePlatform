@@ -842,7 +842,7 @@ public sealed class WebAppDeploymentService
                 appPoolName,
                 identity);
             ApplyAppPoolDirectoryGrants(
-                PlanRootApplicationDirectoryGrants(targetPath, appPoolName, identity),
+                PlanRootApplicationDirectoryGrants(targetPath, appPoolName, identity, settings.WebAppsRoot),
                 _logger);
             EnsureIisSite(settings, targetPath, appPoolName);
             return;
@@ -866,7 +866,8 @@ public sealed class WebAppDeploymentService
                 rootIdentity,
                 targetPath,
                 appPoolName,
-                childIdentity),
+                childIdentity,
+                settings.WebAppsRoot),
             _logger);
         EnsureIisSite(settings, siteRootPath, rootAppPoolName);
         EnsureIisChildApplication(settings, iisAppName, appPath, targetPath, appPoolName);
@@ -880,13 +881,15 @@ public sealed class WebAppDeploymentService
     internal static IReadOnlyList<AppPoolDirectoryGrant> PlanRootApplicationDirectoryGrants(
         string targetPath,
         string appPoolName,
-        HostAgentIisAppPoolIdentitySettings identity)
+        HostAgentIisAppPoolIdentitySettings identity,
+        string webAppsRoot)
     {
         var accountNames = ResolveAppPoolFilesystemAccountNames(appPoolName, identity).ToList();
+        var rootPath = ResolveDirectoryGrantRoot(targetPath, webAppsRoot);
         return
         [
-            new AppPoolDirectoryGrant(targetPath, appPoolName, accountNames, "M", Required: true),
-            new AppPoolDirectoryGrant(GetWebAppLogDirectory(targetPath), appPoolName, accountNames, "M", Required: false)
+            new AppPoolDirectoryGrant(targetPath, appPoolName, accountNames, "M", Required: true, rootPath),
+            new AppPoolDirectoryGrant(GetWebAppLogDirectory(targetPath), appPoolName, accountNames, "M", Required: false, rootPath)
         ];
     }
 
@@ -901,7 +904,8 @@ public sealed class WebAppDeploymentService
         HostAgentIisAppPoolIdentitySettings rootIdentity,
         string targetPath,
         string appPoolName,
-        HostAgentIisAppPoolIdentitySettings identity)
+        HostAgentIisAppPoolIdentitySettings identity,
+        string webAppsRoot)
     {
         return
         [
@@ -910,18 +914,40 @@ public sealed class WebAppDeploymentService
                 rootAppPoolName,
                 ResolveAppPoolFilesystemAccountNames(rootAppPoolName, rootIdentity).ToList(),
                 "M",
-                Required: true),
+                Required: true,
+                ResolveDirectoryGrantRoot(siteRootPath, webAppsRoot)),
             new AppPoolDirectoryGrant(
                 GetWebAppLogDirectory(targetPath),
                 appPoolName,
                 ResolveAppPoolFilesystemAccountNames(appPoolName, identity).ToList(),
                 "M",
-                Required: false)
+                Required: false,
+                ResolveDirectoryGrantRoot(targetPath, webAppsRoot))
         ];
     }
 
     private static string GetWebAppLogDirectory(string targetPath)
         => Path.Join(targetPath, "logs");
+
+    private static string ResolveDirectoryGrantRoot(string applicationPath, string webAppsRoot)
+    {
+        var applicationRoot = Path.GetFullPath(applicationPath);
+        if (!string.IsNullOrWhiteSpace(webAppsRoot))
+        {
+            var configuredRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(webAppsRoot.Trim()));
+            if (string.Equals(applicationRoot, configuredRoot, StringComparison.OrdinalIgnoreCase)
+                || applicationRoot.StartsWith(
+                    Path.EndsInDirectorySeparator(configuredRoot) ? configuredRoot : configuredRoot + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return configuredRoot;
+            }
+        }
+
+        // PortalPhysicalPath and absolute InstallPath may live outside WebAppsRoot.
+        // In that case the explicitly configured application directory is the boundary.
+        return applicationRoot;
+    }
 
     private static void EnsureIisSite(
         HostAgentSettings settings,
@@ -1071,14 +1097,14 @@ public sealed class WebAppDeploymentService
         ILogger logger,
         Func<string, IReadOnlyList<string>, HostAgentProcessResult>? runProcess = null)
     {
-        EnsureAppPoolDirectoryGrantPath(grant.Path, "Required web app directory grant");
+        EnsureAppPoolDirectoryGrantPath(grant, "Required web app directory grant");
         Directory.CreateDirectory(grant.Path);
         if (grant.AccountNames.Count == 0)
         {
             return;
         }
 
-        EnsureAppPoolDirectoryGrantPath(grant.Path, "Required web app directory grant");
+        EnsureAppPoolDirectoryGrantPath(grant, "Required web app directory grant");
         if (!TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out var error, runProcess))
         {
             throw new InvalidOperationException(
@@ -1105,9 +1131,9 @@ public sealed class WebAppDeploymentService
         var error = "No app pool identity could be resolved.";
         try
         {
-            EnsureAppPoolDirectoryGrantPath(grant.Path, "Web app log directory");
+            EnsureAppPoolDirectoryGrantPath(grant, "Web app log directory");
             Directory.CreateDirectory(grant.Path);
-            EnsureAppPoolDirectoryGrantPath(grant.Path, "Web app log directory");
+            EnsureAppPoolDirectoryGrantPath(grant, "Web app log directory");
             if (grant.AccountNames.Count > 0
                 && TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out error, runProcess))
             {
@@ -1132,11 +1158,11 @@ public sealed class WebAppDeploymentService
             error);
     }
 
-    private static void EnsureAppPoolDirectoryGrantPath(string path, string description)
+    private static void EnsureAppPoolDirectoryGrantPath(AppPoolDirectoryGrant grant, string description)
     {
-        // Include the application and webapps roots, not just the leaf. Grants have no
-        // trusted deployment-root boundary, so check every ancestor to the filesystem root.
-        OmpReparsePointGuard.EnsureNoReparsePointInPath(path, string.Empty, description);
+        // Check the owned tree, including its configured root. Ancestors above that
+        // boundary are administrator-owned and may legitimately be junctions or mounts.
+        OmpReparsePointGuard.EnsureNoReparsePointInPath(grant.Path, grant.RootPath, description);
     }
 
     private static bool TryGrantDirectoryAccess(
@@ -1150,7 +1176,10 @@ public sealed class WebAppDeploymentService
 
         // /L keeps icacls from granting access to a link's target. Success on a link
         // does not establish write access through it. Both required and optional grants
-        // reject reparse points anywhere in the directory path before reaching this method.
+        // reject reparse points from their configured root down before reaching this method.
+        // A local principal with directory write/rename rights can still swap a path after
+        // the check (TOCTOU). /L limits leaf-link traversal, not ancestor replacement;
+        // protect deployment directories with ACLs rather than treating this as an atomic check.
         runProcess ??= static (fileName, arguments) => HostAgentProcessRunner.Run(fileName, arguments);
         var grantResults = accountNames.Select(accountName => runProcess(
             "icacls.exe",
