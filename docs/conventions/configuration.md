@@ -484,6 +484,11 @@ Web.Shared, Fabrikam and Tailwind:
    by HostAgent at apply time (Fabrikam model). Installer-written
    `appsettings.Production.json` remains acceptable for Bootstrapper-managed
    services, but overlay-generated appsettings is the target for module apps.
+   Artifact configuration files may set `ConnectionStrings` values only as
+   such placeholders: `scripts/omp/build-repository-objects.ps1` refuses to
+   package a literal value, and HostAgent always writes the live
+   `ConnectionStrings:OmpDb` for web apps and service apps (a replaced
+   literal is logged as a warning, without the value).
 7. **Secrets:** none in committed files; installer/overlay injection,
    `enc:aesgcm:v1:` for bootstrap config, DPAPI for service-account secrets.
 

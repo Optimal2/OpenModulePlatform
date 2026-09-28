@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.HostAgent.Runtime.Models;
@@ -44,6 +45,42 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         Assert.Contains("auth-oidc", last.Result.DiagnosticWarningMessage, StringComparison.Ordinal);
         Assert.Contains("0.3.183", last.Result.DiagnosticWarningMessage, StringComparison.Ordinal);
         Assert.Contains(descriptor.Version, last.Result.DiagnosticWarningMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_ArtifactWithLiteralOmpDb_WritesLiveConnectionAndWarnsOncePerArtifact()
+    {
+        const string packagedConnectionString = "Data Source=localhost;Initial Catalog=OpenModulePlatform;Integrated Security=true;";
+        var logger = new CaptureLogger<WebAppDeploymentService>();
+        var (service, repository, _) = CreateServiceWithFakeRepository(logger: logger);
+        var descriptor = CreateWebAppDeploymentDescriptor(out _);
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 1,
+            ArtifactId = descriptor.ArtifactId,
+            RelativePath = "appsettings.json",
+            FileContent = $$"""
+            { "ConnectionStrings": { "OmpDb": {{JsonSerializer.Serialize(packagedConnectionString)}} } }
+            """
+        });
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var written = File.ReadAllText(Path.Join(descriptor.InstallPath!, "appsettings.json"));
+        using var document = JsonDocument.Parse(written);
+        Assert.Equal(
+            repository.GetConfiguredConnectionString(),
+            document.RootElement.GetProperty("ConnectionStrings").GetProperty("OmpDb").GetString());
+
+        var warnings = logger.Entries
+            .Where(entry => entry.Level == LogLevel.Warning && entry.Message.Contains("ConnectionStrings:OmpDb", StringComparison.Ordinal))
+            .ToList();
+        var warning = Assert.Single(warnings);
+        Assert.Contains(descriptor.ArtifactId.ToString(System.Globalization.CultureInfo.InvariantCulture), warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(packagedConnectionString, warning.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(repository.GetConfiguredConnectionString(), warning.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -346,7 +383,8 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     }
 
     private (WebAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, HostAgentSettings Settings) CreateServiceWithFakeRepository(
-        Func<HostAgentSettings, WebAppDeploymentDescriptor, string?, CancellationToken, Task>? health = null)
+        Func<HostAgentSettings, WebAppDeploymentDescriptor, string?, CancellationToken, Task>? health = null,
+        ILogger<WebAppDeploymentService>? logger = null)
     {
         var repository = new FakeOmpHostArtifactRepository();
         var settings = CreateTestSettings();
@@ -356,7 +394,7 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
             optionsMonitor,
             repository,
             credentialStore: null!,
-            NullLogger<WebAppDeploymentService>.Instance,
+            logger ?? NullLogger<WebAppDeploymentService>.Instance,
             health ?? ((_, _, _, _) => Task.CompletedTask));
 
         return (service, repository, settings);
@@ -430,5 +468,14 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
         var path = Path.Join(Path.GetTempPath(), $"OmpWebAppDeployTests-{Guid.NewGuid():N}");
         _tempPaths.Add(path);
         return path;
+    }
+
+    private sealed class CaptureLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, formatter(state, exception)));
     }
 }

@@ -21,6 +21,10 @@ public sealed class ServiceAppDeploymentService
     private static readonly TimeSpan StartAttemptResetWindow = TimeSpan.FromMinutes(30);
     private readonly ConcurrentDictionary<string, StartAttemptState> _consecutiveStartAttemptsByServiceName = new(StringComparer.OrdinalIgnoreCase);
 
+    // Artifacts already warned about for a replaced literal ConnectionStrings:OmpDb. The
+    // replacement runs every deployment cycle; the warning is meant once per artifact.
+    private readonly ConcurrentDictionary<int, byte> _replacedOmpConnectionStringArtifactIds = new();
+
     private sealed record StartAttemptState(int Count, DateTime LastAttemptUtc);
 
     public ServiceAppDeploymentService(
@@ -230,7 +234,17 @@ public sealed class ServiceAppDeploymentService
                 configurationFiles,
                 deployment,
                 configuredConnectionString,
-                settings);
+                settings,
+                out var replacedOmpConnectionString);
+            if (replacedOmpConnectionString
+                && _replacedOmpConnectionStringArtifactIds.TryAdd(deployment.ArtifactId, 0))
+            {
+                // Never log the value: it is a connection string and may carry credentials.
+                _logger.LogWarning(
+                    "Service app artifact configuration set ConnectionStrings:OmpDb to a value other than the live OMP connection; the live connection was written instead. Package the artifact with the Omp.Json.ConnectionStrings.OmpDb placeholder instead. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId);
+            }
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,
                 configuredConnectionString,

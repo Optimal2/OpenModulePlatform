@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Security.Cryptography.X509Certificates;
@@ -24,6 +25,10 @@ public sealed class WebAppDeploymentService
     private readonly HostAgentCredentialStoreService _credentialStore;
     private readonly ILogger<WebAppDeploymentService> _logger;
     private readonly Func<HostAgentSettings, WebAppDeploymentDescriptor, string?, CancellationToken, Task> _deploymentHealthCheck;
+
+    // Artifacts already warned about for a replaced literal ConnectionStrings:OmpDb. The
+    // replacement runs every deployment cycle; the warning is meant once per artifact.
+    private readonly ConcurrentDictionary<int, byte> _replacedOmpConnectionStringArtifactIds = new();
 
     public WebAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -183,7 +188,17 @@ public sealed class WebAppDeploymentService
                 configurationFiles,
                 deployment,
                 configuredConnectionString,
-                settings);
+                settings,
+                out var replacedOmpConnectionString);
+            if (replacedOmpConnectionString
+                && _replacedOmpConnectionStringArtifactIds.TryAdd(deployment.ArtifactId, 0))
+            {
+                // Never log the value: it is a connection string and may carry credentials.
+                _logger.LogWarning(
+                    "Web app artifact configuration set ConnectionStrings:OmpDb to a value other than the live OMP connection; the live connection was written instead. Package the artifact with the Omp.Json.ConnectionStrings.OmpDb placeholder instead.AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId);
+            }
             var configurationVariables = ArtifactConfigurationFileWriter.CreateVariables(
                 deployment,
                 configuredConnectionString,

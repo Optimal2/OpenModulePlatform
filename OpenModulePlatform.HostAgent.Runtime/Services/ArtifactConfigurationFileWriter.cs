@@ -19,7 +19,20 @@ internal static class ArtifactConfigurationFileWriter
         WebAppDeploymentDescriptor deployment,
         string ompConnectionString,
         HostAgentSettings settings)
+        => WithBuiltInWebAppConfiguration(files, deployment, ompConnectionString, settings, out _);
+
+    /// <param name="replacedArtifactOmpConnectionString">
+    /// True when the artifact configuration carried a <c>ConnectionStrings:OmpDb</c> value
+    /// other than the live connection or its placeholder, and that value was replaced.
+    /// </param>
+    public static IReadOnlyList<ArtifactConfigurationFileDescriptor> WithBuiltInWebAppConfiguration(
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
+        WebAppDeploymentDescriptor deployment,
+        string ompConnectionString,
+        HostAgentSettings settings,
+        out bool replacedArtifactOmpConnectionString)
     {
+        replacedArtifactOmpConnectionString = false;
         var builtInFile = CreateBuiltInWebAppConfigurationFile(deployment, ompConnectionString, settings);
         if (!HasAppSettingsJson(files))
         {
@@ -30,17 +43,38 @@ internal static class ArtifactConfigurationFileWriter
             ];
         }
 
-        return files
-            .Select(file => IsAppSettingsJson(file)
-                ? new ArtifactConfigurationFileDescriptor
+        // The artifact's appsettings.json wins the merge for everything except the OMP
+        // connection, which is host-owned. A literal OmpDb baked into an artifact is the
+        // database it was packaged against, so letting it win pointed the web app at the
+        // wrong database on every host whose database differs from the packaging one.
+        var replaced = false;
+        var result = files
+            .Select(file =>
+            {
+                if (!IsAppSettingsJson(file))
+                {
+                    return file;
+                }
+
+                var content = MergeJsonConfiguration(
+                    builtInFile.FileContent,
+                    file.FileContent,
+                    file.RelativePath,
+                    ompConnectionString,
+                    out var replacedInFile);
+                replaced |= replacedInFile;
+                return new ArtifactConfigurationFileDescriptor
                 {
                     ArtifactConfigurationFileId = file.ArtifactConfigurationFileId,
                     ArtifactId = file.ArtifactId,
                     RelativePath = file.RelativePath,
-                    FileContent = MergeJsonConfiguration(builtInFile.FileContent, file.FileContent, file.RelativePath)
-                }
-                : file)
+                    FileContent = content
+                };
+            })
             .ToArray();
+
+        replacedArtifactOmpConnectionString = replaced;
+        return result;
     }
 
     public static IReadOnlyList<ArtifactConfigurationFileDescriptor> WithBuiltInServiceAppConfiguration(
@@ -48,7 +82,20 @@ internal static class ArtifactConfigurationFileWriter
         ServiceAppDeploymentDescriptor deployment,
         string ompConnectionString,
         HostAgentSettings settings)
+        => WithBuiltInServiceAppConfiguration(files, deployment, ompConnectionString, settings, out _);
+
+    /// <param name="replacedArtifactOmpConnectionString">
+    /// True when a replacing service-app configuration carried a <c>ConnectionStrings:OmpDb</c>
+    /// value other than the live connection or its placeholder, and that value was replaced.
+    /// </param>
+    public static IReadOnlyList<ArtifactConfigurationFileDescriptor> WithBuiltInServiceAppConfiguration(
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> files,
+        ServiceAppDeploymentDescriptor deployment,
+        string ompConnectionString,
+        HostAgentSettings settings,
+        out bool replacedArtifactOmpConnectionString)
     {
+        replacedArtifactOmpConnectionString = false;
         if (HasAppSettingsJson(files))
         {
             // A service-app overlay replaces the built-in configuration (no merge,
@@ -77,17 +124,39 @@ internal static class ArtifactConfigurationFileWriter
                     .ToArray();
             }
 
-            return files
-                .Select(file => IsAppSettingsJson(file)
-                    ? new ArtifactConfigurationFileDescriptor
+            // The OMP connection is host-owned for the same reason. A literal OmpDb in a
+            // replacing configuration is replaced with the live connection instead of
+            // failing the deployment: the live value is the only correct one on this host
+            // (WorkerManager already forces it), whereas failing would block every upgrade
+            // of an already-shipped artifact until it is rebuilt. The caller logs a warning.
+            var replaced = false;
+            var result = files
+                .Select(file =>
+                {
+                    if (!IsAppSettingsJson(file))
+                    {
+                        return file;
+                    }
+
+                    var content = WithLiveWorkerAppInstanceId(
+                        file.FileContent,
+                        deployment.AppInstanceId,
+                        ompConnectionString,
+                        file.RelativePath,
+                        out var replacedInFile);
+                    replaced |= replacedInFile;
+                    return new ArtifactConfigurationFileDescriptor
                     {
                         ArtifactConfigurationFileId = file.ArtifactConfigurationFileId,
                         ArtifactId = file.ArtifactId,
                         RelativePath = file.RelativePath,
-                        FileContent = WithLiveWorkerAppInstanceId(file.FileContent, deployment.AppInstanceId, file.RelativePath)
-                    }
-                    : file)
+                        FileContent = content
+                    };
+                })
                 .ToArray();
+
+            replacedArtifactOmpConnectionString = replaced;
+            return result;
         }
 
         return
@@ -591,13 +660,16 @@ internal static class ArtifactConfigurationFileWriter
     private static string MergeJsonConfiguration(
         string baseContent,
         string overrideContent,
-        string relativePath)
+        string relativePath,
+        string ompConnectionString,
+        out bool replacedOmpConnectionString)
     {
         try
         {
             var baseObject = ParseJsonObject(baseContent, "built-in web app configuration");
             var overrideObject = ParseJsonObject(overrideContent, relativePath);
             var merged = MergeJsonObjects(baseObject, overrideObject);
+            replacedOmpConnectionString = ForceLiveOmpConnectionString(merged, ompConnectionString, ensurePresent: true);
 
             return merged.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         }
@@ -609,11 +681,20 @@ internal static class ArtifactConfigurationFileWriter
         }
     }
 
-    private static string WithLiveWorkerAppInstanceId(string content, Guid appInstanceId, string relativePath)
+    private static string WithLiveWorkerAppInstanceId(
+        string content,
+        Guid appInstanceId,
+        string ompConnectionString,
+        string relativePath,
+        out bool replacedOmpConnectionString)
     {
         try
         {
             var root = ParseJsonObject(content, relativePath);
+
+            // A service that does not use the OMP database need not declare it, so only an
+            // existing OmpDb entry is replaced; none is added.
+            replacedOmpConnectionString = ForceLiveOmpConnectionString(root, ompConnectionString, ensurePresent: false);
             if (root["Worker"] is not JsonObject worker)
             {
                 worker = new JsonObject();
@@ -675,6 +756,73 @@ internal static class ArtifactConfigurationFileWriter
                 $"WorkerManager configuration file '{relativePath}' must contain a valid JSON object.",
                 ex);
         }
+    }
+
+    /// <summary>
+    /// Sets every <c>ConnectionStrings:OmpDb</c> entry to the live OMP connection. Keys are
+    /// matched case-insensitively, as .NET configuration binds them, so a differently cased
+    /// duplicate cannot carry a stale value past the check. Returns true when an entry held
+    /// anything other than the live value or its placeholder; the value itself is never
+    /// returned, so a caller cannot log it.
+    /// </summary>
+    private static bool ForceLiveOmpConnectionString(JsonObject root, string ompConnectionString, bool ensurePresent)
+    {
+        var replacedForeignValue = false;
+        var present = false;
+
+        foreach (var section in root.Where(static item => IsConfigurationKey(item.Key, "ConnectionStrings")).ToArray())
+        {
+            if (section.Value is not JsonObject connectionStrings)
+            {
+                // A non-object ConnectionStrings would hide the live OmpDb entirely.
+                if (ensurePresent)
+                {
+                    replacedForeignValue |= section.Value is not null;
+                    root.Remove(section.Key);
+                }
+
+                continue;
+            }
+
+            foreach (var entry in connectionStrings.Where(static item => IsConfigurationKey(item.Key, "OmpDb")).ToArray())
+            {
+                present = true;
+                if (!IsLiveOmpConnectionStringValue(entry.Value, ompConnectionString))
+                {
+                    replacedForeignValue = true;
+                }
+
+                connectionStrings[entry.Key] = ompConnectionString;
+            }
+        }
+
+        if (ensurePresent && !present)
+        {
+            if (root["ConnectionStrings"] is not JsonObject connectionStrings)
+            {
+                connectionStrings = new JsonObject();
+                root["ConnectionStrings"] = connectionStrings;
+            }
+
+            connectionStrings["OmpDb"] = ompConnectionString;
+        }
+
+        return replacedForeignValue;
+    }
+
+    private static bool IsConfigurationKey(string key, string expected)
+        => string.Equals(key, expected, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsLiveOmpConnectionStringValue(JsonNode? value, string ompConnectionString)
+    {
+        if (value is not JsonValue jsonValue || !jsonValue.TryGetValue<string>(out var text))
+        {
+            return false;
+        }
+
+        return string.Equals(text, ompConnectionString, StringComparison.Ordinal)
+            || string.Equals(text, "{{Omp.Json.ConnectionStrings.OmpDb}}", StringComparison.Ordinal)
+            || string.Equals(text, "{{Omp.ConnectionStrings.OmpDb}}", StringComparison.Ordinal);
     }
 
     private static JsonObject ParseJsonObject(string content, string sourceName)

@@ -571,7 +571,8 @@ function Update-OpenDocViewerIndexHtmlIntegrity {
 function Copy-ExistingArtifactPackage {
     param(
         [Parameter(Mandatory = $true)][string]$SourcePath,
-        [Parameter(Mandatory = $true)][string]$DestinationPath
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $true)][string]$ComponentKey
     )
 
     # A reused artifact must satisfy the same runtime-configuration rule as a
@@ -581,7 +582,28 @@ function Copy-ExistingArtifactPackage {
     Assert-OmpArtifactPackageHasNoRuntimeConfiguration `
         -ZipPath $SourcePath `
         -Description ("Reused artifact package '{0}'" -f (Split-Path -Leaf $SourcePath))
+    Assert-OmpArtifactPackageConfigurationHasNoLiteralConnectionStrings `
+        -ZipPath $SourcePath `
+        -ComponentKey $ComponentKey
     Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+}
+
+function Assert-ConfigurationMappingsHaveNoLiteralConnectionStrings {
+    param(
+        [Parameter(Mandatory = $true)][string]$ComponentKey,
+        [string[]]$Mappings = @()
+    )
+
+    foreach ($mapping in $Mappings) {
+        $equalsIndex = $mapping.IndexOf('=')
+        $relativePath = $mapping.Substring(0, $equalsIndex)
+        $sourcePath = $mapping.Substring($equalsIndex + 1)
+        Assert-OmpConfigurationFileHasNoLiteralConnectionStrings `
+            -ComponentKey $ComponentKey `
+            -RelativePath $relativePath `
+            -Content ([System.IO.File]::ReadAllText($sourcePath)) `
+            -Source $sourcePath
+    }
 }
 
 function Copy-PortableObjectFiles {
@@ -836,6 +858,29 @@ if ([string]::IsNullOrWhiteSpace($repositoryKey)) {
 
 $pathMapRoot = '/_/' + (Get-SafePathMapSegment -Value $repositoryKey)
 
+# Resolve and verify every selected component's configuration files before
+# anything is published, so a literal connection string fails the build in
+# seconds instead of after a full publish.
+$componentConfigurationFiles = @{}
+foreach ($component in $selectedComponents) {
+    $componentKeyValue = [string]$component.componentKey
+    $configurationFileArgs = [System.Collections.Generic.List[string]]::new()
+    foreach ($mapping in @(Get-ComponentArtifactConfigurationMappings -Component $component -RepositoryRoot $repositoryRoot)) {
+        $configurationFileArgs.Add($mapping)
+    }
+
+    if ($configurationMappings.ContainsKey($componentKeyValue)) {
+        foreach ($mapping in @($configurationMappings[$componentKeyValue])) {
+            $configurationFileArgs.Add($mapping)
+        }
+    }
+
+    Assert-ConfigurationMappingsHaveNoLiteralConnectionStrings `
+        -ComponentKey $componentKeyValue `
+        -Mappings $configurationFileArgs.ToArray()
+    $componentConfigurationFiles[$componentKeyValue] = $configurationFileArgs
+}
+
 try {
     foreach ($component in $selectedComponents) {
         $packageName = Get-ArtifactPackageName -Component $component
@@ -846,7 +891,7 @@ try {
         ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 
         if (-not [string]::IsNullOrWhiteSpace($existingPackage) -and -not $BuildArtifacts) {
-            Copy-ExistingArtifactPackage -SourcePath $existingPackage -Destination (Join-Path $artifactsRoot $packageName)
+            Copy-ExistingArtifactPackage -SourcePath $existingPackage -Destination (Join-Path $artifactsRoot $packageName) -ComponentKey ([string]$component.componentKey)
             continue
         }
 
@@ -875,7 +920,7 @@ try {
                     Write-Warning "Component '$($component.componentKey)' has no publishable .NET or Node web projectPath, so -BuildArtifacts could not build it. Reusing the existing package instead: $existingPackage"
                 }
 
-                Copy-ExistingArtifactPackage -SourcePath $existingPackage -Destination (Join-Path $artifactsRoot $packageName)
+                Copy-ExistingArtifactPackage -SourcePath $existingPackage -Destination (Join-Path $artifactsRoot $packageName) -ComponentKey ([string]$component.componentKey)
                 continue
             }
 
@@ -897,16 +942,7 @@ try {
 
         Remove-OmpRuntimeConfigurationFilesFromFolder -Path $payloadPath
 
-        $configurationFileArgs = [System.Collections.Generic.List[string]]::new()
-        foreach ($mapping in @(Get-ComponentArtifactConfigurationMappings -Component $component -RepositoryRoot $repositoryRoot)) {
-            $configurationFileArgs.Add($mapping)
-        }
-
-        if ($configurationMappings.ContainsKey([string]$component.componentKey)) {
-            foreach ($mapping in @($configurationMappings[[string]$component.componentKey])) {
-                $configurationFileArgs.Add($mapping)
-            }
-        }
+        $configurationFileArgs = $componentConfigurationFiles[[string]$component.componentKey]
 
         $artifactPackageArgs = @{
             ModuleKey = [string]$component.moduleKey

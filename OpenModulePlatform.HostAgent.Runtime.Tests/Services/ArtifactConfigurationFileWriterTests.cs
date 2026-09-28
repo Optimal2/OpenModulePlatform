@@ -237,6 +237,122 @@ public sealed class ArtifactConfigurationFileWriterTests
             root["Worker"]!["AppInstanceId"]!.GetValue<string>());
     }
 
+    private const string LiveConnectionString = "Server=live-sql;Database=LiveOmp;Integrated Security=true;";
+    private const string PackagedConnectionString = "Data Source=localhost;Initial Catalog=OpenModulePlatform;Integrated Security=true;";
+
+    [Fact]
+    public void WebAppArtifactConfiguration_WithLiteralOmpDb_GetsLiveConnectionAndReportsReplacement()
+    {
+        var overlay = CreateOverlay($$"""
+            {
+              "ConnectionStrings": { "OmpDb": "{{PackagedConnectionString}}" },
+              "Portal": { "Title": "Artifact title" }
+            }
+            """);
+
+        var result = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
+            [overlay],
+            CreateWebDeployment(),
+            LiveConnectionString,
+            new HostAgentSettings(),
+            out var replaced);
+
+        Assert.True(replaced);
+        var root = JsonNode.Parse(Assert.Single(result).FileContent)!.AsObject();
+        Assert.Equal(LiveConnectionString, root["ConnectionStrings"]!["OmpDb"]!.GetValue<string>());
+        Assert.DoesNotContain(PackagedConnectionString, Assert.Single(result).FileContent, StringComparison.Ordinal);
+        // The rest of the artifact configuration still wins the merge.
+        Assert.Equal("Artifact title", root["Portal"]!["Title"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void WebAppArtifactConfiguration_WithDifferentlyCasedLiteralOmpDb_GetsLiveConnection()
+    {
+        var overlay = CreateOverlay($$"""
+            { "connectionStrings": { "ompdb": "{{PackagedConnectionString}}" } }
+            """);
+
+        var result = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
+            [overlay],
+            CreateWebDeployment(),
+            LiveConnectionString,
+            new HostAgentSettings(),
+            out var replaced);
+
+        Assert.True(replaced);
+        Assert.DoesNotContain(PackagedConnectionString, Assert.Single(result).FileContent, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{ "ConnectionStrings": { "OmpDb": "{{Omp.Json.ConnectionStrings.OmpDb}}" } }""")]
+    [InlineData("""{ "Portal": { "Title": "No connection string" } }""")]
+    public void WebAppArtifactConfiguration_WithPlaceholderOrNoOmpDb_GetsLiveConnectionWithoutReplacement(string content)
+    {
+        var result = ArtifactConfigurationFileWriter.WithBuiltInWebAppConfiguration(
+            [CreateOverlay(content)],
+            CreateWebDeployment(),
+            LiveConnectionString,
+            new HostAgentSettings(),
+            out var replaced);
+
+        Assert.False(replaced);
+        var root = JsonNode.Parse(Assert.Single(result).FileContent)!.AsObject();
+        Assert.Equal(LiveConnectionString, root["ConnectionStrings"]!["OmpDb"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ServiceAppOverlay_WithLiteralOmpDb_GetsLiveConnectionAndReportsReplacement()
+    {
+        var overlay = CreateOverlay($$"""
+            {
+              "ConnectionStrings": { "OmpDb": "{{PackagedConnectionString}}", "Other": "keep" },
+              "Worker": { "PollSeconds": 30 }
+            }
+            """);
+
+        var result = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+            [overlay],
+            CreateDeployment(),
+            LiveConnectionString,
+            new HostAgentSettings(),
+            out var replaced);
+
+        Assert.True(replaced);
+        var root = JsonNode.Parse(Assert.Single(result).FileContent)!.AsObject();
+        Assert.Equal(LiveConnectionString, root["ConnectionStrings"]!["OmpDb"]!.GetValue<string>());
+        Assert.Equal("keep", root["ConnectionStrings"]!["Other"]!.GetValue<string>());
+        Assert.Equal(30, root["Worker"]!["PollSeconds"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void ServiceAppOverlay_WithoutOmpDb_DoesNotAddOne()
+    {
+        var result = ArtifactConfigurationFileWriter.WithBuiltInServiceAppConfiguration(
+            [CreateOverlay("""{ "Custom": { "Enabled": true } }""")],
+            CreateDeployment(),
+            LiveConnectionString,
+            new HostAgentSettings(),
+            out var replaced);
+
+        Assert.False(replaced);
+        var root = JsonNode.Parse(Assert.Single(result).FileContent)!.AsObject();
+        Assert.Null(root["ConnectionStrings"]);
+    }
+
+    private static WebAppDeploymentDescriptor CreateWebDeployment()
+        => new()
+        {
+            HostId = Guid.NewGuid(),
+            HostKey = "test-host",
+            AppInstanceId = Guid.NewGuid(),
+            AppInstanceKey = "test-web-app",
+            AppKey = "test-web-app",
+            ModuleInstanceKey = "module-test",
+            DisplayName = "Test web app",
+            ArtifactId = 42,
+            Version = "1.0.0"
+        };
+
     private static ServiceAppDeploymentDescriptor CreateDeployment()
         => new()
         {

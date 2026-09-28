@@ -16,6 +16,13 @@ mirrors the same rule at package build time so an invalid payload fails the
 build instead of the import. scripts/omp/test-runtime-configuration-guard.ps1
 verifies that this mirror stays in parity with the canonical C# list.
 
+Artifact configuration files may carry ConnectionStrings only as OMP
+placeholders ({{Omp.Json.ConnectionStrings.OmpDb}} and the like). A literal
+value is the database the artifact was packaged against, which is wrong on
+every other host; Assert-OmpConfigurationFileHasNoLiteralConnectionStrings and
+Assert-OmpArtifactPackageConfigurationHasNoLiteralConnectionStrings fail the
+build instead.
+
 Dot-source this file from packaging scripts:
 
     . (Join-Path $PSScriptRoot 'runtime-configuration-files.ps1')
@@ -146,5 +153,120 @@ function Assert-OmpArtifactPackageHasNoRuntimeConfiguration {
 
     if ($offenders.Count -gt 0) {
         throw ("{0} contains runtime configuration file(s): {1}. Put runtime configuration in the artifact package configuration-files section instead." -f $Description, ($offenders -join ', '))
+    }
+}
+
+function Test-OmpConfigurationPlaceholderValue {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([AllowNull()][object]$Value)
+
+    # The whole value must be one OMP placeholder that the HostAgent renders at
+    # deployment, e.g. {{Omp.Json.ConnectionStrings.OmpDb}}.
+    return ($Value -is [string]) -and [Regex]::IsMatch($Value, '^\{\{Omp\.[A-Za-z0-9_.]+\}\}$')
+}
+
+function Get-OmpLiteralConnectionStringName {
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Content)) {
+        return @()
+    }
+
+    try {
+        $document = $Content | ConvertFrom-Json
+    }
+    catch {
+        throw ("{0} is not valid JSON, so its ConnectionStrings cannot be verified: {1}" -f $Description, $_.Exception.Message)
+    }
+
+    if ($null -eq $document -or $document -isnot [System.Management.Automation.PSCustomObject]) {
+        return @()
+    }
+
+    # Property lookup is case-insensitive here, matching .NET configuration binding.
+    $names = [System.Collections.Generic.List[string]]::new()
+    foreach ($section in @($document.PSObject.Properties | Where-Object { $_.Name -eq 'ConnectionStrings' })) {
+        if ($null -eq $section.Value) {
+            continue
+        }
+
+        if ($section.Value -isnot [System.Management.Automation.PSCustomObject]) {
+            $names.Add($section.Name)
+            continue
+        }
+
+        foreach ($entry in @($section.Value.PSObject.Properties)) {
+            if ($null -ne $entry.Value -and -not (Test-OmpConfigurationPlaceholderValue -Value $entry.Value)) {
+                $names.Add(('{0}:{1}' -f $section.Name, $entry.Name))
+            }
+        }
+    }
+
+    return $names.ToArray()
+}
+
+function Assert-OmpConfigurationFileHasNoLiteralConnectionStrings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ComponentKey,
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content,
+        [string]$Source = ''
+    )
+
+    if (-not $RelativePath.Trim().EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+
+    $description = "Artifact configuration file '$RelativePath' of component '$ComponentKey'"
+    if (-not [string]::IsNullOrWhiteSpace($Source)) {
+        $description += " (source: $Source)"
+    }
+    $literalNames = @(Get-OmpLiteralConnectionStringName -Content $Content -Description $description)
+    if ($literalNames.Count -gt 0) {
+        # Name the keys, never the values: a connection string may carry credentials.
+        throw ("{0} sets a literal connection string ({1}). Artifact configuration may only use placeholders such as {{{{Omp.Json.ConnectionStrings.OmpDb}}}}; the HostAgent writes the live OMP connection at deployment, and any other database belongs in a config overlay." -f $description, ($literalNames -join ', '))
+    }
+}
+
+function Assert-OmpArtifactPackageConfigurationHasNoLiteralConnectionStrings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ZipPath,
+        [Parameter(Mandatory = $true)][string]$ComponentKey
+    )
+
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        foreach ($entry in $archive.Entries) {
+            $normalizedFullName = $entry.FullName.Replace('\', '/')
+            if (-not $normalizedFullName.StartsWith('configuration/', [StringComparison]::OrdinalIgnoreCase) `
+                    -or -not $entry.Name.EndsWith('.json', [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+
+            $reader = [System.IO.StreamReader]::new($entry.Open(), [System.Text.UTF8Encoding]::new($false), $true)
+            try {
+                $content = $reader.ReadToEnd()
+            }
+            finally {
+                $reader.Dispose()
+            }
+
+            Assert-OmpConfigurationFileHasNoLiteralConnectionStrings `
+                -ComponentKey $ComponentKey `
+                -RelativePath $normalizedFullName `
+                -Content $content `
+                -Source $ZipPath
+        }
+    }
+    finally {
+        $archive.Dispose()
     }
 }
