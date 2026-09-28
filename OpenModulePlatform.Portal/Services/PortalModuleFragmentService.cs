@@ -374,10 +374,19 @@ public sealed class PortalModuleFragmentService
         }
 
         var relative = basePath.TrimEnd('/') + fragmentPath;
-        if (!string.IsNullOrWhiteSpace(options.InternalBaseUrl)
-            && Uri.TryCreate(options.InternalBaseUrl.Trim(), UriKind.Absolute, out var internalBase)
-            && internalBase.Scheme is "http" or "https")
+        if (!string.IsNullOrWhiteSpace(options.InternalBaseUrl))
         {
+            // Fail closed even when options are supplied without the startup validator.
+            // An unsafe explicit override must not fall through to another destination.
+            if (!Uri.TryCreate(options.InternalBaseUrl.Trim(), UriKind.Absolute, out var internalBase)
+                || internalBase.Scheme is not ("http" or "https")
+                || !string.IsNullOrEmpty(internalBase.UserInfo)
+                || (request.IsHttps && internalBase.Scheme == Uri.UriSchemeHttp
+                    && !options.AllowInsecureInternalBaseUrl))
+            {
+                return null;
+            }
+
             return new FragmentRequestTarget(
                 new Uri(internalBase.GetLeftPart(UriPartial.Authority) + relative),
                 HostHeader: null);

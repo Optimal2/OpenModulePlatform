@@ -432,7 +432,24 @@ public sealed class ModuleFragmentWidgetTests
     }
 
     [Theory]
-    [InlineData("http://127.0.0.1:5000/ignored", "https://module.example/sample", "http://127.0.0.1:5000/sample/widgets/overview")]
+    [InlineData("https://user:private-password@module.example", "http")]
+    [InlineData("http://user@module.example", "http")]
+    [InlineData("http://127.0.0.1:5000", "https")]
+    public async Task Fetch_UnsafeInternalBaseUrl_DoesNotSendIdentity(string internalBaseUrl, string scheme)
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(Html("<p>x</p>")));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions { InternalBaseUrl = internalBaseUrl });
+        var context = CreateContext();
+        context.Request.Scheme = scheme;
+
+        var result = await service.GetFragmentAsync(context, 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+
+        Assert.False(result.IsLoaded);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData("https://module.example:5000/ignored", "https://module.example/sample", "https://module.example:5000/sample/widgets/overview")]
     [InlineData(null, "https://module.example/sample", "https://module.example/sample/widgets/overview")]
     [InlineData(null, "https://untrusted.example/sample", "https://portal.example/sample/widgets/overview")]
     public void Https_TargetPrecedence_UsesOnlyOperatorConfiguredRemoteOrigins(
@@ -449,6 +466,36 @@ public sealed class ModuleFragmentWidgetTests
         Assert.NotNull(target);
         Assert.Equal(expected, target.RequestUri.AbsoluteUri);
         Assert.Null(target.HostHeader);
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:5000/ignored", true)]
+    [InlineData("http://user:private-password@module.example", false)]
+    [InlineData("https://user@module.example", false)]
+    public async Task Fetch_InsecureInternalBaseUrlOptIn_NeverAllowsUserInfo(string internalBaseUrl, bool allowed)
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(Html("<p>x</p>")));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions
+        {
+            InternalBaseUrl = internalBaseUrl,
+            AllowInsecureInternalBaseUrl = true
+        });
+        var context = CreateContext();
+        context.Request.Scheme = "https";
+
+        var result = await service.GetFragmentAsync(context, 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+
+        Assert.Equal(allowed, result.IsLoaded);
+        if (allowed)
+        {
+            var request = Assert.Single(handler.Requests);
+            Assert.Equal("http://127.0.0.1:5000/sample/widgets/overview", request.Uri);
+            Assert.Null(request.Host);
+        }
+        else
+        {
+            Assert.Empty(handler.Requests);
+        }
     }
 
     [Theory]

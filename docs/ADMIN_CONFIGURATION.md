@@ -332,8 +332,19 @@ hosts behind a load balancer need an explicit internal entry point. This is
 one override for all fragment requests, including registered remote modules:
 the selected endpoint must route every module path. For example,
 `https://portal.example.com` uses that origin's DNS name for TLS and its normal
-certificate trust chain. A configured HTTP endpoint forwards identity cookies
-without TLS; use it only on a trusted loopback/private hop by operator choice.
+certificate trust chain. `InternalBaseUrl` must be an absolute HTTP or HTTPS URL
+without user information (username or password); invalid values fail options
+validation at startup and on configuration reload. Validation errors never echo
+the configured URL or credentials.
+
+For incoming HTTPS requests, an HTTP `InternalBaseUrl` is rejected by default:
+no fragment request is sent, a warning is logged, and the widget shows the neutral
+placeholder. Set `ModuleFragmentWidgets:AllowInsecureInternalBaseUrl` to `true`
+only to explicitly approve a trusted loopback/private HTTP hop. That opt-in
+forwards identity cookies without TLS and never permits user information in the URL.
+The HTTPS check uses the request scheme after configured forwarded-header handling;
+ensure a TLS-terminating proxy is trusted and correctly reports the original scheme.
+Incoming HTTP requests may still use an HTTP `InternalBaseUrl` without the opt-in.
 An HTTPS Portal URL never implicitly falls back to a configured HTTP Portal URL.
 
 Certificate validation stays enabled. TLS failures log the target authority,
@@ -350,7 +361,8 @@ Portal settings (`appsettings.json`, all optional):
   "CacheSeconds": 30,
   "TimeoutMilliseconds": 3000,
   "MaxResponseBytes": 262144,
-  "InternalBaseUrl": null
+  "InternalBaseUrl": null,
+  "AllowInsecureInternalBaseUrl": false
 }
 ```
 

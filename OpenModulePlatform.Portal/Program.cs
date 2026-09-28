@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 // File: OpenModulePlatform.Portal/Program.cs
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Localization;
 using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
@@ -78,8 +79,10 @@ builder.Services.AddOptions<ArtifactUploadOptions>()
 
 builder.Services.AddOptions<MusicPlayerWidgetOptions>()
     .Bind(builder.Configuration.GetSection(MusicPlayerWidgetOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<ModuleFragmentWidgetOptions>, ModuleFragmentWidgetOptionsValidator>();
 builder.Services.AddOptions<ModuleFragmentWidgetOptions>()
-    .Bind(builder.Configuration.GetSection(ModuleFragmentWidgetOptions.SectionName));
+    .Bind(builder.Configuration.GetSection(ModuleFragmentWidgetOptions.SectionName))
+    .ValidateOnStart();
 builder.Services.Configure<IISServerOptions>(options =>
 {
     options.MaxRequestBodySize = maxUploadBytes;

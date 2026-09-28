@@ -6,7 +6,7 @@ namespace OpenModulePlatform.Portal.Options;
 /// </summary>
 /// <remarks>
 /// The Portal fetches each fragment server-side from the module's web app with the
-/// user's shared OMP cookie. Every value is clamped to a safe range when read, so a
+/// user's shared OMP cookie. Numeric limits are clamped to a safe range when read, so a
 /// missing or odd section never disables the timeout or the size limit.
 /// </remarks>
 public sealed class ModuleFragmentWidgetOptions
@@ -35,8 +35,16 @@ public sealed class ModuleFragmentWidgetOptions
     /// resolvable from the server. The path always comes from the module's registration.
     /// This overrides every fragment destination, including registered remote modules;
     /// the endpoint must route all module paths. HTTPS uses normal certificate validation.
+    /// Must be an absolute HTTP(S) URL without user information.
     /// </summary>
     public string? InternalBaseUrl { get; set; }
+
+    /// <summary>
+    /// Explicitly allows an HTTP InternalBaseUrl for incoming HTTPS requests.
+    /// Disabled by default because the forwarded identity cookies would travel without TLS.
+    /// Enable only for an operator-approved trusted internal hop.
+    /// </summary>
+    public bool AllowInsecureInternalBaseUrl { get; set; }
 
     public TimeSpan GetCacheDuration()
         => TimeSpan.FromSeconds(Math.Clamp(CacheSeconds, 0, 3600));
