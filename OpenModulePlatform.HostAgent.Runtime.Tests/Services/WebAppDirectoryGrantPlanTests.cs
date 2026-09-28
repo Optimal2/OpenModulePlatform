@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
@@ -247,6 +248,100 @@ public sealed class WebAppDirectoryGrantPlanTests
         finally
         {
             Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [SkippableTheory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public void DirectoryGrant_RejectsJunctionInPath(bool required, bool linkWebAppsRoot, bool directoryExists)
+    {
+        Skip.IfNot(OperatingSystem.IsWindows(), "NTFS junctions require Windows.");
+        var tempRoot = Directory.CreateTempSubdirectory("omp-grant-junction-");
+        var webAppsRoot = Path.Join(tempRoot.FullName, "webapps");
+        var linkPath = linkWebAppsRoot ? webAppsRoot : Path.Join(webAppsRoot, "example");
+        var targetPath = Path.Join(tempRoot.FullName, "target");
+        var grantPath = Path.Join(webAppsRoot, "example", required ? "content" : "logs");
+        var redirectedPath = linkWebAppsRoot
+            ? Path.Join(targetPath, "example", required ? "content" : "logs")
+            : Path.Join(targetPath, required ? "content" : "logs");
+        var linkCreated = false;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(linkPath)!);
+            Directory.CreateDirectory(targetPath);
+            if (directoryExists)
+            {
+                Directory.CreateDirectory(redirectedPath);
+            }
+
+            var startInfo = new ProcessStartInfo("cmd.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            foreach (var argument in new[] { "/c", "mklink", "/J", linkPath, targetPath })
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            using (var process = Process.Start(startInfo)!)
+            {
+                Assert.True(process.WaitForExit(10_000), "Junction creation timed out.");
+                linkCreated = Directory.Exists(linkPath);
+                Assert.Equal(0, process.ExitCode);
+            }
+
+            Assert.True(File.GetAttributes(linkPath).HasFlag(FileAttributes.ReparsePoint));
+            var grant = new AppPoolDirectoryGrant(
+                grantPath, "OMP_Example", [@"IIS AppPool\OMP_Example"], "M", Required: required);
+            var logger = new CapturingLogger();
+            var calls = 0;
+            HostAgentProcessResult RunProcess(string fileName, IReadOnlyList<string> arguments)
+            {
+                calls++;
+                return new HostAgentProcessResult(0, string.Empty, string.Empty);
+            }
+
+            if (required)
+            {
+                var error = Assert.Throws<IOException>(() =>
+                    WebAppDeploymentService.EnsureRequiredAppPoolDirectoryGrant(grant, logger, RunProcess));
+                Assert.Contains("reparse point", error.Message);
+                Assert.Contains(linkPath, error.Message);
+                Assert.Empty(logger.Entries);
+            }
+            else
+            {
+                WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(grant, logger, RunProcess);
+                var entry = Assert.Single(logger.Entries);
+                Assert.Equal(LogLevel.Warning, entry.Level);
+                Assert.Contains("reparse point", entry.Message);
+                Assert.Contains(linkPath, entry.Message);
+                Assert.Contains(grantPath, entry.Message);
+                Assert.Contains(@"IIS AppPool\OMP_Example", entry.Message);
+                Assert.Contains("file logging may fail silently", entry.Message);
+            }
+
+            Assert.Equal(0, calls);
+            Assert.Equal(directoryExists, Directory.Exists(redirectedPath));
+        }
+        finally
+        {
+            if (linkCreated)
+            {
+                Directory.Delete(linkPath);
+            }
+
+            tempRoot.Delete(recursive: true);
         }
     }
 

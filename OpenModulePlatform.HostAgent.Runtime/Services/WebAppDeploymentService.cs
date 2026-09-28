@@ -1066,15 +1066,20 @@ public sealed class WebAppDeploymentService
         }
     }
 
-    private static void EnsureRequiredAppPoolDirectoryGrant(AppPoolDirectoryGrant grant, ILogger logger)
+    internal static void EnsureRequiredAppPoolDirectoryGrant(
+        AppPoolDirectoryGrant grant,
+        ILogger logger,
+        Func<string, IReadOnlyList<string>, HostAgentProcessResult>? runProcess = null)
     {
+        EnsureAppPoolDirectoryGrantPath(grant.Path, "Required web app directory grant");
         Directory.CreateDirectory(grant.Path);
         if (grant.AccountNames.Count == 0)
         {
             return;
         }
 
-        if (!TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out var error))
+        EnsureAppPoolDirectoryGrantPath(grant.Path, "Required web app directory grant");
+        if (!TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out var error, runProcess))
         {
             throw new InvalidOperationException(
                 $"Could not grant Modify access to Portal path '{grant.Path}' for IIS app pool '{grant.AppPoolName}'. {error}");
@@ -1100,9 +1105,9 @@ public sealed class WebAppDeploymentService
         var error = "No app pool identity could be resolved.";
         try
         {
-            OmpReparsePointGuard.EnsureNotReparsePoint(grant.Path, "Web app log directory");
+            EnsureAppPoolDirectoryGrantPath(grant.Path, "Web app log directory");
             Directory.CreateDirectory(grant.Path);
-            OmpReparsePointGuard.EnsureNotReparsePoint(grant.Path, "Web app log directory");
+            EnsureAppPoolDirectoryGrantPath(grant.Path, "Web app log directory");
             if (grant.AccountNames.Count > 0
                 && TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out error, runProcess))
             {
@@ -1127,6 +1132,13 @@ public sealed class WebAppDeploymentService
             error);
     }
 
+    private static void EnsureAppPoolDirectoryGrantPath(string path, string description)
+    {
+        // Include the application and webapps roots, not just the leaf. Grants have no
+        // trusted deployment-root boundary, so check every ancestor to the filesystem root.
+        OmpReparsePointGuard.EnsureNoReparsePointInPath(path, string.Empty, description);
+    }
+
     private static bool TryGrantDirectoryAccess(
         string path,
         IReadOnlyCollection<string> accountNames,
@@ -1137,8 +1149,8 @@ public sealed class WebAppDeploymentService
         var lastError = string.Empty;
 
         // /L keeps icacls from granting access to a link's target. Success on a link
-        // does not establish write access through it, so optional log-directory grants
-        // reject reparse points before reaching this method and warn the operator.
+        // does not establish write access through it. Both required and optional grants
+        // reject reparse points anywhere in the directory path before reaching this method.
         runProcess ??= static (fileName, arguments) => HostAgentProcessRunner.Run(fileName, arguments);
         var grantResults = accountNames.Select(accountName => runProcess(
             "icacls.exe",
