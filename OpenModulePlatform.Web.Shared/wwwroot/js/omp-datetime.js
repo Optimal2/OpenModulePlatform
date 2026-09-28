@@ -789,10 +789,11 @@
     // data-precision="minute" gives the two fields a time as well (the
     // datetime mask, values yyyy-mm-ddThh:mm): quick picks and calendar
     // clicks set whole days, 00:00 to 23:59, and the time is typed or, while
-    // a field is armed, clicked in the hour and minute grid in a third
-    // column that folds out at the right when a field is clicked and folds
-    // away again when none is armed (the popup is placed with room for it
-    // from the start, so it does not move when the column opens). The
+    // a field is armed, clicked in the hour and minute grid in a column
+    // beside the calendar, as tall as it, that folds out at the right when
+    // a field is clicked and folds away again when none is armed (the popup
+    // is placed with room for it from the start, so it does not move when
+    // the column opens). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -1201,10 +1202,11 @@
             // With minute precision, the hour and minute grid of the single
             // field's popup shows under the calendar while a field is armed
             // and sets that field's time; a day click still sets its day.
-            // With minute precision a third column at the right holds the
-            // hour and minute grid for the armed field. It is folded (no
-            // width) while no field is armed and folds out when one is; the
-            // popup is placed with that room counted in (see _ompGrowth).
+            // With minute precision a column at the right of the fields
+            // holds the hour and minute grid for the armed field, as tall
+            // as the calendar. It is folded (no width) while no field is
+            // armed and folds out when one is; the popup is placed with
+            // that room counted in (see _ompGrowth).
             var timeHost = document.createElement("div");
             timeHost.className = "omp-daterange-panel__time-host omp-daterange-panel__time-host--collapsed";
             var timeColumnWidth = 206 + 14;
@@ -1618,9 +1620,8 @@
             };
             footer.appendChild(apply);
             fields.appendChild(footer);
-            rangePanel.appendChild(fields);
             if (minutePrecision) {
-                rangePanel.appendChild(timeHost);
+                fields.appendChild(timeHost);
                 renderRangeTime();
                 // The room the column still has to grow: its full width less
                 // what it takes right now (measured, so a placement made in
@@ -1632,6 +1633,7 @@
                     return Math.max(0, timeColumnWidth - taken);
                 };
             }
+            rangePanel.appendChild(fields);
 
             container.appendChild(rangePanel);
             baseline = fieldsSnapshot();

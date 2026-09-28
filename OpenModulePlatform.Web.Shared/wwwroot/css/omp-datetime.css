@@ -517,38 +517,29 @@
     width: 196px;
 }
 
-/* With minute precision the popup has a third column at the right: the
-   hour and minute grid for the armed field. Folded to nothing while no
-   field is armed, it folds out when one is; the popup was placed with
-   that room from the start. The fields column's three parts (the field
-   row, the calendar, the footer) are rows of the grid itself, so the
-   time column can share the calendar's row and stand exactly as tall. */
-.omp-daterange--minute .omp-daterange-panel {
-    grid-template-columns: max-content max-content max-content;
-    grid-template-rows: auto auto auto;
-    /* No column gap: the rail carries the gap to the fields, and the time
-       column's gap is part of what folds, so a folded column leaves
-       nothing. The row gap is the one the fields column used to have. */
-    column-gap: 0;
-    row-gap: 8px;
-}
-
-.omp-daterange--minute .omp-daterange-panel__presets {
-    grid-row: 1 / -1;
-    margin-right: 14px;
-}
-
+/* With minute precision the fields column has a column of its own at the
+   right: the hour and minute grid for the armed field. Folded to nothing
+   while no field is armed, it folds out when one is; the popup was placed
+   with that room from the start. The fields column is a grid with a row
+   for each of its parts (the field row, the calendar, the footer), so the
+   time column shares the calendar's row and stands exactly as tall. The
+   rail lives in the popup's own grid and has no say in those rows. */
 .omp-daterange--minute .omp-daterange-panel__fields {
-    display: contents;
+    display: grid;
+    grid-template-columns: max-content max-content;
+    grid-template-rows: auto auto auto;
+    row-gap: 8px;
+    column-gap: 0;
+    /* The rows keep their natural height however tall the rail beside the
+       column makes it (the popup's grid stretches the column to match). */
+    align-content: start;
 }
 
 .omp-daterange--minute .omp-daterange-panel__fields > * {
-    grid-column: 2;
+    grid-column: 1;
 }
 
 .omp-daterange-panel__time-host {
-    grid-column: 3;
-    grid-row: 2;
     width: 206px;
     margin-left: 14px;
     display: flex;
@@ -556,6 +547,12 @@
     align-items: stretch;
     overflow: hidden;
     transition: width 160ms ease, margin-left 160ms ease, opacity 160ms ease;
+}
+
+/* Placed after the rule for the column's children, which it is one of. */
+.omp-daterange--minute .omp-daterange-panel__time-host {
+    grid-column: 2;
+    grid-row: 2;
 }
 
 .omp-daterange-panel__time-host--collapsed {
@@ -707,12 +704,12 @@
 /* Between a phone and a wide window the three columns do not fit: the time
    column then takes a row of its own under the rail and the calendar. */
 @media (max-width: 900px) {
-    .omp-daterange--minute .omp-daterange-panel {
-        grid-template-columns: max-content max-content;
+    .omp-daterange--minute .omp-daterange-panel__fields {
+        grid-template-columns: max-content;
     }
 
     .omp-daterange--minute .omp-daterange-panel__time-host {
-        grid-column: 1 / -1;
+        grid-column: 1;
         grid-row: 4;
         width: auto;
         margin: 0;
@@ -741,25 +738,19 @@
    screen: the presets become a wrapping row above the fields instead. */
 @media (max-width: 600px) {
     /* One column no wider than the screen, so the rail's row of presets
-       wraps inside it instead of stretching the popup. The minute-precision
-       popup's three-column rule has a higher specificity, so it is named
-       here too, and its time column takes the popup's width below the
-       calendar. */
-    .omp-daterange-panel,
-    .omp-daterange--minute .omp-daterange-panel {
+       wraps inside it instead of stretching the popup. */
+    .omp-daterange-panel {
         grid-template-columns: minmax(0, 1fr);
         gap: 10px 0;
         width: max-content;
         max-width: calc(100vw - 16px);
     }
 
-    .omp-daterange--minute .omp-daterange-panel {
+    /* The fields column too: its parts and the time column in one column,
+       in document order. */
+    .omp-daterange--minute .omp-daterange-panel__fields {
+        grid-template-columns: minmax(0, 1fr);
         grid-template-rows: none;
-    }
-
-    .omp-daterange--minute .omp-daterange-panel__presets {
-        grid-row: auto;
-        margin-right: 0;
     }
 
     .omp-daterange--minute .omp-daterange-panel__fields > *,
