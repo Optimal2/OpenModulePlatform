@@ -1160,9 +1160,21 @@ public sealed class WebAppDeploymentService
 
     private static void EnsureAppPoolDirectoryGrantPath(AppPoolDirectoryGrant grant, string description)
     {
-        // Check the owned tree, including its configured root. Ancestors above that
-        // boundary are administrator-owned and may legitimately be junctions or mounts.
-        OmpReparsePointGuard.EnsureNoReparsePointInPath(grant.Path, grant.RootPath, description);
+        // The administrator-configured root and its ancestors are trusted. Only
+        // descendants are checked; the shared guard keeps its inclusive-root contract.
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(grant.RootPath));
+        var current = Path.TrimEndingDirectorySeparator(Path.GetFullPath(grant.Path));
+        var rootPrefix = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        while (!string.Equals(current, root, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!current.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new IOException($"{description} is outside its configured root: '{grant.Path}'.");
+            }
+
+            OmpReparsePointGuard.EnsureNotReparsePoint(current, description);
+            current = Path.GetDirectoryName(current)!;
+        }
     }
 
     private static bool TryGrantDirectoryAccess(
@@ -1176,7 +1188,7 @@ public sealed class WebAppDeploymentService
 
         // /L keeps icacls from granting access to a link's target. Success on a link
         // does not establish write access through it. Both required and optional grants
-        // reject reparse points from their configured root down before reaching this method.
+        // reject reparse points strictly below their trusted root before reaching this method.
         // A local principal with directory write/rename rights can still swap a path after
         // the check (TOCTOU). /L limits leaf-link traversal, not ancestor replacement;
         // protect deployment directories with ACLs rather than treating this as an atomic check.

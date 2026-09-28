@@ -286,15 +286,15 @@ public sealed class WebAppDirectoryGrantPlanTests
     [InlineData(true, false, true)]
     [InlineData(true, true, false)]
     [InlineData(true, true, true)]
-    public void DirectoryGrant_RejectsJunctionInPath(bool required, bool linkWebAppsRoot, bool directoryExists)
+    public void DirectoryGrant_RejectsJunctionInPath(bool required, bool linkIntermediateDirectory, bool directoryExists)
     {
         Skip.IfNot(OperatingSystem.IsWindows(), "NTFS junctions require Windows.");
         var tempRoot = Directory.CreateTempSubdirectory("omp-grant-junction-");
         var webAppsRoot = Path.Join(tempRoot.FullName, "webapps");
-        var linkPath = linkWebAppsRoot ? webAppsRoot : Path.Join(webAppsRoot, "example");
+        var linkPath = linkIntermediateDirectory ? Path.Join(webAppsRoot, "group") : Path.Join(webAppsRoot, "group", "example");
         var targetPath = Path.Join(tempRoot.FullName, "target");
-        var grantPath = Path.Join(webAppsRoot, "example", required ? "content" : "logs");
-        var redirectedPath = linkWebAppsRoot
+        var grantPath = Path.Join(webAppsRoot, "group", "example", required ? "content" : "logs");
+        var redirectedPath = linkIntermediateDirectory
             ? Path.Join(targetPath, "example", required ? "content" : "logs")
             : Path.Join(targetPath, required ? "content" : "logs");
         try
@@ -352,9 +352,11 @@ public sealed class WebAppDirectoryGrantPlanTests
     }
 
     [SkippableTheory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void DirectoryGrants_AllowJunctionAboveConfiguredRoot(bool directoryExists)
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void DirectoryGrants_AllowJunctionAtOrAboveConfiguredRoot(bool junctionAtRoot, bool directoryExists)
     {
         Skip.IfNot(OperatingSystem.IsWindows(), "NTFS junctions require Windows.");
         var tempRoot = Directory.CreateTempSubdirectory("omp-grant-ancestor-");
@@ -364,7 +366,7 @@ public sealed class WebAppDirectoryGrantPlanTests
         {
             Directory.CreateDirectory(targetPath);
             CreateJunction(linkPath, targetPath);
-            var webAppsRoot = Path.Join(linkPath, "webapps");
+            var webAppsRoot = junctionAtRoot ? linkPath : Path.Join(linkPath, "webapps");
             Directory.CreateDirectory(webAppsRoot);
             var applicationPath = Path.Join(webAppsRoot, "example");
             if (directoryExists)
@@ -391,7 +393,8 @@ public sealed class WebAppDirectoryGrantPlanTests
             Assert.Equal([applicationPath, Path.Join(applicationPath, "logs")], calls);
             Assert.Equal(2, logger.Entries.Count);
             Assert.All(logger.Entries, entry => Assert.Equal(LogLevel.Debug, entry.Level));
-            Assert.True(Directory.Exists(Path.Join(targetPath, "webapps", "example", "logs")));
+            var physicalRoot = junctionAtRoot ? targetPath : Path.Join(targetPath, "webapps");
+            Assert.True(Directory.Exists(Path.Join(physicalRoot, "example", "logs")));
         }
         finally
         {
