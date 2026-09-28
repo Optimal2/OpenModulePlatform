@@ -517,17 +517,30 @@
     width: 196px;
 }
 
-/* The hour and minute grid under the calendar while a field is armed;
-   hidden, it takes no room (the display rule would otherwise beat the
-   hidden attribute). */
-.omp-daterange-panel__time-host {
-    display: flex;
-    justify-content: center;
-    margin-top: 8px;
+/* With minute precision the popup has a third column at the right: the
+   hour and minute grid for the armed field, a hint while none is. It is
+   always there, at the grid's width, so the popup never grows or moves. */
+.omp-daterange--minute .omp-daterange-panel {
+    grid-template-columns: max-content max-content max-content;
 }
 
-.omp-daterange-panel__time-host[hidden] {
-    display: none;
+.omp-daterange-panel__time-host {
+    width: 206px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.omp-daterange-panel__time-host .omp-datetime-panel__time {
+    align-self: stretch;
+}
+
+.omp-daterange-panel__time-hint {
+    margin: 0;
+    padding: 10px 8px;
+    color: var(--text-muted, #5b667a);
+    font-size: 12px;
+    line-height: 1.4;
 }
 
 /* Base look for the embedded fields, at zero specificity so a host input

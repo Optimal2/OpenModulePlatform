@@ -10,8 +10,8 @@
     "use strict";
 
     var texts = (document.documentElement.lang || "").toLowerCase().indexOf("sv") === 0
-        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Tillämpa", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Du har osparade ändringar.", save: "Spara", discard: "Spara inte", keepEditing: "Fortsätt redigera" }
-        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Apply", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "You have unsaved changes.", save: "Save", discard: "Don't save", keepEditing: "Continue editing" };
+        ? { time: "Tid", clear: "Rensa", reset: "Återställ", now: "Nu", today: "Idag", week: "v.", open: "Öppna kalendern", close: "Stäng kalendern", year: "åååå", presets: "Snabbalternativ", confirm: "Tillämpa", cancel: "Avbryt", dayBack: "En dag tidigare", dayForward: "En dag senare", unsaved: "Du har osparade ändringar.", save: "Spara", discard: "Spara inte", keepEditing: "Fortsätt redigera", timeHint: "Klicka i Från eller Till för att välja tid." }
+        : { time: "Time", clear: "Clear", reset: "Reset", now: "Now", today: "Today", week: "wk", open: "Open the calendar", close: "Close the calendar", year: "yyyy", presets: "Quick picks", confirm: "Apply", cancel: "Cancel", dayBack: "One day earlier", dayForward: "One day later", unsaved: "You have unsaved changes.", save: "Save", discard: "Don't save", keepEditing: "Continue editing", timeHint: "Click in From or To to pick a time." };
 
     // The year placeholder follows the page language; its four letters keep
     // the slot positions identical across languages. Segments are digit-index
@@ -774,15 +774,17 @@
     // the trigger field or with nothing in particular focused is Confirm;
     // the popup's buttons keep Enter for themselves. A click on a date
     // field arms it (a warm outline): the next calendar click sets that
-    // field alone and disarms; a click on the same field again disarms
-    // without picking; otherwise the calendar's two-click logic (first
-    // click starts, second ends) stands. data-apply-text and
+    // field alone and disarms; a quick pick, Reset or arming the other
+    // field disarms it too, and a click within the armed field just moves
+    // the caret; otherwise the calendar's two-click logic (first click
+    // starts, second ends) stands. data-apply-text and
     // data-cancel-text name the two buttons (Apply/Cancel by default).
     // data-precision="minute" gives the two fields a time as well (the
     // datetime mask, values yyyy-mm-ddThh:mm): quick picks and calendar
     // clicks set whole days, 00:00 to 23:59, and the time is typed or, while
-    // a field is armed, clicked in the hour and minute grid that then shows
-    // under the calendar. The
+    // a field is armed, clicked in the hour and minute grid in a third
+    // column at the right (the column is always there with minute
+    // precision, so the popup keeps one width and one place). The
     // container takes omp-daterange--active whenever the period is a known
     // preset other than the neutral one (data-neutral="all", else the first
     // preset) or a custom period, and omp-daterange--open while its popup is
@@ -987,6 +989,7 @@
             // calendar's own two-click logic.
             var armedInput = null;
             function arm(input) {
+                if (input !== armedInput) { gridFocus = null; }
                 armedInput = input;
                 [fromInput, toInput].forEach(function (other) {
                     if (!other) { return; }
@@ -1129,9 +1132,9 @@
                     state(input).defaultTime = defaultTime;
                     render(state(input));
                 }
-                // A click on the field arms it for the next calendar click;
-                // a click on the armed field again disarms it.
-                input.addEventListener("click", function () { arm(armedInput === input ? null : input); });
+                // A click on the field arms it for the next calendar click; a
+                // click within the armed field (the time part, say) keeps it.
+                input.addEventListener("click", function () { if (armedInput !== input) { arm(input); } });
                 // Arrows at the right end of the field step the date a day
                 // at a time (an empty field starts from today), never past
                 // the cap; the calendar follows. Like typing, this waits for
@@ -1190,19 +1193,25 @@
             // With minute precision, the hour and minute grid of the single
             // field's popup shows under the calendar while a field is armed
             // and sets that field's time; a day click still sets its day.
+            // With minute precision a third column at the right holds the
+            // hour and minute grid for the armed field, and a hint while no
+            // field is armed. The column is always there, so the popup keeps
+            // one width and its place does not have to allow for growth.
             var timeHost = document.createElement("div");
             timeHost.className = "omp-daterange-panel__time-host";
-            timeHost.hidden = true;
-            fields.appendChild(timeHost);
             // A cell click re-renders the grid (through the field's change),
             // which would drop keyboard focus to body; the clicked cell is
             // remembered and focused again in the new grid.
             var gridFocus = null;
             function renderRangeTime() {
                 timeHost.textContent = "";
-                if (!minutePrecision || !armedInput) {
-                    timeHost.hidden = true;
+                if (!minutePrecision) { return; }
+                if (!armedInput) {
                     gridFocus = null;
+                    var hint = document.createElement("p");
+                    hint.className = "omp-daterange-panel__time-hint";
+                    hint.textContent = texts.timeHint;
+                    timeHost.appendChild(hint);
                     return;
                 }
                 var st = state(armedInput);
@@ -1248,7 +1257,6 @@
                 });
                 time.appendChild(minutes);
                 timeHost.appendChild(time);
-                timeHost.hidden = false;
                 var refocus = timeHost.querySelector("[data-grid-focus]");
                 if (refocus && (document.activeElement === document.body || !document.activeElement || !document.activeElement.isConnected)) {
                     refocus.focus({ preventScroll: true });
@@ -1583,6 +1591,10 @@
             footer.appendChild(apply);
             fields.appendChild(footer);
             rangePanel.appendChild(fields);
+            if (minutePrecision) {
+                rangePanel.appendChild(timeHost);
+                renderRangeTime();
+            }
 
             container.appendChild(rangePanel);
             baseline = fieldsSnapshot();
