@@ -1,7 +1,12 @@
 @model IReadOnlyList<OpenModulePlatform.Portal.Models.DashboardWidgetReadinessIssue>
+@inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
+@{
+    var storedIssues = Model.Where(static issue => !issue.IsSkippedImport).ToList();
+    var skippedImports = Model.Where(static issue => issue.IsSkippedImport).ToList();
+}
 
 <h3>@L["Dashboard widget readiness"]</h3>
-@if (Model.Count == 0)
+@if (storedIssues.Count == 0)
 {
     <p class="muted">@L["No invalid stored module-fragment widget definitions were found."]</p>
 }
@@ -22,12 +27,32 @@ else
         <table class="grid">
             <thead><tr><th>@L["Widget"]</th><th>@L["Version"]</th><th>@L["Status"]</th></tr></thead>
             <tbody>
-            @foreach (var issue in Model)
+            @foreach (var issue in storedIssues)
             {
                 <tr>
                     <td><code>@issue.WidgetKey</code> (#@issue.WidgetId)</td>
                     <td>@issue.WidgetVersion</td>
                     <td>@L[issue.IsEnabled ? "Enabled" : "Disabled"]</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+@if (skippedImports.Count > 0)
+{
+    <h4>@L["Widgets skipped by a HostAgent import"]</h4>
+    <p role="alert">@L["These widget definitions were not stored because the importer does not support them. Upgrade HostAgent and Portal, then re-import the package. A row disappears after the same widget key is imported successfully."]</p>
+    <div class="table-scroll">
+        <table class="grid">
+            <thead><tr><th>@L["Widget"]</th><th>@L["Reason"]</th><th>@L["Last seen"]</th></tr></thead>
+            <tbody>
+            @foreach (var skipped in skippedImports)
+            {
+                <tr>
+                    <td><code>@skipped.WidgetKey</code></td>
+                    <td>@skipped.SkipReason</td>
+                    <td>@(skipped.SkippedUtc is { } skippedUtc ? OmpTime.Format(skippedUtc) : string.Empty)</td>
                 </tr>
             }
             </tbody>

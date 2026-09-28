@@ -488,7 +488,8 @@ After upgrading HostAgent and Portal, open **System → Maintenance → Dashboar
 readiness**. This live, read-only check uses the runtime payload parser and lists the
 affected widget keys, IDs and versions, including disabled widgets. It checks stored
 definitions, not endpoint availability. Invalid widget payloads also produce a Warning
-once per widget per Portal process; the payload content is never logged.
+once per widget and stored definition per Portal process: a widget that is repaired and
+later breaks again warns again. The payload content is never logged.
 
 To repair listed rows without changing their `widgetVersion`:
 
@@ -504,9 +505,19 @@ To repair listed rows without changing their `widgetVersion`:
 
 Only `portal` and `module-fragment` widget types are supported. An unknown type is
 rejected by Portal validation; HostAgent skips that widget with a Warning and continues
-with valid siblings. After upgrading to an importer that supports the type, explicitly
-re-import the package. Skipped widgets are not automatically retried. These checks apply
-to the upgraded importer; an already running older binary cannot enforce them.
+with valid siblings. HostAgent also counts every skipped widget in the `dashboard-widget`
+item result (`skipped (invalid): N`, with each widget key and reason) and records it as an
+open maintenance finding (category `DashboardWidgetImportSkipped`). **Dashboard widget
+readiness** lists these skipped widgets with their reason until a later import of the same
+widget key succeeds through HostAgent or Portal; the finding can also be ignored from the
+maintenance findings list. After upgrading to an importer that supports the type,
+explicitly re-import the package. Skipped widgets are not automatically retried. These
+checks apply to the upgraded importer; an already running older binary cannot enforce them.
+
+The list of supported widget types lives in one place,
+`OpenModulePlatform.Artifacts/DashboardWidgetTypes.cs`, which both importers and the
+Portal dashboard read. Adding a widget type requires extending that list together with
+its normalization and render path; until then every importer rejects or skips it.
 
 ## Migration Policy
 

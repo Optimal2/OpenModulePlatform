@@ -126,10 +126,12 @@ public sealed class PortalModuleFragmentService
 
             if (ModuleFragmentWidget.TryParsePayload(widget.Payload) is not { } config)
             {
-                DashboardWidgetPayloadDiagnostics.WarnOnce(_logger, widget.WidgetId, ModuleFragmentWidget.WidgetType);
+                DashboardWidgetPayloadDiagnostics.WarnOnce(_logger, widget.WidgetId, ModuleFragmentWidget.WidgetType, widget.Payload);
                 results[widget.WidgetId] = ModuleFragmentResult.Unavailable;
                 continue;
             }
+
+            DashboardWidgetPayloadDiagnostics.Forget(widget.WidgetId);
 
             var app = accessibleApps
                 .Where(item => string.Equals(item.AppKey, config.AppKey, StringComparison.OrdinalIgnoreCase))

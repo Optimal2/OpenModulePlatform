@@ -626,7 +626,7 @@ public sealed class ArtifactZipImportService
                     Path.Join(stagingPath, "universal-module-package"),
                     cancellationToken);
                 _logger.LogInformation(
-                    "Imported universal module package from HostAgent import folder. File={ImportPath}, Package={PackageKey}, Version={PackageVersion}, Imported={Imported}, Skipped={Skipped}, SkippedIdentical={SkippedIdentical}, Conflicts={Conflicts}, Failed={Failed}",
+                    "Imported universal module package from HostAgent import folder. File={ImportPath}, Package={PackageKey}, Version={PackageVersion}, Imported={Imported}, Skipped={Skipped}, SkippedIdentical={SkippedIdentical}, Conflicts={Conflicts}, Failed={Failed}, SkippedInvalidWidgets={SkippedInvalidWidgets}",
                     importPath,
                     result.PackageKey ?? Path.GetFileName(importPath),
                     result.PackageVersion,
@@ -634,7 +634,8 @@ public sealed class ArtifactZipImportService
                     result.SkippedCount,
                     result.SkippedIdenticalCount,
                     result.ConflictCount,
-                    result.FailedCount);
+                    result.FailedCount,
+                    result.SkippedInvalidWidgetCount);
 
                 // A package whose items ALL failed used to be archived to processed\
                 // just like a clean one, because FailedCount was only logged. Every
@@ -1133,7 +1134,9 @@ public sealed class ArtifactZipImportService
         }
     }
 
-    private async Task<UniversalHostAgentImportItemResult> ImportUniversalDashboardWidgetItemAsync(
+    // Internal so the skipped-widget tests can drive one widget file through the import,
+    // the findings write and the item result without building a whole package zip.
+    internal async Task<UniversalHostAgentImportItemResult> ImportUniversalDashboardWidgetItemAsync(
         PortableUniversalModulePackageItem item,
         CancellationToken cancellationToken)
     {
@@ -1143,16 +1146,68 @@ public sealed class ArtifactZipImportService
             var reader = new DashboardWidgetPackageReader(_logger);
             var widgets = await reader.ReadAsync(stream, item.SourceName, cancellationToken);
             var result = await _repository.SaveImportedDashboardWidgetsAsync(widgets, cancellationToken);
+            await RecordDashboardWidgetImportFindingsAsync(widgets, item.SourceName, cancellationToken);
             return new UniversalHostAgentImportItemResult(
                 "dashboard-widget",
                 item.Path,
                 result.CreatedCount + result.UpdatedCount > 0 ? "Imported" : "Skipped",
-                $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; skipped: {result.SkippedCount}; permission rows: {result.PermissionRowCount}.");
+                BuildDashboardWidgetImportMessage(result, widgets.SkippedWidgets))
+            {
+                SkippedInvalidWidgetCount = widgets.SkippedWidgets.Count
+            };
         }
         catch (Exception ex) when (IsExpectedImportFailure(ex))
         {
             return new UniversalHostAgentImportItemResult("dashboard-widget", item.Path, "Failed", ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Keeps the Maintenance page in step with this widget file. The widgets are already
+    /// stored at this point, so a failure here is logged and never fails the import item.
+    /// </summary>
+    private async Task RecordDashboardWidgetImportFindingsAsync(
+        PortableDashboardWidgetPackage widgets,
+        string sourceName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _repository.RecordDashboardWidgetImportFindingsAsync(
+                widgets.Widgets.Select(static widget => widget.WidgetKey).ToArray(),
+                widgets.SkippedWidgets,
+                sourceName,
+                cancellationToken);
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not record skipped dashboard widgets as maintenance findings. Source={SourceName}, Skipped={SkippedCount}",
+                sourceName,
+                widgets.SkippedWidgets.Count);
+        }
+    }
+
+    /// <summary>
+    /// Counts widgets the reader skipped as invalid next to the stored outcomes, and names
+    /// each one with its reason, so a skipped widget is visible in the import result and
+    /// not only as a log line.
+    /// </summary>
+    internal static string BuildDashboardWidgetImportMessage(
+        (int CreatedCount, int UpdatedCount, int SkippedCount, int PermissionRowCount) result,
+        IReadOnlyList<PortableDashboardWidgetSkip> skippedWidgets)
+    {
+        var message = $"Created: {result.CreatedCount}; updated: {result.UpdatedCount}; skipped: {result.SkippedCount}; " +
+                      $"skipped (invalid): {skippedWidgets.Count}; permission rows: {result.PermissionRowCount}.";
+        if (skippedWidgets.Count == 0)
+        {
+            return message;
+        }
+
+        var details = skippedWidgets.Select(static skip =>
+            $"{(string.IsNullOrWhiteSpace(skip.WidgetKey) ? "(missing widgetKey)" : skip.WidgetKey)}: {skip.Reason}");
+        return $"{message} Skipped widgets: {string.Join(" | ", details)}";
     }
 
     private async Task<UniversalHostAgentImportItemResult> ImportUniversalWidgetRuntimeDataItemAsync(
@@ -2530,6 +2585,8 @@ public sealed class ArtifactZipImportService
         public int FailedCount => Items.Count(static item => item.Status == "Failed");
 
         public int ConflictCount => Items.Count(static item => item.IsVersionConflict);
+
+        public int SkippedInvalidWidgetCount => Items.Sum(static item => item.SkippedInvalidWidgetCount);
     }
 
     internal sealed record UniversalHostAgentImportItemResult(
@@ -2545,6 +2602,10 @@ public sealed class ArtifactZipImportService
         /// <summary>True when the item failed because the content changed under an
         /// already-imported version (<see cref="ArtifactVersionConflictException"/>).</summary>
         public bool IsVersionConflict { get; init; }
+
+        /// <summary>Number of dashboard widgets in this item that were skipped as invalid
+        /// while their valid siblings were imported.</summary>
+        public int SkippedInvalidWidgetCount { get; init; }
     }
 
     private sealed record ModulePackageArtifactPlan(

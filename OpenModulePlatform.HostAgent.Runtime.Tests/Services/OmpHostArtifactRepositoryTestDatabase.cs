@@ -668,12 +668,29 @@ CREATE TABLE omp.MaintenanceFindings
     Status tinyint NOT NULL DEFAULT(0),
     Severity tinyint NOT NULL DEFAULT(1),
     Confidence tinyint NOT NULL DEFAULT(80),
-    DetectedByHostAgentJobId bigint NOT NULL,
+    DetectedByHostAgentJobId bigint NULL,
     ResultMessage nvarchar(max) NULL,
     DetectedUtc datetime2(3) NOT NULL,
     LastSeenUtc datetime2(3) NOT NULL,
     UpdatedUtc datetime2(3) NOT NULL
 );");
+    }
+
+    public IReadOnlyList<(string FindingKey, string Category, string TargetIdentifier, string? Detail, byte Status)> GetMaintenanceFindings()
+    {
+        var rows = new List<(string, string, string, string?, byte)>();
+        using var conn = new SqlConnection(_connectionString);
+        conn.Open();
+        using var cmd = new SqlCommand(
+            "SELECT FindingKey, Category, TargetIdentifier, Detail, Status FROM omp.MaintenanceFindings ORDER BY MaintenanceFindingId;",
+            conn);
+        using var rdr = cmd.ExecuteReader();
+        while (rdr.Read())
+        {
+            rows.Add((rdr.GetString(0), rdr.GetString(1), rdr.GetString(2), rdr.IsDBNull(3) ? null : rdr.GetString(3), rdr.GetByte(4)));
+        }
+
+        return rows;
     }
 
     public int CountFindings()

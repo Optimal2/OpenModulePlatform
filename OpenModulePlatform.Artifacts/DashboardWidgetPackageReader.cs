@@ -11,7 +11,21 @@ public sealed record PortableDashboardWidgetPackage(
     string PackageVersion,
     string? ModuleKey,
     string? Author,
-    IReadOnlyList<PortableDashboardWidgetDefinition> Widgets);
+    IReadOnlyList<PortableDashboardWidgetDefinition> Widgets)
+{
+    /// <summary>
+    /// Widgets the reader dropped because that single widget broke a rule. Import callers
+    /// report these in their result so a dropped widget is not visible only as a log line.
+    /// </summary>
+    public IReadOnlyList<PortableDashboardWidgetSkip> SkippedWidgets { get; init; } = [];
+}
+
+/// <summary>
+/// One widget that was left out of a dashboard widget package, with the rule it broke.
+/// </summary>
+/// <param name="WidgetKey">The widget key as written in the document; may be empty when the key itself was invalid.</param>
+/// <param name="Reason">The validation message. It names fields and the widget type but never includes payload content.</param>
+public sealed record PortableDashboardWidgetSkip(string WidgetKey, string Reason);
 
 public sealed record PortableDashboardWidgetDefinition(
     string WidgetKey,
@@ -67,16 +81,22 @@ public sealed class DashboardWidgetPackageReader
             ?? throw new InvalidOperationException("The dashboard widget JSON file is empty.");
         ValidateDocument(document, sourceName);
 
+        var skipped = new List<PortableDashboardWidgetSkip>();
+        var widgets = document.Widgets.Select(item => NormalizeOrSkip(document, item, sourceName, skipped))
+            .Where(widget => widget is not null)
+            .Select(widget => widget!)
+            .ToArray();
+
         return new PortableDashboardWidgetPackage(
             document.Format,
             document.FormatVersion,
             CleanVersionText(document.PackageVersion, "packageVersion") ?? LegacyWidgetVersion,
             CleanOptionalKey(document.ModuleKey, "moduleKey", 100),
             CleanOptionalText(document.Author, "author", 200),
-            document.Widgets.Select(item => NormalizeOrSkip(document, item, sourceName))
-                .Where(widget => widget is not null)
-                .Select(widget => widget!)
-                .ToArray());
+            widgets)
+        {
+            SkippedWidgets = skipped
+        };
     }
 
     private static void ValidateDocument(DashboardWidgetDocument document, string sourceName)
@@ -161,14 +181,16 @@ public sealed class DashboardWidgetPackageReader
     }
 
     /// <summary>
-    /// Normalizes one widget, or returns null (and logs the reason) when that single
-    /// widget violates a rule. A bad widget must not fail the whole file: the rest of
-    /// the document is imported and only the invalid widget is dropped.
+    /// Normalizes one widget, or returns null (logging and recording the reason in
+    /// <paramref name="skipped"/>) when that single widget violates a rule. A bad widget
+    /// must not fail the whole file: the rest of the document is imported and only the
+    /// invalid widget is dropped.
     /// </summary>
     private PortableDashboardWidgetDefinition? NormalizeOrSkip(
         DashboardWidgetDocument document,
         DashboardWidgetDocumentItem item,
-        string sourceName)
+        string sourceName,
+        List<PortableDashboardWidgetSkip> skipped)
     {
         try
         {
@@ -181,6 +203,7 @@ public sealed class DashboardWidgetPackageReader
                 item.WidgetKey,
                 sourceName,
                 ex.Message);
+            skipped.Add(new PortableDashboardWidgetSkip(item.WidgetKey?.Trim() ?? string.Empty, ex.Message));
             return null;
         }
     }

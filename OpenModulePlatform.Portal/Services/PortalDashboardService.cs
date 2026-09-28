@@ -828,14 +828,20 @@ ORDER BY w.title,
     /// </summary>
     internal static bool IsOrphanedWidget(DashboardWidgetDefinition definition)
         => !ModuleFragmentWidget.IsModuleFragment(definition.WidgetType)
-           && (!string.Equals(definition.WidgetType?.Trim(), "portal", StringComparison.OrdinalIgnoreCase)
+           && (!DashboardWidgetTypes.IsKnown(definition.WidgetType)
                || (!string.IsNullOrWhiteSpace(definition.Payload) && !IsKnownPortalPayload(definition.Payload)));
 
     internal void LogUnrecognizedPayload(DashboardWidgetDefinition definition)
     {
         if (IsOrphanedWidget(definition))
         {
-            DashboardWidgetPayloadDiagnostics.WarnOnce(_logger, definition.WidgetId, definition.WidgetType);
+            DashboardWidgetPayloadDiagnostics.WarnOnce(_logger, definition.WidgetId, definition.WidgetType, definition.Payload);
+        }
+        else if (!ModuleFragmentWidget.IsModuleFragment(definition.WidgetType))
+        {
+            // Module-fragment payloads are judged by PortalModuleFragmentService, which
+            // forgets a widget once its payload parses.
+            DashboardWidgetPayloadDiagnostics.Forget(definition.WidgetId);
         }
     }
 

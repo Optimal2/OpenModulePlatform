@@ -42,6 +42,28 @@ public sealed class DashboardWidgetRenderingIntegrationTests
     }
 
     [Fact]
+    public async Task WidgetReadiness_ShowsWidgetsSkippedByHostAgentImportWithReason()
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var html = await RenderPartialAsync(scope.ServiceProvider, CreateHttpContext(scope.ServiceProvider),
+            "/Pages/Shared/_DashboardWidgetReadiness.cshtml",
+            new List<DashboardWidgetReadinessIssue>
+            {
+                new(0, "example:future", string.Empty, false)
+                {
+                    SkipReason = "unsupported widgetType future-widget",
+                    SkippedUtc = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)
+                }
+            });
+
+        Assert.Contains("No invalid stored module-fragment widget definitions were found.", html, StringComparison.Ordinal);
+        Assert.Contains("Widgets skipped by a HostAgent import", html, StringComparison.Ordinal);
+        Assert.Contains("example:future", html, StringComparison.Ordinal);
+        Assert.Contains("unsupported widgetType future-widget", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("(#0)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ModuleFragmentWidget_Unavailable_RendersNeutralPlaceholder()
     {
         using var scope = _fixture.Factory.Services.CreateScope();

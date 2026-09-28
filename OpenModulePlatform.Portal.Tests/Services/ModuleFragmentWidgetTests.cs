@@ -810,6 +810,49 @@ public sealed class ModuleFragmentWidgetTests
         Assert.DoesNotContain("unrecognized-private-payload", warning, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ChangedOrReturningInvalidDefinition_WarnsAgain()
+    {
+        var logger = new PayloadWarningLogger();
+        const int widgetId = 190006;
+        var service = new PortalDashboardService(null!, null!, logger);
+        void Render(string payload) => service.LogUnrecognizedPayload(new DashboardWidgetDefinition
+        {
+            WidgetId = widgetId, WidgetType = "portal", Payload = payload
+        });
+
+        Render("broken-private-payload");
+        Render("broken-private-payload");
+        Assert.Single(logger.Warnings);
+
+        Render("other-broken-private-payload");
+        Assert.Equal(2, logger.Warnings.Count);
+
+        // Repaired, then broken again with the payload it had before.
+        Render("admin-overview");
+        Render("broken-private-payload");
+        Assert.Equal(3, logger.Warnings.Count);
+        Assert.All(logger.Warnings, message => Assert.DoesNotContain("private-payload", message, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WarnedDefinitions_AreBoundedByClearingAtTheCap()
+    {
+        var logger = new PayloadWarningLogger();
+        var service = new PortalDashboardService(null!, null!, logger);
+        for (var offset = 0; offset <= DashboardWidgetPayloadDiagnostics.MaxTrackedWidgets; offset++)
+        {
+            service.LogUnrecognizedPayload(new DashboardWidgetDefinition
+            {
+                WidgetId = 300000 + offset, WidgetType = "future-widget", Payload = null
+            });
+        }
+
+        // Every widget warned once, and the map was cleared on reaching the cap instead of growing.
+        Assert.Equal(DashboardWidgetPayloadDiagnostics.MaxTrackedWidgets + 1, logger.Warnings.Count);
+        Assert.True(DashboardWidgetPayloadDiagnostics.TrackedWidgetCount <= DashboardWidgetPayloadDiagnostics.MaxTrackedWidgets);
+    }
+
     private sealed class PayloadWarningLogger : Microsoft.Extensions.Logging.ILogger<PortalModuleFragmentService>,
         Microsoft.Extensions.Logging.ILogger<PortalDashboardService>
     {

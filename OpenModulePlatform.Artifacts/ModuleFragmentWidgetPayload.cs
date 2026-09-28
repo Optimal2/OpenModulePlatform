@@ -107,7 +107,8 @@ public static class ModuleFragmentWidgetPayload
     {
         if (!IsModuleFragment(widgetType))
         {
-            if (!string.Equals(widgetType?.Trim(), "portal", StringComparison.OrdinalIgnoreCase))
+            // IsModuleFragment is false here, so of DashboardWidgetTypes.Known only portal remains.
+            if (!DashboardWidgetTypes.IsKnown(widgetType))
             {
                 throw new InvalidOperationException(
                     $"Dashboard widget '{widgetKey}': unsupported widgetType '{widgetType}'. Upgrade the importer and Portal before re-importing this widget definition.");
