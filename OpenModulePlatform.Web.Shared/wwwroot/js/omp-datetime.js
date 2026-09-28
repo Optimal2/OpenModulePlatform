@@ -1230,7 +1230,14 @@
                 done.type = "button";
                 done.className = "omp-daterange-panel__time-done";
                 done.textContent = texts.timeDone;
-                done.addEventListener("click", function () { disarm(); });
+                // Focus goes back to the field it was for: the button itself
+                // is gone with the grid once the field is disarmed (a focus,
+                // unlike a click, does not arm the field again).
+                done.addEventListener("click", function () {
+                    var field = armedInput;
+                    disarm();
+                    if (field) { field.focus({ preventScroll: true }); }
+                });
                 timeTitle.appendChild(done);
                 time.appendChild(timeTitle);
                 var hours = document.createElement("div");
