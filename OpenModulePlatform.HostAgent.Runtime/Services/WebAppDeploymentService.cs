@@ -1088,7 +1088,10 @@ public sealed class WebAppDeploymentService
     // A missing log directory must not fail the deployment: the application itself runs
     // without it. It must not be silent either, because NLog drops file targets it cannot
     // create without any visible error, so the failure is logged as a warning.
-    internal static void TryEnsureAppPoolDirectoryGrant(AppPoolDirectoryGrant grant, ILogger logger)
+    internal static void TryEnsureAppPoolDirectoryGrant(
+        AppPoolDirectoryGrant grant,
+        ILogger logger,
+        Func<string, IReadOnlyList<string>, HostAgentProcessResult>? runProcess = null)
     {
         var identity = grant.AccountNames.Count == 0
             ? $@"IIS AppPool\{grant.AppPoolName}"
@@ -1096,9 +1099,11 @@ public sealed class WebAppDeploymentService
         var error = "No app pool identity could be resolved.";
         try
         {
+            OmpReparsePointGuard.EnsureNotReparsePoint(grant.Path, "Web app log directory");
             Directory.CreateDirectory(grant.Path);
+            OmpReparsePointGuard.EnsureNotReparsePoint(grant.Path, "Web app log directory");
             if (grant.AccountNames.Count > 0
-                && TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out error))
+                && TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out error, runProcess))
             {
                 logger.LogDebug(
                     "Ensured web app log directory Modify access. Path={Path}, AppPoolName={AppPoolName}, Identity={Identity}",
@@ -1108,7 +1113,7 @@ public sealed class WebAppDeploymentService
                 return;
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or TimeoutException)
         {
             error = ex.Message;
         }
@@ -1125,17 +1130,16 @@ public sealed class WebAppDeploymentService
         string path,
         IReadOnlyCollection<string> accountNames,
         string permission,
-        out string error)
+        out string error,
+        Func<string, IReadOnlyList<string>, HostAgentProcessResult>? runProcess = null)
     {
         var lastError = string.Empty;
 
-        // R8-P2-16..23: /L acts on a link rather than its target. Without it, a junction
-        // planted on this path would have received Modify for an application-pool
-        // identity on whatever it points at. Unlike the Bootstrapper's equivalent this
-        // does not refuse a link outright, because the path here comes from deployment
-        // configuration and an installation deliberately placed behind a junction is
-        // supported.
-        var grantResults = accountNames.Select(accountName => RunProcess(
+        // /L keeps icacls from granting access to a link's target. Success on a link
+        // does not establish write access through it, so optional log-directory grants
+        // reject reparse points before reaching this method and warn the operator.
+        runProcess ??= static (fileName, arguments) => HostAgentProcessRunner.Run(fileName, arguments);
+        var grantResults = accountNames.Select(accountName => runProcess(
             "icacls.exe",
             [path, "/grant", $"{accountName}:(OI)(CI)({permission})", "/L"]));
 
@@ -1184,7 +1188,10 @@ public sealed class WebAppDeploymentService
             yield return normalized;
         }
 
-        yield return trimmed;
+        if (!string.Equals(normalized, trimmed, StringComparison.OrdinalIgnoreCase))
+        {
+            yield return trimmed;
+        }
     }
 
     private static string TryNormalizeDomainAccountName(string accountName)

@@ -82,6 +82,13 @@ on the web app log directory` with the path, app pool name, identity and the
 icacls "<application directory>\logs" /grant "IIS AppPool\<app pool name>:(OI)(CI)(M)"
 ```
 
+An `icacls` timeout also produces a warning and leaves deployment running.
+If `logs\` is a junction or symbolic link, HostAgent warns and skips the grant:
+an ACL applied to the link does not establish write access to its target.
+An operator must review the intended target and its permissions separately.
+Account-name candidates are tried once each, ignoring case, with normalized
+domain names before distinct configured names and the virtual app pool account.
+
 An application that is already deployed receives the grant at its next
 deployment. When HostAgent does not manage the IIS site, create `logs\` and
 grant the right as part of the site setup.
