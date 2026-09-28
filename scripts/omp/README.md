@@ -131,7 +131,10 @@ rejects the consumer artifact at import.
 Where Check 14 locks shared source TREES, Check 15 locks the shared SCRIPTS that are
 copied verbatim across the fleet -- today two files, `scripts/omp/bump-version.ps1` and
 `scripts/omp/validate-component-versions.helpers.ps1` (the `$sharedScripts` list), which are
-byte-identical in all nine repositories. The
+byte-identical in all nine repositories. Repositories with a `Microsoft.NET.Sdk.Web`
+project must also carry `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
+verbatim and import it from their root `Directory.Build.targets` (the
+`$sharedWebBuildFiles` list); repositories without web projects need neither. The
 consumer's `scripts/validate-component-versions.ps1` calls this script out of the sibling
 OpenModulePlatform checkout; it is deliberately **not** copied into the consumers, because
 a copied guard would be subject to the very drift it exists to detect. Comparison is a

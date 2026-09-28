@@ -45,7 +45,12 @@ internal static partial class PreStageArtifactContentProbe
 {
     private const string ArtifactsFolder = "artifacts/";
 
-    [GeneratedRegex("^[A-Za-z0-9._-]+$", RegexOptions.CultureInvariant)]
+    // The same token rule as the import's file name parser
+    // (ArtifactZipImportService.MetadataTokenPattern): a leading letter or digit,
+    // then '+' allowed for build metadata such as 1.2.3+abc. A looser or stricter
+    // rule here lets the gate skip a package the import measures, or measure one
+    // the import refuses by name.
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._+-]*$", RegexOptions.CultureInvariant)]
     private static partial Regex MetadataTokenPattern();
 
     public static PreStageArtifactIdentity? TryParseArtifactPackageName(string fileName)
@@ -85,14 +90,18 @@ internal static partial class PreStageArtifactContentProbe
         using var archive = ZipFile.OpenRead(universalPackagePath);
         foreach (var entry in archive.Entries.OrderBy(entry => entry.FullName, StringComparer.OrdinalIgnoreCase))
         {
+            // Every package anywhere under artifacts/, as the import finds them:
+            // UniversalModulePackageReader enumerates artifacts/ with
+            // SearchOption.AllDirectories, and the identity comes from the file
+            // name alone.
             var entryName = entry.FullName.Replace('\\', '/');
             if (!entryName.StartsWith(ArtifactsFolder, StringComparison.OrdinalIgnoreCase)
-                || entryName.IndexOf('/', ArtifactsFolder.Length) >= 0)
+                || entryName.EndsWith('/'))
             {
                 continue;
             }
 
-            var identity = TryParseArtifactPackageName(entryName[ArtifactsFolder.Length..]);
+            var identity = TryParseArtifactPackageName(entryName[(entryName.LastIndexOf('/') + 1)..]);
             if (identity is null)
             {
                 continue;

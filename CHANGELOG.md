@@ -356,6 +356,23 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Module repositories inherit the deterministic web publish; the pinning
+  target no longer adds a trailing newline.** The pinning target wrote the
+  manifest with `WriteLinesToFile`, which appended a line break the SDK
+  manifest does not have; an inline task now rewrites only the `Last-Modified`
+  values and round-trips every other byte. Every repository with a
+  `Microsoft.NET.Sdk.Web` project carries a verbatim copy of the target at the
+  same path and imports it from its root `Directory.Build.targets`;
+  `scripts/omp/validate-shared-scripts.ps1` (Check 15) fails when that copy is
+  missing, differs or is not imported. `scripts/dev/test-deterministic-web-publish.ps1`
+  proves it per project: publish, touch `wwwroot`, publish again, compare
+  the artifact SHA-256. All web-app components were bumped because their
+  published manifest loses the trailing newline once.
+- **The pre-stage artifact probe reads packages like the import.** It accepts
+  the import's file name tokens (a leading letter or digit, `+` allowed),
+  finds packages in subfolders of `artifacts/` as the universal package reader
+  does, and only compares against artifacts of an enabled module and app, the
+  same rows the import resolves.
 - **Same source, same version, same artifact SHA-256 for web apps.** The
   SDK writes a `Last-Modified` header per static web asset into
   `<app>.staticwebassets.endpoints.json`, taken from file system timestamps,

@@ -27,7 +27,14 @@ function New-Pair {
         [string] $PlatformManifest = '{ "manifestVersion": 1, "repositoryKey": "openmoduleplatform", "repositoryVersion": "0.0.1", "components": [] }',
         # A name other than OpenModulePlatform puts the platform checkout where
         # the sibling assumption cannot find it, as in a worktree under another root.
-        [string] $PlatformDirectoryName = 'OpenModulePlatform'
+        [string] $PlatformDirectoryName = 'OpenModulePlatform',
+        # Gives the consumer a Microsoft.NET.Sdk.Web project, which makes the
+        # shared web build files (the static web assets pinning target) required.
+        [switch] $ConsumerIsWeb,
+        # Body of the consumer's copy of the pinning target; empty leaves it out.
+        [string] $ConsumerTargetsBody = '',
+        # Writes a root Directory.Build.targets that imports the pinning target.
+        [switch] $ConsumerImportsTargets
     )
 
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
@@ -41,8 +48,22 @@ function New-Pair {
     }
     [IO.File]::WriteAllText((Join-Path $consumer 'scripts\omp\validate-component-versions.helpers.ps1'), $helpersBody)
 
+    if ($ConsumerIsWeb) {
+        New-Item -ItemType Directory -Path (Join-Path $consumer 'Web') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $consumer 'Web\Web.csproj'), '<Project Sdk="Microsoft.NET.Sdk.Web"></Project>')
+    }
+    if (-not [string]::IsNullOrEmpty($ConsumerTargetsBody)) {
+        New-Item -ItemType Directory -Path (Join-Path $consumer 'build') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $consumer 'build\OpenModulePlatform.DeterministicStaticWebAssets.targets'), $ConsumerTargetsBody)
+    }
+    if ($ConsumerImportsTargets) {
+        [IO.File]::WriteAllText((Join-Path $consumer 'Directory.Build.targets'), '<Project><Import Project="$(MSBuildThisFileDirectory)build\OpenModulePlatform.DeterministicStaticWebAssets.targets" /></Project>')
+    }
+
     if (-not $OmitPlatformRoot) {
         New-Item -ItemType Directory -Path (Join-Path $platform 'scripts\omp') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $platform 'build') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $platform 'build\OpenModulePlatform.DeterministicStaticWebAssets.targets'), 'canonical targets')
         if (-not $OmitPlatformScripts) {
             [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\bump-version.ps1'), $PlatformBody)
             [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\validate-component-versions.helpers.ps1'), $helpersBody)

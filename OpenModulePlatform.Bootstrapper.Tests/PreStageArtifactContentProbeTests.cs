@@ -41,6 +41,35 @@ public sealed class PreStageArtifactContentProbeTests : IDisposable
         Assert.Null(PreStageArtifactContentProbe.TryParseArtifactPackageName("content_webapp.module-definition.json"));
     }
 
+    [Theory]
+    [InlineData("content_webapp__content_webapp_webapp__web-app__content-webapp__0.3.316+abc123.zip", true)]
+    [InlineData("content_webapp__content_webapp_webapp__web-app__content-webapp__.0.3.316.zip", false)]
+    [InlineData("content_webapp__content_webapp_webapp__web-app__-content-webapp__0.3.316.zip", false)]
+    [InlineData("content_webapp__content_webapp_webapp__web-app__content webapp__0.3.316.zip", false)]
+    public void TheFileNameTokenRuleIsTheImports(string fileName, bool accepted)
+    {
+        // ArtifactZipImportService.MetadataTokenPattern: a leading letter or digit,
+        // then letters, digits, '.', '_', '+' and '-'.
+        Assert.Equal(accepted, PreStageArtifactContentProbe.TryParseArtifactPackageName(fileName) is not null);
+    }
+
+    [Fact]
+    public async Task APackageInASubfolderOfArtifactsIsMeasuredLikeTheImportFindsIt()
+    {
+        var universal = BuildUniversalPackage("nested", "artifacts/web/");
+        var expectedHash = await HashOfContentAsync("nested");
+
+        var components = await PreStageArtifactContentProbe.MeasureAsync(
+            universal,
+            (_, _) => Task.FromResult<PreStageRegisteredArtifact?>(new("0.3.316", expectedHash)),
+            Path.Join(_root, "work"),
+            CancellationToken.None);
+
+        var component = Assert.Single(components);
+        Assert.Equal("content-webapp", component.ComponentKey);
+        Assert.Equal(expectedHash, component.PackageSha256);
+    }
+
     [Fact]
     public async Task ContentThatDiffersFromTheRegisteredHashIsRefusedAndIdenticalContentPasses()
     {
@@ -85,7 +114,7 @@ public sealed class PreStageArtifactContentProbeTests : IDisposable
         Assert.True(PreStageVersionGate.Evaluate(components, databaseChecked: true, databaseFailure: null).MayProceed);
     }
 
-    private string BuildUniversalPackage(string endpointsText)
+    private string BuildUniversalPackage(string endpointsText, string artifactFolder = "artifacts/")
     {
         // A legacy (manifest-less) artifact package: the whole zip is the content.
         var artifactPath = Path.Join(_root, Guid.NewGuid().ToString("N") + ".zip");
@@ -98,7 +127,7 @@ public sealed class PreStageArtifactContentProbeTests : IDisposable
         var universalPath = Path.Join(_root, Guid.NewGuid().ToString("N") + ".zip");
         using (var universal = ZipFile.Open(universalPath, ZipArchiveMode.Create))
         {
-            universal.CreateEntryFromFile(artifactPath, "artifacts/" + PackageName);
+            universal.CreateEntryFromFile(artifactPath, artifactFolder + PackageName);
             WriteEntry(universal, "module-definitions/content_webapp.module-definition.json", "{}");
         }
 

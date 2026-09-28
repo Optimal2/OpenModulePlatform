@@ -103,6 +103,45 @@ $sharedScripts = @(
     'scripts/omp/validate-component-versions.helpers.ps1'
 )
 
+# Shared build files every repository with a web project (a .csproj on
+# Microsoft.NET.Sdk.Web) must carry verbatim AND import from its root
+# Directory.Build.targets. The static web assets endpoints manifest is generated
+# by the consuming web project, so a module repository that does not import the
+# pinning target publishes a different artifact SHA-256 from unchanged source
+# after every fresh checkout, and the import refuses it with "The artifact
+# content has changed under the same version" (measured 2026-09-28). A
+# repository without web projects needs neither the file nor the import.
+$sharedWebBuildFiles = @(
+    'build/OpenModulePlatform.DeterministicStaticWebAssets.targets'
+)
+
+function Test-HasWebProject {
+    <#
+        True when the repository contains a .csproj on Microsoft.NET.Sdk.Web.
+        Build output, dependency and VCS folders are not descended into: they
+        hold no source projects and can be large.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $skip = @('.git', '.vs', 'bin', 'obj', 'node_modules', 'artifacts', 'TestResults')
+    $pending = [System.Collections.Generic.Stack[string]]::new()
+    $pending.Push($Root)
+    while ($pending.Count -gt 0) {
+        $directory = $pending.Pop()
+        foreach ($project in [IO.Directory]::GetFiles($directory, '*.csproj')) {
+            if ([IO.File]::ReadAllText($project) -match 'Sdk\s*=\s*"Microsoft\.NET\.Sdk\.Web"') {
+                return $true
+            }
+        }
+        foreach ($child in [IO.Directory]::GetDirectories($directory)) {
+            if ($skip -notcontains [IO.Path]::GetFileName($child)) {
+                $pending.Push($child)
+            }
+        }
+    }
+    return $false
+}
+
 function Get-FileSha256 {
     <#
         Hashes the content with line-ending style normalized away.
@@ -261,6 +300,41 @@ foreach ($relative in $sharedScripts) {
     }
     else {
         Write-Host "Shared scripts: '$relative' matches the canonical copy ($($platformHash.Substring(0,16)))."
+    }
+}
+
+if (Test-HasWebProject -Root $consumerRoot) {
+    foreach ($relative in $sharedWebBuildFiles) {
+        $consumerPath = Join-Path $consumerRoot ($relative -replace '/', '\')
+        $platformPath = Join-Path $platformRoot ($relative -replace '/', '\')
+
+        if (-not (Test-Path -LiteralPath $platformPath -PathType Leaf)) {
+            $drift += "  - $relative is not in the platform checkout; update the OpenModulePlatform checkout at '$platformRoot'."
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $consumerPath -PathType Leaf)) {
+            $drift += "  - $relative is missing from this repository, which has web projects; the platform repository ships it."
+            continue
+        }
+
+        $consumerHash = Get-FileSha256 -Path $consumerPath
+        $platformHash = Get-FileSha256 -Path $platformPath
+        if ($consumerHash -ne $platformHash) {
+            $drift += "  - $relative differs from the canonical copy (this repository: $($consumerHash.Substring(0,16)), platform: $($platformHash.Substring(0,16)))."
+            continue
+        }
+
+        # A verbatim copy that nothing imports changes nothing.
+        $importsPath = Join-Path $consumerRoot 'Directory.Build.targets'
+        $fileName = [regex]::Escape([IO.Path]::GetFileName($relative))
+        $imported = (Test-Path -LiteralPath $importsPath -PathType Leaf) -and
+            ([IO.File]::ReadAllText($importsPath) -match ('<Import\s+Project="[^"]*build[\\/]' + $fileName + '"'))
+        if (-not $imported) {
+            $drift += "  - $relative matches the canonical copy but the root Directory.Build.targets does not import it."
+            continue
+        }
+
+        Write-Host "Shared scripts: '$relative' matches the canonical copy ($($platformHash.Substring(0,16))) and is imported."
     }
 }
 

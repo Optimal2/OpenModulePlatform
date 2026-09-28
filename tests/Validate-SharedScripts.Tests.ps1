@@ -340,3 +340,57 @@ Describe 'validate-shared-scripts: line-ending style is not drift' {
         finally { Remove-Pair -Pair $pair }
     }
 }
+
+Describe 'validate-shared-scripts: web repositories carry and import the pinning target' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
+    It 'Fails when a repository with a web project lacks the target' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerIsWeb
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'DeterministicStaticWebAssets\.targets is missing') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails when the copy differs from the canonical target' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerIsWeb -ConsumerTargetsBody 'stale targets' -ConsumerImportsTargets
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'differs from the canonical copy') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails when an identical copy is not imported' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerIsWeb -ConsumerTargetsBody 'canonical targets'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'does not import it') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Passes when an identical copy is imported' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerIsWeb -ConsumerTargetsBody 'canonical targets' -ConsumerImportsTargets
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Does not require the target in a repository without web projects' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+}

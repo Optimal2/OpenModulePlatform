@@ -5481,6 +5481,9 @@ internal static partial class Program
         // Same identity lookup as the host agent import
         // (OmpHostArtifactRepository.FindImportedArtifactByIdentityAsync), reached
         // through the module/app keys the artifact package file name declares.
+        // The app is resolved like ResolveArtifactZipImportAppAsync: enabled module
+        // and enabled app only, lowest AppId first. A disabled app is never
+        // compared by the import, so the gate must not compare it either.
         private static async Task<PreStageRegisteredArtifact?> FindRegisteredArtifactAsync(
             SqlConnection connection,
             PreStageArtifactIdentity identity,
@@ -5494,10 +5497,12 @@ INNER JOIN omp.Apps a ON a.AppId = ar.AppId
 INNER JOIN omp.Modules m ON m.ModuleId = a.ModuleId
 WHERE m.ModuleKey = @moduleKey
   AND a.AppKey = @appKey
+  AND m.IsEnabled = 1
+  AND a.IsEnabled = 1
   AND ar.Version = @version
   AND ar.PackageType = @packageType
   AND ar.TargetName = @targetName
-ORDER BY ar.ArtifactId;
+ORDER BY a.AppId, ar.ArtifactId;
 """,
                 connection);
             command.Parameters.AddWithValue("@moduleKey", identity.ModuleKey);
