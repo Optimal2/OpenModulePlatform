@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
 using OpenModulePlatform.Web.Shared.ActivityLog;
 using OpenModulePlatform.Web.Shared.Options;
@@ -17,16 +18,19 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     private readonly OmpAdminRepository _repo;
     private readonly ActivityLogWriter _activityLog;
+    private readonly IOptionsMonitor<ModuleFragmentWidgetOptions> _fragmentOptions;
 
     public MaintenanceModel(
         IOptions<WebAppOptions> options,
         RbacService rbac,
         OmpAdminRepository repo,
-        ActivityLogWriter activityLog)
+        ActivityLogWriter activityLog,
+        IOptionsMonitor<ModuleFragmentWidgetOptions> fragmentOptions)
         : base(options, rbac)
     {
         _repo = repo;
         _activityLog = activityLog;
+        _fragmentOptions = fragmentOptions;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -45,7 +49,8 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     public IReadOnlyList<MaintenanceFindingRow> MaintenanceFindings { get; private set; } = [];
 
-    public IReadOnlyList<DashboardWidgetReadinessIssue> DashboardWidgetIssues { get; private set; } = [];
+    public DashboardWidgetReadiness DashboardWidgetReadiness { get; private set; }
+        = new([], ModuleFragmentEndpointIssue.None);
 
     public IReadOnlyList<HostAgentJobRow> RecentHostAgentJobs { get; private set; } = [];
 
@@ -261,7 +266,11 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     private async Task LoadOperationalListsAsync(CancellationToken ct)
     {
-        DashboardWidgetIssues = await _repo.GetDashboardWidgetReadinessIssuesAsync(ct);
+        // The endpoint check uses this request's scheme, as the dashboard does, so an HTTP
+        // InternalBaseUrl blocked for HTTPS requests is reported here too.
+        DashboardWidgetReadiness = new DashboardWidgetReadiness(
+            await _repo.GetDashboardWidgetReadinessIssuesAsync(ct),
+            ModuleFragmentEndpointCheck.Check(_fragmentOptions.CurrentValue, Request.IsHttps, out _));
         MaintenanceFindings = await _repo.GetMaintenanceFindingsAsync(DefaultMaintenanceFindingLimit, ct);
         await LoadRecentHostAgentJobsAsync(ct);
     }

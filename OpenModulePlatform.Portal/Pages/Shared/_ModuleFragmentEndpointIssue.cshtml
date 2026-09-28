@@ -1,0 +1,19 @@
+@model OpenModulePlatform.Portal.Options.ModuleFragmentEndpointIssue
+@using OpenModulePlatform.Portal.Options
+
+@* Names the configuration key, the reason and the action. Never renders the configured URL. *@
+@switch (Model)
+{
+    case ModuleFragmentEndpointIssue.InvalidInternalBaseUrl:
+        <strong>@L["Module-fragment widgets are disabled: ModuleFragmentWidgets:InternalBaseUrl is not an absolute HTTP or HTTPS URL."]</strong>
+        <span>@L["Correct the value, or remove it to use the default fragment routing."]</span>
+        break;
+    case ModuleFragmentEndpointIssue.InternalBaseUrlUserInfo:
+        <strong>@L["Module-fragment widgets are disabled: ModuleFragmentWidgets:InternalBaseUrl contains user information (username or password), which is never sent."]</strong>
+        <span>@L["Remove the user information from the URL."]</span>
+        break;
+    case ModuleFragmentEndpointIssue.InsecureInternalBaseUrlForHttpsRequest:
+        <strong>@L["Module-fragment widgets are blocked for HTTPS requests: ModuleFragmentWidgets:InternalBaseUrl uses HTTP and would send identity cookies without TLS."]</strong>
+        <span>@L["Change it to an HTTPS address, or set ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true if a TLS-terminating proxy makes this HTTP hop intentional."]</span>
+        break;
+}

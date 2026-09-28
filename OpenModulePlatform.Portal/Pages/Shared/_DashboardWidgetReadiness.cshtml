@@ -1,11 +1,15 @@
-@model IReadOnlyList<OpenModulePlatform.Portal.Models.DashboardWidgetReadinessIssue>
+@model OpenModulePlatform.Portal.Models.DashboardWidgetReadiness
 @inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
 @{
-    var storedIssues = Model.Where(static issue => !issue.IsSkippedImport).ToList();
-    var skippedImports = Model.Where(static issue => issue.IsSkippedImport).ToList();
+    var storedIssues = Model.DefinitionIssues.Where(static issue => !issue.IsSkippedImport).ToList();
+    var skippedImports = Model.DefinitionIssues.Where(static issue => issue.IsSkippedImport).ToList();
 }
 
 <h3>@L["Dashboard widget readiness"]</h3>
+@if (Model.EndpointIssue != OpenModulePlatform.Portal.Options.ModuleFragmentEndpointIssue.None)
+{
+    <p role="alert"><partial name="_ModuleFragmentEndpointIssue" model="Model.EndpointIssue" /></p>
+}
 @if (storedIssues.Count == 0)
 {
     <p class="muted">@L["No invalid stored module-fragment widget definitions were found."]</p>

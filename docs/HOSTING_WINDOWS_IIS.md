@@ -146,6 +146,10 @@ operator can verify the dashboard with an authorized module-fragment widget:
    `TLS/certificate` warning includes target authority, effective TLS host and
    the underlying reason. Fix name mismatch, expiry or trust-chain errors at
    the endpoint; no private certificate details are exposed in the widget UI.
+   If `InternalBaseUrl` itself blocks the request (invalid URL, user
+   information, or HTTP for an HTTPS request), a Portal administrator sees the
+   reason and the action in the placeholder and under **Maintenance > Dashboard
+   widget readiness**; the Portal still starts.
 
 See [module-owned widgets](ADMIN_CONFIGURATION.md#module-owned-widgets-module-fragment)
 for routing precedence, caching, limits and the `InternalBaseUrl` override.

@@ -449,6 +449,63 @@ public sealed class ModuleFragmentWidgetTests
     }
 
     [Theory]
+    [InlineData("https://user:private-password@module.example", "http", false, ModuleFragmentEndpointIssue.InternalBaseUrlUserInfo,
+        "contains user information", "Remove the user information")]
+    [InlineData("ftp://private-host.example", "http", false, ModuleFragmentEndpointIssue.InvalidInternalBaseUrl,
+        "is not an absolute HTTP or HTTPS URL", "Correct the value")]
+    [InlineData("http://private-host.example:5000", "https", true, ModuleFragmentEndpointIssue.InsecureInternalBaseUrlForHttpsRequest,
+        "uses HTTP", "set ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true")]
+    public async Task Fetch_BlockedInternalBaseUrl_WarnsOncePerReasonWithActionAndReportsIssue(
+        string internalBaseUrl, string scheme, bool forwardedProxy, ModuleFragmentEndpointIssue expected,
+        string reason, string action)
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(Html("<p>x</p>")));
+        var logger = new ModuleFragmentWidgetOptionsTests.CapturingLoggerProvider();
+        using var loggerFactory = new Microsoft.Extensions.Logging.LoggerFactory([logger]);
+        var diagnostics = new ModuleFragmentEndpointDiagnostics(
+            new Microsoft.Extensions.Logging.Logger<ModuleFragmentEndpointDiagnostics>(loggerFactory));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions { InternalBaseUrl = internalBaseUrl },
+            endpointDiagnostics: diagnostics);
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var context = CreateContext();
+            // A TLS-terminating proxy: the scheme is HTTPS after forwarded-header handling
+            // while the connection to the Portal itself is plain HTTP.
+            context.Request.Scheme = scheme;
+            if (forwardedProxy)
+            {
+                context.Connection.LocalPort = 80;
+            }
+
+            var result = await service.GetFragmentAsync(context, 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+
+            Assert.False(result.IsLoaded);
+            Assert.Equal(expected, result.EndpointIssue);
+        }
+
+        Assert.Empty(handler.Requests);
+        var warning = Assert.Single(logger.Warnings);
+        Assert.Contains(ModuleFragmentEndpointCheck.InternalBaseUrlKey, warning, StringComparison.Ordinal);
+        Assert.Contains(reason, warning, StringComparison.Ordinal);
+        Assert.Contains(action, warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-password", warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-host", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Fetch_OtherFailures_DoNotReportEndpointIssue()
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions());
+
+        var result = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+
+        Assert.False(result.IsLoaded);
+        Assert.Equal(ModuleFragmentEndpointIssue.None, result.EndpointIssue);
+    }
+
+    [Theory]
     [InlineData("https://module.example:5000/ignored", "https://module.example/sample", "https://module.example:5000/sample/widgets/overview")]
     [InlineData(null, "https://module.example/sample", "https://module.example/sample/widgets/overview")]
     [InlineData(null, "https://untrusted.example/sample", "https://portal.example/sample/widgets/overview")]
@@ -869,13 +926,15 @@ public sealed class ModuleFragmentWidgetTests
     }
 
     private static PortalModuleFragmentService CreateService(StubHandler handler, ModuleFragmentWidgetOptions options,
-        Microsoft.Extensions.Logging.ILogger<PortalModuleFragmentService>? logger = null)
+        Microsoft.Extensions.Logging.ILogger<PortalModuleFragmentService>? logger = null,
+        ModuleFragmentEndpointDiagnostics? endpointDiagnostics = null)
         => new(
             new StubHttpClientFactory(handler),
             new MemoryCache(new MemoryCacheOptions()),
             new StaticOptionsMonitor<ModuleFragmentWidgetOptions>(options),
             Microsoft.Extensions.Options.Options.Create(new OmpAuthOptions()),
             Microsoft.Extensions.Options.Options.Create(new WebAppOptions()),
+            endpointDiagnostics ?? new ModuleFragmentEndpointDiagnostics(NullLogger<ModuleFragmentEndpointDiagnostics>.Instance),
             logger ?? NullLogger<PortalModuleFragmentService>.Instance);
 
     private sealed record CapturedRequest(string Uri, string? Host, string? Cookie, string? FragmentHeader);

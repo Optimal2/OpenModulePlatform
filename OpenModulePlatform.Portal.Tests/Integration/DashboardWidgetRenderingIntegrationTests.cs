@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using OpenModulePlatform.Portal.Models;
+using OpenModulePlatform.Portal.Options;
 using OpenModulePlatform.Portal.Services;
 
 namespace OpenModulePlatform.Portal.Tests.Integration;
@@ -31,7 +32,9 @@ public sealed class DashboardWidgetRenderingIntegrationTests
         using var scope = _fixture.Factory.Services.CreateScope();
         var html = await RenderPartialAsync(scope.ServiceProvider, CreateHttpContext(scope.ServiceProvider),
             "/Pages/Shared/_DashboardWidgetReadiness.cshtml",
-            new List<DashboardWidgetReadinessIssue> { new(190003, "example:legacy", "1.0.0", false) });
+            new DashboardWidgetReadiness(
+                new List<DashboardWidgetReadinessIssue> { new(190003, "example:legacy", "1.0.0", false) },
+                ModuleFragmentEndpointIssue.None));
 
         Assert.Contains("example:legacy", html, StringComparison.Ordinal);
         Assert.Contains("1.0.0", html, StringComparison.Ordinal);
@@ -47,20 +50,52 @@ public sealed class DashboardWidgetRenderingIntegrationTests
         using var scope = _fixture.Factory.Services.CreateScope();
         var html = await RenderPartialAsync(scope.ServiceProvider, CreateHttpContext(scope.ServiceProvider),
             "/Pages/Shared/_DashboardWidgetReadiness.cshtml",
-            new List<DashboardWidgetReadinessIssue>
-            {
-                new(0, "example:future", string.Empty, false)
+            new DashboardWidgetReadiness(
+                new List<DashboardWidgetReadinessIssue>
                 {
-                    SkipReason = "unsupported widgetType future-widget",
-                    SkippedUtc = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)
-                }
-            });
+                    new(0, "example:future", string.Empty, false)
+                    {
+                        SkipReason = "unsupported widgetType future-widget",
+                        SkippedUtc = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc)
+                    }
+                },
+                ModuleFragmentEndpointIssue.None));
 
         Assert.Contains("No invalid stored module-fragment widget definitions were found.", html, StringComparison.Ordinal);
         Assert.Contains("Widgets skipped by a HostAgent import", html, StringComparison.Ordinal);
         Assert.Contains("example:future", html, StringComparison.Ordinal);
         Assert.Contains("unsupported widgetType future-widget", html, StringComparison.Ordinal);
         Assert.DoesNotContain("(#0)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WidgetReadiness_ShowsBlockedEndpointReasonAndAction()
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var html = await RenderPartialAsync(scope.ServiceProvider, CreateHttpContext(scope.ServiceProvider),
+            "/Pages/Shared/_DashboardWidgetReadiness.cshtml",
+            new DashboardWidgetReadiness([], ModuleFragmentEndpointIssue.InsecureInternalBaseUrlForHttpsRequest));
+
+        Assert.Contains("ModuleFragmentWidgets:InternalBaseUrl uses HTTP", html, StringComparison.Ordinal);
+        Assert.Contains("ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true", html, StringComparison.Ordinal);
+        Assert.Contains("role=\"alert\"", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ModuleFragmentWidget_EndpointBlocked_ShowsReasonOnlyToAdministrators(bool isAdmin)
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var html = await RenderPartialAsync(scope.ServiceProvider, CreateHttpContext(scope.ServiceProvider),
+            "/Pages/Shared/_DashboardModuleFragmentWidget.cshtml",
+            new DashboardModuleFragmentWidget(7, 300,
+                ModuleFragmentResult.EndpointBlocked(ModuleFragmentEndpointIssue.InsecureInternalBaseUrlForHttpsRequest),
+                ShowAdminDiagnostics: isAdmin));
+
+        Assert.Contains("dashboard-module-fragment__placeholder", html, StringComparison.Ordinal);
+        Assert.Equal(isAdmin, html.Contains("ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true", StringComparison.Ordinal));
+        Assert.Equal(isAdmin, html.Contains("/admin/maintenance#maintenance-widgets", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

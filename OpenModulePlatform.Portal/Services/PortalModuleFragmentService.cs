@@ -51,6 +51,7 @@ public sealed class PortalModuleFragmentService
     private readonly IOptionsMonitor<ModuleFragmentWidgetOptions> _options;
     private readonly IOptions<OmpAuthOptions> _authOptions;
     private readonly IOptions<WebAppOptions> _webAppOptions;
+    private readonly ModuleFragmentEndpointDiagnostics _endpointDiagnostics;
     private readonly ILogger<PortalModuleFragmentService> _logger;
 
     public PortalModuleFragmentService(
@@ -59,6 +60,7 @@ public sealed class PortalModuleFragmentService
         IOptionsMonitor<ModuleFragmentWidgetOptions> options,
         IOptions<OmpAuthOptions> authOptions,
         IOptions<WebAppOptions> webAppOptions,
+        ModuleFragmentEndpointDiagnostics endpointDiagnostics,
         ILogger<PortalModuleFragmentService> logger)
     {
         _httpClientFactory = httpClientFactory;
@@ -66,6 +68,7 @@ public sealed class PortalModuleFragmentService
         _options = options;
         _authOptions = authOptions;
         _webAppOptions = webAppOptions;
+        _endpointDiagnostics = endpointDiagnostics;
         _logger = logger;
     }
 
@@ -154,8 +157,15 @@ public sealed class PortalModuleFragmentService
                 continue;
             }
 
-            var target = BuildTarget(httpContext, moduleBaseHref, config.FragmentPath, options,
-                _webAppOptions.Value.PortalTopBar.PortalBaseUrl);
+            var target = ResolveTarget(httpContext, moduleBaseHref, config.FragmentPath, options,
+                _webAppOptions.Value.PortalTopBar.PortalBaseUrl, out var endpointIssue);
+            if (endpointIssue != ModuleFragmentEndpointIssue.None)
+            {
+                _endpointDiagnostics.Report(endpointIssue);
+                results[widget.WidgetId] = ModuleFragmentResult.EndpointBlocked(endpointIssue);
+                continue;
+            }
+
             if (target is null)
             {
                 _logger.LogWarning(
@@ -341,7 +351,21 @@ public sealed class PortalModuleFragmentService
         string fragmentPath,
         ModuleFragmentWidgetOptions options,
         string? configuredPortalBaseUrl = null)
+        => ResolveTarget(httpContext, moduleBaseHref, fragmentPath, options, configuredPortalBaseUrl, out _);
+
+    /// <summary>
+    /// Builds the fragment request target. Returns null with a non-None
+    /// <paramref name="endpointIssue"/> when the configured InternalBaseUrl blocks the request.
+    /// </summary>
+    internal static FragmentRequestTarget? ResolveTarget(
+        HttpContext httpContext,
+        string moduleBaseHref,
+        string fragmentPath,
+        ModuleFragmentWidgetOptions options,
+        string? configuredPortalBaseUrl,
+        out ModuleFragmentEndpointIssue endpointIssue)
     {
+        endpointIssue = ModuleFragmentEndpointIssue.None;
         var request = httpContext.Request;
         string basePath;
         Uri? registeredOrigin = null;
@@ -376,19 +400,16 @@ public sealed class PortalModuleFragmentService
         }
 
         var relative = basePath.TrimEnd('/') + fragmentPath;
-        if (!string.IsNullOrWhiteSpace(options.InternalBaseUrl))
+        // An unsafe explicit override fails closed and never falls through to another
+        // destination; the caller reports the reason.
+        endpointIssue = ModuleFragmentEndpointCheck.Check(options, request.IsHttps, out var internalBase);
+        if (endpointIssue != ModuleFragmentEndpointIssue.None)
         {
-            // Fail closed even when options are supplied without the startup validator.
-            // An unsafe explicit override must not fall through to another destination.
-            if (!Uri.TryCreate(options.InternalBaseUrl.Trim(), UriKind.Absolute, out var internalBase)
-                || internalBase.Scheme is not ("http" or "https")
-                || !string.IsNullOrEmpty(internalBase.UserInfo)
-                || (request.IsHttps && internalBase.Scheme == Uri.UriSchemeHttp
-                    && !options.AllowInsecureInternalBaseUrl))
-            {
-                return null;
-            }
+            return null;
+        }
 
+        if (internalBase is not null)
+        {
             return new FragmentRequestTarget(
                 new Uri(internalBase.GetLeftPart(UriPartial.Authority) + relative),
                 HostHeader: null);

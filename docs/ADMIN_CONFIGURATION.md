@@ -333,13 +333,31 @@ one override for all fragment requests, including registered remote modules:
 the selected endpoint must route every module path. For example,
 `https://portal.example.com` uses that origin's DNS name for TLS and its normal
 certificate trust chain. `InternalBaseUrl` must be an absolute HTTP or HTTPS URL
-without user information (username or password); invalid values fail options
-validation at startup and on configuration reload. Validation errors never echo
-the configured URL or credentials.
+without user information (username or password). An unusable value does not
+stop the Portal from starting; it disables only the module-fragment widgets. No
+fragment request is ever sent to it, and it never falls back to another
+destination.
+
+Each blocking reason is logged once per Portal process as a warning that names
+the configuration key, the reason and the action. The warnings never contain the
+configured URL, so user information cannot reach the log:
+
+| Reason | When | Logged action |
+| --- | --- | --- |
+| `InternalBaseUrl` is not an absolute HTTP or HTTPS URL | At startup and on first use | Correct the value, or remove it to use the default fragment routing. |
+| `InternalBaseUrl` contains user information | At startup and on first use | Remove the user information from the URL. |
+| HTTP `InternalBaseUrl` for an HTTPS request | On the first blocked HTTPS request | Change it to an HTTPS address, or set `ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true` if a TLS-terminating proxy makes this HTTP hop intentional. |
+
+The same reason and action are shown to Portal administrators in the widget's
+placeholder on the dashboard and under **Maintenance > Dashboard widget
+readiness**, which evaluates the configuration for the scheme of the current
+request. Other users only see the neutral placeholder.
 
 For incoming HTTPS requests, an HTTP `InternalBaseUrl` is rejected by default:
-no fragment request is sent, a warning is logged, and the widget shows the neutral
-placeholder. Set `ModuleFragmentWidgets:AllowInsecureInternalBaseUrl` to `true`
+no fragment request is sent and the widget shows the placeholder. An existing
+installation behind a TLS-terminating proxy with an HTTP `InternalBaseUrl` to the
+Portal is affected after upgrading; check the readiness section after the upgrade.
+Set `ModuleFragmentWidgets:AllowInsecureInternalBaseUrl` to `true`
 only to explicitly approve a trusted loopback/private HTTP hop. That opt-in
 forwards identity cookies without TLS and never permits user information in the URL.
 The HTTPS check uses the request scheme after configured forwarded-header handling;

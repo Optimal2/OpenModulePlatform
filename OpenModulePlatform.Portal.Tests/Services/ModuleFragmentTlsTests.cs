@@ -104,6 +104,8 @@ public sealed class ModuleFragmentTlsTests
         services.AddOptions<WebAppOptions>().Configure(options => options.PortalTopBar.PortalBaseUrl = portalBaseUrl);
         services.AddSingleton<IHttpClientFactory>(new ClientFactory(handler));
         services.AddSingleton<ILogger<PortalModuleFragmentService>>(logger ?? new CaptureLogger());
+        services.AddSingleton(new ModuleFragmentEndpointDiagnostics(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ModuleFragmentEndpointDiagnostics>.Instance));
         return services.BuildServiceProvider();
     }
 

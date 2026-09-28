@@ -174,7 +174,7 @@
                         <div class="dashboard-widget__content-scale-target" data-widget-content-scale-target>
                             @if (ModuleFragmentWidget.IsModuleFragment(widget.WidgetType))
                             {
-                                <partial name="_DashboardModuleFragmentWidget" model="new DashboardModuleFragmentWidget(widget.WidgetId, widget.Width, Model.GetModuleFragment(widget.WidgetId))" />
+                                <partial name="_DashboardModuleFragmentWidget" model="new DashboardModuleFragmentWidget(widget.WidgetId, widget.Width, Model.GetModuleFragment(widget.WidgetId), Model.IsPortalAdmin)" />
                             }
                             else if (widget.Payload == "admin-overview")
                             {

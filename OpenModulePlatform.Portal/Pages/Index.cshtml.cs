@@ -207,7 +207,11 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
         return Partial(
             "_DashboardModuleFragmentWidget",
-            new DashboardModuleFragmentWidget(widgetId, Math.Clamp(width, 0, PortalDashboardService.MaxWidgetWidth), result));
+            new DashboardModuleFragmentWidget(
+                widgetId,
+                Math.Clamp(width, 0, PortalDashboardService.MaxWidgetWidth),
+                result,
+                ShowAdminDiagnostics: permissions.Contains(OmpPortalPermissions.Admin)));
     }
 
     public async Task<IActionResult> OnPostAddWidget(int widgetId, CancellationToken ct)

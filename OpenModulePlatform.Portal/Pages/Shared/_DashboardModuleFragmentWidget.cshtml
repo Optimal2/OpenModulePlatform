@@ -17,6 +17,20 @@
     }
     else
     {
-        <div class="dashboard-module-fragment__placeholder">@L["The widget could not be loaded."]</div>
+        <div class="dashboard-module-fragment__placeholder">
+            @if (Model.ShowAdminDiagnostics && Model.Result.EndpointIssue != OpenModulePlatform.Portal.Options.ModuleFragmentEndpointIssue.None)
+            {
+                @* Administrators see why the configured endpoint blocked the widget; other users keep the neutral text. *@
+                <div role="alert">
+                    <p>@L["The widget could not be loaded."]</p>
+                    <p><partial name="_ModuleFragmentEndpointIssue" model="Model.Result.EndpointIssue" /></p>
+                    <a class="action-link" href="~/admin/maintenance#maintenance-widgets">@L["Dashboard widget readiness"]</a>
+                </div>
+            }
+            else
+            {
+                @L["The widget could not be loaded."]
+            }
+        </div>
     }
 </div>

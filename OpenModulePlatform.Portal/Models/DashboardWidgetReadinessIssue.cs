@@ -1,3 +1,5 @@
+using OpenModulePlatform.Portal.Options;
+
 namespace OpenModulePlatform.Portal.Models;
 
 /// <summary>
@@ -15,3 +17,11 @@ public sealed record DashboardWidgetReadinessIssue(int WidgetId, string WidgetKe
 
     public bool IsSkippedImport => SkipReason is not null;
 }
+
+/// <summary>
+/// Maintenance-page readiness of dashboard widgets: definition issues plus the
+/// module-fragment endpoint issue evaluated for the current request.
+/// </summary>
+public sealed record DashboardWidgetReadiness(
+    IReadOnlyList<DashboardWidgetReadinessIssue> DefinitionIssues,
+    ModuleFragmentEndpointIssue EndpointIssue);

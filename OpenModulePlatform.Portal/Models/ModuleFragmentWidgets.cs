@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Portal/Models/ModuleFragmentWidgets.cs
 using OpenModulePlatform.Artifacts;
+using OpenModulePlatform.Portal.Options;
 
 namespace OpenModulePlatform.Portal.Models;
 
@@ -85,12 +86,23 @@ public static class ModuleFragmentWidget
 public sealed record ModuleFragmentResult(bool IsLoaded, string Html, string? ModeClass)
 {
     public static ModuleFragmentResult Unavailable { get; } = new(false, string.Empty, null);
+
+    /// <summary>
+    /// Why the configured fragment endpoint blocked the request, shown to administrators
+    /// only. <see cref="ModuleFragmentEndpointIssue.None"/> for every other outcome.
+    /// </summary>
+    public ModuleFragmentEndpointIssue EndpointIssue { get; init; }
+
+    public static ModuleFragmentResult EndpointBlocked(ModuleFragmentEndpointIssue issue)
+        => Unavailable with { EndpointIssue = issue };
 }
 
 /// <summary>
 /// View model for the module fragment widget container.
 /// </summary>
+/// <param name="ShowAdminDiagnostics">True for Portal administrators: shows why the endpoint blocked the widget.</param>
 public sealed record DashboardModuleFragmentWidget(
     int WidgetId,
     int ContentWidth,
-    ModuleFragmentResult Result);
+    ModuleFragmentResult Result,
+    bool ShowAdminDiagnostics = false);
