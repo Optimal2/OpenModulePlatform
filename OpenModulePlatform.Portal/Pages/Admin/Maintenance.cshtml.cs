@@ -45,6 +45,8 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     public IReadOnlyList<MaintenanceFindingRow> MaintenanceFindings { get; private set; } = [];
 
+    public IReadOnlyList<DashboardWidgetReadinessIssue> DashboardWidgetIssues { get; private set; } = [];
+
     public IReadOnlyList<HostAgentJobRow> RecentHostAgentJobs { get; private set; } = [];
 
     public async Task<IActionResult> OnGet(int? maxVersionsToKeep, CancellationToken ct)
@@ -259,6 +261,7 @@ public sealed class MaintenanceModel : OmpPortalPageModel
 
     private async Task LoadOperationalListsAsync(CancellationToken ct)
     {
+        DashboardWidgetIssues = await _repo.GetDashboardWidgetReadinessIssuesAsync(ct);
         MaintenanceFindings = await _repo.GetMaintenanceFindingsAsync(DefaultMaintenanceFindingLimit, ct);
         await LoadRecentHostAgentJobsAsync(ct);
     }

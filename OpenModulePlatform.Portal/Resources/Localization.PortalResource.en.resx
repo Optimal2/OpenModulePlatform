@@ -1165,4 +1165,11 @@
   <data name="Starts at" xml:space="preserve"><value>Starts at</value></data>
   <data name="Expires at" xml:space="preserve"><value>Expires at</value></data>
   <data name="Enter a valid date and time." xml:space="preserve"><value>Enter a valid date and time.</value></data>
+  <data name="Dashboard widget readiness" xml:space="preserve"><value>Dashboard widget readiness</value></data>
+  <data name="No invalid stored module-fragment widget definitions were found." xml:space="preserve"><value>No invalid stored module-fragment widget definitions were found.</value></data>
+  <data name="Widget definitions require repair. A HostAgent upgrade alone does not repair previously imported rows." xml:space="preserve"><value>Widget definitions require repair. A HostAgent upgrade alone does not repair previously imported rows.</value></data>
+  <data name="After upgrading HostAgent and Portal, re-import the original universal package, or build one from the original widget files in the package library. Keep the same widget versions." xml:space="preserve"><value>After upgrading HostAgent and Portal, re-import the original universal package, or build one from the original widget files in the package library. Keep the same widget versions.</value></data>
+  <data name="Turn off" xml:space="preserve"><value>Turn off</value></data>
+  <data name="Turn on" xml:space="preserve"><value>Turn on</value></data>
+  <data name="In the package preview, select only the affected widget definitions and review their permissions before importing. Refresh this page to verify the repair." xml:space="preserve"><value>In the package preview, select only the affected widget definitions and review their permissions before importing. Refresh this page to verify the repair.</value></data>
 </root>

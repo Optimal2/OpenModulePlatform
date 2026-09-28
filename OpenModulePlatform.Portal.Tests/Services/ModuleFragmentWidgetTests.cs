@@ -21,6 +21,17 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// </summary>
 public sealed class ModuleFragmentWidgetTests
 {
+    [Fact]
+    public void UnknownWidgetType_IsRejectedBeforePersistence()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PortalDashboardWidgetPackageService.ValidateJson(
+                BuildDocument("\"payload\": \"opaque\"", "future-widget"), "future.widgets.json"));
+
+        Assert.Contains("unsupported widgetType", error.Message, StringComparison.Ordinal);
+        Assert.Contains("sample.overview", error.Message, StringComparison.Ordinal);
+    }
+
     private const string AppKey = "sample_module_web";
     private const string ModuleBase = "http://portal.example:8088/sample";
 
@@ -706,14 +717,76 @@ public sealed class ModuleFragmentWidgetTests
     private static HttpResponseMessage Html(string body)
         => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "text/html") };
 
-    private static PortalModuleFragmentService CreateService(StubHandler handler, ModuleFragmentWidgetOptions options)
+    [Fact]
+    public async Task InvalidPayload_WarnsOncePerWidgetAcrossServiceInstances_WithoutLoggingPayload()
+    {
+        var handler = new StubHandler((_, _) => Task.FromResult(Html("unused")));
+        var logger = new PayloadWarningLogger();
+        const int firstId = 190001;
+        const int secondId = 190002;
+        var ids = new HashSet<int> { firstId, secondId };
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var service = CreateService(handler, new ModuleFragmentWidgetOptions(), logger);
+            var result = await service.GetFragmentsAsync(CreateContext(),
+                [new(firstId, "secret-invalid-payload"), new(secondId, "{}")], ids, [App()], CancellationToken.None);
+            Assert.All(result.Values, value => Assert.False(value.IsLoaded));
+        }
+
+        Assert.Empty(handler.Requests);
+        Assert.Equal(2, logger.Warnings.Count);
+        Assert.All(logger.Warnings, message =>
+        {
+            Assert.Contains("module-fragment", message, StringComparison.Ordinal);
+            Assert.DoesNotContain("secret-invalid-payload", message, StringComparison.Ordinal);
+        });
+        Assert.Contains(logger.Warnings, message => message.Contains(firstId.ToString(), StringComparison.Ordinal));
+        Assert.Contains(logger.Warnings, message => message.Contains(secondId.ToString(), StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(190004, "portal", "unrecognized-private-payload")]
+    [InlineData(190005, "future-widget", null)]
+    public void UnrecognizedPayload_WarnsOnceWithoutLoggingPayload(int widgetId, string type, string? payload)
+    {
+        var logger = new PayloadWarningLogger();
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var service = new PortalDashboardService(null!, null!, logger);
+            service.LogUnrecognizedPayload(new DashboardWidgetDefinition
+            {
+                WidgetId = widgetId, WidgetType = type, Payload = payload
+            });
+        }
+        var warning = Assert.Single(logger.Warnings);
+        Assert.Contains(type, warning, StringComparison.Ordinal);
+        Assert.DoesNotContain("unrecognized-private-payload", warning, StringComparison.Ordinal);
+    }
+
+    private sealed class PayloadWarningLogger : Microsoft.Extensions.Logging.ILogger<PortalModuleFragmentService>,
+        Microsoft.Extensions.Logging.ILogger<PortalDashboardService>
+    {
+        public List<string> Warnings { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel,
+            Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == Microsoft.Extensions.Logging.LogLevel.Warning)
+                Warnings.Add(formatter(state, exception));
+        }
+    }
+
+    private static PortalModuleFragmentService CreateService(StubHandler handler, ModuleFragmentWidgetOptions options,
+        Microsoft.Extensions.Logging.ILogger<PortalModuleFragmentService>? logger = null)
         => new(
             new StubHttpClientFactory(handler),
             new MemoryCache(new MemoryCacheOptions()),
             new StaticOptionsMonitor<ModuleFragmentWidgetOptions>(options),
             Microsoft.Extensions.Options.Options.Create(new OmpAuthOptions()),
             Microsoft.Extensions.Options.Options.Create(new WebAppOptions()),
-            NullLogger<PortalModuleFragmentService>.Instance);
+            logger ?? NullLogger<PortalModuleFragmentService>.Instance);
 
     private sealed record CapturedRequest(string Uri, string? Host, string? Cookie, string? FragmentHeader);
 

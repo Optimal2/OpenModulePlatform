@@ -1,0 +1,36 @@
+@model IReadOnlyList<OpenModulePlatform.Portal.Models.DashboardWidgetReadinessIssue>
+
+<h3>@L["Dashboard widget readiness"]</h3>
+@if (Model.Count == 0)
+{
+    <p class="muted">@L["No invalid stored module-fragment widget definitions were found."]</p>
+}
+else
+{
+    <p role="alert"><strong>@L["Widget definitions require repair. A HostAgent upgrade alone does not repair previously imported rows."]</strong></p>
+    <p>@L["After upgrading HostAgent and Portal, re-import the original universal package, or build one from the original widget files in the package library. Keep the same widget versions."]</p>
+    <ol>
+        <li>@L["Turn off"] <strong>@L["Quick import"]</strong>.</li>
+        <li>@L["Turn on"] <strong>@L["Replace existing dashboard widgets for rollback or repair"]</strong>.</li>
+        <li>@L["In the package preview, select only the affected widget definitions and review their permissions before importing. Refresh this page to verify the repair."]</li>
+    </ol>
+    <div class="toolbar">
+        <a class="action-link" href="~/admin/universalpackagebuilder">@L["Create universal package"]</a>
+        <a class="action-link" href="~/admin/modulepackageimport">@L["Import/export"]</a>
+    </div>
+    <div class="table-scroll">
+        <table class="grid">
+            <thead><tr><th>@L["Widget"]</th><th>@L["Version"]</th><th>@L["Status"]</th></tr></thead>
+            <tbody>
+            @foreach (var issue in Model)
+            {
+                <tr>
+                    <td><code>@issue.WidgetKey</code> (#@issue.WidgetId)</td>
+                    <td>@issue.WidgetVersion</td>
+                    <td>@L[issue.IsEnabled ? "Enabled" : "Disabled"]</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

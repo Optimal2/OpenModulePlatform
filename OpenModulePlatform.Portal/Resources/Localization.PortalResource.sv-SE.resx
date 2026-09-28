@@ -3431,4 +3431,11 @@
   <data name="Select a valid local time in {0}. The selected time does not exist or is not a calendar value." xml:space="preserve"><value>Välj en giltig lokal tid i {0}. Den valda tiden finns inte eller är inte ett kalendervärde.</value></data>
   <data name="If a clock time occurs twice when daylight saving time ends, the first occurrence is used." xml:space="preserve"><value>Om ett klockslag förekommer två gånger när sommartiden slutar används den första förekomsten.</value></data>
   <data name="Enter a valid date and time." xml:space="preserve"><value>Ange ett giltigt datum och klockslag.</value></data>
+  <data name="Dashboard widget readiness" xml:space="preserve"><value>Kontroll av dashboardwidgetar</value></data>
+  <data name="No invalid stored module-fragment widget definitions were found." xml:space="preserve"><value>Inga ogiltiga lagrade module-fragment-definitioner hittades.</value></data>
+  <data name="Widget definitions require repair. A HostAgent upgrade alone does not repair previously imported rows." xml:space="preserve"><value>Widgetdefinitioner behöver repareras. En uppgradering av HostAgent reparerar inte tidigare importerade rader.</value></data>
+  <data name="After upgrading HostAgent and Portal, re-import the original universal package, or build one from the original widget files in the package library. Keep the same widget versions." xml:space="preserve"><value>Efter uppgradering av HostAgent och Portal: importera om det ursprungliga universalpaketet, eller bygg ett paket från de ursprungliga widgetfilerna i paketbiblioteket. Behåll samma widgetversioner.</value></data>
+  <data name="Turn off" xml:space="preserve"><value>Stäng av</value></data>
+  <data name="Turn on" xml:space="preserve"><value>Aktivera</value></data>
+  <data name="In the package preview, select only the affected widget definitions and review their permissions before importing. Refresh this page to verify the repair." xml:space="preserve"><value>Välj bara de berörda widgetdefinitionerna i paketförhandsgranskningen och kontrollera deras behörigheter före import. Uppdatera den här sidan för att verifiera reparationen.</value></data>
 </root>

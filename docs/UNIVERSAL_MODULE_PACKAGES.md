@@ -478,6 +478,36 @@ itself is unreadable.
 6. Review the status banner for counts and first failures; expand
    **Import details** for the full row list.
 
+## Repair widget definitions imported before an importer upgrade
+
+Upgrading HostAgent does not replay widget files already imported into the database.
+An older importer can therefore leave a `module-fragment` widget with a missing or
+invalid payload even after the service upgrade succeeds.
+
+After upgrading HostAgent and Portal, open **System → Maintenance → Dashboard widget
+readiness**. This live, read-only check uses the runtime payload parser and lists the
+affected widget keys, IDs and versions, including disabled widgets. It checks stored
+definitions, not endpoint availability. Invalid widget payloads also produce a Warning
+once per widget per Portal process; the payload content is never logged.
+
+To repair listed rows without changing their `widgetVersion`:
+
+1. Use the original universal package, or create one containing the original widget
+   files from the package library. Do not export the damaged database rows as the source.
+2. In **Import/export**, turn off **Quick import** and turn on **Replace existing
+   dashboard widgets for rollback or repair**.
+3. Preview the package, select only the affected widget definitions, and review their
+   permissions and metadata before importing. Replacement applies the definition's
+   metadata and permissions as well as the normalized payload.
+4. Refresh Maintenance. Repaired definitions disappear from the list; existing user
+   layouts keep referencing the same widget IDs.
+
+Only `portal` and `module-fragment` widget types are supported. An unknown type is
+rejected by Portal validation; HostAgent skips that widget with a Warning and continues
+with valid siblings. After upgrading to an importer that supports the type, explicitly
+re-import the package. Skipped widgets are not automatically retried. These checks apply
+to the upgraded importer; an already running older binary cannot enforce them.
+
 ## Migration Policy
 
 The old object formats remain readable during the transition:

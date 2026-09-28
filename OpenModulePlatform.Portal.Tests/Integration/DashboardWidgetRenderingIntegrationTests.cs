@@ -26,6 +26,22 @@ public sealed class DashboardWidgetRenderingIntegrationTests
     }
 
     [Fact]
+    public async Task WidgetReadiness_ShowsAffectedVersionAndSameVersionRepairAction()
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var html = await RenderPartialAsync(scope.ServiceProvider, CreateHttpContext(scope.ServiceProvider),
+            "/Pages/Shared/_DashboardWidgetReadiness.cshtml",
+            new List<DashboardWidgetReadinessIssue> { new(190003, "example:legacy", "1.0.0", false) });
+
+        Assert.Contains("example:legacy", html, StringComparison.Ordinal);
+        Assert.Contains("1.0.0", html, StringComparison.Ordinal);
+        Assert.Contains("190003", html, StringComparison.Ordinal);
+        Assert.Contains("Quick import", html, StringComparison.Ordinal);
+        Assert.Contains("Replace existing dashboard widgets for rollback or repair", html, StringComparison.Ordinal);
+        Assert.Contains("/admin/modulepackageimport", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ModuleFragmentWidget_Unavailable_RendersNeutralPlaceholder()
     {
         using var scope = _fixture.Factory.Services.CreateScope();

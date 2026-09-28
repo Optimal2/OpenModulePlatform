@@ -92,9 +92,9 @@ public static class ModuleFragmentWidgetPayload
     /// <remarks>
     /// For a <c>module-fragment</c> widget the definition must use <c>appKey</c> and
     /// <c>fragmentPath</c> and leave <c>payload</c> empty; the result is the normalized JSON.
-    /// For every other widget type the fragment fields must be absent and the payload is
-    /// returned as given (trimmed, null when empty). Any rule violation throws with the
-    /// widget key in the message, so an import fails loudly instead of storing NULL.
+    /// For a <c>portal</c> widget the fragment fields must be absent and the payload is
+    /// returned as given (trimmed, null when empty). Unsupported types and rule violations
+    /// throw with the widget key in the message, so import cannot persist an invalid definition.
     /// </remarks>
     public static string? NormalizeDefinition(
         string widgetKey,
@@ -107,6 +107,12 @@ public static class ModuleFragmentWidgetPayload
     {
         if (!IsModuleFragment(widgetType))
         {
+            if (!string.Equals(widgetType?.Trim(), "portal", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Dashboard widget '{widgetKey}': unsupported widgetType '{widgetType}'. Upgrade the importer and Portal before re-importing this widget definition.");
+            }
+
             if (appKey is not null || fragmentPath is not null || defaultWidth is not null || defaultHeight is not null)
             {
                 throw new InvalidOperationException(

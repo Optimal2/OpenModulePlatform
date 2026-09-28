@@ -118,9 +118,15 @@ public sealed class PortalModuleFragmentService
                 continue;
             }
 
-            if (!accessibleWidgetIds.Contains(widget.WidgetId)
-                || ModuleFragmentWidget.TryParsePayload(widget.Payload) is not { } config)
+            if (!accessibleWidgetIds.Contains(widget.WidgetId))
             {
+                results[widget.WidgetId] = ModuleFragmentResult.Unavailable;
+                continue;
+            }
+
+            if (ModuleFragmentWidget.TryParsePayload(widget.Payload) is not { } config)
+            {
+                DashboardWidgetPayloadDiagnostics.WarnOnce(_logger, widget.WidgetId, ModuleFragmentWidget.WidgetType);
                 results[widget.WidgetId] = ModuleFragmentResult.Unavailable;
                 continue;
             }

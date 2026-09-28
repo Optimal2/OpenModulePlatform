@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using OpenModulePlatform.Artifacts;
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Web.Shared.Services;
-using System.Collections.Concurrent;
 using System.Data;
 using System.Globalization;
 using System.Security.Cryptography;
@@ -41,10 +40,6 @@ public sealed class PortalDashboardService
     private readonly SqlConnectionFactory _db;
     private readonly AppCatalogService _catalog;
     private readonly ILogger<PortalDashboardService> _logger;
-
-    // Debug logging of orphaned widget rows is deliberately rate-limited to once per
-    // widget row per process, so a user's dashboard load cannot spam the log.
-    private static readonly ConcurrentDictionary<int, byte> LoggedOrphanWidgetIds = new();
 
     public PortalDashboardService(
         SqlConnectionFactory db,
@@ -165,20 +160,7 @@ ORDER BY uaw.order_priority,
                 continue;
             }
 
-            if (IsOrphanedWidget(definition) && LoggedOrphanWidgetIds.TryAdd(widgetId, 0))
-            {
-                // A widget row whose payload the Portal no longer renders (for example a
-                // module-owned dashboard widget that moved to its own module repository)
-                // is kept but ignored: it renders as an empty widget and is logged at
-                // Debug so the operator can clean up the orphaned row if desired. The
-                // payload itself is never logged - old module keys must not leak into the
-                // log - only its length and a short hash, once per widget row per process.
-                _logger.LogDebug(
-                    "Dashboard widget (widget_id {WidgetId}) of type '{WidgetType}' has an unrecognized payload ({PayloadFingerprint}) and renders as an empty widget.",
-                    widgetId,
-                    definition.WidgetType,
-                    PayloadFingerprint(definition.Payload!));
-            }
+            LogUnrecognizedPayload(definition);
 
             widgets.Add(new DashboardActiveWidget
             {
@@ -840,16 +822,22 @@ ORDER BY w.title,
     }
 
     /// <summary>
-    /// True when a widget definition carries a payload the Portal no longer renders.
-    /// A null or empty payload is never an orphan: portal widget types that do not use
-    /// a payload legitimately store NULL, and flagging those would label ordinary rows
-    /// as leftovers. Module-fragment widgets are never orphans either - their payload
-    /// is parsed by <see cref="ModuleFragmentWidget"/>, not by this switch.
+    /// True for unsupported types or portal payloads the dashboard no longer renders.
+    /// Empty portal payloads are legitimate. Module-fragment payloads are validated
+    /// by their own render path before any request is sent.
     /// </summary>
     internal static bool IsOrphanedWidget(DashboardWidgetDefinition definition)
-        => !string.IsNullOrWhiteSpace(definition.Payload)
-           && !ModuleFragmentWidget.IsModuleFragment(definition.WidgetType)
-           && !IsKnownPortalPayload(definition.Payload);
+        => !ModuleFragmentWidget.IsModuleFragment(definition.WidgetType)
+           && (!string.Equals(definition.WidgetType?.Trim(), "portal", StringComparison.OrdinalIgnoreCase)
+               || (!string.IsNullOrWhiteSpace(definition.Payload) && !IsKnownPortalPayload(definition.Payload)));
+
+    internal void LogUnrecognizedPayload(DashboardWidgetDefinition definition)
+    {
+        if (IsOrphanedWidget(definition))
+        {
+            DashboardWidgetPayloadDiagnostics.WarnOnce(_logger, definition.WidgetId, definition.WidgetType);
+        }
+    }
 
     /// <summary>
     /// A short, stable stand-in for a payload in log output: its length plus the first

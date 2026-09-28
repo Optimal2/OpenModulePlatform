@@ -6,6 +6,7 @@
 @{
     const string StatusSectionId = "maintenance-status";
     const string ScanSectionId = "maintenance-scan";
+    const string WidgetsSectionId = "maintenance-widgets";
     const string RetentionSectionId = "maintenance-retention";
     const string JobsSectionId = "maintenance-jobs";
     const string PreviewSectionId = "maintenance-preview";
@@ -23,6 +24,7 @@
         sectionNavigatorItems.Add(new SectionNavigatorItem(L["Status"].Value, StatusSectionId));
     }
 
+    sectionNavigatorItems.Add(new SectionNavigatorItem(L["Dashboard widget readiness"].Value, WidgetsSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["OMP scan"].Value, ScanSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["HostAgent job queue"].Value, JobsSectionId));
     sectionNavigatorItems.Add(new SectionNavigatorItem(L["Artifact retention"].Value, RetentionSectionId));
@@ -51,6 +53,10 @@
 <div id="@StatusSectionId" class="section-navigator-target">
     @await Component.InvokeAsync("OmpFeedback", new { message = Model.StatusMessage })
 </div>
+
+<section id="@WidgetsSectionId" class="card top-gap section-navigator-target">
+    <partial name="_DashboardWidgetReadiness" model="Model.DashboardWidgetIssues" />
+</section>
 
 <section id="@ScanSectionId" class="card top-gap section-navigator-target">
     <div class="split-header">

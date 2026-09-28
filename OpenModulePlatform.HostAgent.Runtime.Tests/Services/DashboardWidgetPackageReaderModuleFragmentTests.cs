@@ -14,6 +14,23 @@ namespace OpenModulePlatform.HostAgent.Runtime.Tests.Services;
 public sealed class DashboardWidgetPackageReaderModuleFragmentTests
 {
     [Fact]
+    public async Task UnknownWidgetType_IsRejectedBeforePersistence()
+    {
+        var logger = new RecordingLogger();
+        var package = await ReadAsync(WidgetDocument("""
+            "widgetKey": "example:future",
+            "title": "Future widget",
+            "widgetType": "future-widget",
+            "payload": "opaque",
+            "permissionNames": [],
+            "roleNames": []
+            """), logger);
+
+        Assert.Empty(package.Widgets);
+        AssertWarning(logger, "example:future", "unsupported widgetType");
+    }
+
+    [Fact]
     public async Task ModuleFragmentDefinition_IsNormalizedIntoPayloadJson()
     {
         var package = await ReadAsync(ModuleFragmentWidgetJson("""
