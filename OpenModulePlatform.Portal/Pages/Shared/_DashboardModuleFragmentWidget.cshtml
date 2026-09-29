@@ -20,6 +20,10 @@
     else if (isLoading)
     {
         <div class="dashboard-module-fragment__placeholder" aria-live="polite">@L["The widget is loading…"]</div>
+        <noscript>
+            <style>.dashboard-module-fragment.is-loading > [aria-live] { display: none; }</style>
+            <div class="dashboard-module-fragment__placeholder">@L["The widget could not be loaded."]</div>
+        </noscript>
     }
     else
     {

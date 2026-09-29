@@ -114,7 +114,9 @@ public sealed class DashboardWidgetRenderingIntegrationTests
         Assert.Contains("data-module-fragment-retry=\"timeout\"", html, StringComparison.Ordinal);
         Assert.Contains("data-module-fragment-widget-id=\"7\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("is-unavailable", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("The widget could not be loaded.", html, StringComparison.Ordinal);
+        var noScript = html[html.IndexOf("<noscript>", StringComparison.Ordinal)..html.IndexOf("</noscript>", StringComparison.Ordinal)];
+        Assert.Contains("The widget could not be loaded.", noScript, StringComparison.Ordinal);
+        Assert.Contains("[aria-live] { display: none; }", noScript, StringComparison.Ordinal);
     }
 
     [Fact]

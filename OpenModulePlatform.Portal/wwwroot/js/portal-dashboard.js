@@ -336,12 +336,7 @@
     };
 
     function initDashboard(root) {
-        root.querySelectorAll('[data-module-fragment-retry="timeout"]').forEach(pending => {
-            const element = pending.closest('[data-dashboard-widget]');
-            if (element) {
-                scheduleModuleFragmentRetry(root, element, { widgetId: pending.dataset.moduleFragmentWidgetId });
-            }
-        });
+        root.querySelectorAll('[data-dashboard-widget]').forEach(element => initializeModuleFragment(root, element));
         const canvas = root.querySelector('[data-dashboard-canvas]');
         const editToggle = root.querySelector('[data-dashboard-edit-toggle]');
         const editLabel = root.querySelector('[data-dashboard-edit-label]');
@@ -523,9 +518,7 @@
             const element = createWidgetElement(root, widget);
             canvas.appendChild(element);
             snapWidgetToGrid(element, state);
-            if (isModuleFragmentWidgetType(widget.widgetType)) {
-                loadModuleFragment(root, element, widget);
-            }
+            initializeModuleFragment(root, element);
             state.addedWidgetIds.add(temporaryWidgetId);
             bindWidget(root, canvas, element, token, () => ++maxOrder, state, updateDirtyState);
             bindEntryFavoriteToggles(root, element, token);
@@ -3777,7 +3770,7 @@
         const requests = moduleFragmentRequests.get(root);
         const key = String(widgetId);
         if (!requests.has(key)) {
-            requests.set(key, { attempts: 0, busy: false });
+            requests.set(key, { attempts: 0, active: null });
         }
         return requests.get(key);
     }
@@ -3792,22 +3785,53 @@
         }
     }
 
+    function initializeModuleFragment(root, element) {
+        const pending = element.querySelector('[data-module-fragment]');
+        if (!pending || !pending.classList.contains('is-loading')) {
+            return;
+        }
+        const widget = { widgetId: element.dataset.widgetId || pending.dataset.moduleFragmentWidgetId };
+        if (!widget.widgetId || !root.dataset.moduleFragmentUrl) {
+            showModuleFragmentUnavailable(root, pending);
+        } else if (pending.dataset.moduleFragmentRetry === 'timeout') {
+            scheduleModuleFragmentRetry(root, element, widget);
+        } else {
+            loadModuleFragment(root, element, widget);
+        }
+    }
+
+    function beginModuleFragmentRequest(state, element, pending) {
+        if (state.active?.element === element && state.active.pending === pending) {
+            return null;
+        }
+        if (state.active?.timer != null) {
+            window.clearTimeout(state.active.timer);
+        }
+        const active = { element, pending, timer: null };
+        state.active = active;
+        return active;
+    }
+
     function scheduleModuleFragmentRetry(root, element, widget) {
         const pending = element.querySelector('[data-module-fragment]');
         if (!pending || pending.dataset.moduleFragmentRetry !== 'timeout') {
             return;
         }
         const state = getModuleFragmentRequest(root, widget.widgetId);
-        if (state.busy) {
+        const active = beginModuleFragmentRequest(state, element, pending);
+        if (!active) {
             return;
         }
         if (state.attempts >= moduleFragmentRetryDelays.length || !root.dataset.moduleFragmentUrl) {
+            state.active = null;
             showModuleFragmentUnavailable(root, pending);
             return;
         }
-        state.busy = true;
-        window.setTimeout(() => {
-            state.busy = false;
+        active.timer = window.setTimeout(() => {
+            if (state.active !== active) {
+                return;
+            }
+            state.active = null;
             if (!root.contains(element) || element.querySelector('[data-module-fragment]') !== pending) {
                 return;
             }
@@ -3833,15 +3857,19 @@
     // response is the same partial the page itself renders.
     async function loadModuleFragment(root, element, widget) {
         const pending = element.querySelector('[data-module-fragment]');
-        if (!pending || !root.dataset.moduleFragmentUrl) {
+        if (!pending) {
+            return;
+        }
+        if (!root.dataset.moduleFragmentUrl) {
+            showModuleFragmentUnavailable(root, pending);
             return;
         }
 
         const state = getModuleFragmentRequest(root, widget.widgetId);
-        if (state.busy) {
+        const active = beginModuleFragmentRequest(state, element, pending);
+        if (!active) {
             return;
         }
-        state.busy = true;
         const showUnavailable = () => showModuleFragmentUnavailable(root, pending);
 
         try {
@@ -3865,13 +3893,18 @@
                 return;
             }
 
-            pending.replaceWith(loaded);
+            if (state.active === active && root.contains(element)
+                && element.querySelector('[data-module-fragment]') === pending) {
+                pending.replaceWith(loaded);
+            }
         } catch {
             showUnavailable();
         } finally {
-            state.busy = false;
-            if (root.contains(element)) {
-                scheduleModuleFragmentRetry(root, element, widget);
+            if (state.active === active) {
+                state.active = null;
+                if (root.contains(element)) {
+                    scheduleModuleFragmentRetry(root, element, widget);
+                }
             }
         }
     }
@@ -4287,6 +4320,7 @@
             });
 
             canvas.appendChild(widget);
+            initializeModuleFragment(root, widget);
             if (userActiveWidgetId <= 0) {
                 state.addedWidgetIds.add(userActiveWidgetId);
                 nextTemporaryId = Math.min(nextTemporaryId, userActiveWidgetId - 1);
@@ -4519,6 +4553,7 @@
             const widget = savedWidget.cloneNode(true);
             clearDashboardBindingMarkers(widget);
             canvas.appendChild(widget);
+            initializeModuleFragment(root, widget);
             bindWidget(root, canvas, widget, token, nextOrder, state, onChange);
             bindEntryFavoriteToggles(root, widget, token);
             bindEntryListFilters(widget);
