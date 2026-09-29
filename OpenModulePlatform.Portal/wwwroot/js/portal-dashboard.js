@@ -3759,18 +3759,20 @@
         return widgetType === 'module-fragment';
     }
 
-    // Keep the budget outside replaced fragment markup, isolated per widget element.
+    // Two retries per widget instance and page view, including snapshot/draft restores.
+    // Definition IDs are shared by distinct instances and must never key this budget.
     const moduleFragmentRequests = new WeakMap();
     const moduleFragmentRetryDelays = [2000, 5000];
+    const moduleFragmentTimeoutMilliseconds = 15000;
 
     function getModuleFragmentRequest(root, element) {
         if (!moduleFragmentRequests.has(root)) {
-            moduleFragmentRequests.set(root, new WeakMap());
+            moduleFragmentRequests.set(root, new Map());
         }
         const requests = moduleFragmentRequests.get(root);
-        const key = element;
+        const key = element.dataset.userActiveWidgetId || element;
         if (!requests.has(key)) {
-            requests.set(key, { attempts: 0, active: null });
+            requests.set(key, { attempts: 0, started: false, active: null });
         }
         return requests.get(key);
     }
@@ -3810,6 +3812,7 @@
         if (state.active?.timer != null) {
             window.clearTimeout(state.active.timer);
         }
+        state.active?.controller?.abort();
         const active = { element, pending, timer: null };
         state.active = active;
         return active;
@@ -3821,6 +3824,7 @@
             return;
         }
         const state = getModuleFragmentRequest(root, element);
+        state.started = true;
         const active = beginModuleFragmentRequest(state, element, pending);
         if (!active) {
             return;
@@ -3839,7 +3843,7 @@
                 return;
             }
             state.attempts += 1;
-            loadModuleFragment(root, element, widget);
+            loadModuleFragment(root, element, widget, true);
         }, moduleFragmentRetryDelays[state.attempts]);
     }
 
@@ -3858,7 +3862,7 @@
     // A widget added without a page reload asks the Portal for the fragment; the Portal
     // fetches and sanitizes it server-side exactly as on a full page load, so the
     // response is the same partial the page itself renders.
-    async function loadModuleFragment(root, element, widget) {
+    async function loadModuleFragment(root, element, widget, isRetry = false) {
         const pending = element.querySelector('[data-module-fragment]');
         if (!pending) {
             return;
@@ -3869,11 +3873,24 @@
         }
 
         const state = getModuleFragmentRequest(root, element);
+        if (!isRetry && state.started && state.active?.element !== element) {
+            pending.dataset.moduleFragmentRetry = 'timeout';
+            scheduleModuleFragmentRetry(root, element, widget);
+            return;
+        }
         const active = beginModuleFragmentRequest(state, element, pending);
         if (!active) {
             return;
         }
         const showUnavailable = () => showModuleFragmentUnavailable(root, pending);
+        state.started = true;
+        active.controller = new AbortController();
+        let timedOut = false;
+        // Covers response headers AND the response body. Aborting fetch releases both.
+        active.timer = window.setTimeout(() => {
+            timedOut = true;
+            active.controller.abort();
+        }, moduleFragmentTimeoutMilliseconds);
 
         try {
             const url = new URL(root.dataset.moduleFragmentUrl, window.location.href);
@@ -3881,6 +3898,7 @@
             url.searchParams.set('width', String(Math.round(element.getBoundingClientRect().width) || widget.width || 0));
             const response = await fetch(url.toString(), {
                 credentials: 'same-origin',
+                signal: active.controller.signal,
                 headers: { Accept: 'text/html' }
             });
             if (!response.ok || isDashboardLoginRedirect(response)) {
@@ -3901,8 +3919,16 @@
                 pending.replaceWith(loaded);
             }
         } catch {
-            showUnavailable();
+            if (state.active === active && root.contains(element)
+                && element.querySelector('[data-module-fragment]') === pending) {
+                if (timedOut) {
+                    pending.dataset.moduleFragmentRetry = 'timeout';
+                } else {
+                    showUnavailable();
+                }
+            }
         } finally {
+            window.clearTimeout(active.timer);
             if (state.active === active) {
                 state.active = null;
                 if (root.contains(element)) {
@@ -4530,6 +4556,11 @@
 
             const widget = canvas.querySelector(`[data-dashboard-widget][data-user-active-widget-id="${cssEscape(temporaryId)}"]`);
             if (widget) {
+                const requests = moduleFragmentRequests.get(widget.closest('[data-dashboard-root]'));
+                if (requests?.has(temporaryId)) {
+                    // Older snapshots/drafts may still carry the temporary ID.
+                    requests.set(userActiveWidgetId, requests.get(temporaryId));
+                }
                 widget.dataset.userActiveWidgetId = userActiveWidgetId;
             }
         });

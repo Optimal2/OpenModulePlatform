@@ -15,9 +15,15 @@ public sealed class ModuleFragmentWidgetOptions
 
     /// <summary>
     /// Seconds one fragment result is reused per user, active role and widget.
-    /// Zero disables caching. Clamped to 0-3600.
+    /// Zero disables ordinary result caching. Clamped to 0-3600.
     /// </summary>
     public int CacheSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Seconds a timeout is reused. Independent of CacheSeconds; zero disables it.
+    /// Clamped to 0-5 seconds so the retry after 2 + 5 seconds can reach the module.
+    /// </summary>
+    public int TimeoutCacheSeconds { get; set; } = 1;
 
     /// <summary>
     /// Maximum time for one fragment request. Clamped to 250-10000 ms.
@@ -48,6 +54,9 @@ public sealed class ModuleFragmentWidgetOptions
 
     public TimeSpan GetCacheDuration()
         => TimeSpan.FromSeconds(Math.Clamp(CacheSeconds, 0, 3600));
+
+    public TimeSpan GetTimeoutCacheDuration()
+        => TimeSpan.FromSeconds(Math.Clamp(TimeoutCacheSeconds, 0, 5));
 
     public TimeSpan GetTimeout()
         => TimeSpan.FromMilliseconds(Math.Clamp(TimeoutMilliseconds, 250, 10000));

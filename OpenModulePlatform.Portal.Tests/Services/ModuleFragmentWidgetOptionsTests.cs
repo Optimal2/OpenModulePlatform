@@ -11,6 +11,19 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 public sealed class ModuleFragmentWidgetOptionsTests
 {
     [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(3, 3)]
+    [InlineData(100, 5)]
+    public void TimeoutCache_IsClampedToAllowBoundedRetries(int configured, int expected)
+    {
+        Assert.Equal(TimeSpan.FromSeconds(expected),
+            new ModuleFragmentWidgetOptions { TimeoutCacheSeconds = configured }.GetTimeoutCacheDuration());
+        Assert.Equal(TimeSpan.FromSeconds(1), new ModuleFragmentWidgetOptions().GetTimeoutCacheDuration());
+    }
+
+    [Theory]
     [InlineData("http://user@module.example")]
     [InlineData("https://user:private-password@module.example")]
     [InlineData(" https://user%40name:private-password@module.example/path ")]

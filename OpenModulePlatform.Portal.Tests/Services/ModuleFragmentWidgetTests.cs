@@ -776,21 +776,64 @@ public sealed class ModuleFragmentWidgetTests
         Assert.Equal(3, handler.Requests.Count);
     }
 
-    [Fact]
-    public async Task Fetch_Timeout_IsNotCached_AndRetryCanRecover()
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(60, 1)]
+    [InlineData(60, 5)]
+    public async Task Fetch_Timeout_IsBrieflyCached_AndRetryCanRecover(int cacheSeconds, int timeoutCacheSeconds)
     {
         var calls = 0;
         var handler = new StubHandler((_, _) => ++calls == 1
             ? Task.FromException<HttpResponseMessage>(new OperationCanceledException())
             : Task.FromResult(Html("<p>ready</p>")));
-        var service = CreateService(handler, new ModuleFragmentWidgetOptions { CacheSeconds = 60 });
+        var clock = new CacheClock();
+        using var cache = new MemoryCache(new MemoryCacheOptions { Clock = clock });
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions
+        {
+            CacheSeconds = cacheSeconds, TimeoutCacheSeconds = timeoutCacheSeconds
+        }, cache: cache);
 
         var first = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
         var second = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
 
         Assert.Equal(ModuleFragmentFailureReason.Timeout, first.FailureReason);
-        Assert.True(second.IsLoaded);
+        Assert.Equal(ModuleFragmentFailureReason.Timeout, second.FailureReason);
+        Assert.Single(handler.Requests);
+        clock.UtcNow += TimeSpan.FromSeconds(timeoutCacheSeconds).Subtract(TimeSpan.FromMilliseconds(1));
+        var beforeExpiry = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+        Assert.Equal(ModuleFragmentFailureReason.Timeout, beforeExpiry.FailureReason);
+        Assert.Single(handler.Requests);
+        clock.UtcNow += TimeSpan.FromMilliseconds(2);
+        var retry = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+        Assert.True(retry.IsLoaded);
         Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Fetch_TimeoutCache_CanBeDisabled()
+    {
+        var handler = new StubHandler((_, _) => Task.FromException<HttpResponseMessage>(new OperationCanceledException()));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions { TimeoutCacheSeconds = 0 });
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var result = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+            Assert.Equal(ModuleFragmentFailureReason.Timeout, result.FailureReason);
+        }
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Fetch_TimeoutCache_PreservesUserAndWidgetIsolationAndPermissionChecks()
+    {
+        var handler = new StubHandler((_, _) => Task.FromException<HttpResponseMessage>(new OperationCanceledException()));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions());
+        await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+        var denied = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int>(), [App()], CancellationToken.None);
+        Assert.Equal(ModuleFragmentFailureReason.None, denied.FailureReason);
+        Assert.Single(handler.Requests);
+        await service.GetFragmentAsync(CreateContext(userId: "8"), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+        await service.GetFragmentAsync(CreateContext(), 9, Payload(), new HashSet<int> { 9 }, [App()], CancellationToken.None);
+        Assert.Equal(3, handler.Requests.Count);
     }
 
     [Fact]
@@ -993,10 +1036,11 @@ public sealed class ModuleFragmentWidgetTests
 
     private static PortalModuleFragmentService CreateService(StubHandler handler, ModuleFragmentWidgetOptions options,
         Microsoft.Extensions.Logging.ILogger<PortalModuleFragmentService>? logger = null,
-        ModuleFragmentEndpointDiagnostics? endpointDiagnostics = null)
+        ModuleFragmentEndpointDiagnostics? endpointDiagnostics = null,
+        IMemoryCache? cache = null)
         => new(
             new StubHttpClientFactory(handler),
-            new MemoryCache(new MemoryCacheOptions()),
+            cache ?? new MemoryCache(new MemoryCacheOptions()),
             new StaticOptionsMonitor<ModuleFragmentWidgetOptions>(options),
             Microsoft.Extensions.Options.Options.Create(new OmpAuthOptions()),
             Microsoft.Extensions.Options.Options.Create(new WebAppOptions()),
@@ -1004,6 +1048,11 @@ public sealed class ModuleFragmentWidgetTests
             logger ?? NullLogger<PortalModuleFragmentService>.Instance);
 
     private sealed record CapturedRequest(string Uri, string? Host, string? Cookie, string? FragmentHeader);
+
+    private sealed class CacheClock : Microsoft.Extensions.Internal.ISystemClock
+    {
+        public DateTimeOffset UtcNow { get; set; } = DateTimeOffset.UtcNow;
+    }
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
         : HttpMessageHandler

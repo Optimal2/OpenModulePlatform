@@ -310,12 +310,15 @@ response, or a response above the size limit shows the neutral placeholder
 "The widget could not be loaded." to the user. Details only go to the Portal log.
 A timeout instead shows "The widget is loading…" with a polite live region.
 The browser retries through the Portal after 2 seconds and, if that also times
-out, after another 5 seconds. There are at most two retries per widget element;
-instances of the same widget have independent budgets. Repeated initialization
+out, after another 5 seconds. There are at most two retries per widget instance
+and page view, even across Reset/Discard and draft restoration; instances of the
+same widget have independent budgets. Repeated initialization
 of an unchanged widget does not start duplicate
 requests. A final timeout shows the
 ordinary error placeholder. Other failures never trigger these retries. The
-default server timeout remains 3000 ms.
+default server timeout remains 3000 ms. Each browser request has a 15-second
+deadline covering both headers and body; expiry aborts the request and uses the
+same timeout retry budget, ending with the ordinary error when exhausted.
 
 The request target is chosen so that a client cannot steer it:
 
@@ -384,6 +387,7 @@ Portal settings (`appsettings.json`, all optional):
 ```json
 "ModuleFragmentWidgets": {
   "CacheSeconds": 30,
+  "TimeoutCacheSeconds": 1,
   "TimeoutMilliseconds": 3000,
   "MaxResponseBytes": 262144,
   "InternalBaseUrl": null,
@@ -392,13 +396,15 @@ Portal settings (`appsettings.json`, all optional):
 ```
 
 Results, including failures other than timeouts, are cached per user, active
-role, culture, and widget for `CacheSeconds` (0 disables the cache), so the
-dashboard does not call a module on every page load. Timeouts are not cached,
-allowing the bounded retries to recover when a module finishes starting. A
+role, culture, and widget for `CacheSeconds` (0 disables ordinary result caching),
+so the dashboard does not call a module on every page load. Timeouts use the same
+cache isolation for `TimeoutCacheSeconds` (default 1, clamped to 0–5; 0 disables
+timeout caching independently). The short lifetime shields slow modules from
+immediate repeated requests while allowing bounded cold-start retries. A
 widget added without a page reload uses the same server-side path and retry
 budget. Resetting or discarding changes and restoring a draft also resume loading
-fragments. Each new element receives its own retry budget; replacing fragment
-markup within an existing element retains its budget. A removed element's pending
+fragments. The instance's budget survives element and fragment replacement,
+including assignment of a saved instance ID to a newly added widget. A removed element's pending
 retry or response cannot interfere with other instances. If loading cannot start,
 or JavaScript is disabled, the ordinary error placeholder is shown instead.
 Run the retry tests with `node --test tests/portal-dashboard-fragment.test.cjs`.

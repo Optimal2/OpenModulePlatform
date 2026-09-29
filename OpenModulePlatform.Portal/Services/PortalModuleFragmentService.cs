@@ -108,6 +108,7 @@ public sealed class PortalModuleFragmentService
     {
         var options = _options.CurrentValue;
         var cacheDuration = options.GetCacheDuration();
+        var timeoutCacheDuration = options.GetTimeoutCacheDuration();
         var results = new Dictionary<int, ModuleFragmentResult>();
         var pending = new List<PreparedFetch>();
         string? cookieHeader = null;
@@ -149,9 +150,10 @@ public sealed class PortalModuleFragmentService
             }
 
             var cacheKey = BuildCacheKey(httpContext, widget.WidgetId, widget.Payload);
-            if (cacheDuration > TimeSpan.Zero
-                && _cache.TryGetValue(cacheKey, out ModuleFragmentResult? cached)
-                && cached is not null)
+            if (_cache.TryGetValue(cacheKey, out ModuleFragmentResult? cached)
+                && cached is not null
+                && (cached.FailureReason == ModuleFragmentFailureReason.Timeout
+                    ? timeoutCacheDuration : cacheDuration) > TimeSpan.Zero)
             {
                 results[widget.WidgetId] = cached;
                 continue;
@@ -202,11 +204,12 @@ public sealed class PortalModuleFragmentService
             (Fetch: fetch, Result: await FetchAsync(fetch, options, ct))));
         foreach (var (fetch, result) in fetched)
         {
-            if (cacheDuration > TimeSpan.Zero && result.FailureReason != ModuleFragmentFailureReason.Timeout)
+            var resultCacheDuration = result.FailureReason == ModuleFragmentFailureReason.Timeout
+                ? timeoutCacheDuration : cacheDuration;
+            if (resultCacheDuration > TimeSpan.Zero)
             {
-                // Cache other failures as before; a timeout must reach the endpoint
-                // again so the dashboard's bounded retries can recover from a cold start.
-                _cache.Set(fetch.CacheKey, result, cacheDuration);
+                // Briefly shield a slow module while allowing bounded cold-start retries.
+                _cache.Set(fetch.CacheKey, result, resultCacheDuration);
             }
 
             results[fetch.WidgetId] = result;
