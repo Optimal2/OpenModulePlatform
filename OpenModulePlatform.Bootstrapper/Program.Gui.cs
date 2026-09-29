@@ -2035,7 +2035,7 @@ internal static partial class Program
             UniversalPackageBuildResult result;
             try
             {
-                result = CreateUniversalPackageZip(request);
+                result = CreateUniversalPackageZip(request, message => Report("> Warning: " + message));
             }
             catch (OutputFileExistsException ex)
             {
@@ -2484,7 +2484,7 @@ internal static partial class Program
                     UniversalPackageBuildResult result;
                     try
                     {
-                        result = CreateUniversalPackageZip(request);
+                        result = CreateUniversalPackageZip(request, message => Console.WriteLine("> Warning: " + message));
                     }
                     catch (OutputFileExistsException ex)
                     {
@@ -7167,7 +7167,9 @@ ORDER BY ar.ArtifactId DESC;
         return candidate.ToString(AutomaticUniversalPackageVersionFormat, CultureInfo.InvariantCulture);
     }
 
-    internal static UniversalPackageBuildResult CreateUniversalPackageZip(UniversalPackageBuildRequest request)
+    internal static UniversalPackageBuildResult CreateUniversalPackageZip(
+        UniversalPackageBuildRequest request,
+        Action<string>? reportWarning = null)
     {
         // Validate artifact payloads before touching the output path so a failed
         // export never leaves a truncated package behind.
@@ -7183,7 +7185,7 @@ ORDER BY ar.ArtifactId DESC;
         // name fails instead of winning silently (OutputFileExistsException) and
         // no reader sees a partial zip.
         var outputPath = Path.GetFullPath(request.OutputPath);
-        NoOverwriteFile.Write(outputPath, stream => WriteUniversalPackageZip(stream, request));
+        NoOverwriteFile.Write(outputPath, stream => WriteUniversalPackageZip(stream, request), reportWarning);
         return new UniversalPackageBuildResult(outputPath, request.Items.Count);
     }
 

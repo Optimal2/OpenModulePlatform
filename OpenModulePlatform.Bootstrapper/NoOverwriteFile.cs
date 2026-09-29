@@ -1,3 +1,6 @@
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
 namespace OpenModulePlatform.Bootstrapper;
 
 /// <summary>
@@ -8,10 +11,16 @@ namespace OpenModulePlatform.Bootstrapper;
 internal sealed class OutputFileExistsException : IOException
 {
     public OutputFileExistsException(string path, Exception? innerException = null)
-        : base(
+        : this(
+            path,
             $"{path} already exists and was not replaced. An existing package is never overwritten; "
                 + "build again to get a new version, or choose another version or output file.",
             innerException)
+    {
+    }
+
+    public OutputFileExistsException(string path, string message, Exception? innerException = null)
+        : base(message, innerException)
     {
         Path = path;
     }
@@ -41,15 +50,25 @@ internal sealed class OutputFileExistsException : IOException
 /// the content to a temporary file beside the target (same directory, same
 /// volume) and renames it over its own claim, so a reader never observes a
 /// partial package under the final name -- only, briefly, the empty claim.
+///
+/// The rename replaces whatever holds the name, so it runs only after the
+/// target is verified to still be this writer's claim: empty and the same file
+/// (volume serial number and file index) that was created. A claim deleted and
+/// recreated by someone else while the content was written is refused instead
+/// of replaced. A process killed between claim and rename leaves the empty
+/// claim behind; the next build recognises an empty file and explains it
+/// instead of reporting a package that does not exist.
 /// </remarks>
 internal static class NoOverwriteFile
 {
     /// <summary>
     /// Writes a new file at <paramref name="path"/> through <paramref name="write"/>.
     /// Throws <see cref="OutputFileExistsException"/> when the path already
-    /// exists or another writer claims it first.
+    /// exists or another writer claims it first. <paramref name="reportWarning"/>
+    /// receives cleanup failures that leave a file behind; without it they go
+    /// to <see cref="System.Diagnostics.Trace"/>.
     /// </summary>
-    public static void Write(string path, Action<Stream> write)
+    public static void Write(string path, Action<Stream> write, Action<string>? reportWarning = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(write);
@@ -59,7 +78,7 @@ internal static class NoOverwriteFile
             ?? throw new ArgumentException($"'{path}' has no parent directory.", nameof(path));
         Directory.CreateDirectory(directory);
 
-        ClaimName(fullPath);
+        var claim = ClaimName(fullPath);
         var tempPath = System.IO.Path.Join(
             directory,
             $".{System.IO.Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
@@ -72,31 +91,110 @@ internal static class NoOverwriteFile
                 stream.Flush(flushToDisk: true);
             }
 
-            // Replacing is correct here: the file being replaced is this writer's
-            // own empty claim, never someone else's package.
+            // Replacing is correct only while the target is this writer's own
+            // empty claim, never someone else's file.
+            if (!IsOwnClaim(fullPath, claim))
+            {
+                throw new OutputFileExistsException(
+                    fullPath,
+                    $"{fullPath} was replaced by another file while this package was written, and was not overwritten. "
+                        + "An existing package is never overwritten; build again to get a new version.");
+            }
+
             File.Move(tempPath, fullPath, overwrite: true);
             published = true;
         }
         finally
         {
-            TryDelete(tempPath);
-            if (!published)
+            TryDelete(tempPath, reportWarning, "temporary package file");
+            if (!published && IsOwnClaim(fullPath, claim))
             {
                 // Release the claim so a failed build leaves no empty package behind.
-                TryDelete(fullPath);
+                TryDelete(fullPath, reportWarning, "empty name reservation");
             }
         }
     }
 
-    private static void ClaimName(string fullPath)
+    private static FileIdentity ClaimName(string fullPath)
     {
+        FileStream claim;
         try
         {
-            using var claim = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            claim = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         }
         catch (IOException ex) when (File.Exists(fullPath))
         {
-            throw new OutputFileExistsException(fullPath, ex);
+            throw ExistingFile(fullPath, ex);
+        }
+
+        FileIdentity? identity;
+        using (claim)
+        {
+            identity = FileIdentity.Of(claim.SafeFileHandle);
+        }
+
+        if (identity is null)
+        {
+            // Without an identity the final rename could not prove it replaces
+            // its own claim, so give the name back and fail.
+            TryDelete(fullPath, reportWarning: null, "empty name reservation");
+            throw new IOException($"The identity of the name reservation {fullPath} could not be read.");
+        }
+
+        return identity.Value;
+    }
+
+    private static OutputFileExistsException ExistingFile(string fullPath, Exception innerException)
+    {
+        long length;
+        try
+        {
+            length = new FileInfo(fullPath).Length;
+        }
+        catch (IOException)
+        {
+            return new OutputFileExistsException(fullPath, innerException);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return new OutputFileExistsException(fullPath, innerException);
+        }
+
+        if (length != 0)
+        {
+            return new OutputFileExistsException(fullPath, innerException);
+        }
+
+        return new OutputFileExistsException(
+            fullPath,
+            $"{fullPath} already exists and is empty, so it holds no package. Either another build is writing "
+                + "this package right now, or an interrupted build left its name reservation behind. If no other "
+                + "build is running, delete the empty file and build again; an existing file is never overwritten.",
+            innerException);
+    }
+
+    /// <summary>
+    /// True when <paramref name="fullPath"/> is still the empty file this writer
+    /// created. Any doubt (missing file, unreadable identity) answers false.
+    /// </summary>
+    private static bool IsOwnClaim(string fullPath, FileIdentity claim)
+    {
+        try
+        {
+            using var target = new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            return target.Length == 0 && FileIdentity.Of(target.SafeFileHandle) == claim;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
@@ -133,7 +231,7 @@ internal static class NoOverwriteFile
         }
     }
 
-    private static void TryDelete(string path)
+    private static void TryDelete(string path, Action<string>? reportWarning, string description)
     {
         try
         {
@@ -144,11 +242,62 @@ internal static class NoOverwriteFile
         }
         catch (IOException ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ReportLeftover(path, description, ex, reportWarning);
         }
         catch (UnauthorizedAccessException ex)
         {
-            System.Diagnostics.Debug.WriteLine(ex);
+            ReportLeftover(path, description, ex, reportWarning);
         }
+    }
+
+    private static void ReportLeftover(string path, string description, Exception ex, Action<string>? reportWarning)
+    {
+        var message = $"The {description} {path} of a failed package write could not be removed ({ex.Message}). "
+            + "It holds no package; delete it before building this version again.";
+        if (reportWarning is not null)
+        {
+            reportWarning(message);
+        }
+        else
+        {
+            System.Diagnostics.Trace.TraceWarning(message);
+        }
+    }
+
+    /// <summary>The NTFS identity of an open file: volume serial number plus file index.</summary>
+    private readonly record struct FileIdentity(uint VolumeSerialNumber, uint FileIndexHigh, uint FileIndexLow)
+    {
+        public static FileIdentity? Of(SafeFileHandle handle)
+            => NativeMethods.GetFileInformationByHandle(handle, out var info)
+                ? new FileIdentity(info.VolumeSerialNumber, info.FileIndexHigh, info.FileIndexLow)
+                : null;
+    }
+
+    private static class NativeMethods
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct ByHandleFileInformation
+        {
+            // FILETIME is two DWORDs with 4-byte alignment; a ulong would add padding.
+            internal uint FileAttributes;
+            internal uint CreationTimeLow;
+            internal uint CreationTimeHigh;
+            internal uint LastAccessTimeLow;
+            internal uint LastAccessTimeHigh;
+            internal uint LastWriteTimeLow;
+            internal uint LastWriteTimeHigh;
+            internal uint VolumeSerialNumber;
+            internal uint FileSizeHigh;
+            internal uint FileSizeLow;
+            internal uint NumberOfLinks;
+            internal uint FileIndexHigh;
+            internal uint FileIndexLow;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool GetFileInformationByHandle(
+            SafeFileHandle hFile,
+            out ByHandleFileInformation lpFileInformation);
     }
 }

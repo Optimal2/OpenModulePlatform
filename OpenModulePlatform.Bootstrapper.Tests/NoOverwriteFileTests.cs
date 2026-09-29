@@ -169,6 +169,35 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
+    public void AReservationThatCannotBeReleasedIsReported()
+    {
+        // The write fails while another handle keeps the empty claim from being
+        // deleted: the leftover must be reported, not swallowed.
+        var path = Path.Join(_testRoot, "package.zip");
+        var warnings = new List<string>();
+        FileStream? blocker = null;
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => NoOverwriteFile.Write(
+                path,
+                _ =>
+                {
+                    blocker = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    throw new InvalidOperationException("build failed");
+                },
+                warnings.Add));
+        }
+        finally
+        {
+            blocker?.Dispose();
+        }
+
+        var warning = Assert.Single(warnings);
+        Assert.Contains(Path.GetFullPath(path), warning, StringComparison.Ordinal);
+        Assert.Contains("could not be removed", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CopyRefusesAnExistingDestinationWithoutTouchingIt()
     {
         var source = Path.Join(_testRoot, "source.zip");
