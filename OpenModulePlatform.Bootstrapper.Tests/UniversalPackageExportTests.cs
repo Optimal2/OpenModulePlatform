@@ -235,6 +235,84 @@ public sealed class UniversalPackageExportTests : IDisposable
         Assert.Contains("payload/artifact.zip", exception.Message, StringComparison.Ordinal);
     }
 
+    // Two builds within the same UTC minute get the same automatic name. The
+    // export used to File.Delete an existing output and write over it, so the
+    // second build replaced the first package silently. These tests use only
+    // IOException and the message, so they compile and run against that old
+    // behavior too -- which is how they were seen failing before the fix.
+    [Fact]
+    public void ExportRefusesToReplaceAnExistingPackage()
+    {
+        var artifactPath = CreateArtifactPackage(
+            ArtifactFileName,
+            nestedPayloadEntries: new Dictionary<string, string> { ["bin/odv.dll"] = "first" });
+        var first = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
+        var firstResult = Program.CreateUniversalPackageZip(first);
+        var firstBytes = File.ReadAllBytes(firstResult.PackagePath);
+
+        var second = first with { PackageVersion = "9.9.9" };
+        var ex = Assert.ThrowsAny<IOException>(() => Program.CreateUniversalPackageZip(second));
+
+        Assert.Contains("already exists", ex.Message, StringComparison.Ordinal);
+        Assert.Contains(first.OutputPath, ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(firstBytes, File.ReadAllBytes(firstResult.PackagePath));
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(first.OutputPath)!));
+    }
+
+    [Fact]
+    public void ConcurrentExportsOfTheSameNameNeverReplaceEachOther()
+    {
+        var artifactPath = CreateArtifactPackage(
+            ArtifactFileName,
+            nestedPayloadEntries: new Dictionary<string, string> { ["bin/odv.dll"] = "dll" });
+        var request = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
+
+        const int builders = 6;
+        using var start = new Barrier(builders);
+        var outcomes = new Exception?[builders];
+        var threads = Enumerable.Range(0, builders)
+            .Select(index => new Thread(() =>
+            {
+                start.SignalAndWait();
+                try
+                {
+                    Program.CreateUniversalPackageZip(request with { PackageVersion = "race-" + index });
+                }
+                catch (Exception ex)
+                {
+                    outcomes[index] = ex;
+                }
+            }))
+            .ToArray();
+        foreach (var thread in threads)
+        {
+            thread.Start();
+        }
+
+        foreach (var thread in threads)
+        {
+            thread.Join();
+        }
+
+        Assert.Equal(1, outcomes.Count(static outcome => outcome is null));
+        Assert.All(
+            outcomes.Where(static outcome => outcome is not null),
+            outcome =>
+            {
+                var io = Assert.IsAssignableFrom<IOException>(outcome);
+                Assert.Contains("already exists", io.Message, StringComparison.Ordinal);
+            });
+
+        // The one package on disk is whole and is the winner's own.
+        var winner = Array.FindIndex(outcomes, static outcome => outcome is null);
+        using var exported = ZipFile.OpenRead(request.OutputPath);
+        var manifestEntry = exported.GetEntry("omp-universal-package.json");
+        Assert.NotNull(manifestEntry);
+        using var reader = new StreamReader(manifestEntry.Open());
+        Assert.Contains($"\"race-{winner}\"", reader.ReadToEnd(), StringComparison.Ordinal);
+        Assert.Single(Directory.GetFiles(Path.GetDirectoryName(request.OutputPath)!));
+    }
+
     private Program.UniversalPackageCandidate CreateArtifactCandidate(string fileName, string version)
         => new(
             "artifact-package",
