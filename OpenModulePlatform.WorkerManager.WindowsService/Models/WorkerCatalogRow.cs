@@ -30,4 +30,9 @@ public sealed record WorkerCatalogRow
     public string? ConfigurationJson { get; init; }
 
     public string? ArtifactVersion { get; init; }
+
+    /// <summary>One for pinned placement; otherwise the number of enabled hosts assigned to the role.</summary>
+    public int RoleHostCount { get; init; } = 1;
+
+    public bool IsImplicitDefault { get; init; }
 }

@@ -13,7 +13,7 @@ Workers with channel types must follow the [channel-type reconciliation contract
 Implemented as a Windows Service manager that:
 
 - discovers desired worker app instances from configuration or from OMP
-- supervises one child process per `AppInstanceId`
+- supervises one child process per `WorkerInstanceId`
 - is deployed as the `omp_core` `service-app` artifact `omp_workermanager`
 - applies a basic restart policy
 - requests graceful shutdown through named OS events
@@ -70,6 +70,25 @@ The current OMP-backed Windows implementation uses:
   worker plugin packages
 
 ## Portal administration status
+
+### Placement and implicit workers
+
+The database catalog requires both the app instance and the worker instance to be
+enabled, allowed, and in the running desired state. An explicit worker `HostId`
+takes precedence over the app instance's `HostId`. Without either pin, a host role
+must have exactly one active, enabled assigned host. If multiple hosts share the
+role, WorkerManager rejects the unpinned worker and logs a placement error with the
+app and worker IDs. Assign each worker to a host before enabling a second host for
+the role. Already managed workers that become ambiguous are stopped on the next
+reconciliation. This rule also covers the implicit default worker.
+
+For compatibility, an app instance with no `omp.WorkerInstances` rows still gets
+one implicit worker whose ID equals the app instance ID. Discovery logs a warning;
+every runtime observation starts with `Implicit default worker (no WorkerInstances
+row).` The app-level runtime summary retains the process/exit diagnostics, including
+crash-loop failures, for the Portal. A count of WorkerInstances is therefore not a
+count of running processes. Creating explicit worker rows replaces the fallback;
+even disabled explicit rows suppress it.
 
 The public Portal now includes:
 

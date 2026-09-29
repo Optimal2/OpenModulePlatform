@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "definitionType": "platform-core",
   "moduleKey": "omp_core",
-  "definitionVersion": "0.3.242",
+  "definitionVersion": "0.3.243",
   "module": {
     "displayName": "OpenModulePlatform Core",
     "moduleType": "PlatformCore",
@@ -44,7 +44,7 @@
       "targetName": "omp-hostagent",
       "relativePathTemplate": "omp-hostagent/hostagent/{version}",
       "minVersion": "0.3.10",
-      "maxVersion": "0.3.298"
+      "maxVersion": "0.3.299"
     },
     {
       "appKey": "omp_workermanager",
@@ -52,7 +52,7 @@
       "targetName": "omp-workermanager",
       "relativePathTemplate": "omp-workermanager/service/{version}",
       "minVersion": "0.3.3",
-      "maxVersion": "0.3.65"
+      "maxVersion": "0.3.66"
     },
     {
       "appKey": "omp_workerprocesshost",
@@ -141,7 +141,7 @@
         "schema": "omp",
         "name": "SystemLog",
         "source": "sql/1-setup-openmoduleplatform.sql",
-        "purpose": "The platform\u0027s central Warn-and-above log, written by NLog from every host-side process and pruned by the HostAgent."
+        "purpose": "The platform's central Warn-and-above log, written by NLog from every host-side process and pruned by the HostAgent."
       },
       {
         "schema": "omp",

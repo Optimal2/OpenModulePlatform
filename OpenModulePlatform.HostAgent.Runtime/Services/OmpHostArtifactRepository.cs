@@ -4437,7 +4437,7 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
         CancellationToken ct)
     {
         // The mirror image of the desired-set query above: same host targeting, but only
-        // instances that are switched off (IsEnabled = 0 or DesiredState = 0) and still
+        // instances that are switched off (IsEnabled = 0 or DesiredState in (0, 2)) and still
         // carry a recorded runtime deployment on this host. Artifact enabled/provisioning
         // state is deliberately NOT required -- a disabled instance's artifact may be
         // retired, and the removal decision only needs the platform's own deployment
@@ -4495,13 +4495,13 @@ WHERE
           )
       )
   )
-  AND (ai.IsEnabled = 0 OR ai.DesiredState = 0)
+  AND (ai.IsEnabled = 0 OR ai.DesiredState IN (0, 2))
   AND ar.PackageType = N'service-app'
   AND hds.RuntimeName IS NOT NULL
   AND LTRIM(RTRIM(hds.RuntimeName)) <> N''
   AND hds.TargetPath IS NOT NULL
   AND LTRIM(RTRIM(hds.TargetPath)) <> N''
-ORDER BY ai.SortOrder, ai.AppInstanceKey;";
+ORDER BY hds.LastCheckedUtc, ai.SortOrder, ai.AppInstanceKey;";
 
         var result = new List<DisabledServiceAppServiceDescriptor>();
 
@@ -4528,6 +4528,43 @@ ORDER BY ai.SortOrder, ai.AppInstanceKey;";
         }
 
         return result;
+    }
+
+    public async Task PublishInactiveServiceAppResultAsync(
+        string hostKey,
+        DisabledServiceAppServiceDescriptor candidate,
+        bool removed,
+        CancellationToken ct)
+    {
+        // Only acknowledge the exact inactive deployment we inspected. Re-enabling or
+        // redeploying during service control must not erase a newer deployment record.
+        const string predicate = @"
+FROM omp.HostAppDeploymentStates hds
+INNER JOIN omp.Hosts h ON h.HostId = hds.HostId
+INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = hds.AppInstanceId
+WHERE h.HostKey = @hostKey
+  AND hds.AppInstanceId = @appInstanceId
+  AND hds.RuntimeName = @runtimeName
+  AND hds.TargetPath = @targetPath
+  AND ai.IsEnabled = @isEnabled
+  AND ai.DesiredState = @desiredState
+  AND (ai.IsEnabled = 0 OR ai.DesiredState IN (0, 2));";
+        var sql = removed
+            ? "DELETE hds " + predicate
+            : @"UPDATE hds SET DeploymentState = 0, LastAppliedUtc = NULL,
+    LastCheckedUtc = SYSUTCDATETIME(), UpdatedUtc = SYSUTCDATETIME(),
+    LastError = NULL, LastWarning = N'Stopped by desired state; service installation retained.' " + predicate;
+
+        await using var conn = _db.Create();
+        await conn.OpenAsync(ct);
+        await using var cmd = new SqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("@hostKey", hostKey);
+        cmd.Parameters.AddWithValue("@appInstanceId", candidate.AppInstanceId);
+        cmd.Parameters.AddWithValue("@runtimeName", candidate.RuntimeName);
+        cmd.Parameters.AddWithValue("@targetPath", candidate.TargetPath);
+        cmd.Parameters.AddWithValue("@isEnabled", candidate.IsEnabled);
+        cmd.Parameters.AddWithValue("@desiredState", candidate.DesiredState);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     public async Task<IReadOnlyList<HostRuntimeFootprint>> GetHostRuntimeFootprintsAsync(

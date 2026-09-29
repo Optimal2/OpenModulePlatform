@@ -996,7 +996,9 @@ public sealed class WorkerManagerHostedService : BackgroundService
             LastSeenUtc = lastSeenUtc,
             LastExitUtc = lastExitUtc,
             LastExitCode = managed.LastExitCode,
-            StatusMessage = statusMessage,
+            StatusMessage = managed.Definition.IsImplicitDefault
+                ? $"Implicit default worker (no WorkerInstances row). {statusMessage}"
+                : statusMessage,
             RuntimeArtifactId = isLive ? managed.StartedArtifactId : null,
             RuntimeArtifactVersion = isLive ? managed.StartedArtifactVersion : null,
             RuntimeHostArtifactId = isLive ? managed.StartedHostArtifactId : null,

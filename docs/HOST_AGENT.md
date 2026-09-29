@@ -432,6 +432,16 @@ desired rows cannot mix host-neutral and host-specific placement for the same
 module/app definition.
 
 Host-neutral placement applies to `web-app` (and `worker-host`) instances only.
+A service app with `DesiredState = 2` (Stopped / should not run) is reconciled by
+the inactive-service path: HostAgent stops its Windows service but retains the
+service registration and files. It continues checking the service each cycle,
+refreshes `LastCheckedUtc`, clears the applied timestamp, and records an explanatory
+warning. Setting the desired state back to 1 resumes normal deployment/start
+behavior. Disabling the instance or setting `DesiredState = 0` removes the service.
+After confirmed removal (including an already missing service), HostAgent deletes
+that host's matching `HostAppDeploymentStates` row. Failed or refused removal does
+not clear the row. Ownership and shared-runtime guards apply to stops and removals.
+
 A `service-app` instance is part of a host's desired state only when its
 `HostId` is that host, or when `HostId` is `NULL` and its
 `TargetHostTemplateId` names a host template with an active

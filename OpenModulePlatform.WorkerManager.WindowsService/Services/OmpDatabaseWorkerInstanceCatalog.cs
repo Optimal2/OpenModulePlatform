@@ -67,6 +67,14 @@ WITH HostRoles AS
     WHERE HostId = @hostId
       AND IsActive = 1
 ),
+RoleHostCounts AS
+(
+    SELECT hda.HostTemplateId, COUNT(DISTINCT hda.HostId) AS HostCount
+    FROM omp.HostDeploymentAssignments hda
+    INNER JOIN omp.Hosts h ON h.HostId = hda.HostId AND h.IsEnabled = 1
+    WHERE hda.IsActive = 1
+    GROUP BY hda.HostTemplateId
+),
 WorkerRows AS
 (
     SELECT
@@ -83,12 +91,15 @@ WorkerRows AS
         -- R12-F2. Carried on the definition so the manager can report which artifact
         -- version a worker was actually started from; see DesiredWorkerInstance.ArtifactVersion.
         ar.Version AS ArtifactVersion,
+        CASE WHEN wi.HostId IS NULL AND ai.HostId IS NULL THEN COALESCE(rhc.HostCount, 0) ELSE 1 END AS RoleHostCount,
+        CAST(0 AS bit) AS IsImplicitDefault,
         wi.SortOrder
     FROM omp.WorkerInstances wi
     INNER JOIN omp.AppInstances ai ON ai.AppInstanceId = wi.AppInstanceId
     INNER JOIN omp.Apps a ON a.AppId = ai.AppId
     INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
     INNER JOIN omp.Artifacts ar ON ar.ArtifactId = COALESCE(wi.ArtifactId, ai.ArtifactId)
+    LEFT JOIN RoleHostCounts rhc ON rhc.HostTemplateId = ai.TargetHostTemplateId
     LEFT JOIN omp.HostArtifactStates has
         ON has.HostId = CASE
             WHEN wi.HostId IS NOT NULL THEN wi.HostId
@@ -112,6 +123,7 @@ WorkerRows AS
       AND a.IsEnabled = 1
       AND ai.IsEnabled = 1
       AND ai.IsAllowed = 1
+      AND ai.DesiredState = @runningDesiredState
       AND wi.IsEnabled = 1
       AND wi.IsAllowed = 1
       AND wi.DesiredState = @runningDesiredState
@@ -134,11 +146,14 @@ WorkerRows AS
         awd.PluginRelativePath,
         CAST(NULL AS nvarchar(max)) AS ConfigurationJson,
         ar.Version AS ArtifactVersion,
+        CASE WHEN ai.HostId IS NULL THEN COALESCE(rhc.HostCount, 0) ELSE 1 END AS RoleHostCount,
+        CAST(1 AS bit) AS IsImplicitDefault,
         ai.SortOrder
     FROM omp.AppInstances ai
     INNER JOIN omp.Apps a ON a.AppId = ai.AppId
     INNER JOIN omp.AppWorkerDefinitions awd ON awd.AppId = ai.AppId
     INNER JOIN omp.Artifacts ar ON ar.ArtifactId = ai.ArtifactId
+    LEFT JOIN RoleHostCounts rhc ON rhc.HostTemplateId = ai.TargetHostTemplateId
     LEFT JOIN omp.HostArtifactStates has
         ON has.HostId = CASE WHEN ai.HostId IS NOT NULL THEN ai.HostId ELSE @hostId END
        AND has.ArtifactId = ar.ArtifactId
@@ -174,7 +189,9 @@ SELECT
     IsProvisionedFromHostArtifactCache,
     PluginRelativePath,
     ConfigurationJson,
-    ArtifactVersion
+    ArtifactVersion,
+    RoleHostCount,
+    IsImplicitDefault
 FROM WorkerRows
 WHERE PluginRelativePath IS NOT NULL
   AND LTRIM(RTRIM(PluginRelativePath)) <> N''
@@ -217,6 +234,12 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
             if (TryCreateDesiredWorker(row, runtimeKind, seen, out var instance, out var problem))
             {
                 desired.Add(instance);
+                if (row.IsImplicitDefault)
+                {
+                    _logger.LogWarning(
+                        "Implicit default worker selected because no WorkerInstances exist. AppInstanceId={AppInstanceId}, WorkerInstanceId={WorkerInstanceId}. Runtime status is published to AppInstanceRuntimeStates and the Portal Worker runtime page; create explicit worker instances to replace this fallback.",
+                        row.AppInstanceId, row.WorkerInstanceId);
+                }
             }
             else
             {
@@ -256,7 +279,9 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
             IsProvisionedFromHostArtifactCache = rdr.GetBoolean(7),
             PluginRelativePath = rdr.GetString(8),
             ConfigurationJson = rdr.IsDBNull(9) ? null : rdr.GetString(9),
-            ArtifactVersion = rdr.IsDBNull(10) ? null : rdr.GetString(10).Trim()
+            ArtifactVersion = rdr.IsDBNull(10) ? null : rdr.GetString(10).Trim(),
+            RoleHostCount = rdr.GetInt32(11),
+            IsImplicitDefault = rdr.GetBoolean(12)
         };
     }
 
@@ -280,6 +305,12 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
 
         worker = null;
         problem = null;
+
+        if (row.RoleHostCount != 1)
+        {
+            problem = "Worker placement is ambiguous: the role has multiple active enabled hosts (or none). Set WorkerInstances.HostId or AppInstances.HostId explicitly to prevent duplicate execution.";
+            return false;
+        }
 
         if (!seenWorkerInstanceIds.Add(row.WorkerInstanceId))
         {
@@ -310,6 +341,7 @@ ORDER BY SortOrder, WorkerInstanceKey, WorkerInstanceId;";
         {
             AppInstanceId = row.AppInstanceId,
             WorkerInstanceId = row.WorkerInstanceId,
+            IsImplicitDefault = row.IsImplicitDefault,
             WorkerInstanceKey = row.WorkerInstanceKey.Trim(),
             WorkerTypeKey = row.WorkerTypeKey.Trim(),
             ArtifactId = row.ArtifactId,

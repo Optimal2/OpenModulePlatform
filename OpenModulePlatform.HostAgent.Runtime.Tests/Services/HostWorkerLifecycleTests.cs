@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenModulePlatform.HostAgent.Runtime.Services;
+using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.WorkerManager.WindowsService.Models;
 using OpenModulePlatform.WorkerManager.WindowsService.Services;
 using WorkerSqlFactory = OpenModulePlatform.WorkerManager.WindowsService.Services.SqlConnectionFactory;
@@ -28,6 +29,8 @@ public sealed class HostWorkerLifecycleTests : IDisposable
                 ALTER TABLE omp.AppInstances ADD TargetHostTemplateId int NULL, InstallPath nvarchar(500) NULL,
                     InstallationName nvarchar(150) NULL, SortOrder int NOT NULL DEFAULT(0);
                 ALTER TABLE omp.Artifacts ADD Version nvarchar(50) NOT NULL DEFAULT('1.0.0');
+                ALTER TABLE omp.HostAppDeploymentStates ADD LastCheckedUtc datetime2(3) NULL,
+                    UpdatedUtc datetime2(3) NULL, LastError nvarchar(max) NULL, LastWarning nvarchar(max) NULL;
                 ALTER TABLE omp.WorkerInstances ADD WorkerInstanceKey nvarchar(150) NOT NULL DEFAULT('worker'),
                     IsAllowed bit NOT NULL DEFAULT(1), DesiredState tinyint NOT NULL DEFAULT(1),
                     ConfigurationJson nvarchar(max) NULL, SortOrder int NOT NULL DEFAULT(0);
@@ -106,10 +109,86 @@ public sealed class HostWorkerLifecycleTests : IDisposable
     public async Task ImplicitWorker_HasExplicitWarningIdentifyingItsRuntimeSummary()
     {
         Execute("UPDATE omp.AppInstances SET HostId = @host;", new SqlParameter("@host", _hostA));
-        Assert.Equal(_app, Assert.Single(await Catalog("host-a").GetDesiredWorkersAsync(CancellationToken.None)).WorkerInstanceId);
+        var worker = Assert.Single(await Catalog("host-a").GetDesiredWorkersAsync(CancellationToken.None));
+        Assert.Equal(_app, worker.WorkerInstanceId);
+        Assert.True(worker.IsImplicitDefault);
         Assert.Contains(_logger.Messages, message => message.Contains("implicit", StringComparison.OrdinalIgnoreCase)
             && message.Contains(_app.ToString(), StringComparison.OrdinalIgnoreCase)
             && message.Contains("AppInstanceRuntimeStates", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DisabledSecondHost_DoesNotMakePlacementAmbiguous()
+    {
+        InsertWorker(null);
+        Execute("UPDATE omp.Hosts SET IsEnabled = 0 WHERE HostId = @host;", new SqlParameter("@host", _hostB));
+        Assert.Single(await Catalog("host-a").GetDesiredWorkersAsync(CancellationToken.None));
+        Assert.Empty(await Catalog("host-b").GetDesiredWorkersAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ParentHostPin_ResolvesRoleAmbiguity()
+    {
+        InsertWorker(null);
+        Execute("UPDATE omp.AppInstances SET HostId = @host;", new SqlParameter("@host", _hostA));
+        Assert.Single(await Catalog("host-a").GetDesiredWorkersAsync(CancellationToken.None));
+        Assert.Empty(await Catalog("host-b").GetDesiredWorkersAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ExistingDisabledWorker_DoesNotCreateImplicitReplacement()
+    {
+        InsertWorker(_hostA);
+        Execute("UPDATE omp.WorkerInstances SET IsEnabled = 0;");
+        Assert.Empty(await Catalog("host-a").GetDesiredWorkersAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public async Task InactiveAcknowledgement_UpdatesOnlyUnchangedLocalDeployment(bool removed, bool reenabled)
+    {
+        Execute("UPDATE omp.AppInstances SET DesiredState = 2;");
+        Execute("""
+            INSERT omp.HostAppDeploymentStates(HostId, AppInstanceId, RuntimeName, TargetPath, LastAppliedUtc)
+            SELECT HostId, @app, 'test-service', 'C:\workers\test', '2020-01-01' FROM omp.Hosts;
+            """, new SqlParameter("@app", _app));
+        var candidate = new DisabledServiceAppServiceDescriptor
+        {
+            AppInstanceId = _app, IsEnabled = true, DesiredState = 2,
+            RuntimeName = "test-service", TargetPath = @"C:\workers\test"
+        };
+        if (reenabled) Execute("UPDATE omp.AppInstances SET DesiredState = 1;");
+
+        await new OmpHostArtifactRepository(_database.CreateFactory())
+            .PublishInactiveServiceAppResultAsync("host-a", candidate, removed, CancellationToken.None);
+
+        using var connection = new SqlConnection(_database.ConnectionString);
+        connection.Open();
+        using var command = new SqlCommand("SELECT HostId, DeploymentState, LastAppliedUtc, LastCheckedUtc, LastWarning FROM omp.HostAppDeploymentStates", connection);
+        using var reader = command.ExecuteReader();
+        var count = 0;
+        while (reader.Read())
+        {
+            count++;
+            if (reader.GetGuid(0) == _hostB || reenabled)
+            {
+                Assert.Equal(2, reader.GetByte(1));
+                Assert.False(reader.IsDBNull(2));
+                Assert.True(reader.IsDBNull(3));
+            }
+            else
+            {
+                Assert.False(removed);
+                Assert.Equal(0, reader.GetByte(1));
+                Assert.True(reader.IsDBNull(2));
+                Assert.False(reader.IsDBNull(3));
+                Assert.Contains("Stopped", reader.GetString(4));
+            }
+        }
+        Assert.Equal(removed && !reenabled ? 1 : 2, count);
     }
 
     private Guid InsertWorker(Guid? host)

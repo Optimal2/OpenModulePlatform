@@ -2,7 +2,7 @@ namespace OpenModulePlatform.HostAgent.Runtime.Models;
 
 /// <summary>
 /// A service-app app instance targeted at this host that is switched off
-/// (<c>IsEnabled = 0</c> or <c>DesiredState = 0</c>) but still has a recorded runtime
+/// (<c>IsEnabled = 0</c> or <c>DesiredState</c> is 0 or 2) but still has a recorded runtime
 /// deployment here. <see cref="RuntimeName"/> and <see cref="TargetPath"/> come from
 /// omp.HostAppDeploymentStates -- the platform's own record, written when HostAgent
 /// itself deployed the instance -- and are the attribution basis for removing the

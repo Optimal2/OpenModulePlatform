@@ -7,6 +7,8 @@ public sealed class DesiredWorkerInstance
 
     public Guid WorkerInstanceId { get; init; }
 
+    public bool IsImplicitDefault { get; init; }
+
     public string WorkerInstanceKey { get; init; } = string.Empty;
 
     public string WorkerTypeKey { get; init; } = string.Empty;
@@ -49,6 +51,7 @@ public sealed class DesiredWorkerInstance
 
         return AppInstanceId == other.AppInstanceId
             && WorkerInstanceId == other.WorkerInstanceId
+            && IsImplicitDefault == other.IsImplicitDefault
             && string.Equals(WorkerInstanceKey, other.WorkerInstanceKey, StringComparison.Ordinal)
             && string.Equals(WorkerTypeKey, other.WorkerTypeKey, StringComparison.Ordinal)
             && ArtifactId == other.ArtifactId
@@ -76,6 +79,7 @@ public sealed class DesiredWorkerInstance
         {
             AppInstanceId = AppInstanceId,
             WorkerInstanceId = WorkerInstanceId,
+            IsImplicitDefault = IsImplicitDefault,
             WorkerInstanceKey = WorkerInstanceKey,
             WorkerTypeKey = WorkerTypeKey,
             ArtifactId = ArtifactId,

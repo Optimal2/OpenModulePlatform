@@ -674,7 +674,8 @@ public sealed class ServiceAppDeploymentService
 
     /// <summary>
     /// Removes the Windows services of service-app instances that have been switched off
-    /// (IsEnabled = 0 or DesiredState = 0). The desired-set query excludes them, so the
+    /// (IsEnabled = 0 or DesiredState = 0). DesiredState = 2 stops but retains the service.
+    /// The desired-set query excludes them, so the
     /// deploy loop above never sees them again: the service stayed installed -- and kept
     /// running -- indefinitely, and a manual <c>sc delete</c> was re-created by
     /// <see cref="EnsureWindowsService"/> for as long as the instance row was enabled.
@@ -722,7 +723,11 @@ public sealed class ServiceAppDeploymentService
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                RemoveDisabledServiceAppService(settings, candidate, claimedServiceNames, hostRuntimeFootprints);
+                var removed = RemoveDisabledServiceAppService(settings, candidate, claimedServiceNames, hostRuntimeFootprints);
+                if (removed.HasValue)
+                {
+                    await _repository.PublishInactiveServiceAppResultAsync(hostKey, candidate, removed.Value, cancellationToken);
+                }
             }
             catch (Exception ex) when (IsExpectedDeploymentFailure(ex))
             {
@@ -736,7 +741,7 @@ public sealed class ServiceAppDeploymentService
         }
     }
 
-    private void RemoveDisabledServiceAppService(
+    private bool? RemoveDisabledServiceAppService(
         HostAgentSettings settings,
         DisabledServiceAppServiceDescriptor candidate,
         IReadOnlySet<string> claimedServiceNames,
@@ -752,7 +757,7 @@ public sealed class ServiceAppDeploymentService
                 candidate.AppInstanceId,
                 candidate.AppInstanceKey,
                 serviceName);
-            return;
+            return true;
         }
 
         var refusal = ValidateDisabledServiceAppServiceRemoval(
@@ -766,7 +771,7 @@ public sealed class ServiceAppDeploymentService
         if (refusal is not null)
         {
             LogDisabledServiceRemovalRefusal(candidate, serviceName, refusal);
-            return;
+            return null;
         }
 
         // Execution layer: re-read the live service immediately before deleting and run
@@ -774,7 +779,7 @@ public sealed class ServiceAppDeploymentService
         // the decision and the deletion is refused here instead of removed.
         if (_serviceControl.GetServiceState(serviceName) is not { } liveState)
         {
-            return;
+            return true;
         }
 
         var executionRefusal = ValidateDisabledServiceAppServiceRemoval(
@@ -788,7 +793,19 @@ public sealed class ServiceAppDeploymentService
         if (executionRefusal is not null)
         {
             LogDisabledServiceRemovalRefusal(candidate, serviceName, executionRefusal);
-            return;
+            return null;
+        }
+
+        if (candidate.IsEnabled && candidate.DesiredState == 2)
+        {
+            _serviceControl.StopServiceIfRunning(serviceName, settings.ServiceAppStopTimeoutSeconds);
+            if (!string.Equals(_serviceControl.GetServiceState(serviceName), "STOPPED", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Windows service '{serviceName}' did not reach STOPPED.");
+
+            _logger.LogInformation(
+                "Stopped the Windows service by desired state; installation retained. AppInstanceId={AppInstanceId}, ServiceName={ServiceName}",
+                candidate.AppInstanceId, serviceName);
+            return false;
         }
 
         // DeleteService stops a running service first, so a switched-off instance is
@@ -802,6 +819,7 @@ public sealed class ServiceAppDeploymentService
             serviceName,
             targetPath,
             DescribeDisabledReason(candidate));
+        return true;
     }
 
     /// <summary>

@@ -92,7 +92,7 @@ public interface IOmpHostArtifactRepository
 
     /// <summary>
     /// Service-app instances targeted at this host that are switched off
-    /// (IsEnabled = 0 or DesiredState = 0) but still have a recorded runtime deployment
+    /// (IsEnabled = 0 or DesiredState in (0, 2)) but still have a recorded runtime deployment
     /// (runtime name and target path) on this host. The deploy loop no longer manages
     /// these instances, so without this query their Windows services stay installed --
     /// and keep running -- forever.
@@ -100,6 +100,13 @@ public interface IOmpHostArtifactRepository
     Task<IReadOnlyList<DisabledServiceAppServiceDescriptor>> GetDisabledServiceAppServicesAsync(
         string hostKey,
         int maxDeployments,
+        CancellationToken ct);
+
+    /// <summary>Records a confirmed stop or removal without overwriting a newer desired deployment.</summary>
+    Task PublishInactiveServiceAppResultAsync(
+        string hostKey,
+        DisabledServiceAppServiceDescriptor candidate,
+        bool removed,
         CancellationToken ct);
 
     /// <summary>
