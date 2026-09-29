@@ -394,3 +394,73 @@ Describe 'validate-shared-scripts: web repositories carry and import the pinning
         finally { Remove-Pair -Pair $pair }
     }
 }
+
+Describe 'validate-shared-scripts: repositories with Pester suites carry the canonical Pester step' {
+    # run-script-tests.ps1 and pester-bootstrap.ps1 are the canonical Pester
+    # step. A repository that runs Pester suites, or already carries a copy of
+    # either file, must carry both verbatim; one without suites needs neither.
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-SharedScripts.TestHelpers.ps1')
+    }
+
+    It 'Fails when a repository with suites lacks the runner' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerSuitePath 'Some.Tests.ps1'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'run-script-tests\.ps1 is missing') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Counts a suite in a subdirectory of tests' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerSuitePath 'nested/Some.Tests.ps1'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'run-script-tests\.ps1 is missing') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails when the runner copy differs from the canonical one' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerSuitePath 'Some.Tests.ps1' `
+            -ConsumerRunnerBody 'drifted runner' -ConsumerBootstrapBody 'canonical bootstrap'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'run-script-tests\.ps1 differs from the canonical copy') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Fails when only one of the two files was copied' {
+        # A copy of either file obliges both: the runner dot-sources the bootstrap.
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerRunnerBody 'canonical runner'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'pester-bootstrap\.ps1 is missing') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Passes when both files match the canonical copies' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerSuitePath 'Some.Tests.ps1' `
+            -ConsumerRunnerBody 'canonical runner' -ConsumerBootstrapBody 'canonical bootstrap'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Does not require the Pester step in a repository without suites' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+}

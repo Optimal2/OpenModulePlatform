@@ -105,3 +105,36 @@ function Remove-TestDirectory {
         Remove-Item -LiteralPath $Path -Recurse -Force
     }
 }
+
+function New-SuiteFixture {
+    <#
+    .SYNOPSIS
+    Creates a temporary tests directory holding the given files (relative path
+    -> content) and returns its path. Subdirectories are created as needed.
+    #>
+    param([Parameter(Mandatory = $true)][hashtable]$Files)
+
+    $root = New-TestDirectory
+    foreach ($relative in $Files.Keys) {
+        $path = Join-Path $root $relative
+        $parent = Split-Path -Parent $path
+        if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+            $null = New-Item -ItemType Directory -Path $parent -Force
+        }
+        [System.IO.File]::WriteAllText($path, [string]$Files[$relative], [System.Text.UTF8Encoding]::new($false))
+    }
+    return $root
+}
+
+# A suite with one passing test; the building block of every inventory fixture.
+$script:PassingSuiteBody = "Describe 'fixture' { It 'passes' { 1 | Should -Be 1 } }`n"
+
+function Invoke-RunnerAgainst {
+    <#
+    .SYNOPSIS
+    Runs run-script-tests.ps1 as a child process against a fixture directory.
+    #>
+    param([Parameter(Mandatory = $true)][string]$TestsPath)
+
+    return Invoke-ChildPowerShell -ScriptPath $script:RunnerScript -ScriptArguments @('-TestsPath', $TestsPath)
+}
