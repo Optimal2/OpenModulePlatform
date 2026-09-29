@@ -128,6 +128,13 @@ The item `version` lets installer archive imports keep several widget package
 versions under `data/global/widgets` without relying on file content checks. The
 widget JSON remains the source of truth during Portal and HostAgent import.
 
+The manifest root also carries source provenance: `sourceRepositoryKey`,
+`sourceRepositoryVersion`, `sourceCommitSha`, and `sourceDirty`. They record
+which source repository, release version, and commit the package was exported
+from, and whether the source tree was dirty at export time. Importers treat all
+four as optional operator-facing metadata and ignore unknown fields, so older
+packages keep working.
+
 Widget import version rules are intentionally the same across Portal and
 HostAgent unattended imports:
 
@@ -279,13 +286,21 @@ scripts/omp/export-universal-package.ps1
 The exporter is the command-line equivalent of the Portal and standalone
 builders for repository-owned objects. It reads `omp-components.json`, builds the
 current module definitions and artifact packages, optionally applies host
-profile inputs, and writes a universal package zip.
+profile inputs, and writes a universal package zip. Before doing any of that it
+requires a clean source tree: building from a dirty tree fails unless the
+operator passes `-AllowDirtySource` explicitly for local troubleshooting, and
+such a build is stamped `sourceDirty: true` in the package manifest and in
+every built artifact manifest. Pure line-ending noise does not count as dirty;
+the verdict matches the content comparison the release tooling uses. The
+canonical implementation lives in `scripts/omp/source-provenance.ps1`.
 
 All generators must produce the same object bytes for the same source inputs.
 Repository exporters, the HostAgent-first installer refresh, Portal export, and
 the standalone universal builder share the same universal package folder layout
 and artifact package manifest envelope. Do not add generator-specific metadata
-to artifact packages. `moduleDefinition.minVersion` is present only when the
+to artifact packages. Source provenance (`sourceCommitSha`, `sourceDirty`) is
+the deliberate exception: it is deterministic — the same source commit always
+stamps the same SHA — so it never makes two builds from the same source differ. `moduleDefinition.minVersion` is present only when the
 owning component declares `minModuleDefinitionVersion`.
 
 Exact package comparisons require the same object selection. A current-state

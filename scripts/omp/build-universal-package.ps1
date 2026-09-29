@@ -26,6 +26,10 @@ param(
     [string[]]$ConfigOverlayFile = @(),
     [string[]]$WidgetFile = @(),
     [string[]]$WidgetDataFile = @(),
+    # Passed through to export-universal-package.ps1: building from a dirty
+    # source tree fails by default. Use this for local troubleshooting only;
+    # the package is then stamped sourceDirty=true.
+    [switch]$AllowDirtySource,
     [switch]$Pause
 )
 
@@ -149,6 +153,10 @@ try {
 
     if ($AllComponents) {
         $exportArgs.AllComponents = $true
+    }
+
+    if ($AllowDirtySource) {
+        $exportArgs.AllowDirtySource = $true
     }
 
     if (-not $UseExistingArtifacts) {

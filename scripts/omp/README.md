@@ -82,6 +82,12 @@ The default output folder is `artifacts\universal-packages`. Set
 `OMP_UNIVERSAL_PACKAGE_OUTPUT_DIR` to use a shared package folder without
 hardcoding machine-specific paths in repositories.
 
+Package builds require a clean source tree and stamp source provenance
+(repository, commit SHA, dirty flag — see `source-provenance.ps1`) into the
+universal package manifest and every built artifact manifest. A dirty tree
+fails the build unless `-AllowDirtySource` is passed for local
+troubleshooting; such a build is stamped `sourceDirty=true`.
+
 Use `validate-module-definitions.ps1` before packaging or in CI to catch
 manifest/module-definition version drift and stale embedded SQL content. If you
 changed a source `.sql` file referenced by a module definition, refresh the

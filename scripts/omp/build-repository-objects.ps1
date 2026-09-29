@@ -39,7 +39,12 @@ param(
     [string[]]$HostConfigurationFile = @(),
     [string[]]$ConfigOverlayFile = @(),
     [string[]]$WidgetFile = @(),
-    [string[]]$WidgetDataFile = @()
+    [string[]]$WidgetDataFile = @(),
+    # Source provenance stamped into every built artifact manifest. When empty,
+    # the commit SHA and dirty flag are read from the repository checkout, so a
+    # direct call stamps honestly instead of omitting the fields.
+    [string]$SourceCommitSha = '',
+    [switch]$SourceDirty
 )
 
 Set-StrictMode -Version Latest
@@ -63,6 +68,7 @@ function Get-ScriptDirectory {
 }
 
 . (Join-Path (Get-ScriptDirectory) 'runtime-configuration-files.ps1')
+. (Join-Path (Get-ScriptDirectory) 'source-provenance.ps1')
 
 function Resolve-PathFromBase {
     param(
@@ -862,6 +868,21 @@ if ([string]::IsNullOrWhiteSpace($repositoryKey)) {
 
 $pathMapRoot = '/_/' + (Get-SafePathMapSegment -Value $repositoryKey)
 
+# Stamp every built artifact with the source commit it was built from. An
+# explicit SHA from the caller (export-universal-package.ps1) wins; a direct
+# call reads the checkout so the manifest never claims a cleaner state than
+# the real one.
+if ([string]::IsNullOrWhiteSpace($SourceCommitSha)) {
+    $localProvenance = Get-OmpSourceProvenanceOrNull -RepositoryRoot $repositoryRoot
+    if ($null -ne $localProvenance) {
+        $SourceCommitSha = $localProvenance.CommitSha
+        $SourceDirty = $localProvenance.Dirty
+    }
+    else {
+        Write-Warning "Source provenance is unavailable for '$repositoryRoot'; built artifact manifests will omit source fields."
+    }
+}
+
 # Resolve and verify every selected component's configuration files before
 # anything is published, so a literal connection string fails the build in
 # seconds instead of after a full publish.
@@ -957,6 +978,9 @@ try {
             PayloadPath = $payloadPath
             OutputPath = $artifactsRoot
             ConfigurationFile = @($configurationFileArgs)
+            SourceRepositoryKey = $repositoryKey
+            SourceCommitSha = $SourceCommitSha
+            SourceDirty = $SourceDirty
         }
         $minModuleDefinitionVersion = [string](Get-JsonPropertyValue -Object $component -Name 'minModuleDefinitionVersion')
         if (-not [string]::IsNullOrWhiteSpace($minModuleDefinitionVersion)) {

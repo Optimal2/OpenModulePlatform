@@ -129,6 +129,15 @@ because WorkerManager resolves only the selected-and-provisioned artifact.
 WorkerProcessHost checks again before loading the plugin, which also protects a
 previously imported plugin after a host downgrade.
 
+`sourceRepositoryKey`, `sourceCommitSha`, and `sourceDirty` are optional source
+provenance stamped by the repository builders
+(`scripts/omp/build-repository-objects.ps1` via
+`scripts/deployment/new-omp-artifact-package.ps1`). They record which source
+repository and commit an artifact was built from, and whether the source tree
+was dirty at build time. Importers ignore them when absent, so older packages
+keep working; when only `sourceCommitSha` is unknown the fields are omitted
+rather than guessed.
+
 When an older WorkerManager omits the artifact-root and host-version arguments,
 WorkerProcessHost searches the plugin assembly directory and its ancestors for
 the embedded marker.

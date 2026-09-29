@@ -36,7 +36,14 @@ param(
     [Parameter(Mandatory = $true)][string]$OutputPath,
     [string[]]$ConfigurationFile = @(),
     [string]$MinModuleDefinitionVersion,
-    [string]$MinWorkerHostVersion
+    [string]$MinWorkerHostVersion,
+    # Source provenance stamped into the artifact manifest so a package can be
+    # traced back to the exact commit it was built from. All three are optional
+    # on write and ignored when absent on read: older importers keep working.
+    # The fields are omitted (not guessed) when no commit SHA is supplied.
+    [string]$SourceRepositoryKey = '',
+    [string]$SourceCommitSha = '',
+    [switch]$SourceDirty
 )
 
 $ErrorActionPreference = 'Stop'
@@ -351,6 +358,14 @@ try {
             componentKey = 'omp-workerprocesshost'
             minVersion = $resolvedMinWorkerHostVersion
         }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SourceCommitSha)) {
+        if (-not [string]::IsNullOrWhiteSpace($SourceRepositoryKey)) {
+            $manifest.sourceRepositoryKey = $SourceRepositoryKey.Trim()
+        }
+
+        $manifest.sourceCommitSha = $SourceCommitSha.Trim()
+        $manifest.sourceDirty = [bool]$SourceDirty
     }
 
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot 'omp-artifact-package.json') -Encoding UTF8
