@@ -158,11 +158,33 @@ or input over OMP's own UTC data.
 - Topbar JavaScript exposes `window.OmpTime.formatUtc`. It reads the layout's
   `omp-time-zone` meta element or the shared topbar's `data-omp-time-zone` value.
   ISO API values without an offset are treated as UTC. No browser-zone fallback.
-  Include the meta element in layouts even when the topbar is disabled. The
-  date picker reads the same zone for Today/Now and relative calendar limits.
+  Include the meta element in layouts even when the topbar is disabled. Unless
+  the page sets `omp-calendar-time-zone` (below), the date picker reads the same
+  zone for Today/Now and relative calendar limits.
   Missing or empty meta content causes one console warning per page, using
   `data-omp-time-zone` if available, otherwise UTC. Invalid configured zone
   identifiers still fail explicitly.
+- A page whose business calendar differs from the presentation zone, for
+  example a module whose business days follow a local zone while `OmpTime` is
+  UTC, sets `<meta name="omp-calendar-time-zone" content="Europe/Stockholm">`.
+  It controls only the date picker's calendar: which day is Today, the Now
+  time, the month the calendar opens on, and relative presets and limits.
+  It does not control `window.OmpTime.formatUtc`, the topbar's message times,
+  server-rendered `OmpTime` text, or how the server converts submitted calendar
+  values; the module's own server code must interpret those in the same
+  business zone. The picker resolves its zone in this order:
+  1. non-empty `omp-calendar-time-zone` meta content;
+  2. non-empty `omp-time-zone` meta content;
+  3. the first `data-omp-time-zone` attribute in the document, with the
+     one-time console warning;
+  4. UTC, with the same warning.
+
+  Empty `omp-calendar-time-zone` content counts as absent and produces no
+  warning of its own; an invalid identifier fails explicitly like the other
+  sources. Without the tag, every page behaves exactly as before.
+  Do not overwrite `omp-time-zone` to change the picker's calendar: that also
+  moves `formatUtc` output, so client-refreshed timestamps would disagree with
+  server-rendered ones on the same page.
 
 The system-log and activity-log pickers now describe local calendar dates. Old
 bare-date bookmarks therefore follow the configured zone after upgrade. Explicit
@@ -236,6 +258,9 @@ bounds, invalid formats, localized errors and process-list availability without
 a log search. This Windows validation does not change the machine time zone;
 it does not claim a two-machine-zone execution.
 The three Node tests use a Los Angeles browser zone with a Stockholm platform
-zone, covering both timestamp rendering and the calendar picker. An actual
+zone, covering both timestamp rendering and the calendar picker. Three more
+cover `omp-calendar-time-zone`: without it the picker and `formatUtc` share
+`omp-time-zone`; with it the picker follows the business zone while
+`formatUtc` on the same page stays in the presentation zone. An actual
 Portal process launched with `--OmpTime:TimeZoneId=Invalid/Zone` also exits with
 code 1 before accepting requests and identifies `OmpTime:TimeZoneId` in its error.

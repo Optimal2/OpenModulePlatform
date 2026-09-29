@@ -8,6 +8,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Date picker: `omp-calendar-time-zone`.** A page whose business calendar
+  differs from the presentation zone sets
+  `<meta name="omp-calendar-time-zone" content="...">`. The picker's Today,
+  Now, opening month and relative presets follow it; `OmpTime.formatUtc` and
+  the topbar keep reading `omp-time-zone`. Without the tag nothing changes.
+  See `docs/TIME_ZONE.md`.
 - **Period picker: Space in the unsaved-draft question is Continue
   editing.** The question now opens with Continue editing focused, so
   Space keeps the popup open; Enter is still Save and Escape still

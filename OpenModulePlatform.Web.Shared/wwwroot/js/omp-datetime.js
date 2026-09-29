@@ -39,9 +39,13 @@
 
     // Return a wall-clock carrier so existing UTC-field calendar arithmetic stays
     // independent of both browser DST and the browser's selected time zone.
+    // omp-calendar-time-zone lets a page give the picker a business calendar
+    // that differs from the presentation zone; formatUtc never reads it.
     function calendarNow(instant) {
-        var meta = document.querySelector('meta[name="omp-time-zone"]');
-        var zone = meta && (meta.getAttribute('content') || '').trim();
+        var calendarMeta = document.querySelector('meta[name="omp-calendar-time-zone"]');
+        var zone = calendarMeta && (calendarMeta.getAttribute('content') || '').trim();
+        var meta = zone ? null : document.querySelector('meta[name="omp-time-zone"]');
+        zone = zone || (meta && (meta.getAttribute('content') || '').trim());
         if (!zone) {
             var source = document.querySelector('[data-omp-time-zone]');
             zone = (source && (source.getAttribute('data-omp-time-zone') || '').trim()) || 'UTC';
