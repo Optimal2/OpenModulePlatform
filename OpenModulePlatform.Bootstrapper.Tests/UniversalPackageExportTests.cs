@@ -245,7 +245,7 @@ public sealed class UniversalPackageExportTests : IDisposable
     {
         var artifactPath = CreateArtifactPackage(
             ArtifactFileName,
-            nestedPayloadEntries: new Dictionary<string, string> { ["bin/odv.dll"] = "first" });
+            nestedPayloadEntries: new Dictionary<string, string> { ["bin/app.dll"] = "first" });
         var first = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
         var firstResult = Program.CreateUniversalPackageZip(first);
         var firstBytes = File.ReadAllBytes(firstResult.PackagePath);
@@ -264,7 +264,7 @@ public sealed class UniversalPackageExportTests : IDisposable
     {
         var artifactPath = CreateArtifactPackage(
             ArtifactFileName,
-            nestedPayloadEntries: new Dictionary<string, string> { ["bin/odv.dll"] = "dll" });
+            nestedPayloadEntries: new Dictionary<string, string> { ["bin/app.dll"] = "dll" });
         var request = CreateRequest(artifactPath, ArtifactFileName, "2.4.58");
 
         const int builders = 6;
