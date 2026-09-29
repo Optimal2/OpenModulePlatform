@@ -131,6 +131,43 @@ public sealed class NoOverwriteFileTests : IDisposable
         Assert.Empty(Directory.GetFiles(_testRoot));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("someone else's package")]
+    public void WriteNeverReplacesAFileThatIsNoLongerItsOwnClaim(string foreignContent)
+    {
+        // While the content is written, the empty claim is deleted and another
+        // file takes the name -- empty or not, it is not this writer's claim,
+        // so the final rename must not replace it.
+        var path = Path.Join(_testRoot, "package.zip");
+
+        Assert.Throws<OutputFileExistsException>(() => NoOverwriteFile.Write(path, stream =>
+        {
+            File.Delete(path);
+            File.WriteAllText(path, foreignContent);
+            stream.Write(Encoding.UTF8.GetBytes("mine"));
+        }));
+
+        Assert.Equal(foreignContent, File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public void AnEmptyLeftoverReservationIsRefusedWithAnExplanation()
+    {
+        // A build killed between claiming the name and the final rename leaves
+        // the empty claim behind. The next build must say what the file is.
+        var path = Path.Join(_testRoot, "package.zip");
+        File.WriteAllBytes(path, []);
+
+        var ex = Assert.Throws<OutputFileExistsException>(
+            () => NoOverwriteFile.Write(path, stream => stream.Write(Encoding.UTF8.GetBytes("new"))));
+
+        Assert.Contains("empty", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("interrupted build", ex.Message, StringComparison.Ordinal);
+        Assert.Empty(File.ReadAllBytes(path));
+    }
+
     [Fact]
     public void CopyRefusesAnExistingDestinationWithoutTouchingIt()
     {

@@ -92,12 +92,15 @@ function New-ProvenanceConsumer {
         shared-source gate and then skips publishing them. The sibling carries
         a stub scripts/deployment/new-omp-artifact-package.ps1 so the builder
         accepts it as the OpenModulePlatform root. -DirtySibling leaves an
-        uncommitted edit in the sibling while the consumer stays clean;
+        uncommitted edit inside the consumed SharedProject folder while the
+        consumer stays clean; -UntrackedSiblingElsewhere leaves an untracked
+        file in the sibling outside every declared projectPath;
         -ReusedPackage puts an existing provenance-app package under the
         consumer's artifacts folder, which the builder reuses.
     #>
     param(
         [switch]$DirtySibling,
+        [switch]$UntrackedSiblingElsewhere,
         [switch]$ReusedPackage
     )
 
@@ -117,7 +120,8 @@ function New-ProvenanceConsumer {
         & git -C $root config commit.gpgsign false
     }
 
-    [System.IO.File]::WriteAllText((Join-Path $sibling 'shared.txt'), "shared`n", $utf8)
+    New-Item -ItemType Directory -Path (Join-Path $sibling 'SharedProject') -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $sibling 'SharedProject/shared.txt'), "shared`n", $utf8)
     $stubFolder = Join-Path $sibling 'scripts/deployment'
     New-Item -ItemType Directory -Path $stubFolder -Force | Out-Null
     [System.IO.File]::WriteAllText((Join-Path $stubFolder 'new-omp-artifact-package.ps1'), "throw 'stub: the provenance fixture never publishes'`n", $utf8)
@@ -186,7 +190,10 @@ function New-ProvenanceConsumer {
 
     $siblingHead = (git -C $sibling rev-parse HEAD | Out-String).Trim()
     if ($DirtySibling) {
-        [System.IO.File]::AppendAllText((Join-Path $sibling 'shared.txt'), "uncommitted shared edit`n", $utf8)
+        [System.IO.File]::AppendAllText((Join-Path $sibling 'SharedProject/shared.txt'), "uncommitted shared edit`n", $utf8)
+    }
+    if ($UntrackedSiblingElsewhere) {
+        [System.IO.File]::WriteAllText((Join-Path $sibling 'scratch.txt'), "untracked elsewhere`n", $utf8)
     }
 
     return @{ Parent = $parent; Root = $consumer; Sibling = $sibling; SiblingHead = $siblingHead }

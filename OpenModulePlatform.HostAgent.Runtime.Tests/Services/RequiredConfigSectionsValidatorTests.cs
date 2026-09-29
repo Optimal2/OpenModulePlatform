@@ -57,6 +57,25 @@ public sealed class RequiredConfigSectionsValidatorTests
     }
 
     [Fact]
+    public void Validate_Warning_DescribesTheResolvedFileNotTheOverlayAlone()
+    {
+        // The validator judges the resolved appsettings.json: a merge-mode
+        // overlay only carries the keys it changes, so the warning must not
+        // tell operators that the overlay itself needs every section.
+        var files = new List<ArtifactConfigurationFileDescriptor>
+        {
+            CreateAppSettingsFile("""{ "Portal": {} }""")
+        };
+
+        var result = RequiredConfigSectionsValidator.Validate(files, ["Portal", "NLog"]);
+
+        Assert.NotNull(result);
+        Assert.Contains("NLog", result);
+        Assert.Contains("resolved appsettings.json", result);
+        Assert.DoesNotContain("overlay must include all required sections", result);
+    }
+
+    [Fact]
     public void Validate_EmptyRequiredSections_ReturnsNull()
     {
         var files = new List<ArtifactConfigurationFileDescriptor>

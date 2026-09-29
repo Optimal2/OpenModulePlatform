@@ -282,6 +282,24 @@ Describe 'shared source gate' {
         finally { Remove-ProvenanceConsumer -Consumer $consumer }
     }
 
+    It 'Judges only the consumed projectPath, like Check 14, not the whole sibling root' {
+        $consumer = New-ProvenanceConsumer -UntrackedSiblingElsewhere
+        $report = Join-Path $consumer.Parent 'shared-sources.json'
+        try {
+            $roots = @(Get-OmpSharedSourceRoots -RepositoryRoot $consumer.Root)
+            @(Get-OmpSharedSourceProjectPaths -SharedSource $roots[0] -ComponentKey 'provenance-app') | Should -Be @('SharedProject')
+
+            $result = Invoke-ObjectBuilder -Consumer $consumer -ComponentKey 'provenance-app' -ReportPath $report
+            $result.ExitCode | Should -Be 0
+            ($result.Output -match 'dirty source tree') | Should -Be $false
+            $entries = @(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json | ForEach-Object { $_ })
+            $entries.Count | Should -Be 1
+            [string]$entries[0].commitSha | Should -Be $consumer.SiblingHead
+            [bool]$entries[0].dirty | Should -Be $false
+        }
+        finally { Remove-ProvenanceConsumer -Consumer $consumer }
+    }
+
     It 'Reports the consumed dirty sibling with -AllowDirtySource' {
         $consumer = New-ProvenanceConsumer -DirtySibling
         $report = Join-Path $consumer.Parent 'shared-sources.json'
@@ -353,6 +371,26 @@ Describe 'package build provenance gate' {
             [string]$manifest.sourceCommitSha | Should -Be $expectedSha
             [bool]$manifest.sourceDirty | Should -Be $false
             [string]$manifest.sourceRepositoryKey | Should -Be 'openmoduleplatform'
+        }
+        finally {
+            try { Remove-Item -LiteralPath $outputPath -Force -ErrorAction Stop } catch { }
+        }
+    }
+
+    It 'Refuses to replace an existing package file and leaves it untouched' {
+        # The Bootstrapper refuses through NoOverwriteFile; the script path
+        # used to delete the existing file and write a new one under the
+        # same, versioned name.
+        $outputPath = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-prov-exists-' + [Guid]::NewGuid().ToString('N') + '.zip')
+        try {
+            [System.IO.File]::WriteAllText($outputPath, 'existing package', (New-Object System.Text.UTF8Encoding($false)))
+            $result = Invoke-ChildScript -ScriptPath $script:ExportScript -Arguments @(
+                '-RepositoryRoot', $script:RepoRoot,
+                '-OutputPath', $outputPath
+            )
+            ($result.ExitCode -ne 0) | Should -Be $true
+            ($result.Output -match 'already exists and was not replaced') | Should -Be $true
+            [System.IO.File]::ReadAllText($outputPath) | Should -Be 'existing package'
         }
         finally {
             try { Remove-Item -LiteralPath $outputPath -Force -ErrorAction Stop } catch { }

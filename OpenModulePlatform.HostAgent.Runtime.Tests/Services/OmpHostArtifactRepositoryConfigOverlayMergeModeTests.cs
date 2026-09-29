@@ -133,6 +133,46 @@ public sealed class OmpHostArtifactRepositoryConfigOverlayMergeModeTests : IDisp
     }
 
     [Fact]
+    public async Task RequiredSections_AreJudgedOnTheMergedFile()
+    {
+        // The deployment services validate required root sections on what this
+        // repository resolves. A merge-mode overlay that only changes one key
+        // must not trip the warning for sections the artifact file carries.
+        _database.InsertArtifactConfigurationFile(
+            ArtifactId,
+            "appsettings.json",
+            """{ "Portal": {}, "NLog": {} }""",
+            packageFileContent: null);
+        await SaveOverlayAsync(new PortableConfigOverlayConfigurationFile(
+            "appsettings.json",
+            """{ "Portal": { "Title": "overlay" } }"""));
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, HostKey, CancellationToken.None);
+
+        Assert.Null(RequiredConfigSectionsValidator.Validate(files, ["Portal", "NLog"]));
+    }
+
+    [Fact]
+    public async Task RequiredSections_ReplaceModeOverlayStandsAlone()
+    {
+        _database.InsertArtifactConfigurationFile(
+            ArtifactId,
+            "appsettings.json",
+            """{ "Portal": {}, "NLog": {} }""",
+            packageFileContent: null);
+        await SaveOverlayAsync(new PortableConfigOverlayConfigurationFile(
+            "appsettings.json",
+            """{ "Portal": { "Title": "overlay" } }""",
+            "replace"));
+
+        var files = await _repository.GetArtifactConfigurationFilesAsync(ArtifactId, HostKey, CancellationToken.None);
+        var warning = RequiredConfigSectionsValidator.Validate(files, ["Portal", "NLog"]);
+
+        Assert.NotNull(warning);
+        Assert.Contains("NLog", warning);
+    }
+
+    [Fact]
     public async Task MergeMode_IsPersistedPerConfigurationFile()
     {
         await SaveOverlayAsync(
