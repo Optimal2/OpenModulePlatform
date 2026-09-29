@@ -63,20 +63,57 @@ public sealed class NoOverwriteFileTests : IDisposable
     }
 
     [Fact]
-    public void WriteLosesARaceWithoutReplacingTheWinner()
+    public void ASecondWriterDuringTheFirstWriteIsRefused()
     {
-        // The target appears while the content is being written: the rename,
-        // not the early check, must decide.
+        // The second writer starts while the first is still producing content:
+        // the name is already claimed, so the second fails before writing and
+        // the first finishes with its own content.
         var path = Path.Join(_testRoot, "package.zip");
+        OutputFileExistsException? second = null;
 
-        var ex = Assert.Throws<OutputFileExistsException>(() => NoOverwriteFile.Write(path, stream =>
+        NoOverwriteFile.Write(path, stream =>
         {
-            File.WriteAllText(path, "winner");
-            stream.Write(Encoding.UTF8.GetBytes("loser"));
-        }));
+            second = Assert.Throws<OutputFileExistsException>(
+                () => NoOverwriteFile.Write(path, inner => inner.Write(Encoding.UTF8.GetBytes("second"))));
+            stream.Write(Encoding.UTF8.GetBytes("first"));
+        });
 
-        Assert.Equal(Path.GetFullPath(path), ex.Path);
-        Assert.Equal("winner", File.ReadAllText(path));
+        Assert.NotNull(second);
+        Assert.Equal(Path.GetFullPath(path), second.Path);
+        Assert.Equal("first", File.ReadAllText(path));
+        Assert.Equal([path], Directory.GetFiles(_testRoot));
+    }
+
+    [Fact]
+    public async Task ConcurrentWritersProduceExactlyOneFile()
+    {
+        var path = Path.Join(_testRoot, "package.zip");
+        const int writers = 8;
+        using var start = new Barrier(writers);
+        var writes = Enumerable.Range(0, writers)
+            .Select(index => Task.Factory.StartNew(
+                () =>
+                {
+                    start.SignalAndWait();
+                    NoOverwriteFile.Write(path, stream => stream.Write(Encoding.UTF8.GetBytes("writer-" + index)));
+                },
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default))
+            .ToArray();
+
+        await Task.WhenAll(writes.Select(static write => write.ContinueWith(
+            static _ => { },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default)));
+
+        var winners = Enumerable.Range(0, writers).Where(index => writes[index].Exception is null).ToArray();
+        var winner = Assert.Single(winners);
+        Assert.All(
+            writes.Where(static write => write.Exception is not null),
+            write => Assert.IsType<OutputFileExistsException>(write.Exception!.GetBaseException()));
+        Assert.Equal("writer-" + winner, File.ReadAllText(path));
         Assert.Equal([path], Directory.GetFiles(_testRoot));
     }
 

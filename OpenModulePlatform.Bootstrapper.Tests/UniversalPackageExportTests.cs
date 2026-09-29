@@ -260,7 +260,7 @@ public sealed class UniversalPackageExportTests : IDisposable
     }
 
     [Fact]
-    public void ConcurrentExportsOfTheSameNameNeverReplaceEachOther()
+    public async Task ConcurrentExportsOfTheSameNameNeverReplaceEachOther()
     {
         var artifactPath = CreateArtifactPackage(
             ArtifactFileName,
@@ -269,30 +269,30 @@ public sealed class UniversalPackageExportTests : IDisposable
 
         const int builders = 6;
         using var start = new Barrier(builders);
-        var outcomes = new Exception?[builders];
-        var threads = Enumerable.Range(0, builders)
-            .Select(index => new Thread(() =>
-            {
-                start.SignalAndWait();
-                try
+        // LongRunning gives every builder its own thread, so the barrier releases
+        // them together instead of waiting on a pool that has fewer threads.
+        var builds = Enumerable.Range(0, builders)
+            .Select(index => Task.Factory.StartNew(
+                () =>
                 {
+                    start.SignalAndWait();
                     Program.CreateUniversalPackageZip(request with { PackageVersion = "race-" + index });
-                }
-                catch (Exception ex)
-                {
-                    outcomes[index] = ex;
-                }
-            }))
+                },
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default))
             .ToArray();
-        foreach (var thread in threads)
-        {
-            thread.Start();
-        }
 
-        foreach (var thread in threads)
-        {
-            thread.Join();
-        }
+        // Wait for every build to finish, failed ones included, without throwing:
+        // each build's own exception is read from its task below.
+        await Task.WhenAll(builds.Select(static build => build.ContinueWith(
+            static _ => { },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default)));
+        var outcomes = builds
+            .Select(static build => build.Exception?.GetBaseException())
+            .ToArray();
 
         Assert.Equal(1, outcomes.Count(static outcome => outcome is null));
         Assert.All(

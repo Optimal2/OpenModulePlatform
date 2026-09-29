@@ -31,20 +31,23 @@ internal sealed class OutputFileExistsException : IOException
 /// <c>File.Copy(overwrite: false)</c>, which refuses correctly, but the refusal
 /// surfaced as an uncaught <see cref="IOException"/> instead of a message.
 ///
-/// Here the existence decision belongs to the file system itself: the content
-/// is written to a temporary file beside the target (opened with
-/// <see cref="FileMode.CreateNew"/>, same directory and therefore same volume)
-/// and then renamed with <c>File.Move(overwrite: false)</c>, which fails when
-/// the target exists at the moment of the rename. A reader never observes a
-/// partial package under the final name, and a losing race ends in
-/// <see cref="OutputFileExistsException"/> with the target untouched.
+/// The name is claimed first: the target is created empty with
+/// <see cref="FileMode.CreateNew"/>, which the operating system decides
+/// atomically (CREATE_NEW on Windows, O_CREAT|O_EXCL elsewhere), so exactly one
+/// of several concurrent writers gets it and the others fail before doing any
+/// work. <c>File.Move(overwrite: false)</c> alone is not enough for that: on
+/// Unix .NET may implement it as an existence check followed by a rename, and
+/// two concurrent writers were measured both succeeding. The owner then writes
+/// the content to a temporary file beside the target (same directory, same
+/// volume) and renames it over its own claim, so a reader never observes a
+/// partial package under the final name -- only, briefly, the empty claim.
 /// </remarks>
 internal static class NoOverwriteFile
 {
     /// <summary>
     /// Writes a new file at <paramref name="path"/> through <paramref name="write"/>.
     /// Throws <see cref="OutputFileExistsException"/> when the path already
-    /// exists, including when another writer creates it while this one runs.
+    /// exists or another writer claims it first.
     /// </summary>
     public static void Write(string path, Action<Stream> write)
     {
@@ -56,16 +59,11 @@ internal static class NoOverwriteFile
             ?? throw new ArgumentException($"'{path}' has no parent directory.", nameof(path));
         Directory.CreateDirectory(directory);
 
-        // Fail before doing the work when the answer is already known; the
-        // rename below is what decides a race.
-        if (File.Exists(fullPath))
-        {
-            throw new OutputFileExistsException(fullPath);
-        }
-
+        ClaimName(fullPath);
         var tempPath = System.IO.Path.Join(
             directory,
             $".{System.IO.Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+        var published = false;
         try
         {
             using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
@@ -74,18 +72,31 @@ internal static class NoOverwriteFile
                 stream.Flush(flushToDisk: true);
             }
 
-            try
-            {
-                File.Move(tempPath, fullPath, overwrite: false);
-            }
-            catch (IOException ex) when (File.Exists(fullPath))
-            {
-                throw new OutputFileExistsException(fullPath, ex);
-            }
+            // Replacing is correct here: the file being replaced is this writer's
+            // own empty claim, never someone else's package.
+            File.Move(tempPath, fullPath, overwrite: true);
+            published = true;
         }
         finally
         {
             TryDelete(tempPath);
+            if (!published)
+            {
+                // Release the claim so a failed build leaves no empty package behind.
+                TryDelete(fullPath);
+            }
+        }
+    }
+
+    private static void ClaimName(string fullPath)
+    {
+        try
+        {
+            using var claim = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        }
+        catch (IOException ex) when (File.Exists(fullPath))
+        {
+            throw new OutputFileExistsException(fullPath, ex);
         }
     }
 

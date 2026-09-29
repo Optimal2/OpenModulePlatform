@@ -7177,10 +7177,11 @@ ORDER BY ar.ArtifactId DESC;
         }
 
         // Never replace an existing package: the file name carries the version,
-        // so a replacement ships different content under the same name. The
-        // package is written beside the target and renamed without overwrite, so
-        // a concurrent build of the same name fails instead of winning silently
-        // (OutputFileExistsException) and no reader sees a partial zip.
+        // so a replacement ships different content under the same name. The name
+        // is claimed atomically (FileMode.CreateNew) before the zip is written
+        // beside it and renamed over the claim, so a concurrent build of the same
+        // name fails instead of winning silently (OutputFileExistsException) and
+        // no reader sees a partial zip.
         var outputPath = Path.GetFullPath(request.OutputPath);
         NoOverwriteFile.Write(outputPath, stream => WriteUniversalPackageZip(stream, request));
         return new UniversalPackageBuildResult(outputPath, request.Items.Count);
