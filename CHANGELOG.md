@@ -11,8 +11,10 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 - **Period picker: `omp-daterange-restore`.** A page that writes the
   picker's hidden values itself (the search-lock Cancel on the IbsPackager
   jobs and history pages restores what it stashed) dispatches the event on
-  the container, and the field's label and active look follow the values,
-  the counterpart of `omp-datetime-restore` on a single field.
+  the container, and the field's label and active look follow the values
+  (an open popup closes first), the counterpart of `omp-datetime-restore`
+  on a single field. A period open at one end reads "2026-09-28 00:00 –"
+  or "– 2026-09-28 23:59" rather than with a dash hanging in the air.
 - **Runtime maintenance steps in module definitions.** A module that keeps
   references to platform rows declares, in the new optional
   `runtimeMaintenance` section, versioned SQL steps for the events

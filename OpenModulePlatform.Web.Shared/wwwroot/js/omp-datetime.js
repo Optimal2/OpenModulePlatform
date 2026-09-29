@@ -766,7 +766,10 @@
     // labels on the presets), so the page's GET contract and localization
     // stay where they were; a page that writes them itself (a lock/cancel
     // flow restoring what it stashed) dispatches omp-daterange-restore on
-    // the container and the field follows them. Nothing applies until Confirm: a quick pick in
+    // the container: the field's label and look follow the values, an open
+    // popup closes, and no change event fires (the page wrote the values),
+    // as with omp-datetime-restore on a single field. Nothing applies until
+    // Confirm: a quick pick in
     // the rail on the left (the page's presets and a built-in Today) sets
     // the fields as a draft, and so do the dates typed, picked in the
     // calendar or nudged a day with the arrows inside each field, and Reset
@@ -908,7 +911,10 @@
             }
             from = from.replace("T", " ");
             to = to.replace("T", " ");
-            if (from || to) { return (from || "") + " – " + (to || ""); }
+            // An open start or end keeps the dash on the open side only.
+            if (from && to) { return from + " – " + to; }
+            if (from) { return from + " –"; }
+            if (to) { return "– " + to; }
             return presets.length > 0 ? presets[0].label : "";
         }
 
@@ -980,8 +986,12 @@
         }
 
         // A page's lock/cancel flow restores the hidden values it stashed;
-        // the field's label and look follow them again.
+        // the field's label and look follow them again. A popup still open
+        // would show its old draft and could apply it over the restored
+        // values, so it closes first. No change event: the page wrote the
+        // values itself, as with omp-datetime-restore on a single field.
         container.addEventListener("omp-daterange-restore", function () {
+            if (rangeContainer === container) { closeRangePanel(); }
             field.textContent = currentLabel();
             syncActive();
         });
