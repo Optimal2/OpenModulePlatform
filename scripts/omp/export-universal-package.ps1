@@ -65,7 +65,8 @@ param(
     # Building from a dirty source tree can ship the same package version with
     # different content and no trace of it. Fail by default; pass this switch
     # for local troubleshooting, which then stamps sourceDirty=true in the
-    # package manifest and in every built artifact manifest.
+    # package manifest and in every built artifact manifest. The same gate
+    # covers the sibling repositories behind sharedDependencies.
     [switch]$AllowDirtySource
 )
 
@@ -668,6 +669,7 @@ if (-not (Test-Path -LiteralPath $buildRepositoryObjectsScript -PathType Leaf)) 
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-universal-export-' + [Guid]::NewGuid().ToString('N'))
 $objectRoot = Join-Path $tempRoot 'objects'
+$sharedSourceReportPath = Join-Path $tempRoot 'shared-sources.json'
 
 try {
     $builderArgs = @{
@@ -676,6 +678,15 @@ try {
         Configuration = $Configuration
         SourceCommitSha = $sourceProvenance.CommitSha
         SourceDirty = $sourceProvenance.Dirty
+        # A consumer compiles against the sibling repositories behind its
+        # sharedDependencies. Check 14 only warns when one of them is dirty; the
+        # package build refuses a dirty sibling that a component published in
+        # this run compiles against, like a dirty own tree, before anything is
+        # published. Siblings behind reused packages or other components are
+        # not part of this package's bytes and are neither gated nor stamped.
+        EnforceCleanSharedSources = $true
+        AllowDirtySource = [bool]$AllowDirtySource
+        SharedSourceReportPath = $sharedSourceReportPath
     }
 
     if (-not [string]::IsNullOrWhiteSpace($OmpRepositoryRoot)) {
@@ -715,6 +726,12 @@ try {
     }
 
     & $buildRepositoryObjectsScript @builderArgs
+
+    $sharedSourceProvenance = @()
+    if (Test-Path -LiteralPath $sharedSourceReportPath -PathType Leaf) {
+        $sharedSourceProvenance = @(Get-Content -LiteralPath $sharedSourceReportPath -Raw -Encoding UTF8 | ConvertFrom-Json | ForEach-Object { $_ })
+    }
+    $anySourceDirty = [bool]$sourceProvenance.Dirty -or @($sharedSourceProvenance | Where-Object { $_.dirty }).Count -gt 0
 
     if (-not [string]::IsNullOrWhiteSpace($resolvedHostProfilePath)) {
         Invoke-HostProfileObjectHook `
@@ -777,8 +794,20 @@ try {
         sourceRepositoryKey = [string](Get-JsonPropertyValue -Object $componentManifest -Name 'repositoryKey')
         sourceRepositoryVersion = [string](Get-JsonPropertyValue -Object $componentManifest -Name 'repositoryVersion')
         sourceCommitSha = $sourceProvenance.CommitSha
-        sourceDirty = $sourceProvenance.Dirty
+        sourceDirty = $anySourceDirty
         items = $manifestItems
+    }
+
+    # Optional on read, like the other source fields: present only when a
+    # component published in this run compiled against a sibling repository.
+    if ($sharedSourceProvenance.Count -gt 0) {
+        $manifest.sharedSources = @($sharedSourceProvenance | ForEach-Object {
+            [ordered]@{
+                repositoryKey = [string]$_.repositoryKey
+                commitSha = [string]$_.commitSha
+                dirty = [bool]$_.dirty
+            }
+        })
     }
 
     if (Test-Path -LiteralPath $outputPath -PathType Leaf) {

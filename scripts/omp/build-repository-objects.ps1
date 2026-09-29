@@ -44,7 +44,17 @@ param(
     # the commit SHA and dirty flag are read from the repository checkout, so a
     # direct call stamps honestly instead of omitting the fields.
     [string]$SourceCommitSha = '',
-    [switch]$SourceDirty
+    [switch]$SourceDirty,
+    # Gate the sibling repositories behind sharedDependencies that the
+    # components published in THIS run compile against (package builds pass
+    # this; export-universal-package.ps1 does). Without it a direct call only
+    # stamps a dirty sibling into the affected artifact manifests, the same way
+    # a direct call stamps its own dirty tree instead of refusing it.
+    [switch]$EnforceCleanSharedSources,
+    [switch]$AllowDirtySource,
+    # Optional JSON report of the shared sources the published components were
+    # compiled against, for the caller's universal package manifest.
+    [string]$SharedSourceReportPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -148,6 +158,55 @@ function Test-ArtifactComponent {
         -and -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'packageType')) `
         -and -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'targetName')) `
         -and -not [string]::IsNullOrWhiteSpace([string](Get-JsonPropertyValue -Object $Component -Name 'version'))
+}
+
+function Find-ExistingArtifactPackage {
+    <#
+    .SYNOPSIS
+        The previously built package this run would reuse for a component, or
+        an empty string. The same lookup decides reuse in the build loop and
+        which components are built from source in the shared-source gate.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][object]$Component,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$ArtifactsRoot
+    )
+
+    $packageName = Get-ArtifactPackageName -Component $Component
+    $existing = @(
+        Join-Path $RepositoryRoot "artifacts\$packageName"
+        Join-Path $RepositoryRoot "artifacts\archive\$packageName"
+        Join-Path $ArtifactsRoot $packageName
+    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+    return [string]$existing
+}
+
+function Test-ComponentBuiltFromSource {
+    <#
+    .SYNOPSIS
+        True when this run publishes the component from its project (and so
+        compiles against its shared sources): it has a project path that
+        exists, and no existing package is reused for it.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][object]$Component,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$ArtifactsRoot,
+        [switch]$BuildArtifacts
+    )
+
+    $projectPath = [string](Get-JsonPropertyValue -Object $Component -Name 'projectPath')
+    if ([string]::IsNullOrWhiteSpace($projectPath)) {
+        return $false
+    }
+
+    if (-not (Test-Path -LiteralPath (Resolve-PathFromBase -Path $projectPath -BasePath $RepositoryRoot))) {
+        return $false
+    }
+
+    $existing = Find-ExistingArtifactPackage -Component $Component -RepositoryRoot $RepositoryRoot -ArtifactsRoot $ArtifactsRoot
+    return ([string]::IsNullOrWhiteSpace($existing) -or $BuildArtifacts)
 }
 
 function Get-ArtifactPackageName {
@@ -883,6 +942,66 @@ if ([string]::IsNullOrWhiteSpace($SourceCommitSha)) {
     }
 }
 
+# Shared sources: only the sibling repositories consumed by a component this
+# run publishes from source matter. A reused package or a component outside a
+# dependency's consumers contributes no bytes compiled against the sibling, so
+# its state neither blocks the build nor is stamped (PR review, 2026-09-29).
+$componentSharedSources = @{}
+$usedSharedSources = [ordered]@{}
+$sharedSourceRoots = @(Get-OmpSharedSourceRoots -RepositoryRoot $repositoryRoot -ExplicitRoot $OmpRepositoryRoot)
+if ($sharedSourceRoots.Count -gt 0) {
+    foreach ($component in $selectedComponents) {
+        if (-not (Test-ComponentBuiltFromSource -Component $component -RepositoryRoot $repositoryRoot -ArtifactsRoot $artifactsRoot -BuildArtifacts:$BuildArtifacts)) {
+            continue
+        }
+
+        $componentKeyValue = [string]$component.componentKey
+        $consumed = @($sharedSourceRoots | Where-Object { Test-OmpSharedSourceConsumedBy -SharedSource $_ -ComponentKey $componentKeyValue })
+        if ($consumed.Count -eq 0) {
+            continue
+        }
+
+        $componentSharedSources[$componentKeyValue] = @($consumed | ForEach-Object { $_.RepositoryRoot.ToUpperInvariant() })
+        foreach ($shared in $consumed) {
+            $key = $shared.RepositoryRoot.ToUpperInvariant()
+            if (-not $usedSharedSources.Contains($key)) {
+                $usedSharedSources[$key] = $shared
+            }
+        }
+    }
+}
+
+$sharedSourceProvenance = @{}
+if ($usedSharedSources.Count -gt 0) {
+    if ($EnforceCleanSharedSources) {
+        $verified = @(Assert-OmpSharedSourcesClean -SharedSources @($usedSharedSources.Values) -AllowDirtySource:$AllowDirtySource)
+    }
+    else {
+        $verified = @($usedSharedSources.Values | ForEach-Object {
+            $provenance = Get-OmpSourceProvenanceOrNull -RepositoryRoot $_.RepositoryRoot
+            if ($null -eq $provenance) {
+                Write-Warning "Source provenance is unavailable for shared source '$($_.RepositoryRoot)'; affected artifacts are stamped dirty."
+                [pscustomobject]@{ RepositoryKey = $_.RepositoryKey; RepositoryRoot = $_.RepositoryRoot; CommitSha = ''; Dirty = $true }
+            }
+            else {
+                [pscustomobject]@{ RepositoryKey = $_.RepositoryKey; RepositoryRoot = $provenance.RepositoryRoot; CommitSha = $provenance.CommitSha; Dirty = $provenance.Dirty }
+            }
+        })
+    }
+
+    foreach ($item in $verified) {
+        $sharedSourceProvenance[$item.RepositoryRoot.ToUpperInvariant()] = $item
+    }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SharedSourceReportPath)) {
+    $report = @($sharedSourceProvenance.Values | Sort-Object RepositoryKey | ForEach-Object {
+        [ordered]@{ repositoryKey = $_.RepositoryKey; commitSha = $_.CommitSha; dirty = [bool]$_.Dirty }
+    })
+    $reportJson = ConvertTo-Json -InputObject @($report) -Depth 5
+    [System.IO.File]::WriteAllText($SharedSourceReportPath, $reportJson, (New-Object System.Text.UTF8Encoding($false)))
+}
+
 # Resolve and verify every selected component's configuration files before
 # anything is published, so a literal connection string fails the build in
 # seconds instead of after a full publish.
@@ -909,11 +1028,7 @@ foreach ($component in $selectedComponents) {
 try {
     foreach ($component in $selectedComponents) {
         $packageName = Get-ArtifactPackageName -Component $component
-        $existingPackage = @(
-            Join-Path $repositoryRoot "artifacts\$packageName"
-            Join-Path $repositoryRoot "artifacts\archive\$packageName"
-            Join-Path $artifactsRoot $packageName
-        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        $existingPackage = Find-ExistingArtifactPackage -Component $component -RepositoryRoot $repositoryRoot -ArtifactsRoot $artifactsRoot
 
         if (-not [string]::IsNullOrWhiteSpace($existingPackage) -and -not $BuildArtifacts) {
             Copy-ExistingArtifactPackage -SourcePath $existingPackage -Destination (Join-Path $artifactsRoot $packageName) -ComponentKey ([string]$component.componentKey)
@@ -969,6 +1084,17 @@ try {
 
         $configurationFileArgs = $componentConfigurationFiles[[string]$component.componentKey]
 
+        # The artifact is dirty when its own tree or any shared source it was
+        # compiled against was dirty.
+        $artifactSourceDirty = [bool]$SourceDirty
+        if ($componentSharedSources.ContainsKey([string]$component.componentKey)) {
+            foreach ($sharedKey in $componentSharedSources[[string]$component.componentKey]) {
+                if ($sharedSourceProvenance.ContainsKey($sharedKey) -and $sharedSourceProvenance[$sharedKey].Dirty) {
+                    $artifactSourceDirty = $true
+                }
+            }
+        }
+
         $artifactPackageArgs = @{
             ModuleKey = [string]$component.moduleKey
             AppKey = [string]$component.appKey
@@ -980,7 +1106,7 @@ try {
             ConfigurationFile = @($configurationFileArgs)
             SourceRepositoryKey = $repositoryKey
             SourceCommitSha = $SourceCommitSha
-            SourceDirty = $SourceDirty
+            SourceDirty = $artifactSourceDirty
         }
         $minModuleDefinitionVersion = [string](Get-JsonPropertyValue -Object $component -Name 'minModuleDefinitionVersion')
         if (-not [string]::IsNullOrWhiteSpace($minModuleDefinitionVersion)) {
