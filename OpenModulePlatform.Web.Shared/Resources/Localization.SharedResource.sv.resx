@@ -102,4 +102,8 @@
   <data name="'{0}' and '{1}' do not match." xml:space="preserve"><value>'{0}' och '{1}' stämmer inte överens.</value></data>
   <data name="User log" xml:space="preserve"><value>Användarlogg</value></data>
   <data name="System log" xml:space="preserve"><value>Systemlogg</value></data>
+  <data name="Theme" xml:space="preserve"><value>Tema</value></data>
+  <data name="Theme: System" xml:space="preserve"><value>System</value></data>
+  <data name="Theme: Light" xml:space="preserve"><value>Ljust</value></data>
+  <data name="Theme: Dark" xml:space="preserve"><value>Mörkt</value></data>
 </root>

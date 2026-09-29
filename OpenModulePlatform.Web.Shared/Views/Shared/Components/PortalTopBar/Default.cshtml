@@ -355,6 +355,8 @@
         </nav>
 
         <div class="portal-topbar__actions">
+            @await Component.InvokeAsync("OmpThemeSwitch")
+
             @if (Model.LanguageOptions.Count > 1)
             {
                 <details class="portal-topbar__language" data-portal-topbar-overlay data-portal-topbar-hover-menu>

@@ -235,7 +235,7 @@
 .omp-datetime-panel__day--selected:hover {
     background: var(--link, #0b57d0);
     border-color: var(--link, #0b57d0);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 /* The time half is its own clearly bounded block: tinted, bordered and
@@ -292,7 +292,7 @@
 .omp-datetime-panel__cell--selected,
 .omp-datetime-panel__cell--selected:hover {
     background: var(--link, #0b57d0);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 /* Left-aligned so the buttons keep their positions when the time block
@@ -337,7 +337,7 @@
 .omp-datetime-panel__action--on:hover {
     background: var(--link, #0b57d0);
     border-color: var(--link, #0b57d0);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 /* --- range mode --------------------------------------------------------- */
@@ -483,7 +483,7 @@
 .omp-daterange-panel__preset--active:hover {
     background: var(--link, #0b57d0);
     border-color: var(--link, #0b57d0);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 .omp-daterange-panel__fields {

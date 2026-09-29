@@ -1,0 +1,29 @@
+@inject Microsoft.Extensions.Localization.IStringLocalizer<OpenModulePlatform.Web.Shared.Localization.SharedResource> L
+@* Theme menu of the OMP theme contract (docs/THEME_CONTRACT.md). Behaviour lives in
+   js/omp-theme.js; the Blazor top bar (Components/Layout/PortalTopBar.razor) renders
+   the same markup and must be kept identical. *@
+<div class="omp-theme-switch" data-omp-theme-switch>
+    <button type="button"
+            class="omp-theme-switch__toggle"
+            title="@L["Theme"]"
+            aria-label="@L["Theme"]"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            data-omp-theme-toggle>
+        <span class="omp-theme-switch__icon" aria-hidden="true"></span>
+    </button>
+    <div class="omp-theme-switch__menu" role="menu" aria-label="@L["Theme"]" data-omp-theme-menu hidden>
+        <button type="button" class="omp-theme-switch__option" role="menuitemradio" aria-checked="false" tabindex="-1" data-omp-theme-option="system">
+            <span class="omp-theme-switch__icon omp-theme-switch__icon--system" aria-hidden="true"></span>
+            <span>@L["Theme: System"]</span>
+        </button>
+        <button type="button" class="omp-theme-switch__option" role="menuitemradio" aria-checked="false" tabindex="-1" data-omp-theme-option="light">
+            <span class="omp-theme-switch__icon omp-theme-switch__icon--light" aria-hidden="true"></span>
+            <span>@L["Theme: Light"]</span>
+        </button>
+        <button type="button" class="omp-theme-switch__option" role="menuitemradio" aria-checked="false" tabindex="-1" data-omp-theme-option="dark">
+            <span class="omp-theme-switch__icon omp-theme-switch__icon--dark" aria-hidden="true"></span>
+            <span>@L["Theme: Dark"]</span>
+        </button>
+    </div>
+</div>

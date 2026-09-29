@@ -135,7 +135,7 @@
     margin-left: 6px;
     border-radius: 9px;
     background: var(--link);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
     font-size: 0.72rem;
     font-weight: 700;
     line-height: 1;

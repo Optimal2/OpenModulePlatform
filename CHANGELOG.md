@@ -29,6 +29,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Light/dark theme contract, first slice.** `OpenModulePlatform.Web.Shared`
+  ships `js/omp-theme.js` (synchronous head script, CSP-safe, sets
+  `data-theme`/`data-theme-mode` on `<html>` before first paint) and
+  `css/omp-theme.css` (`--omp-*` tokens for both palettes). The choice is
+  stored as `OMP_THEME_PREFERENCE` in a host-only cookie mirrored to
+  localStorage. The shared top bar (Razor and Blazor) and the Auth login page
+  get a System / Light / Dark menu; the Portal, Auth and the Blazor example
+  alias their colour variables to the tokens. Contract:
+  `docs/THEME_CONTRACT.md`; browser tests:
+  `OpenModulePlatform.UiTests/ThemeContractTests.cs`.
+
 - **Date picker: `omp-calendar-time-zone`.** A page whose business calendar
   differs from the presentation zone sets
   `<meta name="omp-calendar-time-zone" content="...">`. The picker's Today,

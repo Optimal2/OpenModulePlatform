@@ -1,0 +1,211 @@
+/* File: OpenModulePlatform.Web.Shared/wwwroot/css/omp-theme.css
+   OMP theme contract, version 1. See docs/THEME_CONTRACT.md.
+
+   Load after js/omp-theme.js and before the app's own stylesheet. This file only
+   defines --omp-* tokens and the theme switch; each app maps its own legacy
+   variable names onto the tokens (for example --surface: var(--omp-surface)),
+   so an app that does not load this file keeps its current palette. */
+
+:root {
+    color-scheme: light;
+
+    --omp-bg: #f5f7fb;
+    --omp-surface: #ffffff;
+    --omp-surface-muted: #f8fafc;
+    --omp-text: #172033;
+    --omp-text-muted: #5b667a;
+    --omp-link: #0b57d0;
+    --omp-link-hover: #0842a1;
+    --omp-focus: #0b57d0;
+    --omp-control-border: #7b8799;
+    /* Decorative separators; not a control boundary. */
+    --omp-border: #d7deea;
+    --omp-border-strong: #c4cede;
+    /* Selected rows, current items and soft highlights. */
+    --omp-accent-surface: #e8f0fe;
+    /* Text on a --omp-link filled surface (primary buttons, current badges). */
+    --omp-on-accent: #ffffff;
+    --omp-shadow: 0 8px 24px rgba(17, 24, 39, 0.05);
+    --omp-overlay: rgba(15, 23, 42, 0.35);
+
+    --omp-success-text: #166534;
+    --omp-success-bg: #dcfce7;
+    --omp-success-border: #86c79b;
+    --omp-warning-text: #92400e;
+    --omp-warning-bg: #fef3c7;
+    --omp-warning-border: #f0b36d;
+    --omp-danger-text: #991b1b;
+    --omp-danger-bg: #fee2e2;
+    --omp-danger-border: #f1a9a9;
+    --omp-info-text: #075985;
+    --omp-info-bg: #e0f2fe;
+    --omp-info-border: #7dd3fc;
+}
+
+/* Screen only: printed pages keep the light palette (white paper, dark text)
+   whatever the user picked, without touching the stored preference. */
+@media not print {
+html[data-theme="dark"] {
+    color-scheme: dark;
+
+    --omp-bg: #0f172a;
+    --omp-surface: #111c2d;
+    --omp-surface-muted: #18263a;
+    --omp-text: #e5edf7;
+    --omp-text-muted: #b6c3d5;
+    --omp-link: #8bb7ff;
+    --omp-link-hover: #b8d3ff;
+    --omp-focus: #8bb7ff;
+    --omp-control-border: #718198;
+    --omp-border: #2c3b52;
+    --omp-border-strong: #3b4d68;
+    --omp-accent-surface: #16243a;
+    --omp-on-accent: #0b1220;
+    --omp-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --omp-overlay: rgba(0, 0, 0, 0.55);
+
+    --omp-success-text: #86efac;
+    --omp-success-bg: #0f2a1b;
+    --omp-success-border: #2f7d46;
+    --omp-warning-text: #fcd34d;
+    --omp-warning-bg: #2e2310;
+    --omp-warning-border: #8a6a1f;
+    --omp-danger-text: #fca5a5;
+    --omp-danger-bg: #3a1518;
+    --omp-danger-border: #9f3a3f;
+    --omp-info-text: #93c5fd;
+    --omp-info-bg: #0f2236;
+    --omp-info-border: #2f5f8f;
+}
+}
+
+/* ---- Theme switch ----------------------------------------------------------
+   Rendered by the OmpThemeSwitch view component (Razor top bar, Auth) and the
+   Blazor top bar. Hidden until omp-theme.js has run, so a page without the
+   script never shows a dead control. */
+
+html:not([data-theme-mode]) .omp-theme-switch {
+    display: none;
+}
+
+.omp-theme-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.omp-theme-switch__toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    min-height: 28px;
+    margin: 0;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--portal-topbar-text-muted, var(--omp-text-muted));
+    font: inherit;
+    cursor: pointer;
+}
+
+.omp-theme-switch__toggle:hover,
+.omp-theme-switch__toggle[aria-expanded="true"] {
+    color: var(--portal-topbar-text, var(--omp-text));
+    background: var(--portal-topbar-surface-muted, var(--omp-surface-muted));
+}
+
+.omp-theme-switch__toggle:focus-visible,
+.omp-theme-switch__option:focus-visible {
+    outline: 2px solid var(--omp-focus);
+    outline-offset: 2px;
+}
+
+.omp-theme-switch__icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: var(--omp-theme-icon, url("../icons/theme-system.svg")) center / contain no-repeat;
+    mask: var(--omp-theme-icon, url("../icons/theme-system.svg")) center / contain no-repeat;
+}
+
+html[data-theme-mode="light"] .omp-theme-switch__toggle .omp-theme-switch__icon,
+.omp-theme-switch__icon--light {
+    --omp-theme-icon: url("../icons/theme-light.svg");
+}
+
+html[data-theme-mode="dark"] .omp-theme-switch__toggle .omp-theme-switch__icon,
+.omp-theme-switch__icon--dark {
+    --omp-theme-icon: url("../icons/theme-dark.svg");
+}
+
+.omp-theme-switch__icon--system {
+    --omp-theme-icon: url("../icons/theme-system.svg");
+}
+
+.omp-theme-switch__menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 1100;
+    display: grid;
+    gap: 2px;
+    min-width: 180px;
+    padding: 6px;
+    border: 1px solid var(--omp-border);
+    border-radius: 12px;
+    background: var(--omp-surface);
+    color: var(--omp-text);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+}
+
+.omp-theme-switch__menu[hidden] {
+    display: none;
+}
+
+.omp-theme-switch__option {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 36px;
+    margin: 0;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--omp-text);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.omp-theme-switch__option:hover,
+.omp-theme-switch__option:focus-visible {
+    background: var(--omp-surface-muted);
+    color: var(--omp-text);
+}
+
+.omp-theme-switch__option[aria-checked="true"] {
+    background: var(--omp-accent-surface);
+}
+
+.omp-theme-switch__option[aria-checked="true"]::after {
+    content: "";
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url("../icons/check.svg") center / contain no-repeat;
+    mask: url("../icons/check.svg") center / contain no-repeat;
+}
+
+@media print {
+    .omp-theme-switch {
+        display: none !important;
+    }
+}

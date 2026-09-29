@@ -122,7 +122,7 @@
     margin-left: 6px;
     border-radius: 9px;
     background: var(--link, #0b57d0);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
     font-size: 0.72rem;
     font-weight: 700;
     line-height: 1;
@@ -260,7 +260,7 @@
 .omp-picker__option--active:hover {
     background: var(--link, #0b57d0);
     border-color: var(--link, #0b57d0);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 /* A multiple choice says so: a box before every row, a tick in the link
@@ -385,7 +385,7 @@
 .omp-segmented__option:has(input:checked),
 .omp-segmented__option:has(input:checked):hover {
     background: var(--link, #0b57d0);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 /* With the thumb in place the option's own fill steps aside, so the fill

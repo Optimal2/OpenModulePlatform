@@ -172,20 +172,20 @@
 .omp-confirm-dialog__actions button.omp-confirm-dialog__ok {
     border-color: var(--link);
     background: var(--link);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 .omp-confirm-dialog__ok:hover,
 .omp-confirm-dialog__ok:focus-visible {
     border-color: var(--link-hover);
     background: var(--link-hover);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }
 
 .omp-confirm-dialog__actions button.omp-confirm-dialog__ok:disabled {
     border-color: var(--link);
     background: var(--link);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
     opacity: 0.45;
     cursor: not-allowed;
 }
@@ -196,5 +196,5 @@
 .omp-confirm-dialog__actions button.omp-confirm-dialog__ok:focus-visible {
     border-color: var(--link-hover);
     background: var(--link-hover);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
 }

@@ -17,7 +17,7 @@
     min-height: 34px;
     padding: 6px 20px;
     border-bottom: 1px solid var(--portal-topbar-border);
-    background: rgba(248, 250, 252, 0.96);
+    background: color-mix(in srgb, var(--omp-surface-muted, #f8fafc) 96%, transparent);
     overflow: visible;
 }
 
@@ -812,7 +812,7 @@ span.portal-topbar__nav-group-link {
 }
 
 .portal-topbar__notification-form.is-unread .portal-topbar__notification-row {
-    background: rgba(224, 242, 254, 0.72);
+    background: var(--omp-info-bg, rgba(224, 242, 254, 0.72));
 }
 
 .portal-topbar__notification-form.is-unread .portal-topbar__notification-title::before {
@@ -856,25 +856,25 @@ span.portal-topbar__nav-group-link {
     height: 32px;
     overflow: hidden;
     border-radius: 10px;
-    background: #e0f2fe;
-    color: #0369a1;
+    background: var(--omp-info-bg, #e0f2fe);
+    color: var(--omp-info-text, #0369a1);
     font-size: 0.78rem;
     font-weight: 800;
 }
 
 .portal-topbar__notification-row--success .portal-topbar__notification-caller-icon {
-    background: #dcfce7;
-    color: #166534;
+    background: var(--omp-success-bg, #dcfce7);
+    color: var(--omp-success-text, #166534);
 }
 
 .portal-topbar__notification-row--warning .portal-topbar__notification-caller-icon {
-    background: #fef3c7;
-    color: #92400e;
+    background: var(--omp-warning-bg, #fef3c7);
+    color: var(--omp-warning-text, #92400e);
 }
 
 .portal-topbar__notification-row--error .portal-topbar__notification-caller-icon {
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--omp-danger-bg, #fee2e2);
+    color: var(--omp-danger-text, #991b1b);
 }
 
 .portal-topbar__notification-caller-icon img {
@@ -1006,7 +1006,7 @@ span.portal-topbar__nav-group-link {
 }
 
 .portal-topbar__message-row.is-unread {
-    background: rgba(224, 242, 254, 0.72);
+    background: var(--omp-info-bg, rgba(224, 242, 254, 0.72));
 }
 
 .portal-topbar__message-avatar {
@@ -1016,8 +1016,8 @@ span.portal-topbar__nav-group-link {
     width: 32px;
     height: 32px;
     border-radius: 999px;
-    background: #e0f2fe;
-    color: #0369a1;
+    background: var(--omp-info-bg, #e0f2fe);
+    color: var(--omp-info-text, #0369a1);
     font-size: 0.72rem;
     font-weight: 800;
     overflow: hidden;
@@ -1104,23 +1104,23 @@ span.portal-topbar__nav-group-link {
     padding: 4px 8px;
     border: 1px solid rgba(2, 132, 199, 0.22);
     border-radius: 8px;
-    background: rgba(224, 242, 254, 0.72);
+    background: var(--omp-info-bg, rgba(224, 242, 254, 0.72));
     color: var(--portal-topbar-text);
 }
 
 .portal-topbar__notification-banner--announcement {
     border-color: rgba(2, 132, 199, 0.28);
-    background: rgba(224, 242, 254, 0.78);
+    background: var(--omp-info-bg, rgba(224, 242, 254, 0.78));
 }
 
 .portal-topbar__notification-banner--warning {
     border-color: rgba(217, 119, 6, 0.32);
-    background: rgba(254, 243, 199, 0.88);
+    background: var(--omp-warning-bg, rgba(254, 243, 199, 0.88));
 }
 
 .portal-topbar__notification-banner--critical {
     border-color: rgba(220, 38, 38, 0.34);
-    background: rgba(254, 226, 226, 0.9);
+    background: var(--omp-danger-bg, rgba(254, 226, 226, 0.9));
 }
 
 .portal-topbar__notification-banner-icon {
@@ -1131,20 +1131,20 @@ span.portal-topbar__nav-group-link {
     height: 24px;
     overflow: hidden;
     border-radius: 8px;
-    background: #e0f2fe;
-    color: #0369a1;
+    background: var(--omp-info-bg, #e0f2fe);
+    color: var(--omp-info-text, #0369a1);
     font-size: 0.7rem;
     font-weight: 800;
 }
 
 .portal-topbar__notification-banner--warning .portal-topbar__notification-banner-icon {
-    background: #fef3c7;
-    color: #92400e;
+    background: var(--omp-warning-bg, #fef3c7);
+    color: var(--omp-warning-text, #92400e);
 }
 
 .portal-topbar__notification-banner--critical .portal-topbar__notification-banner-icon {
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--omp-danger-bg, #fee2e2);
+    color: var(--omp-danger-text, #991b1b);
 }
 
 .portal-topbar__notification-banner-icon img {
@@ -1565,8 +1565,8 @@ span.portal-topbar__nav-group-link {
 
 .portal-topbar__profile-logout-row:hover,
 .portal-topbar__profile-logout-row:focus-visible {
-    background: #fee2e2;
-    color: #b91c1c;
+    background: var(--omp-danger-bg, #fee2e2);
+    color: var(--omp-danger-text, #b91c1c);
 }
 
 .portal-topbar__profile-switch {
@@ -1634,10 +1634,10 @@ button.portal-topbar__profile-role-link {
     gap: 14px;
     max-width: min(720px, calc(100vw - 32px));
     padding: 10px 12px;
-    border: 1px solid #f0b36d;
+    border: 1px solid var(--omp-warning-border, #f0b36d);
     border-radius: 12px;
-    background: #fff8ed;
-    color: #6f3f00;
+    background: var(--omp-warning-bg, #fff8ed);
+    color: var(--omp-warning-text, #6f3f00);
     box-shadow: 0 18px 48px rgba(17, 24, 39, 0.18);
     transform: translateX(-50%);
 }
@@ -1647,15 +1647,15 @@ button.portal-topbar__profile-role-link {
 }
 
 .omp-session-status-banner--auth {
-    border-color: #f0b36d;
-    background: #fff8ed;
-    color: #6f3f00;
+    border-color: var(--omp-warning-border, #f0b36d);
+    background: var(--omp-warning-bg, #fff8ed);
+    color: var(--omp-warning-text, #6f3f00);
 }
 
 .omp-session-status-banner--network {
-    border-color: #d8b4fe;
-    background: #faf5ff;
-    color: #581c87;
+    border-color: var(--omp-info-border, #d8b4fe);
+    background: var(--omp-info-bg, #faf5ff);
+    color: var(--omp-info-text, #581c87);
 }
 
 .omp-session-status-banner__message {
@@ -1680,7 +1680,7 @@ button.portal-topbar__profile-role-link {
     padding: 6px 10px;
     border: 1px solid currentColor;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.82);
+    background: var(--omp-surface, rgba(255, 255, 255, 0.82));
     color: inherit;
     font: inherit;
     font-size: 0.82rem;
@@ -1691,7 +1691,7 @@ button.portal-topbar__profile-role-link {
 
 .omp-session-status-banner__action:hover,
 .omp-session-status-banner__action:focus-visible {
-    background: #ffffff;
+    background: var(--omp-surface, #ffffff);
     outline: none;
 }
 
@@ -1705,4 +1705,12 @@ button.portal-topbar__profile-role-link {
     .omp-session-status-banner__actions {
         justify-content: flex-start;
     }
+}
+
+/* The theme menu (OmpThemeSwitch) is part of the top bar markup, but it only
+   works where the app follows the theme contract (docs/THEME_CONTRACT.md) and
+   loads js/omp-theme.js, which sets data-theme-mode on <html>. Without it the
+   menu stays hidden instead of showing a control that does nothing. */
+html:not([data-theme-mode]) .omp-theme-switch {
+    display: none;
 }

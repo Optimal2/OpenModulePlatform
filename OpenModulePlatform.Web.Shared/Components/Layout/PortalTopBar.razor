@@ -252,6 +252,34 @@
         </nav>
 
         <div class="portal-topbar__actions">
+            @* Same markup as Views/Shared/Components/OmpThemeSwitch/Default.cshtml; behaviour is
+               document-level delegation in js/omp-theme.js, so re-renders need no init call. *@
+            <div class="omp-theme-switch" data-omp-theme-switch>
+                <button type="button"
+                        class="omp-theme-switch__toggle"
+                        title="@L["Theme"]"
+                        aria-label="@L["Theme"]"
+                        aria-haspopup="menu"
+                        aria-expanded="false"
+                        data-omp-theme-toggle>
+                    <span class="omp-theme-switch__icon" aria-hidden="true"></span>
+                </button>
+                <div class="omp-theme-switch__menu" role="menu" aria-label="@L["Theme"]" data-omp-theme-menu hidden>
+                    <button type="button" class="omp-theme-switch__option" role="menuitemradio" aria-checked="false" tabindex="-1" data-omp-theme-option="system">
+                        <span class="omp-theme-switch__icon omp-theme-switch__icon--system" aria-hidden="true"></span>
+                        <span>@L["Theme: System"]</span>
+                    </button>
+                    <button type="button" class="omp-theme-switch__option" role="menuitemradio" aria-checked="false" tabindex="-1" data-omp-theme-option="light">
+                        <span class="omp-theme-switch__icon omp-theme-switch__icon--light" aria-hidden="true"></span>
+                        <span>@L["Theme: Light"]</span>
+                    </button>
+                    <button type="button" class="omp-theme-switch__option" role="menuitemradio" aria-checked="false" tabindex="-1" data-omp-theme-option="dark">
+                        <span class="omp-theme-switch__icon omp-theme-switch__icon--dark" aria-hidden="true"></span>
+                        <span>@L["Theme: Dark"]</span>
+                    </button>
+                </div>
+            </div>
+
             @if (_portalTopBar.LanguageOptions.Count > 1)
             {
                 <details class="portal-topbar__language" data-portal-topbar-overlay data-portal-topbar-hover-menu>

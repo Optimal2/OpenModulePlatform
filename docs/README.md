@@ -63,6 +63,7 @@ For repository and release work:
 - `PROJECT_STATUS.md` - current project status notes.
 - `SECURITY_AUDIT_2026-05-24.md` - security audit notes from May 24, 2026.
 - `CONTENT_SECURITY_POLICY.md` - CSP rollout model, per-app policies, and documented exceptions.
+- `THEME_CONTRACT.md` - light/dark theme contract: `data-theme` attributes, stored preference, shared tokens, and how an app adopts it.
 
 ## Development
 

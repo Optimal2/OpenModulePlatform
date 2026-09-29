@@ -177,7 +177,7 @@
 .omp-linkbox__link--active:focus-visible {
     background: var(--link);
     border-color: var(--link);
-    color: #fff;
+    color: var(--omp-on-accent, #ffffff);
     font-weight: 600;
 }
 
