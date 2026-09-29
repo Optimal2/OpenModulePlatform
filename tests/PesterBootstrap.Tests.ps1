@@ -340,7 +340,7 @@ Describe 'run-script-tests: a suite whose every test is skipped' {
         Skip-UnlessPinnedPesterSeedAvailable
         $testsDir = New-SuiteFixture -Files @{
             'Good.Tests.ps1'    = $script:PassingSuiteBody
-            'Skipped.Tests.ps1' = "# omp-pester: allow-all-skipped needs a resource this fixture does not have`n" + $script:SkippedSuiteBody
+            'Skipped.Tests.ps1' = "# omp-pester: allow-all-skipped needs a resource this fixture does not have`r`n" + $script:SkippedSuiteBody
         }
         try {
             $result = Invoke-RunnerAgainst -TestsPath $testsDir
