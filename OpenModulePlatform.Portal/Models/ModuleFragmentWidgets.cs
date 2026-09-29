@@ -87,6 +87,8 @@ public sealed record ModuleFragmentResult(bool IsLoaded, string Html, string? Mo
 {
     public static ModuleFragmentResult Unavailable { get; } = new(false, string.Empty, null);
 
+    public ModuleFragmentFailureReason FailureReason { get; init; }
+
     /// <summary>
     /// Why the configured fragment endpoint blocked the request, shown to administrators
     /// only. <see cref="ModuleFragmentEndpointIssue.None"/> for every other outcome.
@@ -95,6 +97,12 @@ public sealed record ModuleFragmentResult(bool IsLoaded, string Html, string? Mo
 
     public static ModuleFragmentResult EndpointBlocked(ModuleFragmentEndpointIssue issue)
         => Unavailable with { EndpointIssue = issue };
+}
+
+public enum ModuleFragmentFailureReason
+{
+    None,
+    Timeout
 }
 
 /// <summary>

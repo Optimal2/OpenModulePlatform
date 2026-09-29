@@ -306,9 +306,14 @@ its chunks), the active-role cookie, and the culture cookies are copied onto the
 request, and the module validates them as it would for the browser. The module
 endpoint must therefore enforce its own permissions, exactly like its pages do.
 Redirects are not followed; a redirect, an error status, a non-`text/html`
-response, a response above the size limit, or a timeout all show the neutral
-placeholder "The widget could not be loaded." to the user. Details only go to
-the Portal log.
+response, or a response above the size limit shows the neutral placeholder
+"The widget could not be loaded." to the user. Details only go to the Portal log.
+A timeout instead shows "The widget is loading…" with a polite live region.
+The browser retries through the Portal after 2 seconds and, if that also times
+out, after another 5 seconds. There are at most two retries per widget per page
+view, with no overlapping requests for that widget. A final timeout shows the
+ordinary error placeholder. Other failures never trigger these retries. The
+default server timeout remains 3000 ms.
 
 The request target is chosen so that a client cannot steer it:
 
@@ -384,10 +389,12 @@ Portal settings (`appsettings.json`, all optional):
 }
 ```
 
-Results, including failures, are cached per user, active role, culture, and
-widget for `CacheSeconds` (0 disables the cache), so the dashboard does not call
-a module on every page load. A widget added without a page reload is loaded
-through the same server-side path.
+Results, including failures other than timeouts, are cached per user, active
+role, culture, and widget for `CacheSeconds` (0 disables the cache), so the
+dashboard does not call a module on every page load. Timeouts are not cached,
+allowing the bounded retries to recover when a module finishes starting. A
+widget added without a page reload uses the same server-side path and retry
+budget. Run the retry tests with `node --test tests/portal-dashboard-fragment.test.cjs`.
 
 **Allowed fragment HTML.** The Portal inserts the fragment into its own page
 after sanitizing it server-side. Everything outside this subset is removed:

@@ -3290,6 +3290,7 @@
   <data name="No system log entries match the current filters." xml:space="preserve"><value>No system log entries match the current filters.</value></data>
   <data name="No process has reported anything at warning level or above yet." xml:space="preserve"><value>No process has reported anything at warning level or above yet.</value></data>
   <data name="The widget could not be loaded." xml:space="preserve"><value>The widget could not be loaded.</value></data>
+  <data name="The widget is loading…" xml:space="preserve"><value>The widget is loading…</value></data>
   <data name="Loading..." xml:space="preserve"><value>Loading...</value></data>
   <data name="Assigned" xml:space="preserve"><value>Assigned</value></data>
   <data name="Requested" xml:space="preserve"><value>Requested</value></data>

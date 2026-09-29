@@ -202,10 +202,10 @@ public sealed class PortalModuleFragmentService
             (Fetch: fetch, Result: await FetchAsync(fetch, options, ct))));
         foreach (var (fetch, result) in fetched)
         {
-            if (cacheDuration > TimeSpan.Zero)
+            if (cacheDuration > TimeSpan.Zero && result.FailureReason != ModuleFragmentFailureReason.Timeout)
             {
-                // Failures are cached too, so a slow or broken module is asked at most
-                // once per user and widget per cache window instead of on every load.
+                // Cache other failures as before; a timeout must reach the endpoint
+                // again so the dashboard's bounded retries can recover from a cold start.
                 _cache.Set(fetch.CacheKey, result, cacheDuration);
             }
 
@@ -282,7 +282,7 @@ public sealed class PortalModuleFragmentService
                 "Dashboard module fragment for widget {WidgetId} (app {AppKey}) timed out.",
                 fetch.WidgetId,
                 fetch.AppKey);
-            return ModuleFragmentResult.Unavailable;
+            return ModuleFragmentResult.Unavailable with { FailureReason = ModuleFragmentFailureReason.Timeout };
         }
         catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.SecureConnectionError)
         {

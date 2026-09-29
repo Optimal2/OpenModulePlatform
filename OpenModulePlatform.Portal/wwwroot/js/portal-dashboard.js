@@ -336,6 +336,12 @@
     };
 
     function initDashboard(root) {
+        root.querySelectorAll('[data-module-fragment-retry="timeout"]').forEach(pending => {
+            const element = pending.closest('[data-dashboard-widget]');
+            if (element) {
+                scheduleModuleFragmentRetry(root, element, { widgetId: pending.dataset.moduleFragmentWidgetId });
+            }
+        });
         const canvas = root.querySelector('[data-dashboard-canvas]');
         const editToggle = root.querySelector('[data-dashboard-edit-toggle]');
         const editLabel = root.querySelector('[data-dashboard-edit-label]');
@@ -3760,13 +3766,64 @@
         return widgetType === 'module-fragment';
     }
 
+    // Keep the budget outside replaced markup, including widgets removed and added again.
+    const moduleFragmentRequests = new WeakMap();
+    const moduleFragmentRetryDelays = [2000, 5000];
+
+    function getModuleFragmentRequest(root, widgetId) {
+        if (!moduleFragmentRequests.has(root)) {
+            moduleFragmentRequests.set(root, new Map());
+        }
+        const requests = moduleFragmentRequests.get(root);
+        const key = String(widgetId);
+        if (!requests.has(key)) {
+            requests.set(key, { attempts: 0, busy: false });
+        }
+        return requests.get(key);
+    }
+
+    function showModuleFragmentUnavailable(root, pending) {
+        delete pending.dataset.moduleFragmentRetry;
+        pending.classList.remove('is-loading');
+        pending.classList.add('is-unavailable');
+        const placeholder = pending.querySelector('.dashboard-module-fragment__placeholder');
+        if (placeholder) {
+            placeholder.textContent = root.dataset.moduleFragmentUnavailableLabel || 'The widget could not be loaded.';
+        }
+    }
+
+    function scheduleModuleFragmentRetry(root, element, widget) {
+        const pending = element.querySelector('[data-module-fragment]');
+        if (!pending || pending.dataset.moduleFragmentRetry !== 'timeout') {
+            return;
+        }
+        const state = getModuleFragmentRequest(root, widget.widgetId);
+        if (state.busy) {
+            return;
+        }
+        if (state.attempts >= moduleFragmentRetryDelays.length || !root.dataset.moduleFragmentUrl) {
+            showModuleFragmentUnavailable(root, pending);
+            return;
+        }
+        state.busy = true;
+        window.setTimeout(() => {
+            state.busy = false;
+            if (!root.contains(element) || element.querySelector('[data-module-fragment]') !== pending) {
+                return;
+            }
+            state.attempts += 1;
+            loadModuleFragment(root, element, widget);
+        }, moduleFragmentRetryDelays[state.attempts]);
+    }
+
     function createModuleFragmentPlaceholder(root) {
         const container = document.createElement('div');
         container.className = 'dashboard-module-fragment is-loading';
         container.dataset.moduleFragment = '';
         const placeholder = document.createElement('div');
         placeholder.className = 'dashboard-module-fragment__placeholder';
-        placeholder.textContent = root.dataset.moduleFragmentLoadingLabel || 'Loading...';
+        placeholder.textContent = root.dataset.moduleFragmentLoadingLabel || 'The widget is loading…';
+        placeholder.setAttribute('aria-live', 'polite');
         container.appendChild(placeholder);
         return container;
     }
@@ -3780,14 +3837,12 @@
             return;
         }
 
-        const showUnavailable = () => {
-            pending.classList.remove('is-loading');
-            pending.classList.add('is-unavailable');
-            const placeholder = pending.querySelector('.dashboard-module-fragment__placeholder');
-            if (placeholder) {
-                placeholder.textContent = root.dataset.moduleFragmentUnavailableLabel || 'The widget could not be loaded.';
-            }
-        };
+        const state = getModuleFragmentRequest(root, widget.widgetId);
+        if (state.busy) {
+            return;
+        }
+        state.busy = true;
+        const showUnavailable = () => showModuleFragmentUnavailable(root, pending);
 
         try {
             const url = new URL(root.dataset.moduleFragmentUrl, window.location.href);
@@ -3813,6 +3868,11 @@
             pending.replaceWith(loaded);
         } catch {
             showUnavailable();
+        } finally {
+            state.busy = false;
+            if (root.contains(element)) {
+                scheduleModuleFragmentRetry(root, element, widget);
+            }
         }
     }
 

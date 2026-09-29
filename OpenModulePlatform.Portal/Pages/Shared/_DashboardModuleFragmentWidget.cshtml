@@ -6,14 +6,20 @@
     // the class follows the widget's saved width. Container queries in site.css keep the
     // fragment helper classes in step with the live width while the widget is resized.
     var modeClass = Model.Result.ModeClass ?? ModuleFragmentWidget.GetWidthClass(Model.ContentWidth);
+    var isLoading = !Model.Result.IsLoaded && Model.Result.FailureReason == ModuleFragmentFailureReason.Timeout;
 }
-<div class="dashboard-module-fragment @modeClass@(Model.Result.IsLoaded ? string.Empty : " is-unavailable")"
+<div class="dashboard-module-fragment @modeClass@(Model.Result.IsLoaded ? string.Empty : isLoading ? " is-loading" : " is-unavailable")"
      data-module-fragment
+     @Html.Raw(isLoading ? "data-module-fragment-retry=\"timeout\"" : string.Empty)
      data-module-fragment-widget-id="@Model.WidgetId.ToString(CultureInfo.InvariantCulture)">
     @if (Model.Result.IsLoaded)
     {
         @* Html has been reduced to the module-fragment allowlist by ModuleFragmentHtmlSanitizer. *@
         @Html.Raw(Model.Result.Html)
+    }
+    else if (isLoading)
+    {
+        <div class="dashboard-module-fragment__placeholder" aria-live="polite">@L["The widget is loading…"]</div>
     }
     else
     {

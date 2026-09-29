@@ -96,6 +96,25 @@ public sealed class DashboardWidgetRenderingIntegrationTests
         Assert.Contains("dashboard-module-fragment__placeholder", html, StringComparison.Ordinal);
         Assert.Equal(isAdmin, html.Contains("ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true", StringComparison.Ordinal));
         Assert.Equal(isAdmin, html.Contains("/admin/maintenance#maintenance-widgets", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain("data-module-fragment-retry", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModuleFragmentWidget_Timeout_RendersLoadingWithRetryMarker()
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var html = await RenderPartialAsync(scope.ServiceProvider, CreateHttpContext(scope.ServiceProvider),
+            "/Pages/Shared/_DashboardModuleFragmentWidget.cshtml",
+            new DashboardModuleFragmentWidget(7, 300,
+                ModuleFragmentResult.Unavailable with { FailureReason = ModuleFragmentFailureReason.Timeout }));
+
+        Assert.Contains("is-loading", html, StringComparison.Ordinal);
+        Assert.Contains("The widget is loading…", System.Net.WebUtility.HtmlDecode(html), StringComparison.Ordinal);
+        Assert.Contains("aria-live=\"polite\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-module-fragment-retry=\"timeout\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-module-fragment-widget-id=\"7\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("is-unavailable", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("The widget could not be loaded.", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -112,6 +131,8 @@ public sealed class DashboardWidgetRenderingIntegrationTests
 
         Assert.Contains("dashboard-module-fragment__placeholder", html, StringComparison.Ordinal);
         Assert.Contains("is-unavailable", html, StringComparison.Ordinal);
+        Assert.Contains("The widget could not be loaded.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-module-fragment-retry", html, StringComparison.Ordinal);
         Assert.Contains("is-narrow", html, StringComparison.Ordinal);
         Assert.DoesNotContain("http", html, StringComparison.OrdinalIgnoreCase);
     }
@@ -132,6 +153,7 @@ public sealed class DashboardWidgetRenderingIntegrationTests
             new DashboardModuleFragmentWidget(7, 900, fragment));
 
         Assert.Contains("<strong>42</strong>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-module-fragment-retry", html, StringComparison.Ordinal);
         Assert.Contains("is-medium", html, StringComparison.Ordinal);
         Assert.DoesNotContain("is-wide", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script", html, StringComparison.Ordinal);
