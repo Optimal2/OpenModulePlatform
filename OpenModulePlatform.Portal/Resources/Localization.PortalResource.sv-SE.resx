@@ -3430,7 +3430,10 @@
   <data name="Starts at" xml:space="preserve"><value>Startar</value></data>
   <data name="Expires at" xml:space="preserve"><value>Upphör</value></data>
   <data name="Select a valid local time in {0}. The selected time does not exist or is not a calendar value." xml:space="preserve"><value>Välj en giltig lokal tid i {0}. Den valda tiden finns inte eller är inte ett kalendervärde.</value></data>
-  <data name="If a clock time occurs twice when daylight saving time ends, the first occurrence is used." xml:space="preserve"><value>Om ett klockslag förekommer två gånger när sommartiden slutar används den första förekomsten.</value></data>
+  <data name="If a clock time occurs twice when daylight saving time ends, a new time uses the first occurrence and an unchanged time keeps its stored occurrence. When a field shows such a time, choose the occurrence next to it." xml:space="preserve"><value>Om ett klockslag förekommer två gånger när sommartiden slutar används den första förekomsten för en ny tid, medan en oförändrad tid behåller sin sparade förekomst. När ett fält visar ett sådant klockslag väljer du förekomst bredvid fältet.</value></data>
+  <data name="This clock time occurs twice. Occurrence:" xml:space="preserve"><value>Klockslaget förekommer två gånger. Förekomst:</value></data>
+  <data name="First ({0})" xml:space="preserve"><value>Första ({0})</value></data>
+  <data name="Second ({0})" xml:space="preserve"><value>Andra ({0})</value></data>
   <data name="Enter a valid date and time." xml:space="preserve"><value>Ange ett giltigt datum och klockslag.</value></data>
   <data name="Dashboard widget readiness" xml:space="preserve"><value>Kontroll av dashboardwidgetar</value></data>
   <data name="Widgets skipped by a HostAgent import" xml:space="preserve"><value>Widgetar som hoppades över vid HostAgent-import</value></data>

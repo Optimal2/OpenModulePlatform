@@ -1376,8 +1376,14 @@ public static class OmpWebHostingExtensions
             return;
         }
 
-        // NotBefore/NotAfter are machine-local wall times. Comparing wall times
-        // misorders instants in the repeated autumn hour, so compare UTC instants.
+        // NotBefore/NotAfter are Local-kind values converted from the certificate's
+        // UTC validity. Comparing them as wall times misorders instants in the
+        // repeated autumn hour, so compare UTC instants. The ToUniversalTime()
+        // round trip is exact here only because X509Certificate2 builds these values
+        // from UTC, so the DateTime carries the hidden daylight-saving flag that
+        // tells the two occurrences apart. Do not copy this pattern to other Local
+        // values (parsed text, form input, SQL): without that flag a repeated
+        // minute converts to the standard-time occurrence.
         var now = (utcNow ?? DateTimeOffset.UtcNow).UtcDateTime;
         if (now < certificate.NotBefore.ToUniversalTime())
         {

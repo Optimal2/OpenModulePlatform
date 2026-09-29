@@ -14,6 +14,8 @@ public sealed class BannersModel : OmpPortalPageModel
 {
     private const string TargetModeGlobal = "global";
     private const string TargetModeRoles = "roles";
+    public const string OccurrenceFirst = "first";
+    public const string OccurrenceSecond = "second";
 
     private readonly OmpTime _time;
     private readonly BannerService _banners;
@@ -105,6 +107,13 @@ public sealed class BannersModel : OmpPortalPageModel
                     return NotFound();
                 }
 
+                var startsAt = ToUtcOffset(Input.StartsAt, Input.StartsAtOccurrence, stored.StartsAtUtc);
+                var expiresAt = ToUtcOffset(Input.ExpiresAt, Input.ExpiresAtOccurrence, stored.ExpiresAtUtc);
+                if (!ValidateScheduledOrder(startsAt, expiresAt))
+                {
+                    return Page();
+                }
+
                 var updated = await _banners.UpdateAsync(
                     new BannerEditRequest(
                         Input.BannerId,
@@ -112,8 +121,8 @@ public sealed class BannersModel : OmpPortalPageModel
                         Input.Content,
                         Input.Status,
                         Input.Level,
-                        ToUtcOffset(Input.StartsAt, stored.StartsAtUtc),
-                        ToUtcOffset(Input.ExpiresAt, stored.ExpiresAtUtc),
+                        startsAt,
+                        expiresAt,
                         ToTargets()),
                     ct);
 
@@ -126,14 +135,21 @@ public sealed class BannersModel : OmpPortalPageModel
                 return RedirectToPage("/Admin/Banners", new { bannerId = Input.BannerId });
             }
 
+            var newStartsAt = ToUtcOffset(Input.StartsAt, Input.StartsAtOccurrence);
+            var newExpiresAt = ToUtcOffset(Input.ExpiresAt, Input.ExpiresAtOccurrence);
+            if (!ValidateScheduledOrder(newStartsAt, newExpiresAt))
+            {
+                return Page();
+            }
+
             var bannerId = await _banners.CreateAsync(
                 new BannerCreateRequest(
                     Input.Title,
                     Input.Content,
                     Input.Status,
                     Input.Level,
-                    ToUtcOffset(Input.StartsAt),
-                    ToUtcOffset(Input.ExpiresAt)),
+                    newStartsAt,
+                    newExpiresAt),
                 ToTargets(),
                 ct);
 
@@ -257,20 +273,68 @@ public sealed class BannersModel : OmpPortalPageModel
             ModelState.AddModelError(nameof(Input.TargetMode), P("Select a valid target."));
         }
 
-        if (Input.StartsAt.HasValue && Input.ExpiresAt.HasValue && Input.ExpiresAt.Value <= Input.StartsAt.Value)
-        {
-            ModelState.AddModelError(nameof(Input.ExpiresAt), P("Expires at must be after starts at."));
-        }
-
         ValidateCalendarInput(Input.StartsAt, "Input.StartsAt");
         ValidateCalendarInput(Input.ExpiresAt, "Input.ExpiresAt");
+        Input.StartsAtOccurrence = NormalizeOccurrence(Input.StartsAtOccurrence);
+        Input.ExpiresAtOccurrence = NormalizeOccurrence(Input.ExpiresAtOccurrence);
+    }
+
+    // Compared as instants: wall times misorder the two occurrences of a repeated minute.
+    private bool ValidateScheduledOrder(DateTimeOffset? startsAt, DateTimeOffset? expiresAt)
+    {
+        if (startsAt.HasValue && expiresAt.HasValue && expiresAt.Value <= startsAt.Value)
+        {
+            ModelState.AddModelError("Input.ExpiresAt", P("Expires at must be after starts at."));
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string? NormalizeOccurrence(string? occurrence)
+        => occurrence?.Trim().ToLowerInvariant() switch
+        {
+            OccurrenceFirst => OccurrenceFirst,
+            OccurrenceSecond => OccurrenceSecond,
+            _ => null
+        };
+
+    /// <summary>
+    /// True when the wall time occurs twice in the presentation zone (the repeated
+    /// autumn hour). The form then offers an explicit choice of occurrence, because
+    /// the datetime field alone cannot tell the two instants apart.
+    /// </summary>
+    public bool IsRepeatedLocalTime(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return false;
+        }
+
+        try
+        {
+            var wallTime = DateTime.SpecifyKind(value.Value, DateTimeKind.Unspecified);
+            return _time.ToUtc(wallTime, upperBound: false) != _time.ToUtc(wallTime, upperBound: true);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>The wall time with its zone abbreviation or offset for one occurrence.</summary>
+    public string OccurrenceText(DateTime value, string occurrence)
+    {
+        var wallTime = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+        var utc = _time.ToUtc(wallTime, upperBound: occurrence == OccurrenceSecond);
+        return _time.Format(utc, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
     }
 
     private void ValidateCalendarInput(DateTime? value, string field)
     {
         try
         {
-            _ = ToUtcOffset(value);
+            _ = ToUtcOffset(value, occurrence: null);
         }
         catch (ArgumentException)
         {
@@ -290,14 +354,19 @@ public sealed class BannersModel : OmpPortalPageModel
             .ToArray();
     }
 
-    // Scheduled instants (both start and expiry) use the earliest occurrence.
-    // An unchanged field keeps its stored instant: the wall-time form cannot
-    // tell the two occurrences of a repeated autumn minute apart.
-    private DateTimeOffset? ToUtcOffset(DateTime? value, DateTime? storedUtc = null)
+    // A repeated autumn minute uses the explicitly chosen occurrence. Without a
+    // choice, an unchanged field keeps its stored instant (the wall-time field
+    // cannot tell the two occurrences apart) and a new value uses the first.
+    private DateTimeOffset? ToUtcOffset(DateTime? value, string? occurrence, DateTime? storedUtc = null)
     {
         if (!value.HasValue)
         {
             return null;
+        }
+
+        if (occurrence is OccurrenceFirst or OccurrenceSecond && IsRepeatedLocalTime(value))
+        {
+            return new DateTimeOffset(_time.ToUtc(value.Value, upperBound: occurrence == OccurrenceSecond));
         }
 
         if (storedUtc is { } stored && _time.ToDisplayTime(stored).DateTime == value.Value)
@@ -306,6 +375,25 @@ public sealed class BannersModel : OmpPortalPageModel
         }
 
         return new DateTimeOffset(_time.ToUtc(value.Value, upperBound: false));
+    }
+
+    // The occurrence a stored instant has, so the choice starts at the stored value.
+    private string? StoredOccurrence(DateTime? storedUtc)
+    {
+        if (storedUtc is not { } stored)
+        {
+            return null;
+        }
+
+        var wallTime = _time.ToDisplayTime(stored).DateTime;
+        if (!IsRepeatedLocalTime(wallTime))
+        {
+            return null;
+        }
+
+        return _time.ToUtc(wallTime, upperBound: true) == DateTime.SpecifyKind(stored, DateTimeKind.Utc)
+            ? OccurrenceSecond
+            : OccurrenceFirst;
     }
 
     private InputModel ToInput(BannerEditData row)
@@ -326,6 +414,8 @@ public sealed class BannersModel : OmpPortalPageModel
             Level = row.Level,
             StartsAt = row.StartsAtUtc is { } starts ? _time.ToDisplayTime(starts).DateTime : null,
             ExpiresAt = row.ExpiresAtUtc is { } expires ? _time.ToDisplayTime(expires).DateTime : null,
+            StartsAtOccurrence = StoredOccurrence(row.StartsAtUtc),
+            ExpiresAtOccurrence = StoredOccurrence(row.ExpiresAtUtc),
             TargetMode = roleIds.Count > 0 ? TargetModeRoles : TargetModeGlobal,
             SelectedRoleIds = roleIds
         };
@@ -356,6 +446,10 @@ public sealed class BannersModel : OmpPortalPageModel
 
         [Display(Name = "Expires at")]
         public DateTime? ExpiresAt { get; set; }
+
+        public string? StartsAtOccurrence { get; set; }
+
+        public string? ExpiresAtOccurrence { get; set; }
 
         [Display(Name = "Banner targets")]
         public string TargetMode { get; set; } = TargetModeGlobal;

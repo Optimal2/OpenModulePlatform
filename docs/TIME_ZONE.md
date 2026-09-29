@@ -103,11 +103,14 @@ external source data: day boundaries, "today", "future date" checks, date
 filters in background processing, night/weekend windows, or dates embedded in
 file or folder names. Reasons:
 
-- Worker processes never receive it. WorkerManager starts a worker with only
-  the OMP connection string and `WorkerProcess__ConfigurationJson`; artifact
-  runtime configuration files are removed at packaging time, and configuration
-  overlays apply to web applications and services, not workers. A worker that
-  reads `OmpTime:TimeZoneId` silently gets `UTC`.
+- Worker processes never receive it. WorkerManager starts a worker with the
+  OMP connection string, `WorkerProcess__ConfigurationJson` and a fixed set of
+  `--WorkerProcess:*` command-line arguments (instance identity, plugin path,
+  shutdown event), never with `OmpTime`. Universal packaging refuses an
+  artifact package that carries a runtime configuration file, and HostAgent
+  generates `appsettings.json` only for web applications, service applications
+  and WorkerManager, so no configuration file reaches a worker plugin either.
+  A worker that reads `OmpTime:TimeZoneId` silently gets `UTC`.
 - A source system that writes local wall-clock time without an offset has a
   fixed calendar of its own. Changing how OMP presents time must never move a
   document across a day boundary.

@@ -3308,7 +3308,10 @@
   <data name="Starts at" xml:space="preserve"><value>Starts at</value></data>
   <data name="Expires at" xml:space="preserve"><value>Expires at</value></data>
   <data name="Select a valid local time in {0}. The selected time does not exist or is not a calendar value." xml:space="preserve"><value>Select a valid local time in {0}. The selected time does not exist or is not a calendar value.</value></data>
-  <data name="If a clock time occurs twice when daylight saving time ends, the first occurrence is used." xml:space="preserve"><value>If a clock time occurs twice when daylight saving time ends, the first occurrence is used.</value></data>
+  <data name="If a clock time occurs twice when daylight saving time ends, a new time uses the first occurrence and an unchanged time keeps its stored occurrence. When a field shows such a time, choose the occurrence next to it." xml:space="preserve"><value>If a clock time occurs twice when daylight saving time ends, a new time uses the first occurrence and an unchanged time keeps its stored occurrence. When a field shows such a time, choose the occurrence next to it.</value></data>
+  <data name="This clock time occurs twice. Occurrence:" xml:space="preserve"><value>This clock time occurs twice. Occurrence:</value></data>
+  <data name="First ({0})" xml:space="preserve"><value>First ({0})</value></data>
+  <data name="Second ({0})" xml:space="preserve"><value>Second ({0})</value></data>
   <data name="Enter a valid date and time." xml:space="preserve"><value>Enter a valid date and time.</value></data>
   <data name="Dashboard widget readiness" xml:space="preserve"><value>Dashboard widget readiness</value></data>
   <data name="Widgets skipped by a HostAgent import" xml:space="preserve"><value>Widgets skipped by a HostAgent import</value></data>

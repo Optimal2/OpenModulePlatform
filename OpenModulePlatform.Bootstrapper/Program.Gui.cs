@@ -2001,10 +2001,28 @@ internal static partial class Program
             }
 
             // UTC, like the other package versions: local time repeats an hour every autumn.
-            var version = DateTime.UtcNow.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture);
+            // Packages written before the switch carry local-time versions up to two hours
+            // ahead of UTC, so the version is raised past every existing one instead of
+            // colliding with or sorting below a package already built today.
             var exportsRoot = Path.Join(_payloadRoot, "exports");
             Directory.CreateDirectory(exportsRoot);
-            var outputPath = Path.Join(exportsRoot, $"omp-universal__global__{version}.zip");
+            var knownPackageFolders = new List<string> { exportsRoot };
+            if (!string.IsNullOrWhiteSpace(importRoot))
+            {
+                knownPackageFolders.Add(importRoot);
+                knownPackageFolders.Add(ResolveHostAgentImportArchivePath(importRoot, "ProcessedPath", "processed"));
+                knownPackageFolders.Add(ResolveHostAgentImportArchivePath(importRoot, "FailedPath", "failed"));
+            }
+
+            var version = NextAutomaticUniversalPackageVersion(DateTime.UtcNow, knownPackageFolders);
+            var outputPath = Path.Join(exportsRoot, AutomaticUniversalPackageFileName(version));
+            if (File.Exists(outputPath))
+            {
+                // The version is chosen past every existing package, so this only happens
+                // on a race with another build. Never replace a package silently.
+                Report($"> Refusing to build: {outputPath} already exists and would be overwritten.");
+                return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
+            }
             var request = new UniversalPackageBuildRequest(
                 "omp-universal",
                 version,
@@ -2059,7 +2077,13 @@ internal static partial class Program
 
             Directory.CreateDirectory(importRoot);
             var importTarget = Path.Join(importRoot, Path.GetFileName(outputPath));
-            File.Copy(outputPath, importTarget, overwrite: true);
+            if (File.Exists(importTarget))
+            {
+                Report($"> Refusing to stage: {importTarget} already exists and would be overwritten.");
+                return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, null, false, false);
+            }
+
+            File.Copy(outputPath, importTarget, overwrite: false);
             Report($"> Step 3/3 stage: staged package in HostAgent import folder: {importTarget}");
 
             var importEnabled = IsHostAgentArtifactImportEnabled();
@@ -7053,6 +7077,53 @@ ORDER BY ar.ArtifactId DESC;
             .OrderBy(static item => item.Kind, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static item => item.PackagePath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private const string AutomaticUniversalPackagePrefix = "omp-universal__global__";
+    private const string AutomaticUniversalPackageVersionFormat = "yyyyMMdd-HHmm";
+
+    internal static string AutomaticUniversalPackageFileName(string version)
+        => $"{AutomaticUniversalPackagePrefix}{version}.zip";
+
+    // Returns the current UTC minute as a package version, raised to one minute past
+    // the newest automatic package already present in any of the folders. A new
+    // version is therefore never equal to or lower than an existing one, even when
+    // the existing package was versioned with a local time ahead of UTC.
+    internal static string NextAutomaticUniversalPackageVersion(DateTime utcNow, IEnumerable<string?> folders)
+    {
+        var candidate = new DateTime(utcNow.Year, utcNow.Month, utcNow.Day, utcNow.Hour, utcNow.Minute, 0, DateTimeKind.Unspecified);
+        foreach (var folder in folders)
+        {
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+            {
+                continue;
+            }
+
+            foreach (var path in Directory.EnumerateFiles(folder, "*" + AutomaticUniversalPackagePrefix + "*.zip"))
+            {
+                // The HostAgent import archive prefixes the file name with its own
+                // timestamp, so the version is read after the package prefix.
+                var name = Path.GetFileNameWithoutExtension(path);
+                var rest = name[(name.LastIndexOf(AutomaticUniversalPackagePrefix, StringComparison.OrdinalIgnoreCase) + AutomaticUniversalPackagePrefix.Length)..];
+                if (rest.Length < AutomaticUniversalPackageVersionFormat.Length
+                    || !DateTime.TryParseExact(
+                        rest[..AutomaticUniversalPackageVersionFormat.Length],
+                        AutomaticUniversalPackageVersionFormat,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None,
+                        out var existing))
+                {
+                    continue;
+                }
+
+                if (existing >= candidate)
+                {
+                    candidate = existing.AddMinutes(1);
+                }
+            }
+        }
+
+        return candidate.ToString(AutomaticUniversalPackageVersionFormat, CultureInfo.InvariantCulture);
     }
 
     internal static UniversalPackageBuildResult CreateUniversalPackageZip(UniversalPackageBuildRequest request)

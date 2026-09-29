@@ -75,10 +75,10 @@ public sealed class PresentationTimeTests
         var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
         foreach (var minute in new[] { 30, 45 })
         {
-            var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, minute, 0), null])!;
+            var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, minute, 0), null, null])!;
             Assert.Equal(new DateTimeOffset(2026, 10, 25, 0, minute, 0, TimeSpan.Zero), result);
         }
-        Assert.Null(convert.Invoke(model, [null, null]));
+        Assert.Null(convert.Invoke(model, [null, null, null]));
     }
 
     // Editing only the title must not move a stored instant. 01:30 UTC on the
@@ -99,8 +99,8 @@ public sealed class PresentationTimeTests
             [new BannerEditData(1, "t", "c", BannerService.StatusActive, BannerService.LevelAnnouncement, stored, stored, [])])!;
         var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
-        var start = (DateTimeOffset)convert.Invoke(model, [input.StartsAt, stored])!;
-        var expiry = (DateTimeOffset)convert.Invoke(model, [input.ExpiresAt, stored])!;
+        var start = (DateTimeOffset)convert.Invoke(model, [input.StartsAt, input.StartsAtOccurrence, stored])!;
+        var expiry = (DateTimeOffset)convert.Invoke(model, [input.ExpiresAt, input.ExpiresAtOccurrence, stored])!;
 
         var expected = new DateTimeOffset(stored, TimeSpan.Zero);
         Assert.Equal(expected, start);
@@ -113,8 +113,90 @@ public sealed class PresentationTimeTests
         var model = CreateBannerModel();
         var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var stored = new DateTime(2026, 10, 25, 1, 30, 0);
-        var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, 45, 0), stored])!;
+        var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, 45, 0), null, stored])!;
         Assert.Equal(new DateTimeOffset(2026, 10, 25, 0, 45, 0, TimeSpan.Zero), result);
+    }
+
+    // A browser that posts no occurrence choice (for example an older cached
+    // form) still keeps the stored instant of an unchanged field.
+    [Theory]
+    [InlineData(1, 30)]
+    [InlineData(0, 30)]
+    public void BannerUnchangedFieldWithoutChoiceKeepsStoredInstant(int hour, int minute)
+    {
+        var model = CreateBannerModel();
+        var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var stored = new DateTime(2026, 10, 25, hour, minute, 0);
+        var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, 30, 0), null, stored])!;
+        Assert.Equal(new DateTimeOffset(stored, TimeSpan.Zero), result);
+    }
+
+    // The review finding: a banner at one occurrence of 02:30 on the autumn
+    // night could not be moved to the other one, because the field shows the
+    // same wall time and the unchanged branch kept the stored instant.
+    [Theory]
+    [InlineData(0, 30, BannersModel.OccurrenceSecond, 1, 30)] // first -> second
+    [InlineData(1, 30, BannersModel.OccurrenceFirst, 0, 30)] // second -> first
+    [InlineData(1, 30, BannersModel.OccurrenceSecond, 1, 30)] // explicit, unchanged
+    public void BannerExplicitOccurrenceChoiceMovesARepeatedMinute(
+        int storedHour, int storedMinute, string occurrence, int expectedHour, int expectedMinute)
+    {
+        var model = CreateBannerModel();
+        var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var stored = new DateTime(2026, 10, 25, storedHour, storedMinute, 0);
+        var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, 30, 0), occurrence, stored])!;
+        Assert.Equal(new DateTimeOffset(2026, 10, 25, expectedHour, expectedMinute, 0, TimeSpan.Zero), result);
+    }
+
+    [Fact]
+    public void BannerOccurrenceChoiceIsIgnoredForATimeThatOccursOnce()
+    {
+        var model = CreateBannerModel();
+        var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 24, 2, 30, 0), BannersModel.OccurrenceSecond, null])!;
+        Assert.Equal(new DateTimeOffset(2026, 10, 24, 0, 30, 0, TimeSpan.Zero), result);
+    }
+
+    [Theory]
+    [InlineData(2026, 10, 25, 1, 30, BannersModel.OccurrenceSecond)]
+    [InlineData(2026, 10, 25, 0, 30, BannersModel.OccurrenceFirst)]
+    [InlineData(2026, 10, 24, 0, 30, null)]
+    public void BannerEditFormStartsWithTheStoredOccurrence(int year, int month, int day, int hour, int minute, string? expected)
+    {
+        var model = CreateBannerModel();
+        var stored = new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Unspecified);
+        var toInput = typeof(BannersModel).GetMethod("ToInput", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var input = (BannersModel.InputModel)toInput.Invoke(model,
+            [new BannerEditData(1, "t", "c", BannerService.StatusActive, BannerService.LevelAnnouncement, stored, stored, [])])!;
+        Assert.Equal(expected, input.StartsAtOccurrence);
+        Assert.Equal(expected, input.ExpiresAtOccurrence);
+        Assert.Equal(expected is not null, model.IsRepeatedLocalTime(input.StartsAt));
+    }
+
+    [Fact]
+    public void BannerRepeatedLocalTimeIsOnlyTheAutumnHour()
+    {
+        var model = CreateBannerModel();
+        Assert.True(model.IsRepeatedLocalTime(new DateTime(2026, 10, 25, 2, 0, 0)));
+        Assert.True(model.IsRepeatedLocalTime(new DateTime(2026, 10, 25, 2, 59, 0)));
+        Assert.False(model.IsRepeatedLocalTime(new DateTime(2026, 10, 25, 3, 0, 0)));
+        Assert.False(model.IsRepeatedLocalTime(new DateTime(2026, 3, 29, 2, 30, 0))); // spring gap
+        Assert.False(model.IsRepeatedLocalTime(null));
+        Assert.Equal("2026-10-25 02:30 CEST", model.OccurrenceText(new DateTime(2026, 10, 25, 2, 30, 0), BannersModel.OccurrenceFirst));
+        Assert.Equal("2026-10-25 02:30 CET", model.OccurrenceText(new DateTime(2026, 10, 25, 2, 30, 0), BannersModel.OccurrenceSecond));
+    }
+
+    // Wall-time ordering would accept 02:10 (second, 01:10 UTC) to 02:50 (first,
+    // 00:50 UTC), a banner that expires before it starts.
+    [Fact]
+    public void BannerScheduleOrderIsComparedAsInstants()
+    {
+        var model = CreateBannerModel();
+        var validate = typeof(BannersModel).GetMethod("ValidateScheduledOrder", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var start = new DateTimeOffset(2026, 10, 25, 1, 10, 0, TimeSpan.Zero);
+        var expiry = new DateTimeOffset(2026, 10, 25, 0, 50, 0, TimeSpan.Zero);
+        Assert.False((bool)validate.Invoke(model, [start, expiry])!);
+        Assert.True((bool)validate.Invoke(model, [expiry, start])!);
     }
 
     private static BannersModel CreateBannerModel()

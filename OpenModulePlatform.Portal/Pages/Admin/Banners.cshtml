@@ -60,17 +60,33 @@
             <div class="form-field">
                 <label asp-for="Input.StartsAt"></label> <span class="muted">@OmpTime.TimeZoneId</span>
                 <input asp-for="Input.StartsAt" type="datetime-local" />
+                @if (Model.IsRepeatedLocalTime(Model.Input.StartsAt))
+                {
+                    <label class="muted" for="StartsAtOccurrence">@L["This clock time occurs twice. Occurrence:"]</label>
+                    <select asp-for="Input.StartsAtOccurrence" id="StartsAtOccurrence">
+                        <option value="first">@L["First ({0})", Model.OccurrenceText(Model.Input.StartsAt!.Value, BannersModel.OccurrenceFirst)]</option>
+                        <option value="second">@L["Second ({0})", Model.OccurrenceText(Model.Input.StartsAt!.Value, BannersModel.OccurrenceSecond)]</option>
+                    </select>
+                }
                 <span asp-validation-for="Input.StartsAt" class="field-validation-error"></span>
             </div>
 
             <div class="form-field">
                 <label asp-for="Input.ExpiresAt"></label> <span class="muted">@OmpTime.TimeZoneId</span>
                 <input asp-for="Input.ExpiresAt" type="datetime-local" />
+                @if (Model.IsRepeatedLocalTime(Model.Input.ExpiresAt))
+                {
+                    <label class="muted" for="ExpiresAtOccurrence">@L["This clock time occurs twice. Occurrence:"]</label>
+                    <select asp-for="Input.ExpiresAtOccurrence" id="ExpiresAtOccurrence">
+                        <option value="first">@L["First ({0})", Model.OccurrenceText(Model.Input.ExpiresAt!.Value, BannersModel.OccurrenceFirst)]</option>
+                        <option value="second">@L["Second ({0})", Model.OccurrenceText(Model.Input.ExpiresAt!.Value, BannersModel.OccurrenceSecond)]</option>
+                    </select>
+                }
                 <span asp-validation-for="Input.ExpiresAt" class="field-validation-error"></span>
             </div>
         </div>
 
-        <p class="muted">@L["If a clock time occurs twice when daylight saving time ends, the first occurrence is used."]</p>
+        <p class="muted">@L["If a clock time occurs twice when daylight saving time ends, a new time uses the first occurrence and an unchanged time keeps its stored occurrence. When a field shows such a time, choose the occurrence next to it."]</p>
 
         <div class="form-field">
             <label asp-for="Input.TargetMode"></label>
