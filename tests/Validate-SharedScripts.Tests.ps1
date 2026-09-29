@@ -463,4 +463,40 @@ Describe 'validate-shared-scripts: repositories with Pester suites carry the can
         }
         finally { Remove-Pair -Pair $pair }
     }
+
+    It 'Does not count a *.Tests.ps1 in build output under tests as a suite' {
+        # The same inventory as the runner: bin/, obj/ and node_modules/ are
+        # not the repository's tests.
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerSuitePath 'Ui/bin/Debug/Copied.Tests.ps1'
+        try {
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Counts a hidden suite under tests' {
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same' -ConsumerSuitePath 'Hidden.Tests.ps1'
+        try {
+            $suite = Get-Item -LiteralPath (Join-Path $pair.Consumer 'tests\Hidden.Tests.ps1') -Force
+            $suite.Attributes = $suite.Attributes -bor [IO.FileAttributes]::Hidden
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 1
+            ($result.Output -match 'run-script-tests\.ps1 is missing') | Should -Be $true
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
+
+    It 'Does not treat a *.tests.ps1 outside tests as a Pester suite' {
+        # Deliberate scope, see Test-NeedsPesterStep: the canonical runner runs
+        # tests/ only, and a self-test script elsewhere that merely shares the
+        # suffix is not a Pester suite.
+        $pair = New-Pair -ConsumerBody 'same' -PlatformBody 'same'
+        try {
+            [IO.File]::WriteAllText((Join-Path $pair.Consumer 'scripts\omp\self-check.tests.ps1'), "Write-Output 'plain self-test'")
+            $result = Invoke-Guard -Pair $pair
+            $result.Kod | Should -Be 0
+        }
+        finally { Remove-Pair -Pair $pair }
+    }
 }

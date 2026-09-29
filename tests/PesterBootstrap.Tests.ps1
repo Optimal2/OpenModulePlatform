@@ -224,6 +224,151 @@ Describe 'run-script-tests: suite inventory guards' {
     }
 }
 
+Describe 'run-script-tests: the inventory counts only files that belong to the repository' {
+    # Build output and ignored files are not the repository's tests: a .NET
+    # test project writes generated scripts (playwright.ps1) under bin/, and
+    # counting them turned a correct run red. Hidden files ARE the
+    # repository's, and skipping them made the inventory disagree with Pester.
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')
+    }
+
+    It 'Ignores scripts under bin/, obj/ and node_modules/ outside git and does not run them' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'                              = $script:PassingSuiteBody
+            'Ui/bin/Debug/net8.0/playwright.ps1'          = "Write-Output 'generated'`n"
+            'Ui/bin/Debug/net8.0/Copied.Tests.ps1'        = $script:FailingSuiteBody
+            'Ui/obj/Generated.ps1'                        = "Write-Output 'generated'`n"
+            'node_modules/some-package/install.ps1'       = "Write-Output 'dependency'`n"
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Not -Match 'GATE FAIL'
+            $result.Output | Should -Not -Match 'Copied\.Tests\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Ignores git-ignored scripts in a git work tree but counts untracked ones' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        if (-not (Test-GitAvailable)) {
+            Set-ItResult -Skipped -Because 'git is not on PATH'
+            return
+        }
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'              = $script:PassingSuiteBody
+            'generated/helper.ps1'        = "Write-Output 'generated'`n"
+            'generated/Ignored.Tests.ps1' = $script:FailingSuiteBody
+            'New.Tests.ps1'               = "Describe 'untracked' { It 'still runs' { 1 | Should -Be 1 } }`n"
+        }
+        try {
+            Initialize-GitFixture -Path $testsDir -GitIgnore "generated/`n"
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Not -Match 'Ignored\.Tests\.ps1'
+            $result.Output | Should -Match 'New\.Tests\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Counts and runs a hidden suite file' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'   = $script:PassingSuiteBody
+            'Hidden.Tests.ps1' = "Describe 'hidden fixture' { It 'runs although hidden' { 1 | Should -Be 1 } }`n"
+        }
+        try {
+            Set-HiddenFile -Path (Join-Path $testsDir 'Hidden.Tests.ps1')
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Match 'Hidden\.Tests\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Fails red on a hidden script that is neither a suite nor a helper' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'  = $script:PassingSuiteBody
+            'Renamed.Test.ps1' = $script:PassingSuiteBody
+        }
+        try {
+            Set-HiddenFile -Path (Join-Path $testsDir 'Renamed.Test.ps1')
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'Renamed\.Test\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+}
+
+Describe 'run-script-tests: a suite whose every test is skipped' {
+    # A suite that skips everything proves nothing, and a passing test in
+    # ANOTHER suite used to carry the run to green.
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')
+    }
+
+    It 'Fails red when every test in one suite is skipped next to a passing suite' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'    = $script:PassingSuiteBody
+            'Skipped.Tests.ps1' = $script:SkippedSuiteBody
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'GATE FAIL: .*passed no test'
+            $result.Output | Should -Match 'Skipped\.Tests\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Allows an all-skipped suite that declares an explicit exception, with a visible warning' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'    = $script:PassingSuiteBody
+            'Skipped.Tests.ps1' = "# omp-pester: allow-all-skipped needs a resource this fixture does not have`n" + $script:SkippedSuiteBody
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Match 'WARNING: .*Skipped\.Tests\.ps1.*needs a resource this fixture does not have'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Does not accept an exception without a reason' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'    = $script:PassingSuiteBody
+            'Skipped.Tests.ps1' = "# omp-pester: allow-all-skipped`n" + $script:SkippedSuiteBody
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'Skipped\.Tests\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+}
+
 Describe 'run-script-tests: an incompatible Pester already loaded' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')

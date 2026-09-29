@@ -332,3 +332,107 @@ Describe 'Local external-consumer overlay (omp-components.external.json)' {
         $result.Output | Should -Match 'omp-components\.external\.json'
     }
 }
+
+Describe 'Checks 14 and 15: finding the platform checkout from a consumer (Resolve-PlatformCheckScript)' {
+    # A consumer validator that cannot find the OpenModulePlatform checkout
+    # used to skip Checks 14 and 15 with a warning and exit 0 -- green for a
+    # check that never ran. The shared resolver makes that a validation error
+    # unless the caller set an explicit, named exception.
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'Validate-ComponentVersions.TestHelpers.ps1')
+
+        function Invoke-Resolver {
+            param(
+                [string]$RepositoryRoot,
+                [string]$PlatformRepositoryRoot = '',
+                [hashtable]$Environment = @{}
+            )
+
+            $names = @('OMP_PLATFORM_ROOT', 'OpenModulePlatformRoot', 'OMP_ALLOW_MISSING_PLATFORM')
+            $saved = @{}
+            foreach ($name in $names) {
+                $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+                [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+            }
+            foreach ($name in $Environment.Keys) {
+                [Environment]::SetEnvironmentVariable($name, $Environment[$name], 'Process')
+            }
+            try {
+                $errors = [System.Collections.Generic.List[string]]::new()
+                $warnings = [System.Collections.Generic.List[string]]::new()
+                $resolved = Resolve-PlatformCheckScript -RepositoryRoot $RepositoryRoot `
+                    -ScriptRelativePath 'scripts/omp/validate-shared-scripts.ps1' -CheckLabel 'Check 15' `
+                    -Errors $errors -Warnings $warnings -PlatformRepositoryRoot $PlatformRepositoryRoot
+                return @{ Resolved = $resolved; Errors = @($errors); Warnings = @($warnings) }
+            }
+            finally {
+                foreach ($name in $names) {
+                    [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process')
+                }
+            }
+        }
+    }
+
+    BeforeEach {
+        $root = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-platform-resolve-' + [Guid]::NewGuid().ToString('N'))
+        $consumer = Join-Path $root 'Consumer'
+        $null = New-Item -ItemType Directory -Path $consumer -Force
+    }
+
+    AfterEach {
+        if (Test-Path -LiteralPath $root -PathType Container) {
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'Records an error that says how to set OMP_PLATFORM_ROOT when no checkout is found' {
+        $result = Invoke-Resolver -RepositoryRoot $consumer
+        $result.Resolved | Should -BeNullOrEmpty
+        $result.Errors.Count | Should -Be 1
+        $result.Errors[0] | Should -Match 'Check 15'
+        $result.Errors[0] | Should -Match 'OMP_PLATFORM_ROOT'
+        $result.Warnings.Count | Should -Be 0
+    }
+
+    It 'Records a warning, not an error, under the explicit OMP_ALLOW_MISSING_PLATFORM exception' {
+        $result = Invoke-Resolver -RepositoryRoot $consumer -Environment @{ OMP_ALLOW_MISSING_PLATFORM = '1' }
+        $result.Resolved | Should -BeNullOrEmpty
+        $result.Errors.Count | Should -Be 0
+        $result.Warnings.Count | Should -Be 1
+        $result.Warnings[0] | Should -Match 'NOT VERIFIED'
+        $result.Warnings[0] | Should -Match 'OMP_ALLOW_MISSING_PLATFORM'
+    }
+
+    It 'Still fails when OMP_PLATFORM_ROOT names a directory without the script, exception or not' {
+        $wrong = Join-Path $root 'NotPlatform'
+        $null = New-Item -ItemType Directory -Path $wrong -Force
+        $result = Invoke-Resolver -RepositoryRoot $consumer -Environment @{ OMP_PLATFORM_ROOT = $wrong; OMP_ALLOW_MISSING_PLATFORM = '1' }
+        $result.Resolved | Should -BeNullOrEmpty
+        $result.Errors.Count | Should -Be 1
+        $result.Errors[0] | Should -Match 'OMP_PLATFORM_ROOT'
+    }
+
+    It 'Resolves the sibling checkout and returns the script and the platform root' {
+        $platform = Join-Path $root 'OpenModulePlatform'
+        $null = New-Item -ItemType Directory -Path (Join-Path $platform 'scripts\omp') -Force
+        [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\validate-shared-scripts.ps1'), 'guard')
+        $result = Invoke-Resolver -RepositoryRoot $consumer
+        $result.Errors.Count | Should -Be 0
+        $result.Warnings.Count | Should -Be 0
+        $result.Resolved.PlatformRoot | Should -Be $platform
+        $result.Resolved.ScriptPath | Should -Be (Join-Path $platform 'scripts\omp\validate-shared-scripts.ps1')
+    }
+
+    It 'Prefers -PlatformRepositoryRoot, then OMP_PLATFORM_ROOT, and anchors a relative root at the repository' {
+        $named = Join-Path $root 'Named'
+        $null = New-Item -ItemType Directory -Path (Join-Path $named 'scripts\omp') -Force
+        [IO.File]::WriteAllText((Join-Path $named 'scripts\omp\validate-shared-scripts.ps1'), 'guard')
+        $viaEnvironment = Invoke-Resolver -RepositoryRoot $consumer -Environment @{ OMP_PLATFORM_ROOT = '..\Named' }
+        $viaEnvironment.Errors.Count | Should -Be 0
+        $viaEnvironment.Resolved.PlatformRoot | Should -Be $named
+
+        $viaParameter = Invoke-Resolver -RepositoryRoot $consumer -PlatformRepositoryRoot $named -Environment @{ OMP_PLATFORM_ROOT = (Join-Path $root 'Elsewhere') }
+        $viaParameter.Errors.Count | Should -Be 0
+        $viaParameter.Resolved.PlatformRoot | Should -Be $named
+    }
+}

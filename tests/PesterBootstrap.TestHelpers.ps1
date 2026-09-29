@@ -138,3 +138,46 @@ function Invoke-RunnerAgainst {
 
     return Invoke-ChildPowerShell -ScriptPath $script:RunnerScript -ScriptArguments @('-TestsPath', $TestsPath)
 }
+
+function Set-HiddenFile {
+    <#
+    .SYNOPSIS
+    Marks a fixture file hidden, the attribute Get-ChildItem skips without -Force.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $item = Get-Item -LiteralPath $Path -Force
+    $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden
+}
+
+function Test-GitAvailable {
+    return $null -ne (Get-Command -Name git -CommandType Application -ErrorAction SilentlyContinue)
+}
+
+function Initialize-GitFixture {
+    <#
+    .SYNOPSIS
+    Turns a fixture directory into a git work tree with the given .gitignore
+    body. Nothing is committed: untracked files that are not ignored must count
+    exactly like tracked ones.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$GitIgnore
+    )
+
+    [System.IO.File]::WriteAllText((Join-Path $Path '.gitignore'), $GitIgnore, [System.Text.UTF8Encoding]::new($false))
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & git -C $Path init -q 2>&1
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
+# A suite that fails when it runs: a fixture that must NOT be run.
+$script:FailingSuiteBody = "Describe 'must not run' { It 'fails' { 1 | Should -Be 2 } }`n"
+# A suite whose only test is skipped.
+$script:SkippedSuiteBody = "Describe 'all skipped' { It 'is skipped' -Skip { 1 | Should -Be 1 } }`n"
