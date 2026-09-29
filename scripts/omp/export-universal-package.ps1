@@ -602,6 +602,11 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 }
 
 $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
+# An explicit output file that already exists is refused before any
+# validation or build work; the default name is checked once it is known.
+if (-not [string]::IsNullOrWhiteSpace($OutputPath) -and (Test-Path -LiteralPath ([System.IO.Path]::GetFullPath($OutputPath)))) {
+    throw (Get-OutputFileExistsMessage -Path ([System.IO.Path]::GetFullPath($OutputPath)))
+}
 # Fail fast on a dirty source tree, before creating any package objects: the
 # same version must never leave with different content and no trace of it.
 $sourceProvenance = Assert-OmpSourceTreeClean -RepositoryRoot $repositoryRoot -AllowDirtySource:$AllowDirtySource
