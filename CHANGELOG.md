@@ -8,6 +8,21 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Pester inventory counts only the repository's files; an all-skipped
+  suite fails; a missing platform checkout is an error.**
+  `run-script-tests.ps1` takes its suite inventory from
+  `git ls-files --cached --others --exclude-standard` inside a git work tree
+  (a directory walk outside one), skips `bin/`, `obj/` and `node_modules/`,
+  includes hidden files, and hands Pester exactly the inventoried suites, so
+  generated scripts in test build output no longer fail the run. A suite
+  whose every test is skipped now fails the run unless it declares
+  `# omp-pester: allow-all-skipped <reason>`. Check 15 decides whether a
+  repository needs the Pester step from the same inventory (still `tests/`
+  only; see `Test-NeedsPesterStep`). The shared validator core gains
+  `Resolve-PlatformCheckScript`: consumers that cannot find the
+  OpenModulePlatform checkout for Checks 14 and 15 get a validation error
+  that says how to set `OMP_PLATFORM_ROOT`, or a `NOT VERIFIED` warning under
+  the explicit `OMP_ALLOW_MISSING_PLATFORM=1` exception.
 - **Canonical Pester step carries every guard; Check 15 holds the copies
   identical.** `scripts/omp/run-script-tests.ps1` now also refuses a
   `Pester.dll` of another version already loaded in the process (with the

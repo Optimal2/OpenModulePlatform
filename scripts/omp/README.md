@@ -142,7 +142,8 @@ Where Check 14 locks shared source TREES, Check 15 locks the shared SCRIPTS that
 copied verbatim across the fleet -- `scripts/omp/bump-version.ps1` and
 `scripts/omp/validate-component-versions.helpers.ps1` (the `$sharedScripts` list), which are
 byte-identical in all nine repositories. Repositories that run Pester suites (a `*.Tests.ps1`
-anywhere under `tests/`) or carry a copy of either file must also carry the canonical Pester
+in the runner's own inventory of `tests/`, so build output and git-ignored files do not count)
+or carry a copy of either file must also carry the canonical Pester
 step verbatim, `scripts/omp/run-script-tests.ps1` and `scripts/omp/pester-bootstrap.ps1`
 (the `$sharedPesterStepFiles` list); repositories without suites need neither. Repositories with a `Microsoft.NET.Sdk.Web`
 project must also carry `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
@@ -326,12 +327,23 @@ time) or when zero tests passed, and it guards the suite inventory:
   version, never by "the first Pester that loaded";
 - the inventory is recursive, like Pester's discovery, so a `*.Tests.ps1` in a
   subdirectory runs and is counted;
-- every `*.ps1` under the tests path must be a suite (`*.Tests.ps1`) or a helper
+- the inventory holds only files that belong to the repository: inside a git work
+  tree what `git ls-files --cached --others --exclude-standard` lists, outside one a
+  walk of the directory; either way `bin/`, `obj/` and `node_modules/` are skipped
+  (a .NET test project writes generated scripts such as `playwright.ps1` into
+  `bin/`) and hidden files are included. Pester is handed exactly the inventoried
+  suites, so a `*.Tests.ps1` copied into build output never runs;
+- every `*.ps1` in the inventory must be a suite (`*.Tests.ps1`) or a helper
   (`*.TestHelpers.ps1`); anything else, typically a suite renamed away from the
   glob, fails the run instead of silently no longer running;
 - the containers that ran must be exactly the suite files found, and each must
   run at least one test (an emptied `Describe` is reported as NotRun and would
-  otherwise pass next to green suites).
+  otherwise pass next to green suites);
+- each container must also PASS at least one test: a suite whose every test is
+  skipped fails the run however green the other suites are. A suite that
+  legitimately skips everything in some environment declares it in its own file,
+  with a reason, on a line of its own -- `# omp-pester: allow-all-skipped <reason>`
+  -- and is then reported as a warning instead.
 
 `run-script-tests.ps1` and `pester-bootstrap.ps1` are the fleet's canonical
 Pester step: a repository that runs Pester suites copies both verbatim, and

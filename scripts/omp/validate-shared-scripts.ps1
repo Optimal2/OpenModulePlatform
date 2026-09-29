@@ -121,7 +121,7 @@ $sharedWebBuildFiles = @(
 # consumer repositories carried their own copies, which drifted apart and gave
 # different protection (2026-09-29); the canonical pair carries every guard any
 # of them had. Required, verbatim and together, in a repository that runs Pester
-# suites (a *.Tests.ps1 anywhere under tests/) or already carries a copy of
+# suites (a *.Tests.ps1 in the runner's inventory of tests/) or already carries a copy of
 # either file; a repository without suites needs neither. Not part of
 # Test-PlatformCheckout, so an older platform checkout still counts as one and
 # reports the missing canonical file instead.
@@ -130,11 +130,28 @@ $sharedPesterStepFiles = @(
     'scripts/omp/pester-bootstrap.ps1'
 )
 
+# The suite inventory is the runner's own (Get-PesterScriptInventory), taken
+# from the platform checkout this guard runs from, so the guard and the runner
+# can never disagree about what a suite is: git-ignored files and bin/, obj/
+# and node_modules/ do not count, hidden files do.
+. (Join-Path $PSScriptRoot 'pester-bootstrap.ps1')
+
 function Test-NeedsPesterStep {
     <#
-        True when the repository runs Pester suites (a *.Tests.ps1 anywhere
-        under tests/, subdirectories included, as Pester discovers them) or
-        carries a copy of either canonical Pester step file.
+        True when the repository runs Pester suites (a *.Tests.ps1 in the
+        runner's inventory of tests/, subdirectories included) or carries a
+        copy of either canonical Pester step file.
+
+        Deliberately tests/ only, not *.Tests.ps1 anywhere in the repository
+        (decided 2026-09-29). The canonical runner runs tests/ and nothing
+        else, so demanding it because of a suite elsewhere would not make that
+        suite run -- it would only make a green run look like coverage. And
+        the wider glob is measurably wrong: two consumer repositories carry a
+        plain self-test script named *.tests.ps1 under scripts/omp/ that is
+        not a Pester suite at all (it has its own assertions and is invoked
+        directly by local CI), and it would have turned Check 15 red for a
+        runner those repositories cannot use. A Pester suite belongs under
+        tests/, where the runner's inventory holds it to account.
     #>
     param([Parameter(Mandatory = $true)][string]$Root)
 
@@ -148,10 +165,12 @@ function Test-NeedsPesterStep {
     if (-not (Test-Path -LiteralPath $testsRoot -PathType Container)) {
         return $false
     }
-    $suite = Get-ChildItem -LiteralPath $testsRoot -Filter '*.Tests.ps1' -File -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.Extension -ieq '.ps1' } |
-        Select-Object -First 1
-    return ($null -ne $suite)
+    foreach ($path in (Get-PesterScriptInventory -Path $testsRoot).Files) {
+        if ([IO.Path]::GetFileName($path) -like '*.Tests.ps1') {
+            return $true
+        }
+    }
+    return $false
 }
 
 function Test-HasWebProject {

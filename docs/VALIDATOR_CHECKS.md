@@ -105,9 +105,30 @@ configuration error: exit 1 even without `-Strict`. A sibling directory that exi
 checkout is reported like a missing sibling: warning and exit 0 without `-Strict`, exit 1 with it.
 Relative roots are resolved against the consumer repository root, not the current directory.
 
-The consumer validator locates `validate-shared-scripts.ps1` itself before calling it, and
-that lookup is repo-local code. Each consumer must read `OMP_PLATFORM_ROOT` there too, or
-the guard is never reached from a worktree under another root.
+The consumer validator locates `validate-shared-scripts.ps1` (and, for Check 14,
+`validate-shared-dependencies.ps1`) before calling it. That lookup used to be repo-local code in
+each consumer, and when it found nothing it warned and exited 0 unless `-Strict` was passed -- a
+green validation for a check that never ran. The lookup now belongs in the shared core:
+`Resolve-PlatformCheckScript` in `validate-component-versions.helpers.ps1` resolves
+`-PlatformRepositoryRoot`, `OMP_PLATFORM_ROOT`, `OpenModulePlatformRoot` and the sibling in that
+order and returns the script path and platform root. When nothing is found it records a
+validation **error** whose message says how to set `OMP_PLATFORM_ROOT`, with or without `-Strict`.
+The one way to accept a missing checkout is the explicit exception `OMP_ALLOW_MISSING_PLATFORM=1`
+(meant for CI that checks out one repository): the check is then reported as a `NOT VERIFIED`
+warning, never skipped in silence. A root that is named explicitly but does not hold the script
+is an error even under the exception. Consumer validators wire Checks 14 and 15 like this:
+
+```powershell
+$check15 = Resolve-PlatformCheckScript -RepositoryRoot $repositoryRoot `
+    -ScriptRelativePath 'scripts/omp/validate-shared-scripts.ps1' -CheckLabel 'Check 15' `
+    -Errors $errors -Warnings $warnings -PlatformRepositoryRoot $PlatformRepositoryRoot
+if ($null -ne $check15) {
+    & $check15.ScriptPath -ConsumerRepositoryRoot $repositoryRoot -PlatformRepositoryRoot $check15.PlatformRoot -Strict:$Strict
+    if ($LASTEXITCODE -ne 0) {
+        Add-ValidationError -Errors $errors -Message 'Check 15 (shared script drift) failed; see the Check 15 lines above.'
+    }
+}
+```
 
 ## Present-but-vacuous is not applied uniformly (measured 2026-09-07)
 
