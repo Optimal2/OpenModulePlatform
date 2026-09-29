@@ -9,20 +9,23 @@
     working tree was clean. A build from a dirty tree can otherwise ship the
     same component version with different content and leave no trace of it.
 
-    Clean-tree method: `git status --porcelain`, the same primary signal the
-    repository already uses in scripts/omp/push-with-rebump.ps1,
-    scripts/local-ci.ps1 (gate-cache stamp), and
-    scripts/omp/validate-shared-dependencies.ps1 (Check 14 sibling warning).
-    A non-empty porcelain listing is then judged content-wise so pure
-    line-ending noise does not count as dirty: a tracked modification is
-    ignored only when `git diff --ignore-cr-at-eol` reports no difference
-    against HEAD. That is the same content verdict the release comparisons
-    use for CRLF drift (compare with CRLF normalized, as Check 16 in
-    scripts/omp/validate-component-versions.ps1 and Get-FileSha256 in
-    scripts/omp/validate-shared-scripts.ps1 document), while a missing or
-    extra trailing newline still counts as content. Anything that cannot be
-    judged (deleted/added/renamed paths, untracked files, unmerged entries,
-    or a git error) fails closed to dirty.
+    Clean-tree method: the same three questions the release tooling asks in
+    Get-GitChangedFiles (scripts/omp/validate-component-versions.helpers.ps1):
+
+      git diff --name-only                        worktree vs index
+      git diff --cached --name-only               index vs HEAD
+      git ls-files --others --exclude-standard    untracked, not ignored
+
+    Any path in any of the three answers makes the tree dirty. The verdict is
+    about content, not file-system state: git diff compares the worktree after
+    git's own clean conversion (core.autocrlf, .gitattributes eol/text), so a
+    file that only looks changed -- for example a CRLF checkout under
+    core.autocrlf=true, which `git status --porcelain` can still list as
+    modified -- is clean, while a byte change git itself records (a CRLF
+    rewrite with no normalization configured, a missing trailing newline) is
+    dirty. That is deliberate: those bytes are what the build would ship.
+    Any git error fails closed (throws), so an unknown state is never stamped
+    as clean.
 
     This file is dot-sourced; it must never call exit.
 #>
@@ -56,101 +59,39 @@ function Invoke-SourceProvenanceGit {
     }
 }
 
-function Test-ProvenanceContentSame {
+function Get-ProvenanceChangedPaths {
     <#
     .SYNOPSIS
-        True when a tracked path's worktree content matches its HEAD blob
-        ignoring carriage returns at end of line. False (dirty) when the
-        content really differs or when git cannot answer.
-
-        `git diff --quiet --ignore-cr-at-eol` is the whole verdict: it compares
-        bytes rather than line-split strings, so a missing or extra trailing
-        newline still counts as content (the same rule Get-FileSha256 in
-        validate-shared-scripts.ps1 documents), while pure CRLF/LF drift does
-        not. Anything undecidable fails closed to dirty.
+        Returns every path that makes the tree dirty, each prefixed with the
+        question that found it (worktree:, staged:, untracked:). Throws when
+        git cannot answer any of the three questions. Callers wrap the result
+        in @() so an empty answer counts as zero paths.
     #>
     param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-        [Parameter(Mandatory = $true)][string]$Path
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot
     )
 
-    $diff = Invoke-SourceProvenanceGit -RepositoryRoot $RepositoryRoot -Arguments @('diff', '--quiet', '--ignore-cr-at-eol', 'HEAD', '--', $Path)
-    return ($diff.ExitCode -eq 0)
-}
-
-function ConvertFrom-ProvenancePorcelainPath {
-    <#
-    .SYNOPSIS
-        Unquotes a porcelain v1 path and resolves rename arrows to the new path.
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$Value
+    $questions = @(
+        @{ Label = 'worktree';  Arguments = @('diff', '--name-only') },
+        @{ Label = 'staged';    Arguments = @('diff', '--cached', '--name-only') },
+        @{ Label = 'untracked'; Arguments = @('ls-files', '--others', '--exclude-standard') }
     )
 
-    $path = $Value.Trim()
-    $arrowIndex = $path.IndexOf(' -> ')
-    if ($arrowIndex -ge 0) {
-        $path = $path.Substring($arrowIndex + 4).Trim()
-    }
-
-    if ($path.Length -ge 2 -and $path.StartsWith('"') -and $path.EndsWith('"')) {
-        $path = $path.Substring(1, $path.Length - 2)
-        $path = $path.Replace('\\', '\').Replace('\"', '"')
-    }
-
-    return $path
-}
-
-function Test-ProvenancePorcelainDirty {
-    <#
-    .SYNOPSIS
-        Judges porcelain v1 lines content-wise. Untracked, added, deleted,
-        renamed, type-changed, and unmerged entries are dirty; tracked content
-        modifications are dirty only when the normalized bytes really differ.
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$PorcelainLines
-    )
-
-    foreach ($line in $PorcelainLines) {
-        if ([string]::IsNullOrWhiteSpace($line)) {
-            continue
+    $changed = New-Object System.Collections.Generic.List[string]
+    foreach ($question in $questions) {
+        $answer = Invoke-SourceProvenanceGit -RepositoryRoot $RepositoryRoot -Arguments $question.Arguments
+        if ($answer.ExitCode -ne 0) {
+            throw "Could not determine whether the source tree of '$RepositoryRoot' is clean: 'git $($question.Arguments -join ' ')' exited with $($answer.ExitCode). $(($answer.Lines -join "`n")) Refusing to stamp an unknown provenance."
         }
 
-        if ($line.Length -lt 4) {
-            return $true
-        }
-
-        $x = $line[0]
-        $y = $line[1]
-        $path = ConvertFrom-ProvenancePorcelainPath -Value $line.Substring(3)
-        if ([string]::IsNullOrWhiteSpace($path)) {
-            return $true
-        }
-
-        if ($x -eq '?' -and $y -eq '?') {
-            return $true
-        }
-
-        if ($x -eq '!' -or $y -eq '!') {
-            continue
-        }
-
-        if ($x -eq 'U' -or $y -eq 'U' -or ($x -eq 'A' -and $y -eq 'A') -or ($x -eq 'D' -and $y -eq 'D')) {
-            return $true
-        }
-
-        if ($y -eq 'D' -or $x -eq 'D' -or $x -eq 'A' -or $x -eq 'R' -or $x -eq 'C' -or $x -eq 'T' -or $y -eq 'T') {
-            return $true
-        }
-
-        if (-not (Test-ProvenanceContentSame -RepositoryRoot $RepositoryRoot -Path $path)) {
-            return $true
+        foreach ($line in $answer.Lines) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                $changed.Add(('{0}: {1}' -f $question.Label, $line.Trim()))
+            }
         }
     }
 
-    return $false
+    return $changed.ToArray()
 }
 
 function Get-OmpSourceProvenance {
@@ -170,19 +111,13 @@ function Get-OmpSourceProvenance {
         throw "Could not determine the source commit of '$root': $(($head.Lines -join "`n")). Refusing to stamp an unknown provenance."
     }
 
-    $status = Invoke-SourceProvenanceGit -RepositoryRoot $root -Arguments @('status', '--porcelain')
-    if ($status.ExitCode -ne 0) {
-        throw "Could not determine whether the source tree of '$root' is clean: $(($status.Lines -join "`n")). Refusing to stamp an unknown provenance."
-    }
-
-    $porcelainLines = @($status.Lines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $dirty = Test-ProvenancePorcelainDirty -RepositoryRoot $root -PorcelainLines $porcelainLines
+    $changedPaths = @(Get-ProvenanceChangedPaths -RepositoryRoot $root)
 
     return [pscustomobject]@{
         RepositoryRoot = $root
         CommitSha      = ($head.Lines -join "`n").Trim()
-        Dirty          = [bool]$dirty
-        Porcelain      = ($porcelainLines -join "`n")
+        Dirty          = ($changedPaths.Count -gt 0)
+        ChangedPaths   = ($changedPaths -join "`n")
     }
 }
 
@@ -207,7 +142,8 @@ function Get-OmpSourceProvenanceOrNull {
     }
 }
 
-function Assert-OmpSourceTreeClean {    <#
+function Assert-OmpSourceTreeClean {
+    <#
     .SYNOPSIS
         Fails a package build on a dirty source tree unless -AllowDirtySource
         is passed for local troubleshooting. Returns the provenance either way
@@ -220,8 +156,108 @@ function Assert-OmpSourceTreeClean {    <#
 
     $provenance = Get-OmpSourceProvenance -RepositoryRoot $RepositoryRoot
     if ($provenance.Dirty -and -not $AllowDirtySource) {
-        throw ("Refusing to build a package from a dirty source tree in '{0}'. Commit the changes first, or rebuild with -AllowDirtySource for local troubleshooting (the package is then stamped sourceDirty=true). Uncommitted changes:`n{1}" -f $provenance.RepositoryRoot, $provenance.Porcelain)
+        throw ("Refusing to build a package from a dirty source tree in '{0}'. Commit the changes first, or rebuild with -AllowDirtySource for local troubleshooting (the package is then stamped sourceDirty=true). Uncommitted changes:`n{1}" -f $provenance.RepositoryRoot, $provenance.ChangedPaths)
     }
 
     return $provenance
+}
+
+function Get-OmpSharedSourceRoots {
+    <#
+    .SYNOPSIS
+        Resolves the sibling repositories a consumer build compiles against:
+        one entry per distinct repository behind the sharedDependencies of the
+        consumer's omp-components.json, in the same order Check 14
+        (validate-shared-dependencies.ps1) uses -- an explicit root, then the
+        OpenModulePlatformRoot environment variable, then each dependency's
+        repositoryPathHint relative to the consumer root. The consumer's own
+        root is never returned. Returns an empty array when the manifest is
+        missing or declares no shared dependencies.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string]$ExplicitRoot = ''
+    )
+
+    $root = [System.IO.Path]::GetFullPath($RepositoryRoot)
+    $manifestPath = Join-Path $root 'omp-components.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        return @()
+    }
+
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $property = $manifest.PSObject.Properties['sharedDependencies']
+    if ($null -eq $property -or $null -eq $property.Value) {
+        return @()
+    }
+
+    $roots = New-Object System.Collections.Generic.List[object]
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($dependency in @($property.Value)) {
+        $siblingRoot = $ExplicitRoot
+        if ([string]::IsNullOrWhiteSpace($siblingRoot)) {
+            $siblingRoot = $env:OpenModulePlatformRoot
+        }
+        if ([string]::IsNullOrWhiteSpace($siblingRoot)) {
+            $hint = $dependency.PSObject.Properties['repositoryPathHint']
+            if ($null -eq $hint -or [string]::IsNullOrWhiteSpace([string]$hint.Value)) {
+                throw "A sharedDependencies entry in '$manifestPath' has no repositoryPathHint, so the repository it compiles against cannot be verified clean."
+            }
+            $siblingRoot = Join-Path $root ([string]$hint.Value)
+        }
+        elseif (-not [System.IO.Path]::IsPathRooted($siblingRoot)) {
+            $siblingRoot = Join-Path $root $siblingRoot
+        }
+
+        $siblingRoot = [System.IO.Path]::GetFullPath($siblingRoot)
+        if ([string]::Equals($siblingRoot.TrimEnd('\', '/'), $root.TrimEnd('\', '/'), [System.StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+
+        if ($seen.Add($siblingRoot)) {
+            $keyProperty = $dependency.PSObject.Properties['repositoryKey']
+            $roots.Add([pscustomobject]@{
+                RepositoryKey  = $(if ($null -ne $keyProperty) { [string]$keyProperty.Value } else { '' })
+                RepositoryRoot = $siblingRoot
+            })
+        }
+    }
+
+    return $roots.ToArray()
+}
+
+function Assert-OmpSharedSourcesClean {
+    <#
+    .SYNOPSIS
+        Applies the dirty-tree gate to every sibling repository a consumer
+        build compiles against. Check 14 only warns about a dirty sibling --
+        the verification itself still succeeds there -- but a package build
+        from one ships the uncommitted shared code under the consumer's
+        unchanged version, so the package build refuses it exactly like a
+        dirty own tree. A sibling that is missing or not a checkout cannot be
+        verified and fails the build even with -AllowDirtySource: the build
+        compiles against it, so its state is part of what ships.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string]$ExplicitRoot = '',
+        [switch]$AllowDirtySource
+    )
+
+    $results = New-Object System.Collections.Generic.List[object]
+    foreach ($shared in @(Get-OmpSharedSourceRoots -RepositoryRoot $RepositoryRoot -ExplicitRoot $ExplicitRoot)) {
+        if (-not (Test-Path -LiteralPath $shared.RepositoryRoot -PathType Container)) {
+            throw "Shared dependency repository '$($shared.RepositoryRoot)' was not found. The package build compiles against it, so it must be present and verified clean."
+        }
+
+        $provenance = Assert-OmpSourceTreeClean -RepositoryRoot $shared.RepositoryRoot -AllowDirtySource:$AllowDirtySource
+        $results.Add([pscustomobject]@{
+            RepositoryKey  = $shared.RepositoryKey
+            RepositoryRoot = $provenance.RepositoryRoot
+            CommitSha      = $provenance.CommitSha
+            Dirty          = $provenance.Dirty
+        })
+    }
+
+    return $results.ToArray()
 }

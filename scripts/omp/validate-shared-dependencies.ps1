@@ -70,7 +70,11 @@
 
     A dirty sibling working tree stays a warning even in strict mode: the
     verification itself succeeded there -- the warning only says the recorded
-    treeId will go stale when the uncommitted edits are committed.
+    treeId will go stale when the uncommitted edits are committed. Package
+    builds do not rely on this warning: export-universal-package.ps1 refuses a
+    dirty sibling behind sharedDependencies exactly like a dirty own tree
+    (Assert-OmpSharedSourcesClean in source-provenance.ps1), unless
+    -AllowDirtySource is passed and the package is stamped sourceDirty=true.
 #>
 [CmdletBinding()]
 param(
@@ -297,7 +301,7 @@ else {
             $ErrorActionPreference = $previousErrorActionPreference
         }
         if ($siblingDirty) {
-            Write-Check14Result -Message "Check 14: '$projectPath' has uncommitted changes in '$siblingRoot'. Commit them there before releasing here, or the recorded treeId will be stale." -IsWarning
+            Write-Check14Result -Message "Check 14: '$projectPath' has uncommitted changes in '$siblingRoot'. Commit them there before releasing here, or the recorded treeId will be stale. A package build refuses a dirty sibling unless -AllowDirtySource is passed." -IsWarning
         }
 
         if ([string]::Equals($currentTreeId, $recordedTreeId, [System.StringComparison]::OrdinalIgnoreCase)) {

@@ -86,7 +86,10 @@ Package builds require a clean source tree and stamp source provenance
 (repository, commit SHA, dirty flag — see `source-provenance.ps1`) into the
 universal package manifest and every built artifact manifest. A dirty tree
 fails the build unless `-AllowDirtySource` is passed for local
-troubleshooting; such a build is stamped `sourceDirty=true`.
+troubleshooting; such a build is stamped `sourceDirty=true`. "Clean" means the
+release tooling's content questions (`git diff --name-only`, `--cached`, and
+`git ls-files --others --exclude-standard`) find nothing, in the repository
+itself and in every sibling repository behind `sharedDependencies`.
 
 Use `validate-module-definitions.ps1` before packaging or in CI to catch
 manifest/module-definition version drift and stale embedded SQL content. If you

@@ -133,7 +133,11 @@ The manifest root also carries source provenance: `sourceRepositoryKey`,
 which source repository, release version, and commit the package was exported
 from, and whether the source tree was dirty at export time. Importers treat all
 four as optional operator-facing metadata and ignore unknown fields, so older
-packages keep working.
+packages keep working. A package exported from a consumer repository that
+compiles against sibling repositories (`sharedDependencies` in its
+`omp-components.json`) also carries an optional `sharedSources` array with one
+`{ repositoryKey, commitSha, dirty }` entry per sibling, and its `sourceDirty`
+is true when any of those sources was dirty.
 
 Widget import version rules are intentionally the same across Portal and
 HostAgent unattended imports:
@@ -290,9 +294,16 @@ profile inputs, and writes a universal package zip. Before doing any of that it
 requires a clean source tree: building from a dirty tree fails unless the
 operator passes `-AllowDirtySource` explicitly for local troubleshooting, and
 such a build is stamped `sourceDirty: true` in the package manifest and in
-every built artifact manifest. Pure line-ending noise does not count as dirty;
-the verdict matches the content comparison the release tooling uses. The
-canonical implementation lives in `scripts/omp/source-provenance.ps1`.
+every built artifact manifest. "Clean" is judged on content with the same three
+questions the release tooling asks (`git diff --name-only`,
+`git diff --cached --name-only`, `git ls-files --others --exclude-standard`),
+not on `git status --porcelain`: under `core.autocrlf=true` a file can be listed
+as modified although its content is identical, while a byte change git itself
+records (for example a CRLF rewrite with no normalization configured) is dirty,
+because those are the bytes the build would ship. The same gate applies to the
+sibling repositories behind `sharedDependencies`; Check 14 only warns about a
+dirty sibling, the package build refuses it. The canonical implementation lives
+in `scripts/omp/source-provenance.ps1`.
 
 All generators must produce the same object bytes for the same source inputs.
 Repository exporters, the HostAgent-first installer refresh, Portal export, and

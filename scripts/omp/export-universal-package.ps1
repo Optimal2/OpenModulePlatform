@@ -65,7 +65,8 @@ param(
     # Building from a dirty source tree can ship the same package version with
     # different content and no trace of it. Fail by default; pass this switch
     # for local troubleshooting, which then stamps sourceDirty=true in the
-    # package manifest and in every built artifact manifest.
+    # package manifest and in every built artifact manifest. The same gate
+    # covers the sibling repositories behind sharedDependencies.
     [switch]$AllowDirtySource
 )
 
@@ -596,6 +597,12 @@ $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
 # Fail fast on a dirty source tree, before creating any package objects: the
 # same version must never leave with different content and no trace of it.
 $sourceProvenance = Assert-OmpSourceTreeClean -RepositoryRoot $repositoryRoot -AllowDirtySource:$AllowDirtySource
+# A consumer compiles against the sibling repositories behind its
+# sharedDependencies. Check 14 only warns when one of them is dirty; the package
+# build refuses it like a dirty own tree, and the built artifacts count as dirty
+# when any source they were compiled from was.
+$sharedSourceProvenance = @(Assert-OmpSharedSourcesClean -RepositoryRoot $repositoryRoot -ExplicitRoot $OmpRepositoryRoot -AllowDirtySource:$AllowDirtySource)
+$anySourceDirty = $sourceProvenance.Dirty -or @($sharedSourceProvenance | Where-Object { $_.Dirty }).Count -gt 0
 # Validate before creating any package objects, including reuse of existing artifacts.
 & (Join-Path $scriptDirectory 'validate-module-definitions.ps1') -RepositoryRoot $repositoryRoot
 & (Join-Path $scriptDirectory 'Test-ModuleSqlGuards.ps1') -RepositoryRoot $repositoryRoot
@@ -675,7 +682,7 @@ try {
         OutputRoot = $objectRoot
         Configuration = $Configuration
         SourceCommitSha = $sourceProvenance.CommitSha
-        SourceDirty = $sourceProvenance.Dirty
+        SourceDirty = $anySourceDirty
     }
 
     if (-not [string]::IsNullOrWhiteSpace($OmpRepositoryRoot)) {
@@ -777,8 +784,20 @@ try {
         sourceRepositoryKey = [string](Get-JsonPropertyValue -Object $componentManifest -Name 'repositoryKey')
         sourceRepositoryVersion = [string](Get-JsonPropertyValue -Object $componentManifest -Name 'repositoryVersion')
         sourceCommitSha = $sourceProvenance.CommitSha
-        sourceDirty = $sourceProvenance.Dirty
+        sourceDirty = $anySourceDirty
         items = $manifestItems
+    }
+
+    # Optional on read, like the other source fields: present only for a
+    # consumer that compiles against sibling repositories.
+    if ($sharedSourceProvenance.Count -gt 0) {
+        $manifest.sharedSources = @($sharedSourceProvenance | ForEach-Object {
+            [ordered]@{
+                repositoryKey = $_.RepositoryKey
+                commitSha = $_.CommitSha
+                dirty = $_.Dirty
+            }
+        })
     }
 
     if (Test-Path -LiteralPath $outputPath -PathType Leaf) {
