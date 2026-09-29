@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.HostAgent.Runtime\OpenModulePlatform.HostAgent.Runtime.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Worker.Abstractions\OpenModulePlatform.Worker.Abstractions.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.WorkerManager.WindowsService\OpenModulePlatform.WorkerManager.WindowsService.csproj" />
   </ItemGroup>
 
   <ItemGroup>

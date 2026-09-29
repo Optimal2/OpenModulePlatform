@@ -1115,7 +1115,7 @@ CREATE TABLE omp.AppInstances
     ArtifactId int NULL,
     IsEnabled bit NOT NULL DEFAULT(1),
     IsAllowed bit NOT NULL DEFAULT(1),
-    DesiredState bit NOT NULL DEFAULT(1),
+    DesiredState tinyint NOT NULL DEFAULT(1),
     UpdatedUtc datetime2(3) NULL
 );");
         Execute(@"

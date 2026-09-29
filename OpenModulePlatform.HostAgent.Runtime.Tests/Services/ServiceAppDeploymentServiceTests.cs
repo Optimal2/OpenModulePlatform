@@ -899,6 +899,62 @@ public sealed class ServiceAppDeploymentServiceTests : IDisposable
         Assert.Null(refusal);
     }
 
+    [Fact]
+    public async Task Lifecycle_DesiredStateTwo_StopsButRetainsService()
+    {
+        var (service, repository, control, original) = CreateDisabledScenario();
+        var candidate = new DisabledServiceAppServiceDescriptor
+        {
+            AppInstanceId = original.AppInstanceId, AppInstanceKey = original.AppInstanceKey,
+            IsEnabled = true, DesiredState = 2, InstallPath = original.InstallPath,
+            RuntimeName = original.RuntimeName, TargetPath = original.TargetPath
+        };
+        repository.DisabledServiceAppServices = [candidate];
+        control.SetState(candidate.RuntimeName, "RUNNING");
+        control.SetExecutablePath(candidate.RuntimeName, Path.Join(candidate.TargetPath, "worker.exe"));
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Equal("STOPPED", control.GetServiceState(candidate.RuntimeName));
+        Assert.Empty(control.DeletedServices);
+        Assert.Contains((candidate.AppInstanceId, false), repository.InactiveServiceResults);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Lifecycle_RemovedOrAlreadyAbsentService_ClearsDeploymentState(bool installed)
+    {
+        var (service, repository, control, candidate) = CreateDisabledScenario();
+        if (installed)
+        {
+            control.SetState(candidate.RuntimeName, "RUNNING");
+            control.SetExecutablePath(candidate.RuntimeName, Path.Join(candidate.TargetPath, "worker.exe"));
+        }
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Contains((candidate.AppInstanceId, true), repository.InactiveServiceResults);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Lifecycle_FailedOrRefusedRemoval_DoesNotClearDeploymentState(bool failure)
+    {
+        var (service, repository, control, candidate) = CreateDisabledScenario();
+        control.SetState(candidate.RuntimeName, "RUNNING");
+        control.SetExecutablePath(candidate.RuntimeName,
+            failure ? Path.Join(candidate.TargetPath, "worker.exe") : Path.Join(_tempRoot, "unrelated.exe"));
+        if (failure)
+            control.DeleteServiceSimulator = _ => new InvalidOperationException("simulated removal failure");
+
+        await service.DeployDesiredServiceAppsAsync("test-host", CancellationToken.None);
+
+        Assert.Empty(repository.InactiveServiceResults);
+        Assert.NotNull(control.GetServiceState(candidate.RuntimeName));
+    }
+
     private (ServiceAppDeploymentService Service, FakeOmpHostArtifactRepository Repository, FakeWindowsServiceControl Control, DisabledServiceAppServiceDescriptor Candidate) CreateDisabledScenario()
     {
         var settings = new HostAgentSettings

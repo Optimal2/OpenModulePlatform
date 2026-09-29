@@ -209,6 +209,14 @@ public sealed class FakeOmpHostArtifactRepository : IOmpHostArtifactRepository
 
     public List<DisabledServiceAppServiceDescriptor> DisabledServiceAppServices { get; set; } = [];
 
+    public List<(Guid AppInstanceId, bool Removed)> InactiveServiceResults { get; } = [];
+
+    public Task PublishInactiveServiceAppResultAsync(string hostKey, DisabledServiceAppServiceDescriptor candidate, bool removed, CancellationToken ct)
+    {
+        InactiveServiceResults.Add((candidate.AppInstanceId, removed));
+        return Task.CompletedTask;
+    }
+
     public List<ServiceAppDeploymentResult> PublishedServiceAppResults { get; } = [];
 
     public Task<IReadOnlyList<WebAppDeploymentDescriptor>> GetDesiredWebAppDeploymentsAsync(
