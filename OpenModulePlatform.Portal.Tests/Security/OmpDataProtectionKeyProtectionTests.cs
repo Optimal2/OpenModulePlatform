@@ -436,6 +436,37 @@ public sealed class OmpDataProtectionKeyProtectionTests
         Assert.Contains(nameof(OmpAuthOptions.DataProtectionRetiredCertificateThumbprints), ex.Message);
     }
 
+    // Autumn 2026 in Central Europe: 00:00-01:00 UTC is 02:00-03:00 CEST and
+    // 01:00-02:00 UTC repeats 02:00-03:00 as CET. Machine-local wall times order
+    // these instants wrongly on a Central European host.
+    [Fact]
+    public void Guard_WhenExpiredInRepeatedAutumnHour_ComparesInstants()
+    {
+        using var certificate = CreateSelfSignedCertificate(
+            notAfter: new DateTimeOffset(2026, 10, 25, 0, 45, 0, TimeSpan.Zero));
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => OmpWebHostingExtensions.ThrowIfCertificateCannotProtectKeys(
+                certificate,
+                certificate.Thumbprint!,
+                isRetiredCertificate: false,
+                utcNow: new DateTimeOffset(2026, 10, 25, 1, 15, 0, TimeSpan.Zero)));
+        Assert.Contains("EXPIRED", ex.Message);
+    }
+
+    [Fact]
+    public void Guard_WhenValidUntilSecondRepeatedHour_AcceptsFirstRepeatedHour()
+    {
+        using var certificate = CreateSelfSignedCertificate(
+            notAfter: new DateTimeOffset(2026, 10, 25, 1, 45, 0, TimeSpan.Zero));
+
+        OmpWebHostingExtensions.ThrowIfCertificateCannotProtectKeys(
+            certificate,
+            certificate.Thumbprint!,
+            isRetiredCertificate: false,
+            utcNow: new DateTimeOffset(2026, 10, 25, 0, 50, 0, TimeSpan.Zero));
+    }
+
     [Fact]
     public void Guard_WhenRetiredCertificateExpired_AcceptedByDesign()
     {

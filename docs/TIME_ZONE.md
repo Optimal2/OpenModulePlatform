@@ -45,7 +45,9 @@ example service/worker engines, and retention in
 `OpenModulePlatform.HostAgent.Runtime/Services/SystemLogRetentionService.cs:106`
 and `ArtifactZipImportService.cs:211`. Bootstrapper package versions, backup names,
 portable export timestamps and ZIP DOS timestamps are technical identities, not
-user calendar rules. Certificate validity compares native certificate times.
+user calendar rules; they are generated from UTC because a local timestamp
+repeats during the autumn DST hour. Certificate validity compares UTC instants
+(native certificate times are machine-local wall times).
 No local-calendar daily scheduler was found in the platform or examples.
 
 Additional presentation sites found in the completeness pass (baseline lines):
@@ -79,8 +81,7 @@ application restart; there is no silent fallback or per-browser override.
 Use the existing artifact configuration / host overlay chain described in
 [CONFIG_OVERLAYS.md](CONFIG_OVERLAYS.md). Add the section to a host-targeted
 `appsettings.json` overlay with JSON merge semantics, consistently for Portal and
-each module web application. Use the same zone for non-web components that apply
-business calendar rules. Host configuration `values` is opaque and does not
+each module web application. Host configuration `values` is opaque and does not
 automatically become application settings. Private profile generators must emit
 the overlay explicitly. Do not rely on editing the deployed file: HostAgent
 rewrites it. The packaged Portal/Auth/Content defaults differ from source
@@ -88,6 +89,46 @@ appsettings; update the artifact-owned configuration and preserve the host
 overlay when refreshing/importing packages. Previous artifact configuration is
 copied only to a new artifact with zero configuration files, from its highest
 earlier registered version, not necessarily from the active deployment.
+
+## Presentation zone versus source-data calendar
+
+`OmpTime:TimeZoneId` is a presentation setting with a `UTC` default. It decides
+how stored UTC instants are shown and how an operator's calendar input in an
+OMP page (log filters, banner times, "today" presets) is converted to UTC, so
+that a filter always matches the times the same page displays. It is not a
+business calendar.
+
+Do not use `OmpTime`, or its configuration key, for rules about the calendar of
+external source data: day boundaries, "today", "future date" checks, date
+filters in background processing, night/weekend windows, or dates embedded in
+file or folder names. Reasons:
+
+- Worker processes never receive it. WorkerManager starts a worker with only
+  the OMP connection string and `WorkerProcess__ConfigurationJson`; artifact
+  runtime configuration files are removed at packaging time, and configuration
+  overlays apply to web applications and services, not workers. A worker that
+  reads `OmpTime:TimeZoneId` silently gets `UTC`.
+- A source system that writes local wall-clock time without an offset has a
+  fixed calendar of its own. Changing how OMP presents time must never move a
+  document across a day boundary.
+
+With a `UTC` calendar, local 00:00–02:00 during summer time (00:00–01:00 in
+winter) belongs to the previous date, so "today" is one day behind and a record
+stamped just after local midnight looks like it is in the future.
+
+A module that needs a source-data calendar declares its own setting in its own
+configuration contract (for a worker: the worker configuration JSON that
+WorkerManager passes through), documents it in the module's packaged
+configuration template and operator documentation, defaults it to the source
+system's zone, and validates it at startup so an unknown zone is a clear error
+rather than a fallback. Regression tests for such a rule should build the
+production composition (for example the worker factory from a configuration
+without any `OmpTime` section) and cover local 00:30 and 01:59 in summer time,
+00:30 in winter time, and both DST transition nights.
+
+The OMP platform and the examples in this repository contain no source-data
+calendar rule; every `OmpTime` calendar use is an operator-facing Portal filter
+or input over OMP's own UTC data.
 
 ## Shared helper contract
 
@@ -104,7 +145,9 @@ earlier registered version, not necessarily from the active deployment.
   bound. Do not add 24 hours to a UTC instant: DST days can contain 23 or 25 hours.
 - `ToUtc(wallTime)` accepts unspecified calendar input. Nonexistent clock
   times are rejected; ambiguous filter lower bounds use the first occurrence,
-  upper bounds use the last. Banner input uses the first occurrence.
+  upper bounds use the last. Banner input uses the first occurrence; an
+  edited banner whose start or expiry field still shows the stored value keeps
+  the stored UTC instant, so a repeated autumn minute is not moved.
   Missing banner times produce field validation errors; both start and expiry
   choose the earliest occurrence of a repeated minute.
 - Central European zones use CET/CEST according to the instant's offset.
@@ -149,8 +192,10 @@ The shared helper's rejection of machine-local `DateTime` values is unchanged.
 ## Consumer migration (separate phase)
 
 After integrating this Web.Shared revision, replace presentation-only UTC or
-machine-local formatting and business `UtcNow.Date` rules with `OmpTime`. Preserve
-storage/API contracts. Set the same host overlay on each app and restart it.
+machine-local formatting with `OmpTime`. Do not move business or source-data
+calendar rules (`UtcNow.Date`, "today", day filters in background processing)
+to `OmpTime`: give them a module-owned calendar setting as described in
+"Presentation zone versus source-data calendar". Preserve storage/API contracts. Set the same host overlay on each app and restart it.
 
 Bump every artifact that ships the updated shared assembly using the owning
 repository's `scripts/omp/bump-version.ps1 -ComponentKey <affected-keys>`, then

@@ -6373,7 +6373,17 @@ ORDER BY ArtifactId;
         var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(installPath))
             ?? throw new InvalidOperationException($"Cannot resolve parent folder for {installPath}.");
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(installPath));
-        return Path.Join(parent + "Backups", $"{name}-{DateTime.Now:yyyyMMdd-HHmmss}");
+        // UTC plus a suffix: a local timestamp repeats during the autumn DST hour,
+        // and CopyDirectory overwrites, so an existing backup must never be reused.
+        var basePath = Path.Join(parent + "Backups",
+            $"{name}-{DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture)}Z");
+        var candidate = basePath;
+        for (var suffix = 2; Directory.Exists(candidate) || File.Exists(candidate); suffix++)
+        {
+            candidate = $"{basePath}-{suffix}";
+        }
+
+        return candidate;
     }
 
     private static void CopyDirectory(string sourceDirectory, string targetDirectory)

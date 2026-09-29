@@ -2000,7 +2000,8 @@ internal static partial class Program
                 }
             }
 
-            var version = DateTime.Now.ToString("yyyyMMdd-HHmm");
+            // UTC, like the other package versions: local time repeats an hour every autumn.
+            var version = DateTime.UtcNow.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture);
             var exportsRoot = Path.Join(_payloadRoot, "exports");
             Directory.CreateDirectory(exportsRoot);
             var outputPath = Path.Join(exportsRoot, $"omp-universal__global__{version}.zip");
@@ -6531,7 +6532,7 @@ ORDER BY ar.ArtifactId DESC;
             Size = new Size(980, 700);
 
             _packageKeyBox.Text = "omp-universal";
-            _packageVersionBox.Text = DateTime.Now.ToString("yyyyMMdd-HHmm");
+            _packageVersionBox.Text = DateTime.UtcNow.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture);
             _displayNameBox.Text = "OpenModulePlatform universal package";
 
             BuildLayout();

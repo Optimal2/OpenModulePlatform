@@ -1338,7 +1338,8 @@ public static class OmpWebHostingExtensions
     internal static void ThrowIfCertificateCannotProtectKeys(
         X509Certificate2 certificate,
         string normalizedThumbprint,
-        bool isRetiredCertificate)
+        bool isRetiredCertificate,
+        DateTimeOffset? utcNow = null)
     {
         var role = isRetiredCertificate ? "retired " : "";
 
@@ -1375,8 +1376,10 @@ public static class OmpWebHostingExtensions
             return;
         }
 
-        var now = DateTime.Now; // NotBefore/NotAfter are returned in local time.
-        if (now < certificate.NotBefore)
+        // NotBefore/NotAfter are machine-local wall times. Comparing wall times
+        // misorders instants in the repeated autumn hour, so compare UTC instants.
+        var now = (utcNow ?? DateTimeOffset.UtcNow).UtcDateTime;
+        if (now < certificate.NotBefore.ToUniversalTime())
         {
             throw new InvalidOperationException(
                 $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: the " +
@@ -1386,7 +1389,7 @@ public static class OmpWebHostingExtensions
                 "fall back to another protection scope.");
         }
 
-        if (now > certificate.NotAfter)
+        if (now > certificate.NotAfter.ToUniversalTime())
         {
             throw new InvalidOperationException(
                 $"OmpAuth:{nameof(OmpAuthOptions.DataProtectionCertificateThumbprint)}: the " +

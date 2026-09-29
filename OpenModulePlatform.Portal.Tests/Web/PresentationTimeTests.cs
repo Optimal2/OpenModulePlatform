@@ -75,10 +75,46 @@ public sealed class PresentationTimeTests
         var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
         foreach (var minute in new[] { 30, 45 })
         {
-            var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, minute, 0)])!;
+            var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, minute, 0), null])!;
             Assert.Equal(new DateTimeOffset(2026, 10, 25, 0, minute, 0, TimeSpan.Zero), result);
         }
-        Assert.Null(convert.Invoke(model, [null]));
+        Assert.Null(convert.Invoke(model, [null, null]));
+    }
+
+    // Editing only the title must not move a stored instant. 01:30 UTC on the
+    // autumn night is the second 02:30 (CET); the form shows it as 02:30.
+    [Theory]
+    [InlineData(2026, 10, 25, 1, 30)] // second occurrence of 02:30, CET
+    [InlineData(2026, 10, 25, 0, 30)] // first occurrence of 02:30, CEST
+    [InlineData(2026, 9, 28, 22, 30)] // 00:30 CEST
+    [InlineData(2026, 9, 28, 23, 59)] // 01:59 CEST
+    [InlineData(2026, 11, 30, 23, 30)] // 00:30 CET
+    [InlineData(2026, 3, 29, 1, 0)] // 03:00 CEST, first minute after the spring gap
+    public void BannerUnchangedFieldKeepsStoredInstantAcrossEditRoundTrip(int year, int month, int day, int hour, int minute)
+    {
+        var model = CreateBannerModel();
+        var stored = new DateTime(year, month, day, hour, minute, 0, DateTimeKind.Unspecified);
+        var toInput = typeof(BannersModel).GetMethod("ToInput", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var input = (BannersModel.InputModel)toInput.Invoke(model,
+            [new BannerEditData(1, "t", "c", BannerService.StatusActive, BannerService.LevelAnnouncement, stored, stored, [])])!;
+        var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var start = (DateTimeOffset)convert.Invoke(model, [input.StartsAt, stored])!;
+        var expiry = (DateTimeOffset)convert.Invoke(model, [input.ExpiresAt, stored])!;
+
+        var expected = new DateTimeOffset(stored, TimeSpan.Zero);
+        Assert.Equal(expected, start);
+        Assert.Equal(expected, expiry);
+    }
+
+    [Fact]
+    public void BannerChangedFieldIsConvertedFromTheEnteredWallTime()
+    {
+        var model = CreateBannerModel();
+        var convert = typeof(BannersModel).GetMethod("ToUtcOffset", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var stored = new DateTime(2026, 10, 25, 1, 30, 0);
+        var result = (DateTimeOffset)convert.Invoke(model, [new DateTime(2026, 10, 25, 2, 45, 0), stored])!;
+        Assert.Equal(new DateTimeOffset(2026, 10, 25, 0, 45, 0, TimeSpan.Zero), result);
     }
 
     private static BannersModel CreateBannerModel()

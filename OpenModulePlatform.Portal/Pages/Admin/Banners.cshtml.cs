@@ -99,6 +99,12 @@ public sealed class BannersModel : OmpPortalPageModel
         {
             if (Input.BannerId > 0)
             {
+                var stored = await _banners.GetForEditAsync(Input.BannerId, ct);
+                if (stored is null)
+                {
+                    return NotFound();
+                }
+
                 var updated = await _banners.UpdateAsync(
                     new BannerEditRequest(
                         Input.BannerId,
@@ -106,8 +112,8 @@ public sealed class BannersModel : OmpPortalPageModel
                         Input.Content,
                         Input.Status,
                         Input.Level,
-                        ToUtcOffset(Input.StartsAt),
-                        ToUtcOffset(Input.ExpiresAt),
+                        ToUtcOffset(Input.StartsAt, stored.StartsAtUtc),
+                        ToUtcOffset(Input.ExpiresAt, stored.ExpiresAtUtc),
                         ToTargets()),
                     ct);
 
@@ -285,10 +291,22 @@ public sealed class BannersModel : OmpPortalPageModel
     }
 
     // Scheduled instants (both start and expiry) use the earliest occurrence.
-    private DateTimeOffset? ToUtcOffset(DateTime? value)
-        => value.HasValue
-            ? new DateTimeOffset(_time.ToUtc(value.Value, upperBound: false))
-            : null;
+    // An unchanged field keeps its stored instant: the wall-time form cannot
+    // tell the two occurrences of a repeated autumn minute apart.
+    private DateTimeOffset? ToUtcOffset(DateTime? value, DateTime? storedUtc = null)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        if (storedUtc is { } stored && _time.ToDisplayTime(stored).DateTime == value.Value)
+        {
+            return new DateTimeOffset(DateTime.SpecifyKind(stored, DateTimeKind.Utc));
+        }
+
+        return new DateTimeOffset(_time.ToUtc(value.Value, upperBound: false));
+    }
 
     private InputModel ToInput(BannerEditData row)
     {
