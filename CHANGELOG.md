@@ -8,6 +8,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Period picker: Space in the unsaved-draft question is Continue
+  editing.** The question now opens with Continue editing focused, so
+  Space keeps the popup open; Enter is still Save and Escape still
+  Continue editing. `ompConfirm` takes `enter: "ok"` for this: Enter is
+  OK while the focus is where the dialog put it, and presses the focused
+  button once the user has moved it (Tab to Don't save, then Enter).
 - **Period picker: `omp-daterange-restore`.** A page that writes the
   picker's hidden values itself (the search-lock Cancel on the IbsPackager
   jobs and history pages restores what it stashed) dispatches the event on

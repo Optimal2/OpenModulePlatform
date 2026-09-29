@@ -11,6 +11,10 @@
 //       string "extra" when it is chosen.
 //     focus: "ok" starts with the OK button focused (so Enter is OK and
 //       Escape is Cancel); the default starts on Cancel.
+//     enter: "ok" makes Enter OK while the focus is still where the dialog
+//       put it, so the focused button (Cancel, by default) keeps Space for
+//       itself. Once the user moves the focus, Enter presses the focused
+//       button as usual.
 //     title: a heading above the message; none when empty.
 //     content: an element shown between the message and the buttons, holding
 //       the page's own fields (a note, an optional text field, a checkbox). It
@@ -134,6 +138,8 @@
                 dialog.removeEventListener('close', onClose);
                 body.removeEventListener('submit', onSubmit);
                 slot.removeEventListener('change', syncOk);
+                dialog.removeEventListener('focusin', onFocusIn);
+                dialog.removeEventListener('keydown', onKeyDown);
                 if (dialog.open) {
                     dialog.close();
                 }
@@ -172,6 +178,24 @@
                 }
             };
 
+            // enter: "ok" - Enter is OK until the focus leaves the element
+            // the dialog focused; a button's own Enter activation fires on
+            // keydown, so stopping it there keeps that button from firing.
+            let initialFocus = null;
+            let focusMoved = false;
+            const onFocusIn = (event) => {
+                if (event.target !== initialFocus) {
+                    focusMoved = true;
+                }
+            };
+            const onKeyDown = (event) => {
+                if (event.key !== 'Enter' || focusMoved || okButton.disabled) {
+                    return;
+                }
+                event.preventDefault();
+                finish(true);
+            };
+
             okButton.addEventListener('click', onOk);
             cancelButton.addEventListener('click', onCancel);
             extraButton.addEventListener('click', onExtra);
@@ -181,7 +205,12 @@
             slot.addEventListener('change', syncOk);
             dialog.showModal();
             const focusTarget = content ? content.querySelector('[autofocus]') : null;
-            (focusTarget || (settings.focus === 'ok' ? okButton : cancelButton)).focus();
+            initialFocus = focusTarget || (settings.focus === 'ok' ? okButton : cancelButton);
+            initialFocus.focus();
+            if (settings.enter === 'ok') {
+                dialog.addEventListener('focusin', onFocusIn);
+                dialog.addEventListener('keydown', onKeyDown);
+            }
         });
     }
 

@@ -779,7 +779,7 @@
     // fields empty as the neutral preset) and closes; Cancel closes with
     // nothing applied, and so does Escape. A click outside with an unsaved
     // draft asks first ("You have unsaved changes."): Save (Enter), Don't
-    // save, or Continue editing (Escape), which keeps the popup open with
+    // save, or Continue editing (Escape or Space), which keeps the popup open with
     // the draft; through the shared confirm dialog when omp-forms.js is on
     // the page (the browser's own confirm knows only save or don't save). Enter in a date field, on
     // the trigger field or with nothing in particular focused is Confirm;
@@ -1595,12 +1595,13 @@
             }
             apply.addEventListener("click", confirmDraft);
             // Closing with an unsaved draft asks first: Save (Enter) applies
-            // it, Don't save drops it and closes, Continue editing (Escape)
-            // keeps the popup open. The shared dialog when the page has it;
-            // the browser's own otherwise, where OK saves and Cancel drops.
+            // it, Don't save drops it and closes, Continue editing (Escape,
+            // and Space, since it starts focused) keeps the popup open. The
+            // shared dialog when the page has it; the browser's own
+            // otherwise, where OK saves and Cancel drops.
             function askUnsaved() {
                 if (typeof window.ompConfirm === "function") {
-                    return window.ompConfirm(texts.unsaved, { okLabel: texts.save, cancelLabel: texts.keepEditing, extraLabel: texts.discard, focus: "ok" });
+                    return window.ompConfirm(texts.unsaved, { okLabel: texts.save, cancelLabel: texts.keepEditing, extraLabel: texts.discard, enter: "ok" });
                 }
                 return Promise.resolve(window.confirm(texts.unsaved) ? true : "extra");
             }
