@@ -1,9 +1,9 @@
 #Requires -Version 5.1
-# Pester 5's 'Should -Be/-Not -Be/-Match' parameters are provided by the pinned
-# Pester module (5.9.1), not by the inbox Pester 3.4.0 profile the compatibility
+# The 'Should -Be/-Not -Be/-Match' parameters are provided by the pinned
+# Pester module, not by the inbox Pester 3.4.0 profile the compatibility
 # rule measures against; suppress for the whole file, not per assertion.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
-    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+    Justification = 'Pinned Pester dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
 param()
 <#
 .SYNOPSIS
