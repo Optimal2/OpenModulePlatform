@@ -70,6 +70,11 @@
 .EXAMPLE
     powershell.exe -NoProfile -File scripts/omp/run-script-tests.ps1
 #>
+# Invoke-Pester here is the pinned Pester 6.1.0 imported by full path below,
+# not the inbox Pester 3.4.0 the compatibility profile measures; -ExcludePath
+# exists in 6.1.0.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
+    Justification = 'Invoke-Pester comes from the pinned Pester 6.1.0 module, not the inbox 3.4.0 profile.')]
 [CmdletBinding()]
 param(
     # Test-suite directory; defaults to the repository's tests folder. Exists
