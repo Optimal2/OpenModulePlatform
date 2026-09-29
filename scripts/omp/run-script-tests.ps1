@@ -215,7 +215,9 @@ if ($emptyContainers.Count -gt 0) {
 # environment says so in its own file, with a reason, on a line of its own:
 #   # omp-pester: allow-all-skipped <reason>
 # and is then reported as a warning instead of failing the run.
-$allowAllSkippedPattern = '(?m)^[ \t]*#[ \t]*omp-pester:[ \t]*allow-all-skipped[ \t]+(\S[^\r\n]*)$'
+# The optional \r keeps the marker working in a CRLF checkout: in multiline
+# mode $ matches before \n only.
+$allowAllSkippedPattern = '(?m)^[ \t]*#[ \t]*omp-pester:[ \t]*allow-all-skipped[ \t]+(\S[^\r\n]*?)[ \t]*\r?$'
 $unprovenContainers = @()
 foreach ($container in @($results.Containers)) {
     if ($container.PassedCount -gt 0) {
