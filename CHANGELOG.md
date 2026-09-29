@@ -8,6 +8,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Period picker: `omp-daterange-restore`.** A page that writes the
+  picker's hidden values itself (the search-lock Cancel on the IbsPackager
+  jobs and history pages restores what it stashed) dispatches the event on
+  the container, and the field's label and active look follow the values,
+  the counterpart of `omp-datetime-restore` on a single field.
 - **Runtime maintenance steps in module definitions.** A module that keeps
   references to platform rows declares, in the new optional
   `runtimeMaintenance` section, versioned SQL steps for the events

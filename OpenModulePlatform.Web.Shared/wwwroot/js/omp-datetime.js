@@ -764,7 +764,9 @@
     //   </span>
     // The hidden inputs are page-owned (server-rendered values, page resx
     // labels on the presets), so the page's GET contract and localization
-    // stay where they were. Nothing applies until Confirm: a quick pick in
+    // stay where they were; a page that writes them itself (a lock/cancel
+    // flow restoring what it stashed) dispatches omp-daterange-restore on
+    // the container and the field follows them. Nothing applies until Confirm: a quick pick in
     // the rail on the left (the page's presets and a built-in Today) sets
     // the fields as a draft, and so do the dates typed, picked in the
     // calendar or nudged a day with the arrows inside each field, and Reset
@@ -976,6 +978,13 @@
                 container.dispatchEvent(new CustomEvent("omp-daterange-change", { bubbles: true }));
             }
         }
+
+        // A page's lock/cancel flow restores the hidden values it stashed;
+        // the field's label and look follow them again.
+        container.addEventListener("omp-daterange-restore", function () {
+            field.textContent = currentLabel();
+            syncActive();
+        });
 
         function openRangePanel() {
             closeRangePanel();
