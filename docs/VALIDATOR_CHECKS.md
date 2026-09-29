@@ -29,8 +29,11 @@ Two layers, deliberately separated:
   OMP-compatible repository and the shared-script drift guard
   (`validate-shared-scripts.ps1`, wired as Check 15 in consumer validators)
   compares every copy byte-for-byte against this one. The same guard covers
-  `scripts/omp/bump-version.ps1`. Never edit a copy repo-locally: change the
-  canonical file here and redistribute in the same change.
+  `scripts/omp/bump-version.ps1`, and -- in every repository that runs Pester
+  suites or carries a copy of either file -- the canonical Pester step
+  `scripts/omp/run-script-tests.ps1` plus `scripts/omp/pester-bootstrap.ps1`.
+  Never edit a copy repo-locally: change the canonical file here and
+  redistribute in the same change.
 - **Repo-local flow (intentionally per repository):** the validator script
   itself (`scripts/omp/validate-component-versions.ps1`) decides which checks
   RUN. Repositories legitimately differ: this platform repository owns

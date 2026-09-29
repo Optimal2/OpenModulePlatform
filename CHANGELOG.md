@@ -6,6 +6,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ## [Unreleased]
 
+### Changed
+
+- **Canonical Pester step carries every guard; Check 15 holds the copies
+  identical.** `scripts/omp/run-script-tests.ps1` now also refuses a
+  `Pester.dll` of another version already loaded in the process (with the
+  instruction to start a new process), counts suites recursively, fails on a
+  `*.ps1` under `tests/` that is neither a suite nor a `*.TestHelpers.ps1`
+  helper (a suite renamed away from the glob), compares the containers that
+  ran with the suite files by path, and fails a suite that runs zero tests.
+  `validate-shared-scripts.ps1` (Check 15) requires `run-script-tests.ps1`
+  and `pester-bootstrap.ps1` verbatim in every repository that runs Pester
+  suites or carries a copy of either.
+
 ### Fixed
 
 - **Period picker: reversed ends swap days, not times.** Arming Till and

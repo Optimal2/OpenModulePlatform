@@ -210,12 +210,86 @@ function Ensure-PinnedPester {
     return $modulePath
 }
 
+function Get-IncompatiblePesterAssembly {
+    <#
+    .SYNOPSIS
+        Describes a Pester.dll already loaded in THIS process whose version is
+        not the pinned one, or returns $null when there is none.
+
+    .DESCRIPTION
+        A loaded .NET assembly cannot be unloaded. Once a session has imported
+        Pester 5 (or any other Pester with a Pester.dll), the pinned version
+        cannot be imported into that process: Pester.psm1 throws on an older
+        dll with generic restart advice, and a NEWER dll would be used by the
+        pinned module without complaint. An assembly counts as a Pester.dll
+        when it is named Pester or defines the PesterConfiguration type -- the
+        type Pester.psm1 itself probes for -- so the check holds whichever
+        Pester module was imported first and however its dll was loaded.
+    #>
+    param([Parameter(Mandatory = $true)][string] $RequiredVersion)
+
+    $required = [version] $RequiredVersion
+    foreach ($assembly in [AppDomain]::CurrentDomain.GetAssemblies()) {
+        $name = $assembly.GetName()
+        $isPester = ($name.Name -eq 'Pester')
+        if (-not $isPester) {
+            try {
+                $isPester = ($null -ne $assembly.GetType('PesterConfiguration', $false))
+            }
+            catch {
+                $isPester = $false
+            }
+        }
+        if (-not $isPester) {
+            continue
+        }
+        $loaded = $name.Version
+        if ($loaded.Major -eq $required.Major -and $loaded.Minor -eq $required.Minor -and $loaded.Build -eq $required.Build) {
+            continue
+        }
+        $location = '(no file location)'
+        try {
+            if (-not [string]::IsNullOrEmpty($assembly.Location)) {
+                $location = $assembly.Location
+            }
+        }
+        catch {
+            $location = '(file location unavailable)'
+        }
+        return ('Pester.dll {0}.{1}.{2} is already loaded in this process ({3})' -f $loaded.Major, $loaded.Minor, $loaded.Build, $location)
+    }
+    return $null
+}
+
+function Get-IncompatiblePesterMessage {
+    <#
+    .SYNOPSIS
+        The full refusal for Get-IncompatiblePesterAssembly: what is wrong and
+        the one action that fixes it.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string] $Conflict,
+        [Parameter(Mandatory = $true)][string] $RequiredVersion
+    )
+
+    return ($Conflict + '. A loaded .NET assembly cannot be unloaded, so Pester ' + $RequiredVersion +
+        ' cannot be imported into this process. Start a new PowerShell process that has not loaded Pester' +
+        ' and run the gate there, for example: powershell.exe -NoProfile -File scripts/omp/run-script-tests.ps1' +
+        ' (in an editor host, restart its PowerShell session first; do not Import-Module Pester before the gate).')
+}
+
 # Script mode: run the ensure, import the pinned module by full path, and
 # print what was loaded. Skipped when dot-sourced (InvocationName is '.').
 if ($MyInvocation.InvocationName -ne '.') {
     $effectiveCacheRoot = $CacheRoot
     if ([string]::IsNullOrWhiteSpace($effectiveCacheRoot)) {
         $effectiveCacheRoot = Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) '.psmodules'
+    }
+
+    $conflict = Get-IncompatiblePesterAssembly -RequiredVersion $RequiredVersion
+    if ($conflict) {
+        Write-Host (Get-IncompatiblePesterMessage -Conflict $conflict -RequiredVersion $RequiredVersion)
+        exit 1
     }
 
     $pesterModulePath = Ensure-PinnedPester -RequiredVersion $RequiredVersion -CacheRoot $effectiveCacheRoot
