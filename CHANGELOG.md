@@ -36,6 +36,25 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **The script package export never replaces an existing package.**
+  `scripts/omp/export-universal-package.ps1` (and `build-universal-package.ps1`,
+  which delegates to it) deleted an existing output file and wrote a new one
+  under the same versioned name. It now refuses an existing file with a clear
+  error and claims the name with `FileMode.CreateNew` before writing.
+- **NoOverwriteFile replaces only its own claim.** The final rename first
+  verifies that the target is still the empty file the writer created (same
+  volume serial number and file index); a claim that could not be removed is
+  reported instead of swallowed, and an empty file at the package name is
+  explained as a live or interrupted reservation.
+- **The shared-source gate judges only the consumed projectPath.** Like
+  Check 14, the package build now judges only the sibling project folders a
+  published component compiles against, so an untracked file elsewhere in the
+  sibling repository no longer fails the build.
+- **Required config section warnings describe the resolved file.** HostAgent
+  already validates `appsettings.json` after a merge-mode overlay is merged onto
+  the artifact configuration; the warning no longer claims that the overlay
+  itself must carry every section.
+
 - **Period picker: reversed ends swap days, not times.** Arming Till and
   picking a day before Från, then Apply, gave a start at 23:59 and an end
   at 00:00: the two values changed places whole. The days now change
