@@ -1592,7 +1592,20 @@
                         if (toValue !== "" && dayOf(toValue) < floor) { toValue = dayValue(floor, toValue, "23:59"); }
                     }
                     if (fromValue !== "" && toValue !== "" && fromValue > toValue) {
-                        var swap = fromValue; fromValue = toValue; toValue = swap;
+                        if (dayOf(fromValue) !== dayOf(toValue)) {
+                            // Reversed days (an armed pick put Till before
+                            // Från): the days change places and each end
+                            // keeps its own time of day, so the start does
+                            // not end up at 23:59 and the end at 00:00.
+                            var fromDay = dayOf(fromValue);
+                            var toDay = dayOf(toValue);
+                            fromValue = dayValue(toDay, fromValue, "00:00");
+                            toValue = dayValue(fromDay, toValue, "23:59");
+                        } else {
+                            // One day with its times reversed: the times
+                            // change places.
+                            var swap = fromValue; fromValue = toValue; toValue = swap;
+                        }
                     }
                     applyChoice("custom", fromValue, toValue, false);
                 }

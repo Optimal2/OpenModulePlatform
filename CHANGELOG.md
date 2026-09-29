@@ -6,6 +6,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ## [Unreleased]
 
+### Fixed
+
+- **Period picker: reversed ends swap days, not times.** Arming Till and
+  picking a day before Från, then Apply, gave a start at 23:59 and an end
+  at 00:00: the two values changed places whole. The days now change
+  places and each end keeps its own time of day (00:00 and 23:59 unless
+  typed); one day with its times reversed swaps the times.
+
 ### Added
 
 - **Date picker: `omp-calendar-time-zone`.** A page whose business calendar
