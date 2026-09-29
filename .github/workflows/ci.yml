@@ -157,8 +157,10 @@ jobs:
         run: .\scripts\omp\run-script-analyzer.ps1
 
       - name: Run Pester script tests
-        # run-script-tests.ps1 pins Pester 5.9.1 (the suites were migrated off
-        # the Pester 3.4.0 legacy dialect in 2026-09) and bootstraps the pin
+        # run-script-tests.ps1 pins Pester 6.1.0 (the suites were migrated off
+        # the Pester 3.4.0 legacy dialect in 2026-09; the Pester 5 'Should -Be'
+        # dialect carries over unchanged into Pester 6, which ships a net462
+        # binary and runs on Windows PowerShell 5.1) and bootstraps the pin
         # itself into the repository-local .psmodules cache, restoring it from
         # PSGallery when missing -- no separate install step. shell: powershell
         # (Windows PowerShell 5.1) directly, not pwsh wrapping powershell.exe:

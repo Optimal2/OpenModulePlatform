@@ -1,10 +1,10 @@
 #Requires -Version 5.1
-# Pester 5's 'Should -Be/-Not -Be/-Match/-BeTrue' parameters are provided by
-# the pinned Pester module (5.9.1), not by the inbox Pester 3.4.0 profile the
+# Pester 6's 'Should -Be/-Not -Be/-Match/-BeTrue' parameters are provided by
+# the pinned Pester module (6.1.0), not by the inbox Pester 3.4.0 profile the
 # compatibility rule measures against; suppress for the whole file, not per
 # assertion.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
-    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+    Justification = 'Pester 6 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
 param()
 <#
 .SYNOPSIS
@@ -25,10 +25,10 @@ param()
     (.psmodules, which run-script-tests.ps1 has already populated) on the
     child's module path, and the bootstrap copies an available pinned Pester
     instead of downloading. Only a machine with neither that cache nor a
-    global 5.9.1 would reach PSGallery, and there the restore cases skip with
+    global 6.1.0 would reach PSGallery, and there the restore cases skip with
     a reason rather than make the gate depend on the network.
 
-    Pester 5 runs every container in a separate session state, so the shared
+    Pester 6 runs every container in a separate session state, so the shared
     harness (child-process invoker + temp-directory helpers) lives in
     PesterBootstrap.TestHelpers.ps1 and is dot-sourced from each Describe
     block's BeforeAll.
@@ -49,9 +49,9 @@ Describe 'pester-bootstrap: empty module cache' {
 
             $result.ExitCode | Should -Be 0
             $result.Output | Should -Match 'restoring from PSGallery'
-            Test-Path -LiteralPath (Join-Path $cache 'Pester\5.9.1\Pester.psd1') -PathType Leaf | Should -BeTrue
-            $result.Output | Should -Match 'Loaded Pester 5\.9\.1'
-            $result.Output | Should -Match ([regex]::Escape((Join-Path $cache 'Pester\5.9.1')))
+            Test-Path -LiteralPath (Join-Path $cache 'Pester\6.1.0\Pester.psd1') -PathType Leaf | Should -BeTrue
+            $result.Output | Should -Match 'Loaded Pester 6\.1\.0'
+            $result.Output | Should -Match ([regex]::Escape((Join-Path $cache 'Pester\6.1.0')))
         }
         finally {
             Remove-TestDirectory -Path $cache
@@ -84,7 +84,7 @@ Describe 'pester-bootstrap: already-restored module cache' {
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Match 'found in the repository-local cache'
         $result.Output | Should -Not -Match 'restoring from PSGallery'
-        $result.Output | Should -Match 'Loaded Pester 5\.9\.1'
+        $result.Output | Should -Match 'Loaded Pester 6\.1\.0'
     }
 }
 
@@ -95,7 +95,7 @@ Describe 'pester-bootstrap: a different global Pester version' {
 
     It 'Loads the repo-local pin, not a globally installed Pester of another version' {
         Skip-UnlessPinnedPesterSeedAvailable
-        $otherVersions = @(Get-Module -ListAvailable Pester | Where-Object { $_.Version -ne [Version]'5.9.1' })
+        $otherVersions = @(Get-Module -ListAvailable Pester | Where-Object { $_.Version -ne [Version]'6.1.0' })
         $cache = New-TestDirectory
         try {
             $result = Invoke-PesterBootstrap -CacheRoot $cache
@@ -103,8 +103,8 @@ Describe 'pester-bootstrap: a different global Pester version' {
             $result.ExitCode | Should -Be 0
             # The loaded module must come from the cache, never from a global
             # module root such as Program Files or the user's Documents.
-            $result.Output | Should -Match 'Loaded Pester 5\.9\.1'
-            $result.Output | Should -Match ([regex]::Escape((Join-Path $cache 'Pester\5.9.1')))
+            $result.Output | Should -Match 'Loaded Pester 6\.1\.0'
+            $result.Output | Should -Match ([regex]::Escape((Join-Path $cache 'Pester\6.1.0')))
             if ($otherVersions.Count -gt 0) {
                 # A divergent global Pester really is visible on this machine
                 # (Windows carries 3.4.0 inbox): prove the pin still won.

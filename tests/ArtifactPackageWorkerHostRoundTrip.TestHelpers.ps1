@@ -1,5 +1,5 @@
 # Shared setup for ArtifactPackageWorkerHostRoundTrip.Tests.ps1.
-# Dot-sourced from each Describe block's BeforeAll: Pester 5 runs every
+# Dot-sourced from each Describe block's BeforeAll: Pester 6 runs every
 # container in a separate session state, so functions and variables defined
 # at file scope are not visible inside It blocks.
 

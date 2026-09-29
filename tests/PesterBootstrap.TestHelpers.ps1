@@ -1,5 +1,5 @@
 # Shared setup for PesterBootstrap.Tests.ps1.
-# Dot-sourced from each Describe block's BeforeAll: Pester 5 runs every
+# Dot-sourced from each Describe block's BeforeAll: Pester 6 runs every
 # container in a separate session state, so functions and variables defined
 # at file scope are not visible inside It blocks.
 
@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 
 $script:BootstrapScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/omp/pester-bootstrap.ps1'
 $script:RunnerScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/omp/run-script-tests.ps1'
-$script:PinnedPesterVersion = '5.9.1'
+$script:PinnedPesterVersion = '6.1.0'
 # The repository-local cache run-script-tests.ps1 restores into. It is the seed
 # for every restore case below: the bootstrap copies an already available
 # pinned Pester instead of downloading, so with this cache on the child's

@@ -1,6 +1,6 @@
 # Pester assertions are supplied by the repository's pinned module.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
-    Justification = 'Pester 5 assertions are provided by the pinned module.')]
+    Justification = 'Pester 6 assertions are provided by the pinned module.')]
 param()
 
 Describe 'Local CI telemetry writer' {

@@ -1,6 +1,6 @@
-# Pester 5 parameters come from the pinned module, not the inbox 3.4.0 profile.
+# Pester 6 parameters come from the pinned module, not the inbox 3.4.0 profile.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
-    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+    Justification = 'Pester 6 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
 param()
 
 # Exercise the production SQL-copy section without publishing apps or installing a runtime.

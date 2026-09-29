@@ -1,6 +1,6 @@
-# Pester 5 assertions are supplied by the repository's pinned module.
+# Pester 6 assertions are supplied by the repository's pinned module.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
-    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+    Justification = 'Pester 6 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
 param()
 
 Describe 'Module definition setup table union' {

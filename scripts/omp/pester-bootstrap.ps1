@@ -30,7 +30,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [string] $RequiredVersion = '5.9.1',
+    [string] $RequiredVersion = '6.1.0',
 
     [Parameter(Mandatory = $false)]
     [string] $CacheRoot = ''
@@ -56,7 +56,7 @@ function Get-PinnedPesterCachePath {
         return $null
     }
     # The directory name is a claim; the manifest is the fact. A hand-copied or
-    # half-restored folder named 5.9.1 that carries another version would otherwise
+    # half-restored folder named 6.1.0 that carries another version would otherwise
     # be served as the pin (independent review, 2026-09-05).
     $declared = Get-PesterManifestVersion -ManifestPath $manifest
     if ($declared -ne $RequiredVersion) {
@@ -144,7 +144,7 @@ function Restore-PinnedPester {
     # every property the cache exists for (import by full path, nothing global
     # consulted at import time) without a network round-trip. The version is taken
     # from its manifest, never from the folder name. (Independent review, 2026-09-05:
-    # on a developer box with 5.9.1 installed globally the old runner worked and the
+    # on a developer box with 6.1.0 installed globally the old runner worked and the
     # gallery-only restore regressed it.)
     $global = @(Get-Module -ListAvailable -Name Pester | Where-Object {
         $_.Version.ToString() -eq $RequiredVersion -and (Test-Path -LiteralPath (Join-Path $_.ModuleBase 'Pester.psd1') -PathType Leaf)

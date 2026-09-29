@@ -1,9 +1,9 @@
 #Requires -Version 5.1
-# Pester 5's 'Should -Be/-Not -Be/-Match' parameters are provided by the pinned
-# Pester module (5.9.1), not by the inbox Pester 3.4.0 profile the compatibility
+# Pester 6's 'Should -Be/-Not -Be/-Match' parameters are provided by the pinned
+# Pester module (6.1.0), not by the inbox Pester 3.4.0 profile the compatibility
 # rule measures against; suppress for the whole file, not per assertion.
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '',
-    Justification = 'Pester 5 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
+    Justification = 'Pester 6 dialect: parameters come from the pinned Pester module, not the inbox 3.4.0 profile.')]
 param()
 <#
 .SYNOPSIS
@@ -25,7 +25,7 @@ param()
     Signature *status* is passed in rather than read from disk here, so the
     decision can be proven without shipping signed and unsigned test binaries.
 
-    Pester 5 runs every container in a separate session state, so the shared
+    Pester 6 runs every container in a separate session state, so the shared
     harness (gate path + Invoke-Gate) lives in
     Assert-RunnerSignature.TestHelpers.ps1 and is dot-sourced from each
     Describe block's BeforeAll.

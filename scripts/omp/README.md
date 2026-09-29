@@ -294,8 +294,8 @@ companion repository, not in public module repositories.
 
 `run-script-tests.ps1` is the canonical entry point for the Pester script test
 suites (`tests/*.Tests.ps1`), wired as a blocking step in the pre-push hook
-(via `scripts/local-ci.ps1`) and in `ci.yml`. The suites use the **Pester 5**
-dialect and the runner pins **Pester 5.9.1**. The pin is satisfied from the
+(via `scripts/local-ci.ps1`) and in `ci.yml`. The suites use the **Pester 6**
+dialect and the runner pins **Pester 6.1.0**. The pin is satisfied from the
 repository-local module cache `<repoRoot>/.psmodules` (gitignored):
 `pester-bootstrap.ps1` restores the exact version from PSGallery when the
 cache is empty and prepends the cache to the current process's `PSModulePath`
@@ -304,7 +304,7 @@ carries 3.4.0 inbox), runs the suites identically. The runner is invoked via
 `powershell.exe` because one suite spawns child `powershell.exe` processes as
 a Windows requirement; the pin concerns the Pester module, not the engine. Shared per-suite harness code lives in
 `tests/*.TestHelpers.ps1` and is dot-sourced from each `Describe` block's
-`BeforeAll` (Pester 5 runs containers in a separate session state, so
+`BeforeAll` (Pester 6 runs containers in a separate session state, so
 file-scope functions and variables are not visible inside `It` blocks). Exit
 contract: exit 1 when any test fails, exit 0 otherwise — `Invoke-Pester` never
 sets `$LASTEXITCODE`, so the explicit exit in the runner IS the contract.

@@ -44,7 +44,7 @@ pre-push hook. "CI" is `.github/workflows/ci.yml`.
 
 | Repo | Test projects on `origin/main` | Framework | Pins | Local gate runs tests | CI runs tests |
 |---|---|---|---|---|---|
-| **OpenModulePlatform** | 8 xUnit projects (`Bootstrapper.Tests`, `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`, `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`) + 14 Pester 5 suites in `tests/*.Tests.ps1` | xUnit + Playwright; Pester 5 (5.9.1) | CPM | Yes: `dotnet test` per project, Pester suites, zero-execution TRX gate | Yes: `dotnet test` (Integration, lease and `Category=Ui` excluded by filter), Pester suites, TRX gate |
+| **OpenModulePlatform** | 8 xUnit projects (`Bootstrapper.Tests`, `HostAgent.Runtime.Tests`, `Portal.Tests`, `UiTests`, `Web.Shared.Analyzers.Tests`, `Worker.Abstractions.Tests`, `WorkerManager.WindowsService.Tests`, `WorkerProcessHost.Tests`) + 17 Pester 6 suites in `tests/*.Tests.ps1` | xUnit + Playwright; Pester 6 (6.1.0) | CPM | Yes: `dotnet test` per project, Pester suites, zero-execution TRX gate | Yes: `dotnet test` (Integration, lease and `Category=Ui` excluded by filter), Pester suites, TRX gate |
 | **Contoso** | 4 (`Contoso.Tests`, `Contoso.ChannelTypes.FileDrop.Tests`, `Contoso.ChannelTypes.ImageCompose.Tests`, `Contoso.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No (build + validate only) |
 | **Fabrikam** | 2 (`Fabrikam.Tests`, `Fabrikam.UiTests`) | xUnit + Playwright | CPM | Yes | No |
 | **Northwind** | 3 (`Northwind.Runtime.Tests`, `Northwind.Web.Tests`, `Northwind.UiTests`) | xUnit + SkippableFact + Playwright | CPM | Yes | No |
@@ -111,11 +111,13 @@ in the per-repo table.
   (`DOTNET_ROLL_FORWARD=Disable`) runs weekly. It provisions LocalDB and runs `dotnet test` with a
   `--filter` whose exclusions are registered in `docs/TEST_DEBT.md`, then the Pester suites, then
   the zero-execution TRX gate.
-- **Pester:** the suites use the Pester 5 dialect; `run-script-tests.ps1` pins Pester 5.9.1,
-  restored on demand into the repo-local `.psmodules` cache by `scripts/omp/pester-bootstrap.ps1`
+- **Pester:** the suites use the Pester 6 dialect (`Should -Be` etc., unchanged
+  from Pester 5, so the 2026-09 migration needed no suite rewrites);
+  `run-script-tests.ps1` pins Pester 6.1.0, restored on demand into the
+  repo-local `.psmodules` cache by `scripts/omp/pester-bootstrap.ps1`
   (process-local `PSModulePath`, so a divergent global Pester cannot affect the run). Per-suite
   harness code lives in `tests/*.TestHelpers.ps1`, dot-sourced from each `Describe` block's
-  `BeforeAll` because Pester 5 runs containers in a separate session state. CI invokes the
+  `BeforeAll` because Pester 6 runs containers in a separate session state. CI invokes the
   runner with `shell: powershell` (Windows PowerShell 5.1) because one suite spawns child
   `powershell.exe` processes; the local gate (`scripts/local-ci.ps1`) runs it in the current
   shell, which the pinned runner supports for both Windows PowerShell and pwsh.
@@ -238,6 +240,12 @@ done and recorded in the changelog.
 Newest first. Earlier versions of this document carried these entries as struck-through text and
 dated banners inside the audit body; they were consolidated into sections 1-3 on 2026-09-06.
 
+- **2026-09-29** - Pester 5.9.1 to 6.1.0: `run-script-tests.ps1` pins Pester 6.1.0
+  (exact). Pester 6 ships a net462 binary and runs on Windows PowerShell 5.1,
+  so the `shell: powershell` CI step and the child-`powershell.exe` suites are
+  unaffected; the Pester 5 `Should -Be` dialect carries over unchanged into
+  Pester 6, so no suite rewrites were needed (comments/justifications updated
+  to say Pester 6). All 17 suites green on both powershell.exe 5.1 and pwsh.
 - **2026-09-06** - Consolidated the document: one measured state table, standard, open work,
   changelog. Re-measured every `Directory.Packages.props` on `origin/main`: family-wide
   `Microsoft.NET.Test.Sdk` 18.9.0, `xunit` 2.9.3, `xunit.runner.visualstudio` 4.0.0,

@@ -9,19 +9,21 @@
     pre-push gate (.githooks/pre-push.ps1) and GitHub CI
     (.github/workflows/ci.yml).
 
-    The suites use the Pester 5 dialect ('Should -Be' etc.); the Pester 3.4.0
-    legacy dialect ('Should Be') was removed in Pester 5, and the suites were
-    migrated off it in 2026-09. Pester 3.4.0 ships inbox with Windows
-    PowerShell 5.1 but is EOL, so the module is pinned to an explicit 5.x
-    version instead of floating to whatever a machine happens to carry.
-    Callers invoke this runner via powershell.exe so the parent and spawned
-    child processes share the same engine: the suites stay on Windows
-    PowerShell 5.1 because one suite spawns child powershell.exe processes as
-    a Windows requirement -- it is the Pester MODULE version that is pinned,
-    not the engine requirement.
+    The suites use the Pester 6 dialect ('Should -Be' etc., unchanged from
+    Pester 5); the Pester 3.4.0 legacy dialect ('Should Be') was removed in
+    Pester 5, and the suites were migrated off it in 2026-09. Pester 3.4.0
+    ships inbox with Windows PowerShell 5.1 but is EOL, so the module is
+    pinned to an explicit 6.x version instead of floating to whatever a
+    machine happens to carry. Callers invoke this runner via powershell.exe
+    so the parent and spawned child processes share the same engine: the
+    suites stay on Windows PowerShell 5.1 because one suite spawns child
+    powershell.exe processes as a Windows requirement -- it is the Pester
+    MODULE version that is pinned, not the engine requirement. Pester 6.1.0
+    ships a net462 binary and runs on Windows PowerShell 5.1 (verified
+    2026-09-29: all suites green on both powershell.exe 5.1 and pwsh).
 
     Shared per-suite harness code lives in tests/*.TestHelpers.ps1 and is
-    dot-sourced from each Describe block's BeforeAll, because Pester 5 runs
+    dot-sourced from each Describe block's BeforeAll, because Pester 6 runs
     every container in a separate session state where file-scope functions
     and variables are not visible.
 
@@ -51,7 +53,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Pin Pester 5.9.1 explicitly: the suites use the Pester 5 dialect, and
+# Pin Pester 6.1.0 explicitly: the suites use the Pester 6 dialect, and
 # Windows carries Pester 3.4.0 inbox in the module path, so auto-load could
 # silently pick the wrong version and fail every suite with
 # CommandNotFoundException ('Should -Be' does not exist in Pester 3.4). The
@@ -60,7 +62,7 @@ $ErrorActionPreference = 'Stop'
 # from PSGallery when the cache is empty and prepends the cache to THIS
 # PROCESS's module path only, so neither a missing nor a diverging global
 # Pester installation can affect the run.
-$script:RequiredPesterVersion = '5.9.1'
+$script:RequiredPesterVersion = '6.1.0'
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $PSScriptRoot 'pester-bootstrap.ps1')
 $pesterModulePath = Ensure-PinnedPester -RequiredVersion $script:RequiredPesterVersion -CacheRoot (Join-Path $repoRoot '.psmodules')

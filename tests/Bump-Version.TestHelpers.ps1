@@ -1,5 +1,5 @@
 # Shared setup for Bump-Version.Tests.ps1.
-# Dot-sourced from each Describe block's BeforeAll: Pester 5 runs every
+# Dot-sourced from each Describe block's BeforeAll: Pester 6 runs every
 # container in a separate session state, so functions and variables defined
 # at file scope are not visible inside It blocks.
 
@@ -115,7 +115,7 @@ function Invoke-BumpVersion {
     REAL exit code. A child process is required for a meaningful exit-code
     assertion: an in-process & call never sets $LASTEXITCODE for a script, so
     the ambient value leaked between Pester containers ($LASTEXITCODE is
-    updated process-wide; Pester 5's session-state isolation does not cover
+    updated process-wide; Pester 6's session-state isolation does not cover
     it) and made the old assertion depend on whichever unrelated test ran
     last.
     #>
