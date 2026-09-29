@@ -133,11 +133,13 @@ The manifest root also carries source provenance: `sourceRepositoryKey`,
 which source repository, release version, and commit the package was exported
 from, and whether the source tree was dirty at export time. Importers treat all
 four as optional operator-facing metadata and ignore unknown fields, so older
-packages keep working. A package exported from a consumer repository that
-compiles against sibling repositories (`sharedDependencies` in its
-`omp-components.json`) also carries an optional `sharedSources` array with one
-`{ repositoryKey, commitSha, dirty }` entry per sibling, and its `sourceDirty`
-is true when any of those sources was dirty.
+packages keep working. When a component published in the export compiled
+against a sibling repository (`sharedDependencies` in the consumer's
+`omp-components.json`, with the component among the dependency's `consumers`),
+the manifest also carries an optional `sharedSources` array with one
+`{ repositoryKey, commitSha, dirty }` entry per such sibling, and `sourceDirty`
+is true when any of those sources was dirty. Siblings behind reused packages or
+other components contribute no bytes and are not listed.
 
 Widget import version rules are intentionally the same across Portal and
 HostAgent unattended imports:
@@ -301,8 +303,9 @@ not on `git status --porcelain`: under `core.autocrlf=true` a file can be listed
 as modified although its content is identical, while a byte change git itself
 records (for example a CRLF rewrite with no normalization configured) is dirty,
 because those are the bytes the build would ship. The same gate applies to the
-sibling repositories behind `sharedDependencies`; Check 14 only warns about a
-dirty sibling, the package build refuses it. The canonical implementation lives
+sibling repositories behind `sharedDependencies` that a component published in
+this run compiles against; Check 14 only warns about a dirty sibling, the
+package build refuses it. The canonical implementation lives
 in `scripts/omp/source-provenance.ps1`.
 
 All generators must produce the same object bytes for the same source inputs.

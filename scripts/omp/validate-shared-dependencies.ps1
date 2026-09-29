@@ -72,9 +72,10 @@
     verification itself succeeded there -- the warning only says the recorded
     treeId will go stale when the uncommitted edits are committed. Package
     builds do not rely on this warning: export-universal-package.ps1 refuses a
-    dirty sibling behind sharedDependencies exactly like a dirty own tree
-    (Assert-OmpSharedSourcesClean in source-provenance.ps1), unless
-    -AllowDirtySource is passed and the package is stamped sourceDirty=true.
+    dirty sibling that a component published in the build compiles against,
+    exactly like a dirty own tree (Assert-OmpSharedSourcesClean in
+    source-provenance.ps1), unless -AllowDirtySource is passed and the package
+    is stamped sourceDirty=true.
 #>
 [CmdletBinding()]
 param(

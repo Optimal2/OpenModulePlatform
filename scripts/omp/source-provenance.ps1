@@ -170,9 +170,12 @@ function Get-OmpSharedSourceRoots {
         consumer's omp-components.json, in the same order Check 14
         (validate-shared-dependencies.ps1) uses -- an explicit root, then the
         OpenModulePlatformRoot environment variable, then each dependency's
-        repositoryPathHint relative to the consumer root. The consumer's own
-        root is never returned. Returns an empty array when the manifest is
-        missing or declares no shared dependencies.
+        repositoryPathHint relative to the consumer root. Each entry carries
+        the union of the dependencies' consumers (component keys); an empty
+        list means a dependency declared no consumers and counts for every
+        component. The consumer's own root is never returned. Returns an
+        empty array when the manifest is missing or declares no shared
+        dependencies.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
@@ -191,8 +194,7 @@ function Get-OmpSharedSourceRoots {
         return @()
     }
 
-    $roots = New-Object System.Collections.Generic.List[object]
-    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $byRoot = [ordered]@{}
     foreach ($dependency in @($property.Value)) {
         $siblingRoot = $ExplicitRoot
         if ([string]::IsNullOrWhiteSpace($siblingRoot)) {
@@ -214,38 +216,81 @@ function Get-OmpSharedSourceRoots {
             continue
         }
 
-        if ($seen.Add($siblingRoot)) {
+        $key = $siblingRoot.ToUpperInvariant()
+        if (-not $byRoot.Contains($key)) {
             $keyProperty = $dependency.PSObject.Properties['repositoryKey']
-            $roots.Add([pscustomobject]@{
+            $byRoot[$key] = [pscustomobject]@{
                 RepositoryKey  = $(if ($null -ne $keyProperty) { [string]$keyProperty.Value } else { '' })
                 RepositoryRoot = $siblingRoot
-            })
+                Consumers      = New-Object System.Collections.Generic.List[string]
+                AllConsumers   = $false
+            }
+        }
+
+        $entry = $byRoot[$key]
+        $consumersProperty = $dependency.PSObject.Properties['consumers']
+        $consumers = @()
+        if ($null -ne $consumersProperty -and $null -ne $consumersProperty.Value) {
+            $consumers = @($consumersProperty.Value | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        }
+        if ($consumers.Count -eq 0) {
+            $entry.AllConsumers = $true
+        }
+        foreach ($consumer in $consumers) {
+            $entry.Consumers.Add(([string]$consumer).Trim())
         }
     }
 
-    return $roots.ToArray()
+    return @($byRoot.Values)
+}
+
+function Test-OmpSharedSourceConsumedBy {
+    <#
+    .SYNOPSIS
+        True when the component compiles against the shared source: it is
+        listed among the dependency consumers, or a dependency on that
+        repository declared no consumers at all.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][object]$SharedSource,
+        [Parameter(Mandatory = $true)][string]$ComponentKey
+    )
+
+    if ($SharedSource.AllConsumers) {
+        return $true
+    }
+
+    foreach ($consumer in $SharedSource.Consumers) {
+        if ([string]::Equals($consumer, $ComponentKey, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+
+    return $false
 }
 
 function Assert-OmpSharedSourcesClean {
     <#
     .SYNOPSIS
-        Applies the dirty-tree gate to every sibling repository a consumer
-        build compiles against. Check 14 only warns about a dirty sibling --
-        the verification itself still succeeds there -- but a package build
-        from one ships the uncommitted shared code under the consumer's
-        unchanged version, so the package build refuses it exactly like a
-        dirty own tree. A sibling that is missing or not a checkout cannot be
-        verified and fails the build even with -AllowDirtySource: the build
-        compiles against it, so its state is part of what ships.
+        Applies the dirty-tree gate to the sibling repositories a build
+        compiles against. Callers pass only the shared sources consumed by the
+        components this invocation actually publishes; a sibling that
+        contributes no package bytes is none of the package's business.
+        Check 14 only warns about a dirty sibling -- the verification itself
+        still succeeds there -- but a package build from one ships the
+        uncommitted shared code under the consumer's unchanged version, so the
+        package build refuses it exactly like a dirty own tree. A sibling that
+        is missing or not a checkout cannot be verified and fails even with
+        -AllowDirtySource: the build compiles against it, so its state is part
+        of what ships.
     #>
     param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
-        [string]$ExplicitRoot = '',
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$SharedSources,
         [switch]$AllowDirtySource
     )
 
     $results = New-Object System.Collections.Generic.List[object]
-    foreach ($shared in @(Get-OmpSharedSourceRoots -RepositoryRoot $RepositoryRoot -ExplicitRoot $ExplicitRoot)) {
+    foreach ($shared in $SharedSources) {
         if (-not (Test-Path -LiteralPath $shared.RepositoryRoot -PathType Container)) {
             throw "Shared dependency repository '$($shared.RepositoryRoot)' was not found. The package build compiles against it, so it must be present and verified clean."
         }

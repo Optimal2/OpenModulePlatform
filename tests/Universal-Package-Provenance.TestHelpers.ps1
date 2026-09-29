@@ -9,6 +9,7 @@ $script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $script:SourceProvenanceScript = Join-Path $script:RepoRoot 'scripts\omp\source-provenance.ps1'
 $script:ExportScript = Join-Path $script:RepoRoot 'scripts\omp\export-universal-package.ps1'
 $script:ArtifactPackageScript = Join-Path $script:RepoRoot 'scripts\deployment\new-omp-artifact-package.ps1'
+$script:ObjectBuilderScript = Join-Path $script:RepoRoot 'scripts\omp\build-repository-objects.ps1'
 
 function New-ProvenanceRepo {
     <#
@@ -85,11 +86,19 @@ function New-ProvenanceConsumer {
         Creates a consumer repository whose omp-components.json declares a
         shared dependency on a sibling repository next to it (the layout
         validate-shared-dependencies.ps1 documents). Both are real git
-        checkouts; -DirtySibling leaves an uncommitted edit in the sibling
-        while the consumer itself stays clean.
+        checkouts. The consumer has two components with project folders:
+        provenance-app consumes the sibling, other-app does not. The folders
+        hold no project file, so the object builder gets as far as its
+        shared-source gate and then skips publishing them. The sibling carries
+        a stub scripts/deployment/new-omp-artifact-package.ps1 so the builder
+        accepts it as the OpenModulePlatform root. -DirtySibling leaves an
+        uncommitted edit in the sibling while the consumer stays clean;
+        -ReusedPackage puts an existing provenance-app package under the
+        consumer's artifacts folder, which the builder reuses.
     #>
     param(
-        [switch]$DirtySibling
+        [switch]$DirtySibling,
+        [switch]$ReusedPackage
     )
 
     $parent = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-provenance-consumer-' + [Guid]::NewGuid().ToString('N'))
@@ -109,13 +118,17 @@ function New-ProvenanceConsumer {
     }
 
     [System.IO.File]::WriteAllText((Join-Path $sibling 'shared.txt'), "shared`n", $utf8)
-    & git -C $sibling add shared.txt
+    $stubFolder = Join-Path $sibling 'scripts/deployment'
+    New-Item -ItemType Directory -Path $stubFolder -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $stubFolder 'new-omp-artifact-package.ps1'), "throw 'stub: the provenance fixture never publishes'`n", $utf8)
+    & git -C $sibling add -A
     & git -C $sibling commit -q -m 'sibling baseline'
 
     $manifest = @'
 {
   "repositoryKey": "provenance-consumer",
   "repositoryVersion": "0.0.1",
+  "moduleDefinitions": [],
   "sharedDependencies": [
     {
       "repositoryKey": "provenance-sibling",
@@ -125,12 +138,51 @@ function New-ProvenanceConsumer {
       "consumers": [ "provenance-app" ]
     }
   ],
-  "components": []
+  "components": [
+    {
+      "componentKey": "provenance-app",
+      "moduleKey": "provmod",
+      "appKey": "provapp",
+      "packageType": "web-app",
+      "targetName": "prov-target",
+      "version": "1.0.0",
+      "projectPath": "App"
+    },
+    {
+      "componentKey": "other-app",
+      "moduleKey": "provmod",
+      "appKey": "otherapp",
+      "packageType": "web-app",
+      "targetName": "other-target",
+      "version": "1.0.0",
+      "projectPath": "Other"
+    }
+  ]
 }
 '@
     [System.IO.File]::WriteAllText((Join-Path $consumer 'omp-components.json'), $manifest.Replace("`r`n", "`n"), $utf8)
-    & git -C $consumer add omp-components.json
+    foreach ($folder in @('App', 'Other')) {
+        New-Item -ItemType Directory -Path (Join-Path $consumer $folder) -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $consumer "$folder/README.txt"), "no project file`n", $utf8)
+    }
+    & git -C $consumer add -A
     & git -C $consumer commit -q -m 'consumer baseline'
+
+    if ($ReusedPackage) {
+        $artifacts = Join-Path $consumer 'artifacts'
+        New-Item -ItemType Directory -Path $artifacts -Force | Out-Null
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zipPath = Join-Path $artifacts 'provmod__provapp__web-app__prov-target__1.0.0.zip'
+        $archive = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+            $entry = $archive.CreateEntry('payload/app.txt')
+            $writer = New-Object System.IO.StreamWriter($entry.Open(), $utf8)
+            try { $writer.Write('reused') } finally { $writer.Dispose() }
+        }
+        finally {
+            $archive.Dispose()
+        }
+    }
 
     $siblingHead = (git -C $sibling rev-parse HEAD | Out-String).Trim()
     if ($DirtySibling) {

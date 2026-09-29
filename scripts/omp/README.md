@@ -89,7 +89,8 @@ fails the build unless `-AllowDirtySource` is passed for local
 troubleshooting; such a build is stamped `sourceDirty=true`. "Clean" means the
 release tooling's content questions (`git diff --name-only`, `--cached`, and
 `git ls-files --others --exclude-standard`) find nothing, in the repository
-itself and in every sibling repository behind `sharedDependencies`.
+itself and in every sibling repository behind `sharedDependencies` that a
+component published in this build compiles against.
 
 Use `validate-module-definitions.ps1` before packaging or in CI to catch
 manifest/module-definition version drift and stale embedded SQL content. If you

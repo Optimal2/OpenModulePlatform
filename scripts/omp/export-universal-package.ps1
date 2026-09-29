@@ -597,12 +597,6 @@ $repositoryRoot = [System.IO.Path]::GetFullPath($RepositoryRoot)
 # Fail fast on a dirty source tree, before creating any package objects: the
 # same version must never leave with different content and no trace of it.
 $sourceProvenance = Assert-OmpSourceTreeClean -RepositoryRoot $repositoryRoot -AllowDirtySource:$AllowDirtySource
-# A consumer compiles against the sibling repositories behind its
-# sharedDependencies. Check 14 only warns when one of them is dirty; the package
-# build refuses it like a dirty own tree, and the built artifacts count as dirty
-# when any source they were compiled from was.
-$sharedSourceProvenance = @(Assert-OmpSharedSourcesClean -RepositoryRoot $repositoryRoot -ExplicitRoot $OmpRepositoryRoot -AllowDirtySource:$AllowDirtySource)
-$anySourceDirty = $sourceProvenance.Dirty -or @($sharedSourceProvenance | Where-Object { $_.Dirty }).Count -gt 0
 # Validate before creating any package objects, including reuse of existing artifacts.
 & (Join-Path $scriptDirectory 'validate-module-definitions.ps1') -RepositoryRoot $repositoryRoot
 & (Join-Path $scriptDirectory 'Test-ModuleSqlGuards.ps1') -RepositoryRoot $repositoryRoot
@@ -675,6 +669,7 @@ if (-not (Test-Path -LiteralPath $buildRepositoryObjectsScript -PathType Leaf)) 
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-universal-export-' + [Guid]::NewGuid().ToString('N'))
 $objectRoot = Join-Path $tempRoot 'objects'
+$sharedSourceReportPath = Join-Path $tempRoot 'shared-sources.json'
 
 try {
     $builderArgs = @{
@@ -682,7 +677,16 @@ try {
         OutputRoot = $objectRoot
         Configuration = $Configuration
         SourceCommitSha = $sourceProvenance.CommitSha
-        SourceDirty = $anySourceDirty
+        SourceDirty = $sourceProvenance.Dirty
+        # A consumer compiles against the sibling repositories behind its
+        # sharedDependencies. Check 14 only warns when one of them is dirty; the
+        # package build refuses a dirty sibling that a component published in
+        # this run compiles against, like a dirty own tree, before anything is
+        # published. Siblings behind reused packages or other components are
+        # not part of this package's bytes and are neither gated nor stamped.
+        EnforceCleanSharedSources = $true
+        AllowDirtySource = [bool]$AllowDirtySource
+        SharedSourceReportPath = $sharedSourceReportPath
     }
 
     if (-not [string]::IsNullOrWhiteSpace($OmpRepositoryRoot)) {
@@ -722,6 +726,12 @@ try {
     }
 
     & $buildRepositoryObjectsScript @builderArgs
+
+    $sharedSourceProvenance = @()
+    if (Test-Path -LiteralPath $sharedSourceReportPath -PathType Leaf) {
+        $sharedSourceProvenance = @(Get-Content -LiteralPath $sharedSourceReportPath -Raw -Encoding UTF8 | ConvertFrom-Json | ForEach-Object { $_ })
+    }
+    $anySourceDirty = [bool]$sourceProvenance.Dirty -or @($sharedSourceProvenance | Where-Object { $_.dirty }).Count -gt 0
 
     if (-not [string]::IsNullOrWhiteSpace($resolvedHostProfilePath)) {
         Invoke-HostProfileObjectHook `
@@ -788,14 +798,14 @@ try {
         items = $manifestItems
     }
 
-    # Optional on read, like the other source fields: present only for a
-    # consumer that compiles against sibling repositories.
+    # Optional on read, like the other source fields: present only when a
+    # component published in this run compiled against a sibling repository.
     if ($sharedSourceProvenance.Count -gt 0) {
         $manifest.sharedSources = @($sharedSourceProvenance | ForEach-Object {
             [ordered]@{
-                repositoryKey = $_.RepositoryKey
-                commitSha = $_.CommitSha
-                dirty = $_.Dirty
+                repositoryKey = [string]$_.repositoryKey
+                commitSha = [string]$_.commitSha
+                dirty = [bool]$_.dirty
             }
         })
     }

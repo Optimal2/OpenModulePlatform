@@ -144,6 +144,32 @@ Describe 'shared source gate' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'Universal-Package-Provenance.TestHelpers.ps1')
         . $script:SourceProvenanceScript
+
+        function Invoke-ObjectBuilder {
+            param(
+                [Parameter(Mandatory = $true)][hashtable]$Consumer,
+                [Parameter(Mandatory = $true)][string]$ComponentKey,
+                [string]$ReportPath = '',
+                [switch]$AllowDirtySource
+            )
+
+            $arguments = @(
+                '-RepositoryRoot', $Consumer.Root,
+                '-OmpRepositoryRoot', $Consumer.Sibling,
+                '-OutputRoot', (Join-Path $Consumer.Parent 'objects'),
+                '-ComponentKey', $ComponentKey,
+                '-SourceCommitSha', 'fixture',
+                '-EnforceCleanSharedSources'
+            )
+            if (-not [string]::IsNullOrWhiteSpace($ReportPath)) {
+                $arguments += @('-SharedSourceReportPath', $ReportPath)
+            }
+            if ($AllowDirtySource) {
+                $arguments += '-AllowDirtySource'
+            }
+
+            return Invoke-ChildScript -ScriptPath $script:ObjectBuilderScript -Arguments $arguments
+        }
     }
 
     BeforeEach {
@@ -157,23 +183,26 @@ Describe 'shared source gate' {
         $env:OpenModulePlatformRoot = $script:SavedOmpRoot
     }
 
-    It 'Resolves the sibling behind sharedDependencies like Check 14' {
+    It 'Resolves the sibling behind sharedDependencies like Check 14, with its consumers' {
         $consumer = New-ProvenanceConsumer
         try {
             $roots = @(Get-OmpSharedSourceRoots -RepositoryRoot $consumer.Root)
             $roots.Count | Should -Be 1
             $roots[0].RepositoryKey | Should -Be 'provenance-sibling'
             $roots[0].RepositoryRoot | Should -Be ([System.IO.Path]::GetFullPath($consumer.Sibling))
+            (Test-OmpSharedSourceConsumedBy -SharedSource $roots[0] -ComponentKey 'provenance-app') | Should -Be $true
+            (Test-OmpSharedSourceConsumedBy -SharedSource $roots[0] -ComponentKey 'other-app') | Should -Be $false
         }
         finally { Remove-ProvenanceConsumer -Consumer $consumer }
     }
 
-    It 'Refuses a dirty sibling without the switch and stamps it with the switch' {
+    It 'Refuses a dirty sibling without the switch and reports it with the switch' {
         $consumer = New-ProvenanceConsumer -DirtySibling
         try {
+            $roots = @(Get-OmpSharedSourceRoots -RepositoryRoot $consumer.Root)
             $threw = $false
             try {
-                Assert-OmpSharedSourcesClean -RepositoryRoot $consumer.Root | Out-Null
+                Assert-OmpSharedSourcesClean -SharedSources $roots | Out-Null
             }
             catch {
                 $threw = $true
@@ -182,7 +211,7 @@ Describe 'shared source gate' {
             }
 
             $threw | Should -Be $true
-            $shared = @(Assert-OmpSharedSourcesClean -RepositoryRoot $consumer.Root -AllowDirtySource)
+            $shared = @(Assert-OmpSharedSourcesClean -SharedSources $roots -AllowDirtySource)
             $shared.Count | Should -Be 1
             $shared[0].Dirty | Should -Be $true
             $shared[0].CommitSha | Should -Be $consumer.SiblingHead
@@ -193,10 +222,11 @@ Describe 'shared source gate' {
     It 'Fails when the sibling is missing, even with the switch' {
         $consumer = New-ProvenanceConsumer
         try {
+            $roots = @(Get-OmpSharedSourceRoots -RepositoryRoot $consumer.Root)
             Remove-Item -LiteralPath $consumer.Sibling -Recurse -Force
             $threw = $false
             try {
-                Assert-OmpSharedSourcesClean -RepositoryRoot $consumer.Root -AllowDirtySource | Out-Null
+                Assert-OmpSharedSourcesClean -SharedSources $roots -AllowDirtySource | Out-Null
             }
             catch {
                 $threw = $true
@@ -214,6 +244,57 @@ Describe 'shared source gate' {
             @(Get-OmpSharedSourceRoots -RepositoryRoot $repo.Root).Count | Should -Be 0
         }
         finally { Remove-ProvenanceRepo -Repo $repo }
+    }
+
+    It 'Refuses to build a consuming component while its sibling is dirty' {
+        $consumer = New-ProvenanceConsumer -DirtySibling
+        try {
+            $result = Invoke-ObjectBuilder -Consumer $consumer -ComponentKey 'provenance-app'
+            ($result.ExitCode -ne 0) | Should -Be $true
+            ($result.Output -match 'dirty source tree') | Should -Be $true
+            ($result.Output -match 'SharedSibling') | Should -Be $true
+        }
+        finally { Remove-ProvenanceConsumer -Consumer $consumer }
+    }
+
+    It 'Neither gates nor stamps a dirty sibling that a built component does not consume' {
+        $consumer = New-ProvenanceConsumer -DirtySibling
+        $report = Join-Path $consumer.Parent 'shared-sources.json'
+        try {
+            $result = Invoke-ObjectBuilder -Consumer $consumer -ComponentKey 'other-app' -ReportPath $report
+            $result.ExitCode | Should -Be 0
+            ($result.Output -match 'dirty source tree') | Should -Be $false
+            @(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json | ForEach-Object { $_ }).Count | Should -Be 0
+        }
+        finally { Remove-ProvenanceConsumer -Consumer $consumer }
+    }
+
+    It 'Neither gates nor stamps a dirty sibling behind a reused package' {
+        $consumer = New-ProvenanceConsumer -DirtySibling -ReusedPackage
+        $report = Join-Path $consumer.Parent 'shared-sources.json'
+        try {
+            $result = Invoke-ObjectBuilder -Consumer $consumer -ComponentKey 'provenance-app' -ReportPath $report
+            $result.ExitCode | Should -Be 0
+            ($result.Output -match 'dirty source tree') | Should -Be $false
+            @(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json | ForEach-Object { $_ }).Count | Should -Be 0
+            (Test-Path -LiteralPath (Join-Path $consumer.Parent 'objects/artifacts/provmod__provapp__web-app__prov-target__1.0.0.zip')) | Should -Be $true
+        }
+        finally { Remove-ProvenanceConsumer -Consumer $consumer }
+    }
+
+    It 'Reports the consumed dirty sibling with -AllowDirtySource' {
+        $consumer = New-ProvenanceConsumer -DirtySibling
+        $report = Join-Path $consumer.Parent 'shared-sources.json'
+        try {
+            $result = Invoke-ObjectBuilder -Consumer $consumer -ComponentKey 'provenance-app' -ReportPath $report -AllowDirtySource
+            $result.ExitCode | Should -Be 0
+            $entries = @(Get-Content -LiteralPath $report -Raw | ConvertFrom-Json | ForEach-Object { $_ })
+            $entries.Count | Should -Be 1
+            [string]$entries[0].repositoryKey | Should -Be 'provenance-sibling'
+            [string]$entries[0].commitSha | Should -Be $consumer.SiblingHead
+            [bool]$entries[0].dirty | Should -Be $true
+        }
+        finally { Remove-ProvenanceConsumer -Consumer $consumer }
     }
 }
 
@@ -255,28 +336,6 @@ Describe 'package build provenance gate' {
         }
         finally {
             Remove-ProvenanceRepo -Repo $repo
-            try { Remove-Item -LiteralPath $outputPath -Force -ErrorAction Stop } catch { }
-        }
-    }
-
-    It 'Fails a consumer build whose shared sibling is dirty' {
-        $consumer = New-ProvenanceConsumer -DirtySibling
-        $outputPath = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-prov-sibling-' + [Guid]::NewGuid().ToString('N') + '.zip')
-        $savedOmpRoot = $env:OpenModulePlatformRoot
-        $env:OpenModulePlatformRoot = $null
-        try {
-            $result = Invoke-ChildScript -ScriptPath $script:ExportScript -Arguments @(
-                '-RepositoryRoot', $consumer.Root,
-                '-OutputPath', $outputPath
-            )
-            ($result.ExitCode -ne 0) | Should -Be $true
-            ($result.Output -match 'dirty source tree') | Should -Be $true
-            ($result.Output -match 'SharedSibling') | Should -Be $true
-            (Test-Path -LiteralPath $outputPath) | Should -Be $false
-        }
-        finally {
-            $env:OpenModulePlatformRoot = $savedOmpRoot
-            Remove-ProvenanceConsumer -Consumer $consumer
             try { Remove-Item -LiteralPath $outputPath -Force -ErrorAction Stop } catch { }
         }
     }
