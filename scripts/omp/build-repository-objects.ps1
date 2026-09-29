@@ -965,7 +965,20 @@ if ($sharedSourceRoots.Count -gt 0) {
         foreach ($shared in $consumed) {
             $key = $shared.RepositoryRoot.ToUpperInvariant()
             if (-not $usedSharedSources.Contains($key)) {
-                $usedSharedSources[$key] = $shared
+                $usedSharedSources[$key] = [pscustomobject]@{
+                    RepositoryKey  = $shared.RepositoryKey
+                    RepositoryRoot = $shared.RepositoryRoot
+                    ProjectPaths   = New-Object System.Collections.Generic.List[string]
+                }
+            }
+
+            # Judge only the project folders a published component compiles
+            # against, like Check 14 does per projectPath: an untracked file
+            # elsewhere in the sibling is not part of the package's bytes.
+            foreach ($projectPath in @(Get-OmpSharedSourceProjectPaths -SharedSource $shared -ComponentKey $componentKeyValue)) {
+                if (-not $usedSharedSources[$key].ProjectPaths.Contains($projectPath)) {
+                    $usedSharedSources[$key].ProjectPaths.Add($projectPath)
+                }
             }
         }
     }
@@ -978,7 +991,7 @@ if ($usedSharedSources.Count -gt 0) {
     }
     else {
         $verified = @($usedSharedSources.Values | ForEach-Object {
-            $provenance = Get-OmpSourceProvenanceOrNull -RepositoryRoot $_.RepositoryRoot
+            $provenance = Get-OmpSourceProvenanceOrNull -RepositoryRoot $_.RepositoryRoot -Paths @($_.ProjectPaths)
             if ($null -eq $provenance) {
                 Write-Warning "Source provenance is unavailable for shared source '$($_.RepositoryRoot)'; affected artifacts are stamped dirty."
                 [pscustomobject]@{ RepositoryKey = $_.RepositoryKey; RepositoryRoot = $_.RepositoryRoot; CommitSha = ''; Dirty = $true }

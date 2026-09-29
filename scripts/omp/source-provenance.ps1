@@ -65,10 +65,13 @@ function Get-ProvenanceChangedPaths {
         Returns every path that makes the tree dirty, each prefixed with the
         question that found it (worktree:, staged:, untracked:). Throws when
         git cannot answer any of the three questions. Callers wrap the result
-        in @() so an empty answer counts as zero paths.
+        in @() so an empty answer counts as zero paths. -Paths limits every
+        question to those repository-relative paths; empty means the whole
+        tree.
     #>
     param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string[]]$Paths = @()
     )
 
     $questions = @(
@@ -77,9 +80,17 @@ function Get-ProvenanceChangedPaths {
         @{ Label = 'untracked'; Arguments = @('ls-files', '--others', '--exclude-standard') }
     )
 
+    $pathspec = @()
+    $scoped = @($Paths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($scoped.Count -gt 0 -and -not ($scoped -contains '.')) {
+        # ':(top,literal)' keeps each path relative to the repository root and
+        # free of glob interpretation.
+        $pathspec = @('--') + @($scoped | ForEach-Object { ':(top,literal)' + ([string]$_).Trim().Replace('\', '/') })
+    }
+
     $changed = New-Object System.Collections.Generic.List[string]
     foreach ($question in $questions) {
-        $answer = Invoke-SourceProvenanceGit -RepositoryRoot $RepositoryRoot -Arguments $question.Arguments
+        $answer = Invoke-SourceProvenanceGit -RepositoryRoot $RepositoryRoot -Arguments (@($question.Arguments) + $pathspec)
         if ($answer.ExitCode -ne 0) {
             throw "Could not determine whether the source tree of '$RepositoryRoot' is clean: 'git $($question.Arguments -join ' ')' exited with $($answer.ExitCode). $(($answer.Lines -join "`n")) Refusing to stamp an unknown provenance."
         }
@@ -99,10 +110,12 @@ function Get-OmpSourceProvenance {
     .SYNOPSIS
         Returns the source provenance of a repository checkout: HEAD commit SHA
         and whether the working tree is clean. Throws when git cannot answer,
-        so a build never stamps an unknown state as clean.
+        so a build never stamps an unknown state as clean. -Paths limits the
+        clean-tree verdict to those repository-relative paths.
     #>
     param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string[]]$Paths = @()
     )
 
     $root = [System.IO.Path]::GetFullPath($RepositoryRoot)
@@ -111,7 +124,7 @@ function Get-OmpSourceProvenance {
         throw "Could not determine the source commit of '$root': $(($head.Lines -join "`n")). Refusing to stamp an unknown provenance."
     }
 
-    $changedPaths = @(Get-ProvenanceChangedPaths -RepositoryRoot $root)
+    $changedPaths = @(Get-ProvenanceChangedPaths -RepositoryRoot $root -Paths $Paths)
 
     return [pscustomobject]@{
         RepositoryRoot = $root
@@ -131,11 +144,12 @@ function Get-OmpSourceProvenanceOrNull {
         instead of failing a build whose inputs are otherwise fine.
     #>
     param(
-        [Parameter(Mandatory = $true)][string]$RepositoryRoot
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string[]]$Paths = @()
     )
 
     try {
-        return Get-OmpSourceProvenance -RepositoryRoot $RepositoryRoot
+        return Get-OmpSourceProvenance -RepositoryRoot $RepositoryRoot -Paths $Paths
     }
     catch {
         return $null
@@ -147,14 +161,16 @@ function Assert-OmpSourceTreeClean {
     .SYNOPSIS
         Fails a package build on a dirty source tree unless -AllowDirtySource
         is passed for local troubleshooting. Returns the provenance either way
-        so the caller can stamp it into the package manifests.
+        so the caller can stamp it into the package manifests. -Paths limits
+        the verdict to those repository-relative paths.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [string[]]$Paths = @(),
         [switch]$AllowDirtySource
     )
 
-    $provenance = Get-OmpSourceProvenance -RepositoryRoot $RepositoryRoot
+    $provenance = Get-OmpSourceProvenance -RepositoryRoot $RepositoryRoot -Paths $Paths
     if ($provenance.Dirty -and -not $AllowDirtySource) {
         throw ("Refusing to build a package from a dirty source tree in '{0}'. Commit the changes first, or rebuild with -AllowDirtySource for local troubleshooting (the package is then stamped sourceDirty=true). Uncommitted changes:`n{1}" -f $provenance.RepositoryRoot, $provenance.ChangedPaths)
     }
@@ -173,7 +189,10 @@ function Get-OmpSharedSourceRoots {
         repositoryPathHint relative to the consumer root. Each entry carries
         the union of the dependencies' consumers (component keys); an empty
         list means a dependency declared no consumers and counts for every
-        component. The consumer's own root is never returned. Returns an
+        component. Each entry also lists its Dependencies (projectPath plus
+        consumers), so a build can judge only the project folders a published
+        component compiles against, the way Check 14 does per projectPath.
+        The consumer's own root is never returned. Returns an
         empty array when the manifest is missing or declares no shared
         dependencies.
     #>
@@ -224,6 +243,7 @@ function Get-OmpSharedSourceRoots {
                 RepositoryRoot = $siblingRoot
                 Consumers      = New-Object System.Collections.Generic.List[string]
                 AllConsumers   = $false
+                Dependencies   = New-Object System.Collections.Generic.List[object]
             }
         }
 
@@ -239,6 +259,13 @@ function Get-OmpSharedSourceRoots {
         foreach ($consumer in $consumers) {
             $entry.Consumers.Add(([string]$consumer).Trim())
         }
+
+        $projectPathProperty = $dependency.PSObject.Properties['projectPath']
+        $entry.Dependencies.Add([pscustomobject]@{
+            ProjectPath  = $(if ($null -ne $projectPathProperty) { ([string]$projectPathProperty.Value).Trim() } else { '' })
+            Consumers    = @($consumers | ForEach-Object { ([string]$_).Trim() })
+            AllConsumers = ($consumers.Count -eq 0)
+        })
     }
 
     return @($byRoot.Values)
@@ -269,13 +296,53 @@ function Test-OmpSharedSourceConsumedBy {
     return $false
 }
 
+function Get-OmpSharedSourceProjectPaths {
+    <#
+    .SYNOPSIS
+        Returns the projectPath values of the shared dependencies the
+        component compiles against, in declaration order and without
+        duplicates. A consumed dependency without a projectPath returns '.',
+        the whole repository, because nothing narrower is declared.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][object]$SharedSource,
+        [Parameter(Mandatory = $true)][string]$ComponentKey
+    )
+
+    $paths = New-Object System.Collections.Generic.List[string]
+    foreach ($dependency in $SharedSource.Dependencies) {
+        $consumed = [bool]$dependency.AllConsumers
+        foreach ($consumer in $dependency.Consumers) {
+            if ([string]::Equals($consumer, $ComponentKey, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $consumed = $true
+            }
+        }
+        if (-not $consumed) {
+            continue
+        }
+
+        $path = $dependency.ProjectPath
+        if ([string]::IsNullOrWhiteSpace($path)) {
+            $path = '.'
+        }
+        if (-not $paths.Contains($path)) {
+            $paths.Add($path)
+        }
+    }
+
+    return $paths.ToArray()
+}
+
 function Assert-OmpSharedSourcesClean {
     <#
     .SYNOPSIS
         Applies the dirty-tree gate to the sibling repositories a build
         compiles against. Callers pass only the shared sources consumed by the
         components this invocation actually publishes; a sibling that
-        contributes no package bytes is none of the package's business.
+        contributes no package bytes is none of the package's business. When
+        an entry carries ProjectPaths, only those folders are judged, like
+        Check 14: an untracked file elsewhere in the sibling is not part of
+        what the component compiles against.
         Check 14 only warns about a dirty sibling -- the verification itself
         still succeeds there -- but a package build from one ships the
         uncommitted shared code under the consumer's unchanged version, so the
@@ -295,7 +362,13 @@ function Assert-OmpSharedSourcesClean {
             throw "Shared dependency repository '$($shared.RepositoryRoot)' was not found. The package build compiles against it, so it must be present and verified clean."
         }
 
-        $provenance = Assert-OmpSourceTreeClean -RepositoryRoot $shared.RepositoryRoot -AllowDirtySource:$AllowDirtySource
+        $paths = @()
+        $pathsProperty = $shared.PSObject.Properties['ProjectPaths']
+        if ($null -ne $pathsProperty -and $null -ne $pathsProperty.Value) {
+            $paths = @($pathsProperty.Value)
+        }
+
+        $provenance = Assert-OmpSourceTreeClean -RepositoryRoot $shared.RepositoryRoot -Paths $paths -AllowDirtySource:$AllowDirtySource
         $results.Add([pscustomobject]@{
             RepositoryKey  = $shared.RepositoryKey
             RepositoryRoot = $provenance.RepositoryRoot
