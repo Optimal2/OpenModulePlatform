@@ -8,7 +8,9 @@
     scripts/omp/bump-version.ps1 and
     scripts/omp/validate-component-versions.helpers.ps1 (the validator family's
     shared core, see docs/VALIDATOR_CHECKS.md) are copied verbatim into every
-    OMP-compatible repository. Keeping the copies identical has so far been a
+    OMP-compatible repository, and so is the canonical Pester step
+    (scripts/omp/run-script-tests.ps1 plus scripts/omp/pester-bootstrap.ps1)
+    into every repository that runs Pester suites. Keeping the copies identical has so far been a
     manual act - done on 2026-08-25 and again on 2026-08-28 - and nothing held
     them that way. The next fix to a canonical file recreated the drift the day
     it landed, and the failure was SILENT: a repository running a stale copy
@@ -114,6 +116,43 @@ $sharedScripts = @(
 $sharedWebBuildFiles = @(
     'build/OpenModulePlatform.DeterministicStaticWebAssets.targets'
 )
+
+# The canonical Pester step: the runner and the bootstrap it dot-sources. Three
+# consumer repositories carried their own copies, which drifted apart and gave
+# different protection (2026-09-29); the canonical pair carries every guard any
+# of them had. Required, verbatim and together, in a repository that runs Pester
+# suites (a *.Tests.ps1 anywhere under tests/) or already carries a copy of
+# either file; a repository without suites needs neither. Not part of
+# Test-PlatformCheckout, so an older platform checkout still counts as one and
+# reports the missing canonical file instead.
+$sharedPesterStepFiles = @(
+    'scripts/omp/run-script-tests.ps1',
+    'scripts/omp/pester-bootstrap.ps1'
+)
+
+function Test-NeedsPesterStep {
+    <#
+        True when the repository runs Pester suites (a *.Tests.ps1 anywhere
+        under tests/, subdirectories included, as Pester discovers them) or
+        carries a copy of either canonical Pester step file.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    foreach ($relative in $sharedPesterStepFiles) {
+        if (Test-Path -LiteralPath (Join-Path $Root ($relative -replace '/', '\')) -PathType Leaf) {
+            return $true
+        }
+    }
+
+    $testsRoot = Join-Path $Root 'tests'
+    if (-not (Test-Path -LiteralPath $testsRoot -PathType Container)) {
+        return $false
+    }
+    $suite = Get-ChildItem -LiteralPath $testsRoot -Filter '*.Tests.ps1' -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -ieq '.ps1' } |
+        Select-Object -First 1
+    return ($null -ne $suite)
+}
 
 function Test-HasWebProject {
     <#
@@ -299,6 +338,31 @@ foreach ($relative in $sharedScripts) {
         $drift += "  - $relative differs from the canonical copy (this repository: $($consumerHash.Substring(0,16)), platform: $($platformHash.Substring(0,16)))."
     }
     else {
+        Write-Host "Shared scripts: '$relative' matches the canonical copy ($($platformHash.Substring(0,16)))."
+    }
+}
+
+if (Test-NeedsPesterStep -Root $consumerRoot) {
+    foreach ($relative in $sharedPesterStepFiles) {
+        $consumerPath = Join-Path $consumerRoot ($relative -replace '/', '\')
+        $platformPath = Join-Path $platformRoot ($relative -replace '/', '\')
+
+        if (-not (Test-Path -LiteralPath $platformPath -PathType Leaf)) {
+            $drift += "  - $relative is not in the platform checkout; update the OpenModulePlatform checkout at '$platformRoot'."
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $consumerPath -PathType Leaf)) {
+            $drift += "  - $relative is missing from this repository, which runs Pester suites or carries the other Pester step file; the platform repository ships it."
+            continue
+        }
+
+        $consumerHash = Get-FileSha256 -Path $consumerPath
+        $platformHash = Get-FileSha256 -Path $platformPath
+        if ($consumerHash -ne $platformHash) {
+            $drift += "  - $relative differs from the canonical copy (this repository: $($consumerHash.Substring(0,16)), platform: $($platformHash.Substring(0,16)))."
+            continue
+        }
+
         Write-Host "Shared scripts: '$relative' matches the canonical copy ($($platformHash.Substring(0,16)))."
     }
 }

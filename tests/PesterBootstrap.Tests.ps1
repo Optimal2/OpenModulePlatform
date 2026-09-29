@@ -145,6 +145,126 @@ Describe 'run-script-tests: zero-test gate' {
     }
 }
 
+Describe 'run-script-tests: suite inventory guards' {
+    # The runner's contract is that every suite file on disk runs and runs at
+    # least one test. Each case below is a way a suite used to drop out of a
+    # green run without anyone noticing.
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')
+    }
+
+    It 'Fails red when a suite is renamed away from *.Tests.ps1' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        # Renamed.Test.ps1 matches no discovery glob: without an inventory of
+        # every script in the tests tree it silently stops running.
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'   = $script:PassingSuiteBody
+            'Renamed.Test.ps1' = $script:PassingSuiteBody
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'Renamed\.Test\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Fails red when one suite runs zero tests next to a passing one' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        # Pester reports the empty container as NotRun and the whole run as
+        # Passed, and PassedCount is 1: only a per-container check sees it.
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'  = $script:PassingSuiteBody
+            'Empty.Tests.ps1' = "Describe 'emptied' { }`n"
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'Empty\.Tests\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Runs and counts a suite in a subdirectory' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        # Pester discovers suites recursively; the inventory must count the
+        # same set, or a nested suite either fails a correct run or goes unseen.
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'       = $script:PassingSuiteBody
+            'nested/Deep.Tests.ps1' = "Describe 'nested fixture' { It 'runs from a subdirectory' { 1 | Should -Be 1 } }`n"
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Match 'Deep\.Tests\.ps1'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+
+    It 'Allows *.TestHelpers.ps1 next to the suites without counting it as a suite' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        $testsDir = New-SuiteFixture -Files @{
+            'Good.Tests.ps1'       = "Describe 'with helpers' { BeforeAll { . (Join-Path `$PSScriptRoot 'Good.TestHelpers.ps1') }; It 'uses the helper' { Get-FixtureValue | Should -Be 42 } }`n"
+            'Good.TestHelpers.ps1' = "function Get-FixtureValue { 42 }`n"
+        }
+        try {
+            $result = Invoke-RunnerAgainst -TestsPath $testsDir
+            $result.ExitCode | Should -Be 0
+            $result.Output | Should -Not -Match 'GATE FAIL'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+        }
+    }
+}
+
+Describe 'run-script-tests: an incompatible Pester already loaded' {
+    BeforeAll {
+        . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')
+    }
+
+    It 'Refuses with an instruction to start a new process' {
+        Skip-UnlessPinnedPesterSeedAvailable
+        # A Pester 5 session has Pester.dll 5.x loaded. A .NET assembly cannot
+        # be unloaded, so 6.1.0 cannot be imported into that process. The
+        # fixture loads a stand-in assembly named Pester, version 5.7.1, that
+        # defines the PesterConfiguration type Pester's own import check looks
+        # for -- what the runner meets in such a session, without a second
+        # Pester download. (Measured with the real Pester 5.7.1: the import
+        # then fails inside Pester.psm1 with Pester's generic restart advice.)
+        $testsDir = New-SuiteFixture -Files @{ 'Good.Tests.ps1' = $script:PassingSuiteBody }
+        $work = New-TestDirectory
+        try {
+            $child = Join-Path $work 'load-incompatible-pester.ps1'
+            $body = @(
+                'param([string]$Runner, [string]$TestsPath, [string]$Work)',
+                '$source = "using System.Reflection; [assembly: AssemblyVersion(""5.7.1.0"")] public class PesterConfiguration { }"',
+                '$dll = Join-Path $Work "Pester.dll"',
+                'Add-Type -TypeDefinition $source -OutputAssembly $dll -OutputType Library',
+                'Add-Type -Path $dll',
+                '& $Runner -TestsPath $TestsPath',
+                'exit $LASTEXITCODE'
+            ) -join "`n"
+            [System.IO.File]::WriteAllText($child, $body, [System.Text.UTF8Encoding]::new($false))
+
+            $result = Invoke-ChildPowerShell -ScriptPath $child -ScriptArguments @('-Runner', $script:RunnerScript, '-TestsPath', $testsDir, '-Work', $work)
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match 'Pester\.dll 5\.7\.1'
+            $result.Output | Should -Match 'new (PowerShell )?process'
+        }
+        finally {
+            Remove-TestDirectory -Path $testsDir
+            Remove-TestDirectory -Path $work
+        }
+    }
+}
+
 Describe 'pester-bootstrap: Windows PowerShell-safe module path' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'PesterBootstrap.TestHelpers.ps1')

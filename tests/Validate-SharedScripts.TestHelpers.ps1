@@ -34,7 +34,15 @@ function New-Pair {
         # Body of the consumer's copy of the pinning target; empty leaves it out.
         [string] $ConsumerTargetsBody = '',
         # Writes a root Directory.Build.targets that imports the pinning target.
-        [switch] $ConsumerImportsTargets
+        [switch] $ConsumerImportsTargets,
+        # Gives the consumer a Pester suite at this path under tests/ (for
+        # example 'Some.Tests.ps1' or 'sub/Some.Tests.ps1'); empty leaves it out.
+        [string] $ConsumerSuitePath = '',
+        # Bodies of the consumer's copies of the canonical Pester step; empty
+        # leaves the file out. The platform's copies are 'canonical runner' and
+        # 'canonical bootstrap'.
+        [string] $ConsumerRunnerBody = '',
+        [string] $ConsumerBootstrapBody = ''
     )
 
     $root = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
@@ -56,6 +64,17 @@ function New-Pair {
         New-Item -ItemType Directory -Path (Join-Path $consumer 'build') -Force | Out-Null
         [IO.File]::WriteAllText((Join-Path $consumer 'build\OpenModulePlatform.DeterministicStaticWebAssets.targets'), $ConsumerTargetsBody)
     }
+    if (-not [string]::IsNullOrEmpty($ConsumerSuitePath)) {
+        $suitePath = Join-Path (Join-Path $consumer 'tests') $ConsumerSuitePath
+        New-Item -ItemType Directory -Path (Split-Path -Parent $suitePath) -Force | Out-Null
+        [IO.File]::WriteAllText($suitePath, "Describe 'consumer suite' { }")
+    }
+    if (-not [string]::IsNullOrEmpty($ConsumerRunnerBody)) {
+        [IO.File]::WriteAllText((Join-Path $consumer 'scripts\omp\run-script-tests.ps1'), $ConsumerRunnerBody)
+    }
+    if (-not [string]::IsNullOrEmpty($ConsumerBootstrapBody)) {
+        [IO.File]::WriteAllText((Join-Path $consumer 'scripts\omp\pester-bootstrap.ps1'), $ConsumerBootstrapBody)
+    }
     if ($ConsumerImportsTargets) {
         [IO.File]::WriteAllText((Join-Path $consumer 'Directory.Build.targets'), '<Project><Import Project="$(MSBuildThisFileDirectory)build\OpenModulePlatform.DeterministicStaticWebAssets.targets" /></Project>')
     }
@@ -64,6 +83,8 @@ function New-Pair {
         New-Item -ItemType Directory -Path (Join-Path $platform 'scripts\omp') -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $platform 'build') -Force | Out-Null
         [IO.File]::WriteAllText((Join-Path $platform 'build\OpenModulePlatform.DeterministicStaticWebAssets.targets'), 'canonical targets')
+        [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\run-script-tests.ps1'), 'canonical runner')
+        [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\pester-bootstrap.ps1'), 'canonical bootstrap')
         if (-not $OmitPlatformScripts) {
             [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\bump-version.ps1'), $PlatformBody)
             [IO.File]::WriteAllText((Join-Path $platform 'scripts\omp\validate-component-versions.helpers.ps1'), $helpersBody)
