@@ -3,7 +3,7 @@
 //
 // window.ompConfirm(message, options) -> Promise<boolean | "extra">
 //   Shows an OMP-styled modal <dialog> instead of the native window.confirm.
-//   options: { okLabel, cancelLabel, extraLabel, title, content, focus }
+//   options: { okLabel, cancelLabel, extraLabel, title, content, focus, enter }
 //     okLabel, cancelLabel: plain strings, already localized by the page.
 //     extraLabel: a third choice between Cancel and OK (say "Discard
 //       changes" beside "Save changes", with Cancel meaning keep editing);
@@ -13,8 +13,10 @@
 //       Escape is Cancel); the default starts on Cancel.
 //     enter: "ok" makes Enter OK while the focus is still where the dialog
 //       put it, so the focused button (Cancel, by default) keeps Space for
-//       itself. Once the user moves the focus, Enter presses the focused
-//       button as usual.
+//       itself. Once the user moves the focus, Enter is left to the
+//       browser: it presses a focused button, and does nothing when a click
+//       in the message left the focus on the dialog itself. Not meant for
+//       content that needs Enter of its own (a textarea).
 //     title: a heading above the message; none when empty.
 //     content: an element shown between the message and the buttons, holding
 //       the page's own fields (a note, an optional text field, a checkbox). It
@@ -189,7 +191,8 @@
                 }
             };
             const onKeyDown = (event) => {
-                if (event.key !== 'Enter' || focusMoved || okButton.disabled) {
+                // An Enter that ends an IME composition belongs to the IME.
+                if (event.key !== 'Enter' || event.isComposing || focusMoved || okButton.disabled) {
                     return;
                 }
                 event.preventDefault();
