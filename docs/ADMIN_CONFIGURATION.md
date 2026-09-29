@@ -310,8 +310,9 @@ response, or a response above the size limit shows the neutral placeholder
 "The widget could not be loaded." to the user. Details only go to the Portal log.
 A timeout instead shows "The widget is loading…" with a polite live region.
 The browser retries through the Portal after 2 seconds and, if that also times
-out, after another 5 seconds. There are at most two retries per widget per page
-view; repeated initialization of an unchanged widget does not start duplicate
+out, after another 5 seconds. There are at most two retries per widget element;
+instances of the same widget have independent budgets. Repeated initialization
+of an unchanged widget does not start duplicate
 requests. A final timeout shows the
 ordinary error placeholder. Other failures never trigger these retries. The
 default server timeout remains 3000 ms.
@@ -396,8 +397,9 @@ dashboard does not call a module on every page load. Timeouts are not cached,
 allowing the bounded retries to recover when a module finishes starting. A
 widget added without a page reload uses the same server-side path and retry
 budget. Resetting or discarding changes and restoring a draft also resume loading
-fragments, without resetting the page's retry budget. A replacement widget takes
-over from its old element's pending retry or request. If loading cannot start,
+fragments. Each new element receives its own retry budget; replacing fragment
+markup within an existing element retains its budget. A removed element's pending
+retry or response cannot interfere with other instances. If loading cannot start,
 or JavaScript is disabled, the ordinary error placeholder is shown instead.
 Run the retry tests with `node --test tests/portal-dashboard-fragment.test.cjs`.
 

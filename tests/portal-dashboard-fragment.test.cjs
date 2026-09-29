@@ -12,8 +12,10 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
     function widgetElement(kind) {
         const element = {
             dataset: { widgetId: '7' },
+            style: { width: '416px' },
+            measuredWidth: 416,
             querySelector: () => element.current,
-            getBoundingClientRect: () => ({ width: 416 }),
+            getBoundingClientRect: () => ({ width: element.measuredWidth }),
             cloneNode: () => widgetElement(element.current.dataset.moduleFragmentRetry === 'timeout' ? 'timeout'
                 : element.current.classList.contains('is-loading') ? 'loading'
                 : element.current.classList.contains('is-unavailable') ? 'unavailable' : 'loaded')
@@ -69,7 +71,7 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
         },
         fetch: async (url, options) => {
             requests.push({ url, options });
-            const kind = await respond();
+            const kind = await respond(url);
             if (kind === 'network') throw new Error('network');
             return { ok: kind !== 'http', redirected: kind === 'login', url: kind === 'login' ? '/auth/login' : url, text: async () => kind };
         }
@@ -93,6 +95,8 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
         testCreate: (root, item, placeholder) => {
             const element = widgetElement('loading');
             element.dataset.widgetId = String(item.widgetId);
+            element.style.width = `${item.width || 320}px`;
+            element.measuredWidth = 0; // Newly inserted widgets can be hidden before layout.
             element.current = placeholder(root);
             return element;
         }
@@ -102,6 +106,8 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
     const state = { addedWidgetIds: new Set(), pendingRemovedWidgetIds: new Set(), nextTemporaryWidgetId: -1 };
     return {
         timers, requests,
+        get widgets() { return canvas.widgets; },
+        duplicate: (kind) => { canvas.widgets.push(widgetElement(kind)); },
         get current() { return canvas.widgets[0]?.current; },
         init: () => api.initDashboard(root),
         schedule: () => api.scheduleModuleFragmentRetry(root, canvas.widgets[0], widget),
@@ -112,11 +118,11 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
         snapshot: () => api.captureDashboardSnapshot(canvas, state),
         reset: snapshot => api.resetDashboardChanges(root, canvas, '', state, snapshot, () => 1),
         restoreDraft: () => api.restoreDashboardDraft(root, canvas, '', state, {
-            widgets: [{ widgetId: 7, widgetType: 'module-fragment' }]
+            widgets: [{ widgetId: 7, widgetType: 'module-fragment', width: 528 }]
         }, () => {}),
         respondWith: fn => { respond = fn; },
-        async tick(expectedDelay) {
-            assert.equal(timers.length, 1);
+        async tick(expectedDelay, expectedCount = 1) {
+            assert.equal(timers.length, expectedCount);
             const timer = timers.shift();
             assert.equal(timer.delay, expectedDelay);
             timer.callback();
@@ -178,7 +184,7 @@ test('a dynamically added widget uses the same two-retry budget', async () => {
     await d.tick(2000);
     await d.tick(5000);
     assert.equal(d.requests.length, 3); // Initial request plus two retries.
-    await d.load(); // Replacing markup again must not reset the page's retry budget.
+    await d.load(); // Replacing fragment markup must not reset this element's retry budget.
     assert.equal(d.timers.length, 0);
     assert.equal(d.current.placeholder.textContent, 'Unavailable');
 });
@@ -209,16 +215,19 @@ test('removing a widget cancels its pending retry without making a request', asy
     assert.equal(d.timers.length, 0);
 });
 
-test('reset/discard restarts a cloned timeout snapshot and retains the page retry budget', async () => {
-    const d = dashboard();
+test('reset/discard gives each cloned element its own bounded retry budget', async () => {
+    const d = dashboard('timeout', ['timeout', 'timeout', 'timeout', 'timeout']);
     const snapshot = d.snapshot();
     d.init();
     await d.reset(snapshot); // Both Reset changes and Discard changes use this production path.
+    await d.tick(2000, 2); // The detached element's timer exits without issuing a request.
     await d.tick(2000);
-    await d.reset(snapshot);
     await d.tick(5000);
+    assert.equal(d.current.placeholder.textContent, 'Unavailable');
     await d.reset(snapshot);
-    assert.equal(d.requests.length, 2);
+    await d.tick(2000);
+    await d.tick(5000);
+    assert.equal(d.requests.length, 4);
     assert.equal(d.timers.length, 0);
     assert.equal(d.current.placeholder.textContent, 'Unavailable');
     assert.equal(d.current.classList.contains('is-loading'), false);
@@ -239,6 +248,7 @@ test('restoring a draft starts its fragment load with at most two timeout retrie
     d.restoreDraft();
     await new Promise(done => setImmediate(done));
     assert.equal(d.requests.length, 1);
+    assert.equal(new URL(d.requests[0].url).searchParams.get('width'), '528');
     await d.tick(2000);
     await d.tick(5000);
     assert.equal(d.requests.length, 3);
@@ -260,14 +270,13 @@ test('reset/discard and draft restoration show an error when no fragment endpoin
     }
 });
 
-test('removing and readding the same widget replaces its retry timer and loads the new element', async () => {
+test('removing and readding the same widget leaves its old timer inert and loads the new element', async () => {
     const d = dashboard('timeout', ['loaded']);
     d.init();
-    const staleTimer = d.timers[0];
     d.detach();
     d.reinsert();
     await new Promise(done => setImmediate(done));
-    staleTimer.callback(); // Even an already queued callback cannot revive superseded work.
+    await d.tick(2000); // The detached element's callback cannot revive its work.
     assert.equal(d.requests.length, 1);
     assert.equal(d.timers.length, 0);
     assert.equal(d.current.classList.contains('is-wide'), true);
@@ -289,10 +298,46 @@ test('a superseded request cannot overwrite a new element or release its busy gu
     assert.equal(d.timers.length, 0);
     resolvers[1]('timeout');
     await new Promise(done => setImmediate(done));
-    await d.tick(5000);
+    await d.tick(2000);
     assert.equal(d.requests.length, 3);
     resolvers[2]('timeout');
+    await new Promise(done => setImmediate(done));
+    await d.tick(5000);
+    assert.equal(d.requests.length, 4);
+    resolvers[3]('timeout');
     await new Promise(done => setImmediate(done));
     assert.equal(d.current.placeholder.textContent, 'Unavailable');
     assert.equal(d.timers.length, 0);
 });
+
+for (const initial of ['timeout', 'loading']) {
+    for (const outcome of ['loaded', 'timeout']) {
+        test(`two instances of one widget independently finish: ${initial} -> ${outcome}`, async () => {
+            const d = dashboard(initial);
+            d.duplicate(initial);
+            d.widgets[1].measuredWidth = 520;
+            const counts = new Map();
+            const expectedRequests = initial === 'timeout' ? 2 : 3;
+            d.respondWith(async url => {
+                const width = new URL(url).searchParams.get('width');
+                const count = (counts.get(width) || 0) + 1;
+                counts.set(width, count);
+                return count === expectedRequests ? outcome : 'timeout';
+            });
+            d.init();
+            await new Promise(done => setImmediate(done));
+            await d.tick(2000, 2);
+            await d.tick(2000, 2);
+            await d.tick(5000, 2);
+            await d.tick(5000);
+            assert.deepEqual([...counts.entries()].sort(), [['416', expectedRequests], ['520', expectedRequests]]);
+            assert.equal(d.requests.length, expectedRequests * 2);
+            assert.equal(d.timers.length, 0);
+            for (const element of d.widgets) {
+                assert.equal(element.current.classList.contains('is-loading'), false);
+                assert.equal(element.current.classList.contains(outcome === 'loaded' ? 'is-wide' : 'is-unavailable'), true);
+                if (outcome === 'timeout') assert.equal(element.current.placeholder.textContent, 'Unavailable');
+            }
+        });
+    }
+}

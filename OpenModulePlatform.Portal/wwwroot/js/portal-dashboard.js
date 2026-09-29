@@ -3759,16 +3759,16 @@
         return widgetType === 'module-fragment';
     }
 
-    // Keep the budget outside replaced markup, including widgets removed and added again.
+    // Keep the budget outside replaced fragment markup, isolated per widget element.
     const moduleFragmentRequests = new WeakMap();
     const moduleFragmentRetryDelays = [2000, 5000];
 
-    function getModuleFragmentRequest(root, widgetId) {
+    function getModuleFragmentRequest(root, element) {
         if (!moduleFragmentRequests.has(root)) {
-            moduleFragmentRequests.set(root, new Map());
+            moduleFragmentRequests.set(root, new WeakMap());
         }
         const requests = moduleFragmentRequests.get(root);
-        const key = String(widgetId);
+        const key = element;
         if (!requests.has(key)) {
             requests.set(key, { attempts: 0, active: null });
         }
@@ -3790,7 +3790,10 @@
         if (!pending || !pending.classList.contains('is-loading')) {
             return;
         }
-        const widget = { widgetId: element.dataset.widgetId || pending.dataset.moduleFragmentWidgetId };
+        const widget = {
+            widgetId: element.dataset.widgetId || pending.dataset.moduleFragmentWidgetId,
+            width: parseFloat(element.style.width) || 0
+        };
         if (!widget.widgetId || !root.dataset.moduleFragmentUrl) {
             showModuleFragmentUnavailable(root, pending);
         } else if (pending.dataset.moduleFragmentRetry === 'timeout') {
@@ -3817,7 +3820,7 @@
         if (!pending || pending.dataset.moduleFragmentRetry !== 'timeout') {
             return;
         }
-        const state = getModuleFragmentRequest(root, widget.widgetId);
+        const state = getModuleFragmentRequest(root, element);
         const active = beginModuleFragmentRequest(state, element, pending);
         if (!active) {
             return;
@@ -3865,7 +3868,7 @@
             return;
         }
 
-        const state = getModuleFragmentRequest(root, widget.widgetId);
+        const state = getModuleFragmentRequest(root, element);
         const active = beginModuleFragmentRequest(state, element, pending);
         if (!active) {
             return;
