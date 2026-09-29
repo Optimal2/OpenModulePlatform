@@ -4,6 +4,15 @@ using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
 
+/// <summary>
+/// Checks that the resolved <c>appsettings.json</c> carries every required root
+/// section. Callers pass what <see cref="OmpHostArtifactRepository.GetArtifactConfigurationFilesAsync"/>
+/// resolved -- and, for web apps, what the built-in configuration was merged
+/// with -- which is the content HostAgent writes: a merge-mode overlay (MergeMode
+/// NULL on a .json path, or 'merge') is already deep-merged onto the artifact's
+/// configuration row there, and a 'replace' overlay stands alone. The verdict is
+/// therefore about the final file, never about the overlay by itself.
+/// </summary>
 internal static class RequiredConfigSectionsValidator
 {
     private const string AppSettingsRelativePath = "appsettings.json";
@@ -62,7 +71,8 @@ internal static class RequiredConfigSectionsValidator
 
     private static string FormatWarning(IReadOnlyList<string> missingSections)
     {
-        return $"Incomplete config overlay — missing required sections: {string.Join(", ", missingSections)}. " +
-            "The overlay must include all required sections for the app to function correctly.";
+        return $"Incomplete configuration — the resolved appsettings.json is missing required sections: {string.Join(", ", missingSections)}. " +
+            "The resolved file is the artifact configuration with any merge-mode overlay merged onto it, or a replace-mode overlay alone. " +
+            "Add the sections to the artifact configuration or to a config overlay; a merge-mode overlay only needs the missing sections.";
     }
 }
