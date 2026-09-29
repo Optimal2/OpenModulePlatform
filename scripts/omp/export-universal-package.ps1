@@ -358,6 +358,14 @@ function Get-SafeName {
     return $text
 }
 
+function Get-OutputFileExistsMessage {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    return "$Path already exists and was not replaced. An existing package is never overwritten; build again to get a new version, or choose another version or output file."
+}
+
 function Add-ZipEntryFromFile {
     param(
         [Parameter(Mandatory = $true)][System.IO.Compression.ZipArchive]$Archive,
@@ -661,6 +669,13 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
 $outputPath = [System.IO.Path]::GetFullPath($OutputPath)
 $outputDirectory = Split-Path -Parent $outputPath
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+# A package name carries its version, so replacing an existing file would ship
+# different content under the same name without a trace. Refuse before any
+# build work; the write below claims the name atomically as well, because
+# another build can create it in between.
+if (Test-Path -LiteralPath $outputPath) {
+    throw (Get-OutputFileExistsMessage -Path $outputPath)
+}
 
 $buildRepositoryObjectsScript = Join-Path $scriptDirectory 'build-repository-objects.ps1'
 if (-not (Test-Path -LiteralPath $buildRepositoryObjectsScript -PathType Leaf)) {
@@ -810,21 +825,49 @@ try {
         })
     }
 
-    if (Test-Path -LiteralPath $outputPath -PathType Leaf) {
-        Remove-Item -LiteralPath $outputPath -Force
-    }
-
-    $archive = [System.IO.Compression.ZipFile]::Open($outputPath, [System.IO.Compression.ZipArchiveMode]::Create)
+    # Claim the name with FileMode.CreateNew, which the operating system decides
+    # atomically (CREATE_NEW): of two builds that reach this point with the same
+    # name exactly one gets it, and the other fails without touching the file.
+    # The zip is then written through the claimed handle. The Bootstrapper gives
+    # the same guarantee through NoOverwriteFile.
     try {
-        foreach ($file in $files) {
-            Add-ZipEntryFromFile -Archive $archive -SourcePath $file.FullName -EntryName $file.Path
+        $outputStream = New-Object System.IO.FileStream($outputPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    }
+    catch {
+        if (Test-Path -LiteralPath $outputPath) {
+            throw (Get-OutputFileExistsMessage -Path $outputPath)
         }
 
-        $manifestJson = $manifest | ConvertTo-Json -Depth 20
-        Add-ZipEntryFromText -Archive $archive -EntryName 'omp-universal-package.json' -Text $manifestJson
+        throw
+    }
+
+    $published = $false
+    try {
+        $archive = New-Object System.IO.Compression.ZipArchive($outputStream, [System.IO.Compression.ZipArchiveMode]::Create, $true)
+        try {
+            foreach ($file in $files) {
+                Add-ZipEntryFromFile -Archive $archive -SourcePath $file.FullName -EntryName $file.Path
+            }
+
+            $manifestJson = $manifest | ConvertTo-Json -Depth 20
+            Add-ZipEntryFromText -Archive $archive -EntryName 'omp-universal-package.json' -Text $manifestJson
+        }
+        finally {
+            $archive.Dispose()
+        }
+
+        $outputStream.Flush($true)
+        $published = $true
     }
     finally {
-        $archive.Dispose()
+        $outputStream.Dispose()
+        if (-not $published) {
+            # The file is this build's own claim: remove the partial package.
+            Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $outputPath) {
+                Write-Warning "The partial package '$outputPath' could not be removed. It is not a valid package; delete it before building again."
+            }
+        }
     }
 
     Write-Host "OMP universal package: $outputPath"
