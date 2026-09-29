@@ -2032,7 +2032,18 @@ internal static partial class Program
                 "No target host (global package)",
                 outputPath,
                 candidates);
-            var result = CreateUniversalPackageZip(request);
+            UniversalPackageBuildResult result;
+            try
+            {
+                result = CreateUniversalPackageZip(request);
+            }
+            catch (OutputFileExistsException ex)
+            {
+                // Another build created the same name after the check above.
+                Report($"> Refusing to build: {ex.Message}");
+                return new RefreshAndStagePackageResult(1, null, 0, null, false, false);
+            }
+
             Report($"> Universal module package: {result.PackagePath}");
             Report($"> Items: {result.ItemCount}");
 
@@ -2083,7 +2094,22 @@ internal static partial class Program
                 return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, null, false, false);
             }
 
-            File.Copy(outputPath, importTarget, overwrite: false);
+            try
+            {
+                NoOverwriteFile.Copy(outputPath, importTarget);
+            }
+            catch (OutputFileExistsException ex)
+            {
+                // The check above lost a race with another stage of the same name.
+                Report($"> Refusing to stage: {ex.Message}");
+                return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, null, false, false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Report($"> Could not stage {importTarget}: {ex.Message}");
+                return new RefreshAndStagePackageResult(1, result.PackagePath, result.ItemCount, null, false, false);
+            }
+
             Report($"> Step 3/3 stage: staged package in HostAgent import folder: {importTarget}");
 
             var importEnabled = IsHostAgentArtifactImportEnabled();
@@ -2455,7 +2481,19 @@ internal static partial class Program
                         }
                     }
 
-                    var result = CreateUniversalPackageZip(request);
+                    UniversalPackageBuildResult result;
+                    try
+                    {
+                        result = CreateUniversalPackageZip(request);
+                    }
+                    catch (OutputFileExistsException ex)
+                    {
+                        // Same protection as refresh-and-stage: an existing package,
+                        // including one another build wrote meanwhile, is never replaced.
+                        Console.WriteLine($"> Refusing to create the package: {ex.Message}");
+                        return 1;
+                    }
+
                     Console.WriteLine($"> Universal module package: {result.PackagePath}");
                     Console.WriteLine($"> Package key: {request.PackageKey}");
                     Console.WriteLine($"> Package version: {request.PackageVersion}");
@@ -6556,7 +6594,11 @@ ORDER BY ar.ArtifactId DESC;
             Size = new Size(980, 700);
 
             _packageKeyBox.Text = "omp-universal";
-            _packageVersionBox.Text = DateTime.UtcNow.ToString("yyyyMMdd-HHmm", CultureInfo.InvariantCulture);
+            // Same version rule as refresh-and-stage: past every automatic package
+            // already in the exports folder, so the suggested name never collides.
+            _packageVersionBox.Text = NextAutomaticUniversalPackageVersion(
+                DateTime.UtcNow,
+                [Path.Join(_payloadRoot, "exports")]);
             _displayNameBox.Text = "OpenModulePlatform universal package";
 
             BuildLayout();
@@ -6890,17 +6932,16 @@ ORDER BY ar.ArtifactId DESC;
             var outputPath = _outputPathBox.Text.Trim();
             if (File.Exists(outputPath))
             {
-                var overwrite = MessageBox.Show(
+                // A package is never replaced: its name carries the version, so a
+                // replacement would ship different content under the same name.
+                MessageBox.Show(
                     this,
-                    $"The output file already exists:{Environment.NewLine}{outputPath}{Environment.NewLine}{Environment.NewLine}Replace it?",
+                    $"The output file already exists:{Environment.NewLine}{outputPath}{Environment.NewLine}{Environment.NewLine}"
+                        + "An existing package is never replaced. Change the package version or choose another output file.",
                     "Create universal module package",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question,
-                    MessageBoxDefaultButton.Button2);
-                if (overwrite != DialogResult.Yes)
-                {
-                    return;
-                }
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
             }
 
             var hostChoice = SelectedHostChoice;
@@ -7135,14 +7176,20 @@ ORDER BY ar.ArtifactId DESC;
             AssertUniversalPackageItemHasNoRuntimeConfiguration(item);
         }
 
+        // Never replace an existing package: the file name carries the version,
+        // so a replacement ships different content under the same name. The name
+        // is claimed atomically (FileMode.CreateNew) before the zip is written
+        // beside it and renamed over the claim, so a concurrent build of the same
+        // name fails instead of winning silently (OutputFileExistsException) and
+        // no reader sees a partial zip.
         var outputPath = Path.GetFullPath(request.OutputPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-        if (File.Exists(outputPath))
-        {
-            File.Delete(outputPath);
-        }
+        NoOverwriteFile.Write(outputPath, stream => WriteUniversalPackageZip(stream, request));
+        return new UniversalPackageBuildResult(outputPath, request.Items.Count);
+    }
 
-        using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
+    private static void WriteUniversalPackageZip(Stream stream, UniversalPackageBuildRequest request)
+    {
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
         var items = new JsonArray();
         var usedPackagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in request.Items.OrderBy(static item => item.PackagePath, StringComparer.OrdinalIgnoreCase))
@@ -7193,7 +7240,6 @@ ORDER BY ar.ArtifactId DESC;
         using var manifestStream = manifestEntry.Open();
         using var manifestWriter = new StreamWriter(manifestStream, new UTF8Encoding(false));
         manifestWriter.Write(manifest.ToJsonString(JsonOptions));
-        return new UniversalPackageBuildResult(outputPath, request.Items.Count);
     }
 
     // Fail-fast guard for the GUI export path: an artifact package whose payload
