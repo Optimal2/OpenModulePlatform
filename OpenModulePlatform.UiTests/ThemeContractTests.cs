@@ -36,6 +36,10 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
     public Task A_newer_local_choice_beats_an_older_cookie()
         => ThemeScenarios.NewerLocalChoiceBeatsOlderCookieAsync(playwright, app, PagePath);
 
+    [SkippableFact]
+    public Task A_re_read_copies_the_newest_value_to_the_other_store()
+        => ThemeScenarios.ReReadCopiesNewestToOtherStoreAsync(playwright, app, PagePath);
+
     public static TheoryData<string, string> ReadabilityCases()
     {
         var data = new TheoryData<string, string>();
@@ -56,6 +60,11 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
 
     private static readonly string[] ReadablePages =
     [
+        // The dashboard. It stays out of the invariant matrix (PortalPageInvariantTests)
+        // because it pans horizontally by design, but its colours are measured here.
+        "/",
+        // The shared error view (OmpError view component).
+        "/status/404",
         "/Admin/Overview",
         "/Admin/Modules",
         "/Admin/ConfigSettings",
@@ -71,16 +80,30 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
     // States a page renders only with particular data: an error log row, a failed
     // integrity check, a group conversation, a failed send. Each specimen is the
     // page's own markup for that state, inserted into the live page so it is
-    // measured with the real stylesheet, in both palettes and (for .btn) on hover.
+    // measured with the real stylesheet, in both palettes and (buttons, table rows) on hover.
     // Keep them in step with the views named in the comments.
     private static readonly Dictionary<string, string> Specimens = new(StringComparer.Ordinal)
     {
-        // portal-dashboard.js (the dashboard itself is outside this matrix, see
-        // PortalPageInvariantTests): the unsaved-draft banner and its error variant.
-        ["/Admin/Overview"] = """
+        // Index.cshtml: the edit menu of a signed-in user (the test runs anonymously)
+        // in edit mode with unsaved changes, plus portal-dashboard.js's unsaved-draft
+        // banner and its error variant.
+        ["/"] = """
+            <div class="portal-dashboard is-editing has-dashboard-changes"><div class="dashboard-edit-menu"><div class="dashboard-edit-menu__actions">
+            <button type="button" class="dashboard-add-button"><span class="dashboard-action-icon dashboard-action-icon--add" aria-hidden="true"></span>Add widget</button>
+            <div class="dashboard-edit-menu__save-row"><button type="button" class="dashboard-save-button"><span class="dashboard-action-icon dashboard-action-icon--save" aria-hidden="true"></span>Save</button>
+            <button type="button" class="dashboard-reset-changes-button" aria-label="Reset changes" title="Reset changes"><span class="dashboard-action-icon dashboard-action-icon--reset-history" aria-hidden="true"></span></button></div>
+            </div></div></div>
             <div class="dashboard-draft-banner"><span class="dashboard-draft-banner__message">You have unsaved dashboard changes.</span>
             <span class="dashboard-draft-banner__actions"><button type="button" class="btn btn-secondary btn-sm">Discard</button> <button type="button" class="btn btn-primary btn-sm">Save</button></span></div>
             <div class="dashboard-draft-banner dashboard-draft-banner--error"><span class="dashboard-draft-banner__message">The dashboard could not be saved.</span></div>
+            """,
+        // The edit pages' delete panel (for example Admin/ModuleEdit.cshtml) and a
+        // .grid table, whose rows are also measured on hover.
+        ["/Admin/Overview"] = """
+            <form class="card danger-zone"><h3>Delete module</h3><p class="muted">Deleting cannot be undone.</p>
+            <button type="submit" class="btn btn-danger">Delete</button></form>
+            <table class="grid"><thead><tr><th>Name</th><th>State</th></tr></thead>
+            <tbody><tr><td>First row</td><td class="muted">Enabled</td></tr><tr><td>Second row</td><td class="muted">Disabled</td></tr></tbody></table>
             """,
         // SystemLog.cshtml.cs LevelPillClass.
         ["/Admin/SystemLog"] = """
@@ -145,6 +168,10 @@ public sealed class AuthThemeContractTests(PlaywrightSessionFixture playwright, 
     public Task A_newer_local_choice_beats_an_older_cookie()
         => ThemeScenarios.NewerLocalChoiceBeatsOlderCookieAsync(playwright, app, PagePath);
 
+    [SkippableFact]
+    public Task A_re_read_copies_the_newest_value_to_the_other_store()
+        => ThemeScenarios.ReReadCopiesNewestToOtherStoreAsync(playwright, app, PagePath);
+
     [SkippableTheory]
     [InlineData("light")]
     [InlineData("dark")]
@@ -155,7 +182,7 @@ public sealed class AuthThemeContractTests(PlaywrightSessionFixture playwright, 
 internal static class ThemeScenarios
 {
     private const string PreferenceName = "OMP_THEME_PREFERENCE";
-    private const string OtherAppPreferenceName = "ODV_USER_PREFERENCES";
+    private const string OtherAppPreferenceName = "OTHER_APP_PREFERENCES";
     private const string OtherAppPreferenceValue = "{\"theme\":\"normal\",\"zoom\":1.25}";
 
     // Minimum text contrast the pages must keep in both palettes. WCAG AA for normal
@@ -346,6 +373,53 @@ internal static class ThemeScenarios
         Assert.Equal(["dark", "dark"], await page.EvaluateAsync<string[]>(ThemeOf));
     }
 
+    public static async Task ReReadCopiesNewestToOtherStoreAsync(PlaywrightSessionFixture playwright, WebAppProcessFixture app, string path)
+    {
+        Skip.IfNot(playwright.Available, playwright.UnavailableReason);
+        Skip.IfNot(app.Available, app.UnavailableReason);
+
+        await using var context = await playwright.Browser!.NewContextAsync(new BrowserNewContextOptions { ColorScheme = ColorScheme.Light });
+        var page = await context.NewPageAsync();
+        await GotoAsync(page, app, path);
+        Assert.Equal(["light", "system"], await page.EvaluateAsync<string[]>(ThemeOf));
+
+        // Another port or app on the host wrote a newer cookie: the re-read on focus
+        // applies it and copies it to this origin's localStorage mirror.
+        var newerCookie = "{\"version\":1,\"mode\":\"dark\",\"revision\":\"" + Revision(DateTimeOffset.UtcNow.AddMinutes(1)) + "-cookie\"}";
+        await page.EvaluateAsync(
+            "(value) => { document.cookie = '" + PreferenceName + "=' + encodeURIComponent(value) + '; path=/'; window.dispatchEvent(new Event('focus')); }",
+            newerCookie);
+        await ExpectThemeAsync(page, "dark", "dark");
+        Assert.Equal(newerCookie, await page.EvaluateAsync<string>($"() => localStorage.getItem('{PreferenceName}')"));
+
+        // The mirror got newer while the cookie did not (a dropped cookie write, or a
+        // same-origin write this page did not hear about): the re-read copies it back
+        // to the cookie, so other ports and apps on the host stop reading the old one.
+        var newerLocal = "{\"version\":1,\"mode\":\"light\",\"revision\":\"" + Revision(DateTimeOffset.UtcNow.AddMinutes(2)) + "-local\"}";
+        await page.EvaluateAsync(
+            "(value) => { localStorage.setItem('" + PreferenceName + "', value); window.dispatchEvent(new Event('focus')); }",
+            newerLocal);
+        await ExpectThemeAsync(page, "light", "light");
+        var cookie = (await context.CookiesAsync()).SingleOrDefault(c => c.Name == PreferenceName);
+        Assert.NotNull(cookie);
+        Assert.Equal(newerLocal, Uri.UnescapeDataString(cookie.Value));
+    }
+
+    // A revision as omp-theme.js writes it: the creation time in base 36 first.
+    private static string Revision(DateTimeOffset time)
+    {
+        const string digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+        var value = time.ToUnixTimeMilliseconds();
+        var text = string.Empty;
+        do
+        {
+            text = digits[(int)(value % 36)] + text;
+            value /= 36;
+        }
+        while (value > 0);
+        return text;
+    }
+
     public static async Task TextIsReadableAsync(
         PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output, string path, string theme, string screenshotName, string? specimen)
     {
@@ -370,7 +444,9 @@ internal static class ThemeScenarios
             },
         ]);
         var page = await context.NewPageAsync();
-        await GotoAsync(page, app, path);
+        // A status page answers with its own code (/status/404 renders the error view with 404).
+        var expectedStatus = path.StartsWith("/status/", StringComparison.Ordinal) ? int.Parse(path["/status/".Length..], System.Globalization.CultureInfo.InvariantCulture) : 200;
+        await GotoAsync(page, app, path, expectedStatus);
         Assert.Equal([theme, theme], await page.EvaluateAsync<string[]>(ThemeOf));
 
         // The generic invariants include "text colour equals background colour". They
@@ -397,9 +473,9 @@ internal static class ThemeScenarios
         Assert.True(contrast.Checked > 0, $"{path} in {theme}: no text measured");
         var measured = contrast.Items.ToList();
 
-        // Hover states: every button in the content area, one at a time, measured once
-        // its transition has finished.
-        var buttons = page.Locator("main .btn");
+        // Hover states: every button and table row in the content area, one at a time,
+        // measured once its transition has finished.
+        var buttons = page.Locator("main .btn, main .dashboard-edit-menu button, main .grid tbody tr");
         var buttonCount = Math.Min(await buttons.CountAsync(), 80);
         for (var i = 0; i < buttonCount; i++)
         {
@@ -434,11 +510,11 @@ internal static class ThemeScenarios
     private static string Describe(ContrastItem item)
         => $"{item.Ratio:0.00}:1 {item.Element} \"{item.Text}\" ({item.Color} on {item.Background})";
 
-    private static async Task GotoAsync(IPage page, WebAppProcessFixture app, string path)
+    private static async Task GotoAsync(IPage page, WebAppProcessFixture app, string path, int expectedStatus = 200)
     {
         var response = await page.GotoAsync(app.BaseUrl + path, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
         Assert.NotNull(response);
-        Assert.True(response.Status == 200, $"{path} answered {response.Status}, expected 200");
+        Assert.True(response.Status == expectedStatus, $"{path} answered {response.Status}, expected {expectedStatus}");
     }
 
     // The switch acts synchronously, but a full-suite run on a busy machine has shown one
@@ -543,7 +619,9 @@ internal static class ThemeScenarios
                 if (el.closest('[aria-hidden="true"]')) { continue; }
                 const rect = el.getBoundingClientRect();
                 if (rect.width <= 1 || rect.height <= 1) { continue; }
-                const text = ownText(el);
+                // An icon-only control is read through its label; its icon is drawn in
+                // the control's text colour (currentColor), so that colour is measured.
+                const text = ownText(el) || (el.matches('button[aria-label], a[aria-label]') && el.textContent.trim() === '' ? el.getAttribute('aria-label').trim() : '');
                 if (text.length === 0) { continue; }
                 const style = getComputedStyle(el);
                 const fg = parse(style.color);
