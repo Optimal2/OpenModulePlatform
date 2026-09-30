@@ -129,12 +129,26 @@ because WorkerManager resolves only the selected-and-provisioned artifact.
 One exception covers a universal package that carries the new
 `omp-workerprocesshost` itself: provisioning runs in the HostAgent cycle after
 the import, so a plugin is also accepted when the selected host version was
-registered by that same package. HostAgent imports worker-host artifacts before
-the other artifacts of a batch, so the plugins are checked after the host is
-selected. A host version that is neither provisioned nor in the package is
-still rejected, and WorkerManager does not launch the plugin before the host is
-provisioned. WorkerProcessHost checks again before loading the plugin, which also protects a
-previously imported plugin after a host downgrade.
+registered by that same package. HostAgent registers every worker-host artifact
+of the package before it checks any worker plugin, whatever the package
+composition: a host whose module definition the package does not carry is
+imported in a pre-pass before the first module batch, and a host whose
+definition is in the package is imported first within that batch (`omp_core`,
+the host's module, is applied before every other module). A host version that
+is neither provisioned nor in the package is still rejected, and WorkerManager
+does not launch the plugin before the host is provisioned. WorkerProcessHost
+checks again before loading the plugin, which also protects a previously
+imported plugin after a host downgrade.
+
+Known limitation: accepting a same-package host moves one failure mode from
+import time to run time. If the selected host later cannot be provisioned (a
+damaged payload, a wrong platform), the import still reports the plugin as
+imported. The failure is then visible in operation, not at import: HostAgent
+records the provisioning result in `omp.HostArtifactStates` (`ProvisioningState`
+3 = Failed or 4 = Hash mismatch, with `LastError`), the Portal host deployment
+view (`Admin/HostDeployments`) lists that artifact state, and WorkerManager logs
+`Could not resolve a provisioned OMP Worker Process Host artifact for HostKey
+'<key>'` on every cycle until a provisioned host is selected.
 
 `sourceRepositoryKey`, `sourceCommitSha`, and `sourceDirty` are optional source
 provenance stamped by the repository builders

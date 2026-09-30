@@ -121,6 +121,29 @@ public sealed class WorkerHostCompatibilityImportTests : IDisposable
     }
 
     [Fact]
+    public void SelectWorkerHostArtifactsWithoutPackageDefinition_PicksOnlyHostsWhoseDefinitionIsAbsent()
+    {
+        string[] paths =
+        [
+            "example__example_worker__worker-plugin__example-worker__0.3.189.zip",
+            "omp_core__omp_workerprocesshost__worker-host__omp-workerprocesshost__0.3.71.zip",
+            "custom_core__omp_workerprocesshost__worker-host__omp-workerprocesshost__0.3.72.zip"
+        ];
+
+        var withoutDefinition = ArtifactZipImportService.SelectWorkerHostArtifactsWithoutPackageDefinition(
+            paths,
+            static path => path,
+            ["module-definitions/example.module-definition.json"]);
+        var withCoreDefinition = ArtifactZipImportService.SelectWorkerHostArtifactsWithoutPackageDefinition(
+            paths,
+            static path => path,
+            ["module-definitions\\OMP_CORE.module-definition.json"]);
+
+        Assert.Equal([paths[1], paths[2]], withoutDefinition);
+        Assert.Equal([paths[2]], withCoreDefinition);
+    }
+
+    [Fact]
     public void ArtifactPackageWriter_CarriesWorkerHostRequirementInEnvelopeAndPayload()
     {
         var payloadRoot = Path.Join(_root, "payload");

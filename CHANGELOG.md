@@ -73,12 +73,23 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   `docs/THEME_CONTRACT.md` says, not only on page start. The contrast test
   covers the dashboard, the error view, table-row hover and icon-only
   controls (omp-portal-web 0.3.820).
+- **Worker plugins import with their host in every package composition.** The
+  earlier fix below only reordered artifacts within one module batch, and a
+  worker-host artifact whose module definition the package does not carry was
+  imported after every module batch, so a plugin whose definition was in the
+  package was still checked first and failed with `<not selected>`. HostAgent
+  now imports such hosts in a pre-pass before the first module batch; the
+  import is covered by an end-to-end test through the universal package path.
+  `docs/ARTIFACT_PACKAGES.md` now documents the remaining limitation: a
+  same-package host that later fails to provision shows up in
+  `omp.HostArtifactStates` and the Portal host deployment view, not at import
+  (omp-hostagent-service 0.3.303).
 - **Worker plugins import together with the WorkerProcessHost they need.** A
   universal package carrying a new `omp-workerprocesshost` and worker plugins
   that require it lost the plugins on its first import, because the host it had
   just selected was not provisioned until the next HostAgent cycle; only a
   re-import succeeded. HostAgent now imports worker-host artifacts first in each
-  batch and also accepts the selected host version when this same package
+  batch (see the entry above for hosts outside the plugin's batch) and also accepts the selected host version when this same package
   registered it. A host that is neither provisioned nor in the package is still
   rejected (omp-hostagent-service 0.3.301).
 - **Dark theme: readable group messages, error pills, banners and hovers.**

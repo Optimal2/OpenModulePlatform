@@ -747,6 +747,27 @@ public sealed class ArtifactZipImportService
             .OrderBy(static item => ModuleDefinitionApplyOrder.GetApplyRankForPath(item.Path))
             .ThenBy(static item => item.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // Worker-host artifacts whose module definition is not in this package would
+        // otherwise fall through to the loop after every module batch -- after the worker
+        // plugins that need them. Import them before any module batch. A host whose
+        // definition IS in the package is imported first within that batch, and omp_core
+        // (the host's own module) is applied before every other module.
+        foreach (var item in SelectWorkerHostArtifactsWithoutPackageDefinition(
+                     artifactItems,
+                     static item => item.ExtractedPath,
+                     moduleDefinitionItems.Select(static item => item.Path)))
+        {
+            itemResults.Add(await ImportUniversalArtifactItemAsync(
+                settings,
+                importSettings,
+                item,
+                extractionRoot,
+                samePackageWorkerHostVersions,
+                cancellationToken));
+            processedArtifactPaths.Add(item.ExtractedPath);
+        }
+
         foreach (var item in moduleDefinitionItems)
         {
             ModuleDefinitionImportContext definitionContext;
@@ -770,7 +791,8 @@ public sealed class ArtifactZipImportService
             }
 
             var matchingArtifactItems = artifactItems
-                .Where(artifactItem => TryParseFilenameMetadata(Path.GetFileName(artifactItem.ExtractedPath)) is { } metadata
+                .Where(artifactItem => !processedArtifactPaths.Contains(artifactItem.ExtractedPath)
+                    && TryParseFilenameMetadata(Path.GetFileName(artifactItem.ExtractedPath)) is { } metadata
                     && metadata.ModuleKey.Equals(definitionContext.Definition.ModuleKey, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             var artifactResults = await ImportUniversalModuleArtifactsAsync(
@@ -2238,6 +2260,34 @@ public sealed class ArtifactZipImportService
             .OrderBy(item => TryParseFilenameMetadata(Path.GetFileName(pathSelector(item))) is { } metadata
                 && IsWorkerProcessHostArtifact(metadata) ? 0 : 1)
             .ToList();
+
+    /// <summary>
+    /// The WorkerProcessHost artifacts of a package whose module definition the package does
+    /// not carry. Those are imported in a pre-pass: host and worker plugin never share a module
+    /// batch, so ordering inside a batch cannot put such a host ahead of the plugins.
+    /// </summary>
+    /// <remarks>
+    /// A definition's module key is its file name by construction (see
+    /// <see cref="ModuleDefinitionApplyOrder.GetApplyRankForPath"/>).
+    /// </remarks>
+    internal static IReadOnlyList<T> SelectWorkerHostArtifactsWithoutPackageDefinition<T>(
+        IEnumerable<T> artifactItems,
+        Func<T, string> pathSelector,
+        IEnumerable<string> moduleDefinitionPaths)
+    {
+        const string definitionSuffix = ".module-definition.json";
+        var definitionModuleKeys = moduleDefinitionPaths
+            .Select(static path => Path.GetFileName(path.Replace('\\', '/')))
+            .Where(static fileName => fileName.EndsWith(definitionSuffix, StringComparison.OrdinalIgnoreCase))
+            .Select(static fileName => fileName[..^definitionSuffix.Length])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return artifactItems
+            .Where(item => TryParseFilenameMetadata(Path.GetFileName(pathSelector(item))) is { } metadata
+                && IsWorkerProcessHostArtifact(metadata)
+                && !definitionModuleKeys.Contains(metadata.ModuleKey))
+            .ToList();
+    }
 
     private static bool IsWorkerProcessHostArtifact(FilenameMetadata metadata)
         => metadata.PackageType.Equals("worker-host", StringComparison.OrdinalIgnoreCase)
