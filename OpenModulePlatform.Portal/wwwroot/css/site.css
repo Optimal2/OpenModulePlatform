@@ -7926,10 +7926,25 @@ tr.linkbox-editor-row--dragging {
     display: inline-flex;
 }
 
+/* The stamp sits over the title bar's right end (the title bar keeps room for
+   it) and steps aside while editing, where the title bar's own controls are. */
 .dashboard-widget__updated {
-    float: right;
-    margin-left: 8px;
+    position: absolute;
+    top: 9px;
+    right: 12px;
+    z-index: 4;
     color: var(--text-muted);
     font-size: 0.78rem;
     font-weight: 400;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.dashboard-widget.has-refresh-stamp .dashboard-widget__titlebar {
+    padding-right: 108px;
+}
+
+.portal-dashboard.is-editing .dashboard-widget__updated,
+.portal-dashboard:not(.is-editing) .dashboard-widget.is-titlebar-hidden .dashboard-widget__updated {
+    display: none;
 }

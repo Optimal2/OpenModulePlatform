@@ -3969,7 +3969,10 @@
         return seconds;
     }
 
-    // Which widgets are due at `now`: pure, so it can be tested on its own.
+    // Which widgets are due at `now`: pure, so it can be tested on its own. A
+    // widget whose settings popup is open is left alone until it closes. The
+    // wait counts from the last attempt as well as the last success, so a widget
+    // that fails is tried again on the interval, not on every tick.
     function getModuleFragmentRefreshDue(root, now, force = false) {
         const intervalSeconds = parseRefreshIntervalSeconds(root.dataset.refreshInterval);
         if (!force && intervalSeconds === 0) {
@@ -3978,10 +3981,12 @@
         const due = [];
         root.querySelectorAll('[data-dashboard-widget]').forEach((element) => {
             const own = getModuleFragmentRefreshSeconds(element);
-            if (!own) {
+            if (!own || activeWidgetPopup?.ownerWidget === element) {
                 return;
             }
-            const last = parseFloat(element.dataset.moduleFragmentRefreshedAt) || 0;
+            const last = Math.max(
+                parseFloat(element.dataset.moduleFragmentRefreshedAt) || 0,
+                parseFloat(element.dataset.moduleFragmentAttemptedAt) || 0);
             if (force || now - last >= Math.max(intervalSeconds, own) * 1000) {
                 due.push(element);
             }
@@ -3999,21 +4004,23 @@
         }
     }
 
-    // The stamp in the title bar says when the widget's content was fetched; it
-    // moves only on a successful fetch, so it stands still exactly when refreshes
-    // stop going through.
+    // The stamp over the title bar's right end says when the widget's content
+    // was fetched; it moves only on a successful fetch, so it stands still
+    // exactly when refreshes stop going through. It is a child of the widget,
+    // not of the title bar: the draft and the layout save read the title bar's
+    // text as the title, and the stamp must not become part of it.
     function markModuleFragmentRefreshed(root, element, at = Date.now()) {
         element.dataset.moduleFragmentRefreshedAt = String(at);
-        const titlebar = element.querySelector('[data-widget-titlebar]');
-        if (!titlebar || typeof document.createElement !== 'function') {
+        if (!element.querySelector('[data-widget-titlebar]') || typeof document.createElement !== 'function') {
             return;
         }
-        let stamp = titlebar.querySelector('[data-widget-updated]');
+        let stamp = element.querySelector(':scope > [data-widget-updated]');
         if (!stamp) {
             stamp = document.createElement('span');
             stamp.className = 'dashboard-widget__updated';
             stamp.setAttribute('data-widget-updated', '');
-            titlebar.appendChild(stamp);
+            element.appendChild?.(stamp);
+            element.classList?.add?.('has-refresh-stamp');
         }
         stamp.textContent = (root.dataset.refreshUpdatedLabel || 'Updated {0}').replace('{0}', formatDashboardClock(at));
     }
@@ -4035,6 +4042,7 @@
         if (!current || !widgetId || !root.dataset.moduleFragmentUrl) {
             return false;
         }
+        element.dataset.moduleFragmentAttemptedAt = String(Date.now());
         const controller = new AbortController();
         const timer = window.setTimeout(() => controller.abort(), moduleFragmentTimeoutMilliseconds);
         try {

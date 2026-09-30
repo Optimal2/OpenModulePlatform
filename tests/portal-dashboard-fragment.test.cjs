@@ -96,7 +96,8 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
         createWidgetElement = (root, item) => testCreate(root, item, createModuleFragmentPlaceholder);
         window.testApi = { initDashboard, scheduleModuleFragmentRetry, loadModuleFragment,
             initializeModuleFragment, captureDashboardSnapshot, resetDashboardChanges, restoreDashboardDraft, applySavedWidgetIds,
-            getModuleFragmentRefreshDue, refreshModuleFragment, markModuleFragmentRefreshed };
+            getModuleFragmentRefreshDue, refreshModuleFragment, markModuleFragmentRefreshed, parseRefreshIntervalSeconds,
+            setActiveWidgetPopup: value => { activeWidgetPopup = value; } };
     })();`), Object.assign(context, {
         testRemove: element => { canvas.widgets = canvas.widgets.filter(item => item !== element); },
         testCreate: (root, item, placeholder) => {
@@ -480,4 +481,31 @@ test('refresh: a timeout, an unavailable response or a network error keeps the f
         assert.equal(dash.current, before, kind);
         assert.equal(dash.widgets[0].dataset.moduleFragmentRefreshedAt, undefined, kind);
     }
+});
+
+test('refresh: the interval choices are exactly the menu\'s, anything else is the default minute', () => {
+    const { parseRefreshIntervalSeconds } = dashboard().api;
+    assert.deepEqual([0, 30, 60, 300, 45, -1, 'soon', undefined].map(parseRefreshIntervalSeconds), [0, 30, 60, 300, 60, 60, 60, 60]);
+});
+
+test('refresh: a widget with its settings popup open is not due, and is again once it closes', () => {
+    const dash = refreshing();
+    const api = dash.api;
+    api.markModuleFragmentRefreshed(dash.root, dash.widgets[0], 1000);
+    api.setActiveWidgetPopup({ ownerWidget: dash.widgets[0] });
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 600000).length, 0);
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 600000, true).length, 0);
+    api.setActiveWidgetPopup(null);
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 600000).length, 1);
+});
+
+test('refresh: a failed attempt counts like a fetch, so a widget that fails waits out the interval', async () => {
+    const dash = refreshing();
+    const api = dash.api;
+    dash.respondWith(async () => 'network');
+    assert.equal(await api.refreshModuleFragment(dash.root, dash.widgets[0]), false);
+    const attempted = parseFloat(dash.widgets[0].dataset.moduleFragmentAttemptedAt);
+    assert.ok(attempted > 0);
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, attempted + 59000).length, 0);
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, attempted + 60000).length, 1);
 });

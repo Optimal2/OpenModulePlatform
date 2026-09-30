@@ -770,6 +770,7 @@ BEGIN
         align_to_grid bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_align_to_grid DEFAULT(1),
         expanded_canvas bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_expanded_canvas DEFAULT(0),
         has_custom_dashboard_layout bit NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_has_custom_dashboard_layout DEFAULT(0),
+        refresh_interval_seconds int NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_refresh_interval_seconds DEFAULT(60),
         updated_at datetime2(3) NOT NULL CONSTRAINT DF_omp_portal_user_dashboard_preferences_updated_at DEFAULT(SYSUTCDATETIME()),
 
         CONSTRAINT PK_omp_portal_user_dashboard_preferences PRIMARY KEY(user_id),

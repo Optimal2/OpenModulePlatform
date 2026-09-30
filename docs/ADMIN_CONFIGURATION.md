@@ -470,7 +470,9 @@ a minute or 5 minutes; a minute unless changed, in the dashboard's edit menu
 next to "Refresh now"), or at the module's pace when that is slower. A widget
 whose settings popup is open is left alone, a hidden tab waits, and a tab shown
 again catches up. The title bar shows when the content was last fetched. A
-fragment without the attribute is fetched once, when the page opens.
+fragment without the attribute is fetched once, when the page opens. A user
+who cannot edit the dashboard has no menu and refreshes at the default, a
+minute.
 
 ### 2. Manage the installation topology
 

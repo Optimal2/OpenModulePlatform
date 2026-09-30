@@ -282,9 +282,12 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             return Forbid();
         }
 
-        // A value outside the menu's choices is the default, never an error: the
-        // menu itself only offers the choices.
-        var refreshInterval = DashboardRefreshIntervals.Normalize(refreshIntervalSeconds);
+        // A post without the interval (an older page still open) keeps the stored
+        // choice; a value outside the menu's choices is the default, never an
+        // error, since the menu itself only offers the choices.
+        var refreshInterval = refreshIntervalSeconds is null
+            ? (await _dashboard.GetPreferencesAsync(userId, ct)).RefreshIntervalSeconds
+            : DashboardRefreshIntervals.Normalize(refreshIntervalSeconds);
         await _dashboard.SetPreferencesAsync(userId, alignToGrid, expandedCanvas, refreshInterval, ct);
         return new JsonResult(new { ok = true, alignToGrid, expandedCanvas, refreshIntervalSeconds = refreshInterval });
     }

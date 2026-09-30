@@ -154,6 +154,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   edit menu next to a "Refresh now" button. Widgets are fetched one at a
   time, never one whose settings popup is open; a hidden tab waits and a tab
   shown again catches up; the title bar shows when the content was fetched.
+  A user who cannot edit the dashboard refreshes at the default minute.
 - **Light/dark theme contract, first slice.** `OpenModulePlatform.Web.Shared`
   ships `js/omp-theme.js` (synchronous head script, CSP-safe, sets
   `data-theme`/`data-theme-mode` on `<html>` before first paint) and

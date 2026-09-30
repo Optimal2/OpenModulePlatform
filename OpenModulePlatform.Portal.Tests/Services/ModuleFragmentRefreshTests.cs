@@ -1,6 +1,7 @@
 using OpenModulePlatform.Portal.Models;
 using OpenModulePlatform.Portal.Services;
 using Xunit;
+using PortalIndex = OpenModulePlatform.Portal.Pages.IndexModel;
 
 namespace OpenModulePlatform.Portal.Tests.Services;
 
@@ -45,6 +46,16 @@ public sealed class ModuleFragmentRefreshTests
     public void GetRefreshSeconds_ClampsWholeSecondsAndRejectsTheRest(string? value, int? expected)
     {
         Assert.Equal(expected, ModuleFragmentWidget.GetRefreshSeconds(value));
+    }
+
+    [Fact]
+    public void RefreshIntervalText_NamesEveryMenuChoiceDistinctly()
+    {
+        var keys = DashboardRefreshIntervals.Allowed.Select(PortalIndex.RefreshIntervalText).ToArray();
+
+        Assert.Equal(DashboardRefreshIntervals.Allowed.Count, keys.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal("Off", PortalIndex.RefreshIntervalText(DashboardRefreshIntervals.Off));
+        Assert.Equal("Every minute", PortalIndex.RefreshIntervalText(DashboardRefreshIntervals.Default));
     }
 
     [Theory]
