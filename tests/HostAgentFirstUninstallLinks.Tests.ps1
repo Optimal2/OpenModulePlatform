@@ -89,6 +89,8 @@ Describe 'HostAgent-first uninstall: runtime folder removal never follows links'
 
         Remove-ConfiguredDirectory -Path $script:runtimeFolder 6>$null
 
+        # The emulation must actually run; otherwise the test passes on engines that never follow links.
+        Should -Invoke Remove-Item -Times 1 -Exactly -ParameterFilter { $Recurse -and $LiteralPath -eq $script:runtimeFolder }
         Test-Path -LiteralPath $script:runtimeFolder | Should -BeFalse
         Test-Path -LiteralPath $script:outsideFile | Should -BeTrue
     }
