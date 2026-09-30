@@ -36,6 +36,21 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Dark theme: readable group messages, error pills, banners and hovers.**
+  Incoming bubbles in group conversations, `.pill-danger`,
+  `.integrity-pill--error`, the failed-send banner, the dashboard draft
+  banner and the hover states of `.btn-success`, `.btn-warning` and
+  `.btn-danger` kept light backgrounds under dark-palette text (1.0–1.7:1).
+  They now use tokens. `omp-theme.css` gains
+  `--omp-{success,warning,danger,info}-bg-hover` and the categorical
+  `--omp-series-{1..6}-{bg,border}`; the sender colours moved from the view
+  into site.css classes. `omp-theme.js` orders cookie, localStorage mirror
+  and session value by revision, so an older cookie no longer overrides a
+  newer choice when a cookie write was dropped. The contrast test now also
+  covers `/Admin/SystemLog`, `/Admin/HostDeployments`, `/Admin/Maintenance`,
+  a conversation page, data-dependent states and button hovers, and reports
+  3:1–4.5:1 as warnings (the 3:1 gate is temporary, see
+  `docs/THEME_CONTRACT.md`).
 - **The script package export never replaces an existing package.**
   `scripts/omp/export-universal-package.ps1` (and `build-universal-package.ps1`,
   which delegates to it) deleted an existing output file and wrote a new one

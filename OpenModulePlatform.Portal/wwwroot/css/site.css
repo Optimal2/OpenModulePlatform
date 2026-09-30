@@ -421,9 +421,9 @@
     margin: 0 auto;
     max-width: min(640px, calc(100% - 20px));
     padding: 8px 12px;
-    border: 1px solid rgba(220, 38, 38, 0.22);
+    border: 1px solid var(--omp-danger-border, rgba(220, 38, 38, 0.22));
     border-radius: 999px;
-    background: rgba(254, 242, 242, 0.96);
+    background: var(--omp-danger-bg, #fef2f2);
     box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
     color: var(--omp-danger-text, #991b1b);
     font-size: 0.82rem;
@@ -503,33 +503,33 @@
 /* Group conversations: one colour per sender on incoming bubbles
    (_ThreadMessages.cshtml picks sender-1..6 from the sender id). */
 .portal-message-thread__message--sender-1 {
-    --portal-message-sender-bg: #fef3c7;
-    --portal-message-sender-border: #f59e0b;
+    --portal-message-sender-bg: var(--omp-series-1-bg, #fef3c7);
+    --portal-message-sender-border: var(--omp-series-1-border, #f59e0b);
 }
 
 .portal-message-thread__message--sender-2 {
-    --portal-message-sender-bg: #ede9fe;
-    --portal-message-sender-border: #8b5cf6;
+    --portal-message-sender-bg: var(--omp-series-2-bg, #ede9fe);
+    --portal-message-sender-border: var(--omp-series-2-border, #8b5cf6);
 }
 
 .portal-message-thread__message--sender-3 {
-    --portal-message-sender-bg: #dcfce7;
-    --portal-message-sender-border: #22c55e;
+    --portal-message-sender-bg: var(--omp-series-3-bg, #dcfce7);
+    --portal-message-sender-border: var(--omp-series-3-border, #22c55e);
 }
 
 .portal-message-thread__message--sender-4 {
-    --portal-message-sender-bg: #fee2e2;
-    --portal-message-sender-border: #ef4444;
+    --portal-message-sender-bg: var(--omp-series-4-bg, #fee2e2);
+    --portal-message-sender-border: var(--omp-series-4-border, #ef4444);
 }
 
 .portal-message-thread__message--sender-5 {
-    --portal-message-sender-bg: #cffafe;
-    --portal-message-sender-border: #06b6d4;
+    --portal-message-sender-bg: var(--omp-series-5-bg, #cffafe);
+    --portal-message-sender-border: var(--omp-series-5-border, #06b6d4);
 }
 
 .portal-message-thread__message--sender-6 {
-    --portal-message-sender-bg: #fce7f3;
-    --portal-message-sender-border: #ec4899;
+    --portal-message-sender-bg: var(--omp-series-6-bg, #fce7f3);
+    --portal-message-sender-border: var(--omp-series-6-border, #ec4899);
 }
 
 .portal-message-thread__message.is-own .portal-message-thread__bubble {
@@ -1840,9 +1840,9 @@ a:hover {
 }
 
 .pill-danger {
-    background: #fde2e4;
+    background: var(--omp-danger-bg, #fde2e4);
     color: var(--omp-danger-text, #8a1c2b);
-    border-color: #f3b9c0;
+    border-color: var(--omp-danger-border, #f3b9c0);
 }
 
 .integrity-pill {
@@ -1873,8 +1873,8 @@ a:hover {
 }
 
 .integrity-pill--error {
-    border-color: #e49a9a;
-    background: #fff0f0;
+    border-color: var(--omp-danger-border, #e49a9a);
+    background: var(--omp-danger-bg, #fff0f0);
     color: var(--omp-danger-text, #9a1f1f);
 }
 
@@ -2852,7 +2852,7 @@ button {
 .btn-success:hover,
 .btn-success:focus-visible {
     border-color: #15803d;
-    background: #bbf7d0;
+    background: var(--omp-success-bg-hover, #bbf7d0);
     color: var(--omp-success-text, #14532d);
 }
 
@@ -2865,7 +2865,7 @@ button {
 .btn-warning:hover,
 .btn-warning:focus-visible {
     border-color: #d97706;
-    background: #fde68a;
+    background: var(--omp-warning-bg-hover, #fde68a);
     color: var(--omp-warning-text, #78350f);
 }
 
@@ -2878,7 +2878,7 @@ button {
 .btn-danger:hover,
 .btn-danger:focus-visible {
     border-color: var(--omp-danger-text, #b91c1c);
-    background: #fecaca;
+    background: var(--omp-danger-bg-hover, #fecaca);
     color: var(--omp-danger-text, #7f1d1d);
 }
 
@@ -3283,9 +3283,9 @@ button {
     justify-content: space-between;
     gap: 12px;
     padding: 10px 12px;
-    border: 1px solid #f0b36d;
+    border: 1px solid var(--omp-warning-border, #f0b36d);
     border-radius: 12px;
-    background: #fff8ed;
+    background: var(--omp-warning-bg, #fff8ed);
     color: var(--omp-warning-text, #6f3f00);
     box-shadow: 0 12px 28px rgba(17, 24, 39, 0.1);
 }

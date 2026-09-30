@@ -125,11 +125,32 @@
         }
     }
 
-    // The cookie is the shared value (it reaches every port and app on the host),
-    // so it wins over an older localStorage mirror; the mirror only fills in when
-    // the cookie is gone.
+    // A revision starts with its creation time (newRevision). Anything else,
+    // for example a hand-written value, counts as oldest.
+    function revisionTime(preference) {
+        var time = parseInt(preference.revision.split('-')[0], 36);
+        return isFinite(time) ? time : 0;
+    }
+
+    // The newest of the given preferences by revision. On a tie, or when a
+    // revision cannot be read, the earlier argument wins: the cookie is the shared
+    // value (it reaches every port and app on the host), so it beats the
+    // localStorage mirror unless the mirror is provably newer, as it is when a
+    // cookie write was silently dropped.
+    function newest() {
+        var best = null;
+        for (var i = 0; i < arguments.length; i++) {
+            var candidate = arguments[i];
+            if (candidate && (!best || revisionTime(candidate) > revisionTime(best))) {
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
     function readPreference() {
-        return readCookie() || readLocal() || sessionPreference;
+        return newest(readCookie(), readLocal(), sessionPreference);
     }
 
     function systemTheme() {
@@ -193,13 +214,15 @@
     function initialize() {
         var cookie = readCookie();
         var local = readLocal();
-        if (cookie && (!local || local.revision !== cookie.revision)) {
-            writeLocal(cookie);
-        } else if (!cookie && local) {
-            writeCookie(local);
+        var preference = newest(cookie, local);
+        if (preference && (!local || local.revision !== preference.revision)) {
+            writeLocal(preference);
         }
 
-        var preference = cookie || local;
+        if (preference && (!cookie || cookie.revision !== preference.revision)) {
+            writeCookie(preference);
+        }
+
         apply(preference ? preference.mode : 'system', null);
     }
 

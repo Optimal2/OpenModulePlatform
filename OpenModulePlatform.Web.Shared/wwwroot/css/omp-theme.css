@@ -30,16 +30,35 @@
 
     --omp-success-text: #166534;
     --omp-success-bg: #dcfce7;
+    --omp-success-bg-hover: #bbf7d0;
     --omp-success-border: #86c79b;
     --omp-warning-text: #92400e;
     --omp-warning-bg: #fef3c7;
+    --omp-warning-bg-hover: #fde68a;
     --omp-warning-border: #f0b36d;
     --omp-danger-text: #991b1b;
     --omp-danger-bg: #fee2e2;
+    --omp-danger-bg-hover: #fecaca;
     --omp-danger-border: #f1a9a9;
     --omp-info-text: #075985;
     --omp-info-bg: #e0f2fe;
+    --omp-info-bg-hover: #bae6fd;
     --omp-info-border: #7dd3fc;
+
+    /* Categorical series: tells items apart (for example message senders), carries
+       no status. Text on a series background is --omp-text. */
+    --omp-series-1-bg: #fef3c7;
+    --omp-series-1-border: #f59e0b;
+    --omp-series-2-bg: #ede9fe;
+    --omp-series-2-border: #8b5cf6;
+    --omp-series-3-bg: #dcfce7;
+    --omp-series-3-border: #22c55e;
+    --omp-series-4-bg: #fee2e2;
+    --omp-series-4-border: #ef4444;
+    --omp-series-5-bg: #cffafe;
+    --omp-series-5-border: #06b6d4;
+    --omp-series-6-bg: #fce7f3;
+    --omp-series-6-border: #ec4899;
 }
 
 /* Screen only: printed pages keep the light palette (white paper, dark text)
@@ -66,16 +85,33 @@ html[data-theme="dark"] {
 
     --omp-success-text: #86efac;
     --omp-success-bg: #0f2a1b;
+    --omp-success-bg-hover: #164028;
     --omp-success-border: #2f7d46;
     --omp-warning-text: #fcd34d;
     --omp-warning-bg: #2e2310;
+    --omp-warning-bg-hover: #45341a;
     --omp-warning-border: #8a6a1f;
     --omp-danger-text: #fca5a5;
     --omp-danger-bg: #3a1518;
+    --omp-danger-bg-hover: #52202a;
     --omp-danger-border: #9f3a3f;
     --omp-info-text: #93c5fd;
     --omp-info-bg: #0f2236;
+    --omp-info-bg-hover: #173352;
     --omp-info-border: #2f5f8f;
+
+    --omp-series-1-bg: #33270f;
+    --omp-series-1-border: #b7791f;
+    --omp-series-2-bg: #2a2145;
+    --omp-series-2-border: #7c5cd6;
+    --omp-series-3-bg: #13301f;
+    --omp-series-3-border: #2f9e5a;
+    --omp-series-4-bg: #3a1a1d;
+    --omp-series-4-border: #c2474d;
+    --omp-series-5-bg: #0f2e35;
+    --omp-series-5-border: #1a9bb0;
+    --omp-series-6-bg: #3a1830;
+    --omp-series-6-border: #c2448a;
 }
 }
 

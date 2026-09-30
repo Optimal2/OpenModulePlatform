@@ -38,8 +38,11 @@ Name `OMP_THEME_PREFERENCE`, value (JSON, URI-encoded in the cookie):
   `HttpOnly` (the script owns it). Host-only by default. A shared parent domain is
   opt-in: `<script src="…/omp-theme.js" data-cookie-domain="example.org">`, and is
   ignored when the page's host is not under that domain.
-- `localStorage` under the same name is a mirror. On page start a valid cookie wins
-  over the mirror; the mirror only refills a missing cookie.
+- `localStorage` under the same name is a mirror. The `revision` orders the two: it
+  starts with the creation time, and on page start and on every re-read the newest
+  value wins and is copied to the other store. On a tie, or when a revision cannot
+  be read, the cookie wins. So a mirror that is newer because a cookie write was
+  silently dropped is not overwritten by the older cookie.
 - If both are denied, the switch still works for the current page.
 - A value with another `version` or an unknown `mode` is ignored.
 - The script never reads or writes any other application's preferences
@@ -65,6 +68,8 @@ re-read the cookie on focus, `pageshow` and when the tab becomes visible.
 | `--omp-accent-surface` | Selected/current rows, soft highlights |
 | `--omp-shadow`, `--omp-overlay` | Elevation and modal backdrop |
 | `--omp-{success,warning,danger,info}-{text,bg,border}` | Status messages, chips, banners |
+| `--omp-{success,warning,danger,info}-bg-hover` | Hover/focus fill of a status-coloured control; text stays `-text` |
+| `--omp-series-{1..6}-{bg,border}` | Categorical colours that tell items apart without a status (message senders); text on them is `--omp-text` |
 
 Rules:
 
@@ -73,7 +78,8 @@ Rules:
   `--surface: var(--omp-surface, #ffffff);`. That is how the Portal migrated
   without renaming its selectors.
 - Do not redefine `--omp-*` tokens in an app stylesheet; request a new token instead.
-- Status text and background come in pairs; use both from the same family.
+- Status text and background come in pairs; use both from the same family, and
+  tokenise the background of every state (hover, focus, error) together with its text.
 
 ### JavaScript API
 
@@ -102,6 +108,17 @@ Rules:
    carries the same markup inline.
 4. Test both palettes (see `OpenModulePlatform.UiTests/ThemeContractTests.cs`):
    switching, reload, System following `prefers-color-scheme`, and text contrast.
+   Include the states a page shows only with particular data (error rows, group
+   conversations, failed checks) and hover, not just the page at rest; the Portal
+   tests insert each page's markup for those states into the live page.
+
+### Contrast gate: 3:1 is temporary
+
+The target is WCAG AA for normal text, 4.5:1, in both palettes. The contrast test
+currently fails only below **3:1** (AA large text / non-text) while the remaining
+hard-coded colours are migrated. Everything between 3:1 and 4.5:1 is reported as a
+warning — in the test output and in `TestResults/ui-theme/*.contrast-warnings.txt`
+— without failing. Once those reports are empty the gate moves to 4.5:1.
 
 ## Menu markup and behaviour
 
@@ -126,4 +143,5 @@ delegation, so Blazor re-renders need no init call.
 - Document viewer (ODV) synchronisation and its `normal` palette, including any
   `postMessage` bridge for cross-origin frames.
 - Server-side rendering of `data-theme` (the head script does it before paint).
-- Semantic chart and message-sender colour series.
+- Semantic chart colour series (the categorical `--omp-series-*` tokens are not
+  tuned for charts).
