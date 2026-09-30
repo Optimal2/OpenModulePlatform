@@ -126,7 +126,14 @@ that embedded marker. HostAgent requires both a compatible selected
 selected artifact on the importing host. It deliberately does not accept an
 unrelated older or newer host artifact that merely remains in the host cache,
 because WorkerManager resolves only the selected-and-provisioned artifact.
-WorkerProcessHost checks again before loading the plugin, which also protects a
+One exception covers a universal package that carries the new
+`omp-workerprocesshost` itself: provisioning runs in the HostAgent cycle after
+the import, so a plugin is also accepted when the selected host version was
+registered by that same package. HostAgent imports worker-host artifacts before
+the other artifacts of a batch, so the plugins are checked after the host is
+selected. A host version that is neither provisioned nor in the package is
+still rejected, and WorkerManager does not launch the plugin before the host is
+provisioned. WorkerProcessHost checks again before loading the plugin, which also protects a
 previously imported plugin after a host downgrade.
 
 `sourceRepositoryKey`, `sourceCommitSha`, and `sourceDirty` are optional source

@@ -36,6 +36,14 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Worker plugins import together with the WorkerProcessHost they need.** A
+  universal package carrying a new `omp-workerprocesshost` and worker plugins
+  that require it lost the plugins on its first import, because the host it had
+  just selected was not provisioned until the next HostAgent cycle; only a
+  re-import succeeded. HostAgent now imports worker-host artifacts first in each
+  batch and also accepts the selected host version when this same package
+  registered it. A host that is neither provisioned nor in the package is still
+  rejected (omp-hostagent-service 0.3.301).
 - **Dark theme: readable group messages, error pills, banners and hovers.**
   Incoming bubbles in group conversations, `.pill-danger`,
   `.integrity-pill--error`, the failed-send banner, the dashboard draft

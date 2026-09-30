@@ -732,6 +732,10 @@ public sealed class ArtifactZipImportService
             .ExtractToDirectory(packageZipPath, extractionRoot);
         var itemResults = new List<UniversalHostAgentImportItemResult>();
         var processedArtifactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // WorkerProcessHost versions this package registered; their worker plugins may be
+        // imported before the next HostAgent cycle provisions the host (see
+        // ValidateWorkerHostRequirement).
+        var samePackageWorkerHostVersions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var artifactItems = package.Items
             .Where(static item => item.Kind == UniversalModulePackageItemKind.ArtifactPackage)
             .ToArray();
@@ -775,6 +779,7 @@ public sealed class ArtifactZipImportService
                 definitionContext.Definition,
                 matchingArtifactItems,
                 extractionRoot,
+                samePackageWorkerHostVersions,
                 cancellationToken);
 
             foreach (var artifactItem in matchingArtifactItems)
@@ -889,13 +894,16 @@ public sealed class ArtifactZipImportService
             itemResults.AddRange(artifactResults);
         }
 
-        foreach (var item in artifactItems.Where(item => !processedArtifactPaths.Contains(item.ExtractedPath)))
+        foreach (var item in OrderWorkerHostArtifactsFirst(
+                     artifactItems.Where(item => !processedArtifactPaths.Contains(item.ExtractedPath)),
+                     static item => item.ExtractedPath))
         {
             itemResults.Add(await ImportUniversalArtifactItemAsync(
                 settings,
                 importSettings,
                 item,
                 extractionRoot,
+                samePackageWorkerHostVersions,
                 cancellationToken));
         }
 
@@ -950,11 +958,14 @@ public sealed class ArtifactZipImportService
         ModuleDefinitionImportDocument definition,
         IReadOnlyList<PortableUniversalModulePackageItem> artifactItems,
         string extractionRoot,
+        ISet<string> samePackageWorkerHostVersions,
         CancellationToken cancellationToken)
     {
         var plans = CreateModulePackageArtifactPlans(
             definition,
-            artifactItems.Select(static item => item.ExtractedPath).ToArray());
+            OrderWorkerHostArtifactsFirst(artifactItems, static item => item.ExtractedPath)
+                .Select(static item => item.ExtractedPath)
+                .ToArray());
         var activationKeys = SelectLatestActivationKeys(plans);
         var results = new List<UniversalHostAgentImportItemResult>();
 
@@ -991,7 +1002,13 @@ public sealed class ArtifactZipImportService
                     Path.Join(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
                     cancellationToken,
                     allowExistingIdentical: true,
-                    applyToMatchingApplications: activateArtifact);
+                    applyToMatchingApplications: activateArtifact,
+                    samePackageWorkerHostVersions: samePackageWorkerHostVersions);
+                if (activateArtifact)
+                {
+                    RecordSamePackageWorkerHost(plan.Metadata, samePackageWorkerHostVersions);
+                }
+
                 var message = artifact.Message;
                 if (!activateArtifact && artifact.Status is "Imported" or "Replaced" or "Skipped")
                 {
@@ -1030,6 +1047,7 @@ public sealed class ArtifactZipImportService
         HostAgentArtifactZipImportSettings importSettings,
         PortableUniversalModulePackageItem item,
         string extractionRoot,
+        ISet<string> samePackageWorkerHostVersions,
         CancellationToken cancellationToken)
     {
         try
@@ -1052,7 +1070,9 @@ public sealed class ArtifactZipImportService
                 Path.Join(extractionRoot, ".artifact-staging", Guid.NewGuid().ToString("N")),
                 cancellationToken,
                 allowExistingIdentical: true,
-                applyToMatchingApplications: true);
+                applyToMatchingApplications: true,
+                samePackageWorkerHostVersions: samePackageWorkerHostVersions);
+            RecordSamePackageWorkerHost(metadata, samePackageWorkerHostVersions);
             return new UniversalHostAgentImportItemResult(
                 "artifact-package",
                 item.Path,
@@ -1411,7 +1431,8 @@ public sealed class ArtifactZipImportService
         string stagingPath,
         CancellationToken cancellationToken,
         bool allowExistingIdentical = false,
-        bool applyToMatchingApplications = true)
+        bool applyToMatchingApplications = true,
+        ISet<string>? samePackageWorkerHostVersions = null)
     {
         var storeRoot = Path.GetFullPath(settings.CentralArtifactRoot.Trim());
         string? finalPath = null;
@@ -1449,6 +1470,7 @@ public sealed class ArtifactZipImportService
                 package,
                 metadata.PackageType,
                 settings.ResolveHostKey(),
+                samePackageWorkerHostVersions?.ToArray(),
                 cancellationToken);
             var contentHash = await ComputeDirectorySha256Async(package.ArtifactContentPath, cancellationToken);
 
@@ -2123,6 +2145,7 @@ public sealed class ArtifactZipImportService
         ArtifactPackageExtractionResult package,
         string packageType,
         string hostKey,
+        IReadOnlyCollection<string>? samePackageWorkerHostVersions,
         CancellationToken cancellationToken)
     {
         if (package.WorkerHostRequirement is null)
@@ -2144,41 +2167,90 @@ public sealed class ArtifactZipImportService
         ValidateWorkerHostRequirement(
             package.WorkerHostRequirement,
             workerHostVersions.SelectedVersion,
-            workerHostVersions.ProvisionedVersion);
+            workerHostVersions.ProvisionedVersion,
+            samePackageWorkerHostVersions);
     }
 
     internal static void ValidateWorkerHostRequirement(
         OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement requirement,
         string? selectedVersion,
-        string? provisionedVersion,
-        IReadOnlyCollection<string>? samePackageWorkerHostVersions)
-        => ValidateWorkerHostRequirement(requirement, selectedVersion, provisionedVersion);
+        string? provisionedVersion)
+        => ValidateWorkerHostRequirement(requirement, selectedVersion, provisionedVersion, null);
 
-    internal static IReadOnlyList<T> OrderWorkerHostArtifactsFirst<T>(
-        IEnumerable<T> items,
-        Func<T, string> pathSelector)
-        => items.ToList();
-
+    /// <summary>
+    /// A worker plugin is accepted when the SELECTED worker host satisfies its requirement and
+    /// that selected artifact is either provisioned on this host or was registered by the
+    /// universal package being imported right now.
+    /// </summary>
+    /// <remarks>
+    /// Provisioning runs in the HostAgent cycle AFTER the import, so a package carrying a new
+    /// WorkerProcessHost together with plugins that need it used to lose the plugins on its
+    /// first import and only succeed on a re-import (measured 2026-09-30). Accepting the
+    /// same-package host does not weaken the gate: the version must still be the selected one
+    /// and must still satisfy the requirement, WorkerManager resolves only the
+    /// selected-and-provisioned host so nothing launches the plugin before provisioning
+    /// finishes, and WorkerProcessHost re-checks the requirement before loading the plugin.
+    /// A host that is neither provisioned nor in the package is still rejected.
+    /// </remarks>
     internal static void ValidateWorkerHostRequirement(
         OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement requirement,
         string? selectedVersion,
-        string? provisionedVersion)
+        string? provisionedVersion,
+        IReadOnlyCollection<string>? samePackageWorkerHostVersions)
     {
         var requiredVersion = requirement.MinVersion.Trim();
         var normalizedSelectedVersion = selectedVersion?.Trim();
         var normalizedProvisionedVersion = provisionedVersion?.Trim();
         if (!string.IsNullOrWhiteSpace(normalizedSelectedVersion)
-            && ArtifactVersionComparer.Compare(normalizedSelectedVersion, requiredVersion) >= 0
-            && !string.IsNullOrWhiteSpace(normalizedProvisionedVersion)
-            && ArtifactVersionComparer.Compare(normalizedProvisionedVersion, requiredVersion) >= 0)
+            && ArtifactVersionComparer.Compare(normalizedSelectedVersion, requiredVersion) >= 0)
         {
-            return;
+            if (!string.IsNullOrWhiteSpace(normalizedProvisionedVersion)
+                && ArtifactVersionComparer.Compare(normalizedProvisionedVersion, requiredVersion) >= 0)
+            {
+                return;
+            }
+
+            if (samePackageWorkerHostVersions is not null
+                && samePackageWorkerHostVersions.Any(version =>
+                    ArtifactVersionComparer.Compare(version.Trim(), normalizedSelectedVersion) == 0))
+            {
+                return;
+            }
         }
 
         throw new InvalidOperationException(
             $"Worker plugin artifact requires component '{requirement.ComponentKey}' version {requiredVersion} or later, " +
-            $"but the selected worker host version is {normalizedSelectedVersion ?? "<not selected>"} and the selected artifact's provisioned version on this host is {normalizedProvisionedVersion ?? "<not provisioned>"}. " +
+            $"but the selected worker host version is {normalizedSelectedVersion ?? "<not selected>"} and the selected artifact's provisioned version on this host is {normalizedProvisionedVersion ?? "<not provisioned>"}" +
+            (samePackageWorkerHostVersions is { Count: > 0 }
+                ? $", and the worker host version(s) registered by this package ({string.Join(", ", samePackageWorkerHostVersions)}) are not the selected one. "
+                : ". ") +
             $"Select and provision '{requirement.ComponentKey}' version {requiredVersion} or later before importing this worker plugin.");
+    }
+
+    /// <summary>
+    /// Stable reorder that imports WorkerProcessHost artifacts before everything else, so a
+    /// worker plugin in the same batch is validated after the host it needs was registered.
+    /// </summary>
+    internal static IReadOnlyList<T> OrderWorkerHostArtifactsFirst<T>(
+        IEnumerable<T> items,
+        Func<T, string> pathSelector)
+        => items
+            .OrderBy(item => TryParseFilenameMetadata(Path.GetFileName(pathSelector(item))) is { } metadata
+                && IsWorkerProcessHostArtifact(metadata) ? 0 : 1)
+            .ToList();
+
+    private static bool IsWorkerProcessHostArtifact(FilenameMetadata metadata)
+        => metadata.PackageType.Equals("worker-host", StringComparison.OrdinalIgnoreCase)
+            && metadata.TargetName.Equals(
+                OpenModulePlatform.Worker.Abstractions.Models.WorkerPluginCompatibilityManifest.DefaultWorkerHostComponentKey,
+                StringComparison.OrdinalIgnoreCase);
+
+    private static void RecordSamePackageWorkerHost(FilenameMetadata metadata, ISet<string>? samePackageWorkerHostVersions)
+    {
+        if (samePackageWorkerHostVersions is not null && IsWorkerProcessHostArtifact(metadata))
+        {
+            samePackageWorkerHostVersions.Add(metadata.Version);
+        }
     }
 
     private static bool IsVersionInRange(string version, string? minVersion, string? maxVersion)
