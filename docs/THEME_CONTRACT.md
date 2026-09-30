@@ -71,6 +71,7 @@ re-read the cookie on focus, `pageshow` and when the tab becomes visible.
 | `--omp-{success,warning,danger,info}-{text,bg,border}` | Status messages, chips, banners |
 | `--omp-{success,warning,danger,info}-bg-hover` | Hover/focus fill of a status-coloured control; text stays `-text` |
 | `--omp-danger-surface` | A whole panel about a destructive action (delete zones); normal `--omp-text` on it |
+| `--omp-danger-solid` | Solid fill of counters and badges (unread counts); text on it is `--omp-on-accent` |
 | `--omp-series-{1..6}-{bg,border}` | Categorical colours that tell items apart without a status (message senders); text on them is `--omp-text` |
 
 Rules:

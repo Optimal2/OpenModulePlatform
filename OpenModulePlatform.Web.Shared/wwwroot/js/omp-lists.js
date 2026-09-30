@@ -1162,6 +1162,33 @@
     // visible in the band's start column. Colors come from
     // data-column-band-color or a fixed palette by order of appearance.
     const COLUMN_BAND_PALETTE = ['#4c8dd6', '#58a668', '#d6a54c', '#9273d1', '#4ca8a3'];
+    // Label text on a band: the stylesheet's dark default suits the palette;
+    // a custom #rgb/#rrggbb color gets whichever of the two reads better.
+    const COLUMN_BAND_DARK_TEXT = '#111827';
+    const COLUMN_BAND_LIGHT_TEXT = '#ffffff';
+
+    function relativeLuminance(hex) {
+        const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+        if (!match) {
+            return null;
+        }
+        const digits = match[1].length === 3 ? match[1].replace(/./g, '$&$&') : match[1];
+        const [r, g, b] = [0, 2, 4].map((i) => {
+            const c = parseInt(digits.slice(i, i + 2), 16) / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    function columnBandTextColor(color) {
+        const background = relativeLuminance(color);
+        if (background === null) {
+            return null;
+        }
+        const onDark = (background + 0.05) / (relativeLuminance(COLUMN_BAND_DARK_TEXT) + 0.05);
+        const onLight = 1.05 / (background + 0.05);
+        return onDark >= onLight ? COLUMN_BAND_DARK_TEXT : COLUMN_BAND_LIGHT_TEXT;
+    }
 
     function initColumnBands(root) {
         root.querySelectorAll('table').forEach((table) => {
@@ -1190,6 +1217,10 @@
                     bandLabels.set(band, cell.dataset.columnBandLabel);
                 }
                 cell.style.setProperty('--column-band-color', bandColors.get(band));
+                const textColor = columnBandTextColor(bandColors.get(band));
+                if (textColor) {
+                    cell.style.setProperty('--column-band-text', textColor);
+                }
             });
 
             const refresh = () => {

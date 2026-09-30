@@ -16,15 +16,15 @@
 }
 
 .omp-feedback__alert--success {
-    border-color: #2e7d43;
-    background: #eef8f0;
-    color: #1d5b2f;
+    border-color: var(--omp-success-border, #2e7d43);
+    background: var(--omp-success-bg, #eef8f0);
+    color: var(--omp-success-text, #1d5b2f);
 }
 
 .omp-feedback__alert--error {
-    border-color: #a61b1b;
-    background: #fdf0f0;
-    color: #a61b1b;
+    border-color: var(--omp-danger-border, #a61b1b);
+    background: var(--omp-danger-bg, #fdf0f0);
+    color: var(--omp-danger-text, #a61b1b);
 }
 
 .omp-feedback__list {

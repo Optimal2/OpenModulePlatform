@@ -461,7 +461,7 @@ body.section-navigator-resizing {
 
 .section-navigator__summary-link:focus-visible {
     border-radius: 4px;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.28);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--omp-focus, #2563eb) 28%, transparent);
 }
 
 .section-navigator-target {

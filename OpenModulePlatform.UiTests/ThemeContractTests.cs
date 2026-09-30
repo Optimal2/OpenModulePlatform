@@ -75,12 +75,12 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
         <div class="omp-feedback__alert omp-feedback__alert--error" data-panel>The settings could not be saved.</div></div>
         <p class="omp-confirm-dialog__warning" data-panel>This cannot be undone.</p>
         <div class="portal-topbar__notification-banners">
-        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--announcement" data-panel><span class="portal-topbar__notification-banner-text">An announcement.</span></div>
-        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--warning" data-panel><span class="portal-topbar__notification-banner-text">Maintenance tonight.</span></div>
-        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--critical" data-panel><span class="portal-topbar__notification-banner-text">The service is down.</span></div></div>
+        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--announcement" data-panel><span class="portal-topbar__notification-banner-icon" aria-hidden="true"></span><span class="portal-topbar__notification-banner-text">An announcement.</span></div>
+        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--warning" data-panel><span class="portal-topbar__notification-banner-icon" aria-hidden="true"></span><span class="portal-topbar__notification-banner-text">Maintenance tonight.</span></div>
+        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--critical" data-panel><span class="portal-topbar__notification-banner-icon" aria-hidden="true"></span><span class="portal-topbar__notification-banner-text">The service is down.</span></div></div>
         <p><span class="portal-topbar__notification-badge">3</span> <span class="portal-topbar__message-badge">4</span>
         <span class="portal-topbar__message-row-badge">12</span> <span class="portal-topbar__profile-avatar">AB</span></p>
-        <table class="omp-band-specimen"><thead><tr>
+        <table class="sortable-list"><thead><tr>
         <th data-column-band="b1" data-column-band-label="Band one">One</th><th data-column-band="b2" data-column-band-label="Band two">Two</th>
         <th data-column-band="b3" data-column-band-label="Band three">Three</th><th data-column-band="b4" data-column-band-label="Band four">Four</th>
         <th data-column-band="b5" data-column-band-label="Band five">Five</th><th data-column-band="b6" data-column-band-label="Band six">Six</th>

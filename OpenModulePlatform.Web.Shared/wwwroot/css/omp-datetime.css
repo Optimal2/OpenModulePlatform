@@ -67,7 +67,7 @@
 .omp-datetime__toggle:hover,
 .omp-datetime__toggle:focus-visible {
     border: none;
-    background: rgba(11, 87, 208, 0.08);
+    background: color-mix(in srgb, var(--link, #0b57d0) 8%, transparent);
 }
 
 /* While the panel is open the icon flips to the shared checkmark: the
@@ -75,7 +75,7 @@
    outside closes too). */
 .omp-datetime__toggle--open {
     --omp-dt-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/check.svg");
-    background-color: rgba(11, 87, 208, 0.08);
+    background-color: color-mix(in srgb, var(--link, #0b57d0) 8%, transparent);
 }
 
 /* Quick clear between the UTC suffix and the calendar icon. */
@@ -96,7 +96,7 @@
 .omp-datetime__clear:hover,
 .omp-datetime__clear:focus-visible {
     border: none;
-    background: rgba(11, 87, 208, 0.08);
+    background: color-mix(in srgb, var(--link, #0b57d0) 8%, transparent);
 }
 
 .omp-datetime__clear:hover::after,
@@ -269,7 +269,7 @@
     grid-template-columns: repeat(4, 34px);
     gap: 2px;
     padding-top: 4px;
-    border-top: 1px solid rgba(11, 87, 208, 0.18);
+    border-top: 1px solid color-mix(in srgb, var(--link, #0b57d0) 18%, transparent);
 }
 
 .omp-datetime-panel__cell {
@@ -638,7 +638,7 @@
     flex: none;
     margin: 0;
     padding: 2px 8px;
-    border: 1px solid rgba(11, 87, 208, 0.25);
+    border: 1px solid color-mix(in srgb, var(--link, #0b57d0) 25%, transparent);
     border-radius: 999px;
     background: var(--surface, #fff);
     color: var(--link-hover, #0842a1);

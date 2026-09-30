@@ -2,6 +2,8 @@
 /* Shared OMP form behaviours: the confirm dialog used instead of the native
    window.confirm. Host apps must define the shared tokens (--border, --surface,
    --surface-muted, --text, --text-muted, --link, --link-hover, --shadow).
+   The status colours come from omp-theme.css (--omp-*), with the light
+   palette as fallback for an app that does not load it.
    All visual properties on the buttons are declared explicitly so host app
    global button rules (margins, backgrounds, hover states) cannot leak in. */
 
@@ -22,7 +24,7 @@
 }
 
 .omp-confirm-dialog::backdrop {
-    background: rgba(23, 32, 51, 0.35);
+    background: var(--omp-overlay, rgba(23, 32, 51, 0.35));
 }
 
 .omp-confirm-dialog__body {
@@ -105,11 +107,11 @@
 .omp-confirm-dialog__warning {
     margin: 0;
     padding: 10px 12px;
-    border: 1px solid #e0b15b;
-    border-left: 4px solid #9a6700;
+    border: 1px solid var(--omp-warning-border, #e0b15b);
+    border-left: 4px solid var(--omp-warning-text, #9a6700);
     border-radius: 8px;
-    background: #fff8e6;
-    color: #674300;
+    background: var(--omp-warning-bg, #fff8e6);
+    color: var(--omp-warning-text, #674300);
     line-height: 1.5;
 }
 

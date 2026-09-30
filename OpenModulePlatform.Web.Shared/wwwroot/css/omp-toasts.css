@@ -21,7 +21,7 @@
     gap: 7px;
     padding: 13px 42px 13px 14px;
     overflow: hidden;
-    border: 1px solid rgba(2, 132, 199, 0.22);
+    border: 1px solid var(--omp-info-border, rgba(2, 132, 199, 0.22));
     border-radius: 12px;
     background: var(--surface, #fff);
     box-shadow: 0 16px 42px rgba(15, 23, 42, 0.18);
@@ -66,17 +66,17 @@
 }
 
 .omp-toast:focus-visible {
-    outline: 3px solid rgba(11, 87, 208, 0.22);
+    outline: 3px solid color-mix(in srgb, var(--link, #0b57d0) 22%, transparent);
     outline-offset: 2px;
 }
 
 .omp-toast--summary {
-    border-color: rgba(11, 87, 208, 0.28);
+    border-color: color-mix(in srgb, var(--link, #0b57d0) 28%, transparent);
 }
 
 .omp-toast--message {
     --omp-toast-timer-fill: var(--success, #047857);
-    border-color: rgba(4, 120, 87, 0.22);
+    border-color: var(--omp-success-border, rgba(4, 120, 87, 0.22));
 }
 
 .omp-toast__close {
@@ -101,7 +101,7 @@
 
 .omp-toast__close:hover,
 .omp-toast__close:focus-visible {
-    background: rgba(15, 23, 42, 0.08);
+    background: color-mix(in srgb, var(--text, #172033) 8%, transparent);
     color: var(--text, #172033);
     outline: none;
 }
@@ -133,7 +133,7 @@
     width: 100%;
     border-radius: inherit;
     background-color: var(--omp-toast-timer-fill);
-    box-shadow: 0 0 8px rgba(11, 87, 208, 0.24);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--omp-toast-timer-fill) 24%, transparent);
     opacity: 1;
     transform-origin: left center;
     transform: scaleX(var(--omp-toast-progress, 1));

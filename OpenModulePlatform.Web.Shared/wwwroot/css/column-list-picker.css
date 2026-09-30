@@ -84,7 +84,7 @@
 .column-list-picker__item:focus-within,
 .column-list-picker__item.is-selected {
     border-color: var(--link);
-    box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.12);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link, #0b57d0) 12%, transparent);
 }
 
 .column-list-picker__item.is-selected {

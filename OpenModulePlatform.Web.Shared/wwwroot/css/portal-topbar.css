@@ -337,7 +337,7 @@
     overflow: auto;
     overscroll-behavior: contain;
     padding-right: 10px;
-    scrollbar-color: rgba(100, 113, 132, 0.18) transparent;
+    scrollbar-color: color-mix(in srgb, var(--portal-topbar-text-muted) 18%, transparent) transparent;
     scrollbar-gutter: stable;
     scrollbar-width: thin;
     -ms-overflow-style: none;
@@ -345,7 +345,7 @@
 
 .portal-topbar__nav-scroll:hover,
 .portal-topbar__nav-scroll:focus-within {
-    scrollbar-color: rgba(100, 113, 132, 0.3) transparent;
+    scrollbar-color: color-mix(in srgb, var(--portal-topbar-text-muted) 30%, transparent) transparent;
 }
 
 .portal-topbar__nav-scroll::-webkit-scrollbar {
@@ -361,13 +361,13 @@
 .portal-topbar__nav-scroll::-webkit-scrollbar-thumb {
     border: 3px solid transparent;
     border-radius: 999px;
-    background: rgba(100, 113, 132, 0.18);
+    background: color-mix(in srgb, var(--portal-topbar-text-muted) 18%, transparent);
     background-clip: padding-box;
 }
 
 .portal-topbar__nav-scroll:hover::-webkit-scrollbar-thumb,
 .portal-topbar__nav-scroll:focus-within::-webkit-scrollbar-thumb {
-    background: rgba(100, 113, 132, 0.3);
+    background: color-mix(in srgb, var(--portal-topbar-text-muted) 30%, transparent);
     background-clip: padding-box;
 }
 
@@ -646,8 +646,8 @@ span.portal-topbar__nav-group-link {
     height: 16px;
     padding: 0 4px;
     border-radius: 999px;
-    background: #dc2626;
-    color: #fff;
+    background: var(--omp-danger-solid, #dc2626);
+    color: var(--omp-on-accent, #ffffff);
     font-size: 0.62rem;
     font-weight: 800;
     line-height: 16px;
@@ -822,7 +822,7 @@ span.portal-topbar__nav-group-link {
     height: 7px;
     margin-right: 6px;
     border-radius: 999px;
-    background: #0284c7;
+    background: var(--omp-info-text, #0284c7);
     vertical-align: 0.05em;
 }
 
@@ -1065,8 +1065,8 @@ span.portal-topbar__nav-group-link {
     height: 20px;
     padding: 0 6px;
     border-radius: 999px;
-    background: #dc2626;
-    color: #fff;
+    background: var(--omp-danger-solid, #dc2626);
+    color: var(--omp-on-accent, #ffffff);
     font-size: 0.68rem;
     font-weight: 800;
     line-height: 20px;
@@ -1102,24 +1102,24 @@ span.portal-topbar__nav-group-link {
     width: 100%;
     min-height: 32px;
     padding: 4px 8px;
-    border: 1px solid rgba(2, 132, 199, 0.22);
+    border: 1px solid var(--omp-info-border, rgba(2, 132, 199, 0.22));
     border-radius: 8px;
     background: var(--omp-info-bg, rgba(224, 242, 254, 0.72));
     color: var(--portal-topbar-text);
 }
 
 .portal-topbar__notification-banner--announcement {
-    border-color: rgba(2, 132, 199, 0.28);
+    border-color: var(--omp-info-border, rgba(2, 132, 199, 0.28));
     background: var(--omp-info-bg, rgba(224, 242, 254, 0.78));
 }
 
 .portal-topbar__notification-banner--warning {
-    border-color: rgba(217, 119, 6, 0.32);
+    border-color: var(--omp-warning-border, rgba(217, 119, 6, 0.32));
     background: var(--omp-warning-bg, rgba(254, 243, 199, 0.88));
 }
 
 .portal-topbar__notification-banner--critical {
-    border-color: rgba(220, 38, 38, 0.34);
+    border-color: var(--omp-danger-border, rgba(220, 38, 38, 0.34));
     background: var(--omp-danger-bg, rgba(254, 226, 226, 0.9));
 }
 
@@ -1479,8 +1479,8 @@ span.portal-topbar__nav-group-link {
     height: 28px;
     margin-left: -2px;
     border-radius: 999px;
-    background: #dbeafe;
-    color: #1d4ed8;
+    background: var(--omp-accent-surface, #dbeafe);
+    color: var(--omp-link, #1d4ed8);
     font-size: 0.72rem;
     font-weight: 900;
     letter-spacing: 0.02em;
