@@ -58,6 +58,33 @@ Describe 'OmpIsolatedBuildRoot validation' {
         $result.Text | Should -Match 'OMPBUILD002'
     }
 
+    It 'Fails a drive-relative OmpIsolatedBuildRoot such as C:artifacts\...' {
+        # IsPathRooted('C:artifacts') is true, but the path resolves against the
+        # current directory of that drive, which can be inside this repository.
+        $driveRelative = $script:repositoryRoot.Substring(0, 2) + 'artifacts\omp-isolated-build'
+        $result = Invoke-Probe -IsolatedBuildRoot $driveRelative
+        $result.ExitCode | Should -Not -Be 0
+        $result.Text | Should -Match 'OMPBUILD001'
+    }
+
+    It 'Fails an OmpIsolatedBuildRoot that reaches this repository through a junction' {
+        # The link points at the repository itself; only the link is removed
+        # afterwards, never what it points at. The probe target writes nothing.
+        $linkParent = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-isolated-alias-' + [Guid]::NewGuid().ToString('N'))
+        $link = Join-Path $linkParent 'omp-alias'
+        [void](New-Item -ItemType Directory -Path $linkParent -Force)
+        [void](New-Item -ItemType Junction -Path $link -Value $script:repositoryRoot)
+        try {
+            $result = Invoke-Probe -IsolatedBuildRoot (Join-Path $link 'artifacts\omp-isolated-build')
+        }
+        finally {
+            [System.IO.Directory]::Delete($link)
+            [System.IO.Directory]::Delete($linkParent)
+        }
+        $result.ExitCode | Should -Not -Be 0
+        $result.Text | Should -Match 'OMPBUILD002'
+    }
+
     It 'Passes an absolute OmpIsolatedBuildRoot outside this repository' {
         $result = Invoke-Probe -IsolatedBuildRoot $script:outsideRoot
         $result.Text | Should -Not -Match 'OMPBUILD00'
