@@ -517,7 +517,7 @@ internal static class ThemeScenarios
 
     public static async Task TextIsReadableAsync(
         PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output, string path, string theme, string screenshotName, string? specimen,
-        double minimumContrast = MinimumContrast, string hoverSelector = DefaultHoverSelector)
+        double minimumContrast = MinimumContrast, string hoverSelector = DefaultHoverSelector, int? expectedStatus = null)
     {
         Skip.IfNot(playwright.Available, playwright.UnavailableReason);
         Skip.IfNot(app.Available, app.UnavailableReason);
@@ -541,8 +541,9 @@ internal static class ThemeScenarios
         ]);
         var page = await context.NewPageAsync();
         // A status page answers with its own code (/status/404 renders the error view with 404).
-        var expectedStatus = path.StartsWith("/status/", StringComparison.Ordinal) ? int.Parse(path["/status/".Length..], System.Globalization.CultureInfo.InvariantCulture) : 200;
-        await GotoAsync(page, app, path, expectedStatus);
+        // Other error pages pass their code in expectedStatus.
+        expectedStatus ??= path.StartsWith("/status/", StringComparison.Ordinal) ? int.Parse(path["/status/".Length..], System.Globalization.CultureInfo.InvariantCulture) : 200;
+        await GotoAsync(page, app, path, expectedStatus.Value);
         Assert.Equal([theme, theme], await page.EvaluateAsync<string[]>(ThemeOf));
 
         // The generic invariants include "text colour equals background colour". They

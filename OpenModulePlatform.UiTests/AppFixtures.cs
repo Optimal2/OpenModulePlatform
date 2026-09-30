@@ -129,6 +129,41 @@ public sealed class ExampleWebAppBlazorModuleFixture : WebAppProcessFixture
         new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
 }
 
+/// <summary>
+/// The Blazor example with the shared top bar switched off: MainLayout.razor must then
+/// render the theme menu itself (docs/THEME_CONTRACT.md), exactly once.
+/// </summary>
+public sealed class ExampleWebAppBlazorModuleNoTopBarFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ExampleWebAppBlazorModule";
+    protected override string WebProjectDirectory => "examples/WebAppBlazorModule/WebApp";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string>
+        {
+            ["Portal__AllowAnonymous"] = "true",
+            ["Portal__PortalTopBar__Enabled"] = "false",
+        };
+}
+
+/// <summary>
+/// The iFrame module with the shared top bar switched off: the module header, and the
+/// standalone view's slim row, carry the theme menu.
+/// </summary>
+public sealed class IFrameAppNoTopBarFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.iFrameWebAppModule";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string>
+        {
+            ["Portal__AllowAnonymous"] = "true",
+            ["Portal__PortalTopBar__Enabled"] = "false",
+        };
+}
+
 /// <summary>The content web app module, anonymous.</summary>
 public sealed class ContentAppFixture : WebAppProcessFixture
 {
@@ -151,4 +186,6 @@ public sealed class UiCollection :
     ICollectionFixture<ExampleServiceAppModuleFixture>,
     ICollectionFixture<ExampleWorkerAppModuleFixture>,
     ICollectionFixture<ExampleWebAppBlazorModuleFixture>,
+    ICollectionFixture<ExampleWebAppBlazorModuleNoTopBarFixture>,
+    ICollectionFixture<IFrameAppNoTopBarFixture>,
     ICollectionFixture<ContentAppFixture>;

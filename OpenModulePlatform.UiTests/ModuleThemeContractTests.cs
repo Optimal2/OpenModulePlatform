@@ -14,10 +14,10 @@ namespace OpenModulePlatform.UiTests;
 public abstract class ModuleThemeContractTests(PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output)
 {
     // Measured again on hover: controls and table rows in the content area, and the
-    // links of the app's own header (the shared top bar has its own tests).
+    // links and own theme menu of the app's header (the shared top bar has its own tests).
     private const string HoverSelector =
         "main .btn, main button, main .button, main .action-link, main .grid tbody tr, main a.omp-error-view__button, "
-        + ".app-header .nav a, .app-header .topbar-nav a";
+        + ".app-header .nav a, .app-header .topbar-nav a, .app-header .app-theme-switch [data-omp-theme-toggle]";
 
     /// <summary>Screenshot and report prefix, for example "example-webapp".</summary>
     protected abstract string AppName { get; }
@@ -31,6 +31,12 @@ public abstract class ModuleThemeContractTests(PlaywrightSessionFixture playwrig
     /// with the app's real stylesheet. Keep in step with the views.
     /// </summary>
     protected virtual IReadOnlyDictionary<string, string> Specimens { get; } = new Dictionary<string, string>();
+
+    /// <summary>
+    /// Status code of a page that answers with an error but is not under /status/
+    /// (for example a view whose record does not exist); other pages expect 200.
+    /// </summary>
+    protected virtual IReadOnlyDictionary<string, int> PageStatuses { get; } = new Dictionary<string, int>();
 
     [SkippableFact]
     public Task Menu_switches_theme_and_the_choice_survives_reload()
@@ -60,7 +66,8 @@ public abstract class ModuleThemeContractTests(PlaywrightSessionFixture playwrig
                     AppName + ScreenshotSuffix(path),
                     Specimens.GetValueOrDefault(path),
                     ThemeScenarios.TargetContrast,
-                    HoverSelector);
+                    HoverSelector,
+                    PageStatuses.TryGetValue(path, out var status) ? status : null);
             }
             catch (XunitException ex)
             {
@@ -187,7 +194,11 @@ public sealed class IFrameAppThemeContractTests(PlaywrightSessionFixture playwri
 {
     protected override string AppName => "iframe";
 
-    protected override IReadOnlyList<string> Pages { get; } = ["/", "/status/404"];
+    // /standalone/0 is the standalone view (Standalone.cshtml, HideModuleTopbar) of a URL
+    // that is not configured: it answers 404 with the message card, inside the shared top bar.
+    protected override IReadOnlyList<string> Pages { get; } = ["/", "/status/404", "/standalone/0"];
+
+    protected override IReadOnlyDictionary<string, int> PageStatuses { get; } = new Dictionary<string, int> { ["/standalone/0"] = 404 };
 
     // _IFrameDisplay.cshtml: the message shown when no URL can be displayed.
     protected override IReadOnlyDictionary<string, string> Specimens { get; } = new Dictionary<string, string>
@@ -210,4 +221,34 @@ public sealed class ExampleWebAppWithoutTopBarThemeContractTests(PlaywrightSessi
     protected override string AppName => "example-webapp-no-topbar";
 
     protected override IReadOnlyList<string> Pages { get; } = ["/"];
+}
+
+/// <summary>
+/// The Blazor example with the shared top bar switched off: MainLayout.razor renders the
+/// shared Blazor theme menu in its own header instead, exactly once.
+/// </summary>
+[Collection("ui")]
+[Trait("Category", "Ui")]
+public sealed class ExampleWebAppBlazorWithoutTopBarThemeContractTests(PlaywrightSessionFixture playwright, ExampleWebAppBlazorModuleNoTopBarFixture app, ITestOutputHelper output)
+    : ModuleThemeContractTests(playwright, app, output)
+{
+    protected override string AppName => "example-blazor-no-topbar";
+
+    protected override IReadOnlyList<string> Pages { get; } = ["/", "/configurations"];
+}
+
+/// <summary>
+/// The iFrame module with the shared top bar switched off: the module header carries the
+/// theme menu, and the standalone view (no module header) a slim row with only the menu.
+/// </summary>
+[Collection("ui")]
+[Trait("Category", "Ui")]
+public sealed class IFrameAppWithoutTopBarThemeContractTests(PlaywrightSessionFixture playwright, IFrameAppNoTopBarFixture app, ITestOutputHelper output)
+    : ModuleThemeContractTests(playwright, app, output)
+{
+    protected override string AppName => "iframe-no-topbar";
+
+    protected override IReadOnlyList<string> Pages { get; } = ["/", "/standalone/0"];
+
+    protected override IReadOnlyDictionary<string, int> PageStatuses { get; } = new Dictionary<string, int> { ["/standalone/0"] = 404 };
 }
