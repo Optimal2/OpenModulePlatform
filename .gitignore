@@ -14,6 +14,10 @@ TestResults/
 /artifacts/*
 !/artifacts/
 !/artifacts/README.md
+# Isolation folders a relative -p:OmpIsolatedBuildRoot once wrote into project
+# folders. Directory.Build.targets now rejects such a value (OMPBUILD001), and
+# Directory.Build.props keeps <project>\artifacts\** out of the compile globs.
+**/artifacts/omp-isolated-build/
 **/logs/
 **/.DS_Store
 **/.idea/

@@ -51,15 +51,31 @@
 
   <!--
     Opt-in per-caller isolation of build intermediates and output for OMP
-    projects. Consumer repositories pass -p:OmpIsolatedBuildRoot=<folder inside
-    the consumer repo> from scripts/local-ci.ps1, so parallel builds in sibling
-    repositories never share obj/bin folders for the OMP projects they
-    reference (Web.Shared, Web.Shared.Analyzers, EventPublisher.*). That makes
-    the CS2012 "file locked by VBCSCompiler" collision physically impossible.
-    When the property is not set, the default in-tree obj/bin layout is used,
-    so OMP's own builds are unaffected.
+    projects. Consumer repositories pass -p:OmpIsolatedBuildRoot=<absolute
+    folder inside the consumer repo> from scripts/local-ci.ps1, so parallel
+    builds in sibling repositories never share obj/bin folders for the OMP
+    projects they reference (Web.Shared, Web.Shared.Analyzers, EventPublisher.*).
+    That makes the CS2012 "file locked by VBCSCompiler" collision physically
+    impossible. When the property is not set, the default in-tree obj/bin layout
+    is used, so OMP's own builds are unaffected.
+
+    The value must be an absolute path outside this repository. MSBuild resolves
+    a RELATIVE value against each project, so a hand-run
+    -p:OmpIsolatedBuildRoot=artifacts\omp-isolated-build once wrote obj/bin into
+    <OMP project>\artifacts\omp-isolated-build, and the next build globbed the
+    generated AssemblyInfo files in as sources (CS0579). An invalid value is not
+    applied here, and Directory.Build.targets stops the build with OMPBUILD001
+    (relative) or OMPBUILD002 (inside this repository).
   -->
   <PropertyGroup Condition="'$(OmpIsolatedBuildRoot)' != ''">
+    <_OmpIsolatedBuildRootIsRooted>$([System.IO.Path]::IsPathRooted('$(OmpIsolatedBuildRoot)'))</_OmpIsolatedBuildRootIsRooted>
+    <_OmpRepositoryRootFull>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)').ToUpperInvariant())</_OmpRepositoryRootFull>
+    <_OmpIsolatedBuildRootFull Condition="'$(_OmpIsolatedBuildRootIsRooted)' == 'true'">$([System.IO.Path]::GetFullPath('$(OmpIsolatedBuildRoot)\').ToUpperInvariant())</_OmpIsolatedBuildRootFull>
+    <_OmpIsolatedBuildRootInsideRepository Condition="'$(_OmpIsolatedBuildRootFull)' != '' and $([System.String]::Copy('$(_OmpIsolatedBuildRootFull)').StartsWith('$(_OmpRepositoryRootFull)'))">true</_OmpIsolatedBuildRootInsideRepository>
+    <_OmpIsolatedBuildRootIsValid Condition="'$(_OmpIsolatedBuildRootIsRooted)' == 'true' and '$(_OmpIsolatedBuildRootInsideRepository)' != 'true'">true</_OmpIsolatedBuildRootIsValid>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_OmpIsolatedBuildRootIsValid)' == 'true'">
     <BaseIntermediateOutputPath>$(OmpIsolatedBuildRoot)\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
     <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
     <BaseOutputPath>$(OmpIsolatedBuildRoot)\bin\$(MSBuildProjectName)\</BaseOutputPath>
@@ -71,8 +87,18 @@
     files in the default in-tree obj/bin (from non-isolated builds) would be
     globbed in as sources (duplicate AssemblyInfo attributes). Exclude them.
   -->
-  <PropertyGroup Condition="'$(OmpIsolatedBuildRoot)' != ''">
+  <PropertyGroup Condition="'$(_OmpIsolatedBuildRootIsValid)' == 'true'">
     <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\obj\**</DefaultItemExcludes>
     <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\bin\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!--
+    No OMP project keeps sources in a folder named artifacts; the name is only
+    ever build or package output. Keep <project>\artifacts\** out of the default
+    globs unconditionally, so an isolation folder left behind by an earlier
+    relative OmpIsolatedBuildRoot is never compiled into a later build.
+  -->
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)\artifacts\**</DefaultItemExcludes>
   </PropertyGroup>
 </Project>

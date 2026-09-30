@@ -27,7 +27,7 @@ The collision it guarded against was real - two sibling repositories building th
 referenced OMP projects shared `obj`/`bin` and hit CS2012 "file locked by VBCSCompiler" -
 but it is prevented physically now, not by scheduling. Each consumer's
 `scripts/local-ci.ps1` passes `-p:OmpIsolatedBuildRoot=<folder inside that repo>`, and
-`Directory.Build.props:62-66` redirects the intermediate and output paths under it, so two
+`Directory.Build.props:78-82` redirects the intermediate and output paths under it, so two
 consumer builds cannot write the same files. Unset, the default in-tree layout applies, so
 builds of this repository are unaffected. The AI Orchestrator removed its global
 `build:omp-web-shared` job lock in the same change and now states so explicitly in
@@ -41,6 +41,10 @@ What still holds:
 - A consumer build invoked without `-p:OmpIsolatedBuildRoot` brings the collision back. Go
   through `scripts/local-ci.ps1` rather than calling `dotnet build` by hand across
   repositories.
+- `OmpIsolatedBuildRoot` must be an ABSOLUTE path OUTSIDE this repository. A relative value
+  is resolved per referenced OMP project and used to write `obj`/`bin` into this repository;
+  `Directory.Build.targets` now stops such a build with OMPBUILD001 (relative) or OMPBUILD002
+  (inside this repository).
 - Publishes and package creation write to a shared runtime root and are NOT covered by build
   isolation - keep those sequential.
 

@@ -118,7 +118,7 @@ same referenced OMP projects wrote to the same `obj`/`bin` folders and hit CS201
 locked by VBCSCompiler". It is now prevented physically rather than by scheduling.
 `scripts/local-ci.ps1` in each consumer passes
 `-p:OmpIsolatedBuildRoot=<folder inside the consumer repo>`, and
-`Directory.Build.props:62-66` redirects `BaseIntermediateOutputPath`, `BaseOutputPath` and
+`Directory.Build.props:78-82` redirects `BaseIntermediateOutputPath`, `BaseOutputPath` and
 `MSBuildProjectExtensionsPath` under that root, so two consumer builds cannot share output
 files for Web.Shared, Web.Shared.Analyzers or EventPublisher.*. When the property is unset
 the default in-tree layout applies, so OMP's own builds are unaffected.
@@ -137,6 +137,15 @@ What still holds:
 - If a consumer build is invoked WITHOUT `-p:OmpIsolatedBuildRoot`, the old collision is
   back. Go through `scripts/local-ci.ps1` rather than calling `dotnet build` by hand across
   repositories.
+- `OmpIsolatedBuildRoot` must be an absolute path outside this repository, normally
+  `<consumer repo>\artifacts\omp-isolated-build`. MSBuild resolves a relative value against
+  EACH project, so a hand-run `-p:OmpIsolatedBuildRoot=artifacts\omp-isolated-build` once
+  wrote `obj`/`bin` into `<OMP project>\artifacts\omp-isolated-build` in this repository, and
+  the next build globbed the generated AssemblyInfo files in as sources (CS0579). Since
+  2026-09-30 `Directory.Build.props` does not apply such a value and `Directory.Build.targets`
+  fails the build with `OMPBUILD001` (relative path) or `OMPBUILD002` (path inside this
+  repository), and `<project>\artifacts\**` is excluded from the default compile globs so a
+  leftover folder is never compiled. Covered by `tests/IsolatedBuildRoot.Tests.ps1`.
 - Publishing and package creation write to a shared runtime root (see below) and are not
   covered by build isolation - keep those sequential.
 

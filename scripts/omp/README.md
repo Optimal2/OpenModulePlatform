@@ -447,6 +447,14 @@ universal object comparison and expands artifact packages before comparing
 their payloads. `compare-artifact-payload-files.ps1` is available for a focused
 artifact-to-artifact comparison when a single artifact identity is suspected.
 
+`merge-universal-package-objects.ps1`, `publish-all.ps1 -CleanOutput` and
+`scripts/dev/test-deterministic-web-publish.ps1` delete their output folder and
+create it again. Before the delete they call `Assert-SafeToClean.ps1`, which
+refuses a git repository root, a folder containing this repository, a folder
+with git-tracked files, and a folder of another repository that is not ignored
+there. Point them at `%TEMP%` or an ignored output folder such as
+`artifacts\publish`.
+
 The Bootstrapper installer refresh may keep local `*.zip.source-stamp.json`
 files next to artifact packages in its object archive. Those files are cache
 metadata only: universal package export includes `artifacts/*.zip`, not the

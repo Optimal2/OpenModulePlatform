@@ -14,6 +14,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'scripts\omp\Assert-SafeToClean.ps1')
 
 function Get-AbsolutePath {
     param([string]$BasePath, [string]$Path)
@@ -217,6 +218,7 @@ $publishItems = foreach ($project in $projects) {
 }
 
 if ($CleanOutput -and (Test-Path -LiteralPath $outputRootPath)) {
+    Assert-SafeToClean -Path $outputRootPath -RepositoryRoot $PSScriptRoot
     Remove-Item -LiteralPath $outputRootPath -Recurse -Force
 }
 

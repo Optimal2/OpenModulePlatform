@@ -48,6 +48,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '..\omp\Assert-SafeToClean.ps1')
 
 function Get-ArtifactContentSha256 {
     param([Parameter(Mandatory = $true)][string] $Path)
@@ -102,6 +103,7 @@ function Invoke-Publish {
 $project = (Resolve-Path -LiteralPath $ProjectPath).Path
 $work = [System.IO.Path]::GetFullPath($WorkRoot)
 if (Test-Path -LiteralPath $work) {
+    Assert-SafeToClean -Path $work -RepositoryRoot (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     Remove-Item -LiteralPath $work -Recurse -Force
 }
 [void] (New-Item -ItemType Directory -Path $work)

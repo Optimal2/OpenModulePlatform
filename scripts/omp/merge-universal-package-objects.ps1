@@ -31,6 +31,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+. (Join-Path $PSScriptRoot 'Assert-SafeToClean.ps1')
 
 function Resolve-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -79,6 +80,7 @@ if (-not (Test-Path -LiteralPath $packageRootPath -PathType Container)) {
 
 $outputRootPath = Resolve-FullPath -Path $OutputRoot
 if (Test-Path -LiteralPath $outputRootPath -PathType Container) {
+    Assert-SafeToClean -Path $outputRootPath -RepositoryRoot (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     Remove-Item -LiteralPath $outputRootPath -Recurse -Force
 }
 

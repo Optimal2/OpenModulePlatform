@@ -8,6 +8,23 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Consumer builds and scripts can no longer write into or delete from this
+  repository.** `Directory.Build.targets` stops a build whose
+  `OmpIsolatedBuildRoot` is relative (`OMPBUILD001`) or lies inside this
+  repository (`OMPBUILD002`), and `Directory.Build.props` no longer applies
+  such a value; a relative value was resolved per referenced OMP project and
+  left `obj`/`bin` in `<project>\artifacts\omp-isolated-build`, which the next
+  build compiled in (CS0579). `<project>\artifacts\**` is now excluded from the
+  default compile globs. `publish-all.ps1 -CleanOutput`,
+  `scripts/omp/merge-universal-package-objects.ps1` and
+  `scripts/dev/test-deterministic-web-publish.ps1` call the new
+  `scripts/omp/Assert-SafeToClean.ps1` before deleting their output folder: it
+  refuses a git repository root, a folder containing this repository, a folder
+  with tracked files, and a folder of another repository that is not ignored
+  there. A consumer CI run once deleted the tracked `artifacts/README.md` this
+  way. Covered by `tests/SafeToClean.Tests.ps1` and
+  `tests/IsolatedBuildRoot.Tests.ps1`.
+
 - **Continuity gate reads the deployed file like ASP.NET Core and fails
   closed.** The carry-over of host-owned keys and the continuity gate now
   accept comments, trailing commas and a byte order mark in the deployed
