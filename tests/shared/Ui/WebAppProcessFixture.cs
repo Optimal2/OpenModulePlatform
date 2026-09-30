@@ -9,9 +9,12 @@ namespace OpenModulePlatform.TestSupport.Ui;
 /// Boots a repo's built web app on a free port, mirroring the dev-server
 /// recipe: Development environment (required for the _content static assets
 /// that come from project references), anonymous access, and the OMP database
-/// on localhost unless OMP_UITESTS_DB overrides it. If the app does not
-/// answer 200 on <see cref="ReadinessPath"/> within the timeout the fixture
-/// reports itself unavailable and dependent tests skip with the reason.
+/// on localhost unless OMP_UITESTS_DB overrides it. If the app is not found
+/// or does not answer 200 on <see cref="ReadinessPath"/> within the timeout
+/// the fixture reports itself unavailable and dependent tests skip with the
+/// reason - unless the run requires the UI suite
+/// (<see cref="UiTestPaths.RequiredEnvironmentVariable"/>), in which case the
+/// fixture fails with that reason instead.
 /// </summary>
 public abstract class WebAppProcessFixture : IAsyncLifetime
 {
@@ -45,9 +48,10 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
 
     /// <summary>
     /// When true, an app that cannot be found or started fails the fixture
-    /// instead of making the dependent tests skip.
+    /// instead of making the dependent tests skip. Defaults to
+    /// <see cref="UiTestPaths.IsRequired()"/>.
     /// </summary>
-    protected virtual bool AppRequired => false;
+    protected virtual bool AppRequired => UiTestPaths.IsRequired();
 
     /// <summary>Extra environment variables for the app process.</summary>
     protected virtual IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
@@ -60,13 +64,25 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
+        await StartAsync();
+        if (!Available && AppRequired)
+        {
+            StopProcess();
+            throw new InvalidOperationException(
+                $"{WebProjectName}: {UnavailableReason}. {UiTestPaths.RequiredEnvironmentVariable} is set, so the UI suite "
+                + "must run instead of skipping every test; build the app or fix its output layout.");
+        }
+    }
+
+    private async Task StartAsync()
+    {
         RepoRoot = UiTestPaths.FindRepoRoot(SolutionFileName);
         var projectDir = Path.Join(RepoRoot, WebProjectDirectory);
-        var (configuration, tfm) = UiTestPaths.BuildOutputSegments();
-        var exePath = UiTestPaths.FindAppExecutable(projectDir, WebProjectName, AssemblyName, AppContext.BaseDirectory);
+        var candidates = UiTestPaths.AppExecutableCandidates(projectDir, WebProjectName, AssemblyName, AppContext.BaseDirectory);
+        var exePath = candidates.FirstOrDefault(File.Exists);
         if (exePath is null)
         {
-            UnavailableReason = $"app binary not found: {Path.Join(projectDir, "bin", configuration, tfm, AssemblyName + ".exe")}";
+            UnavailableReason = "app binary not found; looked for " + string.Join(", ", candidates);
             return;
         }
 
@@ -134,6 +150,12 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
 
     public Task DisposeAsync()
     {
+        StopProcess();
+        return Task.CompletedTask;
+    }
+
+    private void StopProcess()
+    {
         if (_process is not null && !_process.HasExited)
         {
             _process.Kill(entireProcessTree: true);
@@ -141,7 +163,7 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
         }
 
         _process?.Dispose();
-        return Task.CompletedTask;
+        _process = null;
     }
 
     private static int GetFreePort()

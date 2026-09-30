@@ -7,7 +7,8 @@ namespace OpenModulePlatform.TestSupport.Ui;
 /// One headless Chromium for a UI test collection. If the browser cannot be
 /// provisioned (offline machine, blocked download) the fixture reports itself
 /// unavailable and tests skip with the reason instead of erroring — the local
-/// gates must stay runnable on machines without the UI prerequisites.
+/// gates must stay runnable on machines without the UI prerequisites. A run
+/// that sets <see cref="UiTestPaths.RequiredEnvironmentVariable"/> fails instead.
 /// </summary>
 public sealed class PlaywrightSessionFixture : IAsyncLifetime
 {
@@ -32,6 +33,13 @@ public sealed class PlaywrightSessionFixture : IAsyncLifetime
         if (provisioning.Exception is { } failure)
         {
             UnavailableReason = $"Chromium could not be started: {failure.GetBaseException().Message}";
+        }
+
+        // A gate that runs the UI suite on purpose must not pass on skips alone.
+        if (!Available && UiTestPaths.IsRequired())
+        {
+            throw new InvalidOperationException(
+                $"{UnavailableReason}. {UiTestPaths.RequiredEnvironmentVariable} is set, so the UI suite must run instead of skipping every test.");
         }
     }
 

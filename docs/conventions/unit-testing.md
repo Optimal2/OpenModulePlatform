@@ -100,6 +100,19 @@ in the per-repo table.
   in `tests/shared/` (`OmpTestDatabaseProvisioner.cs`, `Ui/PlaywrightSessionFixture.cs`,
   `Ui/WebAppProcessFixture.cs`, `Ui/UiInvariantScanner.cs`, `Ui/UiTestPaths.cs`); consumer repos
   link these files rather than copying them.
+- **Finding the app under test, and skip versus fail:** `UiTestPaths` reads the configuration and
+  target framework around the target-framework segment of the test's output path, so extra
+  segments do not matter (a project folder after `bin`, a platform folder, a runtime identifier).
+  `WebAppProcessFixture` looks for the app's executable in the in-tree layout
+  (`<project>\bin\<Configuration>\<Tfm>\`) and then in the `OmpIsolatedBuildRoot` layout next to
+  the test project's own output (`<root>\bin\<ProjectName>\<Configuration>\<Tfm>\`, for the given
+  project name and every `.csproj` in the project folder). By default a missing app, a missing
+  Chromium or an app that never answers makes the fixture unavailable and every dependent test
+  skips with the reason, so `dotnet test` stays green on a machine without the UI prerequisites.
+  A gate that runs the UI suite on purpose sets `OMP_UITESTS_REQUIRED=1` (or `true`): the
+  fixtures then fail with the reason, including every path that was searched, instead of
+  skipping. Consumer `scripts/local-ci.ps1` scripts set it when their UI step is switched on.
+  `UiTestPathsTests` covers the lookup and runs in the ordinary (non-`Category=Ui`) CI pass.
 - **Local gate:** `scripts/local-ci.ps1`, run by `.githooks/pre-push.ps1`: module-definition and
   SQL-ownership validation, component-version validation against the resolved baseline,
   PSScriptAnalyzer, the Pester suites via `scripts/omp/run-script-tests.ps1`, a Release build,
