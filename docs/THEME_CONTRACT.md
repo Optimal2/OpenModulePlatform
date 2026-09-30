@@ -107,13 +107,16 @@ Rules:
    The script must be synchronous (no `defer`/`async`).
 2. Alias the app's colour variables to the tokens and replace hard-coded colours.
 3. The top bar menu appears automatically once `data-theme-mode` is set; without the
-   script it stays hidden. A page without the top bar can render the menu with
-   `@await Component.InvokeAsync("OmpThemeSwitch")` (Razor); the Blazor top bar
-   carries the same markup inline. The shared top bar is off unless
+   script it stays hidden. A page without the top bar renders the menu with
+   `@await Component.InvokeAsync("OmpThemeSwitch")` (Razor) or
+   `<OpenModulePlatform.Web.Shared.Components.Layout.OmpThemeSwitch />` (Blazor; the
+   Blazor top bar uses the same component). The shared top bar is off unless
    `PortalTopBar:Enabled` is set, so a layout that relies on it renders the menu
    itself when it is off (`@if (!WebAppOptions.Value.PortalTopBar.Enabled)`), never both.
+   That includes views that hide the app's own header, such as the iFrame module's
+   standalone view, which keeps a slim row with only the menu.
 4. Test both palettes (see `OpenModulePlatform.UiTests/ThemeContractTests.cs`, and
-   `ModuleThemeContractTests.cs` for a module web app at the 4.5:1 target):
+   `ModuleThemeContractTests.cs` for a module web app), with the top bar on and off:
    switching, reload, System following `prefers-color-scheme`, and text contrast.
    Include the states a page shows only with particular data (error rows, group
    conversations, failed checks, the dashboard's edit menu, delete zones) and hover
@@ -121,13 +124,17 @@ Rules:
    page's markup for those states into the live page. An icon-only control is
    measured through its `aria-label`, since its icon is drawn in the text colour.
 
-### Contrast gate: 3:1 is temporary
+### Contrast gate: 4.5:1
 
-The target is WCAG AA for normal text, 4.5:1, in both palettes. The contrast test
-currently fails only below **3:1** (AA large text / non-text) while the remaining
-hard-coded colours are migrated. Everything between 3:1 and 4.5:1 is reported as a
-warning — in the test output and in `TestResults/ui-theme/*.contrast-warnings.txt`
-— without failing. Once those reports are empty the gate moves to 4.5:1.
+Text must reach WCAG AA for normal text, **4.5:1**, in both palettes and on hover.
+The contrast test fails on anything below that, in the Portal, the Auth login page,
+the platform's module web apps and the example modules alike.
+
+The gate used to fail only below 3:1 (AA large text / non-text) and report the band
+between 3:1 and 4.5:1 as warnings while hard-coded colours were migrated. Once those
+reports were empty everywhere, the temporary gate and its warning reports were
+removed. Consumer repositories that adopt the contract gate their own web apps at
+4.5:1 too, with the shared scenarios; there is no 3:1 step left to fall back on.
 
 ## Menu markup and behaviour
 

@@ -55,6 +55,10 @@ a:hover {
     padding: 14px 20px;
 }
 
+.app-theme-switch {
+    margin-left: auto;
+}
+
 .brand-wrap {
     display: flex;
     flex-direction: column;

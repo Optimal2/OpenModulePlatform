@@ -7,9 +7,9 @@ namespace OpenModulePlatform.UiTests;
 /// <summary>
 /// The theme contract (docs/THEME_CONTRACT.md) on the platform's module web apps: the
 /// examples (Razor, Blazor, service and worker web parts) and the content and iFrame
-/// modules. Same scenarios as the Portal (<see cref="PortalThemeContractTests"/>), but
-/// the text contrast gate is the contract's target, 4.5:1, in both palettes and on
-/// hover, including the app's own header and navigation.
+/// modules. Same scenarios and the same 4.5:1 text contrast gate as the Portal
+/// (<see cref="PortalThemeContractTests"/>), in both palettes and on hover, here
+/// including the app's own header, navigation and theme menu.
 /// </summary>
 public abstract class ModuleThemeContractTests(PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output)
 {
@@ -65,7 +65,6 @@ public abstract class ModuleThemeContractTests(PlaywrightSessionFixture playwrig
                     theme,
                     AppName + ScreenshotSuffix(path),
                     Specimens.GetValueOrDefault(path),
-                    ThemeScenarios.TargetContrast,
                     HoverSelector,
                     PageStatuses.TryGetValue(path, out var status) ? status : null);
             }

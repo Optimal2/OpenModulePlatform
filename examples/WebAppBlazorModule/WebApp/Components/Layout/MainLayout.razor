@@ -18,6 +18,11 @@
                 <NavLink href="configurations">@L["Configurations"]</NavLink>
                 <NavLink href="opendocviewer-demo">@L["OpenDocViewer"]</NavLink>
             </nav>
+            @* Without the shared top bar the app header carries the theme menu itself. *@
+            @if (!Options.Value.PortalTopBar.Enabled)
+            {
+                <div class="app-theme-switch"><OpenModulePlatform.Web.Shared.Components.Layout.OmpThemeSwitch /></div>
+            }
         </div>
     </header>
 

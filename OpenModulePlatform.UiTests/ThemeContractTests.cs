@@ -214,11 +214,10 @@ internal static class ThemeScenarios
     private const string OtherAppPreferenceName = "OTHER_APP_PREFERENCES";
     private const string OtherAppPreferenceValue = "{\"theme\":\"normal\",\"zoom\":1.25}";
 
-    // Minimum text contrast the pages must keep in both palettes. WCAG AA for normal
-    // text is 4.5:1; the gate sits at 3:1 (AA large text / non-text) for now, while
-    // the remaining hard-coded colours are migrated (docs/THEME_CONTRACT.md). Every
-    // element between 3:1 and 4.5:1 is reported as a warning without failing.
-    private const double MinimumContrast = 3.0;
+    // Minimum text contrast every page must keep in both palettes and on hover: WCAG AA
+    // for normal text. The gate sat at 3:1 while hard-coded colours were migrated and
+    // moved here once no page reported anything between 3:1 and 4.5:1
+    // (docs/THEME_CONTRACT.md).
     public const double TargetContrast = 4.5;
 
     // Elements measured again on hover: buttons and table rows in the content area.
@@ -517,7 +516,7 @@ internal static class ThemeScenarios
 
     public static async Task TextIsReadableAsync(
         PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output, string path, string theme, string screenshotName, string? specimen,
-        double minimumContrast = MinimumContrast, string hoverSelector = DefaultHoverSelector, int? expectedStatus = null)
+        string hoverSelector = DefaultHoverSelector, int? expectedStatus = null)
     {
         Skip.IfNot(playwright.Available, playwright.UnavailableReason);
         Skip.IfNot(app.Available, app.UnavailableReason);
@@ -593,22 +592,12 @@ internal static class ThemeScenarios
             measured.AddRange(hovered.Items.Select(item => { item.Element += ":hover"; return item; }));
         }
 
-        var warnings = measured.Where(item => item.Ratio >= minimumContrast).ToArray();
-        var warningsPath = Path.Join(screenshotDirectory, $"{screenshotName}-{theme}.contrast-warnings.txt");
-        File.Delete(warningsPath);
-        if (warnings.Length > 0)
-        {
-            var report = $"{path} in {theme}: {warnings.Length} text elements below {TargetContrast}:1 (warning, not failing yet)\n - "
-                + string.Join("\n - ", warnings.Select(Describe));
-            output.WriteLine("WARNING " + report);
-            await File.WriteAllTextAsync(warningsPath, report);
-        }
-
-        var failing = measured.Where(item => item.Ratio < minimumContrast).ToArray();
+        // The contrast script returns only elements below 4.5:1, so every item fails.
+        output.WriteLine($"{path} in {theme}: {contrast.Checked} text elements measured, {measured.Count} below {TargetContrast}:1");
         Assert.True(
-            failing.Length == 0,
-            $"{path} in {theme}: {failing.Length} text elements below {minimumContrast}:1\n - "
-                + string.Join("\n - ", failing.Select(Describe)));
+            measured.Count == 0,
+            $"{path} in {theme}: {measured.Count} text elements below {TargetContrast}:1\n - "
+                + string.Join("\n - ", measured.Select(Describe)));
     }
 
     public static async Task StatusSurfacesFollowThemeAsync(

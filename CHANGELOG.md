@@ -88,6 +88,30 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Theme menu in the Blazor example without the top bar; contrast gate at
+  4.5:1.** The Blazor theme menu is now a shared component,
+  `Components/Layout/OmpThemeSwitch.razor` in Web.Shared, used by the Blazor
+  top bar and by the Blazor example's `MainLayout.razor`, which renders it
+  when `PortalTopBar:Enabled` is off. Before, that app had no theme menu at
+  all without the top bar. The browser tests cover the Blazor example and the
+  iFrame module with the top bar off, and the iFrame module's standalone view
+  (contrast, hover and exactly one theme toggle). No page reported text between
+  3:1 and 4.5:1 any more, so the temporary 3:1 gate and its warning reports are
+  removed: every theme test now fails below 4.5:1, the Portal and Auth
+  included (omp-portal-web 0.3.828, omp-auth-web 0.3.348, content-webapp
+  0.3.344, iframe-webapp 0.3.337, example-webapp 0.3.342,
+  example-webapp-blazor 0.3.336, example-serviceapp-web/-service and
+  example-workerapp-web 0.3.317, example-workerapp-worker 0.3.193).
+- **Dark theme in the module web apps.** The content and iFrame modules and
+  the example web apps (Razor, Blazor, service and worker) alias their colour
+  variables to the `--omp-*` tokens, so headers, navigation, notices, banners,
+  validation output and hover states follow the palette. With the shared top
+  bar off, each Razor layout renders the theme menu in its own header, never
+  both; the iFrame standalone view gets a slim row with only the menu. The
+  browser tests measure these apps at 4.5:1 in both palettes (content-webapp
+  0.3.343, iframe-webapp 0.3.336, example-webapp 0.3.341,
+  example-webapp-blazor 0.3.335, example-serviceapp and example-workerapp
+  0.3.316).
 - **Dark theme: the remaining one-palette surfaces.** A sweep of every
   colour literal in the Portal's site.css and Web.Shared's stylesheets
   tokenised the surfaces whose background was literal under tokenised text,

@@ -7,7 +7,8 @@ namespace OpenModulePlatform.Web.Shared.ViewComponents;
 /// (docs/THEME_CONTRACT.md). The markup carries no state: omp-theme.js reads the
 /// stored preference and marks the current option when the menu opens, so the
 /// same markup works for every user and survives Blazor re-renders. The Blazor
-/// top bar renders the identical markup inline; keep the two in step.
+/// component Components/Layout/OmpThemeSwitch.razor renders the identical markup;
+/// keep the two in step.
 /// </summary>
 public sealed class OmpThemeSwitchViewComponent : ViewComponent
 {
