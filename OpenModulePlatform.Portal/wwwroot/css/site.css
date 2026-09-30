@@ -7872,9 +7872,22 @@ tr.linkbox-editor-row--dragging {
    editing): the interval as a row whose choices fold out to the right, like a
    submenu, so the menu stays as narrow as its buttons; the "Refresh now"
    button; and the stamp beside a refreshing widget's title bar. */
+/* width: 0 with min-width: 100% keeps the row out of the menu's own sizing:
+   the buttons decide how wide the menu is, and the row then takes that width,
+   truncating its dimmed value rather than widening the menu. */
 .dashboard-refresh-menu {
     position: relative;
     display: none;
+    width: 0;
+    min-width: 100%;
+}
+
+.dashboard-refresh-menu__trigger {
+    min-width: 0;
+}
+
+.dashboard-refresh-menu__label {
+    white-space: nowrap;
 }
 
 .dashboard-refresh-menu__trigger,
@@ -7916,9 +7929,12 @@ tr.linkbox-editor-row--dragging {
 /* The current choice, dimmed, and a chevron at the far right of the row. */
 .dashboard-refresh-menu__value {
     margin-left: auto;
+    min-width: 0;
+    overflow: hidden;
     color: var(--text-muted);
     font-size: 0.8rem;
     white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .dashboard-refresh-menu__chevron {
@@ -7989,6 +8005,15 @@ tr.linkbox-editor-row--dragging {
     border-color: var(--border-strong);
     background: color-mix(in srgb, var(--surface-muted) 68%, transparent);
     outline: none;
+}
+
+/* On a narrow screen there is no room to the right: the choices fold out
+   above the row instead. */
+@media (max-width: 640px) {
+    .dashboard-refresh-menu__list {
+        left: 0;
+        bottom: calc(100% + 8px);
+    }
 }
 
 /* The stamp sits over the title bar's right end (the title bar keeps room for

@@ -4173,22 +4173,44 @@
             });
         };
         let closeTimer = 0;
-        const setOpen = (open) => {
+        // Whether a hover (or the hover a touch emulates) opened the list: the
+        // click that follows then keeps it open instead of folding it away, so a
+        // tap opens the list and a mouse click never closes what its own hover
+        // just opened.
+        let openedByHover = false;
+        const setOpen = (open, byHover = false) => {
             window.clearTimeout(closeTimer);
             closeTimer = 0;
             list.hidden = !open;
+            openedByHover = open && byHover;
             trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
         };
         const isOpen = () => !list.hidden;
         showChoice(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
 
-        trigger.addEventListener('click', () => setOpen(!isOpen()));
+        trigger.addEventListener('click', () => {
+            if (isOpen() && openedByHover) {
+                openedByHover = false;
+                return;
+            }
+            setOpen(!isOpen());
+        });
         // A hover opens the choices and a hover away folds them, with a moment's
         // grace so the pointer can cross the gap to the list.
-        menu.addEventListener('mouseenter', () => setOpen(true));
+        menu.addEventListener('mouseenter', () => {
+            if (!isOpen()) {
+                setOpen(true, true);
+            }
+        });
         menu.addEventListener('mouseleave', () => {
             window.clearTimeout(closeTimer);
             closeTimer = window.setTimeout(() => setOpen(false), 250);
+        });
+        // Focus leaving the menu (a Tab out of it) folds the list away.
+        menu.addEventListener('focusout', (event) => {
+            if (isOpen() && !(event.relatedTarget && menu.contains(event.relatedTarget))) {
+                setOpen(false);
+            }
         });
         menu.addEventListener('keydown', (event) => {
             const items = options();

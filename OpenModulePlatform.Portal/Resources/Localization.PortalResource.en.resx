@@ -1188,4 +1188,5 @@
   <data name="Every 5 minutes" xml:space="preserve"><value>Every 5 minutes</value></data>
   <data name="Refresh now" xml:space="preserve"><value>Refresh now</value></data>
   <data name="Updated {0}" xml:space="preserve"><value>Updated {0}</value></data>
+  <data name="Refresh" xml:space="preserve"><value>Refresh</value></data>
 </root>
