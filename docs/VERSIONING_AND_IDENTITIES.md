@@ -90,7 +90,26 @@ of falling back to a default:
   byte-identically.
 - A web app deployment whose previous on-disk `appsettings.json` provably had a
   file or section the new resolution no longer provides fails loudly, naming the
-  lost section, instead of silently writing the built-in default.
+  lost section, instead of silently writing the built-in default. The currently
+  deployed version keeps running. The operator either provides the settings
+  again (a config overlay or the artifact configuration file for that app
+  instance) or, when the removal is intended, deletes the sections from the
+  previously deployed `appsettings.json` on that host and retries.
+
+**Host-owned configuration keys.** These top-level `appsettings.json` keys
+belong to the host, not to the module. A module may leave them out of its
+packaged configuration, and the continuity gate ignores them, including
+everything below them:
+
+| Key | Why it is host-owned |
+| --- | --- |
+| `AllowedHosts` | Host filtering depends on the host's bindings. Absent means ASP.NET Core applies no host filtering. |
+| `Logging` | Log levels are an operational choice per host. Absent means the ASP.NET Core defaults apply. |
+
+The list lives in `ConfigurationContinuityGate.HostOwnedTopLevelKeys`. Change
+both together. Module sections (for example a section named after the module)
+are never host-owned: losing one still fails the deployment, because the app
+would otherwise run on its built-in defaults without anyone noticing.
 
 `Desired artifact` is the artifact currently selected by an app instance,
 desired installation app row, worker instance, or host artifact requirement. HostAgent

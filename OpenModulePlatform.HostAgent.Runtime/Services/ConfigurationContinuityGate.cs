@@ -19,6 +19,16 @@ internal static class ConfigurationContinuityGate
     private const string AppSettingsRelativePath = "appsettings.json";
 
     /// <summary>
+    /// Top-level appsettings.json keys the host owns rather than the module. A
+    /// module may drop them from its packaged configuration on purpose, and losing
+    /// them only returns ASP.NET Core to its safe default (no host filtering,
+    /// default log levels), so they never fail the gate - neither the key itself
+    /// nor anything below it. Documented in docs/VERSIONING_AND_IDENTITIES.md.
+    /// </summary>
+    internal static readonly IReadOnlySet<string> HostOwnedTopLevelKeys =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AllowedHosts", "Logging" };
+
+    /// <summary>
     /// Returns a human-readable violation message naming every lost top-level
     /// section (and every lost second-level key below an object section, e.g.
     /// "OmpAuth:Oidc"), or null when the deployment may proceed. An unreadable
@@ -81,7 +91,8 @@ internal static class ConfigurationContinuityGate
                 }
 
                 var missing = new List<string>();
-                foreach (var section in previous.RootElement.EnumerateObject())
+                foreach (var section in previous.RootElement.EnumerateObject()
+                             .Where(section => !HostOwnedTopLevelKeys.Contains(section.Name)))
                 {
                     if (!next.RootElement.TryGetProperty(section.Name, out var nextSection))
                     {
@@ -107,15 +118,19 @@ internal static class ConfigurationContinuityGate
 
                 // The gate cannot tell an operator's lost section from a package that
                 // dropped one on purpose, so the way past it is operator-controlled and
-                // explicit: edit the previously deployed file (the evidence the gate
-                // reads) and deploy again (independent review, 2026-09-05).
+                // explicit: either provide the settings again or edit the previously
+                // deployed file (the evidence the gate reads) and deploy again
+                // (independent review, 2026-09-05).
+                var previousFile = Path.Join(targetPath, AppSettingsRelativePath);
                 return
                     "the previous deploy had configuration the new artifact resolution no longer provides: " +
                     string.Join(", ", missing) +
                     "; refusing to silently fall back to the built-in default configuration. " +
-                    "If the removal is intended, delete those sections from the previously deployed " +
-                    Path.Join(targetPath, AppSettingsRelativePath) +
-                    " and deploy again";
+                    "The currently deployed version keeps running. To continue, do one of: " +
+                    "(1) if the app still needs those settings, add them to a config overlay (or the artifact " +
+                    "configuration file) for this app instance so the new resolution provides them, then retry; " +
+                    "(2) if the removal is intended, delete those sections from " + previousFile +
+                    " on this host and retry the deployment";
             }
         }
     }

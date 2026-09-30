@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Continuity gate ignores host-owned keys and tells the operator what to
+  do.** A web app deployment no longer fails because the previously deployed
+  `appsettings.json` has `AllowedHosts` or `Logging` (or keys below them) that
+  the new resolution leaves out; the host owns those keys, and modules may drop
+  them from their packaged configuration. A lost module section still fails
+  the deployment, and the message now says that the current version keeps
+  running and lists both ways forward: provide the settings through a config
+  overlay or the artifact configuration file, or delete the sections from the
+  previous file when the removal is intended. The host-owned key list is
+  documented in `docs/VERSIONING_AND_IDENTITIES.md`. `omp-hostagent-service`
+  0.3.302.
 - **Pester inventory counts only the repository's files; an all-skipped
   suite fails; a missing platform checkout is an error.**
   `run-script-tests.ps1` takes its suite inventory from
