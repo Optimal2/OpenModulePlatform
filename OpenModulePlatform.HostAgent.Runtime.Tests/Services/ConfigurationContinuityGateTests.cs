@@ -149,6 +149,74 @@ public sealed class ConfigurationContinuityGateTests : IDisposable
         Assert.Null(violation);
     }
 
+    [Fact]
+    public void Gate_PassesWhenOnlyHostOwnedAllowedHostsIsMissingFromNewResolution()
+    {
+        // A module that moves AllowedHosts out of its packaged configuration (the host
+        // decides it) must not strand every host whose previous file still carries it.
+        WritePreviousAppSettings("""
+            {
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+              "AllowedHosts": "*"
+            }
+            """);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            new Dictionary<string, string>());
+
+        Assert.Null(violation);
+    }
+
+    [Fact]
+    public void Gate_PassesWhenOnlyHostOwnedLoggingKeysAreMissingFromNewResolution()
+    {
+        WritePreviousAppSettings("""
+            {
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+              "Logging": { "LogLevel": { "Default": "Information" }, "Console": { "FormatterName": "simple" } }
+            }
+            """);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""
+                {
+                  "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+                  "Logging": { "LogLevel": { "Default": "Warning" } }
+                }
+                """)],
+            new Dictionary<string, string>());
+
+        Assert.Null(violation);
+    }
+
+    [Fact]
+    public void Gate_StillFailsForModuleSectionWhenHostOwnedKeysAreAlsoMissing()
+    {
+        WritePreviousAppSettings("""
+            {
+              "AllowedHosts": "*",
+              "ExampleModule": { "RecentJobCount": 20, "ResultPreviewCount": 50 },
+              "NLog": { "throwConfigExceptions": true }
+            }
+            """);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""{ "NLog": { "throwConfigExceptions": true } }""")],
+            new Dictionary<string, string>());
+
+        Assert.NotNull(violation);
+        Assert.Contains("ExampleModule", violation);
+        Assert.DoesNotContain("AllowedHosts", violation);
+        // The operator must be told both ways forward: keep the settings through a
+        // config overlay, or remove them from the previous file when the drop is intended.
+        Assert.Contains("config overlay", violation);
+        Assert.Contains("delete", violation);
+    }
+
     private void WritePreviousAppSettings(string content)
         => File.WriteAllText(Path.Join(_targetRoot, "appsettings.json"), content);
 
