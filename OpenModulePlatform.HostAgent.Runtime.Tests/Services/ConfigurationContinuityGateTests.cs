@@ -390,6 +390,162 @@ public sealed class ConfigurationContinuityGateTests : IDisposable
         Assert.Same(newResolution, Assert.Single(files));
     }
 
+    [Fact]
+    public void CarryOver_ReadsDeployedFileWithCommentsAndTrailingCommas()
+    {
+        // ASP.NET Core reads appsettings.json with comments and trailing commas, and
+        // operators edit the deployed file by hand. Such a file must not hide the host's
+        // AllowedHosts from the carry-over.
+        WritePreviousAppSettings("""
+            {
+              // Restricted by the operator.
+              "AllowedHosts": "localhost;127.0.0.1",
+              /* Connection used by the app. */
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp", },
+            }
+            """);
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            out var carriedKeys);
+
+        Assert.Equal(["AllowedHosts"], carriedKeys);
+        using var resolved = JsonDocument.Parse(Assert.Single(files).FileContent);
+        Assert.Equal("localhost;127.0.0.1", resolved.RootElement.GetProperty("AllowedHosts").GetString());
+    }
+
+    [Fact]
+    public void CarryOver_ReadsNewResolutionWithCommentsAndTrailingCommas()
+    {
+        WritePreviousAppSettings("""{ "AllowedHosts": "localhost;127.0.0.1" }""");
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [AppSettings("""
+                {
+                  // Packaged by the module.
+                  "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp", },
+                }
+                """)],
+            out var carriedKeys);
+
+        Assert.Equal(["AllowedHosts"], carriedKeys);
+        using var resolved = JsonDocument.Parse(Assert.Single(files).FileContent);
+        Assert.Equal("localhost;127.0.0.1", resolved.RootElement.GetProperty("AllowedHosts").GetString());
+    }
+
+    [Fact]
+    public void CarryOver_ReadsDeployedFileWithByteOrderMark()
+    {
+        File.WriteAllText(
+            Path.Join(_targetRoot, "appsettings.json"),
+            """{ "AllowedHosts": "localhost;127.0.0.1" }""",
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            out var carriedKeys);
+
+        Assert.Equal(["AllowedHosts"], carriedKeys);
+        using var resolved = JsonDocument.Parse(Assert.Single(files).FileContent);
+        Assert.Equal("localhost;127.0.0.1", resolved.RootElement.GetProperty("AllowedHosts").GetString());
+    }
+
+    [Fact]
+    public void CarryOver_ReadsNewResolutionWithByteOrderMark()
+    {
+        WritePreviousAppSettings("""{ "AllowedHosts": "localhost;127.0.0.1" }""");
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [AppSettings("﻿" + """{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            out var carriedKeys);
+
+        Assert.Equal(["AllowedHosts"], carriedKeys);
+    }
+
+    [Fact]
+    public void Gate_ReadsDeployedFileWithCommentsAndTrailingCommas()
+    {
+        WritePreviousAppSettings("""
+            {
+              // Tuned by the operator.
+              "ExampleModule": { "RecentJobCount": 20, },
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+            }
+            """);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            new Dictionary<string, string>());
+
+        Assert.NotNull(violation);
+        Assert.Contains("ExampleModule", violation);
+    }
+
+    [Fact]
+    public void Gate_ReadsNewResolutionWithCommentsAndTrailingCommas()
+    {
+        WritePreviousAppSettings("""{ "ExampleModule": { "RecentJobCount": 20 } }""");
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""
+                {
+                  // Packaged by the module; the module section is gone.
+                  "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp", },
+                }
+                """)],
+            new Dictionary<string, string>());
+
+        Assert.NotNull(violation);
+        Assert.Contains("ExampleModule", violation);
+    }
+
+    [Theory]
+    [InlineData("""{ "AllowedHosts": "secret-host.example", """)]
+    [InlineData("""{ "AllowedHosts": secret-host.example }""")]
+    [InlineData("")]
+    [InlineData("""[ "secret-host.example" ]""")]
+    public void Gate_FailsClosedWhenDeployedFileIsNotValidJson(string content)
+    {
+        // A deployed file the gate cannot read is no evidence that the host had nothing:
+        // stop instead of overwriting it, and tell the operator what to do. Never echo
+        // the file content: it may hold secrets.
+        WritePreviousAppSettings(content);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            new Dictionary<string, string>());
+
+        Assert.NotNull(violation);
+        Assert.Contains(Path.Join(_targetRoot, "appsettings.json"), violation);
+        Assert.Contains("not valid JSON", violation);
+        Assert.Contains("correct", violation);
+        Assert.Contains("delete", violation);
+        Assert.DoesNotContain("secret-host", violation);
+    }
+
+    [Fact]
+    public void CarryOver_LeavesFilesUnchangedWhenDeployedFileIsNotValidJson()
+    {
+        // The gate reports the unreadable file; the carry-over must not guess.
+        WritePreviousAppSettings("""{ "AllowedHosts": "localhost" """);
+        var newResolution = AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""");
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [newResolution],
+            out var carriedKeys);
+
+        Assert.Empty(carriedKeys);
+        Assert.Same(newResolution, Assert.Single(files));
+    }
+
     private void WritePreviousAppSettings(string content)
         => File.WriteAllText(Path.Join(_targetRoot, "appsettings.json"), content);
 

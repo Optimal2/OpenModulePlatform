@@ -95,6 +95,59 @@ public sealed class WebAppDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeployDesiredWebAppsAsync_KeepsHostOwnedAllowedHostsTheArtifactLeavesOut()
+    {
+        // Pins the call site: the deployment itself must carry the host's AllowedHosts
+        // into the written file, not only the gate helper in isolation.
+        var logger = new CaptureLogger<WebAppDeploymentService>();
+        var (service, repository, _) = CreateServiceWithFakeRepository(logger: logger);
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, version: "1.0.1");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        repository.ArtifactConfigurationFiles.Add(new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = 1,
+            ArtifactId = descriptor.ArtifactId,
+            RelativePath = "appsettings.json",
+            FileContent = """{ "ConnectionStrings": { "OmpDb": "{{Omp.Json.ConnectionStrings.OmpDb}}" } }"""
+        });
+        var deployedPath = Path.Join(descriptor.InstallPath!, "appsettings.json");
+        File.WriteAllText(deployedPath, """
+            {
+              // Restricted by the operator.
+              "AllowedHosts": "localhost;127.0.0.1",
+            }
+            """);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        Assert.Equal(HostDeploymentStatuses.Succeeded, repository.PublishedWebAppResults.Last().Result.State);
+        using var document = JsonDocument.Parse(File.ReadAllText(deployedPath));
+        Assert.Equal("localhost;127.0.0.1", document.RootElement.GetProperty("AllowedHosts").GetString());
+        var carried = Assert.Single(logger.Entries, entry => entry.Message.Contains("host-owned keys", StringComparison.Ordinal));
+        Assert.Contains("AllowedHosts", carried.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("127.0.0.1", carried.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DeployDesiredWebAppsAsync_WhenDeployedAppSettingsIsNotValidJson_FailsAndLeavesFileUntouched()
+    {
+        var (service, repository, _) = CreateServiceWithFakeRepository();
+        var descriptor = CreateWebAppDeploymentDescriptor(out _, version: "1.0.1");
+        repository.DesiredWebAppDeployments.Add(descriptor);
+        var deployedPath = Path.Join(descriptor.InstallPath!, "appsettings.json");
+        const string broken = """{ "AllowedHosts": "secret-host.example" """;
+        File.WriteAllText(deployedPath, broken);
+
+        await service.DeployDesiredWebAppsAsync(descriptor.HostKey, CancellationToken.None);
+
+        var last = repository.PublishedWebAppResults.Last();
+        Assert.Equal(HostDeploymentStatuses.Failed, last.Result.State);
+        Assert.Contains("not valid JSON", last.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-host", last.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal(broken, File.ReadAllText(deployedPath));
+    }
+
+    [Fact]
     public async Task DeployDesiredWebAppsAsync_WhenNoOverlaySkippedByVersion_LeavesDiagnosticWarningMessageClean()
     {
         var (service, repository, _) = CreateServiceWithFakeRepository();
