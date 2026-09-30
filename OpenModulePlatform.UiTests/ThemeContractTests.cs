@@ -58,6 +58,35 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
         => ThemeScenarios.TextIsReadableAsync(
             playwright, app, output, path, theme, "portal" + path.Replace('/', '-').ToLowerInvariant(), Specimens.GetValueOrDefault(path));
 
+    public static TheoryData<string> Themes() => new() { "light", "dark" };
+
+    [SkippableTheory]
+    [MemberData(nameof(Themes))]
+    public Task Status_panels_badges_and_band_labels_follow_the_theme(string theme)
+        => ThemeScenarios.StatusSurfacesFollowThemeAsync(playwright, app, output, "/Admin/Overview", theme, StatusSurfacesSpecimen);
+
+    // Web.Shared components that were drawn in light-only colours: the OmpFeedback
+    // banners, the confirm dialog's warning, the top bar's notification banners,
+    // counters and avatar, and the column band labels on the omp-lists palette.
+    // Elements marked data-panel must turn dark in the dark palette; every element
+    // the scenario lists must reach 4.5:1.
+    private const string StatusSurfacesSpecimen = """
+        <div class="omp-feedback"><div class="omp-feedback__alert omp-feedback__alert--success" data-panel>The settings were saved.</div>
+        <div class="omp-feedback__alert omp-feedback__alert--error" data-panel>The settings could not be saved.</div></div>
+        <p class="omp-confirm-dialog__warning" data-panel>This cannot be undone.</p>
+        <div class="portal-topbar__notification-banners">
+        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--announcement" data-panel><span class="portal-topbar__notification-banner-text">An announcement.</span></div>
+        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--warning" data-panel><span class="portal-topbar__notification-banner-text">Maintenance tonight.</span></div>
+        <div class="portal-topbar__notification-banner portal-topbar__notification-banner--critical" data-panel><span class="portal-topbar__notification-banner-text">The service is down.</span></div></div>
+        <p><span class="portal-topbar__notification-badge">3</span> <span class="portal-topbar__message-badge">4</span>
+        <span class="portal-topbar__message-row-badge">12</span> <span class="portal-topbar__profile-avatar">AB</span></p>
+        <table class="omp-band-specimen"><thead><tr>
+        <th data-column-band="b1" data-column-band-label="Band one">One</th><th data-column-band="b2" data-column-band-label="Band two">Two</th>
+        <th data-column-band="b3" data-column-band-label="Band three">Three</th><th data-column-band="b4" data-column-band-label="Band four">Four</th>
+        <th data-column-band="b5" data-column-band-label="Band five">Five</th><th data-column-band="b6" data-column-band-label="Band six">Six</th>
+        </tr></thead><tbody><tr><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td></tr></tbody></table>
+        """;
+
     private static readonly string[] ReadablePages =
     [
         // The dashboard. It stays out of the invariant matrix (PortalPageInvariantTests)
@@ -454,6 +483,11 @@ internal static class ThemeScenarios
         var findings = await UiInvariantScanner.ScanAsync(page);
         Assert.True(findings.Count == 0, $"{path} in {theme}:\n - " + string.Join("\n - ", findings));
 
+        // One theme switch per page. A top bar rendered twice (a layout and a component
+        // both emitting the menu) shows up here as two toggles.
+        var toggles = await page.Locator("[data-omp-theme-toggle]").CountAsync();
+        Assert.True(toggles == 1, $"{path} in {theme}: expected exactly one [data-omp-theme-toggle], found {toggles}");
+
         if (specimen is not null)
         {
             await page.EvaluateAsync(
@@ -475,7 +509,7 @@ internal static class ThemeScenarios
 
         // Hover states: every button and table row in the content area, one at a time,
         // measured once its transition has finished.
-        var buttons = page.Locator("main .btn, main .dashboard-edit-menu button, main .grid tbody tr");
+        var buttons = page.Locator("main .btn, main .dashboard-edit-menu button, main .grid tbody tr, main a.omp-error-view__button");
         var buttonCount = Math.Min(await buttons.CountAsync(), 80);
         for (var i = 0; i < buttonCount; i++)
         {
@@ -508,6 +542,151 @@ internal static class ThemeScenarios
             $"{path} in {theme}: {failing.Length} text elements below {MinimumContrast}:1\n - "
                 + string.Join("\n - ", failing.Select(Describe)));
     }
+
+    public static async Task StatusSurfacesFollowThemeAsync(
+        PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output, string path, string theme, string specimen)
+    {
+        Skip.IfNot(playwright.Available, playwright.UnavailableReason);
+        Skip.IfNot(app.Available, app.UnavailableReason);
+
+        await using var context = await playwright.Browser!.NewContextAsync(new BrowserNewContextOptions
+        {
+            ColorScheme = theme == "dark" ? ColorScheme.Dark : ColorScheme.Light,
+            ViewportSize = new ViewportSize { Width = 1366, Height = 900 },
+        });
+        var page = await context.NewPageAsync();
+        await GotoAsync(page, app, path);
+        Assert.Equal([theme, "system"], await page.EvaluateAsync<string[]>(ThemeOf));
+
+        // The band labels are created by omp-lists.js; re-running its init wires the inserted table.
+        await page.EvaluateAsync(
+            "(html) => { const host = document.createElement('div'); host.setAttribute('data-theme-specimen', ''); host.innerHTML = html; (document.querySelector('main') || document.body).prepend(host); window.ompLists && window.ompLists.init(); }",
+            specimen);
+
+        var screenshotDirectory = Path.Join(app.RepoRoot, "TestResults", "ui-theme");
+        Directory.CreateDirectory(screenshotDirectory);
+        await page.Locator("[data-theme-specimen]").ScreenshotAsync(new LocatorScreenshotOptions
+        {
+            Path = Path.Join(screenshotDirectory, $"status-surfaces-{theme}.png"),
+        });
+
+        var surfaces = await page.EvaluateAsync<SurfaceItem[]>(SurfaceScript, StatusSurfaceSelectors);
+        foreach (var selector in StatusSurfaceSelectors)
+        {
+            Assert.True(surfaces.Any(s => s.Selector == selector), $"{path} in {theme}: specimen element {selector} was not rendered");
+        }
+
+        Assert.Equal(6, surfaces.Count(s => s.Selector == ".list-column-band-label"));
+        foreach (var surface in surfaces)
+        {
+            output.WriteLine($"{theme} {surface.Selector} \"{surface.Text}\" {surface.Ratio:0.00}:1 ({surface.Color} on {surface.Background}, luminance {surface.Luminance:0.000})");
+        }
+
+        var problems = surfaces
+            .Where(s => s.Ratio < TargetContrast)
+            .Select(s => $"below {TargetContrast}:1: {s.Ratio:0.00}:1 {s.Selector} \"{s.Text}\" ({s.Color} on {s.Background})")
+            .ToList();
+
+        // A light panel in the dark palette is readable on its own but glares; the
+        // panel's own background must follow the palette.
+        if (theme == "dark")
+        {
+            problems.AddRange(surfaces
+                .Where(s => s.Panel && s.Luminance > DarkPanelLuminance)
+                .Select(s => $"light panel: {s.Selector} \"{s.Text}\" on {s.Background} (luminance {s.Luminance:0.000})"));
+        }
+
+        Assert.True(problems.Count == 0, $"{path} in {theme}: {problems.Count} problems\n - " + string.Join("\n - ", problems));
+    }
+
+    private static readonly string[] StatusSurfaceSelectors =
+    [
+        ".omp-feedback__alert--success",
+        ".omp-feedback__alert--error",
+        ".omp-confirm-dialog__warning",
+        ".portal-topbar__notification-banner--announcement .portal-topbar__notification-banner-text",
+        ".portal-topbar__notification-banner--warning .portal-topbar__notification-banner-text",
+        ".portal-topbar__notification-banner--critical .portal-topbar__notification-banner-text",
+        ".portal-topbar__notification-banner--announcement",
+        ".portal-topbar__notification-banner--warning",
+        ".portal-topbar__notification-banner--critical",
+        ".portal-topbar__notification-badge",
+        ".portal-topbar__message-badge",
+        ".portal-topbar__message-row-badge",
+        ".portal-topbar__profile-avatar",
+        ".list-column-band-label",
+    ];
+
+    // Relative luminance above which a panel reads as light: the dark palette's
+    // status backgrounds sit below 0.03, the light ones above 0.7.
+    private const double DarkPanelLuminance = 0.1;
+
+    public sealed class SurfaceItem
+    {
+        public string Selector { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public bool Panel { get; set; }
+        public double Ratio { get; set; }
+        public double Luminance { get; set; }
+        public string Color { get; set; } = string.Empty;
+        public string Background { get; set; } = string.Empty;
+    }
+
+    // Text contrast and background luminance of the specimen's elements, measured
+    // like ContrastScript (nearest opaque background, alpha-blended) but including
+    // aria-hidden elements such as the band labels and the avatar, whose colours
+    // still have to be readable.
+    private const string SurfaceScript = """
+        (selectors) => {
+            const parse = (value) => {
+                const m = value.match(/rgba?\(([^)]+)\)/);
+                if (!m) { return null; }
+                const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number);
+                return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+            };
+            const blend = (top, bottom) => ({
+                r: top.r * top.a + bottom.r * (1 - top.a),
+                g: top.g * top.a + bottom.g * (1 - top.a),
+                b: top.b * top.a + bottom.b * (1 - top.a),
+                a: 1,
+            });
+            const backgroundOf = (el) => {
+                const layers = [];
+                for (let node = el; node; node = node.parentElement) {
+                    const c = parse(getComputedStyle(node).backgroundColor);
+                    if (c && c.a > 0) { layers.push(c); if (c.a >= 1) { break; } }
+                }
+                let result = { r: 255, g: 255, b: 255, a: 1 };
+                if (layers.length > 0 && layers[layers.length - 1].a >= 1) { result = layers.pop(); }
+                while (layers.length > 0) { result = blend(layers.pop(), result); }
+                return result;
+            };
+            const luminance = (c) => {
+                const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+                return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+            };
+            const rgb = (c) => `rgb(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)})`;
+            const items = [];
+            for (const selector of selectors) {
+                for (const el of document.querySelectorAll('[data-theme-specimen] ' + selector)) {
+                    const bg = backgroundOf(el);
+                    const fg = parse(getComputedStyle(el).color);
+                    const color = fg.a < 1 ? blend(fg, bg) : fg;
+                    const l1 = luminance(color), l2 = luminance(bg);
+                    items.push({
+                        selector,
+                        text: el.textContent.trim().slice(0, 40),
+                        panel: el.hasAttribute('data-panel'),
+                        ratio: Math.round((Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05) * 100) / 100,
+                        luminance: Math.round(l2 * 1000) / 1000,
+                        color: rgb(color),
+                        background: rgb(bg),
+                    });
+                }
+            }
+            return items;
+        }
+        """;
 
     private static string Describe(ContrastItem item)
         => $"{item.Ratio:0.00}:1 {item.Element} \"{item.Text}\" ({item.Color} on {item.Background})";

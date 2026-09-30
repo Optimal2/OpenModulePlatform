@@ -43,6 +43,12 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
     /// </summary>
     protected virtual string ReadinessPath => "/";
 
+    /// <summary>
+    /// When true, an app that cannot be found or started fails the fixture
+    /// instead of making the dependent tests skip.
+    /// </summary>
+    protected virtual bool AppRequired => false;
+
     /// <summary>Extra environment variables for the app process.</summary>
     protected virtual IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
         new Dictionary<string, string>();
@@ -57,10 +63,10 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
         RepoRoot = UiTestPaths.FindRepoRoot(SolutionFileName);
         var projectDir = Path.Join(RepoRoot, WebProjectDirectory);
         var (configuration, tfm) = UiTestPaths.BuildOutputSegments();
-        var exePath = Path.Join(projectDir, "bin", configuration, tfm, AssemblyName + ".exe");
-        if (!File.Exists(exePath))
+        var exePath = UiTestPaths.FindAppExecutable(projectDir, WebProjectName, AssemblyName, AppContext.BaseDirectory);
+        if (exePath is null)
         {
-            UnavailableReason = $"app binary not found: {exePath}";
+            UnavailableReason = $"app binary not found: {Path.Join(projectDir, "bin", configuration, tfm, AssemblyName + ".exe")}";
             return;
         }
 

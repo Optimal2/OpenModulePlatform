@@ -16,6 +16,16 @@ namespace OpenModulePlatform.TestSupport.Ui;
 public static class UiTestPaths
 {
     /// <summary>
+    /// Set to 1 or true by a gate that runs the UI suite on purpose.
+    /// </summary>
+    public const string RequiredEnvironmentVariable = "OMP_UITESTS_REQUIRED";
+
+    /// <summary>
+    /// Whether <paramref name="value"/> (of <see cref="RequiredEnvironmentVariable"/>) asks for a required UI run.
+    /// </summary>
+    public static bool IsRequired(string? value) => false;
+
+    /// <summary>
     /// Walks up from the test assembly until the directory containing
     /// <paramref name="solutionFileName"/> is found.
     /// </summary>
@@ -37,8 +47,14 @@ public static class UiTestPaths
     /// so the app-under-test starts from the matching output.
     /// </summary>
     public static (string Configuration, string Tfm) BuildOutputSegments()
+        => BuildOutputSegments(AppContext.BaseDirectory);
+
+    /// <summary>
+    /// <see cref="BuildOutputSegments()"/> for an explicit output directory.
+    /// </summary>
+    public static (string Configuration, string Tfm) BuildOutputSegments(string baseDirectory)
     {
-        var segments = AppContext.BaseDirectory
+        var segments = baseDirectory
             .TrimEnd(Path.DirectorySeparatorChar)
             .Split(Path.DirectorySeparatorChar);
         var binIndex = Array.FindLastIndex(segments, s => string.Equals(s, "bin", StringComparison.OrdinalIgnoreCase));
@@ -50,6 +66,16 @@ public static class UiTestPaths
         var configuration = binIndex + 1 < segments.Length ? segments[binIndex + 1] : "Release";
         var tfm = binIndex + 2 < segments.Length ? segments[binIndex + 2] : "net10.0";
         return (configuration, tfm);
+    }
+
+    /// <summary>
+    /// The built executable of the app under test, or null when none is found.
+    /// </summary>
+    public static string? FindAppExecutable(string projectDirectory, string projectName, string assemblyName, string baseDirectory)
+    {
+        var (configuration, tfm) = BuildOutputSegments(baseDirectory);
+        var exePath = Path.Join(projectDirectory, "bin", configuration, tfm, assemblyName + ".exe");
+        return File.Exists(exePath) ? exePath : null;
     }
 
     /// <summary>
