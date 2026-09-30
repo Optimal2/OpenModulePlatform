@@ -56,7 +56,8 @@ public sealed class PortalDashboardService
         const string sql = @"
 SELECT align_to_grid,
        expanded_canvas,
-       has_custom_dashboard_layout
+       has_custom_dashboard_layout,
+       refresh_interval_seconds
 FROM omp_portal.user_dashboard_preferences
 WHERE user_id = @user_id;";
 
@@ -74,10 +75,11 @@ WHERE user_id = @user_id;";
         return new DashboardPreferences(
             rdr.IsDBNull(0) ? DefaultAlignToGrid : Convert.ToBoolean(rdr.GetValue(0), CultureInfo.InvariantCulture),
             rdr.IsDBNull(1) ? DefaultExpandedCanvas : Convert.ToBoolean(rdr.GetValue(1), CultureInfo.InvariantCulture),
-            !rdr.IsDBNull(2) && Convert.ToBoolean(rdr.GetValue(2), CultureInfo.InvariantCulture));
+            !rdr.IsDBNull(2) && Convert.ToBoolean(rdr.GetValue(2), CultureInfo.InvariantCulture),
+            DashboardRefreshIntervals.Normalize(rdr.IsDBNull(3) ? null : Convert.ToInt32(rdr.GetValue(3), CultureInfo.InvariantCulture)));
     }
 
-    public async Task SetPreferencesAsync(int userId, bool alignToGrid, bool expandedCanvas, CancellationToken ct)
+    public async Task SetPreferencesAsync(int userId, bool alignToGrid, bool expandedCanvas, int refreshIntervalSeconds, CancellationToken ct)
     {
         const string sql = @"
 MERGE omp_portal.user_dashboard_preferences AS target
@@ -86,10 +88,11 @@ ON target.user_id = source.user_id
 WHEN MATCHED THEN
     UPDATE SET align_to_grid = @align_to_grid,
                expanded_canvas = @expanded_canvas,
+               refresh_interval_seconds = @refresh_interval_seconds,
                updated_at = SYSUTCDATETIME()
 WHEN NOT MATCHED THEN
-    INSERT(user_id, align_to_grid, expanded_canvas, has_custom_dashboard_layout, updated_at)
-    VALUES(@user_id, @align_to_grid, @expanded_canvas, 0, SYSUTCDATETIME());";
+    INSERT(user_id, align_to_grid, expanded_canvas, has_custom_dashboard_layout, refresh_interval_seconds, updated_at)
+    VALUES(@user_id, @align_to_grid, @expanded_canvas, 0, @refresh_interval_seconds, SYSUTCDATETIME());";
 
         await using var conn = _db.Create();
         await conn.OpenAsync(ct);
@@ -97,6 +100,7 @@ WHEN NOT MATCHED THEN
         cmd.Parameters.Add("@user_id", SqlDbType.Int).Value = userId;
         cmd.Parameters.Add("@align_to_grid", SqlDbType.Bit).Value = alignToGrid;
         cmd.Parameters.Add("@expanded_canvas", SqlDbType.Bit).Value = expandedCanvas;
+        cmd.Parameters.Add("@refresh_interval_seconds", SqlDbType.Int).Value = DashboardRefreshIntervals.Normalize(refreshIntervalSeconds);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

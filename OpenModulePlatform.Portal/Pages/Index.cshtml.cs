@@ -70,6 +70,19 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public bool DashboardExpandedCanvas { get; private set; } = true;
 
+    /// <summary>How often the dashboard fetches its refreshing widgets again, in seconds; 0 is off.</summary>
+    public int DashboardRefreshIntervalSeconds { get; private set; } = DashboardRefreshIntervals.Default;
+
+    /// <summary>The resource key for one of the menu's interval choices.</summary>
+    public static string RefreshIntervalText(int seconds) => seconds switch
+    {
+        0 => "Off",
+        30 => "Every 30 seconds",
+        60 => "Every minute",
+        300 => "Every 5 minutes",
+        _ => "Every minute"
+    };
+
     public string DashboardDraftKey { get; private set; } = string.Empty;
 
     public OverviewMetrics Metrics { get; private set; } = new();
@@ -258,15 +271,22 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
         return new JsonResult(new { ok = true, addedWidgets = result.CreatedWidgets });
     }
 
-    public async Task<IActionResult> OnPostSaveDashboardPreference(bool alignToGrid, bool expandedCanvas, CancellationToken ct)
+    public async Task<IActionResult> OnPostSaveDashboardPreference(
+        bool alignToGrid,
+        bool expandedCanvas,
+        int? refreshIntervalSeconds,
+        CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return Forbid();
         }
 
-        await _dashboard.SetPreferencesAsync(userId, alignToGrid, expandedCanvas, ct);
-        return new JsonResult(new { ok = true, alignToGrid, expandedCanvas });
+        // A value outside the menu's choices is the default, never an error: the
+        // menu itself only offers the choices.
+        var refreshInterval = DashboardRefreshIntervals.Normalize(refreshIntervalSeconds);
+        await _dashboard.SetPreferencesAsync(userId, alignToGrid, expandedCanvas, refreshInterval, ct);
+        return new JsonResult(new { ok = true, alignToGrid, expandedCanvas, refreshIntervalSeconds = refreshInterval });
     }
 
     public async Task<IActionResult> OnPostRemoveWidget(long userActiveWidgetId, CancellationToken ct)
@@ -462,6 +482,7 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
             var preferences = await _dashboard.GetPreferencesAsync(userId.Value, ct);
             DashboardAlignToGrid = preferences.AlignToGrid;
             DashboardExpandedCanvas = preferences.ExpandedCanvas;
+            DashboardRefreshIntervalSeconds = preferences.RefreshIntervalSeconds;
             ActiveWidgets = FilterMessageWidgets(
                 await _dashboard.GetActiveWidgetsAsync(userId.Value, roleIds, permissions, ct),
                 messagesEnabled);

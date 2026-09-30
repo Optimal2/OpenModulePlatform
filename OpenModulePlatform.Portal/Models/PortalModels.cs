@@ -171,7 +171,30 @@ public sealed record DashboardRoleOption(int RoleId, string Name, string? Descri
 /// <summary>
 /// Per-user dashboard behavior preferences.
 /// </summary>
-public sealed record DashboardPreferences(bool AlignToGrid, bool ExpandedCanvas, bool HasCustomLayout);
+/// <param name="RefreshIntervalSeconds">How often the dashboard fetches its refreshing widgets again; 0 is off.</param>
+public sealed record DashboardPreferences(
+    bool AlignToGrid,
+    bool ExpandedCanvas,
+    bool HasCustomLayout,
+    int RefreshIntervalSeconds = DashboardRefreshIntervals.Default);
+
+/// <summary>
+/// The intervals the dashboard offers for fetching its refreshing widgets again: one
+/// setting for the whole dashboard, kept per user. A widget that asks to be fetched
+/// less often (its <c>data-widget-refresh</c>) is fetched at its own pace instead.
+/// </summary>
+public static class DashboardRefreshIntervals
+{
+    public const int Off = 0;
+    public const int Default = 60;
+
+    /// <summary>The choices the dashboard's menu offers, in seconds; 0 is off.</summary>
+    public static IReadOnlyList<int> Allowed { get; } = [Off, 30, 60, 300];
+
+    /// <summary>A stored or posted value made into one of the choices; anything else is the default.</summary>
+    public static int Normalize(int? seconds)
+        => seconds is { } value && Allowed.Contains(value) ? value : Default;
+}
 
 /// <summary>
 /// Admin list row for Portal Entries.

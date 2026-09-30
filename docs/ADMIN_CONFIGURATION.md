@@ -461,6 +461,17 @@ while a user resizes the widget, without any script:
 In browsers without container query support the helpers fall back to the width
 class set at render time.
 
+**Refresh contract.** A module whose figures change can ask to be fetched
+again by putting `data-widget-refresh="<seconds>"` on an element of the
+fragment: the least often it wants that (15 to 3600; the Portal removes the
+attribute). The dashboard fetches such widgets again at the user's own
+interval, one setting for the whole dashboard kept per user (off, 30 seconds,
+a minute or 5 minutes; a minute unless changed, in the dashboard's edit menu
+next to "Refresh now"), or at the module's pace when that is slower. A widget
+whose settings popup is open is left alone, a hidden tab waits, and a tab shown
+again catches up. The title bar shows when the content was last fetched. A
+fragment without the attribute is fetched once, when the page opens.
+
 ### 2. Manage the installation topology
 
 The normal administration surface is System > Installation

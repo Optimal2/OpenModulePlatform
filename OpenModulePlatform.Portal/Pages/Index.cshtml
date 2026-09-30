@@ -22,6 +22,8 @@
          data-favorite-toggle-url="@Url.Content("~/navigation/favorites/toggle")"
          data-align-to-grid="@Model.DashboardAlignToGrid.ToString().ToLowerInvariant()"
          data-expanded-canvas="@Model.DashboardExpandedCanvas.ToString().ToLowerInvariant()"
+         data-refresh-interval="@Model.DashboardRefreshIntervalSeconds.ToString(CultureInfo.InvariantCulture)"
+         data-refresh-updated-label="@L["Updated {0}"]"
          data-grid-size="32"
          data-min-canvas-height="640"
          data-canvas-bottom-padding="64"
@@ -437,6 +439,22 @@
                 <button type="button" class="dashboard-add-button" data-dashboard-add-open>
                     <span class="dashboard-action-icon dashboard-action-icon--add" aria-hidden="true"></span>
                     @L["Add widget"]
+                </button>
+                @* One interval for the whole dashboard, kept per user: widgets whose
+                   module asks to be fetched again (data-widget-refresh) are fetched
+                   at this pace, or at the module's own if that is slower. *@
+                <label class="dashboard-refresh-select">
+                    <span>@L["Auto-refresh"]</span>
+                    <select data-dashboard-refresh-interval aria-label="@L["Auto-refresh"]">
+                        @foreach (var seconds in DashboardRefreshIntervals.Allowed)
+                        {
+                            <option value="@seconds.ToString(CultureInfo.InvariantCulture)" selected="@(Model.DashboardRefreshIntervalSeconds == seconds)">@L[OpenModulePlatform.Portal.Pages.IndexModel.RefreshIntervalText(seconds)]</option>
+                        }
+                    </select>
+                </label>
+                <button type="button" class="dashboard-refresh-now-button" data-dashboard-refresh-now>
+                    <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
+                    @L["Refresh now"]
                 </button>
 
                 <div class="dashboard-edit-menu__save-row">

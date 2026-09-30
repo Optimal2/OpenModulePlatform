@@ -63,6 +63,25 @@ public static class ModuleFragmentWidget
             _ => "is-wide"
         };
 
+    /// <summary>Shortest refresh a module can ask for, in seconds.</summary>
+    public const int MinRefreshSeconds = 15;
+
+    /// <summary>Longest refresh a module can ask for, in seconds (an hour).</summary>
+    public const int MaxRefreshSeconds = 3600;
+
+    /// <summary>
+    /// Reads a module's <c>data-widget-refresh</c> value: the least often, in seconds,
+    /// the module wants its fragment fetched again. Null when the value is not a
+    /// positive whole number; otherwise clamped to the supported range. The dashboard
+    /// fetches at the longer of this and the user's own interval, and never when the
+    /// user has turned refreshing off.
+    /// </summary>
+    public static int? GetRefreshSeconds(string? value)
+        => int.TryParse(value?.Trim(), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var seconds) && seconds > 0
+            ? Math.Clamp(seconds, MinRefreshSeconds, MaxRefreshSeconds)
+            : null;
+
     /// <summary>
     /// Maps a module's <c>data-widget-mode</c> suggestion to a container class, or null
     /// when the value is not one of the three supported modes.
@@ -83,7 +102,8 @@ public static class ModuleFragmentWidget
 /// <param name="IsLoaded">True when <paramref name="Html"/> holds sanitized module content.</param>
 /// <param name="Html">Sanitized fragment HTML, or empty when the placeholder should be shown.</param>
 /// <param name="ModeClass">The module's <c>data-widget-mode</c> suggestion mapped to a container class, if any.</param>
-public sealed record ModuleFragmentResult(bool IsLoaded, string Html, string? ModeClass)
+/// <param name="RefreshSeconds">The module's <c>data-widget-refresh</c> request (the least often it wants to be fetched again), if any.</param>
+public sealed record ModuleFragmentResult(bool IsLoaded, string Html, string? ModeClass, int? RefreshSeconds = null)
 {
     public static ModuleFragmentResult Unavailable { get; } = new(false, string.Empty, null);
 

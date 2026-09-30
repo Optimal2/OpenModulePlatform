@@ -788,6 +788,16 @@ BEGIN
 END
 GO
 
+-- How often the dashboard fetches its refreshing widgets again, in seconds; 0 is off.
+IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NOT NULL
+   AND COL_LENGTH(N'omp_portal.user_dashboard_preferences', N'refresh_interval_seconds') IS NULL
+BEGIN
+    ALTER TABLE omp_portal.user_dashboard_preferences
+        ADD refresh_interval_seconds int NOT NULL
+            CONSTRAINT DF_omp_portal_user_dashboard_preferences_refresh_interval_seconds DEFAULT(60);
+END
+GO
+
 IF OBJECT_ID(N'omp_portal.user_dashboard_preferences', N'U') IS NOT NULL
    AND COL_LENGTH(N'omp_portal.user_dashboard_preferences', N'expanded_canvas') IS NULL
 BEGIN

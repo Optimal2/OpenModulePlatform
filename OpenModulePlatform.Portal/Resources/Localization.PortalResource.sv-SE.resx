@@ -3450,4 +3450,11 @@
   <data name="Remove the user information from the URL." xml:space="preserve"><value>Ta bort användaruppgifterna från adressen.</value></data>
   <data name="Module-fragment widgets are blocked for HTTPS requests: ModuleFragmentWidgets:InternalBaseUrl uses HTTP and would send identity cookies without TLS." xml:space="preserve"><value>Module-fragment-widgetar blockeras för HTTPS-begäranden: ModuleFragmentWidgets:InternalBaseUrl använder HTTP och skulle skicka identitetscookies utan TLS.</value></data>
   <data name="Change it to an HTTPS address, or set ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true if a TLS-terminating proxy makes this HTTP hop intentional." xml:space="preserve"><value>Byt till en HTTPS-adress, eller sätt ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true om en TLS-avslutande proxy gör detta HTTP-steg avsiktligt.</value></data>
+  <data name="Auto-refresh" xml:space="preserve"><value>Automatisk uppdatering</value></data>
+  <data name="Off" xml:space="preserve"><value>Av</value></data>
+  <data name="Every 30 seconds" xml:space="preserve"><value>Var 30:e sekund</value></data>
+  <data name="Every minute" xml:space="preserve"><value>Varje minut</value></data>
+  <data name="Every 5 minutes" xml:space="preserve"><value>Var 5:e minut</value></data>
+  <data name="Refresh now" xml:space="preserve"><value>Uppdatera nu</value></data>
+  <data name="Updated {0}" xml:space="preserve"><value>Uppdaterad {0}</value></data>
 </root>

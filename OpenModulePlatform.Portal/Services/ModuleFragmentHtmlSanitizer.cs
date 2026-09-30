@@ -30,6 +30,12 @@ public static class ModuleFragmentHtmlSanitizer
     public const string ModuleDataAttributePrefix = "data-module-";
     public const string WidgetModeAttribute = "data-widget-mode";
 
+    /// <summary>
+    /// A module's request to be fetched again, in seconds, read from the fragment and
+    /// removed like <see cref="WidgetModeAttribute"/>; see <see cref="ModuleFragmentWidget.GetRefreshSeconds"/>.
+    /// </summary>
+    public const string WidgetRefreshAttribute = "data-widget-refresh";
+
     private static readonly string[] AllowedTags =
     [
         "div", "span", "p", "a", "ul", "li", "strong", "em",
@@ -57,6 +63,7 @@ public static class ModuleFragmentHtmlSanitizer
         }
 
         string? modeClass = null;
+        int? refreshSeconds = null;
         var sanitizer = CreateSanitizer();
         sanitizer.PostProcessDom += (_, e) =>
         {
@@ -64,6 +71,12 @@ public static class ModuleFragmentHtmlSanitizer
             {
                 modeClass ??= ModuleFragmentWidget.GetModeClass(element.GetAttribute(WidgetModeAttribute));
                 element.RemoveAttribute(WidgetModeAttribute);
+            }
+
+            foreach (var element in e.Document.QuerySelectorAll($"[{WidgetRefreshAttribute}]").ToArray())
+            {
+                refreshSeconds ??= ModuleFragmentWidget.GetRefreshSeconds(element.GetAttribute(WidgetRefreshAttribute));
+                element.RemoveAttribute(WidgetRefreshAttribute);
             }
 
             foreach (var element in e.Document.QuerySelectorAll("[href]").ToArray())
@@ -81,7 +94,7 @@ public static class ModuleFragmentHtmlSanitizer
         };
 
         var sanitized = sanitizer.Sanitize(html);
-        return new ModuleFragmentResult(true, sanitized, modeClass);
+        return new ModuleFragmentResult(true, sanitized, modeClass, refreshSeconds);
     }
 
     /// <summary>
@@ -198,7 +211,8 @@ public static class ModuleFragmentHtmlSanitizer
             var name = e.Attribute.Name;
             if (name.StartsWith("aria-", StringComparison.OrdinalIgnoreCase)
                 || name.StartsWith(ModuleDataAttributePrefix, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, WidgetModeAttribute, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(name, WidgetModeAttribute, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, WidgetRefreshAttribute, StringComparison.OrdinalIgnoreCase))
             {
                 e.Cancel = true;
             }

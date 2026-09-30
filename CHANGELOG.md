@@ -145,6 +145,15 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Added
 
+- **Dashboard widgets can refresh themselves.** A module that puts
+  `data-widget-refresh="<seconds>"` on its fragment (the least often it wants
+  to be fetched again) gets fetched again at the user's interval: one
+  setting for the whole dashboard, kept per user in
+  `omp_portal.user_dashboard_preferences.refresh_interval_seconds` (off, 30 s,
+  a minute or 5 minutes; a minute unless changed), chosen in the dashboard's
+  edit menu next to a "Refresh now" button. Widgets are fetched one at a
+  time, never one whose settings popup is open; a hidden tab waits and a tab
+  shown again catches up; the title bar shows when the content was fetched.
 - **Light/dark theme contract, first slice.** `OpenModulePlatform.Web.Shared`
   ships `js/omp-theme.js` (synchronous head script, CSP-safe, sets
   `data-theme`/`data-theme-mode` on `<html>` before first paint) and

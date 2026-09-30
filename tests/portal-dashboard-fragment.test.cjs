@@ -95,7 +95,8 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
         removeDashboardWidgetElement = element => testRemove(element);
         createWidgetElement = (root, item) => testCreate(root, item, createModuleFragmentPlaceholder);
         window.testApi = { initDashboard, scheduleModuleFragmentRetry, loadModuleFragment,
-            initializeModuleFragment, captureDashboardSnapshot, resetDashboardChanges, restoreDashboardDraft, applySavedWidgetIds };
+            initializeModuleFragment, captureDashboardSnapshot, resetDashboardChanges, restoreDashboardDraft, applySavedWidgetIds,
+            getModuleFragmentRefreshDue, refreshModuleFragment, markModuleFragmentRefreshed };
     })();`), Object.assign(context, {
         testRemove: element => { canvas.widgets = canvas.widgets.filter(item => item !== element); },
         testCreate: (root, item, placeholder) => {
@@ -112,7 +113,7 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
     const api = context.window.testApi;
     const state = { addedWidgetIds: new Set(), pendingRemovedWidgetIds: new Set(), nextTemporaryWidgetId: -1 };
     return {
-        timers, requests,
+        timers, requests, api, root,
         get widgets() { return canvas.widgets; },
         duplicate: (kind) => { canvas.widgets.push(widgetElement(kind)); },
         get current() { return canvas.widgets[0]?.current; },
@@ -428,3 +429,55 @@ for (const initial of ['timeout', 'loading']) {
         });
     }
 }
+
+// --- module fragment refresh -------------------------------------------------
+
+function refreshing(kind = 'loaded', seconds = '60') {
+    const dash = dashboard(kind, []);
+    dash.current.dataset.moduleFragmentRefresh = seconds;
+    dash.root.dataset.refreshInterval = '60';
+    return dash;
+}
+
+test('refresh: only a loaded widget with a module request is due, at the slower of the two paces', () => {
+    const dash = refreshing();
+    const api = dash.api;
+    api.markModuleFragmentRefreshed(dash.root, dash.widgets[0], 1000);
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 59000).length, 0); // arrays from the VM realm are not deepEqual to ours
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 60000).length, 1);
+    // The module asks for five minutes: the dashboard's minute yields to it.
+    dash.current.dataset.moduleFragmentRefresh = '300';
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 60000).length, 0); // arrays from the VM realm are not deepEqual to ours
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 300000).length, 1);
+    // Off: nothing is due, unless forced by Refresh now.
+    dash.root.dataset.refreshInterval = '0';
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 999000).length, 0); // arrays from the VM realm are not deepEqual to ours
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000, true).length, 1);
+    // A widget without a request, or one still loading, is never due.
+    delete dash.current.dataset.moduleFragmentRefresh;
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 999000, true).length, 0); // arrays from the VM realm are not deepEqual to ours
+    dash.current.dataset.moduleFragmentRefresh = '60';
+    dash.current.classList.add('is-loading');
+    assert.equal(api.getModuleFragmentRefreshDue(dash.root, 1000 + 999000, true).length, 0); // arrays from the VM realm are not deepEqual to ours
+});
+
+test('refresh: a loaded response replaces the fragment and stamps the widget', async () => {
+    const dash = refreshing();
+    dash.respondWith(async () => 'loaded');
+    const before = dash.current;
+    assert.equal(await dash.api.refreshModuleFragment(dash.root, dash.widgets[0]), true);
+    assert.notEqual(dash.current, before);
+    assert.equal(dash.requests.length, 1);
+    assert.ok(parseFloat(dash.widgets[0].dataset.moduleFragmentRefreshedAt) > 0);
+});
+
+test('refresh: a timeout, an unavailable response or a network error keeps the fragment on screen', async () => {
+    for (const kind of ['timeout', 'unavailable', 'network', 'http']) {
+        const dash = refreshing();
+        dash.respondWith(async () => kind);
+        const before = dash.current;
+        assert.equal(await dash.api.refreshModuleFragment(dash.root, dash.widgets[0]), false, kind);
+        assert.equal(dash.current, before, kind);
+        assert.equal(dash.widgets[0].dataset.moduleFragmentRefreshedAt, undefined, kind);
+    }
+});

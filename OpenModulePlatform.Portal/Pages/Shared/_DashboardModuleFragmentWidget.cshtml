@@ -8,9 +8,13 @@
     var modeClass = Model.Result.ModeClass ?? ModuleFragmentWidget.GetWidthClass(Model.ContentWidth);
     var isLoading = !Model.Result.IsLoaded && Model.Result.FailureReason == ModuleFragmentFailureReason.Timeout;
 }
+@* data-module-fragment-refresh carries the module's data-widget-refresh request
+   (seconds) to the dashboard script, which fetches such widgets again on the
+   user's interval. *@
 <div class="dashboard-module-fragment @modeClass@(Model.Result.IsLoaded ? string.Empty : isLoading ? " is-loading" : " is-unavailable")"
      data-module-fragment
      @Html.Raw(isLoading ? "data-module-fragment-retry=\"timeout\"" : string.Empty)
+     @Html.Raw(Model.Result.IsLoaded && Model.Result.RefreshSeconds is { } refreshSeconds ? $"data-module-fragment-refresh=\"{refreshSeconds.ToString(CultureInfo.InvariantCulture)}\"" : string.Empty)
      data-module-fragment-widget-id="@Model.WidgetId.ToString(CultureInfo.InvariantCulture)">
     @if (Model.Result.IsLoaded)
     {

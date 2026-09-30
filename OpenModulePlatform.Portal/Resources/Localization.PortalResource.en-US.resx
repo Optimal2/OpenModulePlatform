@@ -1136,4 +1136,11 @@
   <data name="Remove the user information from the URL." xml:space="preserve"><value>Remove the user information from the URL.</value></data>
   <data name="Module-fragment widgets are blocked for HTTPS requests: ModuleFragmentWidgets:InternalBaseUrl uses HTTP and would send identity cookies without TLS." xml:space="preserve"><value>Module-fragment widgets are blocked for HTTPS requests: ModuleFragmentWidgets:InternalBaseUrl uses HTTP and would send identity cookies without TLS.</value></data>
   <data name="Change it to an HTTPS address, or set ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true if a TLS-terminating proxy makes this HTTP hop intentional." xml:space="preserve"><value>Change it to an HTTPS address, or set ModuleFragmentWidgets:AllowInsecureInternalBaseUrl=true if a TLS-terminating proxy makes this HTTP hop intentional.</value></data>
+  <data name="Auto-refresh" xml:space="preserve"><value>Auto-refresh</value></data>
+  <data name="Off" xml:space="preserve"><value>Off</value></data>
+  <data name="Every 30 seconds" xml:space="preserve"><value>Every 30 seconds</value></data>
+  <data name="Every minute" xml:space="preserve"><value>Every minute</value></data>
+  <data name="Every 5 minutes" xml:space="preserve"><value>Every 5 minutes</value></data>
+  <data name="Refresh now" xml:space="preserve"><value>Refresh now</value></data>
+  <data name="Updated {0}" xml:space="preserve"><value>Updated {0}</value></data>
 </root>

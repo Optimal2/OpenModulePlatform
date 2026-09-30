@@ -337,6 +337,7 @@
 
     function initDashboard(root) {
         root.querySelectorAll('[data-dashboard-widget]').forEach(element => initializeModuleFragment(root, element));
+        startModuleFragmentRefresh(root);
         const canvas = root.querySelector('[data-dashboard-canvas]');
         const editToggle = root.querySelector('[data-dashboard-edit-toggle]');
         const editLabel = root.querySelector('[data-dashboard-edit-label]');
@@ -381,8 +382,10 @@
             editCanvasWidth: 0,
             editCanvasHeight: 0,
             draftWriteTimer: 0,
-            draftWriteSequence: 0
+            draftWriteSequence: 0,
+            refreshIntervalSeconds: parseRefreshIntervalSeconds(root.dataset.refreshInterval)
         };
+        bindModuleFragmentRefreshMenu(root, token, state);
         const updateDirtyState = () => {
             const isDirty = updateDashboardDirtyState(root, canvas, state, saveButton);
             updateDashboardDraftState(root, canvas, state, isDirty);
@@ -3917,6 +3920,7 @@
             if (state.active === active && root.contains(element)
                 && element.querySelector('[data-module-fragment]') === pending) {
                 pending.replaceWith(loaded);
+                noteModuleFragmentLoaded(root, element);
             }
         } catch {
             if (state.active === active && root.contains(element)
@@ -3936,6 +3940,227 @@
                 }
             }
         }
+    }
+
+    // --- module fragment refresh ------------------------------------------
+    // A module that wants its widget fetched again puts data-widget-refresh="<seconds>"
+    // (the least often it wants that) on its fragment; the Portal carries it to the
+    // container as data-module-fragment-refresh. The dashboard fetches such widgets
+    // again at the user's interval (the menu's choice, kept per user; 0 is off), or at
+    // the module's own pace when that is slower, one widget at a time, and never one
+    // whose settings popup is open. A hidden tab waits; a tab shown again catches up.
+    // "Refresh now" fetches them all at once, whatever the interval.
+    const moduleFragmentRefreshers = new WeakMap();
+    const moduleFragmentRefreshTickMs = 5000;
+    const moduleFragmentRefreshChoices = [0, 30, 60, 300];
+    const moduleFragmentRefreshDefault = 60;
+
+    function parseRefreshIntervalSeconds(value) {
+        const parsed = parseInt(value, 10);
+        return moduleFragmentRefreshChoices.includes(parsed) ? parsed : moduleFragmentRefreshDefault;
+    }
+
+    function getModuleFragmentRefreshSeconds(element) {
+        const fragment = element.querySelector('[data-module-fragment]');
+        const seconds = fragment ? parseInt(fragment.dataset.moduleFragmentRefresh, 10) : NaN;
+        if (!(seconds > 0) || fragment.classList.contains('is-loading') || fragment.classList.contains('is-unavailable')) {
+            return 0;
+        }
+        return seconds;
+    }
+
+    // Which widgets are due at `now`: pure, so it can be tested on its own.
+    function getModuleFragmentRefreshDue(root, now, force = false) {
+        const intervalSeconds = parseRefreshIntervalSeconds(root.dataset.refreshInterval);
+        if (!force && intervalSeconds === 0) {
+            return [];
+        }
+        const due = [];
+        root.querySelectorAll('[data-dashboard-widget]').forEach((element) => {
+            const own = getModuleFragmentRefreshSeconds(element);
+            if (!own) {
+                return;
+            }
+            const last = parseFloat(element.dataset.moduleFragmentRefreshedAt) || 0;
+            if (force || now - last >= Math.max(intervalSeconds, own) * 1000) {
+                due.push(element);
+            }
+        });
+        return due;
+    }
+
+    function formatDashboardClock(at) {
+        const meta = typeof document.querySelector === 'function' ? document.querySelector('meta[name="omp-time-zone"]') : null;
+        const options = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+        try {
+            return new Intl.DateTimeFormat(undefined, { ...options, timeZone: meta?.getAttribute('content') || undefined }).format(new Date(at));
+        } catch {
+            return new Intl.DateTimeFormat(undefined, options).format(new Date(at));
+        }
+    }
+
+    // The stamp in the title bar says when the widget's content was fetched; it
+    // moves only on a successful fetch, so it stands still exactly when refreshes
+    // stop going through.
+    function markModuleFragmentRefreshed(root, element, at = Date.now()) {
+        element.dataset.moduleFragmentRefreshedAt = String(at);
+        const titlebar = element.querySelector('[data-widget-titlebar]');
+        if (!titlebar || typeof document.createElement !== 'function') {
+            return;
+        }
+        let stamp = titlebar.querySelector('[data-widget-updated]');
+        if (!stamp) {
+            stamp = document.createElement('span');
+            stamp.className = 'dashboard-widget__updated';
+            stamp.setAttribute('data-widget-updated', '');
+            titlebar.appendChild(stamp);
+        }
+        stamp.textContent = (root.dataset.refreshUpdatedLabel || 'Updated {0}').replace('{0}', formatDashboardClock(at));
+    }
+
+    function noteModuleFragmentLoaded(root, element) {
+        if (!getModuleFragmentRefreshSeconds(element)) {
+            return;
+        }
+        markModuleFragmentRefreshed(root, element);
+        moduleFragmentRefreshers.get(root)?.schedule?.();
+    }
+
+    // Fetches one widget's fragment again and swaps it in. Only a loaded fragment
+    // replaces the one on screen: a placeholder would take a working widget away
+    // for a hiccup the next tick recovers from.
+    async function refreshModuleFragment(root, element) {
+        const current = element.querySelector('[data-module-fragment]');
+        const widgetId = element.dataset.widgetId || current?.dataset.moduleFragmentWidgetId;
+        if (!current || !widgetId || !root.dataset.moduleFragmentUrl) {
+            return false;
+        }
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), moduleFragmentTimeoutMilliseconds);
+        try {
+            const url = new URL(root.dataset.moduleFragmentUrl, window.location.href);
+            url.searchParams.set('widgetId', String(widgetId));
+            url.searchParams.set('width', String(Math.round(element.getBoundingClientRect().width) || parseFloat(element.style.width) || 0));
+            const response = await fetch(url.toString(), {
+                credentials: 'same-origin',
+                signal: controller.signal,
+                headers: { Accept: 'text/html' }
+            });
+            if (!response.ok || isDashboardLoginRedirect(response)) {
+                return false;
+            }
+            const template = document.createElement('template');
+            template.innerHTML = await response.text();
+            const loaded = template.content.querySelector('[data-module-fragment]');
+            if (!loaded || loaded.classList.contains('is-loading') || loaded.classList.contains('is-unavailable')) {
+                return false;
+            }
+            if (!root.contains(element) || element.querySelector('[data-module-fragment]') !== current
+                || activeWidgetPopup?.ownerWidget === element) {
+                return false;
+            }
+            current.replaceWith(loaded);
+            markModuleFragmentRefreshed(root, element);
+            return true;
+        } catch {
+            return false;
+        } finally {
+            window.clearTimeout(timer);
+        }
+    }
+
+    async function runModuleFragmentRefresh(root, refresher, force = false) {
+        if (refresher.running) {
+            return;
+        }
+        refresher.running = true;
+        try {
+            for (const element of getModuleFragmentRefreshDue(root, Date.now(), force)) {
+                if (root.contains(element)) {
+                    await refreshModuleFragment(root, element);
+                }
+            }
+        } finally {
+            refresher.running = false;
+        }
+    }
+
+    function startModuleFragmentRefresh(root) {
+        if (moduleFragmentRefreshers.has(root)) {
+            return;
+        }
+        const refresher = { timer: 0, running: false };
+        moduleFragmentRefreshers.set(root, refresher);
+        const now = Date.now();
+        let anyRefreshing = false;
+        root.querySelectorAll('[data-dashboard-widget]').forEach((element) => {
+            if (getModuleFragmentRefreshSeconds(element)) {
+                anyRefreshing = true;
+                markModuleFragmentRefreshed(root, element, now);
+            }
+        });
+        // The tick is cheap (a scan of the widgets) and only runs while something
+        // can come of it: a refreshing widget, an interval, a visible tab.
+        refresher.schedule = () => {
+            window.clearTimeout(refresher.timer);
+            refresher.timer = 0;
+            if (parseRefreshIntervalSeconds(root.dataset.refreshInterval) === 0 || document.visibilityState === 'hidden') {
+                return;
+            }
+            refresher.timer = window.setTimeout(async () => {
+                refresher.timer = 0;
+                await runModuleFragmentRefresh(root, refresher);
+                refresher.schedule();
+            }, moduleFragmentRefreshTickMs);
+        };
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                runModuleFragmentRefresh(root, refresher).then(() => refresher.schedule());
+            } else {
+                refresher.schedule();
+            }
+        });
+        if (anyRefreshing) {
+            refresher.schedule();
+        }
+    }
+
+    function refreshModuleFragmentsNow(root) {
+        const refresher = moduleFragmentRefreshers.get(root);
+        return refresher ? runModuleFragmentRefresh(root, refresher, true) : Promise.resolve();
+    }
+
+    function applyModuleFragmentRefreshInterval(root, seconds) {
+        root.dataset.refreshInterval = String(parseRefreshIntervalSeconds(seconds));
+        moduleFragmentRefreshers.get(root)?.schedule?.();
+    }
+
+    // The menu's interval select and "Refresh now" button (editors only: the menu
+    // is theirs). A choice is saved with the other dashboard preferences and put
+    // back if the save fails.
+    function bindModuleFragmentRefreshMenu(root, token, state) {
+        const select = root.querySelector('[data-dashboard-refresh-interval]');
+        const refreshNow = root.querySelector('[data-dashboard-refresh-now]');
+        if (select) {
+            select.value = String(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
+            select.addEventListener('change', async () => {
+                const previous = parseRefreshIntervalSeconds(root.dataset.refreshInterval);
+                const next = parseRefreshIntervalSeconds(select.value);
+                applyModuleFragmentRefreshInterval(root, next);
+                state.refreshIntervalSeconds = next;
+                try {
+                    await saveDashboardPreferences(root, token, state);
+                } catch (error) {
+                    state.refreshIntervalSeconds = previous;
+                    applyModuleFragmentRefreshInterval(root, previous);
+                    select.value = String(previous);
+                    handleDashboardSaveError(root, error);
+                }
+            });
+        }
+        refreshNow?.addEventListener('click', () => {
+            refreshModuleFragmentsNow(root).catch(() => {});
+        });
     }
 
     function isBlankWidgetPayload(payload) {
@@ -4637,7 +4862,8 @@
     async function saveDashboardPreferences(root, token, state) {
         await postForm(root.dataset.preferenceUrl, token, {
             alignToGrid: !!state.alignToGrid,
-            expandedCanvas: !!state.expandedCanvas
+            expandedCanvas: !!state.expandedCanvas,
+            refreshIntervalSeconds: parseRefreshIntervalSeconds(state.refreshIntervalSeconds)
         });
     }
 

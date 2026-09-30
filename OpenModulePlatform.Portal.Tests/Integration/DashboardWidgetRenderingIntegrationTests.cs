@@ -140,6 +140,25 @@ public sealed class DashboardWidgetRenderingIntegrationTests
     }
 
     [Fact]
+    public async Task ModuleFragmentWidget_Loaded_CarriesTheRefreshRequestToTheContainer()
+    {
+        using var scope = _fixture.Factory.Services.CreateScope();
+        var httpContext = CreateHttpContext(scope.ServiceProvider);
+        var fragment = ModuleFragmentHtmlSanitizer.Sanitize(
+            "<div data-widget-refresh=\"60\"><strong>42</strong></div>",
+            "/sample");
+
+        var html = await RenderPartialAsync(
+            scope.ServiceProvider,
+            httpContext,
+            "/Pages/Shared/_DashboardModuleFragmentWidget.cshtml",
+            new DashboardModuleFragmentWidget(7, 900, fragment));
+
+        Assert.Contains("data-module-fragment-refresh=\"60\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-widget-refresh", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ModuleFragmentWidget_Loaded_RendersSanitizedContentWithModeClass()
     {
         using var scope = _fixture.Factory.Services.CreateScope();
