@@ -83,7 +83,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   `docs/ARTIFACT_PACKAGES.md` now documents the remaining limitation: a
   same-package host that later fails to provision shows up in
   `omp.HostArtifactStates` and the Portal host deployment view, not at import
-  (omp-hostagent-service 0.3.303).
+  (omp-hostagent-service 0.3.304).
 - **Worker plugins import together with the WorkerProcessHost they need.** A
   universal package carrying a new `omp-workerprocesshost` and worker plugins
   that require it lost the plugins on its first import, because the host it had
