@@ -442,16 +442,31 @@
                 </button>
                 @* One interval for the whole dashboard, kept per user: widgets whose
                    module asks to be fetched again (data-widget-refresh) are fetched
-                   at this pace, or at the module's own if that is slower. *@
-                <label class="dashboard-refresh-select">
-                    <span>@L["Auto-refresh"]</span>
-                    <select data-dashboard-refresh-interval aria-label="@L["Auto-refresh"]">
+                   at this pace, or at the module's own if that is slower. The choices
+                   are a submenu that folds out to the right, so the menu stays as
+                   narrow as its buttons. *@
+                <div class="dashboard-refresh-menu" data-dashboard-refresh-menu>
+                    <button type="button"
+                            class="dashboard-refresh-menu__trigger"
+                            data-dashboard-refresh-trigger
+                            aria-haspopup="menu"
+                            aria-expanded="false">
+                        <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
+                        <span class="dashboard-refresh-menu__label">@L["Auto-refresh"]</span>
+                        <span class="dashboard-refresh-menu__value" data-dashboard-refresh-value>@L[OpenModulePlatform.Portal.Pages.IndexModel.RefreshIntervalText(Model.DashboardRefreshIntervalSeconds)]</span>
+                        <span class="dashboard-refresh-menu__chevron" aria-hidden="true"></span>
+                    </button>
+                    <div class="dashboard-refresh-menu__list" role="menu" aria-label="@L["Auto-refresh"]" data-dashboard-refresh-list hidden>
                         @foreach (var seconds in DashboardRefreshIntervals.Allowed)
                         {
-                            <option value="@seconds.ToString(CultureInfo.InvariantCulture)" selected="@(Model.DashboardRefreshIntervalSeconds == seconds)">@L[OpenModulePlatform.Portal.Pages.IndexModel.RefreshIntervalText(seconds)]</option>
+                            <button type="button"
+                                    class="dashboard-refresh-menu__option"
+                                    role="menuitemradio"
+                                    aria-checked="@((Model.DashboardRefreshIntervalSeconds == seconds).ToString().ToLowerInvariant())"
+                                    data-dashboard-refresh-option="@seconds.ToString(CultureInfo.InvariantCulture)">@L[OpenModulePlatform.Portal.Pages.IndexModel.RefreshIntervalText(seconds)]</button>
                         }
-                    </select>
-                </label>
+                    </div>
+                </div>
                 <button type="button" class="dashboard-refresh-now-button" data-dashboard-refresh-now>
                     <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
                     @L["Refresh now"]

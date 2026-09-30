@@ -4143,31 +4143,99 @@
         moduleFragmentRefreshers.get(root)?.schedule?.();
     }
 
-    // The menu's interval select and "Refresh now" button (editors only: the menu
-    // is theirs). A choice is saved with the other dashboard preferences and put
+    // The menu's interval row and "Refresh now" button (editors only: the menu is
+    // theirs). The row's choices fold out to the right on a click or a hover,
+    // like a submenu; the arrow keys walk them, Escape and a click elsewhere fold
+    // them away. A choice is saved with the other dashboard preferences and put
     // back if the save fails.
     function bindModuleFragmentRefreshMenu(root, token, state) {
-        const select = root.querySelector('[data-dashboard-refresh-interval]');
+        const menu = root.querySelector('[data-dashboard-refresh-menu]');
+        const trigger = menu?.querySelector('[data-dashboard-refresh-trigger]');
+        const list = menu?.querySelector('[data-dashboard-refresh-list]');
         const refreshNow = root.querySelector('[data-dashboard-refresh-now]');
-        if (select) {
-            select.value = String(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
-            select.addEventListener('change', async () => {
+        refreshNow?.addEventListener('click', () => {
+            refreshModuleFragmentsNow(root).catch(() => {});
+        });
+        if (!menu || !trigger || !list) {
+            return;
+        }
+        const options = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-option]'));
+        const showChoice = (seconds) => {
+            options().forEach((option) => {
+                const isChoice = parseRefreshIntervalSeconds(option.dataset.dashboardRefreshOption) === seconds;
+                option.setAttribute('aria-checked', isChoice ? 'true' : 'false');
+                if (isChoice) {
+                    const value = menu.querySelector('[data-dashboard-refresh-value]');
+                    if (value) {
+                        value.textContent = option.textContent.trim();
+                    }
+                }
+            });
+        };
+        let closeTimer = 0;
+        const setOpen = (open) => {
+            window.clearTimeout(closeTimer);
+            closeTimer = 0;
+            list.hidden = !open;
+            trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        };
+        const isOpen = () => !list.hidden;
+        showChoice(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
+
+        trigger.addEventListener('click', () => setOpen(!isOpen()));
+        // A hover opens the choices and a hover away folds them, with a moment's
+        // grace so the pointer can cross the gap to the list.
+        menu.addEventListener('mouseenter', () => setOpen(true));
+        menu.addEventListener('mouseleave', () => {
+            window.clearTimeout(closeTimer);
+            closeTimer = window.setTimeout(() => setOpen(false), 250);
+        });
+        menu.addEventListener('keydown', (event) => {
+            const items = options();
+            const index = items.indexOf(document.activeElement);
+            if (event.key === 'Escape' || (event.key === 'ArrowLeft' && index >= 0)) {
+                setOpen(false);
+                trigger.focus();
+                event.preventDefault();
+            } else if (event.key === 'ArrowRight' && document.activeElement === trigger) {
+                setOpen(true);
+                (items.find((item) => item.getAttribute('aria-checked') === 'true') || items[0])?.focus();
+                event.preventDefault();
+            } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && (index >= 0 || document.activeElement === trigger)) {
+                setOpen(true);
+                const step = event.key === 'ArrowDown' ? 1 : -1;
+                const next = index < 0 ? (step > 0 ? 0 : items.length - 1) : (index + step + items.length) % items.length;
+                items[next]?.focus();
+                event.preventDefault();
+            }
+        });
+        document.addEventListener('click', (event) => {
+            if (isOpen() && !menu.contains(event.target)) {
+                setOpen(false);
+            }
+        });
+
+        options().forEach((option) => {
+            option.addEventListener('click', async () => {
                 const previous = parseRefreshIntervalSeconds(root.dataset.refreshInterval);
-                const next = parseRefreshIntervalSeconds(select.value);
+                const next = parseRefreshIntervalSeconds(option.dataset.dashboardRefreshOption);
+                setOpen(false);
+                trigger.focus();
+                if (next === previous) {
+                    return;
+                }
                 applyModuleFragmentRefreshInterval(root, next);
                 state.refreshIntervalSeconds = next;
+                showChoice(next);
                 try {
                     await saveDashboardPreferences(root, token, state);
                 } catch (error) {
                     state.refreshIntervalSeconds = previous;
                     applyModuleFragmentRefreshInterval(root, previous);
-                    select.value = String(previous);
+                    showChoice(previous);
                     handleDashboardSaveError(root, error);
                 }
             });
-        }
-        refreshNow?.addEventListener('click', () => {
-            refreshModuleFragmentsNow(root).catch(() => {});
         });
     }
 

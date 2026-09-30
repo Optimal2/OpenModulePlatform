@@ -167,8 +167,8 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   to be fetched again) gets fetched again at the user's interval: one
   setting for the whole dashboard, kept per user in
   `omp_portal.user_dashboard_preferences.refresh_interval_seconds` (off, 30 s,
-  a minute or 5 minutes; a minute unless changed), chosen in the dashboard's
-  edit menu next to a "Refresh now" button. Widgets are fetched one at a
+  a minute or 5 minutes; a minute unless changed), chosen in a submenu of the
+  dashboard's edit menu, next to a "Refresh now" button. Widgets are fetched one at a
   time, never one whose settings popup is open; a hidden tab waits and a tab
   shown again catches up; the title bar shows when the content was fetched.
   A user who cannot edit the dashboard refreshes at the default minute.
