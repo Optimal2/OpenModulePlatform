@@ -4165,10 +4165,7 @@
                 const isChoice = parseRefreshIntervalSeconds(option.dataset.dashboardRefreshOption) === seconds;
                 option.setAttribute('aria-checked', isChoice ? 'true' : 'false');
                 if (isChoice) {
-                    const value = menu.querySelector('[data-dashboard-refresh-value]');
-                    if (value) {
-                        value.textContent = option.textContent.trim();
-                    }
+                    trigger.title = option.textContent.trim();
                 }
             });
         };
@@ -4190,14 +4187,17 @@
 
         trigger.addEventListener('click', () => {
             if (isOpen() && openedByHover) {
-                openedByHover = false;
+                setOpen(true);
                 return;
             }
             setOpen(!isOpen());
         });
         // A hover opens the choices and a hover away folds them, with a moment's
-        // grace so the pointer can cross the gap to the list.
+        // grace so the pointer can cross the gap to the list; the pointer coming
+        // back in calls the fold-away off.
         menu.addEventListener('mouseenter', () => {
+            window.clearTimeout(closeTimer);
+            closeTimer = 0;
             if (!isOpen()) {
                 setOpen(true, true);
             }

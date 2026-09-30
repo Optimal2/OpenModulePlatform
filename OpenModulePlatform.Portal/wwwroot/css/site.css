@@ -7882,12 +7882,11 @@ tr.linkbox-editor-row--dragging {
     min-width: 100%;
 }
 
-.dashboard-refresh-menu__trigger {
-    min-width: 0;
-}
-
 .dashboard-refresh-menu__label {
+    min-width: 0;
+    overflow: hidden;
     white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .dashboard-refresh-menu__trigger,
@@ -7926,22 +7925,14 @@ tr.linkbox-editor-row--dragging {
     display: inline-flex;
 }
 
-/* The current choice, dimmed, and a chevron at the far right of the row. */
-.dashboard-refresh-menu__value {
-    margin-left: auto;
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-
+/* A chevron at the far right of the row; the choice in force is the list's
+   check mark and the row's tooltip, not text in the row, so the row never
+   asks for more width than the menu's buttons. */
 .dashboard-refresh-menu__chevron {
     flex: none;
     width: 7px;
     height: 7px;
-    margin-left: 2px;
+    margin-left: auto;
     border-top: 2px solid currentColor;
     border-right: 2px solid currentColor;
     transform: rotate(45deg);
@@ -7957,6 +7948,8 @@ tr.linkbox-editor-row--dragging {
     display: grid;
     gap: 2px;
     min-width: 168px;
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
     padding: 6px;
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -8008,8 +8001,8 @@ tr.linkbox-editor-row--dragging {
 }
 
 /* On a narrow screen there is no room to the right: the choices fold out
-   above the row instead. */
-@media (max-width: 640px) {
+   above the row instead (the file's own narrow breakpoint). */
+@media (max-width: 760px) {
     .dashboard-refresh-menu__list {
         left: 0;
         bottom: calc(100% + 8px);
