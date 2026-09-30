@@ -824,6 +824,11 @@ uninstall-hostagent-first.cmd
 uninstall-hostagent-first-clean.cmd
 ```
 
+When `uninstall-hostagent-first-clean.cmd` removes runtime folders, it never
+follows a junction or symbolic link: a link inside a runtime folder is removed as
+a link and its target is kept, and a configured runtime folder that is itself a
+link or a drive root is refused with a message that names it.
+
 Those helpers do not remove SQL Server databases or database objects. Use the
 GUI full-uninstall action when database objects should be removed as part of the
 same operator-confirmed uninstall.

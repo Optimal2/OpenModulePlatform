@@ -2150,6 +2150,35 @@ function Stop-AndDeleteService {
     }
 }
 
+function Test-ReparsePoint {
+    param([System.IO.FileSystemInfo]$Item)
+
+    return (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+}
+
+# Some Windows PowerShell 5.1 builds follow junctions and symbolic links during
+# a recursive Remove-Item and delete the content they point at. Walk the tree
+# without entering links and delete each link as a link first, so the
+# recursive delete below only ever sees ordinary folders and files.
+function Remove-LinksBelowDirectory {
+    param([string]$Directory)
+
+    foreach ($child in ([System.IO.DirectoryInfo]::new($Directory)).GetFileSystemInfos()) {
+        if (Test-ReparsePoint -Item $child) {
+            Write-Host "Removing link $($child.FullName) (the content it points at is kept)"
+            if ($child -is [System.IO.DirectoryInfo]) {
+                [System.IO.Directory]::Delete($child.FullName, $false)
+            }
+            else {
+                [System.IO.File]::Delete($child.FullName)
+            }
+        }
+        elseif ($child -is [System.IO.DirectoryInfo]) {
+            Remove-LinksBelowDirectory -Directory $child.FullName
+        }
+    }
+}
+
 function Remove-ConfiguredDirectory {
     param([string]$Path)
 
@@ -2158,7 +2187,20 @@ function Remove-ConfiguredDirectory {
         return
     }
 
+    $pathRoot = [System.IO.Path]::GetPathRoot($resolved)
+    if (-not [string]::IsNullOrEmpty($pathRoot) -and [string]::Equals($resolved.TrimEnd('\', '/'), $pathRoot.TrimEnd('\', '/'), [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove '$resolved': it is a drive root. Point the configured runtime folder at a dedicated folder and run the uninstall again."
+    }
+
+    $item = Get-Item -LiteralPath $resolved -Force
+    if (Test-ReparsePoint -Item $item) {
+        throw "Refusing to remove '$resolved': it is a reparse point (junction or symbolic link), and removing it could reach content outside the runtime. Remove the link itself (rmdir `"$resolved`") or point the configuration at the real folder, then run the uninstall again."
+    }
+
     Write-Host "Removing $resolved"
+    if ($item -is [System.IO.DirectoryInfo]) {
+        Remove-LinksBelowDirectory -Directory $resolved
+    }
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 

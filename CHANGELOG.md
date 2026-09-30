@@ -8,6 +8,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **The generated uninstall script never follows links when it removes runtime
+  folders.** `uninstall-hostagent-first.ps1` (written by
+  `scripts/deployment/package-hostagent-first.ps1`) removed each configured
+  runtime folder with a recursive `Remove-Item`, which on some Windows
+  PowerShell 5.1 builds walks into junctions and symbolic links and deletes the
+  content they point at. The script now refuses a folder that is a drive root or
+  is itself a junction or symbolic link (the message names the link and what the
+  operator does), and before the recursive delete it walks the tree without
+  entering links and deletes each link as a link, keeping its target. The guard
+  lives in the generated text, because the script runs on hosts without the
+  repository. Covered by `tests/HostAgentFirstUninstallLinks.Tests.ps1`.
+  Repository version 0.3.928 (installer package identity).
+
 - **The clean guard gives the same verdict for every form of a path.**
   `scripts/omp/Assert-SafeToClean.ps1` compared the caller's path with git's
   final path as strings, so a folder named through a junction (the AI
