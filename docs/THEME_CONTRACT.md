@@ -1,8 +1,9 @@
 # Theme contract (light / dark)
 
 Status: version 1, first slice. Implemented in the Portal, the Auth login page,
-the shared top bar (Razor and Blazor) and the Blazor example. Other OMP web apps
-and consumer repositories can adopt it with the steps below. The contract is
+the shared top bar (Razor and Blazor), the content and iFrame modules and the
+example modules' web apps (Razor, Blazor, service and worker). Consumer
+repositories can adopt it with the steps below. The contract is
 deliberately small so later steps can extend or change it; anything not listed
 here is not part of it yet.
 
@@ -108,8 +109,11 @@ Rules:
 3. The top bar menu appears automatically once `data-theme-mode` is set; without the
    script it stays hidden. A page without the top bar can render the menu with
    `@await Component.InvokeAsync("OmpThemeSwitch")` (Razor); the Blazor top bar
-   carries the same markup inline.
-4. Test both palettes (see `OpenModulePlatform.UiTests/ThemeContractTests.cs`):
+   carries the same markup inline. The shared top bar is off unless
+   `PortalTopBar:Enabled` is set, so a layout that relies on it renders the menu
+   itself when it is off (`@if (!WebAppOptions.Value.PortalTopBar.Enabled)`), never both.
+4. Test both palettes (see `OpenModulePlatform.UiTests/ThemeContractTests.cs`, and
+   `ModuleThemeContractTests.cs` for a module web app at the 4.5:1 target):
    switching, reload, System following `prefers-color-scheme`, and text contrast.
    Include the states a page shows only with particular data (error rows, group
    conversations, failed checks, the dashboard's edit menu, delete zones) and hover

@@ -43,8 +43,9 @@ a:hover {
     top: 0;
     z-index: 10;
     border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(8px);
+    /* Was a translucent white that stayed white in the dark palette, so the title and
+       the navigation (drawn in the palette's light text) were unreadable. */
+    background: var(--surface);
 }
 
 .topbar {
@@ -308,9 +309,12 @@ textarea {
     resize: vertical;
 }
 
+/* Blazor's EditForm renders .validation-message (ValidationSummary and
+   ValidationMessage); the MVC names are kept for markup copied from the Razor example. */
 .field-validation-error,
-.validation-summary-errors {
-    color: #8a2632;
+.validation-summary-errors,
+.validation-message {
+    color: var(--omp-danger-text, #991b1b);
 }
 
 /* R8-P5-22. This stylesheet is a copy of the Razor example module's, and four rules were left

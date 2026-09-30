@@ -1,16 +1,18 @@
 /* File: wwwroot/css/site.css */
 :root {
-    --bg: #f5f7fb;
-    --surface: #ffffff;
-    --surface-muted: #f8fafc;
-    --border: #d7deea;
-    --border-strong: #c4cede;
-    --text: #172033;
-    --text-muted: #5b667a;
-    --link: #0b57d0;
-    --link-hover: #0842a1;
-    --accent: #e8f0fe;
-    --shadow: 0 8px 24px rgba(17, 24, 39, 0.05);
+    /* Aliases of the shared theme tokens (docs/THEME_CONTRACT.md); the fallbacks
+       are the light palette. */
+    --bg: var(--omp-bg, #f5f7fb);
+    --surface: var(--omp-surface, #ffffff);
+    --surface-muted: var(--omp-surface-muted, #f8fafc);
+    --border: var(--omp-border, #d7deea);
+    --border-strong: var(--omp-border-strong, #c4cede);
+    --text: var(--omp-text, #172033);
+    --text-muted: var(--omp-text-muted, #5b667a);
+    --link: var(--omp-link, #0b57d0);
+    --link-hover: var(--omp-link-hover, #0842a1);
+    --accent: var(--omp-accent-surface, #e8f0fe);
+    --shadow: var(--omp-shadow, 0 8px 24px rgba(17, 24, 39, 0.05));
 }
 
 * {
@@ -41,8 +43,7 @@ a:hover {
     top: 0;
     z-index: 10;
     border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(8px);
+    background: var(--surface);
 }
 
 .topbar {
@@ -102,6 +103,10 @@ a:hover {
 .nav a:hover {
     background: var(--surface-muted);
     border-color: var(--border);
+}
+
+.app-theme-switch {
+    margin-left: auto;
 }
 
 .user {
@@ -273,7 +278,7 @@ button:hover,
 }
 
 .grid tbody tr:hover {
-    background: #fbfcfe;
+    background: var(--surface-muted);
 }
 
 .grid tbody tr:last-child td {

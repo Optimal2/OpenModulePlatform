@@ -1,16 +1,24 @@
 /* File: OpenModulePlatform.Web.ContentWebAppModule/wwwroot/css/site.css */
 :root {
-    color-scheme: light;
-    --bg: #f5f7fa;
-    --panel: #fff;
-    --border: #d7dde5;
-    --text: #16202a;
-    --muted: #647184;
-    --accent: #1f6feb;
-    --accent-dark: #185abc;
-    --danger: #b42318;
-    --ok-bg: #e8f6ed;
-    --ok-text: #17643a;
+    /* Aliases of the shared theme tokens (docs/THEME_CONTRACT.md); the fallbacks
+       are the light palette. color-scheme comes from omp-theme.css. */
+    --bg: var(--omp-bg, #f5f7fa);
+    --panel: var(--omp-surface, #fff);
+    --border: var(--omp-border, #d7dde5);
+    --control-border: var(--omp-control-border, #7b8799);
+    --text: var(--omp-text, #16202a);
+    --muted: var(--omp-text-muted, #5b667a);
+    /* The names the shared top bar (portal-topbar.css) reads. */
+    --surface: var(--panel);
+    --surface-muted: var(--omp-surface-muted, #f8fafc);
+    --text-muted: var(--muted);
+    --accent: var(--omp-link, #1f6feb);
+    --accent-dark: var(--omp-link-hover, #185abc);
+    --on-accent: var(--omp-on-accent, #fff);
+    --danger: var(--omp-danger-text, #b42318);
+    --ok-bg: var(--omp-success-bg, #e8f6ed);
+    --ok-text: var(--omp-success-text, #17643a);
+    --shadow: var(--omp-shadow, 0 2px 7px rgba(15, 23, 42, 0.04));
 }
 
 * {
@@ -75,6 +83,10 @@ a {
     color: var(--accent);
 }
 
+.app-theme-switch {
+    margin-left: auto;
+}
+
 .content-shell {
     width: min(72rem, calc(100% - 2rem));
     margin: 1.25rem auto 2rem;
@@ -114,7 +126,7 @@ a {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--panel);
-    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.04);
+    box-shadow: var(--shadow);
 }
 
 .card,
@@ -144,15 +156,16 @@ a {
 .content-page__body code {
     padding: 0.1rem 0.25rem;
     border-radius: 4px;
-    background: #edf1f7;
+    background: var(--surface-muted);
 }
 
 .content-page__body pre {
     overflow: auto;
     padding: 0.85rem;
+    border: 1px solid var(--border);
     border-radius: 6px;
-    background: #111827;
-    color: #f9fafb;
+    background: var(--surface-muted);
+    color: var(--text);
 }
 
 .server-report {
@@ -176,9 +189,9 @@ a {
 
 .server-report__error,
 .server-report--error {
-    border: 1px solid #fecaca;
+    border: 1px solid var(--omp-danger-border, #f1a9a9);
     border-radius: 6px;
-    background: #fef2f2;
+    background: var(--omp-danger-bg, #fee2e2);
     color: var(--danger);
 }
 
@@ -243,7 +256,7 @@ button,
     justify-content: center;
     min-height: 2.25rem;
     padding: 0.45rem 0.8rem;
-    border: 1px solid #c8d1dc;
+    border: 1px solid var(--control-border);
     border-radius: 6px;
     background: var(--panel);
     color: var(--text);
@@ -255,18 +268,19 @@ button,
 
 button:hover,
 .button:hover {
-    background: #f0f4f8;
+    background: var(--surface-muted);
 }
 
 .button--primary,
 button.button--primary {
     border-color: var(--accent);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .button--primary:hover,
 button.button--primary:hover {
+    border-color: var(--accent-dark);
     background: var(--accent-dark);
 }
 
@@ -278,8 +292,9 @@ button.button--danger {
 
 .status-banner {
     margin-bottom: 1rem;
-    border-color: #b7dcff;
-    background: #eaf5ff;
+    border-color: var(--omp-info-border, #7dd3fc);
+    background: var(--omp-info-bg, #e0f2fe);
+    color: var(--omp-info-text, #075985);
 }
 
 .muted,
@@ -306,7 +321,7 @@ button.button--danger {
 }
 
 .grid th {
-    background: #f1f5f9;
+    background: var(--surface-muted);
     font-weight: 700;
 }
 
@@ -323,14 +338,16 @@ button.button--danger {
     display: inline-flex;
     align-items: center;
     padding: 0.16rem 0.45rem;
+    border: 1px solid var(--border);
     border-radius: 999px;
-    background: #edf1f7;
-    color: #334155;
+    background: var(--surface-muted);
+    color: var(--text);
     font-size: 0.82rem;
     font-weight: 700;
 }
 
 .pill--ok {
+    border-color: var(--omp-success-border, #86c79b);
     background: var(--ok-bg);
     color: var(--ok-text);
 }
@@ -365,9 +382,9 @@ select,
 textarea {
     width: 100%;
     padding: 0.55rem 0.65rem;
-    border: 1px solid #c8d1dc;
+    border: 1px solid var(--control-border);
     border-radius: 6px;
-    background: #fff;
+    background: var(--panel);
     color: var(--text);
     font: inherit;
 }
@@ -379,25 +396,25 @@ textarea {
 
 .content-editor-field {
     padding: 0.85rem;
-    border: 1px solid #c8d1dc;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--surface-muted);
 }
 
 .content-editor {
     overflow: hidden;
-    border: 1px solid #c8d1dc;
+    border: 1px solid var(--border);
     border-radius: 0 0 8px 8px;
-    background: #fff;
+    background: var(--panel);
 }
 
 .editor-tabs {
     display: inline-flex;
     width: max-content;
     overflow: hidden;
-    border: 1px solid #c8d1dc;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: #eef3f8;
+    background: var(--surface-muted);
 }
 
 .editor-tabs[hidden] {
@@ -414,7 +431,7 @@ textarea {
 
 .editor-tab[aria-selected="true"] {
     background: var(--panel);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--shadow);
     color: var(--text);
 }
 
@@ -448,7 +465,8 @@ textarea {
 
 .danger-zone {
     margin-top: 1rem;
-    border-color: #fecaca;
+    border-color: var(--omp-danger-border, #f1a9a9);
+    background: var(--omp-danger-surface, #fff8f8);
 }
 
 .danger-zone h2 {

@@ -1,4 +1,5 @@
 @inject OpenModulePlatform.Web.Shared.Services.OmpTime OmpTime
+@inject Microsoft.Extensions.Options.IOptions<OpenModulePlatform.Web.Shared.Options.WebAppOptions> WebAppOptions
 @* File: OpenModulePlatform.Web.ContentWebAppModule/Pages/Shared/_Layout.cshtml *@
 <!doctype html>
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.Name">
@@ -7,6 +8,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>@ViewData["Title"]</title>
+    @* Theme contract (docs/THEME_CONTRACT.md): synchronous, before the stylesheets. *@
+    <script src="~/_content/OpenModulePlatform.Web.Shared/js/omp-theme.js"></script>
+    <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-theme.css" />
     <link rel="stylesheet" href="~/css/site.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/portal-topbar.css" />
     <link rel="stylesheet" href="~/_content/OpenModulePlatform.Web.Shared/css/omp-error-view.css" />
@@ -41,6 +45,11 @@
                     @RenderSection("ModuleNav", required: false)
                 }
             </nav>
+            @if (!WebAppOptions.Value.PortalTopBar.Enabled)
+            {
+                @* Without the shared top bar the app header carries the theme menu itself. *@
+                <div class="app-theme-switch">@await Component.InvokeAsync("OmpThemeSwitch")</div>
+            }
         </div>
     </header>
     <main class="content-shell">

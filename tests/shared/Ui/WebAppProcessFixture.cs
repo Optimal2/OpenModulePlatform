@@ -119,7 +119,9 @@ public abstract class WebAppProcessFixture : IAsyncLifetime
         }
 
         using var http = new HttpClient();
-        var deadline = DateTime.UtcNow.AddSeconds(40);
+        // xUnit initializes a collection's fixtures concurrently, so every app of the
+        // collection cold-starts at the same time; on a loaded machine 40 s was not enough.
+        var deadline = DateTime.UtcNow.AddSeconds(120);
         while (DateTime.UtcNow < deadline)
         {
             if (_process is null || _process.HasExited)
