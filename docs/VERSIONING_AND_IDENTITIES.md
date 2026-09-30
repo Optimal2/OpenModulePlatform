@@ -95,6 +95,13 @@ of falling back to a default:
   again (a config overlay or the artifact configuration file for that app
   instance) or, when the removal is intended, deletes the sections from the
   previously deployed `appsettings.json` on that host and retries.
+  The previous file is read the way ASP.NET Core reads it: comments, trailing
+  commas and a byte order mark are accepted. A previous file that exists but
+  cannot be read, or is not a JSON object, also fails the deployment, naming
+  the file but never its content: it is no evidence that the host had nothing.
+  The operator corrects the file, or deletes it when the artifact configuration
+  or a config overlay provides every setting the app instance needs, and
+  retries. A missing file (first deploy) passes.
 
 **Host-owned configuration keys.** These top-level `appsettings.json` keys
 belong to the host, not to the module. Host-owned means the value on the host

@@ -29,7 +29,9 @@ public sealed class WebAppDeploymentService
     // Artifacts already warned about for a replaced literal ConnectionStrings:OmpDb. The
     // replacement runs every deployment cycle; warn again for each artifact version.
     private readonly ConcurrentDictionary<(int ArtifactId, string Version), byte> _replacedOmpConnectionStringArtifacts = new();
-    private readonly ConcurrentDictionary<(Guid AppInstanceId, int ArtifactId, string Version), byte> _carriedHostOwnedKeyArtifacts = new();
+    // The artifact version each app instance last logged a host-owned key carry-over
+    // for. One entry per app instance at most: a new version replaces it.
+    private readonly ConcurrentDictionary<Guid, (int ArtifactId, string Version)> _carriedHostOwnedKeyArtifacts = new();
 
     public WebAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -267,9 +269,15 @@ public sealed class WebAppDeploymentService
                 targetPath,
                 configurationFiles,
                 out var carriedHostOwnedKeys);
-            if (carriedHostOwnedKeys.Count > 0
-                && _carriedHostOwnedKeyArtifacts.TryAdd((deployment.AppInstanceId, deployment.ArtifactId, deployment.Version), 0))
+            var carriedArtifact = (deployment.ArtifactId, deployment.Version);
+            if (carriedHostOwnedKeys.Count == 0)
             {
+                _carriedHostOwnedKeyArtifacts.TryRemove(deployment.AppInstanceId, out _);
+            }
+            else if (!_carriedHostOwnedKeyArtifacts.TryGetValue(deployment.AppInstanceId, out var loggedArtifact)
+                     || loggedArtifact != carriedArtifact)
+            {
+                _carriedHostOwnedKeyArtifacts[deployment.AppInstanceId] = carriedArtifact;
                 _logger.LogInformation(
                     "Web app artifact configuration leaves out host-owned keys the deployed appsettings.json has; the deployed values were carried over. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, Keys={Keys}",
                     deployment.AppInstanceId,

@@ -8,6 +8,17 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Continuity gate reads the deployed file like ASP.NET Core and fails
+  closed.** The carry-over of host-owned keys and the continuity gate now
+  accept comments, trailing commas and a byte order mark in the deployed
+  `appsettings.json`, as the ASP.NET Core JSON provider does. Before, such a
+  file, which runs fine, was silently treated as no evidence, so a restrictive
+  `AllowedHosts` disappeared again. A deployed file that exists but cannot be
+  read or is not a JSON object now fails the deployment with the file path and
+  what to do (correct it, or delete it), never its content. A service-level
+  test pins the carry-over call in the deployment, and the once-per-version
+  log memory now holds one entry per app instance. `omp-hostagent-service`
+  0.3.305.
 - **Host-owned keys keep the host's value.** When the new resolution leaves
   out `AllowedHosts` or `Logging` and the previously deployed
   `appsettings.json` has it, HostAgent now copies the previous value into the
