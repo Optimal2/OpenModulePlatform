@@ -29,6 +29,7 @@ public sealed class WebAppDeploymentService
     // Artifacts already warned about for a replaced literal ConnectionStrings:OmpDb. The
     // replacement runs every deployment cycle; warn again for each artifact version.
     private readonly ConcurrentDictionary<(int ArtifactId, string Version), byte> _replacedOmpConnectionStringArtifacts = new();
+    private readonly ConcurrentDictionary<(Guid AppInstanceId, int ArtifactId, string Version), byte> _carriedHostOwnedKeyArtifacts = new();
 
     public WebAppDeploymentService(
         IOptionsMonitor<HostAgentSettings> settings,
@@ -257,6 +258,24 @@ public sealed class WebAppDeploymentService
                 diagnosticWarning = string.IsNullOrWhiteSpace(diagnosticWarning)
                     ? skipWarning
                     : diagnosticWarning + Environment.NewLine + skipWarning;
+            }
+
+            // Host-owned keys (AllowedHosts, Logging) the new resolution leaves out keep
+            // the value the host already has, so a restrictive AllowedHosts is never
+            // dropped silently. Log the key names only: a value may be sensitive.
+            configurationFiles = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+                targetPath,
+                configurationFiles,
+                out var carriedHostOwnedKeys);
+            if (carriedHostOwnedKeys.Count > 0
+                && _carriedHostOwnedKeyArtifacts.TryAdd((deployment.AppInstanceId, deployment.ArtifactId, deployment.Version), 0))
+            {
+                _logger.LogInformation(
+                    "Web app artifact configuration leaves out host-owned keys the deployed appsettings.json has; the deployed values were carried over. AppInstanceId={AppInstanceId}, ArtifactId={ArtifactId}, Version={Version}, Keys={Keys}",
+                    deployment.AppInstanceId,
+                    deployment.ArtifactId,
+                    deployment.Version,
+                    string.Join(", ", carriedHostOwnedKeys));
             }
 
             // Continuity gate: a previous successful deploy that provably had

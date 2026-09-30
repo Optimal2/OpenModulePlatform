@@ -8,6 +8,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Host-owned keys keep the host's value.** When the new resolution leaves
+  out `AllowedHosts` or `Logging` and the previously deployed
+  `appsettings.json` has it, HostAgent now copies the previous value into the
+  new file and logs the key name (never the value). Before, the resolved file
+  replaced the deployed one whole, so a restrictive `AllowedHosts` such as
+  `localhost;127.0.0.1`, or a value the operator put there, disappeared
+  silently and host filtering was turned off. A key the artifact or an overlay
+  sets itself still wins. `docs/VERSIONING_AND_IDENTITIES.md` now describes
+  this mechanism instead of claiming that host filtering depends on the site
+  bindings. New tests also pin that host-owned keys match case-insensitively,
+  that a module section such as `LoggingSettings` still fails the gate, and
+  that a nested key with a host-owned name inside a module section is still
+  compared. `omp-hostagent-service` 0.3.303.
 - **Continuity gate ignores host-owned keys and tells the operator what to
   do.** A web app deployment no longer fails because the previously deployed
   `appsettings.json` has `AllowedHosts` or `Logging` (or keys below them) that

@@ -97,19 +97,29 @@ of falling back to a default:
   previously deployed `appsettings.json` on that host and retries.
 
 **Host-owned configuration keys.** These top-level `appsettings.json` keys
-belong to the host, not to the module. A module may leave them out of its
-packaged configuration, and the continuity gate ignores them, including
-everything below them:
+belong to the host, not to the module. Host-owned means the value on the host
+holds. A module may leave them out of its packaged configuration. When the new
+resolution (artifact configuration, built-in configuration and overlays) does
+not set such a key, but the previously deployed `appsettings.json` on the host
+has it, HostAgent copies the previous value into the new file and logs the key
+name (never the value). When the artifact or an overlay sets the key, the new
+resolution wins. Because the value is carried over rather than lost, the
+continuity gate ignores these keys, including everything below them:
 
-| Key | Why it is host-owned |
+| Key | What the host keeps |
 | --- | --- |
-| `AllowedHosts` | Host filtering depends on the host's bindings. Absent means ASP.NET Core applies no host filtering. |
-| `Logging` | Log levels are an operational choice per host. Absent means the ASP.NET Core defaults apply. |
+| `AllowedHosts` | The host filter the previous file had, for example `localhost;127.0.0.1` or a value the operator put there. HostAgent does not derive it from the site bindings. Nothing sets it on a first deploy: without it ASP.NET Core applies no host filtering, so set it through a config overlay when the app needs one. |
+| `Logging` | The log levels the previous file had. The built-in web app configuration always provides a `Logging` section, so for web apps this is only carried when the resolution drops the section entirely. |
 
-The list lives in `ConfigurationContinuityGate.HostOwnedTopLevelKeys`. Change
-both together. Module sections (for example a section named after the module)
-are never host-owned: losing one still fails the deployment, because the app
-would otherwise run on its built-in defaults without anyone noticing.
+Only the exact top-level names match, case-insensitively. A module section
+whose name only starts with one of them (for example `LoggingSettings`), or a
+key with the same name nested inside a module section, is module configuration.
+To remove a carried value on purpose, set the key through a config overlay, or
+edit the deployed file on that host. The list lives in
+`ConfigurationContinuityGate.HostOwnedTopLevelKeys`. Change both together.
+Module sections are never host-owned: losing one still fails the deployment,
+because the app would otherwise run on its built-in defaults without anyone
+noticing.
 
 `Desired artifact` is the artifact currently selected by an app instance,
 desired installation app row, worker instance, or host artifact requirement. HostAgent

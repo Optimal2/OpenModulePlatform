@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 
 namespace OpenModulePlatform.HostAgent.Runtime.Services;
@@ -20,13 +21,95 @@ internal static class ConfigurationContinuityGate
 
     /// <summary>
     /// Top-level appsettings.json keys the host owns rather than the module. A
-    /// module may drop them from its packaged configuration on purpose, and losing
-    /// them only returns ASP.NET Core to its safe default (no host filtering,
-    /// default log levels), so they never fail the gate - neither the key itself
-    /// nor anything below it. Documented in docs/VERSIONING_AND_IDENTITIES.md.
+    /// module may drop them from its packaged configuration on purpose. Host-owned
+    /// means the value on the host holds: when the new resolution leaves such a key
+    /// out, <see cref="CarryOverHostOwnedKeys"/> copies the previously deployed
+    /// value into the new file, so an operator's restrictive AllowedHosts is never
+    /// removed silently. When the artifact or an overlay sets the key, the new
+    /// resolution wins. Because the value is carried rather than lost, the gate
+    /// never fails on these keys - neither the key itself nor anything below it.
+    /// Only exact top-level names match (case-insensitively); a module section such
+    /// as "LoggingSettings", or a nested key with the same name, is module
+    /// configuration. Documented in docs/VERSIONING_AND_IDENTITIES.md.
     /// </summary>
     internal static readonly IReadOnlySet<string> HostOwnedTopLevelKeys =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "AllowedHosts", "Logging" };
+
+    /// <summary>
+    /// Returns the effective files with every host-owned top-level key that the
+    /// previously deployed appsettings.json has, and the new appsettings.json
+    /// resolution does not set (compared case-insensitively), copied over from the
+    /// previous file. <paramref name="carriedKeys"/> names the keys that were
+    /// carried. The files are returned unchanged when nothing is carried, when
+    /// there is no readable previous file, or when either side is not a JSON object.
+    /// </summary>
+    public static IReadOnlyList<ArtifactConfigurationFileDescriptor> CarryOverHostOwnedKeys(
+        string targetPath,
+        IReadOnlyList<ArtifactConfigurationFileDescriptor> effectiveFiles,
+        out IReadOnlyList<string> carriedKeys)
+    {
+        carriedKeys = [];
+
+        var newFileIndex = -1;
+        for (var i = 0; i < effectiveFiles.Count; i++)
+        {
+            if (string.Equals(effectiveFiles[i].RelativePath, AppSettingsRelativePath, StringComparison.OrdinalIgnoreCase))
+            {
+                newFileIndex = i;
+                break;
+            }
+        }
+
+        var previousPath = Path.Join(targetPath, AppSettingsRelativePath);
+        if (newFileIndex < 0 || !File.Exists(previousPath))
+        {
+            return effectiveFiles;
+        }
+
+        JsonObject? next;
+        var carried = new List<string>();
+        try
+        {
+            next = JsonNode.Parse(effectiveFiles[newFileIndex].FileContent) as JsonObject;
+            if (JsonNode.Parse(File.ReadAllText(previousPath)) is not JsonObject previous || next is null)
+            {
+                return effectiveFiles;
+            }
+
+            var nextKeys = next.Select(property => property.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in previous)
+            {
+                if (HostOwnedTopLevelKeys.Contains(property.Key) && nextKeys.Add(property.Key))
+                {
+                    next[property.Key] = property.Value?.DeepClone();
+                    carried.Add(property.Key);
+                }
+            }
+        }
+        // ArgumentException: JsonObject rejects duplicate property names when it is
+        // first enumerated. No reliable evidence either way: carry nothing.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            return effectiveFiles;
+        }
+
+        if (carried.Count == 0)
+        {
+            return effectiveFiles;
+        }
+
+        carriedKeys = carried;
+        var newFile = effectiveFiles[newFileIndex];
+        var result = effectiveFiles.ToArray();
+        result[newFileIndex] = new ArtifactConfigurationFileDescriptor
+        {
+            ArtifactConfigurationFileId = newFile.ArtifactConfigurationFileId,
+            ArtifactId = newFile.ArtifactId,
+            RelativePath = newFile.RelativePath,
+            FileContent = next.ToJsonString(new JsonSerializerOptions { WriteIndented = true })
+        };
+        return result;
+    }
 
     /// <summary>
     /// Returns a human-readable violation message naming every lost top-level
