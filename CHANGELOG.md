@@ -47,6 +47,19 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Dark theme: the remaining one-palette surfaces.** A sweep of every
+  colour literal in the Portal's site.css and Web.Shared's stylesheets
+  tokenised the surfaces whose background was literal under tokenised text,
+  or the reverse: `.grid` row hover (1.15:1 in dark), `.card.danger-zone`
+  (1.13:1), the shared error view (1.18:1), the dashboard's reset, add and
+  save buttons (2.15:1 in both palettes), the messages send button, the
+  active-role and week-number text, and the toast wash. `omp-theme.css`
+  gains `--omp-danger-surface`. Dead rules `.dashboard-module-widget__pill--muted`
+  and `.universal-package-builder-frame` are removed. `omp-theme.js` now
+  copies the newest stored value to the other store on every re-read, as
+  `docs/THEME_CONTRACT.md` says, not only on page start. The contrast test
+  covers the dashboard, the error view, table-row hover and icon-only
+  controls (omp-portal-web 0.3.820).
 - **Worker plugins import together with the WorkerProcessHost they need.** A
   universal package carrying a new `omp-workerprocesshost` and worker plugins
   that require it lost the plugins on its first import, because the host it had

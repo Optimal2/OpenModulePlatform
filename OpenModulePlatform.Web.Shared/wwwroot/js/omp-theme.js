@@ -203,18 +203,12 @@
         apply(resolvedMode, 'user');
     }
 
-    // Re-read storage when another tab, port or app on the host may have changed it.
-    function refreshFromStorage(source) {
-        var preference = readPreference();
-        if (preference) {
-            apply(preference.mode, source);
-        }
-    }
-
-    function initialize() {
+    // Reads both stores and the session value, copies the newest to any store
+    // that holds something else, and returns it (null when nothing is stored).
+    function syncStores() {
         var cookie = readCookie();
         var local = readLocal();
-        var preference = newest(cookie, local);
+        var preference = newest(cookie, local, sessionPreference);
         if (preference && (!local || local.revision !== preference.revision)) {
             writeLocal(preference);
         }
@@ -223,6 +217,19 @@
             writeCookie(preference);
         }
 
+        return preference;
+    }
+
+    // Re-read storage when another tab, port or app on the host may have changed it.
+    function refreshFromStorage(source) {
+        var preference = syncStores();
+        if (preference) {
+            apply(preference.mode, source);
+        }
+    }
+
+    function initialize() {
+        var preference = syncStores();
         apply(preference ? preference.mode : 'system', null);
     }
 

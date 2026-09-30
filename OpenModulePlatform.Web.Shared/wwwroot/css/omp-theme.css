@@ -40,6 +40,8 @@
     --omp-danger-bg: #fee2e2;
     --omp-danger-bg-hover: #fecaca;
     --omp-danger-border: #f1a9a9;
+    /* A whole panel about a destructive action (delete zones); normal text on it. */
+    --omp-danger-surface: #fff8f8;
     --omp-info-text: #075985;
     --omp-info-bg: #e0f2fe;
     --omp-info-bg-hover: #bae6fd;
@@ -95,6 +97,7 @@ html[data-theme="dark"] {
     --omp-danger-bg: #3a1518;
     --omp-danger-bg-hover: #52202a;
     --omp-danger-border: #9f3a3f;
+    --omp-danger-surface: #22151a;
     --omp-info-text: #93c5fd;
     --omp-info-bg: #0f2236;
     --omp-info-bg-hover: #173352;

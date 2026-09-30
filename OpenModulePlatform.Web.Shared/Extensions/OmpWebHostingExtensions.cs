@@ -1823,8 +1823,9 @@ public static class OmpWebHostingExtensions
   <title>{{safeTitle}} - {{safePlatformName}}</title>
   <!--
     NOTE: These fallback styles intentionally mirror omp-error-view.css so this page remains fully styled
-    even if static assets are unavailable during error handling. Keep this block and omp-error-view.css
-    synchronized whenever styles are changed.
+    even if static assets are unavailable during error handling. This page loads no theme tokens, so the
+    block uses the light fallback values of the var(--omp-*) colours there. Keep this block and
+    omp-error-view.css synchronized whenever styles are changed.
   -->
   <style>
     :root { color-scheme: light dark; }

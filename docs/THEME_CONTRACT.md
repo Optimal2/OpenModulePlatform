@@ -39,8 +39,9 @@ Name `OMP_THEME_PREFERENCE`, value (JSON, URI-encoded in the cookie):
   opt-in: `<script src="…/omp-theme.js" data-cookie-domain="example.org">`, and is
   ignored when the page's host is not under that domain.
 - `localStorage` under the same name is a mirror. The `revision` orders the two: it
-  starts with the creation time, and on page start and on every re-read the newest
-  value wins and is copied to the other store. On a tie, or when a revision cannot
+  starts with the creation time, and on page start and on every re-read (focus,
+  `pageshow`, the tab becoming visible, a `storage` event) the newest value wins and
+  is copied to the other store. On a tie, or when a revision cannot
   be read, the cookie wins. So a mirror that is newer because a cookie write was
   silently dropped is not overwritten by the older cookie.
 - If both are denied, the switch still works for the current page.
@@ -69,6 +70,7 @@ re-read the cookie on focus, `pageshow` and when the tab becomes visible.
 | `--omp-shadow`, `--omp-overlay` | Elevation and modal backdrop |
 | `--omp-{success,warning,danger,info}-{text,bg,border}` | Status messages, chips, banners |
 | `--omp-{success,warning,danger,info}-bg-hover` | Hover/focus fill of a status-coloured control; text stays `-text` |
+| `--omp-danger-surface` | A whole panel about a destructive action (delete zones); normal `--omp-text` on it |
 | `--omp-series-{1..6}-{bg,border}` | Categorical colours that tell items apart without a status (message senders); text on them is `--omp-text` |
 
 Rules:
@@ -109,8 +111,10 @@ Rules:
 4. Test both palettes (see `OpenModulePlatform.UiTests/ThemeContractTests.cs`):
    switching, reload, System following `prefers-color-scheme`, and text contrast.
    Include the states a page shows only with particular data (error rows, group
-   conversations, failed checks) and hover, not just the page at rest; the Portal
-   tests insert each page's markup for those states into the live page.
+   conversations, failed checks, the dashboard's edit menu, delete zones) and hover
+   (buttons and table rows), not just the page at rest; the Portal tests insert each
+   page's markup for those states into the live page. An icon-only control is
+   measured through its `aria-label`, since its icon is drawn in the text colour.
 
 ### Contrast gate: 3:1 is temporary
 

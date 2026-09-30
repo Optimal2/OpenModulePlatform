@@ -828,16 +828,17 @@
 }
 
 .portal-message-thread__composer-button--send {
-    border-color: #0284c7;
+    border-color: var(--link);
     border-radius: 4px 14px 14px 4px;
-    background: #0284c7;
-    color: #fff;
+    background: var(--link);
+    color: var(--omp-on-accent, #ffffff);
 }
 
 .portal-message-thread__composer-button--send:hover,
 .portal-message-thread__composer-button--send:focus-visible {
-    background: #0369a1;
-    color: #fff;
+    border-color: var(--link-hover);
+    background: var(--link-hover);
+    color: var(--omp-on-accent, #ffffff);
 }
 
 /* Files waiting to be sent: a row of chips above the composer, each with a
@@ -2087,7 +2088,7 @@ a.btn[aria-disabled=true] {
 }
 
 .grid tbody tr:hover {
-    background: #fbfcfe;
+    background: var(--surface-muted);
 }
 
 .grid tbody tr:last-child td {
@@ -2766,8 +2767,8 @@ code {
 
 .danger-zone {
     margin-top: 16px;
-    border-color: #efcaca;
-    background: #fff8f8;
+    border-color: var(--omp-danger-border, #efcaca);
+    background: var(--omp-danger-surface, #fff8f8);
 }
 
 .inline-form {
@@ -4222,7 +4223,7 @@ button.dashboard-role-list__item:focus-visible {
     grid-area: status;
     align-self: center;
     justify-self: end;
-    color: #0b57d0;
+    color: var(--link);
     font-size: var(--dashboard-role-list-active-size);
     font-weight: 700;
     text-transform: uppercase;
@@ -4742,11 +4743,6 @@ button.dashboard-role-list__item:focus-visible {
     color: var(--omp-danger-text, #991b1b);
 }
 
-.dashboard-module-widget__pill--muted {
-    background: #eef2f7;
-    color: var(--text-muted);
-}
-
 .dashboard-module-widget__empty {
     display: grid;
     min-height: 96px;
@@ -4932,7 +4928,7 @@ button.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-date-widget__week {
-    color: #0b57d0;
+    color: var(--link);
     font-size: var(--dashboard-date-widget-week-size);
     font-weight: 750;
     line-height: 1.2;
@@ -6045,30 +6041,30 @@ button.dashboard-role-list__item:focus-visible {
     width: 38px;
     min-width: 38px;
     padding: 8px;
-    border-color: rgba(245, 158, 11, 0.9);
-    background: #f59e0b;
-    color: #ffffff;
+    border-color: var(--omp-warning-border, #f0b36d);
+    background: var(--omp-warning-bg, #fef3c7);
+    color: var(--omp-warning-text, #92400e);
 }
 
 .dashboard-reset-changes-button:hover,
 .dashboard-reset-changes-button:focus-visible {
-    border-color: #d97706;
-    background: #d97706;
-    color: #ffffff;
+    border-color: var(--omp-warning-text, #92400e);
+    background: var(--omp-warning-bg-hover, #fde68a);
+    color: var(--omp-warning-text, #92400e);
     outline: none;
 }
 
 .dashboard-add-button {
-    border-color: rgba(25, 135, 84, 0.78);
-    background: rgba(25, 135, 84, 0.78);
-    color: #ffffff;
+    border-color: var(--omp-success-border, #86c79b);
+    background: var(--omp-success-bg, #dcfce7);
+    color: var(--omp-success-text, #166534);
 }
 
 .dashboard-add-button:hover,
 .dashboard-add-button:focus-visible {
-    border-color: #198754;
-    background: #198754;
-    color: #ffffff;
+    border-color: var(--omp-success-text, #166534);
+    background: var(--omp-success-bg-hover, #bbf7d0);
+    color: var(--omp-success-text, #166534);
     outline: none;
 }
 
@@ -6079,9 +6075,9 @@ button.dashboard-role-list__item:focus-visible {
 }
 
 .portal-dashboard.is-editing.has-dashboard-changes .dashboard-save-button:not(:disabled) {
-    border-color: #198754;
-    background: #198754;
-    color: #ffffff;
+    border-color: var(--omp-success-text, #166534);
+    background: var(--omp-success-bg, #dcfce7);
+    color: var(--omp-success-text, #166534);
     opacity: 1;
 }
 
@@ -7150,14 +7146,6 @@ body.dashboard-widget-picker-open {
     font-size: 1rem;
 }
 
-.universal-package-builder-frame {
-    display: block;
-    width: 100%;
-    min-height: 78vh;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: #fff;
-}
 
 .import-export-wizard {
     display: grid;

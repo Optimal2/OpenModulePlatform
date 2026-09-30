@@ -492,12 +492,14 @@ internal static class ThemeScenarios
         }
 
         var warnings = measured.Where(item => item.Ratio >= MinimumContrast).ToArray();
+        var warningsPath = Path.Join(screenshotDirectory, $"{screenshotName}-{theme}.contrast-warnings.txt");
+        File.Delete(warningsPath);
         if (warnings.Length > 0)
         {
             var report = $"{path} in {theme}: {warnings.Length} text elements below {TargetContrast}:1 (warning, not failing yet)\n - "
                 + string.Join("\n - ", warnings.Select(Describe));
             output.WriteLine("WARNING " + report);
-            await File.WriteAllTextAsync(Path.Join(screenshotDirectory, $"{screenshotName}-{theme}.contrast-warnings.txt"), report);
+            await File.WriteAllTextAsync(warningsPath, report);
         }
 
         var failing = measured.Where(item => item.Ratio < MinimumContrast).ToArray();

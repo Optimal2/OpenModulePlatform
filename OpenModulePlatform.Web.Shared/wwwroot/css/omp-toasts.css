@@ -37,7 +37,7 @@
     position: absolute;
     inset: 0;
     z-index: 1;
-    background: rgba(241, 245, 249, 0.55);
+    background: color-mix(in srgb, var(--surface-muted, #f1f5f9) 55%, transparent);
     content: "";
     opacity: 1;
     pointer-events: none;

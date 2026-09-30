@@ -2,9 +2,11 @@
     width: min(46rem, 100%);
     margin: 0 auto;
     padding: 2rem;
-    border: 1px solid #d7dde5;
+    border: 1px solid var(--omp-border, #d7dde5);
     border-radius: 18px;
-    background: #fff;
+    background: var(--omp-surface, #fff);
+    /* No fallback: without the theme tokens the text colour is inherited as before. */
+    color: var(--omp-text);
     box-shadow: 0 12px 36px rgba(15, 23, 42, 0.08);
 }
 
@@ -15,7 +17,7 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #3559e0;
+    color: var(--omp-link, #3559e0);
 }
 
 .omp-error-view__title {
@@ -27,12 +29,12 @@
 .omp-error-view__message {
     margin: 0 0 1rem;
     line-height: 1.6;
-    color: #223044;
+    color: var(--omp-text, #223044);
 }
 
 .omp-error-view__detail {
     margin: 0;
-    color: #4b5563;
+    color: var(--omp-text-muted, #4b5563);
     word-break: break-word;
 }
 
@@ -41,8 +43,8 @@
     margin-top: 0.35rem;
     padding: 0.2rem 0.45rem;
     border-radius: 6px;
-    background: #eef2ff;
-    color: #1f2937;
+    background: var(--omp-accent-surface, #eef2ff);
+    color: var(--omp-text, #1f2937);
 }
 
 .omp-error-view__actions {
@@ -67,28 +69,28 @@
 }
 
 .omp-error-view__button--primary {
-    background: #3559e0;
-    border-color: #3559e0;
-    color: #fff;
+    background: var(--omp-link, #3559e0);
+    border-color: var(--omp-link, #3559e0);
+    color: var(--omp-on-accent, #fff);
 }
 
 .omp-error-view__button--primary:hover,
 .omp-error-view__button--primary:focus,
 .omp-error-view__button--primary:focus-visible {
-    background: #2948bc;
-    border-color: #2948bc;
-    color: #fff;
+    background: var(--omp-link-hover, #2948bc);
+    border-color: var(--omp-link-hover, #2948bc);
+    color: var(--omp-on-accent, #fff);
     text-decoration: none;
 }
 
 .omp-error-view__button--secondary {
-    background: #fff;
-    border-color: #c8d1dc;
-    color: #223044;
+    background: var(--omp-surface, #fff);
+    border-color: var(--omp-control-border, #c8d1dc);
+    color: var(--omp-text, #223044);
 }
 
 .omp-error-view__button--secondary:hover,
 .omp-error-view__button--secondary:focus,
 .omp-error-view__button--secondary:focus-visible {
-    background: #f5f7fa;
+    background: var(--omp-surface-muted, #f5f7fa);
 }
