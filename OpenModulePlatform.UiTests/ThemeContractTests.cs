@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Playwright;
 using OpenModulePlatform.TestSupport.Ui;
+using Xunit.Abstractions;
 
 namespace OpenModulePlatform.UiTests;
 
@@ -11,7 +12,7 @@ namespace OpenModulePlatform.UiTests;
 /// </summary>
 [Collection("ui")]
 [Trait("Category", "Ui")]
-public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright, PortalAppFixture app)
+public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright, PortalAppFixture app, ITestOutputHelper output)
 {
     private const string PagePath = "/Admin/Overview";
 
@@ -31,10 +32,14 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
     public Task Denied_storage_still_switches_for_the_session()
         => ThemeScenarios.DeniedStorageStillSwitchesAsync(playwright, app, PagePath);
 
+    [SkippableFact]
+    public Task A_newer_local_choice_beats_an_older_cookie()
+        => ThemeScenarios.NewerLocalChoiceBeatsOlderCookieAsync(playwright, app, PagePath);
+
     public static TheoryData<string, string> ReadabilityCases()
     {
         var data = new TheoryData<string, string>();
-        foreach (var path in new[] { "/Admin/Overview", "/Admin/Modules", "/Admin/ConfigSettings", "/Notifications" })
+        foreach (var path in ReadablePages)
         {
             data.Add(path, "light");
             data.Add(path, "dark");
@@ -46,7 +51,68 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
     [SkippableTheory]
     [MemberData(nameof(ReadabilityCases))]
     public Task Text_is_readable_in_both_themes(string path, string theme)
-        => ThemeScenarios.TextIsReadableAsync(playwright, app, path, theme, "portal" + path.Replace('/', '-').ToLowerInvariant());
+        => ThemeScenarios.TextIsReadableAsync(
+            playwright, app, output, path, theme, "portal" + path.Replace('/', '-').ToLowerInvariant(), Specimens.GetValueOrDefault(path));
+
+    private static readonly string[] ReadablePages =
+    [
+        "/Admin/Overview",
+        "/Admin/Modules",
+        "/Admin/ConfigSettings",
+        "/Notifications",
+        "/Admin/SystemLog",
+        "/Admin/HostDeployments",
+        "/Admin/Maintenance",
+        // A conversation page. The test runs anonymously against whatever the local
+        // database holds, so the group thread itself comes from the specimen below.
+        "/messages/1",
+    ];
+
+    // States a page renders only with particular data: an error log row, a failed
+    // integrity check, a group conversation, a failed send. Each specimen is the
+    // page's own markup for that state, inserted into the live page so it is
+    // measured with the real stylesheet, in both palettes and (for .btn) on hover.
+    // Keep them in step with the views named in the comments.
+    private static readonly Dictionary<string, string> Specimens = new(StringComparer.Ordinal)
+    {
+        // portal-dashboard.js (the dashboard itself is outside this matrix, see
+        // PortalPageInvariantTests): the unsaved-draft banner and its error variant.
+        ["/Admin/Overview"] = """
+            <div class="dashboard-draft-banner"><span class="dashboard-draft-banner__message">You have unsaved dashboard changes.</span>
+            <span class="dashboard-draft-banner__actions"><button type="button" class="btn btn-secondary btn-sm">Discard</button> <button type="button" class="btn btn-primary btn-sm">Save</button></span></div>
+            <div class="dashboard-draft-banner dashboard-draft-banner--error"><span class="dashboard-draft-banner__message">The dashboard could not be saved.</span></div>
+            """,
+        // SystemLog.cshtml.cs LevelPillClass.
+        ["/Admin/SystemLog"] = """
+            <div class="card"><span class="pill pill-danger">Error</span> <span class="pill pill-warning">Warn</span></div>
+            """,
+        // HostDeployments.cshtml integrity columns.
+        ["/Admin/HostDeployments"] = """
+            <div class="card"><span class="integrity-pill integrity-pill--error">Mismatch</span> <span class="integrity-pill integrity-pill--ok">Consistent</span>
+            <span class="integrity-pill integrity-pill--warning">Warning</span></div>
+            """,
+        // Maintenance.cshtml retention actions, enabled.
+        ["/Admin/Maintenance"] = """
+            <div class="toolbar"><button type="button" class="btn btn-success">Confirm change</button>
+            <button type="button" class="btn btn-warning">Cancel</button>
+            <button type="button" class="btn btn-danger">Queue artifact cleanup</button></div>
+            """,
+        // Thread.cshtml + _ThreadMessages.cshtml: a group conversation with all six
+        // sender colours, an own message and the failed-send banner.
+        ["/messages/1"] = """
+            <section class="card portal-message-thread"><div class="portal-message-thread__scroll">
+            <div class="portal-message-thread__error-banner validation-summary-errors"><ul><li>The message could not be sent.</li></ul></div>
+            <div class="portal-message-thread__messages">
+            <article class="portal-message-thread__message portal-message-thread__message--sender-1"><span class="portal-message-thread__avatar" aria-hidden="true">A</span><div class="portal-message-thread__bubble"><div class="portal-message-thread__meta"><strong>Sender one</strong><span>09:01</span></div><p>Incoming message in a group.</p></div></article>
+            <article class="portal-message-thread__message portal-message-thread__message--sender-2"><span class="portal-message-thread__avatar" aria-hidden="true">B</span><div class="portal-message-thread__bubble"><div class="portal-message-thread__meta"><strong>Sender two</strong><span>09:02</span></div><p>Incoming message in a group.</p></div></article>
+            <article class="portal-message-thread__message portal-message-thread__message--sender-3"><span class="portal-message-thread__avatar" aria-hidden="true">C</span><div class="portal-message-thread__bubble"><div class="portal-message-thread__meta"><strong>Sender three</strong><span>09:03</span></div><p>Incoming message in a group.</p></div></article>
+            <article class="portal-message-thread__message portal-message-thread__message--sender-4"><span class="portal-message-thread__avatar" aria-hidden="true">D</span><div class="portal-message-thread__bubble"><div class="portal-message-thread__meta"><strong>Sender four</strong><span>09:04</span></div><p>Incoming message in a group.</p></div></article>
+            <article class="portal-message-thread__message portal-message-thread__message--sender-5"><span class="portal-message-thread__avatar" aria-hidden="true">E</span><div class="portal-message-thread__bubble"><div class="portal-message-thread__meta"><strong>Sender five</strong><span>09:05</span></div><p>Incoming message in a group.</p></div></article>
+            <article class="portal-message-thread__message portal-message-thread__message--sender-6"><span class="portal-message-thread__avatar" aria-hidden="true">F</span><div class="portal-message-thread__bubble"><div class="portal-message-thread__meta"><strong>Sender six</strong><span>09:06</span></div><p>Incoming message in a group.</p></div></article>
+            <article class="portal-message-thread__message is-own"><div class="portal-message-thread__bubble"><div class="portal-message-thread__meta"><strong>Me</strong><span>09:07</span></div><p>Own message.</p></div><span class="portal-message-thread__avatar" aria-hidden="true">M</span></article>
+            </div></div></section>
+            """,
+    };
 }
 
 /// <summary>
@@ -55,7 +121,7 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
 /// </summary>
 [Collection("ui")]
 [Trait("Category", "Ui")]
-public sealed class AuthThemeContractTests(PlaywrightSessionFixture playwright, AuthAppFixture app)
+public sealed class AuthThemeContractTests(PlaywrightSessionFixture playwright, AuthAppFixture app, ITestOutputHelper output)
 {
     private const string PagePath = "/login";
 
@@ -75,11 +141,15 @@ public sealed class AuthThemeContractTests(PlaywrightSessionFixture playwright, 
     public Task Denied_storage_still_switches_for_the_session()
         => ThemeScenarios.DeniedStorageStillSwitchesAsync(playwright, app, PagePath);
 
+    [SkippableFact]
+    public Task A_newer_local_choice_beats_an_older_cookie()
+        => ThemeScenarios.NewerLocalChoiceBeatsOlderCookieAsync(playwright, app, PagePath);
+
     [SkippableTheory]
     [InlineData("light")]
     [InlineData("dark")]
     public Task Text_is_readable_in_both_themes(string theme)
-        => ThemeScenarios.TextIsReadableAsync(playwright, app, PagePath, theme, "login");
+        => ThemeScenarios.TextIsReadableAsync(playwright, app, output, PagePath, theme, "login", specimen: null);
 }
 
 internal static class ThemeScenarios
@@ -89,9 +159,11 @@ internal static class ThemeScenarios
     private const string OtherAppPreferenceValue = "{\"theme\":\"normal\",\"zoom\":1.25}";
 
     // Minimum text contrast the pages must keep in both palettes. WCAG AA for normal
-    // text is 4.5:1; the gate sits at 3:1 (AA large text / non-text) while the
-    // remaining hard-coded colours are migrated, and reports every element below 4.5:1.
+    // text is 4.5:1; the gate sits at 3:1 (AA large text / non-text) for now, while
+    // the remaining hard-coded colours are migrated (docs/THEME_CONTRACT.md). Every
+    // element between 3:1 and 4.5:1 is reported as a warning without failing.
     private const double MinimumContrast = 3.0;
+    private const double TargetContrast = 4.5;
 
     private static readonly string ThemeOf = "() => [document.documentElement.getAttribute('data-theme'), document.documentElement.getAttribute('data-theme-mode')]";
 
@@ -237,10 +309,45 @@ internal static class ThemeScenarios
         // Focus/visibility re-reads must keep the session choice, not fall back to System.
         await page.EvaluateAsync("() => window.dispatchEvent(new Event('focus'))");
         Assert.Equal(["dark", "dark"], await page.EvaluateAsync<string[]>(ThemeOf));
+
+        // A DOM patcher (Blazor enhanced navigation) that drops the attributes makes the
+        // script restore them from storage. With both stores denied only the session
+        // value knows the choice was Dark; without it this falls back to System = light.
+        await page.EvaluateAsync("() => { document.documentElement.removeAttribute('data-theme'); document.documentElement.removeAttribute('data-theme-mode'); }");
+        await ExpectThemeAsync(page, "dark", "dark");
         Assert.DoesNotContain(errors, e => e.Contains("omp-theme", StringComparison.OrdinalIgnoreCase));
     }
 
-    public static async Task TextIsReadableAsync(PlaywrightSessionFixture playwright, WebAppProcessFixture app, string path, string theme, string screenshotName)
+    public static async Task NewerLocalChoiceBeatsOlderCookieAsync(PlaywrightSessionFixture playwright, WebAppProcessFixture app, string path)
+    {
+        Skip.IfNot(playwright.Available, playwright.UnavailableReason);
+        Skip.IfNot(app.Available, app.UnavailableReason);
+
+        await using var context = await playwright.Browser!.NewContextAsync(new BrowserNewContextOptions { ColorScheme = ColorScheme.Light });
+        // Cookie writes are silently dropped and an old Light choice stays readable,
+        // while localStorage works: the mirror ends up newer than the cookie.
+        var staleCookie = Uri.EscapeDataString("{\"version\":1,\"mode\":\"light\",\"revision\":\"1-stale\"}");
+        await context.AddInitScriptAsync(
+            "Object.defineProperty(Document.prototype, 'cookie', { get() { return '" + PreferenceName + "=" + staleCookie + "'; }, set() { } });");
+        var page = await context.NewPageAsync();
+        await GotoAsync(page, app, path);
+        Assert.Equal(["light", "light"], await page.EvaluateAsync<string[]>(ThemeOf));
+
+        await page.EvaluateAsync("() => window.ompTheme.setMode('dark')");
+        await ExpectThemeAsync(page, "dark", "dark");
+        AssertPreference(await page.EvaluateAsync<string>($"() => localStorage.getItem('{PreferenceName}')"), "dark");
+
+        // The revision orders the stores: the older cookie must not undo the choice...
+        await page.EvaluateAsync("() => window.dispatchEvent(new Event('focus'))");
+        Assert.Equal(["dark", "dark"], await page.EvaluateAsync<string[]>(ThemeOf));
+
+        // ...nor win on the next page load.
+        await page.ReloadAsync(new PageReloadOptions { WaitUntil = WaitUntilState.NetworkIdle });
+        Assert.Equal(["dark", "dark"], await page.EvaluateAsync<string[]>(ThemeOf));
+    }
+
+    public static async Task TextIsReadableAsync(
+        PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output, string path, string theme, string screenshotName, string? specimen)
     {
         Skip.IfNot(playwright.Available, playwright.UnavailableReason);
         Skip.IfNot(app.Available, app.UnavailableReason);
@@ -266,6 +373,18 @@ internal static class ThemeScenarios
         await GotoAsync(page, app, path);
         Assert.Equal([theme, theme], await page.EvaluateAsync<string[]>(ThemeOf));
 
+        // The generic invariants include "text colour equals background colour". They
+        // judge the page as served, before any specimen is added.
+        var findings = await UiInvariantScanner.ScanAsync(page);
+        Assert.True(findings.Count == 0, $"{path} in {theme}:\n - " + string.Join("\n - ", findings));
+
+        if (specimen is not null)
+        {
+            await page.EvaluateAsync(
+                "(html) => { const host = document.createElement('div'); host.setAttribute('data-theme-specimen', ''); host.innerHTML = html; (document.querySelector('main') || document.body).prepend(host); }",
+                specimen);
+        }
+
         var screenshotDirectory = Path.Join(app.RepoRoot, "TestResults", "ui-theme");
         Directory.CreateDirectory(screenshotDirectory);
         await page.ScreenshotAsync(new PageScreenshotOptions
@@ -274,18 +393,46 @@ internal static class ThemeScenarios
             FullPage = true,
         });
 
-        // The generic invariants include "text colour equals background colour".
-        var findings = await UiInvariantScanner.ScanAsync(page);
-        Assert.True(findings.Count == 0, $"{path} in {theme}:\n - " + string.Join("\n - ", findings));
-
         var contrast = await page.EvaluateAsync<ContrastReport>(ContrastScript);
         Assert.True(contrast.Checked > 0, $"{path} in {theme}: no text measured");
-        var failing = contrast.Items.Where(item => item.Ratio < MinimumContrast).ToArray();
+        var measured = contrast.Items.ToList();
+
+        // Hover states: every button in the content area, one at a time, measured once
+        // its transition has finished.
+        var buttons = page.Locator("main .btn");
+        var buttonCount = Math.Min(await buttons.CountAsync(), 80);
+        for (var i = 0; i < buttonCount; i++)
+        {
+            var button = buttons.Nth(i);
+            if (!await button.IsVisibleAsync())
+            {
+                continue;
+            }
+
+            await button.HoverAsync(new LocatorHoverOptions { Force = true, Timeout = 5000 });
+            await button.EvaluateAsync("el => Promise.all(el.getAnimations().map(a => a.finished.catch(() => null)))");
+            var hovered = await button.EvaluateAsync<ContrastReport>(ContrastScript);
+            measured.AddRange(hovered.Items.Select(item => { item.Element += ":hover"; return item; }));
+        }
+
+        var warnings = measured.Where(item => item.Ratio >= MinimumContrast).ToArray();
+        if (warnings.Length > 0)
+        {
+            var report = $"{path} in {theme}: {warnings.Length} text elements below {TargetContrast}:1 (warning, not failing yet)\n - "
+                + string.Join("\n - ", warnings.Select(Describe));
+            output.WriteLine("WARNING " + report);
+            await File.WriteAllTextAsync(Path.Join(screenshotDirectory, $"{screenshotName}-{theme}.contrast-warnings.txt"), report);
+        }
+
+        var failing = measured.Where(item => item.Ratio < MinimumContrast).ToArray();
         Assert.True(
             failing.Length == 0,
             $"{path} in {theme}: {failing.Length} text elements below {MinimumContrast}:1\n - "
-                + string.Join("\n - ", failing.Select(item => $"{item.Ratio:0.00}:1 {item.Element} \"{item.Text}\" ({item.Color} on {item.Background})")));
+                + string.Join("\n - ", failing.Select(Describe)));
     }
+
+    private static string Describe(ContrastItem item)
+        => $"{item.Ratio:0.00}:1 {item.Element} \"{item.Text}\" ({item.Color} on {item.Background})";
 
     private static async Task GotoAsync(IPage page, WebAppProcessFixture app, string path)
     {
@@ -353,9 +500,11 @@ internal static class ThemeScenarios
     }
 
     // Contrast of every visible element with its own text against the nearest opaque
-    // background, alpha-blended. Background images and gradients are not measured.
+    // background, alpha-blended: the whole document, or one element and what it holds
+    // when called on an element handle. Only elements below 4.5:1 are returned.
+    // Background images and gradients are not measured.
     private const string ContrastScript = """
-        () => {
+        (target) => {
             const parse = (value) => {
                 const m = value.match(/rgba?\(([^)]+)\)/);
                 if (!m) { return null; }
@@ -387,7 +536,8 @@ internal static class ThemeScenarios
             const ownText = (el) => [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim();
             const items = [];
             let checked = 0;
-            for (const el of document.querySelectorAll('body *')) {
+            const candidates = target instanceof Element ? [target, ...target.querySelectorAll('*')] : document.querySelectorAll('body *');
+            for (const el of candidates) {
                 if (!el.checkVisibility || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) { continue; }
                 // Decorative (aria-hidden) glyphs and screen-reader-only text are not read visually.
                 if (el.closest('[aria-hidden="true"]')) { continue; }
