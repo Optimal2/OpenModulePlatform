@@ -66,12 +66,30 @@
     generated AssemblyInfo files in as sources (CS0579). An invalid value is not
     applied here, and Directory.Build.targets stops the build with OMPBUILD001
     (relative) or OMPBUILD002 (inside this repository).
+
+    "Absolute" on Windows means a drive letter followed by a separator, or a
+    UNC path: IsPathRooted('C:artifacts') is true, but that path resolves
+    against the current directory of drive C:, which may be this repository.
+
+    "Inside this repository" is checked twice, because the same folder can be
+    named through a junction (AI Orchestrator instances reach the repositories
+    that way) or by an 8.3 short name, and GetFullPath resolves neither. The
+    string comparison catches the plain form; GetDirectoryNameOfFileAbove
+    walks up from the root with File.Exists, which the file system resolves
+    through any junction or short name, and finds OpenModulePlatform.slnx at
+    the root of this repository (or of any other OpenModulePlatform checkout,
+    which is no better a place for a consumer's obj/bin). A symbolic link or
+    junction BELOW an existing folder of the root that points into this
+    repository is not detected: the walk only looks at the root's ancestors.
   -->
   <PropertyGroup Condition="'$(OmpIsolatedBuildRoot)' != ''">
-    <_OmpIsolatedBuildRootIsRooted>$([System.IO.Path]::IsPathRooted('$(OmpIsolatedBuildRoot)'))</_OmpIsolatedBuildRootIsRooted>
+    <_OmpIsolatedBuildRootIsRooted Condition="$([MSBuild]::IsOSPlatform('Windows'))">$([System.Text.RegularExpressions.Regex]::IsMatch('$(OmpIsolatedBuildRoot)', '^([A-Za-z]:[\\/]|[\\/][\\/])'))</_OmpIsolatedBuildRootIsRooted>
+    <_OmpIsolatedBuildRootIsRooted Condition="!$([MSBuild]::IsOSPlatform('Windows'))">$([System.IO.Path]::IsPathRooted('$(OmpIsolatedBuildRoot)'))</_OmpIsolatedBuildRootIsRooted>
     <_OmpRepositoryRootFull>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)').ToUpperInvariant())</_OmpRepositoryRootFull>
     <_OmpIsolatedBuildRootFull Condition="'$(_OmpIsolatedBuildRootIsRooted)' == 'true'">$([System.IO.Path]::GetFullPath('$(OmpIsolatedBuildRoot)\').ToUpperInvariant())</_OmpIsolatedBuildRootFull>
     <_OmpIsolatedBuildRootInsideRepository Condition="'$(_OmpIsolatedBuildRootFull)' != '' and $([System.String]::Copy('$(_OmpIsolatedBuildRootFull)').StartsWith('$(_OmpRepositoryRootFull)'))">true</_OmpIsolatedBuildRootInsideRepository>
+    <_OmpIsolatedBuildRootCheckout Condition="'$(_OmpIsolatedBuildRootFull)' != ''">$([MSBuild]::GetDirectoryNameOfFileAbove('$(_OmpIsolatedBuildRootFull)', 'OpenModulePlatform.slnx'))</_OmpIsolatedBuildRootCheckout>
+    <_OmpIsolatedBuildRootInsideRepository Condition="'$(_OmpIsolatedBuildRootCheckout)' != ''">true</_OmpIsolatedBuildRootInsideRepository>
     <_OmpIsolatedBuildRootIsValid Condition="'$(_OmpIsolatedBuildRootIsRooted)' == 'true' and '$(_OmpIsolatedBuildRootInsideRepository)' != 'true'">true</_OmpIsolatedBuildRootIsValid>
   </PropertyGroup>
 

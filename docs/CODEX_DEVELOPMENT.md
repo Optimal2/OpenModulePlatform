@@ -143,8 +143,10 @@ What still holds:
   wrote `obj`/`bin` into `<OMP project>\artifacts\omp-isolated-build` in this repository, and
   the next build globbed the generated AssemblyInfo files in as sources (CS0579). Since
   2026-09-30 `Directory.Build.props` does not apply such a value and `Directory.Build.targets`
-  fails the build with `OMPBUILD001` (relative path) or `OMPBUILD002` (path inside this
-  repository), and `<project>\artifacts\**` is excluded from the default compile globs so a
+  fails the build with `OMPBUILD001` (relative or drive-relative path such as `C:artifacts`)
+  or `OMPBUILD002` (path inside this repository, also when reached through a junction or an
+  8.3 short name above the root; a link below an existing folder of the root is not
+  detected), and `<project>\artifacts\**` is excluded from the default compile globs so a
   leftover folder is never compiled. Covered by `tests/IsolatedBuildRoot.Tests.ps1`.
 - Publishing and package creation write to a shared runtime root (see below) and are not
   covered by build isolation - keep those sequential.

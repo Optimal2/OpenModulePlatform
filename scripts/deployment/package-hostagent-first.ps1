@@ -22,6 +22,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 # Shared runtime-configuration rule (appsettings*.json, odv.site.config.js) —
 # the canonical build-time mirror used by every packaging script (R3-G7).
 . (Join-Path $PSScriptRoot '..\omp\runtime-configuration-files.ps1')
+# Guard in front of every "delete a root and create it again" below.
+. (Join-Path $PSScriptRoot '..\omp\Assert-SafeToClean.ps1')
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $ConfigPath = Join-Path $PSScriptRoot 'hostagent-first.local.psd1'
@@ -1217,12 +1219,20 @@ $zipPath = Join-Path $OutputRoot ("OpenModulePlatformHostAgentFirst-$Version.zip
 $staleBuildRootCutoff = (Get-Date).AddDays(-1)
 foreach ($staleBuildRoot in @(Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory -Filter 'omp-hostagent-first-build-*' -ErrorAction SilentlyContinue)) {
     if ($staleBuildRoot.LastWriteTime -lt $staleBuildRootCutoff) {
+        try {
+            Assert-SafeToClean -Path $staleBuildRoot.FullName -RepositoryRoot $RepositoryRoot
+        }
+        catch {
+            Write-Warning "Leaving abandoned build root in place: $($_.Exception.Message)"
+            continue
+        }
         Write-Host "Removing abandoned build root from an earlier run: $($staleBuildRoot.FullName)"
         Remove-Item -LiteralPath $staleBuildRoot.FullName -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
 if (Test-Path -LiteralPath $packageRoot) {
+    Assert-SafeToClean -Path $packageRoot -RepositoryRoot $RepositoryRoot
     Remove-Item -LiteralPath $packageRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Path $payloadRoot -Force | Out-Null

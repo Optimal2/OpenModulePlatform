@@ -10,10 +10,10 @@
   <Target Name="OmpValidateIsolatedBuildRoot" Condition="'$(OmpIsolatedBuildRoot)' != ''">
     <Error Code="OMPBUILD001"
            Condition="'$(_OmpIsolatedBuildRootIsRooted)' != 'true'"
-           Text="OmpIsolatedBuildRoot='$(OmpIsolatedBuildRoot)' is a relative path. MSBuild resolves it against every referenced OpenModulePlatform project, so their obj and bin folders would be written into the OpenModulePlatform repository ($(MSBuildThisFileDirectory)). Pass an absolute path inside the consuming repository's own tree, for example -p:OmpIsolatedBuildRoot=C:\src\MyConsumer\artifacts\omp-isolated-build, or build through that repository's scripts/local-ci.ps1, which already does this." />
+           Text="OmpIsolatedBuildRoot='$(OmpIsolatedBuildRoot)' is a relative or drive-relative path (such as C:artifacts). MSBuild resolves it against every referenced OpenModulePlatform project, so their obj and bin folders would be written into the OpenModulePlatform repository ($(MSBuildThisFileDirectory)). Pass an absolute path inside the consuming repository's own tree, for example -p:OmpIsolatedBuildRoot=C:\src\MyConsumer\artifacts\omp-isolated-build, or build through that repository's scripts/local-ci.ps1, which already does this." />
     <Error Code="OMPBUILD002"
            Condition="'$(_OmpIsolatedBuildRootInsideRepository)' == 'true'"
-           Text="OmpIsolatedBuildRoot='$(OmpIsolatedBuildRoot)' lies inside the OpenModulePlatform repository ($(MSBuildThisFileDirectory)). Isolated build output belongs to the caller: pass an absolute path inside the consuming repository's own tree, for example -p:OmpIsolatedBuildRoot=C:\src\MyConsumer\artifacts\omp-isolated-build. Builds of OpenModulePlatform itself need no OmpIsolatedBuildRoot." />
+           Text="OmpIsolatedBuildRoot='$(OmpIsolatedBuildRoot)' lies inside the OpenModulePlatform repository ($(MSBuildThisFileDirectory)), directly or through a junction or 8.3 short name. Isolated build output belongs to the caller: pass an absolute path inside the consuming repository's own tree, for example -p:OmpIsolatedBuildRoot=C:\src\MyConsumer\artifacts\omp-isolated-build. Builds of OpenModulePlatform itself need no OmpIsolatedBuildRoot." />
   </Target>
 
   <!--

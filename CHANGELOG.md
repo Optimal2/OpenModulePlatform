@@ -8,6 +8,23 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **The clean guard gives the same verdict for every form of a path.**
+  `scripts/omp/Assert-SafeToClean.ps1` compared the caller's path with git's
+  final path as strings, so a folder named through a junction (the AI
+  Orchestrator layout) or an 8.3 short name was either allowed although it held
+  tracked files or failed with an `ArgumentOutOfRangeException`. It now asks
+  git from inside the folder (`rev-parse --show-prefix`) and only compares
+  git's answers with each other. It also refuses a drive root, a folder that is
+  itself a junction or symbolic link, and a folder that holds a `.git` folder
+  or file or any junction or symbolic link, since Windows PowerShell 5.1
+  `Remove-Item -Recurse` deletes what a junction points at.
+  `scripts/deployment/package-hostagent-first.ps1` now calls the guard before
+  it replaces the package folder and before it removes abandoned build roots.
+  `OMPBUILD001` also rejects a drive-relative `OmpIsolatedBuildRoot` such as
+  `C:artifacts\...`, and `OMPBUILD002` also catches a root that reaches this
+  repository through a junction or an 8.3 short name. Covered by new cases in
+  `tests/SafeToClean.Tests.ps1` and `tests/IsolatedBuildRoot.Tests.ps1`.
+
 - **Consumer builds and scripts can no longer write into or delete from this
   repository.** `Directory.Build.targets` stops a build whose
   `OmpIsolatedBuildRoot` is relative (`OMPBUILD001`) or lies inside this

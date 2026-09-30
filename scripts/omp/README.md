@@ -447,12 +447,18 @@ universal object comparison and expands artifact packages before comparing
 their payloads. `compare-artifact-payload-files.ps1` is available for a focused
 artifact-to-artifact comparison when a single artifact identity is suspected.
 
-`merge-universal-package-objects.ps1`, `publish-all.ps1 -CleanOutput` and
-`scripts/dev/test-deterministic-web-publish.ps1` delete their output folder and
+`merge-universal-package-objects.ps1`, `publish-all.ps1 -CleanOutput`,
+`scripts/dev/test-deterministic-web-publish.ps1` and
+`scripts/deployment/package-hostagent-first.ps1` delete their output folder and
 create it again. Before the delete they call `Assert-SafeToClean.ps1`, which
-refuses a git repository root, a folder containing this repository, a folder
-with git-tracked files, and a folder of another repository that is not ignored
-there. Point them at `%TEMP%` or an ignored output folder such as
+refuses a drive root, a git repository root, a folder containing this
+repository, a folder with git-tracked files, a folder of another repository
+that is not ignored there, a folder that is itself a junction or symbolic link,
+and a folder that holds a `.git` folder or file or any junction or symbolic
+link (Windows PowerShell 5.1 `Remove-Item -Recurse` deletes what a junction
+points at). It asks git about the folder from inside it, so the verdict is the
+same whether the folder is named directly, through a junction or by an 8.3
+short name. Point them at `%TEMP%` or an ignored output folder such as
 `artifacts\publish`.
 
 The Bootstrapper installer refresh may keep local `*.zip.source-stamp.json`
