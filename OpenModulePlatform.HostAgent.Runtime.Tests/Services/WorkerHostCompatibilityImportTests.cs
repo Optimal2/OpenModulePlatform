@@ -57,6 +57,69 @@ public sealed class WorkerHostCompatibilityImportTests : IDisposable
         Assert.Contains("0.3.47", provisionedAhead.Message, StringComparison.Ordinal);
     }
 
+    // Measured 2026-09-30: a universal package carrying a new WorkerProcessHost (0.3.71)
+    // and worker plugins requiring 0.3.21 lost the plugins on its first import, because the
+    // host it had just selected was not provisioned until the next HostAgent cycle.
+    [Fact]
+    public void ValidateWorkerHostRequirement_AllowsSelectedHostImportedFromTheSamePackageBeforeProvisioning()
+    {
+        ArtifactZipImportService.ValidateWorkerHostRequirement(
+            Requirement("0.3.21"),
+            "0.3.71",
+            null,
+            ["0.3.71"]);
+    }
+
+    [Fact]
+    public void ValidateWorkerHostRequirement_StillRejectsUnprovisionedSelectedHostThatIsNotInThePackage()
+    {
+        var otherPackageHost = Assert.Throws<InvalidOperationException>(() =>
+            ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.21"), "0.3.71", null, ["0.3.70"]));
+        var noPackageHost = Assert.Throws<InvalidOperationException>(() =>
+            ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.21"), "0.3.71", null, []));
+
+        Assert.Contains("<not provisioned>", otherPackageHost.Message, StringComparison.Ordinal);
+        Assert.Contains("<not provisioned>", noPackageHost.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ValidateWorkerHostRequirement_StillRejectsSamePackageHostThatIsTooOld()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.80"), "0.3.71", null, ["0.3.71"]));
+
+        Assert.Contains("0.3.80", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ValidateWorkerHostRequirement_StillRejectsWhenThePackageHostIsNotTheSelectedOne()
+    {
+        // The package brought a compatible host, but another (older) artifact is selected:
+        // WorkerManager launches the selected host, so the package host does not count.
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ArtifactZipImportService.ValidateWorkerHostRequirement(Requirement("0.3.46"), "0.3.45", "0.3.45", ["0.3.71"]));
+
+        Assert.Contains("0.3.45", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OrderWorkerHostArtifactsFirst_MovesWorkerHostPackagesAheadAndKeepsTheRestInOrder()
+    {
+        string[] paths =
+        [
+            "example__example_worker__worker-plugin__example-worker__0.3.189.zip",
+            "omp_core__omp_portal__web__omp-portal__0.3.500.zip",
+            "omp_core__omp_workerprocesshost__worker-host__omp-workerprocesshost__0.3.71.zip",
+            "other__other_worker__worker-plugin__other-worker__0.1.25.zip"
+        ];
+
+        var ordered = ArtifactZipImportService.OrderWorkerHostArtifactsFirst(paths, static path => path);
+
+        Assert.Equal(
+            [paths[2], paths[0], paths[1], paths[3]],
+            ordered);
+    }
+
     [Fact]
     public void ArtifactPackageWriter_CarriesWorkerHostRequirementInEnvelopeAndPayload()
     {

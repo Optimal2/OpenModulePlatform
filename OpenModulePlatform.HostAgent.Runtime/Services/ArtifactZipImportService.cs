@@ -2150,6 +2150,18 @@ public sealed class ArtifactZipImportService
     internal static void ValidateWorkerHostRequirement(
         OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement requirement,
         string? selectedVersion,
+        string? provisionedVersion,
+        IReadOnlyCollection<string>? samePackageWorkerHostVersions)
+        => ValidateWorkerHostRequirement(requirement, selectedVersion, provisionedVersion);
+
+    internal static IReadOnlyList<T> OrderWorkerHostArtifactsFirst<T>(
+        IEnumerable<T> items,
+        Func<T, string> pathSelector)
+        => items.ToList();
+
+    internal static void ValidateWorkerHostRequirement(
+        OpenModulePlatform.Worker.Abstractions.Models.WorkerHostCompatibilityRequirement requirement,
+        string? selectedVersion,
         string? provisionedVersion)
     {
         var requiredVersion = requirement.MinVersion.Trim();
