@@ -32,7 +32,7 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 /// universal package under test carries a bumped definition plus artifact
 /// 0.3.135. After the import, the seeded table must contain 0.3.135.
 /// </remarks>
-public sealed class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSqlOrderingTestFixture>
+public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture<SeedSqlOrderingTestFixture>
 {
     private const string PreviousArtifactVersion = "0.3.134";
     private const string PackageArtifactVersion = "0.3.135";
