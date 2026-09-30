@@ -27,8 +27,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenModulePlatform.Auth\OpenModulePlatform.Auth.csproj" />
+    <ProjectReference Include="..\examples\ServiceAppModule\WebApp\OpenModulePlatform.Web.ExampleServiceAppModule.csproj" />
+    <ProjectReference Include="..\examples\WebAppBlazorModule\WebApp\OpenModulePlatform.Web.ExampleWebAppBlazorModule.csproj" />
     <ProjectReference Include="..\examples\WebAppModule\WebApp\OpenModulePlatform.Web.ExampleWebAppModule.csproj" />
+    <ProjectReference Include="..\examples\WorkerAppModule\WebApp\OpenModulePlatform.Web.ExampleWorkerAppModule.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Portal\OpenModulePlatform.Portal.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.Web.ContentWebAppModule\OpenModulePlatform.Web.ContentWebAppModule.csproj" />
     <ProjectReference Include="..\OpenModulePlatform.Web.iFrameWebAppModule\OpenModulePlatform.Web.iFrameWebAppModule.csproj" />
   </ItemGroup>
 

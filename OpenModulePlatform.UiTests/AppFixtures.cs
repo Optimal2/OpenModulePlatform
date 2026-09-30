@@ -78,6 +78,67 @@ public sealed class ExampleWebAppModuleAuthRequiredFixture : WebAppProcessFixtur
         new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "false" };
 }
 
+/// <summary>
+/// The example web app module with the shared top bar switched off: the app's own
+/// header must then carry the theme menu itself (docs/THEME_CONTRACT.md), exactly once.
+/// </summary>
+public sealed class ExampleWebAppModuleNoTopBarFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ExampleWebAppModule";
+    protected override string WebProjectDirectory => "examples/WebAppModule/WebApp";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string>
+        {
+            ["Portal__AllowAnonymous"] = "true",
+            ["Portal__PortalTopBar__Enabled"] = "false",
+        };
+}
+
+/// <summary>The web part of the example service app module, anonymous.</summary>
+public sealed class ExampleServiceAppModuleFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ExampleServiceAppModule";
+    protected override string WebProjectDirectory => "examples/ServiceAppModule/WebApp";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
+}
+
+/// <summary>The web part of the example worker app module, anonymous.</summary>
+public sealed class ExampleWorkerAppModuleFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ExampleWorkerAppModule";
+    protected override string WebProjectDirectory => "examples/WorkerAppModule/WebApp";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
+}
+
+/// <summary>The Blazor example web app module, anonymous.</summary>
+public sealed class ExampleWebAppBlazorModuleFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ExampleWebAppBlazorModule";
+    protected override string WebProjectDirectory => "examples/WebAppBlazorModule/WebApp";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
+}
+
+/// <summary>The content web app module, anonymous.</summary>
+public sealed class ContentAppFixture : WebAppProcessFixture
+{
+    protected override string SolutionFileName => "OpenModulePlatform.slnx";
+    protected override string WebProjectName => "OpenModulePlatform.Web.ContentWebAppModule";
+
+    protected override IReadOnlyDictionary<string, string> ExtraEnvironment { get; } =
+        new Dictionary<string, string> { ["Portal__AllowAnonymous"] = "true" };
+}
+
 [CollectionDefinition("ui")]
 public sealed class UiCollection :
     ICollectionFixture<PlaywrightSessionFixture>,
@@ -85,4 +146,9 @@ public sealed class UiCollection :
     ICollectionFixture<AuthAppFixture>,
     ICollectionFixture<IFrameAppFixture>,
     ICollectionFixture<ExampleWebAppModuleFixture>,
-    ICollectionFixture<ExampleWebAppModuleAuthRequiredFixture>;
+    ICollectionFixture<ExampleWebAppModuleAuthRequiredFixture>,
+    ICollectionFixture<ExampleWebAppModuleNoTopBarFixture>,
+    ICollectionFixture<ExampleServiceAppModuleFixture>,
+    ICollectionFixture<ExampleWorkerAppModuleFixture>,
+    ICollectionFixture<ExampleWebAppBlazorModuleFixture>,
+    ICollectionFixture<ContentAppFixture>;

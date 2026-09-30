@@ -219,7 +219,10 @@ internal static class ThemeScenarios
     // the remaining hard-coded colours are migrated (docs/THEME_CONTRACT.md). Every
     // element between 3:1 and 4.5:1 is reported as a warning without failing.
     private const double MinimumContrast = 3.0;
-    private const double TargetContrast = 4.5;
+    public const double TargetContrast = 4.5;
+
+    // Elements measured again on hover: buttons and table rows in the content area.
+    private const string DefaultHoverSelector = "main .btn, main .dashboard-edit-menu button, main .grid tbody tr, main a.omp-error-view__button";
 
     private static readonly string ThemeOf = "() => [document.documentElement.getAttribute('data-theme'), document.documentElement.getAttribute('data-theme-mode')]";
 
@@ -434,6 +437,69 @@ internal static class ThemeScenarios
         Assert.Equal(newerLocal, Uri.UnescapeDataString(cookie.Value));
     }
 
+    public static async Task PrintKeepsTheLightPaletteAsync(PlaywrightSessionFixture playwright, WebAppProcessFixture app, string path)
+    {
+        Skip.IfNot(playwright.Available, playwright.UnavailableReason);
+        Skip.IfNot(app.Available, app.UnavailableReason);
+
+        await using var context = await playwright.Browser!.NewContextAsync(new BrowserNewContextOptions { ColorScheme = ColorScheme.Dark });
+        var page = await context.NewPageAsync();
+        await GotoAsync(page, app, path);
+        await ExpectThemeAsync(page, "dark", "system");
+
+        // Printed pages use the light palette whatever the screen shows; the choice itself stays.
+        await page.EmulateMediaAsync(new PageEmulateMediaOptions { Media = Media.Print });
+        var print = await page.EvaluateAsync<PrintColours>(PrintScript);
+        Assert.True(print.Page > 0.7, $"{path}: printed page background is dark (luminance {print.Page:0.000})");
+        Assert.True(print.Header > 0.7, $"{path}: printed header background is dark (luminance {print.Header:0.000})");
+        Assert.True(print.Text < 0.1, $"{path}: printed text is light (luminance {print.Text:0.000})");
+        Assert.Equal(["dark", "system"], await page.EvaluateAsync<string[]>(ThemeOf));
+    }
+
+    public sealed class PrintColours
+    {
+        public double Page { get; set; }
+        public double Header { get; set; }
+        public double Text { get; set; }
+    }
+
+    // Relative luminance of the page background, the app header's (alpha-blended)
+    // background and the body text.
+    private const string PrintScript = """
+        () => {
+            const parse = (value) => {
+                const m = value.match(/rgba?\(([^)]+)\)/);
+                if (!m) { return null; }
+                const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number);
+                return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+            };
+            const backgroundOf = (el) => {
+                const layers = [];
+                for (let node = el; node; node = node.parentElement) {
+                    const c = parse(getComputedStyle(node).backgroundColor);
+                    if (c && c.a > 0) { layers.push(c); if (c.a >= 1) { break; } }
+                }
+                let result = { r: 255, g: 255, b: 255, a: 1 };
+                if (layers.length > 0 && layers[layers.length - 1].a >= 1) { result = layers.pop(); }
+                while (layers.length > 0) {
+                    const top = layers.pop();
+                    result = { r: top.r * top.a + result.r * (1 - top.a), g: top.g * top.a + result.g * (1 - top.a), b: top.b * top.a + result.b * (1 - top.a), a: 1 };
+                }
+                return result;
+            };
+            const luminance = (c) => {
+                const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+                return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+            };
+            const header = document.querySelector('.app-header') || document.body;
+            return {
+                page: luminance(backgroundOf(document.body)),
+                header: luminance(backgroundOf(header)),
+                text: luminance(parse(getComputedStyle(document.body).color)),
+            };
+        }
+        """;
+
     // A revision as omp-theme.js writes it: the creation time in base 36 first.
     private static string Revision(DateTimeOffset time)
     {
@@ -450,7 +516,8 @@ internal static class ThemeScenarios
     }
 
     public static async Task TextIsReadableAsync(
-        PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output, string path, string theme, string screenshotName, string? specimen)
+        PlaywrightSessionFixture playwright, WebAppProcessFixture app, ITestOutputHelper output, string path, string theme, string screenshotName, string? specimen,
+        double minimumContrast = MinimumContrast, string hoverSelector = DefaultHoverSelector)
     {
         Skip.IfNot(playwright.Available, playwright.UnavailableReason);
         Skip.IfNot(app.Available, app.UnavailableReason);
@@ -509,7 +576,7 @@ internal static class ThemeScenarios
 
         // Hover states: every button and table row in the content area, one at a time,
         // measured once its transition has finished.
-        var buttons = page.Locator("main .btn, main .dashboard-edit-menu button, main .grid tbody tr, main a.omp-error-view__button");
+        var buttons = page.Locator(hoverSelector);
         var buttonCount = Math.Min(await buttons.CountAsync(), 80);
         for (var i = 0; i < buttonCount; i++)
         {
@@ -525,7 +592,7 @@ internal static class ThemeScenarios
             measured.AddRange(hovered.Items.Select(item => { item.Element += ":hover"; return item; }));
         }
 
-        var warnings = measured.Where(item => item.Ratio >= MinimumContrast).ToArray();
+        var warnings = measured.Where(item => item.Ratio >= minimumContrast).ToArray();
         var warningsPath = Path.Join(screenshotDirectory, $"{screenshotName}-{theme}.contrast-warnings.txt");
         File.Delete(warningsPath);
         if (warnings.Length > 0)
@@ -536,10 +603,10 @@ internal static class ThemeScenarios
             await File.WriteAllTextAsync(warningsPath, report);
         }
 
-        var failing = measured.Where(item => item.Ratio < MinimumContrast).ToArray();
+        var failing = measured.Where(item => item.Ratio < minimumContrast).ToArray();
         Assert.True(
             failing.Length == 0,
-            $"{path} in {theme}: {failing.Length} text elements below {MinimumContrast}:1\n - "
+            $"{path} in {theme}: {failing.Length} text elements below {minimumContrast}:1\n - "
                 + string.Join("\n - ", failing.Select(Describe)));
     }
 
