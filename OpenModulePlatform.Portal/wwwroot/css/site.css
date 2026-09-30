@@ -500,6 +500,38 @@
     background: var(--portal-message-sender-bg, var(--surface-muted));
 }
 
+/* Group conversations: one colour per sender on incoming bubbles
+   (_ThreadMessages.cshtml picks sender-1..6 from the sender id). */
+.portal-message-thread__message--sender-1 {
+    --portal-message-sender-bg: #fef3c7;
+    --portal-message-sender-border: #f59e0b;
+}
+
+.portal-message-thread__message--sender-2 {
+    --portal-message-sender-bg: #ede9fe;
+    --portal-message-sender-border: #8b5cf6;
+}
+
+.portal-message-thread__message--sender-3 {
+    --portal-message-sender-bg: #dcfce7;
+    --portal-message-sender-border: #22c55e;
+}
+
+.portal-message-thread__message--sender-4 {
+    --portal-message-sender-bg: #fee2e2;
+    --portal-message-sender-border: #ef4444;
+}
+
+.portal-message-thread__message--sender-5 {
+    --portal-message-sender-bg: #cffafe;
+    --portal-message-sender-border: #06b6d4;
+}
+
+.portal-message-thread__message--sender-6 {
+    --portal-message-sender-bg: #fce7f3;
+    --portal-message-sender-border: #ec4899;
+}
+
 .portal-message-thread__message.is-own .portal-message-thread__bubble {
     border-color: rgba(2, 132, 199, 0.24);
     background: var(--omp-info-bg, #e0f2fe);

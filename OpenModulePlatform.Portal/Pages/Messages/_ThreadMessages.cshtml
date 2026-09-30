@@ -5,25 +5,20 @@
     bool IsGroupConversation()
         => string.Equals(Model.Conversation?.ConversationType, "group", StringComparison.OrdinalIgnoreCase);
 
-    string SenderBubbleStyle(OpenModulePlatform.Web.Shared.Services.MessageRow message)
+    // Incoming bubbles in a group are colour-coded per sender. The colours live in
+    // site.css (.portal-message-thread__message--sender-1..6); ThemeContractTests
+    // measures the same classes in both palettes.
+    const int SenderColorCount = 6;
+
+    string SenderColorClass(OpenModulePlatform.Web.Shared.Services.MessageRow message)
     {
         if (message.IsOwnMessage || !IsGroupConversation())
         {
             return string.Empty;
         }
 
-        var palette = new (string Background, string Border)[]
-        {
-            ("#fef3c7", "#f59e0b"),
-            ("#ede9fe", "#8b5cf6"),
-            ("#dcfce7", "#22c55e"),
-            ("#fee2e2", "#ef4444"),
-            ("#cffafe", "#06b6d4"),
-            ("#fce7f3", "#ec4899")
-        };
-        var senderColorIndex = (int)(Math.Abs((long)message.SenderUserId) % palette.Length);
-        var color = palette[senderColorIndex];
-        return $"--portal-message-sender-bg: {color.Background}; --portal-message-sender-border: {color.Border};";
+        var senderColor = (int)(Math.Abs((long)message.SenderUserId) % SenderColorCount) + 1;
+        return $" portal-message-thread__message--sender-{senderColor}";
     }
 }
 
@@ -59,8 +54,7 @@
 
                 var avatarUrl = OmpAvatarHelper.BuildUserAvatarPath(message.SenderUserId, message.SenderProfileImageStorageKey);
                 var avatarInitials = OmpAvatarHelper.GetInitials(message.SenderDisplayName);
-                <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)@(message.IsDeleted ? " is-deleted" : string.Empty)"
-                         style="@SenderBubbleStyle(message)"
+                <article class="portal-message-thread__message@(message.IsOwnMessage ? " is-own" : string.Empty)@(message.IsDeleted ? " is-deleted" : string.Empty)@SenderColorClass(message)"
                          data-message-id="@message.MessageId">
                     @if (!message.IsOwnMessage)
                     {
