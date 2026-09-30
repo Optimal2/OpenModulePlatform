@@ -1,3 +1,4 @@
+using System.Text.Json;
 using OpenModulePlatform.HostAgent.Runtime.Models;
 using OpenModulePlatform.HostAgent.Runtime.Services;
 
@@ -215,6 +216,178 @@ public sealed class ConfigurationContinuityGateTests : IDisposable
         // config overlay, or remove them from the previous file when the drop is intended.
         Assert.Contains("config overlay", violation);
         Assert.Contains("delete", violation);
+    }
+
+    [Fact]
+    public void Gate_TreatsHostOwnedKeysCaseInsensitively()
+    {
+        // Configuration keys are case-insensitive, so the host-owned exemption must be too.
+        WritePreviousAppSettings("""
+            {
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+              "allowedhosts": "*",
+              "LOGGING": { "LogLevel": { "Default": "Information" } }
+            }
+            """);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            new Dictionary<string, string>());
+
+        Assert.Null(violation);
+    }
+
+    [Fact]
+    public void Gate_StillFailsForModuleSectionWhoseNameOnlyStartsWithLogging()
+    {
+        // The exemption is an exact top-level name, never a prefix.
+        WritePreviousAppSettings("""
+            {
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+              "LoggingSettings": { "RetentionDays": 30 }
+            }
+            """);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            new Dictionary<string, string>());
+
+        Assert.NotNull(violation);
+        Assert.Contains("LoggingSettings", violation);
+    }
+
+    [Fact]
+    public void Gate_StillComparesHostOwnedNamesNestedInsideModuleSection()
+    {
+        // Only the top-level keys are host-owned; a module's own setting that happens to
+        // share the name is module configuration and is still compared.
+        WritePreviousAppSettings("""
+            {
+              "ExampleModule": {
+                "AllowedHosts": "partner.example",
+                "Logging": { "AuditLevel": "Full" },
+                "RecentJobCount": 20
+              }
+            }
+            """);
+
+        var violation = ConfigurationContinuityGate.EvaluateViolation(
+            _targetRoot,
+            [AppSettings("""{ "ExampleModule": { "RecentJobCount": 20 } }""")],
+            new Dictionary<string, string>());
+
+        Assert.NotNull(violation);
+        Assert.Contains("ExampleModule:AllowedHosts", violation);
+        Assert.Contains("ExampleModule:Logging", violation);
+    }
+
+    [Fact]
+    public void CarryOver_KeepsRestrictiveAllowedHostsTheNewResolutionLeavesOut()
+    {
+        // Host-owned means the host's value holds: an operator's restrictive AllowedHosts
+        // must not disappear silently because the module dropped the key.
+        WritePreviousAppSettings("""
+            {
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+              "AllowedHosts": "localhost;127.0.0.1"
+            }
+            """);
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            out var carriedKeys);
+
+        Assert.Equal(["AllowedHosts"], carriedKeys);
+        using var resolved = JsonDocument.Parse(Assert.Single(files).FileContent);
+        Assert.Equal("localhost;127.0.0.1", resolved.RootElement.GetProperty("AllowedHosts").GetString());
+        Assert.Equal(
+            "Server=.;Database=Omp",
+            resolved.RootElement.GetProperty("ConnectionStrings").GetProperty("OmpDb").GetString());
+    }
+
+    [Fact]
+    public void CarryOver_KeepsLoggingTheNewResolutionLeavesOut()
+    {
+        WritePreviousAppSettings("""
+            {
+              "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" },
+              "Logging": { "LogLevel": { "Default": "Warning" } }
+            }
+            """);
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""")],
+            out var carriedKeys);
+
+        Assert.Equal(["Logging"], carriedKeys);
+        using var resolved = JsonDocument.Parse(Assert.Single(files).FileContent);
+        Assert.Equal(
+            "Warning",
+            resolved.RootElement.GetProperty("Logging").GetProperty("LogLevel").GetProperty("Default").GetString());
+    }
+
+    [Fact]
+    public void CarryOver_LeavesKeyTheNewResolutionSetsItself()
+    {
+        // The artifact or an overlay that sets the key wins, whatever its casing.
+        WritePreviousAppSettings("""
+            {
+              "AllowedHosts": "localhost;127.0.0.1",
+              "Logging": { "LogLevel": { "Default": "Warning" } }
+            }
+            """);
+        var newResolution = AppSettings("""
+            {
+              "allowedHosts": "*",
+              "Logging": { "LogLevel": { "Default": "Information" } }
+            }
+            """);
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [newResolution],
+            out var carriedKeys);
+
+        Assert.Empty(carriedKeys);
+        Assert.Same(newResolution, Assert.Single(files));
+    }
+
+    [Fact]
+    public void CarryOver_NeverCarriesModuleSections()
+    {
+        WritePreviousAppSettings("""
+            {
+              "ExampleModule": { "RecentJobCount": 20 },
+              "LoggingSettings": { "RetentionDays": 30 }
+            }
+            """);
+        var newResolution = AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""");
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [newResolution],
+            out var carriedKeys);
+
+        Assert.Empty(carriedKeys);
+        Assert.Same(newResolution, Assert.Single(files));
+    }
+
+    [Fact]
+    public void CarryOver_DoesNothingOnFirstDeploy()
+    {
+        var newResolution = AppSettings("""{ "ConnectionStrings": { "OmpDb": "Server=.;Database=Omp" } }""");
+
+        var files = ConfigurationContinuityGate.CarryOverHostOwnedKeys(
+            _targetRoot,
+            [newResolution],
+            out var carriedKeys);
+
+        Assert.Empty(carriedKeys);
+        Assert.Same(newResolution, Assert.Single(files));
     }
 
     private void WritePreviousAppSettings(string content)
