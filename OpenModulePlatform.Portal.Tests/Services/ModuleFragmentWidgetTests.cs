@@ -760,6 +760,25 @@ public sealed class ModuleFragmentWidgetTests
     }
 
     [Fact]
+    public async Task A_fresh_request_asks_the_module_past_a_cached_result_and_renews_the_cache()
+    {
+        var calls = 0;
+        var handler = new StubHandler((_, _) => Task.FromResult(Html($"<p>call {++calls}</p>")));
+        var service = CreateService(handler, new ModuleFragmentWidgetOptions { CacheSeconds = 30 });
+
+        var first = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+        var cached = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+        var fresh = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None, fresh: true);
+        var afterFresh = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);
+
+        Assert.Contains("call 1", first.Html);
+        Assert.Contains("call 1", cached.Html);
+        Assert.Contains("call 2", fresh.Html);
+        Assert.Contains("call 2", afterFresh.Html);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    [Fact]
     public async Task Fetch_IsCachedPerUserAndWidget()
     {
         var handler = new StubHandler((_, _) => Task.FromResult(Html("<p>x</p>")));
@@ -798,6 +817,10 @@ public sealed class ModuleFragmentWidgetTests
 
         Assert.Equal(ModuleFragmentFailureReason.Timeout, first.FailureReason);
         Assert.Equal(ModuleFragmentFailureReason.Timeout, second.FailureReason);
+        Assert.Single(handler.Requests);
+        // A fresh request does not get past a cached timeout: the shield holds.
+        var freshDuringShield = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None, fresh: true);
+        Assert.Equal(ModuleFragmentFailureReason.Timeout, freshDuringShield.FailureReason);
         Assert.Single(handler.Requests);
         clock.UtcNow += TimeSpan.FromSeconds(timeoutCacheSeconds).Subtract(TimeSpan.FromMilliseconds(1));
         var beforeExpiry = await service.GetFragmentAsync(CreateContext(), 7, Payload(), new HashSet<int> { 7 }, [App()], CancellationToken.None);

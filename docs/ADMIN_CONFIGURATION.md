@@ -397,7 +397,10 @@ Portal settings (`appsettings.json`, all optional):
 
 Results, including failures other than timeouts, are cached per user, active
 role, culture, and widget for `CacheSeconds` (0 disables ordinary result caching),
-so the dashboard does not call a module on every page load. Timeouts use the same
+so the dashboard does not call a module on every page load. A dashboard
+refresh (the interval or "Refresh now", `fresh=1` on the fragment request)
+asks the module past a cached result and renews the cache with what comes back;
+a cached timeout holds for a fresh request too. Timeouts use the same
 cache isolation for `TimeoutCacheSeconds` (default 1, clamped to 0–5; 0 disables
 timeout caching independently). The short lifetime shields slow modules from
 immediate repeated requests while allowing bounded cold-start retries. A
@@ -467,8 +470,11 @@ fragment: the least often it wants that (15 to 3600; the Portal removes the
 attribute). The dashboard fetches such widgets again at the user's own
 interval, one setting for the whole dashboard kept per user (off, 30 seconds,
 a minute or 5 minutes; a minute unless changed, in a submenu of the
-dashboard's edit menu next to "Refresh now"), or at the module's pace when
-that is slower. A widget
+dashboard's edit menu), or at the module's pace when that is slower. The
+submenu heads with "Refresh now", which fetches every refreshing widget at
+once, past both paces and past the Portal's cache, and then waits 15 seconds
+before it can again (the item counts the wait down; the interval's own
+fetches go on as before). A widget
 whose settings popup is open is left alone, a hidden tab waits, and a tab shown
 again catches up. The title bar shows when the content was last fetched. A
 fragment without the attribute is fetched once, when the page opens. A user

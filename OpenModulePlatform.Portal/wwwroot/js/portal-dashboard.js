@@ -3964,9 +3964,14 @@
     // again at the user's interval (the menu's choice, kept per user; 0 is off), or at
     // the module's own pace when that is slower, one widget at a time, and never one
     // whose settings popup is open. A hidden tab waits; a tab shown again catches up.
-    // "Refresh now" fetches them all at once, whatever the interval.
+    // "Refresh now" fetches them all at once, whatever the interval, then waits
+    // a cooldown before it can again.
     const moduleFragmentRefreshers = new WeakMap();
     const moduleFragmentRefreshTickMs = 5000;
+    // "Refresh now" fetches every refreshing widget at once, past the user's
+    // interval and the modules' own: it waits this long before it can again, so
+    // a hand on the button cannot turn into a stream of fetches.
+    const moduleFragmentRefreshNowCooldownMs = 15000;
     const moduleFragmentRefreshChoices = [0, 30, 60, 300];
     const moduleFragmentRefreshDefault = 60;
 
@@ -4064,6 +4069,9 @@
             const url = new URL(root.dataset.moduleFragmentUrl, window.location.href);
             url.searchParams.set('widgetId', String(widgetId));
             url.searchParams.set('width', String(Math.round(element.getBoundingClientRect().width) || parseFloat(element.style.width) || 0));
+            // A refresh wants what the module shows now, not the Portal's cached
+            // copy of the last page load.
+            url.searchParams.set('fresh', '1');
             const response = await fetch(url.toString(), {
                 credentials: 'same-origin',
                 signal: controller.signal,
@@ -4092,27 +4100,42 @@
         }
     }
 
-    async function runModuleFragmentRefresh(root, refresher, force = false) {
+    // One pass over the widgets that are due (every refreshing widget when
+    // forced). A pass asked for while one is under way joins it: a forced one
+    // runs right after, so "Refresh now" during a tick's pass is not lost.
+    function runModuleFragmentRefresh(root, refresher, force = false) {
         if (refresher.running) {
-            return;
+            refresher.forcePending = refresher.forcePending || force;
+            return refresher.running;
         }
-        refresher.running = true;
-        try {
-            for (const element of getModuleFragmentRefreshDue(root, Date.now(), force)) {
-                if (root.contains(element)) {
-                    await refreshModuleFragment(root, element);
+        refresher.running = (async () => {
+            let forced = force;
+            try {
+                for (;;) {
+                    refresher.forcePending = false;
+                    for (const element of getModuleFragmentRefreshDue(root, Date.now(), forced)) {
+                        if (root.contains(element)) {
+                            await refreshModuleFragment(root, element);
+                        }
+                    }
+                    if (!refresher.forcePending) {
+                        break;
+                    }
+                    forced = true;
                 }
+            } finally {
+                refresher.running = null;
+                refresher.forcePending = false;
             }
-        } finally {
-            refresher.running = false;
-        }
+        })();
+        return refresher.running;
     }
 
     function startModuleFragmentRefresh(root) {
         if (moduleFragmentRefreshers.has(root)) {
             return;
         }
-        const refresher = { timer: 0, running: false };
+        const refresher = { timer: 0, running: null, forcePending: false };
         moduleFragmentRefreshers.set(root, refresher);
         const now = Date.now();
         let anyRefreshing = false;
@@ -4158,23 +4181,22 @@
         moduleFragmentRefreshers.get(root)?.schedule?.();
     }
 
-    // The menu's interval row and "Refresh now" button (editors only: the menu is
-    // theirs). The row's choices fold out to the right on a click or a hover,
-    // like a submenu; the arrow keys walk them, Escape and a click elsewhere fold
-    // them away. A choice is saved with the other dashboard preferences and put
-    // back if the save fails.
+    // The menu's interval row (editors only: the menu is theirs). Its submenu
+    // folds out to the right and behaves like the top bar's menus: a hover opens
+    // it and a hover away folds it, a click pins it open until a click again, a
+    // click elsewhere or Escape. "Refresh now" heads the submenu, with a cooldown;
+    // the interval choices follow a separator. The arrow keys walk the items. A
+    // choice is saved with the other dashboard preferences and put back if the
+    // save fails.
     function bindModuleFragmentRefreshMenu(root, token, state) {
         const menu = root.querySelector('[data-dashboard-refresh-menu]');
         const trigger = menu?.querySelector('[data-dashboard-refresh-trigger]');
         const list = menu?.querySelector('[data-dashboard-refresh-list]');
-        const refreshNow = root.querySelector('[data-dashboard-refresh-now]');
-        refreshNow?.addEventListener('click', () => {
-            refreshModuleFragmentsNow(root).catch(() => {});
-        });
         if (!menu || !trigger || !list) {
             return;
         }
         const options = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-option]'));
+        const items = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-now], [data-dashboard-refresh-option]'));
         const showChoice = (seconds) => {
             options().forEach((option) => {
                 const isChoice = parseRefreshIntervalSeconds(option.dataset.dashboardRefreshOption) === seconds;
@@ -4185,41 +4207,82 @@
             });
         };
         let closeTimer = 0;
-        // Whether a hover (or the hover a touch emulates) opened the list: the
-        // click that follows then keeps it open instead of folding it away, so a
-        // tap opens the list and a mouse click never closes what its own hover
-        // just opened.
-        let openedByHover = false;
-        const setOpen = (open, byHover = false) => {
+        // Pinned: opened by a click (or by the click that follows the hover a
+        // touch emulates), so a hover away leaves it; only a click again, a
+        // click elsewhere, Escape or focus leaving folds it. Unpinned: opened by
+        // a hover, folded by a hover away.
+        let pinned = false;
+        const setOpen = (open, pin = false) => {
             window.clearTimeout(closeTimer);
             closeTimer = 0;
             list.hidden = !open;
-            openedByHover = open && byHover;
+            pinned = open && pin;
             trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
         };
         const isOpen = () => !list.hidden;
         showChoice(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
 
         trigger.addEventListener('click', () => {
-            if (isOpen() && openedByHover) {
-                setOpen(true);
+            if (isOpen() && pinned) {
+                setOpen(false);
                 return;
             }
-            setOpen(!isOpen());
+            setOpen(true, true);
         });
         // A hover opens the choices and a hover away folds them, with a moment's
         // grace so the pointer can cross the gap to the list; the pointer coming
-        // back in calls the fold-away off.
+        // back in calls the fold-away off. A pinned list ignores the hover.
         menu.addEventListener('mouseenter', () => {
             window.clearTimeout(closeTimer);
             closeTimer = 0;
             if (!isOpen()) {
-                setOpen(true, true);
+                setOpen(true, false);
             }
         });
         menu.addEventListener('mouseleave', () => {
+            if (pinned) {
+                return;
+            }
             window.clearTimeout(closeTimer);
             closeTimer = window.setTimeout(() => setOpen(false), 250);
+        });
+
+        // "Refresh now": one burst of fetches, then a cooldown the item shows
+        // counting down; a click during it does nothing.
+        const refreshNow = list.querySelector('[data-dashboard-refresh-now]');
+        const wait = refreshNow?.querySelector('[data-dashboard-refresh-wait]');
+        let refreshNowReadyAt = 0;
+        let waitTimer = 0;
+        const showRefreshNowWait = () => {
+            window.clearTimeout(waitTimer);
+            waitTimer = 0;
+            const left = Math.ceil((refreshNowReadyAt - Date.now()) / 1000);
+            if (left > 0) {
+                refreshNow.setAttribute('aria-disabled', 'true');
+                refreshNow.title = (refreshNow.dataset.waitTemplate || 'Available in {0} s').replace('{0}', String(left));
+                if (wait) {
+                    wait.hidden = false;
+                    wait.textContent = (refreshNow.dataset.waitUnit || '{0} s').replace('{0}', String(left));
+                }
+                waitTimer = window.setTimeout(showRefreshNowWait, 250);
+                return;
+            }
+            refreshNow.removeAttribute('aria-disabled');
+            refreshNow.title = '';
+            if (wait) {
+                wait.hidden = true;
+                wait.textContent = '';
+            }
+        };
+        refreshNow?.addEventListener('click', () => {
+            if (Date.now() < refreshNowReadyAt) {
+                return;
+            }
+            refreshNowReadyAt = Date.now() + moduleFragmentRefreshNowCooldownMs;
+            showRefreshNowWait();
+            setOpen(false);
+            trigger.focus();
+            refreshModuleFragmentsNow(root).catch(() => {});
         });
         // Focus leaving the menu (a Tab out of it) folds the list away.
         menu.addEventListener('focusout', (event) => {
@@ -4228,21 +4291,21 @@
             }
         });
         menu.addEventListener('keydown', (event) => {
-            const items = options();
-            const index = items.indexOf(document.activeElement);
+            const all = items();
+            const index = all.indexOf(document.activeElement);
             if (event.key === 'Escape' || (event.key === 'ArrowLeft' && index >= 0)) {
                 setOpen(false);
                 trigger.focus();
                 event.preventDefault();
             } else if (event.key === 'ArrowRight' && document.activeElement === trigger) {
-                setOpen(true);
-                (items.find((item) => item.getAttribute('aria-checked') === 'true') || items[0])?.focus();
+                setOpen(true, true);
+                all[0]?.focus();
                 event.preventDefault();
             } else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && (index >= 0 || document.activeElement === trigger)) {
-                setOpen(true);
+                setOpen(true, true);
                 const step = event.key === 'ArrowDown' ? 1 : -1;
-                const next = index < 0 ? (step > 0 ? 0 : items.length - 1) : (index + step + items.length) % items.length;
-                items[next]?.focus();
+                const next = index < 0 ? (step > 0 ? 0 : all.length - 1) : (index + step + all.length) % all.length;
+                all[next]?.focus();
                 event.preventDefault();
             }
         });

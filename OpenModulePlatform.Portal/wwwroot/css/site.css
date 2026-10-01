@@ -7870,8 +7870,8 @@ tr.linkbox-editor-row--dragging {
 
 /* The dashboard's refresh in the edit menu (shown with the other actions while
    editing): the interval as a row whose choices fold out to the right, like a
-   submenu, so the menu stays as narrow as its buttons; the "Refresh now"
-   button; and the stamp beside a refreshing widget's title bar. */
+   submenu, so the menu stays as narrow as its buttons, with "Refresh now" at
+   the submenu's head; and the stamp beside a refreshing widget's title bar. */
 /* width: 0 with min-width: 100% keeps the row out of the menu's own sizing:
    the buttons decide how wide the menu is, and the row then takes that width,
    truncating its dimmed value rather than widening the menu. */
@@ -7889,8 +7889,7 @@ tr.linkbox-editor-row--dragging {
     text-overflow: ellipsis;
 }
 
-.dashboard-refresh-menu__trigger,
-.dashboard-refresh-now-button {
+.dashboard-refresh-menu__trigger {
     display: none;
     align-items: center;
     gap: 8px;
@@ -7908,9 +7907,7 @@ tr.linkbox-editor-row--dragging {
 
 .dashboard-refresh-menu__trigger:hover,
 .dashboard-refresh-menu__trigger:focus-visible,
-.dashboard-refresh-menu__trigger[aria-expanded="true"],
-.dashboard-refresh-now-button:hover,
-.dashboard-refresh-now-button:focus-visible {
+.dashboard-refresh-menu__trigger[aria-expanded="true"] {
     border-color: var(--border-strong);
     background: var(--surface);
     outline: none;
@@ -7920,8 +7917,7 @@ tr.linkbox-editor-row--dragging {
     display: block;
 }
 
-.portal-dashboard.is-editing .dashboard-refresh-menu__trigger,
-.portal-dashboard.is-editing .dashboard-refresh-now-button {
+.portal-dashboard.is-editing .dashboard-refresh-menu__trigger {
     display: inline-flex;
 }
 
@@ -7947,7 +7943,9 @@ tr.linkbox-editor-row--dragging {
     z-index: 1;
     display: grid;
     gap: 2px;
+    width: max-content;
     min-width: 168px;
+    max-width: min(360px, calc(100vw - 48px));
     max-height: calc(100vh - 60px);
     overflow-y: auto;
     padding: 6px;
@@ -7964,6 +7962,7 @@ tr.linkbox-editor-row--dragging {
 .dashboard-refresh-menu__option {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 8px;
     min-height: 34px;
     padding: 6px 12px 6px 10px;
@@ -7973,7 +7972,42 @@ tr.linkbox-editor-row--dragging {
     color: var(--text);
     font: inherit;
     text-align: left;
+    white-space: nowrap;
     cursor: pointer;
+}
+
+/* "Refresh now": an icon in the check mark's place; waiting, it is dimmed and
+   says for how long at its right end. */
+.dashboard-refresh-menu__option--action::before {
+    display: none;
+}
+
+.dashboard-refresh-menu__option--action .dashboard-action-icon {
+    width: 18px; /* the check mark's column, so the labels line up */
+}
+
+/* Past the file's general aria-disabled button look: the item stays a plain
+   row, dimmed, with no hover highlight while it waits. */
+.dashboard-refresh-menu__option--action[aria-disabled="true"],
+.dashboard-refresh-menu__option--action[aria-disabled="true"]:hover {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: default;
+}
+
+.dashboard-refresh-menu__wait {
+    margin-left: auto;
+    padding-left: 12px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-refresh-menu__separator {
+    height: 1px;
+    margin: 4px 8px;
+    background: var(--border);
 }
 
 /* Room for the check mark, drawn only on the choice in force. */

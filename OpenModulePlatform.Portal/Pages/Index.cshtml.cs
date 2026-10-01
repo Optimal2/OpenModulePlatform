@@ -194,11 +194,13 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     /// <summary>
     /// Returns the sanitized content of one module-fragment widget. Used by the
-    /// dashboard script when a widget is added without a page reload; the widget is
-    /// resolved from the definitions the current user may access, so a widget the user
-    /// lacks permission for is never fetched.
+    /// dashboard script when a widget is added without a page reload, for the picker's
+    /// preview, and for a refresh (<paramref name="fresh"/>: the module is asked past
+    /// the Portal's cached result); the widget is resolved from the definitions the
+    /// current user may access, so a widget the user lacks permission for is never
+    /// fetched.
     /// </summary>
-    public async Task<IActionResult> OnGetModuleFragment(int widgetId, int width = 0, CancellationToken ct = default)
+    public async Task<IActionResult> OnGetModuleFragment(int widgetId, int width = 0, bool fresh = false, CancellationToken ct = default)
     {
         var roleContext = await _rbac.GetUserRoleContextAsync(User, ct);
         var permissions = roleContext.EffectivePermissions;
@@ -216,7 +218,8 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
                 definition.Payload,
                 new HashSet<int> { definition.WidgetId },
                 await GetAccessibleAppsAsync(permissions, ct),
-                ct);
+                ct,
+                fresh);
 
         return Partial(
             "_DashboardModuleFragmentWidget",

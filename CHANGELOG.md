@@ -229,7 +229,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   setting for the whole dashboard, kept per user in
   `omp_portal.user_dashboard_preferences.refresh_interval_seconds` (off, 30 s,
   a minute or 5 minutes; a minute unless changed), chosen in a submenu of the
-  dashboard's edit menu, next to a "Refresh now" button. Widgets are fetched one at a
+  dashboard's edit menu that also heads with "Refresh now" (every refreshing
+  widget at once, then a 15-second cooldown the item counts down). A refresh
+  asks the module past the Portal's cached result (`fresh=1`). Widgets are fetched one at a
   time, never one whose settings popup is open; a hidden tab waits and a tab
   shown again catches up; the title bar shows when the content was fetched.
   A user who cannot edit the dashboard refreshes at the default minute.

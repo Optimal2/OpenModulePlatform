@@ -457,6 +457,20 @@
                         <span class="dashboard-refresh-menu__chevron" aria-hidden="true"></span>
                     </button>
                     <div class="dashboard-refresh-menu__list" role="menu" aria-label="@L["Auto-refresh"]" data-dashboard-refresh-list hidden>
+                        @* "Refresh now" heads the submenu, set off from the interval
+                           choices by a separator; after a use it waits a moment and
+                           says for how long. *@
+                        <button type="button"
+                                class="dashboard-refresh-menu__option dashboard-refresh-menu__option--action"
+                                role="menuitem"
+                                data-dashboard-refresh-now
+                                data-wait-template="@L["Available in {0} s"]"
+                                data-wait-unit="@L["{0} s"]">
+                            <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
+                            <span>@L["Refresh now"]</span>
+                            <span class="dashboard-refresh-menu__wait" data-dashboard-refresh-wait hidden></span>
+                        </button>
+                        <div class="dashboard-refresh-menu__separator" role="separator"></div>
                         @foreach (var seconds in DashboardRefreshIntervals.Allowed)
                         {
                             <button type="button"
@@ -467,10 +481,6 @@
                         }
                     </div>
                 </div>
-                <button type="button" class="dashboard-refresh-now-button" data-dashboard-refresh-now>
-                    <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
-                    @L["Refresh now"]
-                </button>
 
                 <div class="dashboard-edit-menu__save-row">
                     <button type="button" class="dashboard-save-button" data-dashboard-save disabled aria-disabled="true">

@@ -97,6 +97,7 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
         window.testApi = { initDashboard, scheduleModuleFragmentRetry, loadModuleFragment,
             initializeModuleFragment, captureDashboardSnapshot, resetDashboardChanges, restoreDashboardDraft, applySavedWidgetIds,
             getModuleFragmentRefreshDue, refreshModuleFragment, markModuleFragmentRefreshed, parseRefreshIntervalSeconds,
+            startModuleFragmentRefresh, refreshModuleFragmentsNow,
             setActiveWidgetPopup: value => { activeWidgetPopup = value; } };
     })();`), Object.assign(context, {
         testRemove: element => { canvas.widgets = canvas.widgets.filter(item => item !== element); },
@@ -469,7 +470,41 @@ test('refresh: a loaded response replaces the fragment and stamps the widget', a
     assert.equal(await dash.api.refreshModuleFragment(dash.root, dash.widgets[0]), true);
     assert.notEqual(dash.current, before);
     assert.equal(dash.requests.length, 1);
+    // A refresh asks for a fresh result, past the Portal's cache.
+    assert.equal(new URL(dash.requests[0].url).searchParams.get('fresh'), '1');
     assert.ok(parseFloat(dash.widgets[0].dataset.moduleFragmentRefreshedAt) > 0);
+});
+
+test('refresh: "Refresh now" during a pass is not lost, a forced pass follows it', async () => {
+    const dash = refreshing();
+    const api = dash.api;
+    api.startModuleFragmentRefresh(dash.root);
+    dash.timers.length = 0; // the tick is not under test
+    const releases = [];
+    dash.respondWith(() => new Promise(resolve => { releases.push(resolve); }));
+    // Due now: a pass starts and waits on the module.
+    api.markModuleFragmentRefreshed(dash.root, dash.widgets[0], Date.now() - 61000);
+    const pass = api.refreshModuleFragmentsNow(dash.root);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(dash.requests.length, 1);
+    // Refresh now during the pass: joined, not dropped. The first fetch fails
+    // (the fragment, with its refresh request, stays), and the forced pass
+    // that follows fetches it again.
+    const joined = api.refreshModuleFragmentsNow(dash.root);
+    assert.equal(dash.requests.length, 1);
+    releases[0]('network');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(dash.requests.length, 2);
+    releases[1]('loaded');
+    await pass;
+    await joined;
+    assert.equal(dash.requests.length, 2);
+    // Afterwards nothing is pending; forced, every refreshing widget is fetched even with the interval off.
+    dash.current.dataset.moduleFragmentRefresh = '60';
+    dash.respondWith(async () => 'loaded');
+    dash.root.dataset.refreshInterval = '0';
+    await api.refreshModuleFragmentsNow(dash.root);
+    assert.equal(dash.requests.length, 3);
 });
 
 test('refresh: a timeout, an unavailable response or a network error keeps the fragment on screen', async () => {

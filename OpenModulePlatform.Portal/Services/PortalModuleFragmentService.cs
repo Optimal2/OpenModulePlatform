@@ -76,6 +76,9 @@ public sealed class PortalModuleFragmentService
     /// Loads the fragment for one widget. Returns <see cref="ModuleFragmentResult.Unavailable"/>
     /// without any request when the widget is not in <paramref name="accessibleWidgetIds"/>
     /// or its module web app is not in <paramref name="accessibleApps"/>.
+    /// <paramref name="fresh"/> asks the module even when a result is cached (a dashboard
+    /// refresh wants what the module shows now); the result renews the cache. A cached
+    /// timeout still holds, so a slow module is shielded all the same.
     /// </summary>
     public async Task<ModuleFragmentResult> GetFragmentAsync(
         HttpContext httpContext,
@@ -83,28 +86,32 @@ public sealed class PortalModuleFragmentService
         string? payload,
         IReadOnlySet<int> accessibleWidgetIds,
         IReadOnlyList<PortalAppEntry> accessibleApps,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool fresh = false)
     {
         var results = await GetFragmentsAsync(
             httpContext,
             [new ModuleFragmentWidgetRequest(widgetId, payload)],
             accessibleWidgetIds,
             accessibleApps,
-            ct);
+            ct,
+            fresh);
         return results[widgetId];
     }
 
     /// <summary>
     /// Loads several fragments. Everything that reads <paramref name="httpContext"/> runs
     /// sequentially; only the module requests themselves run in parallel, each bounded by
-    /// the configured timeout.
+    /// the configured timeout. <paramref name="fresh"/> is as for
+    /// <see cref="GetFragmentAsync"/>.
     /// </summary>
     public async Task<IReadOnlyDictionary<int, ModuleFragmentResult>> GetFragmentsAsync(
         HttpContext httpContext,
         IReadOnlyList<ModuleFragmentWidgetRequest> widgets,
         IReadOnlySet<int> accessibleWidgetIds,
         IReadOnlyList<PortalAppEntry> accessibleApps,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool fresh = false)
     {
         var options = _options.CurrentValue;
         var cacheDuration = options.GetCacheDuration();
@@ -153,7 +160,8 @@ public sealed class PortalModuleFragmentService
             if (_cache.TryGetValue(cacheKey, out ModuleFragmentResult? cached)
                 && cached is not null
                 && (cached.FailureReason == ModuleFragmentFailureReason.Timeout
-                    ? timeoutCacheDuration : cacheDuration) > TimeSpan.Zero)
+                    ? timeoutCacheDuration : cacheDuration) > TimeSpan.Zero
+                && !(fresh && cached.FailureReason != ModuleFragmentFailureReason.Timeout))
             {
                 results[widget.WidgetId] = cached;
                 continue;
