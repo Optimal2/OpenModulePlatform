@@ -3969,9 +3969,27 @@
     const moduleFragmentRefreshers = new WeakMap();
     const moduleFragmentRefreshTickMs = 5000;
     // "Refresh now" fetches every refreshing widget at once, past the user's
-    // interval and the modules' own: it waits this long before it can again, so
-    // a hand on the button cannot turn into a stream of fetches.
-    const moduleFragmentRefreshNowCooldownMs = 15000;
+    // interval and the modules' own. It then waits before it can again: a
+    // moment after the first two clicks within a minute (a second look is
+    // cheap and "now" should mean now), and a good while after the third and
+    // later, so a hand on the button cannot turn into a stream of fetches.
+    const moduleFragmentRefreshNowShortCooldownMs = 2000;
+    const moduleFragmentRefreshNowLongCooldownMs = 15000;
+    const moduleFragmentRefreshNowFreeClicks = 2;
+    const moduleFragmentRefreshNowWindowMs = 60000;
+
+    // The clicks still within the window, with this one, and the wait this one
+    // earns. Pure, so the tests can walk a sequence of clicks.
+    function takeRefreshNowClick(clicks, now) {
+        const recent = clicks.filter((at) => now - at < moduleFragmentRefreshNowWindowMs);
+        recent.push(now);
+        return {
+            clicks: recent,
+            cooldownMs: recent.length > moduleFragmentRefreshNowFreeClicks
+                ? moduleFragmentRefreshNowLongCooldownMs
+                : moduleFragmentRefreshNowShortCooldownMs
+        };
+    }
     const moduleFragmentRefreshChoices = [0, 30, 60, 300];
     const moduleFragmentRefreshDefault = 60;
 
@@ -4251,6 +4269,7 @@
         // counting down; a click during it does nothing.
         const refreshNow = list.querySelector('[data-dashboard-refresh-now]');
         const wait = refreshNow?.querySelector('[data-dashboard-refresh-wait]');
+        let refreshNowClicks = [];
         let refreshNowReadyAt = 0;
         let waitTimer = 0;
         const showRefreshNowWait = () => {
@@ -4275,10 +4294,13 @@
             }
         };
         refreshNow?.addEventListener('click', () => {
-            if (Date.now() < refreshNowReadyAt) {
+            const now = Date.now();
+            if (now < refreshNowReadyAt) {
                 return;
             }
-            refreshNowReadyAt = Date.now() + moduleFragmentRefreshNowCooldownMs;
+            const taken = takeRefreshNowClick(refreshNowClicks, now);
+            refreshNowClicks = taken.clicks;
+            refreshNowReadyAt = now + taken.cooldownMs;
             showRefreshNowWait();
             setOpen(false);
             trigger.focus();

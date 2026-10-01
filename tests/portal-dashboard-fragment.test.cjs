@@ -97,7 +97,7 @@ function dashboard(initial = 'timeout', responses = ['timeout', 'timeout']) {
         window.testApi = { initDashboard, scheduleModuleFragmentRetry, loadModuleFragment,
             initializeModuleFragment, captureDashboardSnapshot, resetDashboardChanges, restoreDashboardDraft, applySavedWidgetIds,
             getModuleFragmentRefreshDue, refreshModuleFragment, markModuleFragmentRefreshed, parseRefreshIntervalSeconds,
-            startModuleFragmentRefresh, refreshModuleFragmentsNow,
+            startModuleFragmentRefresh, refreshModuleFragmentsNow, takeRefreshNowClick,
             setActiveWidgetPopup: value => { activeWidgetPopup = value; } };
     })();`), Object.assign(context, {
         testRemove: element => { canvas.widgets = canvas.widgets.filter(item => item !== element); },
@@ -473,6 +473,21 @@ test('refresh: a loaded response replaces the fragment and stamps the widget', a
     // A refresh asks for a fresh result, past the Portal's cache.
     assert.equal(new URL(dash.requests[0].url).searchParams.get('fresh'), '1');
     assert.ok(parseFloat(dash.widgets[0].dataset.moduleFragmentRefreshedAt) > 0);
+});
+
+test('refresh: "Refresh now" waits 2 s after its first two clicks in a minute, 15 s after the rest', () => {
+    const { takeRefreshNowClick } = dashboard().api;
+    let clicks = [];
+    const waits = [];
+    for (const at of [0, 1000, 5000, 25000, 61000, 130000]) {
+        const taken = takeRefreshNowClick(clicks, at);
+        clicks = taken.clicks;
+        waits.push(taken.cooldownMs);
+    }
+    // At 61 s the click at 0 has left the window but 1 s, 5 s and 25 s remain;
+    // at 130 s the window holds only the click itself.
+    assert.deepEqual(waits, [2000, 2000, 15000, 15000, 15000, 2000]);
+    assert.equal(clicks.length, 1);
 });
 
 test('refresh: "Refresh now" during a pass is not lost, a forced pass follows it', async () => {
