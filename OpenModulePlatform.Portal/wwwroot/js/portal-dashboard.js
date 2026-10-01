@@ -482,6 +482,13 @@
 
         picker?.addEventListener('close', () => {
             document.body.classList.remove('dashboard-widget-picker-open');
+            // Escape closes the dialog without closePicker: the preview's player
+            // (webamp and all) is let go of here, whichever way the dialog closed.
+            const preview = picker.querySelector('[data-widget-picker-preview]');
+            if (preview) {
+                widgetPickerPreviewSequence += 1;
+                clearWidgetPickerPreview(preview);
+            }
         });
 
         bindWidgetPickerFilter(picker);
@@ -5505,7 +5512,7 @@
     // subscription): for a widget that leaves the dashboard, and for the picker's
     // preview when it shows something else or closes.
     function disposeDashboardMusicPlayers(scope) {
-        scope?.querySelectorAll?.('[data-dashboard-music-player]').forEach((player) => {
+        getDashboardMusicPlayers(scope).forEach((player) => {
             try { player.__ompWebampResizeObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampLinkObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampBodyObserver?.disconnect(); } catch { /* best effort */ }
@@ -5604,6 +5611,14 @@
 
             picker.dataset.manualCompact = picker.dataset.manualCompact === 'true' ? 'false' : 'true';
             syncWidgetPickerCompactMode(picker);
+            // The detailed view shows the preview again: render the selected
+            // widget's, which the compact view did not build.
+            if (!picker.classList.contains('is-compact')) {
+                const option = getSelectedWidgetPickerOption(picker);
+                if (option) {
+                    renderWidgetPickerPreview(picker.closest('[data-dashboard-root]'), picker, option);
+                }
+            }
         });
         syncWidgetPickerCompactMode(picker);
     }
@@ -5733,12 +5748,18 @@
 
         const sequence = ++widgetPickerPreviewSequence;
         clearWidgetPickerPreview(preview);
+        // In the compact view the preview is not shown: nothing is fetched or
+        // built for it (a player built while hidden would measure as nothing),
+        // and the switch back to the detailed view renders it then.
+        if (picker.classList.contains('is-compact') || !option) {
+            return;
+        }
         try {
             const scaleTarget = document.createElement('div');
             scaleTarget.className = 'dashboard-widget-picker__preview-scale-target dashboard-widget__content-scale-target';
             scaleTarget.dataset.widgetContentScaleTarget = '';
             scaleTarget.dataset.widgetPreview = '';
-            if (option?.dataset?.widgetType === 'module-fragment') {
+            if (isModuleFragmentWidgetType(option?.dataset?.widgetType)) {
                 scaleTarget.appendChild(createModuleFragmentPlaceholder(root));
                 preview.appendChild(scaleTarget);
                 loadModuleFragmentPreview(root, preview, scaleTarget, option.dataset.widgetId, sequence);
@@ -5766,9 +5787,10 @@
         try {
             const url = new URL(root.dataset.moduleFragmentUrl, window.location.href);
             url.searchParams.set('widgetId', String(widgetId));
-            // The preview is scaled down a little; the fragment is asked for at
-            // about the width it gets, so its own responsive mode matches.
-            url.searchParams.set('width', String(Math.max(0, Math.round(preview.getBoundingClientRect().width / 0.88) - 32) || 0));
+            // The fragment is asked for at the width it lays out in (the preview's
+            // scale is visual only), so the mode the module suggests matches the
+            // container queries.
+            url.searchParams.set('width', String(Math.max(0, preview.clientWidth - 32) || 0));
             const response = await fetch(url.toString(), {
                 credentials: 'same-origin',
                 signal: controller.signal,

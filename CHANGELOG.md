@@ -119,11 +119,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 ### Fixed
 
 - **The widget picker's preview shows the widget as it will be.** A module
-  widget (IbsPackager, LogSearch) previewed as nothing: its fragment is now
-  fetched from the module for the preview. The music player previewed as
-  its fallback markup rather than its skin: the preview's player is brought
-  to life like a new widget's, keeps no window layout of its own, and is let
-  go of when the preview changes or the picker closes.
+  fragment widget previewed as nothing: its fragment is now fetched from the
+  module for the preview. The music player previewed as its fallback markup
+  rather than its skin: the preview's player is brought to life like a new
+  widget's, keeps no window layout of its own, and is let go of when the
+  preview changes or the picker closes, by Escape as well. The compact view
+  builds no preview; the detailed view renders it when it comes back.
 - **Theme menu in the Blazor example without the top bar; contrast gate at
   4.5:1.** The Blazor theme menu is now a shared component,
   `Components/Layout/OmpThemeSwitch.razor` in Web.Shared, used by the Blazor
