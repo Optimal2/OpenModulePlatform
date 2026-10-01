@@ -4268,29 +4268,34 @@
         // "Refresh now": one burst of fetches, then a cooldown the item shows
         // counting down; a click during it does nothing.
         const refreshNow = list.querySelector('[data-dashboard-refresh-now]');
-        const wait = refreshNow?.querySelector('[data-dashboard-refresh-wait]');
+        const waitText = refreshNow?.querySelector('[data-dashboard-refresh-wait-text]');
+        const waitUnit = refreshNow?.dataset.waitUnit || '{0} s';
+        const waitSizer = refreshNow?.querySelector('[data-dashboard-refresh-wait-sizer]');
+        if (waitSizer) {
+            waitSizer.textContent = waitUnit.replace('{0}', String(moduleFragmentRefreshNowLongCooldownMs / 1000));
+        }
         let refreshNowClicks = [];
         let refreshNowReadyAt = 0;
         let waitTimer = 0;
         const showRefreshNowWait = () => {
             window.clearTimeout(waitTimer);
             waitTimer = 0;
-            const left = Math.ceil((refreshNowReadyAt - Date.now()) / 1000);
+            // Never past the longest wait (a clock stepped backwards), so the text
+            // never outgrows the sizer.
+            const left = Math.min(Math.ceil((refreshNowReadyAt - Date.now()) / 1000), moduleFragmentRefreshNowLongCooldownMs / 1000);
             if (left > 0) {
                 refreshNow.setAttribute('aria-disabled', 'true');
                 refreshNow.title = (refreshNow.dataset.waitTemplate || 'Available in {0} s').replace('{0}', String(left));
-                if (wait) {
-                    wait.hidden = false;
-                    wait.textContent = (refreshNow.dataset.waitUnit || '{0} s').replace('{0}', String(left));
+                if (waitText) {
+                    waitText.textContent = waitUnit.replace('{0}', String(left));
                 }
                 waitTimer = window.setTimeout(showRefreshNowWait, 250);
                 return;
             }
             refreshNow.removeAttribute('aria-disabled');
             refreshNow.title = '';
-            if (wait) {
-                wait.hidden = true;
-                wait.textContent = '';
+            if (waitText) {
+                waitText.textContent = '';
             }
         };
         refreshNow?.addEventListener('click', () => {

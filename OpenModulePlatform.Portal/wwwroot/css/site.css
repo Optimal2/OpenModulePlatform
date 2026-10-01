@@ -7996,12 +7996,25 @@ tr.linkbox-editor-row--dragging {
     cursor: default;
 }
 
+/* The sizer and the live text share one cell: the sizer, unseen, keeps the
+   width of the longest wait, so the submenu is as wide with no countdown as
+   with one. */
 .dashboard-refresh-menu__wait {
+    display: inline-grid;
+    justify-items: end;
     margin-left: auto;
     padding-left: 12px;
     color: var(--text-muted);
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
+}
+
+.dashboard-refresh-menu__wait > * {
+    grid-area: 1 / 1;
+}
+
+.dashboard-refresh-menu__wait-sizer {
+    visibility: hidden;
 }
 
 .dashboard-refresh-menu__separator {

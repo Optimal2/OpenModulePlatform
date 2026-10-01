@@ -468,7 +468,13 @@
                                 data-wait-unit="@L["{0} s"]">
                             <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
                             <span>@L["Refresh now"]</span>
-                            <span class="dashboard-refresh-menu__wait" data-dashboard-refresh-wait hidden></span>
+                            @* The wait's place is kept even while nothing counts down (the sizer
+                               holds the longest wait's text, unseen), so the submenu never
+                               changes width. *@
+                            <span class="dashboard-refresh-menu__wait" data-dashboard-refresh-wait>
+                                <span class="dashboard-refresh-menu__wait-sizer" aria-hidden="true" data-dashboard-refresh-wait-sizer></span>
+                                <span data-dashboard-refresh-wait-text></span>
+                            </span>
                         </button>
                         <div class="dashboard-refresh-menu__separator" role="separator"></div>
                         @foreach (var seconds in DashboardRefreshIntervals.Allowed)

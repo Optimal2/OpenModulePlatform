@@ -484,8 +484,8 @@ test('refresh: "Refresh now" waits 2 s after its first two clicks in a minute, 1
         clicks = taken.clicks;
         waits.push(taken.cooldownMs);
     }
-    // At 61 s the click at 0 has left the window but 1 s, 5 s and 25 s remain;
-    // at 130 s the window holds only the click itself.
+    // At 61 s the clicks at 0 and 1 s have left the window (a minute exactly is
+    // out) but 5 s and 25 s remain; at 130 s the window holds only the click itself.
     assert.deepEqual(waits, [2000, 2000, 15000, 15000, 15000, 2000]);
     assert.equal(clicks.length, 1);
 });
