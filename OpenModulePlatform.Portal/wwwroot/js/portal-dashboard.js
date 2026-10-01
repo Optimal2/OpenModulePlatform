@@ -2178,6 +2178,10 @@
     const WEBAMP_LAYOUT_PREFIX = 'omp.webamp.layout.';
 
     function webampLayoutKey(player) {
+        // The picker's preview is not a widget: its layout is neither read nor kept.
+        if (player.closest('[data-widget-preview]')) {
+            return '';
+        }
         const widget = player.closest('[data-dashboard-widget]');
         const id = widget?.dataset?.userActiveWidgetId || widget?.dataset?.widgetKey || '';
         return `${WEBAMP_LAYOUT_PREFIX}${id || 'default'}`;
@@ -2230,7 +2234,11 @@
 
     function readWebampLayout(player) {
         try {
-            const stored = window.localStorage.getItem(webampLayoutKey(player));
+            const key = webampLayoutKey(player);
+            if (!key) {
+                return null;
+            }
+            const stored = window.localStorage.getItem(key);
             return sanitizeWebampLayout(JSON.parse(stored || 'null'));
         } catch {
             return null;   // private mode, blocked storage, corrupt value
@@ -2422,8 +2430,8 @@
         // Persist the layout whenever it changes. The store also ticks on every
         // playback frame, so writes are debounced AND compared - localStorage is
         // only touched when the layout itself actually differs.
-        if (typeof webamp.__onStateChange === 'function') {
-            const layoutStorageKey = webampLayoutKey(player);
+        const layoutStorageKey = webampLayoutKey(player);
+        if (layoutStorageKey && typeof webamp.__onStateChange === 'function') {
             let lastSerialized = JSON.stringify(captureWebampLayout(webamp));
             let saveTimer = null;
             const unsubscribe = webamp.__onStateChange(() => {
@@ -5493,16 +5501,23 @@
         return blank;
     }
 
-    function removeDashboardWidgetElement(widget) {
-        closeDashboardWidgetPopupForWidget(widget);
-        widget.querySelectorAll('[data-dashboard-music-player]').forEach((player) => {
+    // Lets go of what a music player holds (webamp, its observers, its layout
+    // subscription): for a widget that leaves the dashboard, and for the picker's
+    // preview when it shows something else or closes.
+    function disposeDashboardMusicPlayers(scope) {
+        scope?.querySelectorAll?.('[data-dashboard-music-player]').forEach((player) => {
             try { player.__ompWebampResizeObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampLinkObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampBodyObserver?.disconnect(); } catch { /* best effort */ }
             try { player.__ompWebampLayoutUnsubscribe?.(); } catch { /* best effort */ }
             try { player.__ompWebamp?.dispose?.(); } catch { /* webamp's own dispose is best effort */ }
         });
-        revokeDashboardMusicPlayerObjectUrls(widget);
+        revokeDashboardMusicPlayerObjectUrls(scope);
+    }
+
+    function removeDashboardWidgetElement(widget) {
+        closeDashboardWidgetPopupForWidget(widget);
+        disposeDashboardMusicPlayers(widget);
         revokeBlankWidgetObjectUrls(widget);
         widget.remove();
     }
@@ -5540,6 +5555,11 @@
             return;
         }
 
+        const preview = picker.querySelector('[data-widget-picker-preview]');
+        if (preview) {
+            widgetPickerPreviewSequence += 1;
+            clearWidgetPickerPreview(preview);
+        }
         if (typeof picker.close === 'function') {
             picker.close();
         } else {
@@ -5641,7 +5661,9 @@
         }
 
         if (preview) {
-            preview.replaceChildren(createWidgetPickerEmptyPreview(emptyLabel));
+            widgetPickerPreviewSequence += 1;
+            clearWidgetPickerPreview(preview);
+            preview.appendChild(createWidgetPickerEmptyPreview(emptyLabel));
         }
     }
 
@@ -5691,22 +5713,91 @@
         renderWidgetPickerPreview(root, picker, option);
     }
 
+    // The preview shows the widget as it will be on the dashboard: a module
+    // fragment is fetched from its module (through the same endpoint the
+    // dashboard uses), and a portal widget's template is brought to life the
+    // way a new widget is, so a music player plays its real skin rather than
+    // its fallback markup. Whatever the preview held before is let go of first.
+    let widgetPickerPreviewSequence = 0;
+
+    function clearWidgetPickerPreview(preview) {
+        disposeDashboardMusicPlayers(preview);
+        preview.replaceChildren();
+    }
+
     function renderWidgetPickerPreview(root, picker, option) {
         const preview = picker?.querySelector('[data-widget-picker-preview]');
         if (!preview) {
             return;
         }
 
-        preview.replaceChildren();
+        const sequence = ++widgetPickerPreviewSequence;
+        clearWidgetPickerPreview(preview);
         try {
-            const content = createWidgetBodyContent(root, option?.dataset?.widgetPayload || '');
             const scaleTarget = document.createElement('div');
             scaleTarget.className = 'dashboard-widget-picker__preview-scale-target dashboard-widget__content-scale-target';
             scaleTarget.dataset.widgetContentScaleTarget = '';
-            scaleTarget.appendChild(content);
+            scaleTarget.dataset.widgetPreview = '';
+            if (option?.dataset?.widgetType === 'module-fragment') {
+                scaleTarget.appendChild(createModuleFragmentPlaceholder(root));
+                preview.appendChild(scaleTarget);
+                loadModuleFragmentPreview(root, preview, scaleTarget, option.dataset.widgetId, sequence);
+                return;
+            }
+            scaleTarget.appendChild(createWidgetBodyContent(root, option?.dataset?.widgetPayload || ''));
             preview.appendChild(scaleTarget);
+            bindDashboardMusicPlayers(scaleTarget);
         } catch {
             preview.replaceChildren(createWidgetPickerEmptyPreview(preview.dataset.unavailableLabel || 'Preview unavailable'));
+        }
+    }
+
+    async function loadModuleFragmentPreview(root, preview, scaleTarget, widgetId, sequence) {
+        const pending = scaleTarget.querySelector('[data-module-fragment]');
+        const stale = () => sequence !== widgetPickerPreviewSequence || !preview.contains(scaleTarget);
+        if (!pending || !widgetId || !root.dataset.moduleFragmentUrl) {
+            if (pending) {
+                showModuleFragmentUnavailable(root, pending);
+            }
+            return;
+        }
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), moduleFragmentTimeoutMilliseconds);
+        try {
+            const url = new URL(root.dataset.moduleFragmentUrl, window.location.href);
+            url.searchParams.set('widgetId', String(widgetId));
+            // The preview is scaled down a little; the fragment is asked for at
+            // about the width it gets, so its own responsive mode matches.
+            url.searchParams.set('width', String(Math.max(0, Math.round(preview.getBoundingClientRect().width / 0.88) - 32) || 0));
+            const response = await fetch(url.toString(), {
+                credentials: 'same-origin',
+                signal: controller.signal,
+                headers: { Accept: 'text/html' }
+            });
+            if (stale()) {
+                return;
+            }
+            if (!response.ok || isDashboardLoginRedirect(response)) {
+                showModuleFragmentUnavailable(root, pending);
+                return;
+            }
+            const template = document.createElement('template');
+            template.innerHTML = await response.text();
+            const loaded = template.content.querySelector('[data-module-fragment]');
+            if (stale()) {
+                return;
+            }
+            if (!loaded || loaded.classList.contains('is-loading')) {
+                showModuleFragmentUnavailable(root, pending);
+                return;
+            }
+            pending.replaceWith(loaded);
+        } catch {
+            if (!stale()) {
+                showModuleFragmentUnavailable(root, pending);
+            }
+        } finally {
+            window.clearTimeout(timer);
         }
     }
 
