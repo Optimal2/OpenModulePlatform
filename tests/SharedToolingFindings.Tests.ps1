@@ -6,6 +6,14 @@ Describe 'Shared tooling version bump regressions' {
     BeforeAll {
         . (Join-Path $PSScriptRoot 'Bump-Version.TestHelpers.ps1')
 
+        # Hash via .NET rather than Get-FileHash: on a workstation whose PSModulePath also lists
+        # PowerShell 7 module folders, Windows PowerShell 5.1 loads a hybrid Utility module without
+        # Get-FileHash and the gate fails for an environmental reason (same as HostAgentFirstModuleSeed.Tests.ps1).
+        function Get-TestFileHash {
+            param([string]$Path)
+            [Convert]::ToBase64String([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($Path)))
+        }
+
         function Invoke-IsolatedBump {
             param([string]$Path, [hashtable]$Parameters)
             # A separate runspace contains the script's exit without starting a shell.
@@ -64,11 +72,11 @@ Describe 'Shared tooling version bump regressions' {
         $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
         $manifest.repositoryVersion = $Current
         $manifest | ConvertTo-Json -Depth 8 | Set-Content $manifestPath -Encoding UTF8
-        $before = (Get-FileHash $manifestPath).Hash
+        $before = (Get-TestFileHash $manifestPath)
         $result = Invoke-IsolatedBump $bump @{ RepositoryOnly = $true; Version = $Next }
         $result.Failed | Should -BeTrue
         $result.Errors | Should -Match 'Refusing to regress repositoryVersion'
-        (Get-FileHash $manifestPath).Hash | Should -Be $before
+        (Get-TestFileHash $manifestPath) | Should -Be $before
     }
 
     It 'Accepts SemVer progression or metadata equality <Current> -> <Next>' -ForEach @(
@@ -92,13 +100,14 @@ Describe 'Shared tooling version bump regressions' {
         $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
         $manifest.moduleDefinitions += [pscustomobject]@{ moduleKey = 'missing'; definitionVersion = '1.0.0'; path = 'missing.json' }
         $manifest | ConvertTo-Json -Depth 8 | Set-Content $manifestPath -Encoding UTF8
-        $manifestBefore = (Get-FileHash $manifestPath).Hash
-        $definitionBefore = (Get-FileHash $definitionPath).Hash
+        $manifestBefore = (Get-TestFileHash $manifestPath)
+        $definitionBefore = (Get-TestFileHash $definitionPath)
         $result = Invoke-IsolatedBump $bump @{ AllModuleDefinitions = $true; ComponentKey = @('test_app') }
         $result.Failed | Should -BeTrue
-        $result.Errors | Should -Match 'missing.*missing.json'
-        (Get-FileHash $manifestPath).Hash | Should -Be $manifestBefore
-        (Get-FileHash $definitionPath).Hash | Should -Be $definitionBefore
+        # Windows PowerShell 5.1 wraps Out-String at the console width, so match across line breaks.
+        ($result.Errors -replace '\s+', '') | Should -Match "Moduledefinition'missing'filewasnotfound:.*missing\.json"
+        (Get-TestFileHash $manifestPath) | Should -Be $manifestBefore
+        (Get-TestFileHash $definitionPath) | Should -Be $definitionBefore
     }
 
     It 'Orders compatible artifact caps with the same SemVer precedence' -ForEach @(
@@ -122,12 +131,12 @@ Describe 'Shared tooling version bump regressions' {
         (Invoke-IsolatedBump $bump @{ ComponentKey = @('test_app') }).Failed | Should -BeFalse
         $before = Get-Content $definitionPath -Raw | ConvertFrom-Json
         [IO.File]::WriteAllText($definitionPath, [IO.File]::ReadAllText($definitionPath), [Text.UTF8Encoding]::new($true))
-        $hashBefore = (Get-FileHash $definitionPath).Hash
+        $hashBefore = (Get-TestFileHash $definitionPath)
         (Invoke-IsolatedBump $bump @{ ComponentKey = @('test_app') }).Failed | Should -BeFalse
         $after = Get-Content $definitionPath -Raw | ConvertFrom-Json
         $after.definitionVersion | Should -Be $before.definitionVersion
         (Get-Content $manifestPath -Raw | ConvertFrom-Json).moduleDefinitions[0].definitionVersion | Should -Be $after.definitionVersion
-        (Get-FileHash $definitionPath).Hash | Should -Be $hashBefore
+        (Get-TestFileHash $definitionPath) | Should -Be $hashBefore
     }
 }
 
