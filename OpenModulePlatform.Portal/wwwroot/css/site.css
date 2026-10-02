@@ -6033,6 +6033,95 @@ button.dashboard-role-list__item:focus-visible {
     --dashboard-floating-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/cancel.svg");
 }
 
+/* "Refresh now" as a floating button, the wrench's size, tucked behind the
+   wrench with 10 px showing at the right like a card under a card. The pair
+   hovered (or focused, for the keyboard) slides it out beside the wrench.
+   Hidden while editing, where the submenu has it. The row is the wrench's
+   box; the refresh button is out of flow, so the menu's width is unchanged. */
+.dashboard-floating-row {
+    position: relative;
+    display: inline-flex;
+}
+
+/* The gap the button slides across belongs to the pair too, so the pointer
+   crossing from the wrench to the slid-out button never loses the hover. */
+.dashboard-floating-row::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    width: 10px;
+}
+
+/* In front of the tucked-away card, and opaque: the wrench's amber is a
+   tint over the page, so it is laid over the surface colour here or the
+   card would show through it. Editing has its own solid look. */
+.dashboard-floating-row > [data-dashboard-edit-toggle] {
+    position: relative;
+    z-index: 1;
+}
+
+.portal-dashboard:not(.is-editing) .dashboard-floating-row > [data-dashboard-edit-toggle] {
+    background: linear-gradient(var(--dashboard-edit-accent-surface), var(--dashboard-edit-accent-surface)), var(--surface);
+}
+
+.portal-dashboard:not(.is-editing) .dashboard-floating-row > [data-dashboard-edit-toggle]:hover,
+.portal-dashboard:not(.is-editing) .dashboard-floating-row > [data-dashboard-edit-toggle]:focus-visible {
+    background: linear-gradient(rgba(245, 158, 11, 0.24), rgba(245, 158, 11, 0.24)), var(--surface);
+}
+
+.dashboard-floating-button--refresh {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 100%;
+    z-index: 0;
+    width: 48px;
+    padding: 10px 0;
+    justify-content: center;
+    transform: translateX(calc(-100% + 10px));
+    transition: transform 160ms ease, background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
+}
+
+/* Keyboard focus (not the focus a click leaves on the wrench) slides it out too. */
+.dashboard-floating-row:hover .dashboard-floating-button--refresh,
+.dashboard-floating-row:has(:focus-visible) .dashboard-floating-button--refresh {
+    transform: translateX(8px);
+}
+
+/* Waiting out the cooldown: dimmed, the countdown in the icon's place. */
+.dashboard-floating-button--refresh[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.dashboard-floating-button--refresh[aria-disabled="true"] .dashboard-action-icon {
+    display: none;
+}
+
+.dashboard-floating-button__wait {
+    display: none;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.dashboard-floating-button--refresh[aria-disabled="true"] .dashboard-floating-button__wait {
+    display: inline;
+}
+
+.portal-dashboard.is-editing .dashboard-floating-button--refresh {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-floating-button--refresh {
+        transition: none;
+    }
+}
+
 .dashboard-save-button,
 .dashboard-add-button,
 .dashboard-reset-changes-button {

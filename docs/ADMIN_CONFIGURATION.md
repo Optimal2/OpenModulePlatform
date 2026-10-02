@@ -475,7 +475,9 @@ submenu heads with "Refresh now", which fetches every refreshing widget at
 once, past both paces and past the Portal's cache, and then waits before it
 can again: 2 seconds after each of the first two clicks within a minute, 15
 seconds after the third and later (the item counts the wait down; the
-interval's own fetches go on as before). A widget
+interval's own fetches go on as before). Outside editing the same "Refresh
+now" is a floating button tucked behind the wrench, slid out beside it when
+hovered; it shares the item's cooldown. A widget
 whose settings popup is open is left alone, a hidden tab waits, and a tab shown
 again catches up. The title bar shows when the content was last fetched. A
 fragment without the attribute is fetched once, when the page opens. A user

@@ -4288,15 +4288,23 @@
             closeTimer = window.setTimeout(() => setOpen(false), 250);
         });
 
-        // "Refresh now": one burst of fetches, then a cooldown the item shows
-        // counting down; a click during it does nothing.
-        const refreshNow = list.querySelector('[data-dashboard-refresh-now]');
-        const waitText = refreshNow?.querySelector('[data-dashboard-refresh-wait-text]');
-        const waitUnit = refreshNow?.dataset.waitUnit || '{0} s';
-        const waitSizer = refreshNow?.querySelector('[data-dashboard-refresh-wait-sizer]');
-        if (waitSizer) {
-            waitSizer.textContent = waitUnit.replace('{0}', String(moduleFragmentRefreshNowLongCooldownMs / 1000));
-        }
+        // "Refresh now", in two places with one cooldown between them: the
+        // submenu's item and the floating button tucked behind the wrench. One
+        // burst of fetches, then a cooldown both show counting down; a click
+        // during it does nothing.
+        const refreshNowButtons = [
+            list.querySelector('[data-dashboard-refresh-now]'),
+            root.querySelector('[data-dashboard-refresh-float]')
+        ].filter(Boolean);
+        refreshNowButtons.forEach((button) => {
+            // The title at rest (the floating button's name; the item has none)
+            // comes back once the wait is over.
+            button.dataset.restTitle = button.title;
+            const sizer = button.querySelector('[data-dashboard-refresh-wait-sizer]');
+            if (sizer) {
+                sizer.textContent = (button.dataset.waitUnit || '{0} s').replace('{0}', String(moduleFragmentRefreshNowLongCooldownMs / 1000));
+            }
+        });
         let refreshNowClicks = [];
         let refreshNowReadyAt = 0;
         let waitTimer = 0;
@@ -4306,33 +4314,42 @@
             // Never past the longest wait (a clock stepped backwards), so the text
             // never outgrows the sizer.
             const left = Math.min(Math.ceil((refreshNowReadyAt - Date.now()) / 1000), moduleFragmentRefreshNowLongCooldownMs / 1000);
-            if (left > 0) {
-                refreshNow.setAttribute('aria-disabled', 'true');
-                refreshNow.title = (refreshNow.dataset.waitTemplate || 'Available in {0} s').replace('{0}', String(left));
-                if (waitText) {
-                    waitText.textContent = waitUnit.replace('{0}', String(left));
+            refreshNowButtons.forEach((button) => {
+                const text = button.querySelector('[data-dashboard-refresh-wait-text]');
+                if (left > 0) {
+                    button.setAttribute('aria-disabled', 'true');
+                    button.title = (button.dataset.waitTemplate || 'Available in {0} s').replace('{0}', String(left));
+                    if (text) {
+                        text.textContent = (button.dataset.waitUnit || '{0} s').replace('{0}', String(left));
+                    }
+                } else {
+                    button.removeAttribute('aria-disabled');
+                    button.title = button.dataset.restTitle || '';
+                    if (text) {
+                        text.textContent = '';
+                    }
                 }
+            });
+            if (left > 0) {
                 waitTimer = window.setTimeout(showRefreshNowWait, 250);
-                return;
-            }
-            refreshNow.removeAttribute('aria-disabled');
-            refreshNow.title = '';
-            if (waitText) {
-                waitText.textContent = '';
             }
         };
-        refreshNow?.addEventListener('click', () => {
-            const now = Date.now();
-            if (now < refreshNowReadyAt) {
-                return;
-            }
-            const taken = takeRefreshNowClick(refreshNowClicks, now);
-            refreshNowClicks = taken.clicks;
-            refreshNowReadyAt = now + taken.cooldownMs;
-            showRefreshNowWait();
-            setOpen(false);
-            trigger.focus();
-            refreshModuleFragmentsNow(root).catch(() => {});
+        refreshNowButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const now = Date.now();
+                if (now < refreshNowReadyAt) {
+                    return;
+                }
+                const taken = takeRefreshNowClick(refreshNowClicks, now);
+                refreshNowClicks = taken.clicks;
+                refreshNowReadyAt = now + taken.cooldownMs;
+                showRefreshNowWait();
+                if (list.contains(button)) {
+                    setOpen(false);
+                    trigger.focus();
+                }
+                refreshModuleFragmentsNow(root).catch(() => {});
+            });
         });
         // Focus leaving the menu (a Tab out of it) folds the list away.
         menu.addEventListener('focusout', (event) => {

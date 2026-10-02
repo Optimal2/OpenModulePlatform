@@ -503,15 +503,31 @@
                     </button>
                 </div>
             </div>
-            <button type="button"
-                    class="dashboard-floating-button"
-                    data-dashboard-edit-toggle
-                    aria-pressed="false"
-                    aria-label="@L["Edit dashboard"]"
-                    title="@L["Edit dashboard"]">
-                <span class="dashboard-floating-button__icon" aria-hidden="true"></span>
-                <span data-dashboard-edit-label></span>
-            </button>
+            <div class="dashboard-floating-row">
+                <button type="button"
+                        class="dashboard-floating-button"
+                        data-dashboard-edit-toggle
+                        aria-pressed="false"
+                        aria-label="@L["Edit dashboard"]"
+                        title="@L["Edit dashboard"]">
+                    <span class="dashboard-floating-button__icon" aria-hidden="true"></span>
+                    <span data-dashboard-edit-label></span>
+                </button>
+                @* "Refresh now" as a floating button as well: tucked behind the
+                   wrench with an edge showing at the right, slid out beside it
+                   while the pair is hovered or focused. Hidden while editing,
+                   where the submenu has it; the two share one cooldown. *@
+                <button type="button"
+                        class="dashboard-floating-button dashboard-floating-button--refresh"
+                        data-dashboard-refresh-float
+                        aria-label="@L["Refresh now"]"
+                        title="@L["Refresh now"]"
+                        data-wait-template="@L["Available in {0} s"]"
+                        data-wait-unit="@L["{0} s"]">
+                    <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
+                    <span class="dashboard-floating-button__wait" data-dashboard-refresh-wait-text></span>
+                </button>
+            </div>
         </div>
 
         @if (Model.IsPortalAdmin)

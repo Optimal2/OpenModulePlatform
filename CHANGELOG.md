@@ -8,6 +8,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Dashboard: "Refresh now" as a floating button.** Beside the edit menu's
+  wrench, tucked behind it with an edge showing and slid out beside it when
+  the pair is hovered or focused; the wrench's size, the same burst of
+  fetches and the same cooldown as the submenu's item (one wait between the
+  two). Hidden while editing, where the submenu has it.
 - **Admin lists: the Filter button shows its border at rest.** On the
   Maintenance page and the other admin lists the Filter button was a ghost
   that showed its edge only on hover; it now reads as a bordered control
