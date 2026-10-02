@@ -2345,10 +2345,11 @@ foreach ($repository in $repositories) {
     }
 }
 
-$results | Format-Table $ValidationSummaryColumns -AutoSize
+$results | Format-Table $ValidationSummaryColumns -AutoSize | Out-Host
 
 # The table stays compact for CI logs. StdoutLog, StderrLog, and Detail remain
 # on each result object for callers that capture the script output.
+$results
 $hasFailures = $false
 foreach ($result in $results) {
     # Keep this as an explicit loop instead of a pipeline so Windows PowerShell
