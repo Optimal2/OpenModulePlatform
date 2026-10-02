@@ -118,6 +118,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **Confirm dialog: the focused button is visibly marked.** The shared
+  dialog (ompConfirm, omp-forms.css) puts the focus on a button when it
+  opens, but the only sign was a hairline border tint, invisible after a
+  mouse click. The focused button now wears a focus ring set off from the
+  button by a gap, so it shows on the primary button's blue as well as on
+  a plain one. First seen in the period picker's unsaved-changes question.
 - **The widget picker's preview shows the widget as it will be.** A module
   fragment widget previewed as nothing: its fragment is now fetched from the
   module for the preview. The music player previewed as its fallback markup

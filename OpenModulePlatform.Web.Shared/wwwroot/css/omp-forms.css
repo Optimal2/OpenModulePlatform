@@ -161,11 +161,22 @@
 }
 
 .omp-confirm-dialog__actions button:hover,
-.omp-confirm-dialog__actions button:focus-visible {
+.omp-confirm-dialog__actions button:focus {
     border-color: var(--link);
     background: var(--surface-muted);
     color: var(--link-hover);
     outline: none;
+}
+
+/* The focused button wears a ring, set off from the button by a gap of the
+   dialog's own surface so it shows on the primary button's blue fill as well
+   as on a plain one. It marks the button Space presses (and Enter, unless the
+   page made Enter OK). The dialog puts the focus there itself, so the ring is
+   on :focus, not :focus-visible, which Chromium withholds from a programmatic
+   focus that followed a mouse click. */
+.omp-confirm-dialog__actions button:focus {
+    outline: 2px solid var(--omp-focus, #0b57d0);
+    outline-offset: 2px;
 }
 
 /* The same specificity as the base rule above, and after it, so the
@@ -178,7 +189,7 @@
 }
 
 .omp-confirm-dialog__ok:hover,
-.omp-confirm-dialog__ok:focus-visible {
+.omp-confirm-dialog__ok:focus {
     border-color: var(--link-hover);
     background: var(--link-hover);
     color: var(--omp-on-accent, #ffffff);
@@ -195,7 +206,7 @@
 /* Higher specificity than the base rule above so the primary button keeps its
    fill on hover regardless of rule order. */
 .omp-confirm-dialog__actions button.omp-confirm-dialog__ok:hover,
-.omp-confirm-dialog__actions button.omp-confirm-dialog__ok:focus-visible {
+.omp-confirm-dialog__actions button.omp-confirm-dialog__ok:focus {
     border-color: var(--link-hover);
     background: var(--link-hover);
     color: var(--omp-on-accent, #ffffff);
