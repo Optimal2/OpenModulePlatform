@@ -75,7 +75,8 @@ Describe 'Shared tooling version bump regressions' {
         $before = (Get-TestFileHash $manifestPath)
         $result = Invoke-IsolatedBump $bump @{ RepositoryOnly = $true; Version = $Next }
         $result.Failed | Should -BeTrue
-        $result.Errors | Should -Match 'Refusing to regress repositoryVersion'
+        # Windows PowerShell 5.1 wraps Out-String at the console width, so match across line breaks.
+        ($result.Errors -replace '\s+', '') | Should -Match 'RefusingtoregressrepositoryVersion'
         (Get-TestFileHash $manifestPath) | Should -Be $before
     }
 
