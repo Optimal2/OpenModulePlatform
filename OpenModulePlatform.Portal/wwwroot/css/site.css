@@ -2896,6 +2896,28 @@ button {
     color: var(--text);
 }
 
+/* A list's Filter button is a control among bordered controls (the search
+   field, the row count), so it shows its edge at rest like them instead of
+   only on hover as a ghost does: the theme's control border (3:1 against the
+   surface). Hover, the menu open and a filter in force take the link colour. */
+.list-filter > summary.btn-ghost {
+    border-color: var(--omp-control-border, var(--border-strong));
+    background: var(--surface);
+    color: var(--text);
+}
+
+.list-filter > summary.btn-ghost:hover,
+.list-filter > summary.btn-ghost:focus-visible,
+.list-filter[open] > summary.btn-ghost {
+    border-color: var(--link);
+    background: var(--surface-muted);
+}
+
+.list-filter--active > summary.btn-ghost {
+    border-color: var(--link);
+    color: var(--link-hover);
+}
+
 .btn-sm {
     min-height: 30px;
     padding: 6px 10px;

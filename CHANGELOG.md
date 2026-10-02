@@ -8,6 +8,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Admin lists: the Filter button shows its border at rest.** On the
+  Maintenance page and the other admin lists the Filter button was a ghost
+  that showed its edge only on hover; it now reads as a bordered control
+  (the theme's control border), takes the link colour on hover and while
+  its menu is open, and keeps the active look of a filter in force.
 - **The generated uninstall script never follows links when it removes runtime
   folders.** `uninstall-hostagent-first.ps1` (written by
   `scripts/deployment/package-hostagent-first.ps1`) removed each configured
