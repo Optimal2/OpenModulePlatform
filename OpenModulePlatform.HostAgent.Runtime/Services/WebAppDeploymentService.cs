@@ -1076,13 +1076,10 @@ public sealed class WebAppDeploymentService
             "/managedRuntimeVersion:",
             "/processModel.loadUserProfile:true");
 
-        if (!string.IsNullOrWhiteSpace(identity.UserName))
-        {
-            ConfigureSpecificUserAppPoolIdentity(appPoolName, identity);
-        }
+        ConfigureAppPoolIdentity(appPoolName, identity);
     }
 
-    private static void ConfigureSpecificUserAppPoolIdentity(
+    private static void ConfigureAppPoolIdentity(
         string appPoolName,
         HostAgentIisAppPoolIdentitySettings identity)
     {
@@ -1091,15 +1088,28 @@ public sealed class WebAppDeploymentService
         var appPool = GetIndexedValue(appPools, appPoolName)
             ?? throw new InvalidOperationException($"IIS app pool '{appPoolName}' was not found after creation.");
         var processModel = GetPropertyValue(appPool, "ProcessModel");
-        var identityType = GetIisEnumValue("Microsoft.Web.Administration.ProcessModelIdentityType", "SpecificUser");
-        SetPropertyValue(processModel, "IdentityType", identityType);
+        ApplyAppPoolIdentity(processModel, identity);
+        CommitIisChanges(serverManager);
+    }
+
+    internal static void ApplyAppPoolIdentity(object processModel, HostAgentIisAppPoolIdentitySettings identity)
+    {
+        var identityType = GetPropertyValue(processModel, "IdentityType").GetType();
+        if (string.IsNullOrWhiteSpace(identity.UserName))
+        {
+            // Reconcile removals too: an existing pool may still hold a specific user's credentials.
+            SetPropertyValue(processModel, "IdentityType", Enum.Parse(identityType, "ApplicationPoolIdentity"));
+            SetPropertyValue(processModel, "UserName", string.Empty);
+            SetPropertyValue(processModel, "Password", string.Empty);
+            return;
+        }
+
+        SetPropertyValue(processModel, "IdentityType", Enum.Parse(identityType, "SpecificUser"));
         SetPropertyValue(processModel, "UserName", identity.UserName.Trim());
         if (!string.IsNullOrWhiteSpace(identity.Password))
         {
             SetPropertyValue(processModel, "Password", identity.Password);
         }
-
-        CommitIisChanges(serverManager);
     }
 
     private static void ApplyAppPoolDirectoryGrants(
@@ -1822,12 +1832,6 @@ public sealed class WebAppDeploymentService
 
         return method.Invoke(configuration, [sectionPath, location])
             ?? throw new InvalidOperationException($"IIS configuration section '{sectionPath}' was not found for '{location}'.");
-    }
-
-    private static object GetIisEnumValue(string typeName, string value)
-    {
-        var enumType = LoadMicrosoftWebAdministrationType(typeName);
-        return Enum.Parse(enumType, value, ignoreCase: false);
     }
 
     private static object GetPropertyValue(object target, string propertyName)

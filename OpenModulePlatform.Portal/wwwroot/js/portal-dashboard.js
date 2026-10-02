@@ -3214,19 +3214,41 @@
     function bindBlankWidgetAdminTabs(panel) {
         const tabs = Array.from(panel.querySelectorAll('[data-blank-widget-admin-tab]'));
         const panes = Array.from(panel.querySelectorAll('[data-blank-widget-admin-pane]'));
-        tabs.forEach((tab) => {
-            tab.addEventListener('click', () => {
-                const mode = tab.dataset.blankWidgetAdminTab || 'image';
-                tabs.forEach((candidate) => {
-                    const selected = candidate === tab;
-                    candidate.classList.toggle('is-active', selected);
-                    candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
-                });
-                panes.forEach((pane) => {
-                    pane.hidden = pane.dataset.blankWidgetAdminPane !== mode;
-                });
+        function selectTab(tab, moveFocus = true) {
+            const mode = tab.dataset.blankWidgetAdminTab || 'image';
+            tabs.forEach((candidate) => {
+                const selected = candidate === tab;
+                candidate.classList.toggle('is-active', selected);
+                candidate.setAttribute('aria-selected', selected ? 'true' : 'false');
+                candidate.tabIndex = selected ? 0 : -1;
+            });
+            panes.forEach((pane) => {
+                pane.hidden = pane.dataset.blankWidgetAdminPane !== mode;
+            });
+            if (moveFocus) {
+                tab.focus();
+            }
+        }
+
+        tabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => selectTab(tab));
+            tab.addEventListener('keydown', (event) => {
+                let nextIndex;
+                switch (event.key) {
+                    case 'ArrowRight': nextIndex = (index + 1) % tabs.length; break;
+                    case 'ArrowLeft': nextIndex = (index + tabs.length - 1) % tabs.length; break;
+                    case 'Home': nextIndex = 0; break;
+                    case 'End': nextIndex = tabs.length - 1; break;
+                    default: return;
+                }
+                event.preventDefault();
+                selectTab(tabs[nextIndex]);
             });
         });
+        const initialTab = tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0];
+        if (initialTab) {
+            selectTab(initialTab, false);
+        }
     }
 
     function isBlankWidgetImageFile(file) {

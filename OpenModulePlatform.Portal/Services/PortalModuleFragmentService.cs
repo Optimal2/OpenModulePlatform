@@ -450,6 +450,9 @@ public sealed class PortalModuleFragmentService
         }
 
         var scheme = request.IsHttps ? "https" : "http";
+        // SocketsHttpHandler uses an explicit Host header for TLS SNI and certificate
+        // hostname validation too; the URI still confines the connection to loopback.
+        // ModuleFragmentTlsTests covers the public-host certificate and rejection paths.
         return new FragmentRequestTarget(
             new Uri(string.Create(CultureInfo.InvariantCulture, $"{scheme}://localhost:{localPort}{relative}")),
             request.Host.Value);

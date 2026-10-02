@@ -14,6 +14,7 @@ function element() {
         setAttribute(name, value) { this.attributes[name] = value; },
         getAttribute(name) { return this.attributes[name]; },
         addEventListener(name, callback) { this.listeners[name] = callback; },
+        focus() { this.focusCount = (this.focusCount || 0) + 1; },
         querySelectorAll(selector) {
             const key = selector === '[data-blank-widget-admin-tab]'
                 ? 'blankWidgetAdminTab' : 'blankWidgetAdminPane';
@@ -54,12 +55,36 @@ test('new image widgets have unique, connected tab panels and preserve selection
             assert.equal(pane.getAttribute('role'), 'tabpanel');
         }
         context.window.testApi.bindBlankWidgetAdminTabs(panel);
+        assert.equal(tabs[0].tabIndex, 0);
+        assert.equal(tabs[1].tabIndex, -1);
+        assert.equal(tabs[0].focusCount, undefined, 'binding must not steal focus');
         for (const selected of [1, 0]) {
             tabs[selected].listeners.click();
             for (let j = 0; j < 2; j++) {
                 assert.equal(tabs[j].getAttribute('aria-selected'), String(j === selected));
                 assert.equal(panes[j].hidden, j !== selected);
+                assert.equal(tabs[j].tabIndex, j === selected ? 0 : -1);
             }
+        }
+        for (const [from, key, selected] of [
+            [0, 'ArrowRight', 1], [1, 'ArrowRight', 0],
+            [0, 'ArrowLeft', 1], [1, 'ArrowLeft', 0],
+            [0, 'End', 1], [1, 'Home', 0]
+        ]) {
+            let prevented = false;
+            const previousFocusCount = tabs[selected].focusCount || 0;
+            tabs[from].listeners.keydown({ key, preventDefault() { prevented = true; } });
+            assert.equal(prevented, true);
+            assert.equal(tabs[selected].focusCount, previousFocusCount + 1);
+            for (let j = 0; j < 2; j++) {
+                assert.equal(tabs[j].getAttribute('aria-selected'), String(j === selected));
+                assert.equal(tabs[j].tabIndex, j === selected ? 0 : -1);
+                assert.equal(panes[j].hidden, j !== selected);
+            }
+        }
+        for (const key of ['Tab', 'ArrowDown', 'ArrowUp', 'a']) {
+            tabs[0].listeners.keydown({ key, preventDefault() { assert.fail(`${key} must retain its default action`); } });
+            assert.equal(tabs[0].getAttribute('aria-selected'), 'true');
         }
     }
 });
