@@ -16,6 +16,14 @@
     --dashboard-edit-accent: #f59e0b;
     --dashboard-edit-accent-soft: rgba(245, 158, 11, 0.28);
     --dashboard-edit-accent-surface: rgba(245, 158, 11, 0.16);
+    /* The floating "Refresh now" has its own accent, cyan, so the card tucked
+       behind the amber wrench reads as something else at a glance. The text
+       colour leans toward the theme's text, so it is darker on light and
+       lighter on dark. */
+    --dashboard-refresh-accent: #06b6d4;
+    --dashboard-refresh-accent-soft: rgba(6, 182, 212, 0.34);
+    --dashboard-refresh-accent-surface: rgba(6, 182, 212, 0.18);
+    --dashboard-refresh-accent-text: color-mix(in srgb, #06b6d4 55%, var(--text));
     --shadow: var(--omp-shadow, 0 8px 24px rgba(17, 24, 39, 0.05));
     --portal-page-chrome-width: 100%;
 }
@@ -6082,6 +6090,18 @@ button.dashboard-role-list__item:focus-visible {
     justify-content: center;
     transform: translateX(calc(-100% + 10px));
     transition: transform 160ms ease, background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
+    border-color: var(--dashboard-refresh-accent-soft);
+    background: linear-gradient(var(--dashboard-refresh-accent-surface), var(--dashboard-refresh-accent-surface)), var(--surface);
+    color: var(--dashboard-refresh-accent-text);
+    box-shadow: 0 8px 22px rgba(6, 182, 212, 0.14);
+}
+
+.dashboard-floating-button--refresh:hover,
+.dashboard-floating-button--refresh:focus-visible {
+    border-color: var(--dashboard-refresh-accent);
+    background: linear-gradient(rgba(6, 182, 212, 0.28), rgba(6, 182, 212, 0.28)), var(--surface);
+    color: var(--dashboard-refresh-accent-text);
+    box-shadow: 0 16px 36px rgba(6, 182, 212, 0.24);
 }
 
 /* Keyboard focus (not the focus a click leaves on the wrench) slides it out too. */
@@ -6090,9 +6110,12 @@ button.dashboard-role-list__item:focus-visible {
     transform: translateX(8px);
 }
 
-/* Waiting out the cooldown: dimmed, the countdown in the icon's place. */
-.dashboard-floating-button--refresh[aria-disabled="true"] {
-    opacity: 0.6;
+/* Waiting out the cooldown: the countdown in the icon's place, in the muted
+   text colour on the same fill (the button stays opaque so the small digits
+   keep their contrast). */
+.dashboard-floating-button--refresh[aria-disabled="true"],
+.dashboard-floating-button--refresh[aria-disabled="true"]:hover {
+    color: var(--text-muted);
     cursor: default;
 }
 
