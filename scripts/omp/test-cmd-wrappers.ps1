@@ -123,9 +123,10 @@ $LineBreakPattern = '\r\n|\n|\r'
 # Whitespace and these cmd.exe metacharacters can change command parsing unless
 # the generated argument is quoted.
 $CmdArgumentNeedsQuotingPattern = '[\s&|<>()^,;=]'
-# Windows cmd.exe accepts at most 8191 characters in a command line. Keep this
-# guard because the wrapper path plus output directory is assembled as one
-# cmd.exe /c command.
+# cmd.exe limits the command text it processes (including expansions) to 8191
+# characters; this is not CreateProcess's lpCommandLine limit. Conservatively
+# cap the complete launch line at that size, including the executable and switches.
+# This preflight cannot predict expansion inside the invoked batch file.
 $MaximumCmdCommandLineLength = 8191
 # 22 bytes is the smallest structurally valid empty ZIP file. OMP universal
 # packages must contain at least the package manifest and object payload, so a
@@ -856,8 +857,25 @@ function Assert-CmdCommandLineLength {
     param([Parameter(Mandatory = $true)][string]$CommandLine)
 
     if ($CommandLine.Length -gt $MaximumCmdCommandLineLength) {
-        throw "CMD command line is $($CommandLine.Length) characters, which exceeds the Windows cmd.exe limit of $MaximumCmdCommandLineLength characters."
+        throw "CMD launch command line is $($CommandLine.Length) characters, which exceeds the conservative wrapper limit of $MaximumCmdCommandLineLength characters."
     }
+}
+
+function Get-CmdProcessCommandLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$ArgumentList
+    )
+
+    # FilePath is already a resolved, unquoted executable path. Start-Process
+    # quotes it even without spaces and joins ArgumentList with single spaces.
+    # Windows PowerShell 5.1 also appends a trailing space after the last item;
+    # PowerShell 7 does not. Count that space, but not the terminating NUL.
+    $commandLine = '"' + $FilePath + '" ' + ($ArgumentList -join ' ')
+    if ($PSVersionTable.PSVersion.Major -le 5) {
+        $commandLine += ' '
+    }
+    return $commandLine
 }
 
 function Resolve-CmdExePath {
@@ -1140,7 +1158,6 @@ function Invoke-TaskKillTree {
 
     $processIdArgument = ConvertTo-TaskKillProcessIdArgument -ProcessId $ProcessId
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = Resolve-TaskKillExePath
     # Required for redirected stdout/stderr streams below.
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
@@ -1160,6 +1177,7 @@ function Invoke-TaskKillTree {
 
     $taskKillProcess = $null
     try {
+        $startInfo.FileName = Resolve-TaskKillExePath
         $taskKillProcess = [System.Diagnostics.Process]::Start($startInfo)
         if ($null -eq $taskKillProcess) {
             throw 'Process.Start returned null.'
@@ -2057,13 +2075,11 @@ foreach ($repository in $repositories) {
     $cmdInvocation = @('call', $joinedWrapperArguments) -join ' '
     # /d disables cmd.exe AutoRun hooks and /c runs the wrapper then exits.
     $cmdArguments = @('/d', '/c', $cmdInvocation)
-    # The 8191-character cmd.exe limit applies to the entire command line that
-    # CreateProcess hands to cmd.exe: the resolved executable path plus every
-    # argument. Guard the full line, not just the 'call ...' invocation, so the
-    # fixed '/d /c' prefix and the cmd.exe path cannot slip past the check.
-    Assert-CmdCommandLineLength -CommandLine ($cmdExePath + ' ' + ($cmdArguments -join ' '))
+    # Apply our conservative cap to the exact lpCommandLine Start-Process builds,
+    # including executable quotes and the host-specific trailing space.
+    Assert-CmdCommandLineLength -CommandLine (Get-CmdProcessCommandLine -FilePath $cmdExePath -ArgumentList $cmdArguments)
     # Display-only diagnostic text. Do not feed this back into cmd.exe; actual
-    # execution uses ArgumentList above so arguments stay separated. Keep the
+    # execution joins ArgumentList with spaces as measured above. Keep the
     # executable path and argument list as separate labeled fields so paths with
     # spaces are readable without pretending this is a pasteable command line.
     # This joined string is intentionally not shell-safe for all cmd.exe edge

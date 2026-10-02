@@ -77,6 +77,37 @@ Describe 'Local CI telemetry writer' {
         $suite.total | Should -Be 0
     }
 
+    It 'discards every counter from a file with a later invalid or missing counter' {
+        $null = New-Item -ItemType Directory -Path $env:APPDATA -Force
+        [System.IO.File]::WriteAllText((Join-Path $env:APPDATA 'valid.trx'), '<TestRun><ResultSummary><Counters total="7" executed="6" passed="4" failed="2" notExecuted="1" /></ResultSummary></TestRun>')
+        [System.IO.File]::WriteAllText((Join-Path $env:APPDATA 'invalid.trx'), '<TestRun><ResultSummary><Counters total="100" executed="99" passed="98" failed="not-a-number" notExecuted="1" /></ResultSummary></TestRun>')
+        [System.IO.File]::WriteAllText((Join-Path $env:APPDATA 'missing.trx'), '<TestRun><ResultSummary><Counters total="200" passed="198" /></ResultSummary></TestRun>')
+
+        $suite = Get-LocalCiTrxCounters -ResultsDirectory $env:APPDATA -SuiteName probe
+        $suite.trx_files | Should -Be 3
+        $suite.malformed_files | Should -Be 2
+        $suite.total | Should -Be 7
+        $suite.executed | Should -Be 6
+        $suite.passed | Should -Be 4
+        $suite.failed | Should -Be 2
+        $suite.notExecuted | Should -Be 1
+    }
+
+    It 'enforces UTF-8 bytes rather than character count when dropping suite detail' {
+        $bigSuite = [pscustomobject]@{ name = ([string][char]0x20ac * 1500) }
+        Write-LocalCiTelemetry @arguments -Suites @($bigSuite)
+        $line = [System.IO.File]::ReadAllLines($target)[0]
+        [System.Text.Encoding]::UTF8.GetByteCount($line) | Should -BeLessOrEqual 4096
+        @(($line | ConvertFrom-Json).suites).Count | Should -Be 0
+    }
+
+    It 'rejects an oversized UTF-8 record without appending a partial line' {
+        Write-LocalCiTelemetry @arguments
+        $original = [System.IO.File]::ReadAllText($target)
+        { Write-LocalCiTelemetry @arguments -TestSkipReason ([string][char]0x20ac * 1500) } | Should -Throw '*exceeds*'
+        [System.IO.File]::ReadAllText($target) | Should -BeExactly $original
+    }
+
     It 'drops per-suite detail when the record exceeds the size limit and still writes a valid line' {
         $bigSuite = [pscustomobject]@{ name = ('x' * 5000); total = 1; executed = 1; passed = 1; failed = 0; notExecuted = 0; trx_files = 1; malformed_files = 0 }
         Write-LocalCiTelemetry @arguments -Suites @($bigSuite)
