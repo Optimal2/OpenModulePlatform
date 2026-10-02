@@ -221,6 +221,190 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   places and each end keeps its own time of day (00:00 and 23:59 unless
   typed); one day with its times reversed swaps the times.
 
+- **Module repositories inherit the deterministic web publish; the pinning
+  target no longer adds a trailing newline.** The pinning target wrote the
+  manifest with `WriteLinesToFile`, which appended a line break the SDK
+  manifest does not have; an inline task now rewrites only the `Last-Modified`
+  values and round-trips every other byte. Every repository with a
+  `Microsoft.NET.Sdk.Web` project carries a verbatim copy of the target at the
+  same path and imports it from its root `Directory.Build.targets`;
+  `scripts/omp/validate-shared-scripts.ps1` (Check 15) fails when that copy is
+  missing, differs or is not imported. `scripts/dev/test-deterministic-web-publish.ps1`
+  proves it per project: publish, touch `wwwroot`, publish again, compare
+  the artifact SHA-256. All web-app components were bumped because their
+  published manifest loses the trailing newline once.
+- **The pre-stage artifact probe reads packages like the import.** It accepts
+  the import's file name tokens (a leading letter or digit, `+` allowed),
+  finds packages in subfolders of `artifacts/` as the universal package reader
+  does, and only compares against artifacts of an enabled module and app, the
+  same rows the import resolves.
+- **Same source, same version, same artifact SHA-256 for web apps.** The
+  SDK writes a `Last-Modified` header per static web asset into
+  `<app>.staticwebassets.endpoints.json`, taken from file system timestamps,
+  so a fresh checkout published a different artifact under an unchanged
+  version and the import refused it ("The artifact content has changed under
+  the same version"). `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
+  (imported by `Directory.Build.targets`) pins those values in the publish
+  manifest. Repositories that publish web projects referencing
+  `OpenModulePlatform.Web.Shared` should import the same file. All web-app
+  components were bumped because their published manifest changes once.
+- **The Bootstrapper pre-stage gate compares content, not only versions.**
+  The gate was fed the developer source status `DIFF`, which means "source
+  older than installed", so a same-version content change always passed it.
+  It now extracts every artifact package in the built universal package, hashes
+  it like the host agent import does and compares with `omp.Artifacts.Sha256`
+  for the same app, version, package type and target.
+- **The Bootstrapper refresh packages the manifest's configuration files.**
+  The selective build handed the artifact writer an empty configuration-files
+  list, so an artifact built by `--refresh-and-stage-package` carried no
+  `artifactConfigurationFiles` even when `omp-components.json` declared them;
+  only the script-built packages did. HostAgent then kept the `appsettings.json`
+  the slot already had, and a packaged change (the SecurityHeaders and NLog
+  sections added to Portal, Auth and Content) never reached a refresh-deployed
+  host. Measured on a development host: the deployed Portal `appsettings.json`
+  was dated 2026-07-31 after a deploy on 2026-09-21. The build now reads the
+  manifest entries, packages the files in the configuration-files section and
+  hashes their content into the per-component source stamp, so a change in a
+  packaged configuration file rebuilds the artifact. Five regression tests.
+- **A date popup near the right edge stays on the page.** The period
+  picker's popup (and a date field's calendar) hangs from the field's left
+  edge; from a field at the right of a row it ran past the viewport and
+  gave the page a horizontal scroll. When it does not fit it hangs from the
+  field's right edge instead, so it still belongs to its field, or shifts
+  just far enough when even that is too wide; and it is placed again when
+  the page changes width under it or when it changes size itself (fonts
+  settling, the calendar growing a row). Its tip aims at the field's
+  calendar glyph from wherever the popup ended up.
+
+- **Deployed Portal, Auth and Content run with the repository's CSP and log
+  to file.** The checked-in `appsettings.json` never reaches a host: the
+  payload strips it and HostAgent writes `Packaging/appsettings.json` over a
+  built-in template that has neither a `SecurityHeaders` nor an `NLog`
+  section, so every deployed web app fell back to the baseline policy with
+  `script-src 'unsafe-inline'` and wrote no log file. The three packaging
+  files now carry the same policy and `NLog` section as the checked-in
+  files; `PortalInlineScriptGuardTests` pins the packaged Portal policy to
+  the checked-in one and `PackagedNLogConfigurationTests` parses every
+  section the way NLog does at startup. Because the package baseline of
+  these three files changes, the first import of the new artifacts reports
+  a carry-forward conflict for an operator-edited `appsettings.json` row
+  (the package file wins); re-apply such edits once from the artifact's
+  configuration page. The Portal, Content and iFrame
+  layouts render the request correlation id
+  (`${scopeproperty:item=CorrelationId}`) that the shared middleware has
+  opened a scope for since it was introduced. The HostAgent template lists
+  `ResourceTelemetry:RetainDays` and `CollectWorkerProcesses` with their
+  defaults; `ADMIN_CONFIGURATION.md` documents the IIS request-filtering
+  copy of the upload limit in `web.config`, the `MusicPlayerWidget` and
+  `ArtifactUpload` folder keys; `HOST_AGENT.md` documents that a
+  service-app instance needs a host or a host template and that the
+  post-deploy health check reads IIS through `appcmd` unless
+  `DeploymentHealthUrls` is set.
+
+- **Sentinel's database heartbeat can look up a configured HostKey.** The
+  optional `omp.Hosts.LastSeenUtc` check queried `Environment.MachineName`
+  only, so a host whose `HostAgent:HostKey` differs from its machine name got
+  event 103 while HostAgent was alive. A new `HostKey` app setting names the
+  key; empty keeps the machine name. The Bootstrapper no longer counts
+  `OMP.HostAgent.Sentinel` as a HostAgent service when upgrade/complete decides
+  whether a missing HostAgent must be installed (self-upgrade already excluded
+  it), parses `net localgroup` output by shape instead of by English or Swedish
+  completion text, reads an unquoted service `BINARY_PATH_NAME` up to the `.exe`
+  that ends a token rather than the first `.exe` anywhere in the path, refuses
+  to remove a runtime directory that is or contains Windows, Program Files,
+  ProgramData or the user profile, and saves a host profile from the GUI
+  without a UTF-8 BOM like the two merge writes already did. HostAgent's
+  IIS/appcmd, sc.exe, service-name and directory-deletion helpers, the shared
+  data-protection key path fallback, the artifact directory hash and the
+  expected-deployment-fault list each have one definition instead of two to
+  five copies; the import-side hash now refuses to follow reparse points like
+  the packaging and provisioning hashes do.
+
+- **The confirmation dialog's OK button is filled again.** The base rule for
+  the dialog's buttons outweighed the primary button's own class, so OK sat
+  next to Cancel in the same grey; the primary rule now carries the same
+  weight and comes after.
+
+- **The OIDC/ADFS sign-in path no longer depends on a single claim mapping for
+  the `DOMAIN\name` principal form.** The claim resolver reads `unique_name` and
+  `windowsaccountname` (short names and WS URIs) as user-principal candidates
+  and, when `TranslateSidClaimsToAccountNames` is enabled (the default),
+  translates SID claims to account names on the domain-joined auth server,
+  mirroring the Windows path. Group claims are enriched in both directions, so a
+  role row matches whether the provider sends a SID or a `DOMAIN\Group` name.
+  Translation is fail-safe and cached per sign-in.
+
+- **Ambiguous AD-user links now fail closed instead of guessing.** The RBAC role
+  admin page resolved an AD user principal with `SELECT TOP (1) ... ORDER BY
+  user_id`. Uniqueness on `omp.user_auth` is `(provider_id,
+  provider_user_hash)`, a SHA-256 over the raw key and therefore case-sensitive,
+  so two active AD links differing only in letter case can point at different
+  OMP users -- and the page silently rewrote the principal to the lowest user
+  id. The lookup now counts distinct active linked users and abstains when more
+  than one resolves, reporting the ambiguity with the same wording as the bulk
+  move. No role is assigned on a guess. The page also reports every
+  `ADUser -> OmpUser` rewrite with its reason and offers a preserve-literal
+  checkbox for storing the exact `DOMAIN\name` principal when that is intended.
+
+- **Module-definition SQL is deferred when an artifact in the same import
+  fails.** A failed artifact item (a version conflict, for example) previously
+  still let the definition SQL run, recording a `Succeeded` execution over the
+  pre-failure artifact state; the version gate would then never re-run it after
+  the artifact was repaired and re-imported. With the SQL deferred, no execution
+  is recorded and the next clean import runs the scripts. Portal defers only
+  when `ExecuteSqlRepairs` is on and the module is not platform core.
+
+- **A definition-SQL failure in Portal no longer causes a double artifact
+  import.** The reordered SQL phase threw out of `ImportAsync` after the
+  artifacts had imported, losing their results; the standalone artifact
+  fall-through then imported the same artifacts a second time, rewriting
+  configuration rows and reporting the fresh import as an identical skip.
+  `ImportAsync` now reports the failure in the result (`DefinitionSqlError`)
+  when the universal loop asks it to, and the loop marks the module-definition
+  item failed while keeping the artifact results. Legacy single-module import
+  paths keep the throwing contract.
+
+- **`bump-version.ps1` now carries the module definition's own
+  `definitionVersion` with a component bump.** A component bump rewrites
+  `compatibleArtifacts.maxVersion` in the module definition, which changes the
+  definition -- and HostAgent rejects a re-imported definition carrying the same
+  `definitionVersion` with different content. The bump left that version
+  untouched, so `local-ci` and the pre-push gate refused the result with a
+  message that never named the second command the operator then had to find. A
+  definition touched by a component bump is now added to the normal selection
+  and goes through exactly the same path as an explicit `-ModuleKey`.
+
+- WorkerManager robustness (review findings R7-F4–F7): the runtime-observation
+  upsert now guards both foreign keys of `omp.WorkerInstanceRuntimeStates` (and
+  the `omp.AppInstanceRuntimeStates` fallback write) instead of only the one the
+  MERGE matches on, so an observation arriving after its app instance was
+  deleted is dropped instead of faulting the publish; the HostAgent RPC caller
+  identity WMI lookup disposes its result collection and every enumerated
+  `ManagementObject`; and a broken OMP database worker catalog row (duplicate
+  id, incompatible package type, unresolvable plugin path, unreadable value) is
+  skipped per row instead of failing reconciliation for every worker on the
+  host. The drain lifecycle (begin/cancel/timeout) is now covered by unit tests
+  against the three historical drain defects (R5-F1, R6-F6/W6, R7-F1).
+
+- Operator-edited artifact configuration files (`omp.ArtifactConfigurationFiles`)
+  are no longer lost silently when a new artifact version is imported with
+  packaged configuration files. Each package-registered row now stores the
+  pristine packaged content in the new `PackageFileContent` baseline column, and
+  HostAgent import, Portal upload, Portal universal import, and the Bootstrapper
+  run a shared three-way carry-forward: when the packaged file is unchanged
+  against the previous version's baseline, the operator-edited content and
+  enabled state follow the new version automatically. When the packaged file
+  changed over an operator edit, or the row predates the baseline column, the
+  package file wins and the import result warns about the affected files instead
+  of dropping the edits silently. Re-registering the same artifact version also
+  preserves operator edits while the packaged file is unchanged.
+
+- HostAgent now redeploys web apps and service apps when the artifact content
+  SHA-256 changes behind an unchanged artifact id and version. The already-applied
+  check compares the desired `omp.HostArtifactStates.ContentSha256` with the
+  deployed `omp.HostAppDeploymentStates.ContentSha256`, so replaced artifact
+  content no longer requires a version bump to reach the runtime.
+
 ### Added
 
 - **Dashboard widgets can refresh themselves.** A module that puts
@@ -613,192 +797,6 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   `docs/img/`, a configuration table, and the current quick-start path through
   the HostAgent-first installer. The stale "HostAgent v1" and "What is still in
   progress" sections were removed.
-
-### Fixed
-
-- **Module repositories inherit the deterministic web publish; the pinning
-  target no longer adds a trailing newline.** The pinning target wrote the
-  manifest with `WriteLinesToFile`, which appended a line break the SDK
-  manifest does not have; an inline task now rewrites only the `Last-Modified`
-  values and round-trips every other byte. Every repository with a
-  `Microsoft.NET.Sdk.Web` project carries a verbatim copy of the target at the
-  same path and imports it from its root `Directory.Build.targets`;
-  `scripts/omp/validate-shared-scripts.ps1` (Check 15) fails when that copy is
-  missing, differs or is not imported. `scripts/dev/test-deterministic-web-publish.ps1`
-  proves it per project: publish, touch `wwwroot`, publish again, compare
-  the artifact SHA-256. All web-app components were bumped because their
-  published manifest loses the trailing newline once.
-- **The pre-stage artifact probe reads packages like the import.** It accepts
-  the import's file name tokens (a leading letter or digit, `+` allowed),
-  finds packages in subfolders of `artifacts/` as the universal package reader
-  does, and only compares against artifacts of an enabled module and app, the
-  same rows the import resolves.
-- **Same source, same version, same artifact SHA-256 for web apps.** The
-  SDK writes a `Last-Modified` header per static web asset into
-  `<app>.staticwebassets.endpoints.json`, taken from file system timestamps,
-  so a fresh checkout published a different artifact under an unchanged
-  version and the import refused it ("The artifact content has changed under
-  the same version"). `build/OpenModulePlatform.DeterministicStaticWebAssets.targets`
-  (imported by `Directory.Build.targets`) pins those values in the publish
-  manifest. Repositories that publish web projects referencing
-  `OpenModulePlatform.Web.Shared` should import the same file. All web-app
-  components were bumped because their published manifest changes once.
-- **The Bootstrapper pre-stage gate compares content, not only versions.**
-  The gate was fed the developer source status `DIFF`, which means "source
-  older than installed", so a same-version content change always passed it.
-  It now extracts every artifact package in the built universal package, hashes
-  it like the host agent import does and compares with `omp.Artifacts.Sha256`
-  for the same app, version, package type and target.
-- **The Bootstrapper refresh packages the manifest's configuration files.**
-  The selective build handed the artifact writer an empty configuration-files
-  list, so an artifact built by `--refresh-and-stage-package` carried no
-  `artifactConfigurationFiles` even when `omp-components.json` declared them;
-  only the script-built packages did. HostAgent then kept the `appsettings.json`
-  the slot already had, and a packaged change (the SecurityHeaders and NLog
-  sections added to Portal, Auth and Content) never reached a refresh-deployed
-  host. Measured on a development host: the deployed Portal `appsettings.json`
-  was dated 2026-07-31 after a deploy on 2026-09-21. The build now reads the
-  manifest entries, packages the files in the configuration-files section and
-  hashes their content into the per-component source stamp, so a change in a
-  packaged configuration file rebuilds the artifact. Five regression tests.
-- **A date popup near the right edge stays on the page.** The period
-  picker's popup (and a date field's calendar) hangs from the field's left
-  edge; from a field at the right of a row it ran past the viewport and
-  gave the page a horizontal scroll. When it does not fit it hangs from the
-  field's right edge instead, so it still belongs to its field, or shifts
-  just far enough when even that is too wide; and it is placed again when
-  the page changes width under it or when it changes size itself (fonts
-  settling, the calendar growing a row). Its tip aims at the field's
-  calendar glyph from wherever the popup ended up.
-
-- **Deployed Portal, Auth and Content run with the repository's CSP and log
-  to file.** The checked-in `appsettings.json` never reaches a host: the
-  payload strips it and HostAgent writes `Packaging/appsettings.json` over a
-  built-in template that has neither a `SecurityHeaders` nor an `NLog`
-  section, so every deployed web app fell back to the baseline policy with
-  `script-src 'unsafe-inline'` and wrote no log file. The three packaging
-  files now carry the same policy and `NLog` section as the checked-in
-  files; `PortalInlineScriptGuardTests` pins the packaged Portal policy to
-  the checked-in one and `PackagedNLogConfigurationTests` parses every
-  section the way NLog does at startup. Because the package baseline of
-  these three files changes, the first import of the new artifacts reports
-  a carry-forward conflict for an operator-edited `appsettings.json` row
-  (the package file wins); re-apply such edits once from the artifact's
-  configuration page. The Portal, Content and iFrame
-  layouts render the request correlation id
-  (`${scopeproperty:item=CorrelationId}`) that the shared middleware has
-  opened a scope for since it was introduced. The HostAgent template lists
-  `ResourceTelemetry:RetainDays` and `CollectWorkerProcesses` with their
-  defaults; `ADMIN_CONFIGURATION.md` documents the IIS request-filtering
-  copy of the upload limit in `web.config`, the `MusicPlayerWidget` and
-  `ArtifactUpload` folder keys; `HOST_AGENT.md` documents that a
-  service-app instance needs a host or a host template and that the
-  post-deploy health check reads IIS through `appcmd` unless
-  `DeploymentHealthUrls` is set.
-
-- **Sentinel's database heartbeat can look up a configured HostKey.** The
-  optional `omp.Hosts.LastSeenUtc` check queried `Environment.MachineName`
-  only, so a host whose `HostAgent:HostKey` differs from its machine name got
-  event 103 while HostAgent was alive. A new `HostKey` app setting names the
-  key; empty keeps the machine name. The Bootstrapper no longer counts
-  `OMP.HostAgent.Sentinel` as a HostAgent service when upgrade/complete decides
-  whether a missing HostAgent must be installed (self-upgrade already excluded
-  it), parses `net localgroup` output by shape instead of by English or Swedish
-  completion text, reads an unquoted service `BINARY_PATH_NAME` up to the `.exe`
-  that ends a token rather than the first `.exe` anywhere in the path, refuses
-  to remove a runtime directory that is or contains Windows, Program Files,
-  ProgramData or the user profile, and saves a host profile from the GUI
-  without a UTF-8 BOM like the two merge writes already did. HostAgent's
-  IIS/appcmd, sc.exe, service-name and directory-deletion helpers, the shared
-  data-protection key path fallback, the artifact directory hash and the
-  expected-deployment-fault list each have one definition instead of two to
-  five copies; the import-side hash now refuses to follow reparse points like
-  the packaging and provisioning hashes do.
-
-- **The confirmation dialog's OK button is filled again.** The base rule for
-  the dialog's buttons outweighed the primary button's own class, so OK sat
-  next to Cancel in the same grey; the primary rule now carries the same
-  weight and comes after.
-
-- **The OIDC/ADFS sign-in path no longer depends on a single claim mapping for
-  the `DOMAIN\name` principal form.** The claim resolver reads `unique_name` and
-  `windowsaccountname` (short names and WS URIs) as user-principal candidates
-  and, when `TranslateSidClaimsToAccountNames` is enabled (the default),
-  translates SID claims to account names on the domain-joined auth server,
-  mirroring the Windows path. Group claims are enriched in both directions, so a
-  role row matches whether the provider sends a SID or a `DOMAIN\Group` name.
-  Translation is fail-safe and cached per sign-in.
-
-- **Ambiguous AD-user links now fail closed instead of guessing.** The RBAC role
-  admin page resolved an AD user principal with `SELECT TOP (1) ... ORDER BY
-  user_id`. Uniqueness on `omp.user_auth` is `(provider_id,
-  provider_user_hash)`, a SHA-256 over the raw key and therefore case-sensitive,
-  so two active AD links differing only in letter case can point at different
-  OMP users -- and the page silently rewrote the principal to the lowest user
-  id. The lookup now counts distinct active linked users and abstains when more
-  than one resolves, reporting the ambiguity with the same wording as the bulk
-  move. No role is assigned on a guess. The page also reports every
-  `ADUser -> OmpUser` rewrite with its reason and offers a preserve-literal
-  checkbox for storing the exact `DOMAIN\name` principal when that is intended.
-
-- **Module-definition SQL is deferred when an artifact in the same import
-  fails.** A failed artifact item (a version conflict, for example) previously
-  still let the definition SQL run, recording a `Succeeded` execution over the
-  pre-failure artifact state; the version gate would then never re-run it after
-  the artifact was repaired and re-imported. With the SQL deferred, no execution
-  is recorded and the next clean import runs the scripts. Portal defers only
-  when `ExecuteSqlRepairs` is on and the module is not platform core.
-
-- **A definition-SQL failure in Portal no longer causes a double artifact
-  import.** The reordered SQL phase threw out of `ImportAsync` after the
-  artifacts had imported, losing their results; the standalone artifact
-  fall-through then imported the same artifacts a second time, rewriting
-  configuration rows and reporting the fresh import as an identical skip.
-  `ImportAsync` now reports the failure in the result (`DefinitionSqlError`)
-  when the universal loop asks it to, and the loop marks the module-definition
-  item failed while keeping the artifact results. Legacy single-module import
-  paths keep the throwing contract.
-
-- **`bump-version.ps1` now carries the module definition's own
-  `definitionVersion` with a component bump.** A component bump rewrites
-  `compatibleArtifacts.maxVersion` in the module definition, which changes the
-  definition -- and HostAgent rejects a re-imported definition carrying the same
-  `definitionVersion` with different content. The bump left that version
-  untouched, so `local-ci` and the pre-push gate refused the result with a
-  message that never named the second command the operator then had to find. A
-  definition touched by a component bump is now added to the normal selection
-  and goes through exactly the same path as an explicit `-ModuleKey`.
-
-- WorkerManager robustness (review findings R7-F4–F7): the runtime-observation
-  upsert now guards both foreign keys of `omp.WorkerInstanceRuntimeStates` (and
-  the `omp.AppInstanceRuntimeStates` fallback write) instead of only the one the
-  MERGE matches on, so an observation arriving after its app instance was
-  deleted is dropped instead of faulting the publish; the HostAgent RPC caller
-  identity WMI lookup disposes its result collection and every enumerated
-  `ManagementObject`; and a broken OMP database worker catalog row (duplicate
-  id, incompatible package type, unresolvable plugin path, unreadable value) is
-  skipped per row instead of failing reconciliation for every worker on the
-  host. The drain lifecycle (begin/cancel/timeout) is now covered by unit tests
-  against the three historical drain defects (R5-F1, R6-F6/W6, R7-F1).
-
-- Operator-edited artifact configuration files (`omp.ArtifactConfigurationFiles`)
-  are no longer lost silently when a new artifact version is imported with
-  packaged configuration files. Each package-registered row now stores the
-  pristine packaged content in the new `PackageFileContent` baseline column, and
-  HostAgent import, Portal upload, Portal universal import, and the Bootstrapper
-  run a shared three-way carry-forward: when the packaged file is unchanged
-  against the previous version's baseline, the operator-edited content and
-  enabled state follow the new version automatically. When the packaged file
-  changed over an operator edit, or the row predates the baseline column, the
-  package file wins and the import result warns about the affected files instead
-  of dropping the edits silently. Re-registering the same artifact version also
-  preserves operator edits while the packaged file is unchanged.
-
-- HostAgent now redeploys web apps and service apps when the artifact content
-  SHA-256 changes behind an unchanged artifact id and version. The already-applied
-  check compares the desired `omp.HostArtifactStates.ContentSha256` with the
-  deployed `omp.HostAppDeploymentStates.ContentSha256`, so replaced artifact
-  content no longer requires a version bump to reach the runtime.
 
 > **Note:** This changelog was not maintained per-release after `0.1.0`. The repository has since advanced to the `0.3.x` release line. The authoritative current version is the `repositoryVersion` in `omp-components.json` — not the newest entry below, and not `Directory.Build.props`, whose assembly version is intentionally static and decoupled from the component versions. Treat the `0.1.0` section as the initial-baseline record, not the current state; future notable changes should be logged here per the Keep a Changelog format.
 

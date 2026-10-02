@@ -93,7 +93,7 @@
         @Html.AntiForgeryToken()
     </form>
 
-    <div class="portal-dashboard__canvas" data-dashboard-canvas aria-label="@L["Dashboard canvas"]">
+    <div class="portal-dashboard__canvas" data-dashboard-canvas role="region" aria-label="@L["Dashboard canvas"]">
         @if (Model.ActiveWidgets.Count == 0)
         {
             <div class="portal-dashboard__empty" data-dashboard-empty>
@@ -264,10 +264,10 @@
                                                     <button type="button" class="dashboard-widget__blank-admin-close" data-blank-widget-admin-close aria-label="@L["Close"]"></button>
                                                 </div>
                                                 <div class="dashboard-widget__blank-admin-tabs" role="tablist" aria-label="@L["Image library"]">
-                                                    <button type="button" class="is-active" data-blank-widget-admin-tab="image" role="tab" aria-selected="true">@L["Single image"]</button>
-                                                    <button type="button" data-blank-widget-admin-tab="zip" role="tab" aria-selected="false">@L["ZIP package"]</button>
+                                                    <button type="button" class="is-active" id="blank-widget-@widget.UserActiveWidgetId-image-tab" data-blank-widget-admin-tab="image" role="tab" aria-selected="true" aria-controls="blank-widget-@widget.UserActiveWidgetId-image-pane">@L["Single image"]</button>
+                                                    <button type="button" id="blank-widget-@widget.UserActiveWidgetId-zip-tab" data-blank-widget-admin-tab="zip" role="tab" aria-selected="false" aria-controls="blank-widget-@widget.UserActiveWidgetId-zip-pane">@L["ZIP package"]</button>
                                                 </div>
-                                                <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="image">
+                                                <div class="dashboard-widget__blank-admin-pane" id="blank-widget-@widget.UserActiveWidgetId-image-pane" data-blank-widget-admin-pane="image" role="tabpanel" aria-labelledby="blank-widget-@widget.UserActiveWidgetId-image-tab">
                                                     <label>
                                                         <span>@L["Image or GIF file"]</span>
                                                         <input type="file" accept="image/gif,image/png,image/jpeg,.gif,.png,.jpg,.jpeg" data-blank-widget-file />
@@ -280,7 +280,7 @@
                                                         <button type="button" class="btn btn-primary" data-blank-widget-upload>@L["Upload image"]</button>
                                                     </div>
                                                 </div>
-                                                <div class="dashboard-widget__blank-admin-pane" data-blank-widget-admin-pane="zip" hidden>
+                                                <div class="dashboard-widget__blank-admin-pane" id="blank-widget-@widget.UserActiveWidgetId-zip-pane" data-blank-widget-admin-pane="zip" role="tabpanel" aria-labelledby="blank-widget-@widget.UserActiveWidgetId-zip-tab" hidden>
                                                     <label>
                                                         <span>@L["ZIP package"]</span>
                                                         <input type="file" accept=".zip,application/zip" data-blank-widget-zip />

@@ -32,6 +32,7 @@
     const pushRefreshDebounceMs = 250;
     const musicObjectUrls = new Set();
     const blankImageObjectUrls = new Set();
+    let nextBlankWidgetAdminId = 0;
     let activeWidgetPopup = null;
     let activeWidgetPopupDrag = null;
     let dashboardWidgetPopupId = 0;
@@ -5478,6 +5479,8 @@
     }
 
     function createBlankWidgetAdminControls(root) {
+        // Draft widgets have no persisted ID; keep their panel IDs distinct from Razor's IDs.
+        const idPrefix = `blank-widget-draft-${++nextBlankWidgetAdminId}`;
         const panel = document.createElement('div');
         panel.className = 'dashboard-widget__blank-admin';
         panel.dataset.blankWidgetAdmin = '';
@@ -5503,12 +5506,16 @@
         imageTab.type = 'button';
         imageTab.className = 'is-active';
         imageTab.dataset.blankWidgetAdminTab = 'image';
+        imageTab.id = `${idPrefix}-image-tab`;
+        imageTab.setAttribute('aria-controls', `${idPrefix}-image-pane`);
         imageTab.setAttribute('role', 'tab');
         imageTab.setAttribute('aria-selected', 'true');
         imageTab.textContent = root.dataset.blankWidgetSingleImageLabel || 'Single image';
         const zipTab = document.createElement('button');
         zipTab.type = 'button';
         zipTab.dataset.blankWidgetAdminTab = 'zip';
+        zipTab.id = `${idPrefix}-zip-tab`;
+        zipTab.setAttribute('aria-controls', `${idPrefix}-zip-pane`);
         zipTab.setAttribute('role', 'tab');
         zipTab.setAttribute('aria-selected', 'false');
         zipTab.textContent = root.dataset.blankWidgetZipPackageLabel || 'ZIP package';
@@ -5518,6 +5525,9 @@
         const imagePane = document.createElement('div');
         imagePane.className = 'dashboard-widget__blank-admin-pane';
         imagePane.dataset.blankWidgetAdminPane = 'image';
+        imagePane.id = `${idPrefix}-image-pane`;
+        imagePane.setAttribute('role', 'tabpanel');
+        imagePane.setAttribute('aria-labelledby', imageTab.id);
         const fileLabel = document.createElement('label');
         const fileText = document.createElement('span');
         fileText.textContent = root.dataset.blankWidgetImageFileLabel || 'Image or GIF file';
@@ -5552,6 +5562,9 @@
         const zipPane = document.createElement('div');
         zipPane.className = 'dashboard-widget__blank-admin-pane';
         zipPane.dataset.blankWidgetAdminPane = 'zip';
+        zipPane.id = `${idPrefix}-zip-pane`;
+        zipPane.setAttribute('role', 'tabpanel');
+        zipPane.setAttribute('aria-labelledby', zipTab.id);
         zipPane.hidden = true;
         const zipLabel = document.createElement('label');
         const zipText = document.createElement('span');

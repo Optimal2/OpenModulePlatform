@@ -121,6 +121,11 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public async Task<IActionResult> OnGetMusicPlaylist(CancellationToken ct)
     {
+        if (!TryGetCurrentUserId(out _))
+        {
+            return Forbid();
+        }
+
         var playlist = await _musicPlayer.GetPlaylistAsync(
             id => Url.Page("/Index", "MusicTrack", new { id }) ?? string.Empty,
             ct);
@@ -129,6 +134,11 @@ public sealed class IndexModel : OmpPageModel<PortalResource>
 
     public async Task<IActionResult> OnGetMusicTrack(long id, CancellationToken ct)
     {
+        if (!TryGetCurrentUserId(out _))
+        {
+            return Forbid();
+        }
+
         var track = await _musicPlayer.GetTrackFileAsync(id, ct);
         if (track is null)
         {
