@@ -918,7 +918,7 @@ function Assert-CmdExecutablePath {
 
 function Resolve-TaskKillExePath {
     # Branch-specific early returns keep the preferred System32 lookup separate
-    # from the PATH fallback used only when SystemRoot is unavailable.
+    # from the fail-closed behaviour used when SystemRoot is unavailable.
     $systemRoot = $env:SystemRoot
     if (-not [string]::IsNullOrWhiteSpace($systemRoot)) {
         $system32Path = Join-Path $systemRoot 'System32'
@@ -928,10 +928,14 @@ function Resolve-TaskKillExePath {
         }
     }
 
-    # taskkill.exe is not configurable like ComSpec; when SystemRoot lookup is
-    # unavailable, allow normal PATH resolution and surface any launch failure
-    # through Invoke-TaskKillTree diagnostics.
-    return 'taskkill.exe'
+    # Unlike cmd.exe (which has the explicit ComSpec override verified by
+    # Assert-CmdExecutablePath), taskkill.exe has no configurable full path, so
+    # the only trustworthy resolution is SystemRoot\System32\taskkill.exe. When
+    # that is unavailable there is no verified fallback: resolving the bare name
+    # 'taskkill.exe' through PATH would let a different executable earlier on
+    # PATH receive the process-kill switches. Fail closed instead; the caller's
+    # catch records the exception and falls through to direct Process.Kill().
+    throw 'Could not resolve the system taskkill.exe. The SystemRoot\System32\taskkill.exe path was unavailable, and PATH resolution is deliberately not used because it cannot verify the genuine system executable.'
 }
 
 function Get-ProcessExitCodeOrNull {
@@ -1142,13 +1146,15 @@ function Invoke-TaskKillTree {
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
-    # ProcessStartInfo.ArgumentList does not exist on .NET Framework 4.8, so under
-    # Windows PowerShell 5.1 adding to it throws before taskkill.exe ever
-    # starts, the catch below returns the execution-exception sentinel and only the
-    # wrapper cmd.exe gets killed directly (the process tree survives). The switches
-    # are constants and the PID is validated integer text, so a plain space-join is a
-    # correctly formed command line on every supported host, in the same order as the
-    # diagnostic command text.
+    # ProcessStartInfo.ArgumentList (the .NET Core collection) does not exist on
+    # .NET Framework 4.8, so under Windows PowerShell 5.1 the code must assign
+    # the string property $startInfo.Arguments below instead of adding to
+    # ArgumentList; trying to use ArgumentList would throw before taskkill.exe
+    # ever starts, the catch below returns the execution-exception sentinel and
+    # only the wrapper cmd.exe gets killed directly (the process tree survives).
+    # The switches are constants and the PID is validated integer text, so a
+    # plain space-join is a correctly formed command line on every supported
+    # host, in the same order as the diagnostic command text.
     $taskKillArguments = @($TaskKillProcessIdSwitch, $processIdArgument, $TaskKillTerminateTreeSwitch, $TaskKillForceSwitch)
     $startInfo.Arguments = $taskKillArguments -join ' '
 
@@ -2049,9 +2055,13 @@ foreach ($repository in $repositories) {
     # 'call' is the cmd.exe built-in keyword, not user input. Only the wrapper
     # path and arguments are escaped and quoted.
     $cmdInvocation = @('call', $joinedWrapperArguments) -join ' '
-    Assert-CmdCommandLineLength -CommandLine $cmdInvocation
     # /d disables cmd.exe AutoRun hooks and /c runs the wrapper then exits.
     $cmdArguments = @('/d', '/c', $cmdInvocation)
+    # The 8191-character cmd.exe limit applies to the entire command line that
+    # CreateProcess hands to cmd.exe: the resolved executable path plus every
+    # argument. Guard the full line, not just the 'call ...' invocation, so the
+    # fixed '/d /c' prefix and the cmd.exe path cannot slip past the check.
+    Assert-CmdCommandLineLength -CommandLine ($cmdExePath + ' ' + ($cmdArguments -join ' '))
     # Display-only diagnostic text. Do not feed this back into cmd.exe; actual
     # execution uses ArgumentList above so arguments stay separated. Keep the
     # executable path and argument list as separate labeled fields so paths with

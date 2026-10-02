@@ -70,6 +70,15 @@ function Invoke-Step {
         # A step that never launches an external process leaves $LASTEXITCODE
         # unset, and Set-StrictMode turns reading it into a failure - which
         # reported a passing validator as broken on the first run.
+        # The reset is deliberately $global:, not $script:. $LASTEXITCODE is the
+        # GLOBAL automatic variable that native commands populate: a child
+        # script that never calls exit leaves its exit code at GLOBAL scope, not
+        # at this script's own scope (verified 2026-10-02). Both the reset here
+        # and the check below read $global:LASTEXITCODE, so they must address the
+        # same variable - a $script:-scoped reset would clear a shadow the native
+        # command never writes, leaving a stale non-zero value to be read as a
+        # false failure. The "whole-session" side effect is harmless: this script
+        # runs as a top-level gate and nothing else depends on $LASTEXITCODE.
         $global:LASTEXITCODE = 0
         & $Body
         if ((Test-Path 'variable:global:LASTEXITCODE') -and $global:LASTEXITCODE -ne 0) {

@@ -51,4 +51,41 @@ Describe 'Local CI telemetry writer' {
         @($messages | Where-Object { $_ -is [System.Management.Automation.VerboseRecord] }).Count | Should -Be 1
         ($messages | Where-Object { $_ -isnot [System.Management.Automation.VerboseRecord] }).malformed_files | Should -Be 1
     }
+
+    It 'returns null when the TRX results directory does not exist' {
+        Get-LocalCiTrxCounters -ResultsDirectory (Join-Path $env:APPDATA 'no-such-dir') -SuiteName probe | Should -Be $null
+    }
+
+    It 'returns null when the TRX directory contains no .trx files' {
+        $null = New-Item -ItemType Directory -Path $env:APPDATA -Force
+        Get-LocalCiTrxCounters -ResultsDirectory $env:APPDATA -SuiteName probe | Should -Be $null
+    }
+
+    It 'counts a TRX file whose Counters node is missing as malformed' {
+        $null = New-Item -ItemType Directory -Path $env:APPDATA -Force
+        [System.IO.File]::WriteAllText((Join-Path $env:APPDATA 'no-counters.trx'), '<TestRun><ResultSummary /></TestRun>')
+        $suite = Get-LocalCiTrxCounters -ResultsDirectory $env:APPDATA -SuiteName probe
+        $suite.malformed_files | Should -Be 1
+        $suite.total | Should -Be 0
+    }
+
+    It 'counts a TRX file with a non-integer counter as malformed' {
+        $null = New-Item -ItemType Directory -Path $env:APPDATA -Force
+        [System.IO.File]::WriteAllText((Join-Path $env:APPDATA 'bad-counter.trx'), '<TestRun><ResultSummary><Counters total="not-a-number" executed="1" /></ResultSummary></TestRun>')
+        $suite = Get-LocalCiTrxCounters -ResultsDirectory $env:APPDATA -SuiteName probe
+        $suite.malformed_files | Should -Be 1
+        $suite.total | Should -Be 0
+    }
+
+    It 'drops per-suite detail when the record exceeds the size limit and still writes a valid line' {
+        $bigSuite = [pscustomobject]@{ name = ('x' * 5000); total = 1; executed = 1; passed = 1; failed = 0; notExecuted = 0; trx_files = 1; malformed_files = 0 }
+        Write-LocalCiTelemetry @arguments -Suites @($bigSuite)
+        $record = Get-Content -LiteralPath $target -Raw | ConvertFrom-Json
+        $record.repo | Should -Be 'test-repo'
+        @($record.suites).Count | Should -Be 0
+    }
+
+    It 'throws when the record still exceeds the size limit after dropping suites' {
+        { Write-LocalCiTelemetry @arguments -TestSkipReason ('x' * 5000) } | Should -Throw '*exceeds*'
+    }
 }
