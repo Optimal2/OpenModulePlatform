@@ -9,6 +9,39 @@ public sealed class WebAppDirectoryGrantPlanTests
 {
     private static readonly HostAgentIisAppPoolIdentitySettings AppPoolIdentity = new();
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(5)]
+    [InlineData(-1)]
+    public void LogDirectoryGrant_DoesNotLogAccountNamesOrProcessOutput(int exitCode)
+    {
+        var root = Directory.CreateTempSubdirectory("omp-account-log-");
+        try
+        {
+            const string account = "service-user@example.test";
+            var logger = new CapturingLogger();
+            WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(
+                new AppPoolDirectoryGrant(Path.Join(root.FullName, "logs"), "ExamplePool",
+                    [account], "M", Required: false, root.FullName), logger,
+                (_, arguments) =>
+                {
+                    Assert.Contains(account + ":(OI)(CI)(M)", arguments);
+                    if (exitCode == -1)
+                        throw new TimeoutException("process failed for " + account);
+                    return new HostAgentProcessResult(exitCode, account, "denied: " + account);
+                });
+
+            var entry = Assert.Single(logger.Entries);
+            Assert.Equal(exitCode == 0 ? LogLevel.Debug : LogLevel.Warning, entry.Level);
+            Assert.Contains("ExamplePool", entry.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(account, entry.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void ChildApplication_GrantsItsAppPoolModifyOnLogsDirectoryOnly()
     {
@@ -152,8 +185,8 @@ public sealed class WebAppDirectoryGrantPlanTests
             var entry = Assert.Single(logger.Entries);
             Assert.Equal(LogLevel.Warning, entry.Level);
             Assert.Contains(logsPath, entry.Message);
-            Assert.Contains(@"IIS AppPool\OMP_Example", entry.Message);
-            Assert.Contains("Simulated account lookup timeout.", entry.Message);
+            Assert.Contains("OMP_Example", entry.Message);
+            Assert.Contains("TimeoutException (HRESULT", entry.Message);
         }
         finally
         {
@@ -190,7 +223,7 @@ public sealed class WebAppDirectoryGrantPlanTests
             Assert.Contains(logsPath, entry.Message);
             if (exitCode != 0)
             {
-                Assert.Contains("Simulated access denial.", entry.Message);
+                Assert.Contains("icacls failed with exit code 5.", entry.Message);
             }
         }
         finally
@@ -232,9 +265,9 @@ public sealed class WebAppDirectoryGrantPlanTests
             Assert.Equal(0, calls);
             var entry = Assert.Single(logger.Entries);
             Assert.Equal(LogLevel.Warning, entry.Level);
-            Assert.Contains("reparse point", entry.Message);
+            Assert.Contains("IOException (HRESULT", entry.Message);
             Assert.Contains(logsPath, entry.Message);
-            Assert.Contains(@"IIS AppPool\OMP_Example", entry.Message);
+            Assert.Contains("OMP_Example", entry.Message);
             Assert.True(Directory.Exists(target.FullName));
         }
         finally
@@ -249,7 +282,7 @@ public sealed class WebAppDirectoryGrantPlanTests
     }
 
     [Fact]
-    public void LogDirectoryGrantFailure_LogsWarningWithPathAndIdentity()
+    public void LogDirectoryGrantFailure_LogsWarningWithPathAndAppPool()
     {
         var tempRoot = Path.Join(Path.GetTempPath(), "omp-logs-grant-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
@@ -269,7 +302,7 @@ public sealed class WebAppDirectoryGrantPlanTests
             var entry = Assert.Single(logger.Entries);
             Assert.Equal(LogLevel.Warning, entry.Level);
             Assert.Contains(logsPath, entry.Message);
-            Assert.Contains(@"IIS AppPool\OMP_Example", entry.Message);
+            Assert.Contains("OMP_Example", entry.Message);
         }
         finally
         {
@@ -330,10 +363,9 @@ public sealed class WebAppDirectoryGrantPlanTests
                 WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(grant, logger, RunProcess);
                 var entry = Assert.Single(logger.Entries);
                 Assert.Equal(LogLevel.Warning, entry.Level);
-                Assert.Contains("reparse point", entry.Message);
-                Assert.Contains(linkPath, entry.Message);
+                Assert.Contains("IOException (HRESULT", entry.Message);
                 Assert.Contains(grantPath, entry.Message);
-                Assert.Contains(@"IIS AppPool\OMP_Example", entry.Message);
+                Assert.Contains("OMP_Example", entry.Message);
                 Assert.Contains("file logging may fail silently", entry.Message);
             }
 
@@ -445,7 +477,7 @@ public sealed class WebAppDirectoryGrantPlanTests
                 WebAppDeploymentService.TryEnsureAppPoolDirectoryGrant(grants[1], logger, RunProcess);
                 var entry = Assert.Single(logger.Entries);
                 Assert.Equal(LogLevel.Warning, entry.Level);
-                Assert.Contains("reparse point", entry.Message);
+                Assert.Contains("IOException (HRESULT", entry.Message);
                 Assert.Contains(linkPath, entry.Message);
             }
 

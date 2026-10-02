@@ -260,7 +260,7 @@ public sealed class PortalModuleFragmentService
                 _logger.LogWarning(
                     "Dashboard module fragment for widget {WidgetId} (app {AppKey}) returned HTTP {StatusCode}.",
                     fetch.WidgetId,
-                    fetch.AppKey,
+                    OmpLogSanitizer.ForLog(fetch.AppKey),
                     (int)response.StatusCode);
                 return ModuleFragmentResult.Unavailable;
             }
@@ -271,7 +271,7 @@ public sealed class PortalModuleFragmentService
                 _logger.LogWarning(
                     "Dashboard module fragment for widget {WidgetId} (app {AppKey}) was not text/html.",
                     fetch.WidgetId,
-                    fetch.AppKey);
+                    OmpLogSanitizer.ForLog(fetch.AppKey));
                 return ModuleFragmentResult.Unavailable;
             }
 
@@ -281,7 +281,7 @@ public sealed class PortalModuleFragmentService
                 _logger.LogWarning(
                     "Dashboard module fragment for widget {WidgetId} (app {AppKey}) exceeded the size limit.",
                     fetch.WidgetId,
-                    fetch.AppKey);
+                    OmpLogSanitizer.ForLog(fetch.AppKey));
                 return ModuleFragmentResult.Unavailable;
             }
 
@@ -292,28 +292,28 @@ public sealed class PortalModuleFragmentService
             _logger.LogWarning(
                 "Dashboard module fragment for widget {WidgetId} (app {AppKey}) timed out.",
                 fetch.WidgetId,
-                fetch.AppKey);
+                OmpLogSanitizer.ForLog(fetch.AppKey));
             return ModuleFragmentResult.Unavailable with { FailureReason = ModuleFragmentFailureReason.Timeout };
         }
         catch (HttpRequestException ex) when (ex.HttpRequestError == HttpRequestError.SecureConnectionError)
         {
             _logger.LogWarning(
-                ex,
                 "Dashboard module fragment for widget {WidgetId} (app {AppKey}) failed TLS/certificate validation at {Authority} (TLS host {TlsHost}). Reason: {Reason}",
                 fetch.WidgetId,
-                fetch.AppKey,
-                fetch.Target.RequestUri.GetLeftPart(UriPartial.Authority),
-                fetch.Target.HostHeader ?? fetch.Target.RequestUri.Authority,
-                ex.GetBaseException().Message);
+                OmpLogSanitizer.ForLog(fetch.AppKey),
+                OmpLogSanitizer.ForLog(fetch.Target.RequestUri.GetLeftPart(UriPartial.Authority)),
+                OmpLogSanitizer.ForLog(fetch.Target.HostHeader ?? fetch.Target.RequestUri.Authority),
+                OmpLogSanitizer.ForLog(ex.GetBaseException().Message));
             return ModuleFragmentResult.Unavailable;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogWarning(
-                ex,
-                "Dashboard module fragment for widget {WidgetId} (app {AppKey}) could not be requested.",
+                "Dashboard module fragment for widget {WidgetId} (app {AppKey}) could not be requested. Error: {Error}. Reason: {Reason}",
                 fetch.WidgetId,
-                fetch.AppKey);
+                OmpLogSanitizer.ForLog(fetch.AppKey),
+                ex.HttpRequestError,
+                OmpLogSanitizer.ForLog(ex.GetBaseException().Message));
             return ModuleFragmentResult.Unavailable;
         }
     }

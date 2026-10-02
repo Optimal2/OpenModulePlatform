@@ -22,6 +22,31 @@ namespace OpenModulePlatform.Portal.Tests.Services;
 
 public sealed class ModuleFragmentTlsTests
 {
+    [Theory]
+    [InlineData(HttpRequestError.SecureConnectionError)]
+    [InlineData(HttpRequestError.ConnectionError)]
+    public async Task RequestFailure_DoesNotExposeMultilineException(HttpRequestError error)
+    {
+        using var handler = new FailingHandler(error);
+        var logger = new CaptureLogger();
+        using var services = CreateServices(handler, "/", logger);
+
+        var result = await FetchAsync(services, Context(443, "portal.example"));
+
+        Assert.False(result.IsLoaded);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Null(entry.Exception);
+        Assert.Contains("remote  forged    ", entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(entry.Message, c => char.IsControl(c) || c is '\u2028' or '\u2029');
+    }
+
+    private sealed class FailingHandler(HttpRequestError error) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+            => throw new HttpRequestException(error, "outer\r\nforged",
+                new IOException("remote\r\nforged\t\u0085\u2028\u2029"));
+    }
+
     [Fact]
     public async Task Https_ConfiguredPortalOrigin_UsesCertificateNameInsteadOfIncomingHost()
     {
@@ -73,7 +98,7 @@ public sealed class ModuleFragmentTlsTests
         var entry = Assert.Single(logger.Entries);
         Assert.Contains("TLS/certificate", entry.Message, StringComparison.Ordinal);
         Assert.Contains("Reason:", entry.Message, StringComparison.Ordinal);
-        Assert.NotNull(entry.Exception?.InnerException);
+        Assert.Null(entry.Exception);
         Assert.DoesNotContain("test-ticket", entry.Message, StringComparison.Ordinal);
     }
 

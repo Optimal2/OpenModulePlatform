@@ -1152,9 +1152,6 @@ public sealed class WebAppDeploymentService
         ILogger logger,
         Func<string, IReadOnlyList<string>, HostAgentProcessResult>? runProcess = null)
     {
-        var identity = grant.AccountNames.Count == 0
-            ? $@"IIS AppPool\{grant.AppPoolName}"
-            : string.Join(", ", grant.AccountNames);
         var error = "No app pool identity could be resolved.";
         try
         {
@@ -1165,23 +1162,22 @@ public sealed class WebAppDeploymentService
                 && TryGrantDirectoryAccess(grant.Path, grant.AccountNames, grant.Permission, out error, runProcess))
             {
                 logger.LogDebug(
-                    "Ensured web app log directory Modify access. Path={Path}, AppPoolName={AppPoolName}, Identity={Identity}",
+                    "Ensured web app log directory Modify access. Path={Path}, AppPoolName={AppPoolName}",
                     grant.Path,
-                    grant.AppPoolName,
-                    identity);
+                    grant.AppPoolName);
                 return;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or TimeoutException)
         {
-            error = ex.Message;
+            // Process exceptions can include command arguments containing account names.
+            error = $"{ex.GetType().Name} (HRESULT 0x{ex.HResult:X8})";
         }
 
         logger.LogWarning(
-            "Could not ensure Modify access on the web app log directory; the application's file logging may fail silently. Path={Path}, AppPoolName={AppPoolName}, Identity={Identity}, Error={Error}",
+            "Could not ensure Modify access on the web app log directory; the application's file logging may fail silently. Path={Path}, AppPoolName={AppPoolName}, Error={Error}",
             grant.Path,
             grant.AppPoolName,
-            identity,
             error);
     }
 
@@ -1232,7 +1228,9 @@ public sealed class WebAppDeploymentService
                 return true;
             }
 
-            lastError = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut.Trim() : result.StdErr.Trim();
+            // icacls output can echo the account being granted access. Keep only the
+            // exit code in diagnostics; account candidates are used solely for the ACL.
+            lastError = $"icacls failed with exit code {result.ExitCode}.";
         }
 
         error = string.IsNullOrWhiteSpace(lastError)

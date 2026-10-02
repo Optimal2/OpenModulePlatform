@@ -30,6 +30,18 @@ namespace OpenModulePlatform.UiTests;
 public sealed class ModuleFragmentAuthorizationTests
 {
     [Fact]
+    public async Task Fixture_authentication_cookie_requires_secure_transport()
+    {
+        var builder = CreateFragmentAppBuilder("Production");
+        await using var app = builder.Build();
+        var options = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(OmpAuthDefaults.AuthenticationScheme);
+
+        // Even the HTTP fixture must retain production-safe cookie emission defaults.
+        Assert.True(options.Cookie.Build(new DefaultHttpContext()).Secure);
+    }
+
+    [Fact]
     public async Task Attribute_alone_protects_fragment_before_rendering()
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -47,7 +59,7 @@ public sealed class ModuleFragmentAuthorizationTests
             .AddCookie(OmpAuthDefaults.AuthenticationScheme, options =>
             {
                 options.Cookie.Name = OmpAuthDefaults.CookieName;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.None;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.LoginPath = "/login";
                 options.AccessDeniedPath = "/denied";
                 options.Events.OnValidatePrincipal = context =>
@@ -81,6 +93,7 @@ public sealed class ModuleFragmentAuthorizationTests
             await using var browser = await playwright.Chromium.LaunchAsync(new() { Headless = true });
             var cookieOptions = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
                 .Get(OmpAuthDefaults.AuthenticationScheme);
+            Assert.True(cookieOptions.Cookie.Build(new DefaultHttpContext()).Secure);
 
             string Cookie(string? permission = null, bool expired = false, bool revoked = false)
             {
@@ -365,7 +378,8 @@ public sealed class ModuleFragmentAuthorizationTests
             .AddCookie(OmpAuthDefaults.AuthenticationScheme, options =>
             {
                 options.Cookie.Name = OmpAuthDefaults.CookieName;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.None;
+                // Tickets are injected directly; this fixture does not need insecure cookie emission.
+                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
             });
         builder.Services.AddAuthorization(options => options.FallbackPolicy = options.DefaultPolicy);
         builder.Services.AddOmpModuleFragments();

@@ -80,7 +80,8 @@ public sealed class ActivityLogWriter
         {
             _logger.LogWarning(
                 "Activity log entry for {Module}/{App} event {Event} has no OMP user id; the activity log is a user log and every entry should name the person who acted: {Summary}",
-                _options.ModuleKey, _options.AppKey, entry.Event, entry.Summary);
+                OmpLogSanitizer.ForLog(_options.ModuleKey), OmpLogSanitizer.ForLog(_options.AppKey),
+                OmpLogSanitizer.ForLog(entry.Event), OmpLogSanitizer.ForLog(entry.Summary));
         }
 
         if (string.IsNullOrWhiteSpace(entry.Event))
@@ -107,9 +108,12 @@ public sealed class ActivityLogWriter
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            _logger.LogError(exception,
-                "Activity log write failed for {Module}/{App} event {Event} (user {UserId}); the entry is lost: {Summary}",
-                _options.ModuleKey, _options.AppKey, entry.Event, ompUserId, entry.Summary);
+            // Providers may append Exception.ToString() verbatim, bypassing field sanitization.
+            _logger.LogError(
+                "Activity log write failed for {Module}/{App} event {Event} (user {UserId}); the entry is lost: {Summary}. {ErrorType}: {Reason}",
+                OmpLogSanitizer.ForLog(_options.ModuleKey), OmpLogSanitizer.ForLog(_options.AppKey),
+                OmpLogSanitizer.ForLog(entry.Event), ompUserId, OmpLogSanitizer.ForLog(entry.Summary),
+                OmpLogSanitizer.ForLog(exception.GetType().Name), OmpLogSanitizer.ForLog(exception.GetBaseException().Message));
         }
     }
 
