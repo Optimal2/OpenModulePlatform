@@ -507,7 +507,8 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
         return (moduleId, appId);
     }
 
-    private async Task RunHostAgentImportAsync(string importRoot, string storeRoot)
+    private async Task RunHostAgentImportAsync(string importRoot, string storeRoot,
+        Microsoft.Extensions.Logging.ILogger<ArtifactZipImportService>? logger = null)
     {
         var settings = new HostAgentSettings
         {
@@ -521,11 +522,12 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
         var service = new ArtifactZipImportService(
             new StaticOptionsMonitor<HostAgentSettings>(settings),
             _fixture.CreateHostAgentRepository(),
-            NullLogger<ArtifactZipImportService>.Instance);
+            logger ?? NullLogger<ArtifactZipImportService>.Instance);
         await service.ImportPendingAsync(CancellationToken.None);
     }
 
-    private PortableModulePackageService CreatePortalService(string storeRoot)
+    private PortableModulePackageService CreatePortalService(string storeRoot,
+        Microsoft.Extensions.Logging.ILogger<PortableModulePackageService>? logger = null)
     {
         var portalFactory = _fixture.CreatePortalConnectionFactory();
         return new PortableModulePackageService(
@@ -536,7 +538,7 @@ public sealed partial class UniversalPackageSeedSqlOrderingTests : IClassFixture
             }),
             new PortalDashboardWidgetPackageService(portalFactory),
             new PortalWidgetRuntimeDataPackageService(portalFactory),
-            NullLogger<PortableModulePackageService>.Instance);
+            logger ?? NullLogger<PortableModulePackageService>.Instance);
     }
 
     private static async Task<UniversalPackageImportResult> ImportPortalPackageAsync(

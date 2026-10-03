@@ -95,7 +95,8 @@ entries** restores the built-in entries, including their names, descriptions,
 enabled state and default order. It can overwrite administrator customisations;
 it is not required after importing a new app.
 
-After each module definition's SQL phase, HostAgent automatically inserts missing
+After each module definition's SQL phase, HostAgent and the Portal Import/Export
+page automatically insert missing
 home entries for enabled, allowed WebApp and Portal app instances. This also runs
 when the imported definition is older than the installed version. It does nothing
 until `omp_portal.portal_entries` exists, so either module import order works. The
@@ -105,8 +106,14 @@ entries remain unchanged by this automatic sync.
 
 Deleting an app home entry is temporary: the next module import recreates it.
 **Disable the entry to hide it persistently.** This automatic sync does not create
-child links or change permissions. Install the updated HostAgent service artifact
-to enable it; no new Portal definition is needed for the sync itself. Existing
+child links or change permissions. A sync failure logs a warning with the module
+key and attempted entry count (unknown if the count could not be read); it never
+turns committed definition SQL into a failed import or prevents artifact pointer
+fill. The next module import retries the sync. The table probe and insert run in
+one transaction, with target key-range locks held between counting and inserting.
+
+Install the updated HostAgent service and Portal web artifacts to enable it in
+both import paths; no new Portal definition is needed for the sync itself. Existing
 module initialization SQL and the explicit reset operation retain their own
 behaviour.
 

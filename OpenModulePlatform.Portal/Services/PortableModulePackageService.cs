@@ -1363,6 +1363,34 @@ public sealed class PortableModulePackageService
             }
         }
 
+        // Match HostAgent's insert-only reconciliation, including version-skipped
+        // definitions. A post-commit sync failure must not prevent artifact pointer fill.
+        if (options.ExecuteSqlRepairs && definitionSqlError is null && !definitionSqlDeferred)
+        {
+            int? attemptedPortalEntries = null;
+            try
+            {
+                var addedPortalEntries = await _repo.InsertMissingPortalAppEntriesAsync(
+                    ct, count => attemptedPortalEntries = count);
+                if (addedPortalEntries > 0)
+                {
+                    _logger.LogInformation(
+                        "Added {Count} missing Portal app home entries after importing module '{ModuleKey}'.",
+                        addedPortalEntries, definition.ModuleKey);
+                }
+            }
+            catch (Exception ex) when (IsExpectedUniversalImportFailure(ex))
+            {
+                warnings.Add(
+                    $"Portal entry sync failed after SQL for module '{definition.ModuleKey}': {ex.Message} "
+                    + "The next import retries it.");
+                _logger.LogWarning(
+                    ex,
+                    "Portal entry sync failed after module-definition SQL; the definition SQL itself succeeded. Module={ModuleKey}, AttemptedEntries={AttemptedEntries}. The next import retries it.",
+                    definition.ModuleKey, attemptedPortalEntries);
+            }
+        }
+
         // Rows the definition's SQL just created missed the per-artifact auto-apply above
         // (it ran before the SQL). Fill them from the newest hash-bearing artifact per app,
         // the same way the HostAgent folder import does after its SQL phase. The SQL has

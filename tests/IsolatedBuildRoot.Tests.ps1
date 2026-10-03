@@ -25,7 +25,10 @@ Describe 'OmpIsolatedBuildRoot validation' {
     BeforeAll {
         $script:repositoryRoot = Split-Path -Parent $PSScriptRoot
         $script:project = Join-Path $script:repositoryRoot 'OpenModulePlatform.EventPublisher.Abstractions\OpenModulePlatform.EventPublisher.Abstractions.csproj'
-        $script:outsideRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('omp-isolated-probe-' + [Guid]::NewGuid().ToString('N'))
+        # TEMP may deliberately live inside a worktree. GetTargetPath only
+        # evaluates a path; use a non-existent sibling to probe an external root
+        # without creating output or requiring write access outside the checkout.
+        $script:outsideRoot = Join-Path (Split-Path -Parent $script:repositoryRoot) ('omp-isolated-probe-' + [Guid]::NewGuid().ToString('N'))
 
         function script:Invoke-Probe {
             param([Parameter(Mandatory = $true)][string]$IsolatedBuildRoot)
@@ -36,12 +39,6 @@ Describe 'OmpIsolatedBuildRoot validation' {
                 ExitCode = $LASTEXITCODE
                 Text = [string]::Join([Environment]::NewLine, @($output))
             }
-        }
-    }
-
-    AfterAll {
-        if (Test-Path -LiteralPath $script:outsideRoot) {
-            Remove-Item -LiteralPath $script:outsideRoot -Recurse -Force
         }
     }
 
@@ -89,6 +86,7 @@ Describe 'OmpIsolatedBuildRoot validation' {
         $result = Invoke-Probe -IsolatedBuildRoot $script:outsideRoot
         $result.Text | Should -Not -Match 'OMPBUILD00'
         $result.ExitCode | Should -Be 0
+        Test-Path -LiteralPath $script:outsideRoot | Should -BeFalse
     }
 }
 

@@ -25,5 +25,6 @@
     <Compile Include="..\shared\ModuleRuntimeMaintenance.cs" Link="ModuleDefinitions\ModuleRuntimeMaintenance.cs" />
     <Compile Include="..\shared\ModuleRuntimeMaintenanceExecutor.cs" Link="ModuleDefinitions\ModuleRuntimeMaintenanceExecutor.cs" />
     <Compile Include="..\shared\PlatformConfigurationMigration.cs" Link="ModuleDefinitions\PlatformConfigurationMigration.cs" />
+    <Compile Include="..\shared\PortalAppEntrySync.cs" Link="ModuleDefinitions\PortalAppEntrySync.cs" />
   </ItemGroup>
 </Project>

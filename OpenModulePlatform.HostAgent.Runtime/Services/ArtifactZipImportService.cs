@@ -1429,12 +1429,26 @@ public sealed class ArtifactZipImportService
         // Initialization SQL can create app instances after the last Portal definition
         // import. Reconcile here for every module, including skipped older definitions,
         // so either import order works without resetting administrator customisations.
-        var addedPortalEntries = await _repository.InsertMissingPortalAppEntriesAsync(cancellationToken);
-        if (addedPortalEntries > 0)
+        int? attemptedPortalEntries = null;
+        try
         {
-            _logger.LogInformation(
-                "Added {Count} missing Portal app home entries after importing module '{ModuleKey}'.",
-                addedPortalEntries, definition.ModuleKey);
+            var addedPortalEntries = await _repository.InsertMissingPortalAppEntriesAsync(
+                cancellationToken, count => attemptedPortalEntries = count);
+            if (addedPortalEntries > 0)
+            {
+                _logger.LogInformation(
+                    "Added {Count} missing Portal app home entries after importing module '{ModuleKey}'.",
+                    addedPortalEntries, definition.ModuleKey);
+            }
+        }
+        catch (Exception ex) when (IsExpectedImportFailure(ex))
+        {
+            // Definition SQL already committed. Keep the import successful and let
+            // the caller fill artifact pointers even if this reconciliation failed.
+            _logger.LogWarning(
+                ex,
+                "Portal entry sync failed after module-definition SQL; the definition SQL itself succeeded. Module={ModuleKey}, AttemptedEntries={AttemptedEntries}. The next import retries it.",
+                definition.ModuleKey, attemptedPortalEntries);
         }
 
         return new ModuleDefinitionImportResult(
