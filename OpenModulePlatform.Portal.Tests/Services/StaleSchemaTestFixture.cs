@@ -18,8 +18,17 @@ public sealed class StaleSchemaTestFixture : IAsyncLifetime
     // Per-process name (pid + start time) so concurrent test hosts never share a
     // database; stale copies from crashed runs are swept by the provisioner.
     public static readonly string DatabaseName = OmpTestDatabaseNames.ForPortalTests("StaleSchema");
+    private readonly string _databaseName;
 
-    public string ConnectionString { get; } = TestSqlConnection.ForDatabase(DatabaseName);
+    public StaleSchemaTestFixture() : this(DatabaseName) { }
+
+    internal StaleSchemaTestFixture(string databaseName)
+    {
+        _databaseName = databaseName;
+        ConnectionString = TestSqlConnection.ForDatabase(databaseName);
+    }
+
+    public string ConnectionString { get; }
 
     public async Task InitializeAsync()
     {
@@ -151,7 +160,7 @@ WHERE s.name = @schemaName
 
         await OmpTestDatabaseProvisioner.CreateDatabaseAsync(
             builder.ConnectionString,
-            $"IF DB_ID(N'{DatabaseName}') IS NULL CREATE DATABASE [{DatabaseName}];");
+            $"IF DB_ID(N'{_databaseName}') IS NULL CREATE DATABASE [{_databaseName}];");
     }
 
     private async Task EnsureSchemaAsync()
@@ -292,8 +301,8 @@ CREATE TABLE omp.ModuleDefinitionSqlExecutions
 
         await using var cmd = new SqlCommand(
             $@"
-ALTER DATABASE [{DatabaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-DROP DATABASE [{DatabaseName}];",
+ALTER DATABASE [{_databaseName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+DROP DATABASE [{_databaseName}];",
             conn);
         try
         {
@@ -305,7 +314,7 @@ DROP DATABASE [{DatabaseName}];",
             // the shared log is what CI turns into a warning about the leaked database.
             OmpTestCleanupLog.RecordFailure(
                 nameof(StaleSchemaTestFixture),
-                $"Could not drop test database '{DatabaseName}': {ex.Message}");
+                $"Could not drop test database '{_databaseName}': {ex.Message}");
         }
     }
 

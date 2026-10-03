@@ -1426,6 +1426,17 @@ public sealed class ArtifactZipImportService
                 cancellationToken);
         }
 
+        // Initialization SQL can create app instances after the last Portal definition
+        // import. Reconcile here for every module, including skipped older definitions,
+        // so either import order works without resetting administrator customisations.
+        var addedPortalEntries = await _repository.InsertMissingPortalAppEntriesAsync(cancellationToken);
+        if (addedPortalEntries > 0)
+        {
+            _logger.LogInformation(
+                "Added {Count} missing Portal app home entries after importing module '{ModuleKey}'.",
+                addedPortalEntries, definition.ModuleKey);
+        }
+
         return new ModuleDefinitionImportResult(
             definition.ModuleKey,
             definition.DefinitionVersion,

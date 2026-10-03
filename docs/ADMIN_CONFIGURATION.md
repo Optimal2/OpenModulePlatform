@@ -88,6 +88,28 @@ Portal administrators can maintain the concrete values from
 of available category/setting combinations; that list belongs to OMP SQL
 upgrades so the UI only exposes settings that the runtime code understands.
 
+### Portal navigation entries
+
+Manage global navigation entries at `/admin/portalentries`. **Reset default
+entries** restores the built-in entries, including their names, descriptions,
+enabled state and default order. It can overwrite administrator customisations;
+it is not required after importing a new app.
+
+After each module definition's SQL phase, HostAgent automatically inserts missing
+home entries for enabled, allowed WebApp and Portal app instances. This also runs
+when the imported definition is older than the installed version. It does nothing
+until `omp_portal.portal_entries` exists, so either module import order works. The
+sync uses `app:<appInstanceId without dashes, lower case>:home`, matching the reset
+operation, and never changes an existing row. Renamed, disabled and reordered
+entries remain unchanged by this automatic sync.
+
+Deleting an app home entry is temporary: the next module import recreates it.
+**Disable the entry to hide it persistently.** This automatic sync does not create
+child links or change permissions. Install the updated HostAgent service artifact
+to enable it; no new Portal definition is needed for the sync itself. Existing
+module initialization SQL and the explicit reset operation retain their own
+behaviour.
+
 ### Portal dashboard
 
 The Portal start page includes a user-customizable dashboard. The dashboard is
