@@ -10,8 +10,11 @@ same fictional consumer names in every example.
 The OMP+ODV ecosystem includes private consumer repositories whose names,
 paths, and per-repo configuration belong to the maintainers' private
 companion repository. To keep the public documentation concrete and
-internally consistent, every example below refers to one of seven fictitious
-consumers. The mapping is fixed — pick the consumer that matches the
+internally consistent, every example below refers to one of **six** fictitious
+consumers — Contoso, Fabrikam, Northwind, AdventureWorks, Tailwind and Globex.
+The table carries a seventh column, **ODVGateway**, which is a *real* public
+repository and is named as itself; it is not a stand-in for anything and must
+never be swapped for a fictitious name. The mapping is fixed — pick the consumer that matches the
 scenario, then use exactly the names in the corresponding column everywhere
 (in a sentence, in a code block, in a file path, in a connection-string name,
 in an options section name, in a module key, in a SQL schema name, in a
@@ -52,8 +55,9 @@ Notes that apply to every consumer example:
 - Pick one consumer per example and keep its column consistent throughout that
   example — never mix the names of two consumers in one sentence, code block
   or path. This rule is the source of truth for the next author; if a new
-  example does not fit any of the seven columns, extend the table here first
-  and then write the example using the new column.
+  example does not fit any of the six fictitious columns (or the real
+  ODVGateway column), extend the table here first and then write the example
+  using the new column.
 
 ## Convention audits
 
