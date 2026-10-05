@@ -3262,4 +3262,5 @@
   <data name="Refresh" xml:space="preserve"><value>Uppdatering</value></data>
   <data name="Available in {0} s" xml:space="preserve"><value>Tillgänglig om {0} s</value></data>
   <data name="{0} s" xml:space="preserve"><value>{0} s</value></data>
+  <data name="Keep the menu open" xml:space="preserve"><value>Håll menyn öppen</value></data>
 </root>

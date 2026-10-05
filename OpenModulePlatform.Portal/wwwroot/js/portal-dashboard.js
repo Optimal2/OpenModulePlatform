@@ -387,6 +387,7 @@
             refreshIntervalSeconds: parseRefreshIntervalSeconds(root.dataset.refreshInterval)
         };
         bindModuleFragmentRefreshMenu(root, token, state);
+        bindDashboardMenuPin(root);
         const updateDirtyState = () => {
             const isDirty = updateDashboardDirtyState(root, canvas, state, saveButton);
             updateDashboardDraftState(root, canvas, state, isDirty);
@@ -4223,6 +4224,39 @@
     function applyModuleFragmentRefreshInterval(root, seconds) {
         root.dataset.refreshInterval = String(parseRefreshIntervalSeconds(seconds));
         moduleFragmentRefreshers.get(root)?.schedule?.();
+    }
+
+    // The pin tile at the head of the edit row: pressed, the row stays fanned
+    // out whatever the pointer does (the menu's is-pinned class; the CSS treats
+    // it like a hover). Remembered per browser.
+    const dashboardMenuPinStorageKey = 'omp.dashboard.editMenuPinned';
+
+    function bindDashboardMenuPin(root) {
+        const pin = root.querySelector('[data-dashboard-menu-pin]');
+        const menu = pin?.closest('.dashboard-edit-menu');
+        if (!pin || !menu) {
+            return;
+        }
+        const apply = (pinned) => {
+            menu.classList.toggle('is-pinned', pinned);
+            pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+        };
+        let pinned = false;
+        try {
+            pinned = window.localStorage.getItem(dashboardMenuPinStorageKey) === 'true';
+        } catch {
+            // Storage blocked: the pin holds for this page view only.
+        }
+        apply(pinned);
+        pin.addEventListener('click', () => {
+            pinned = !pinned;
+            apply(pinned);
+            try {
+                window.localStorage.setItem(dashboardMenuPinStorageKey, pinned ? 'true' : 'false');
+            } catch {
+                // Storage blocked: the pin holds for this page view only.
+            }
+        });
     }
 
     // The menu's interval tile (editors only: the menu is theirs). Its submenu

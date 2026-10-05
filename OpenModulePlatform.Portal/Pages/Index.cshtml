@@ -465,6 +465,12 @@
                 </button>
             </div>
             <div class="dashboard-edit-menu__actions" aria-label="@L["Dashboard actions"]">
+                @* The pin, first in the row: pressed, it keeps the row fanned out
+                   whatever the pointer does. Remembered per browser. *@
+                <button type="button" class="dashboard-pin-button" data-dashboard-menu-pin aria-pressed="false" aria-label="@L["Keep the menu open"]" title="@L["Keep the menu open"]">
+                    <span class="dashboard-action-icon dashboard-action-icon--pin" aria-hidden="true"></span>
+                    <span class="dashboard-edit-menu__label">@L["Keep the menu open"]</span>
+                </button>
                 <button type="button" class="dashboard-add-button" data-dashboard-add-open aria-label="@L["Add widget"]" title="@L["Add widget"]">
                     <span class="dashboard-action-icon dashboard-action-icon--add" aria-hidden="true"></span>
                     <span class="dashboard-edit-menu__label">@L["Add widget"]</span>

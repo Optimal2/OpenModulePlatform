@@ -6005,55 +6005,116 @@ button.dashboard-role-list__item:focus-visible {
 
 /* Each tile's place in the row, so it knows how far back to the cross it
    goes: the row starts 8 px right of the cross, and a tile stands 56 px
-   (48 + the 8 px gap) right of the one before, tucked to 10 px past the
-   cross's right edge. */
-.dashboard-add-button {
+   (48 + the 8 px gap) right of the one before. Tucked, the tiles make a
+   staggered stack: the first 10 px past the cross's right edge, each next
+   one 10 px further, and the first on top, so every tile shows an edge
+   like cards fanned under the cross. */
+.dashboard-pin-button {
     --dashboard-tile-index: 0;
+    z-index: 5;
+}
+
+.dashboard-add-button {
+    --dashboard-tile-index: 1;
+    z-index: 4;
 }
 
 .dashboard-refresh-menu {
-    --dashboard-tile-index: 1;
+    --dashboard-tile-index: 2;
+    z-index: 3;
 }
 
 .dashboard-save-button {
-    --dashboard-tile-index: 2;
+    --dashboard-tile-index: 3;
+    z-index: 2;
 }
 
 .dashboard-reset-changes-button {
-    --dashboard-tile-index: 3;
+    --dashboard-tile-index: 4;
+    z-index: 1;
 }
 
+.portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-pin-button,
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-add-button,
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu,
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-save-button,
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-reset-changes-button {
-    transform: translateX(calc(var(--dashboard-tile-tuck) * (-46px - var(--dashboard-tile-index) * 56px)));
+    position: relative;
+    transform: translateX(calc(var(--dashboard-tile-tuck) * (-46px - var(--dashboard-tile-index) * 46px)));
     transition: transform 160ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
+/* Fanned out: hovered, focused by keyboard, with the submenu open, or pinned. */
 .portal-dashboard.is-editing .dashboard-edit-menu:hover .dashboard-edit-menu__actions,
 .portal-dashboard.is-editing .dashboard-edit-menu:has(:focus-visible) .dashboard-edit-menu__actions,
-.portal-dashboard.is-editing .dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-edit-menu__actions {
+.portal-dashboard.is-editing .dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-edit-menu__actions,
+.portal-dashboard.is-editing .dashboard-edit-menu.is-pinned .dashboard-edit-menu__actions {
     --dashboard-tile-tuck: 0;
     pointer-events: auto;
 }
 
-/* Tucked away, the tiles cast no shadow: four shadows stacked behind the
+/* Tucked away, the tiles cast no shadow: five shadows stacked behind the
    cross made one grey halo around it. */
-.portal-dashboard.is-editing .dashboard-edit-menu:not(:hover):not(:has(:focus-visible)):not(:has([aria-expanded="true"])) .dashboard-edit-menu__actions :is(.dashboard-add-button, .dashboard-save-button, .dashboard-reset-changes-button, .dashboard-refresh-menu__trigger) {
+.portal-dashboard.is-editing .dashboard-edit-menu:not(:hover):not(:has(:focus-visible)):not(:has([aria-expanded="true"])):not(.is-pinned) .dashboard-edit-menu__actions :is(.dashboard-pin-button, .dashboard-add-button, .dashboard-save-button, .dashboard-reset-changes-button, .dashboard-refresh-menu__trigger) {
     box-shadow: none;
 }
 
-/* Fanned out, the floating row's bridge narrows to the gap, so it does not
-   cover the first tile's edge. */
+/* While editing, the floating row's bridge covers the whole staggered stack
+   (five edges of 10 px), so the edges show but only hover; fanned out, it
+   narrows to the gap so it does not cover the first tile's edge. */
+.portal-dashboard.is-editing .dashboard-floating-row::after {
+    width: 50px;
+}
+
 .dashboard-edit-menu:hover .dashboard-floating-row::after,
 .dashboard-edit-menu:has(:focus-visible) .dashboard-floating-row::after,
-.dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-floating-row::after {
+.dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-floating-row::after,
+.portal-dashboard.is-editing .dashboard-edit-menu.is-pinned .dashboard-floating-row::after {
     width: 8px;
+}
+
+/* The pin: a plain tile; pressed, it takes the editing blue like the cross. */
+.dashboard-pin-button {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 48px;
+    min-height: 42px;
+    padding: 10px 0;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: linear-gradient(var(--surface-muted), var(--surface-muted)), var(--surface);
+    color: var(--text);
+    box-shadow: 0 8px 22px rgba(17, 24, 39, 0.12);
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.dashboard-pin-button:hover,
+.dashboard-pin-button:focus-visible {
+    border-color: var(--border-strong);
+    background: var(--surface);
+    outline: none;
+}
+
+.dashboard-pin-button[aria-pressed="true"],
+.dashboard-pin-button[aria-pressed="true"]:hover {
+    border-color: var(--link);
+    background: var(--link);
+    color: var(--omp-on-accent, #ffffff);
+}
+
+.portal-dashboard.is-editing .dashboard-pin-button {
+    display: inline-flex;
+}
+
+.dashboard-action-icon--pin {
+    --dashboard-action-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 17v5'/%3E%3Cpath d='M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'/%3E%3C/svg%3E");
 }
 
 @media (prefers-reduced-motion: reduce) {
     .portal-dashboard .dashboard-edit-menu .dashboard-edit-menu__actions,
+    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-pin-button,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-add-button,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu__trigger,
