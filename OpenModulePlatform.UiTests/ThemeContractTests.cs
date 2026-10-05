@@ -115,8 +115,8 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
     {
         // Index.cshtml: the edit menu of a signed-in user (the test runs anonymously)
         // in edit mode with unsaved changes: the wrench (a cross while editing) with
-        // the "Refresh now" tile behind it, and the row of icon-only tiles (add,
-        // refresh with its submenu, save, reset), plus portal-dashboard.js's
+        // the "Refresh now" tile behind it, and the row of icon-only tiles (pin,
+        // add, refresh with its submenu, save, reset), plus portal-dashboard.js's
         // unsaved-draft banner and its error variant.
         ["/"] = """
             <div class="portal-dashboard is-editing has-dashboard-changes"><div class="dashboard-edit-menu">

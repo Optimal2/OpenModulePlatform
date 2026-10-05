@@ -6064,13 +6064,18 @@ button.dashboard-role-list__item:focus-visible {
    narrows to the gap so it does not cover the first tile's edge. */
 .portal-dashboard.is-editing .dashboard-floating-row::after {
     width: 50px;
+    transition: width 0s;
 }
 
+/* The narrowing waits out the tiles' slide (160 ms), so a click that arrives
+   while they are still moving out from under the bridge lands on the bridge,
+   not on a tile passing by; the widening back is immediate. */
 .dashboard-edit-menu:hover .dashboard-floating-row::after,
 .dashboard-edit-menu:has(:focus-visible) .dashboard-floating-row::after,
 .dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-floating-row::after,
 .portal-dashboard.is-editing .dashboard-edit-menu.is-pinned .dashboard-floating-row::after {
     width: 8px;
+    transition: width 0s linear 180ms;
 }
 
 /* The pin: a plain tile; pressed, it takes the editing blue like the cross. */
@@ -6119,7 +6124,8 @@ button.dashboard-role-list__item:focus-visible {
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu__trigger,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-save-button,
-    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-reset-changes-button {
+    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-reset-changes-button,
+    .portal-dashboard .dashboard-edit-menu .dashboard-floating-row::after {
         transition: none;
     }
 }
@@ -8212,8 +8218,8 @@ tr.linkbox-editor-row--dragging {
 /* The choices, folded out beside the row and aligned with its bottom edge. */
 /* Above the tile: the height cap leaves the tile's own 42 px, the gap and
    the menu's 22 px margin below the list, and the width cap keeps the list
-   inside the viewport from where the tile stands (two tiles in from the
-   left edge). */
+   inside the viewport from where the tile stands (third in the row: 22 px
+   margin, the cross and two tiles, 190 px in). */
 .dashboard-refresh-menu__list {
     position: absolute;
     left: 0;
@@ -8223,7 +8229,7 @@ tr.linkbox-editor-row--dragging {
     gap: 2px;
     width: max-content;
     min-width: 168px;
-    max-width: min(360px, calc(100vw - 160px));
+    max-width: min(360px, calc(100vw - 216px));
     max-height: calc(100vh - 96px);
     overflow-y: auto;
     padding: 6px;
@@ -8325,8 +8331,6 @@ tr.linkbox-editor-row--dragging {
     outline: none;
 }
 
-/* On a narrow screen there is no room to the right: the choices fold out
-   above the row instead (the file's own narrow breakpoint). */
 /* The stamp sits over the title bar's right end (the title bar keeps room for
    it) and steps aside while editing, where the title bar's own controls are. */
 .dashboard-widget__updated {

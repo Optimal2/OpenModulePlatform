@@ -4228,8 +4228,9 @@
 
     // The pin tile at the head of the edit row: pressed, the row stays fanned
     // out whatever the pointer does (the menu's is-pinned class; the CSS treats
-    // it like a hover). Remembered per browser.
-    const dashboardMenuPinStorageKey = 'omp.dashboard.editMenuPinned';
+    // it like a hover). Remembered per user in this browser, under the same
+    // per-user key the draft uses, so a shared workstation keeps users apart.
+    const dashboardMenuPinStoragePrefix = 'omp.dashboard.editMenuPinned:';
 
     function bindDashboardMenuPin(root) {
         const pin = root.querySelector('[data-dashboard-menu-pin]');
@@ -4237,6 +4238,7 @@
         if (!pin || !menu) {
             return;
         }
+        const dashboardMenuPinStorageKey = `${dashboardMenuPinStoragePrefix}${root.dataset.dashboardDraftKey || 'anonymous'}`;
         const apply = (pinned) => {
             menu.classList.toggle('is-pinned', pinned);
             pin.setAttribute('aria-pressed', pinned ? 'true' : 'false');

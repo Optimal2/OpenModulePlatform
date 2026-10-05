@@ -16,7 +16,7 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   behind the cross, each showing an edge like fanned cards, and fan out
   while the menu is hovered, focused or has its submenu open, so the page
   behind it stays reachable; a pin tile at the head of the row keeps it
-  fanned out (remembered per browser).
+  fanned out (remembered per user in the browser).
 - **Dashboard: "Refresh now" as a floating button.** Beside the edit menu's
   wrench, tucked behind it with an edge showing and slid out beside it when
   the pair is hovered or focused; the wrench's size, the same burst of
