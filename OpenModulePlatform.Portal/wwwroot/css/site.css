@@ -23,7 +23,7 @@
     --dashboard-refresh-accent: #0ea5e9;
     --dashboard-refresh-accent-soft: rgba(14, 165, 233, 0.38);
     --dashboard-refresh-accent-surface: rgba(14, 165, 233, 0.2);
-    --dashboard-refresh-accent-hover: rgba(14, 165, 233, 0.32);
+    --dashboard-refresh-accent-hover: rgba(14, 165, 233, 0.26);
     --dashboard-refresh-accent-text: color-mix(in srgb, #0ea5e9 55%, var(--text));
     --shadow: var(--omp-shadow, 0 8px 24px rgba(17, 24, 39, 0.05));
     --portal-page-chrome-width: 100%;
@@ -5965,8 +5965,10 @@ button.dashboard-role-list__item:focus-visible {
     bottom: 22px;
     z-index: 20000;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+    max-width: calc(100vw - 44px);
 }
 
 .dashboard-edit-menu__actions {
@@ -8071,6 +8073,10 @@ tr.linkbox-editor-row--dragging {
 }
 
 /* The choices, folded out beside the row and aligned with its bottom edge. */
+/* Above the tile: the height cap leaves the tile's own 42 px, the gap and
+   the menu's 22 px margin below the list, and the width cap keeps the list
+   inside the viewport from where the tile stands (two tiles in from the
+   left edge). */
 .dashboard-refresh-menu__list {
     position: absolute;
     left: 0;
@@ -8080,8 +8086,8 @@ tr.linkbox-editor-row--dragging {
     gap: 2px;
     width: max-content;
     min-width: 168px;
-    max-width: min(360px, calc(100vw - 48px));
-    max-height: calc(100vh - 60px);
+    max-width: min(360px, calc(100vw - 160px));
+    max-height: calc(100vh - 96px);
     overflow-y: auto;
     padding: 6px;
     border: 1px solid var(--border);
