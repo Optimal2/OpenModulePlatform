@@ -115,15 +115,17 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
     {
         // Index.cshtml: the edit menu of a signed-in user (the test runs anonymously)
         // in edit mode with unsaved changes: the wrench (a cross while editing) with
-        // the "Refresh now" tile behind it, and the row of icon-only tiles (pin,
-        // add, refresh with its submenu, save, reset), plus portal-dashboard.js's
+        // the "Refresh now" tile behind it, the grips column (drag, pin) left of
+        // it, and the row of icon-only tiles (add, refresh with its submenu,
+        // save, reset), plus portal-dashboard.js's
         // unsaved-draft banner and its error variant.
         ["/"] = """
             <div class="portal-dashboard is-editing has-dashboard-changes"><div class="dashboard-edit-menu">
+            <div class="dashboard-edit-menu__grips"><button type="button" class="dashboard-grip dashboard-grip--drag" aria-label="Move the menu" title="Move the menu"><span class="dashboard-action-icon dashboard-action-icon--drag" aria-hidden="true"></span></button>
+            <button type="button" class="dashboard-grip dashboard-grip--pin" aria-pressed="false" aria-label="Keep the menu open" title="Keep the menu open"><span class="dashboard-action-icon dashboard-action-icon--pin" aria-hidden="true"></span></button></div>
             <div class="dashboard-floating-row"><button type="button" class="dashboard-floating-button" aria-label="Exit edit mode" title="Exit edit mode"><span class="dashboard-floating-button__icon" aria-hidden="true"></span></button>
             <button type="button" class="dashboard-floating-button dashboard-floating-button--refresh" aria-label="Refresh now" title="Refresh now"><span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span></button></div>
             <div class="dashboard-edit-menu__actions">
-            <button type="button" class="dashboard-pin-button" aria-pressed="false" aria-label="Keep the menu open" title="Keep the menu open"><span class="dashboard-action-icon dashboard-action-icon--pin" aria-hidden="true"></span><span class="dashboard-edit-menu__label">Keep the menu open</span></button>
             <button type="button" class="dashboard-add-button" aria-label="Add widget" title="Add widget"><span class="dashboard-action-icon dashboard-action-icon--add" aria-hidden="true"></span><span class="dashboard-edit-menu__label">Add widget</span></button>
             <div class="dashboard-refresh-menu"><button type="button" class="dashboard-refresh-menu__trigger" aria-haspopup="menu" aria-expanded="false" aria-label="Refresh" title="Every minute"><span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span><span class="dashboard-refresh-menu__label">Refresh</span><span class="dashboard-refresh-menu__chevron" aria-hidden="true"></span></button>
             <div class="dashboard-refresh-menu__list" role="menu"><button type="button" class="dashboard-refresh-menu__option dashboard-refresh-menu__option--action" role="menuitem"><span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span><span>Refresh now</span></button>

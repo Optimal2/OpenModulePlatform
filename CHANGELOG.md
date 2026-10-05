@@ -15,8 +15,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   The refresh tiles are a livelier blue. At rest the tiles are stacked
   behind the cross, each showing an edge like fanned cards, and fan out
   while the menu is hovered, focused or has its submenu open, so the page
-  behind it stays reachable; a pin tile at the head of the row keeps it
-  fanned out (remembered per user in the browser).
+  behind it stays reachable. Left of the back button a column of two small
+  grips: the upper drags the whole menu anywhere the row still fits (a
+  double-click, or "Put the menu back" in the refresh submenu, returns it
+  to the corner), the lower pins the row fanned out; both remembered per
+  user in the browser.
 - **Dashboard: "Refresh now" as a floating button.** Beside the edit menu's
   wrench, tucked behind it with an edge showing and slid out beside it when
   the pair is hovered or focused; the wrench's size, the same burst of

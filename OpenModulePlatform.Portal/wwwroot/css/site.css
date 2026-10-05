@@ -5977,6 +5977,85 @@ button.dashboard-role-list__item:focus-visible {
     pointer-events: none;
 }
 
+/* A dragged menu is placed from the top-left corner by the script; the
+   default place stays the bottom-left corner above. */
+.dashboard-edit-menu.is-placed {
+    bottom: auto;
+}
+
+/* The grips column, left of the back button while editing: the drag handle
+   above the pin, two small round buttons as tall together as the tiles. It
+   takes no room outside editing, so the wrench stays where it always was. */
+.dashboard-edit-menu__grips {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: 4px;
+    width: 0;
+    margin-right: -8px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition: width 160ms ease, margin-right 160ms ease, opacity 140ms ease;
+}
+
+.portal-dashboard.is-editing .dashboard-edit-menu__grips {
+    width: 19px;
+    margin-right: 0;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.dashboard-grip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 19px;
+    height: 19px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: linear-gradient(var(--surface-muted), var(--surface-muted)), var(--surface);
+    color: var(--text-muted);
+    box-shadow: 0 4px 12px rgba(17, 24, 39, 0.12);
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.dashboard-grip .dashboard-action-icon {
+    width: 11px;
+    height: 11px;
+}
+
+.dashboard-grip:hover,
+.dashboard-grip:focus-visible {
+    border-color: var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+}
+
+.dashboard-grip--drag {
+    cursor: grab;
+    touch-action: none;
+}
+
+.dashboard-edit-menu.is-dragging .dashboard-grip--drag {
+    cursor: grabbing;
+}
+
+/* The pin pressed takes the editing blue, like the back button. */
+.dashboard-grip--pin[aria-pressed="true"],
+.dashboard-grip--pin[aria-pressed="true"]:hover {
+    border-color: var(--link);
+    background: var(--link);
+    color: var(--omp-on-accent, #ffffff);
+}
+
+.dashboard-action-icon--drag {
+    --dashboard-action-icon: url("/_content/OpenModulePlatform.Web.Shared/icons/drag.svg");
+}
+
 .dashboard-edit-menu > .dashboard-floating-row {
     z-index: 1;
     pointer-events: auto;
@@ -6009,32 +6088,26 @@ button.dashboard-role-list__item:focus-visible {
    staggered stack: the first 10 px past the cross's right edge, each next
    one 10 px further, and the first on top, so every tile shows an edge
    like cards fanned under the cross. */
-.dashboard-pin-button {
-    --dashboard-tile-index: 0;
-    z-index: 5;
-}
-
 .dashboard-add-button {
-    --dashboard-tile-index: 1;
+    --dashboard-tile-index: 0;
     z-index: 4;
 }
 
 .dashboard-refresh-menu {
-    --dashboard-tile-index: 2;
+    --dashboard-tile-index: 1;
     z-index: 3;
 }
 
 .dashboard-save-button {
-    --dashboard-tile-index: 3;
+    --dashboard-tile-index: 2;
     z-index: 2;
 }
 
 .dashboard-reset-changes-button {
-    --dashboard-tile-index: 4;
+    --dashboard-tile-index: 3;
     z-index: 1;
 }
 
-.portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-pin-button,
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-add-button,
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu,
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-save-button,
@@ -6053,17 +6126,17 @@ button.dashboard-role-list__item:focus-visible {
     pointer-events: auto;
 }
 
-/* Tucked away, the tiles cast no shadow: five shadows stacked behind the
+/* Tucked away, the tiles cast no shadow: four shadows stacked behind the
    cross made one grey halo around it. */
-.portal-dashboard.is-editing .dashboard-edit-menu:not(:hover):not(:has(:focus-visible)):not(:has([aria-expanded="true"])):not(.is-pinned) .dashboard-edit-menu__actions :is(.dashboard-pin-button, .dashboard-add-button, .dashboard-save-button, .dashboard-reset-changes-button, .dashboard-refresh-menu__trigger) {
+.portal-dashboard.is-editing .dashboard-edit-menu:not(:hover):not(:has(:focus-visible)):not(:has([aria-expanded="true"])):not(.is-pinned) .dashboard-edit-menu__actions :is(.dashboard-add-button, .dashboard-save-button, .dashboard-reset-changes-button, .dashboard-refresh-menu__trigger) {
     box-shadow: none;
 }
 
 /* While editing, the floating row's bridge covers the whole staggered stack
-   (five edges of 10 px), so the edges show but only hover; fanned out, it
+   (four edges of 10 px), so the edges show but only hover; fanned out, it
    narrows to the gap so it does not cover the first tile's edge. */
 .portal-dashboard.is-editing .dashboard-floating-row::after {
-    width: 50px;
+    width: 40px;
     transition: width 0s;
 }
 
@@ -6078,48 +6151,13 @@ button.dashboard-role-list__item:focus-visible {
     transition: width 0s linear 180ms;
 }
 
-/* The pin: a plain tile; pressed, it takes the editing blue like the cross. */
-.dashboard-pin-button {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    width: 48px;
-    min-height: 42px;
-    padding: 10px 0;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: linear-gradient(var(--surface-muted), var(--surface-muted)), var(--surface);
-    color: var(--text);
-    box-shadow: 0 8px 22px rgba(17, 24, 39, 0.12);
-    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-}
-
-.dashboard-pin-button:hover,
-.dashboard-pin-button:focus-visible {
-    border-color: var(--border-strong);
-    background: var(--surface);
-    outline: none;
-}
-
-.dashboard-pin-button[aria-pressed="true"],
-.dashboard-pin-button[aria-pressed="true"]:hover {
-    border-color: var(--link);
-    background: var(--link);
-    color: var(--omp-on-accent, #ffffff);
-}
-
-.portal-dashboard.is-editing .dashboard-pin-button {
-    display: inline-flex;
-}
-
 .dashboard-action-icon--pin {
     --dashboard-action-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 17v5'/%3E%3Cpath d='M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z'/%3E%3C/svg%3E");
 }
 
 @media (prefers-reduced-motion: reduce) {
     .portal-dashboard .dashboard-edit-menu .dashboard-edit-menu__actions,
-    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-pin-button,
+    .portal-dashboard .dashboard-edit-menu .dashboard-edit-menu__grips,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-add-button,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu,
     .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu__trigger,
@@ -8217,9 +8255,9 @@ tr.linkbox-editor-row--dragging {
 
 /* The choices, folded out beside the row and aligned with its bottom edge. */
 /* Above the tile: the height cap leaves the tile's own 42 px, the gap and
-   the menu's 22 px margin below the list, and the width cap keeps the list
-   inside the viewport from where the tile stands (third in the row: 22 px
-   margin, the cross and two tiles, 190 px in). */
+   the menu's 22 px margin below the list. The menu can be dragged, so the
+   script flips the list below the tile or against its right edge when the
+   viewport leaves no room above or to the right (is-below, is-right). */
 .dashboard-refresh-menu__list {
     position: absolute;
     left: 0;
@@ -8229,7 +8267,7 @@ tr.linkbox-editor-row--dragging {
     gap: 2px;
     width: max-content;
     min-width: 168px;
-    max-width: min(360px, calc(100vw - 216px));
+    max-width: min(360px, calc(100vw - 48px));
     max-height: calc(100vh - 96px);
     overflow-y: auto;
     padding: 6px;
@@ -8241,6 +8279,16 @@ tr.linkbox-editor-row--dragging {
 
 .dashboard-refresh-menu__list[hidden] {
     display: none;
+}
+
+.dashboard-refresh-menu.is-below .dashboard-refresh-menu__list {
+    top: calc(100% + 8px);
+    bottom: auto;
+}
+
+.dashboard-refresh-menu.is-right .dashboard-refresh-menu__list {
+    left: auto;
+    right: 0;
 }
 
 .dashboard-refresh-menu__option {

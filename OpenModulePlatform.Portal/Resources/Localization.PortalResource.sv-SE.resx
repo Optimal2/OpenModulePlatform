@@ -3461,4 +3461,7 @@
   <data name="Available in {0} s" xml:space="preserve"><value>Tillgänglig om {0} s</value></data>
   <data name="{0} s" xml:space="preserve"><value>{0} s</value></data>
   <data name="Keep the menu open" xml:space="preserve"><value>Håll menyn öppen</value></data>
+  <data name="Move the menu" xml:space="preserve"><value>Flytta menyn</value></data>
+  <data name="Move the menu (double-click to put it back)" xml:space="preserve"><value>Flytta menyn (dubbelklicka för att lägga tillbaka den)</value></data>
+  <data name="Put the menu back" xml:space="preserve"><value>Lägg tillbaka menyn</value></data>
 </root>

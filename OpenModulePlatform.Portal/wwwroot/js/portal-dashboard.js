@@ -388,6 +388,7 @@
         };
         bindModuleFragmentRefreshMenu(root, token, state);
         bindDashboardMenuPin(root);
+        bindDashboardMenuDrag(root);
         const updateDirtyState = () => {
             const isDirty = updateDashboardDirtyState(root, canvas, state, saveButton);
             updateDashboardDraftState(root, canvas, state, isDirty);
@@ -4226,9 +4227,9 @@
         moduleFragmentRefreshers.get(root)?.schedule?.();
     }
 
-    // The pin tile at the head of the edit row: pressed, the row stays fanned
-    // out whatever the pointer does (the menu's is-pinned class; the CSS treats
-    // it like a hover). Remembered per user in this browser, under the same
+    // The pin grip left of the back button: pressed, the row stays fanned out
+    // whatever the pointer does (the menu's is-pinned class; the CSS treats it
+    // like a hover). Remembered per user in this browser, under the same
     // per-user key the draft uses, so a shared workstation keeps users apart.
     const dashboardMenuPinStoragePrefix = 'omp.dashboard.editMenuPinned:';
 
@@ -4261,6 +4262,112 @@
         });
     }
 
+    // The drag grip above the pin moves the whole menu: a pointer drag places
+    // it anywhere the fanned-out row still fits, the place is remembered per
+    // user in this browser, and a double-click on the grip (or the submenu's
+    // "Put the menu back") returns it to the bottom-left corner. A placed menu
+    // is positioned from its top-left corner; a resize keeps it in view.
+    const dashboardMenuPositionStoragePrefix = 'omp.dashboard.editMenuPosition:';
+    const dashboardMenuViewportMargin = 8;
+
+    function bindDashboardMenuDrag(root) {
+        const menu = root.querySelector('[data-dashboard-edit-menu]');
+        const handle = menu?.querySelector('[data-dashboard-menu-drag]');
+        if (!menu || !handle) {
+            return;
+        }
+        const storageKey = `${dashboardMenuPositionStoragePrefix}${root.dataset.dashboardDraftKey || 'anonymous'}`;
+
+        // The menu's full width (the row's layout box is its fanned width whatever
+        // the tiles' transforms do) and height, kept inside the viewport.
+        const clamp = (left, top) => {
+            const width = menu.offsetWidth;
+            const height = menu.offsetHeight;
+            const maxLeft = Math.max(dashboardMenuViewportMargin, window.innerWidth - width - dashboardMenuViewportMargin);
+            const maxTop = Math.max(dashboardMenuViewportMargin, window.innerHeight - height - dashboardMenuViewportMargin);
+            return {
+                left: Math.min(Math.max(dashboardMenuViewportMargin, left), maxLeft),
+                top: Math.min(Math.max(dashboardMenuViewportMargin, top), maxTop)
+            };
+        };
+        const place = (position) => {
+            const placed = clamp(position.left, position.top);
+            menu.classList.add('is-placed');
+            menu.style.left = `${Math.round(placed.left)}px`;
+            menu.style.top = `${Math.round(placed.top)}px`;
+            return placed;
+        };
+        const reset = () => {
+            menu.classList.remove('is-placed');
+            menu.style.left = '';
+            menu.style.top = '';
+            try {
+                window.localStorage.removeItem(storageKey);
+            } catch {
+                // Storage blocked: nothing to forget.
+            }
+        };
+        const remember = (position) => {
+            try {
+                window.localStorage.setItem(storageKey, JSON.stringify({ left: Math.round(position.left), top: Math.round(position.top) }));
+            } catch {
+                // Storage blocked: the place holds for this page view only.
+            }
+        };
+
+        let stored = null;
+        try {
+            stored = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
+        } catch {
+            stored = null;
+        }
+        if (stored && Number.isFinite(stored.left) && Number.isFinite(stored.top)) {
+            place(stored);
+        }
+        window.addEventListener('resize', () => {
+            if (menu.classList.contains('is-placed')) {
+                place({ left: parseFloat(menu.style.left) || 0, top: parseFloat(menu.style.top) || 0 });
+            }
+        });
+
+        // The drag: pointer capture on the grip, the menu following the pointer
+        // from where it was grabbed. A grab that does not move leaves the menu
+        // (and its stored place) as it was.
+        let drag = null;
+        handle.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0) {
+                return;
+            }
+            const rect = menu.getBoundingClientRect();
+            drag = { pointerId: event.pointerId, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, moved: false, last: null };
+            handle.setPointerCapture(event.pointerId);
+            event.preventDefault();
+        });
+        handle.addEventListener('pointermove', (event) => {
+            if (!drag || event.pointerId !== drag.pointerId) {
+                return;
+            }
+            drag.moved = true;
+            menu.classList.add('is-dragging');
+            drag.last = place({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY });
+        });
+        const endDrag = (event) => {
+            if (!drag || event.pointerId !== drag.pointerId) {
+                return;
+            }
+            if (drag.moved && drag.last) {
+                remember(drag.last);
+            }
+            drag = null;
+            menu.classList.remove('is-dragging');
+            try { handle.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+        };
+        handle.addEventListener('pointerup', endDrag);
+        handle.addEventListener('pointercancel', endDrag);
+        handle.addEventListener('dblclick', reset);
+        root.addEventListener('dashboard:menu-reset-position', reset);
+    }
+
     // The menu's interval tile (editors only: the menu is theirs). Its submenu
     // folds out above it and behaves like the top bar's menus: a hover opens
     // it and a hover away folds it, a click pins it open until a click again, a
@@ -4276,7 +4383,7 @@
             return;
         }
         const options = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-option]'));
-        const items = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-now], [data-dashboard-refresh-option]'));
+        const items = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-now], [data-dashboard-refresh-option], [data-dashboard-menu-reset-position]'));
         const showChoice = (seconds) => {
             options().forEach((option) => {
                 const isChoice = parseRefreshIntervalSeconds(option.dataset.dashboardRefreshOption) === seconds;
@@ -4298,7 +4405,24 @@
             list.hidden = !open;
             pinned = open && pin;
             trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+            // The menu can stand anywhere: the list opens above its tile and
+            // along its left edge unless the viewport leaves no room there.
+            menu.classList.remove('is-below', 'is-right');
+            if (open) {
+                const rect = list.getBoundingClientRect();
+                if (rect.top < 0) {
+                    menu.classList.add('is-below');
+                }
+                if (rect.right > window.innerWidth) {
+                    menu.classList.add('is-right');
+                }
+            }
         };
+        list.querySelector('[data-dashboard-menu-reset-position]')?.addEventListener('click', () => {
+            setOpen(false);
+            trigger.focus();
+            root.dispatchEvent(new CustomEvent('dashboard:menu-reset-position'));
+        });
         const isOpen = () => !list.hidden;
         showChoice(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
 

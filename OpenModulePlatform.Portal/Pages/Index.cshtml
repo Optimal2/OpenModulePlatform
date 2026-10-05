@@ -438,7 +438,19 @@
            cross while editing), and while editing the actions fanned out to its
            right, icon-first like the wrench itself, each named by its tooltip.
            Outside editing the "Refresh now" tile is tucked behind the wrench. *@
-        <div class="dashboard-edit-menu">
+        <div class="dashboard-edit-menu" data-dashboard-edit-menu>
+            @* While editing, a column of two small grips stands left of the back
+               button: the handle that drags the whole menu (a double-click puts it
+               back where it started) and the pin that keeps the row fanned out.
+               Both remembered per user in the browser. *@
+            <div class="dashboard-edit-menu__grips">
+                <button type="button" class="dashboard-grip dashboard-grip--drag" data-dashboard-menu-drag aria-label="@L["Move the menu"]" title="@L["Move the menu (double-click to put it back)"]">
+                    <span class="dashboard-action-icon dashboard-action-icon--drag" aria-hidden="true"></span>
+                </button>
+                <button type="button" class="dashboard-grip dashboard-grip--pin" data-dashboard-menu-pin aria-pressed="false" aria-label="@L["Keep the menu open"]" title="@L["Keep the menu open"]">
+                    <span class="dashboard-action-icon dashboard-action-icon--pin" aria-hidden="true"></span>
+                </button>
+            </div>
             <div class="dashboard-floating-row">
                 <button type="button"
                         class="dashboard-floating-button"
@@ -465,12 +477,6 @@
                 </button>
             </div>
             <div class="dashboard-edit-menu__actions" aria-label="@L["Dashboard actions"]">
-                @* The pin, first in the row: pressed, it keeps the row fanned out
-                   whatever the pointer does. Remembered per user in the browser. *@
-                <button type="button" class="dashboard-pin-button" data-dashboard-menu-pin aria-pressed="false" aria-label="@L["Keep the menu open"]" title="@L["Keep the menu open"]">
-                    <span class="dashboard-action-icon dashboard-action-icon--pin" aria-hidden="true"></span>
-                    <span class="dashboard-edit-menu__label">@L["Keep the menu open"]</span>
-                </button>
                 <button type="button" class="dashboard-add-button" data-dashboard-add-open aria-label="@L["Add widget"]" title="@L["Add widget"]">
                     <span class="dashboard-action-icon dashboard-action-icon--add" aria-hidden="true"></span>
                     <span class="dashboard-edit-menu__label">@L["Add widget"]</span>
@@ -520,6 +526,12 @@
                                     aria-checked="@((Model.DashboardRefreshIntervalSeconds == seconds).ToString().ToLowerInvariant())"
                                     data-dashboard-refresh-option="@seconds.ToString(CultureInfo.InvariantCulture)">@L[OpenModulePlatform.Portal.Pages.IndexModel.RefreshIntervalText(seconds)]</button>
                         }
+                        @* Until a settings page holds it: puts a dragged menu back. *@
+                        <div class="dashboard-refresh-menu__separator" role="separator"></div>
+                        <button type="button" class="dashboard-refresh-menu__option dashboard-refresh-menu__option--action" role="menuitem" data-dashboard-menu-reset-position>
+                            <span class="dashboard-action-icon dashboard-action-icon--drag" aria-hidden="true"></span>
+                            <span>@L["Put the menu back"]</span>
+                        </button>
                     </div>
                 </div>
 
