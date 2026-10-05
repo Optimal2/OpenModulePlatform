@@ -8,6 +8,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Changed
 
+- **Dashboard: the edit menu is a row of tiles.** While editing, the
+  actions (add widget, refresh, save, reset) fan out to the right of the
+  wrench as tiles of its size, icon-first with the name as tooltip, instead
+  of a labelled list above it; the refresh submenu opens above its tile.
+  The refresh tiles are a livelier blue.
 - **Dashboard: "Refresh now" as a floating button.** Beside the edit menu's
   wrench, tucked behind it with an edge showing and slid out beside it when
   the pair is hovered or focused; the wrench's size, the same burst of

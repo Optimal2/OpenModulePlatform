@@ -4222,8 +4222,8 @@
         moduleFragmentRefreshers.get(root)?.schedule?.();
     }
 
-    // The menu's interval row (editors only: the menu is theirs). Its submenu
-    // folds out to the right and behaves like the top bar's menus: a hover opens
+    // The menu's interval tile (editors only: the menu is theirs). Its submenu
+    // folds out above it and behaves like the top bar's menus: a hover opens
     // it and a hover away folds it, a click pins it open until a click again, a
     // click elsewhere or Escape. "Refresh now" heads the submenu, with a cooldown;
     // the interval choices follow a separator. The arrow keys walk the items. A

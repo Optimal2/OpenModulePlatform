@@ -498,8 +498,9 @@ again by putting `data-widget-refresh="<seconds>"` on an element of the
 fragment: the least often it wants that (15 to 3600; the Portal removes the
 attribute). The dashboard fetches such widgets again at the user's own
 interval, one setting for the whole dashboard kept per user (off, 30 seconds,
-a minute or 5 minutes; a minute unless changed, in a submenu of the
-dashboard's edit menu), or at the module's pace when that is slower. The
+a minute or 5 minutes; a minute unless changed, in a submenu above the
+refresh tile of the dashboard's edit menu), or at the module's pace when
+that is slower. The
 submenu heads with "Refresh now", which fetches every refreshing widget at
 once, past both paces and past the Portal's cache, and then waits before it
 can again: 2 seconds after each of the first two clicks within a minute, 15
