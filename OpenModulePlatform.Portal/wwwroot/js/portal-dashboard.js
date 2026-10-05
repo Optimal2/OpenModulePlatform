@@ -4262,13 +4262,18 @@
         });
     }
 
-    // The drag grip above the pin moves the whole menu: a pointer drag places
-    // it anywhere the fanned-out row still fits, the place is remembered per
-    // user in this browser, and a double-click on the grip (or the submenu's
-    // "Put the menu back") returns it to the bottom-left corner. A placed menu
-    // is positioned from its top-left corner; a resize keeps it in view.
+    // The drag grip above the pin moves the whole menu: a pointer drag (or the
+    // arrow keys on the grip) places it anywhere the fanned-out row still
+    // fits, the place is remembered per user in this browser, and a
+    // double-click on the grip (or the submenu's "Put the menu back") returns
+    // it to the bottom-left corner. A placed menu is positioned from its
+    // top-left corner. The place the user chose is kept apart from where the
+    // menu stands: a resize or the start of editing clamps the menu into view
+    // from the chosen place, so a window grown back gives the place back.
     const dashboardMenuPositionStoragePrefix = 'omp.dashboard.editMenuPosition:';
     const dashboardMenuViewportMargin = 8;
+    const dashboardMenuDragThresholdPx = 3;
+    const dashboardMenuKeyStepPx = 8;
 
     function bindDashboardMenuDrag(root) {
         const menu = root.querySelector('[data-dashboard-edit-menu]');
@@ -4278,42 +4283,61 @@
         }
         const storageKey = `${dashboardMenuPositionStoragePrefix}${root.dataset.dashboardDraftKey || 'anonymous'}`;
 
-        // The menu's full width (the row's layout box is its fanned width whatever
-        // the tiles' transforms do) and height, kept inside the viewport.
+        // The menu's footprint is its fanned-out width while editing (the row's
+        // layout box, whatever the tiles' transforms do); outside editing the
+        // tiles are not laid out, so the width seen then is remembered from the
+        // last time editing measured it, and the start of editing clamps again.
+        let fannedWidth = 0;
+        const footprint = () => {
+            if (root.classList.contains('is-editing')) {
+                fannedWidth = Math.max(fannedWidth, menu.offsetWidth);
+            }
+            return { width: Math.max(menu.offsetWidth, fannedWidth), height: menu.offsetHeight };
+        };
         const clamp = (left, top) => {
-            const width = menu.offsetWidth;
-            const height = menu.offsetHeight;
-            const maxLeft = Math.max(dashboardMenuViewportMargin, window.innerWidth - width - dashboardMenuViewportMargin);
-            const maxTop = Math.max(dashboardMenuViewportMargin, window.innerHeight - height - dashboardMenuViewportMargin);
+            const { width, height } = footprint();
+            const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+            const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+            const maxLeft = Math.max(dashboardMenuViewportMargin, viewportWidth - width - dashboardMenuViewportMargin);
+            const maxTop = Math.max(dashboardMenuViewportMargin, viewportHeight - height - dashboardMenuViewportMargin);
             return {
                 left: Math.min(Math.max(dashboardMenuViewportMargin, left), maxLeft),
                 top: Math.min(Math.max(dashboardMenuViewportMargin, top), maxTop)
             };
         };
-        const place = (position) => {
-            const placed = clamp(position.left, position.top);
+        // The place the user chose; null means the default corner.
+        let chosen = null;
+        const show = () => {
+            if (!chosen) {
+                menu.classList.remove('is-placed');
+                menu.style.left = '';
+                menu.style.top = '';
+                return null;
+            }
+            const placed = clamp(chosen.left, chosen.top);
             menu.classList.add('is-placed');
             menu.style.left = `${Math.round(placed.left)}px`;
             menu.style.top = `${Math.round(placed.top)}px`;
             return placed;
         };
-        const reset = () => {
-            menu.classList.remove('is-placed');
-            menu.style.left = '';
-            menu.style.top = '';
-            try {
-                window.localStorage.removeItem(storageKey);
-            } catch {
-                // Storage blocked: nothing to forget.
+        const choose = (position, persist) => {
+            chosen = position ? { left: Math.round(position.left), top: Math.round(position.top) } : null;
+            const placed = show();
+            if (!persist) {
+                return placed;
             }
-        };
-        const remember = (position) => {
             try {
-                window.localStorage.setItem(storageKey, JSON.stringify({ left: Math.round(position.left), top: Math.round(position.top) }));
+                if (chosen) {
+                    window.localStorage.setItem(storageKey, JSON.stringify(chosen));
+                } else {
+                    window.localStorage.removeItem(storageKey);
+                }
             } catch {
                 // Storage blocked: the place holds for this page view only.
             }
+            return placed;
         };
+        const reset = () => choose(null, true);
 
         let stored = null;
         try {
@@ -4322,41 +4346,54 @@
             stored = null;
         }
         if (stored && Number.isFinite(stored.left) && Number.isFinite(stored.top)) {
-            place(stored);
+            choose(stored, false);
         }
-        window.addEventListener('resize', () => {
-            if (menu.classList.contains('is-placed')) {
-                place({ left: parseFloat(menu.style.left) || 0, top: parseFloat(menu.style.top) || 0 });
+        window.addEventListener('resize', show);
+        root.addEventListener('dashboard:edit-mode', (event) => {
+            if (event.detail?.editing) {
+                // The grips column is still widening: measure once it has.
+                window.setTimeout(show, 200);
             }
         });
 
         // The drag: pointer capture on the grip, the menu following the pointer
-        // from where it was grabbed. A grab that does not move leaves the menu
-        // (and its stored place) as it was.
+        // from where it was grabbed once it has moved a few pixels; a grab that
+        // moves less leaves the menu and its stored place as they were.
         let drag = null;
         handle.addEventListener('pointerdown', (event) => {
             if (event.button !== 0) {
                 return;
             }
             const rect = menu.getBoundingClientRect();
-            drag = { pointerId: event.pointerId, offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, moved: false, last: null };
-            handle.setPointerCapture(event.pointerId);
+            drag = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                offsetX: event.clientX - rect.left,
+                offsetY: event.clientY - rect.top,
+                moved: false,
+                last: null
+            };
+            try { handle.setPointerCapture(event.pointerId); } catch { /* a pointer the browser does not track */ }
             event.preventDefault();
         });
         handle.addEventListener('pointermove', (event) => {
             if (!drag || event.pointerId !== drag.pointerId) {
                 return;
             }
+            if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < dashboardMenuDragThresholdPx) {
+                return;
+            }
             drag.moved = true;
             menu.classList.add('is-dragging');
-            drag.last = place({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY });
+            drag.last = choose({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY }, false);
         });
         const endDrag = (event) => {
             if (!drag || event.pointerId !== drag.pointerId) {
                 return;
             }
             if (drag.moved && drag.last) {
-                remember(drag.last);
+                choose(drag.last, true);
             }
             drag = null;
             menu.classList.remove('is-dragging');
@@ -4365,6 +4402,18 @@
         handle.addEventListener('pointerup', endDrag);
         handle.addEventListener('pointercancel', endDrag);
         handle.addEventListener('dblclick', reset);
+        // The keyboard moves the menu too: an arrow key steps it 8 px (32 with
+        // Shift), from where it stands.
+        handle.addEventListener('keydown', (event) => {
+            const step = (event.shiftKey ? 4 : 1) * dashboardMenuKeyStepPx;
+            const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];
+            if (!delta) {
+                return;
+            }
+            event.preventDefault();
+            const rect = menu.getBoundingClientRect();
+            choose({ left: rect.left + delta[0], top: rect.top + delta[1] }, true);
+        });
         root.addEventListener('dashboard:menu-reset-position', reset);
     }
 
@@ -4406,15 +4455,26 @@
             pinned = open && pin;
             trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
             // The menu can stand anywhere: the list opens above its tile and
-            // along its left edge unless the viewport leaves no room there.
+            // along its left edge unless the viewport leaves no room there. The
+            // tile may still be tucked (a hover opens the list as the row fans
+            // out), so its fanned-out place is what counts: the tile's current
+            // transform is taken out of the measurement.
             menu.classList.remove('is-below', 'is-right');
+            list.style.maxHeight = '';
             if (open) {
+                const shift = (() => {
+                    try { return new DOMMatrixReadOnly(window.getComputedStyle(menu).transform).e || 0; } catch { return 0; }
+                })();
+                const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+                const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
                 const rect = list.getBoundingClientRect();
+                if (rect.right - shift > viewportWidth) {
+                    menu.classList.add('is-right');
+                }
                 if (rect.top < 0) {
                     menu.classList.add('is-below');
-                }
-                if (rect.right > window.innerWidth) {
-                    menu.classList.add('is-right');
+                    const below = list.getBoundingClientRect();
+                    list.style.maxHeight = `${Math.max(120, viewportHeight - below.top - 22)}px`;
                 }
             }
         };

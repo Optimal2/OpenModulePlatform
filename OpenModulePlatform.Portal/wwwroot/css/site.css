@@ -5995,15 +5995,18 @@ button.dashboard-role-list__item:focus-visible {
     margin-right: -8px;
     overflow: hidden;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
-    transition: width 160ms ease, margin-right 160ms ease, opacity 140ms ease;
+    transition: width 160ms ease, margin-right 160ms ease, opacity 140ms ease, visibility 0s linear 160ms;
 }
 
 .portal-dashboard.is-editing .dashboard-edit-menu__grips {
     width: 19px;
     margin-right: 0;
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
+    transition: width 160ms ease, margin-right 160ms ease, opacity 140ms ease, visibility 0s;
 }
 
 .dashboard-grip {
