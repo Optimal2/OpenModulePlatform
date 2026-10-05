@@ -5957,8 +5957,13 @@ button.dashboard-role-list__item:focus-visible {
 }
 
 /* The edit menu: a row of tiles at the bottom left. The wrench first; while
-   editing the actions fan out to its right, each a tile of the wrench's size
-   with an icon and a tooltip for its name. */
+   editing the actions are a row of tiles of the wrench's size, each with an
+   icon and a tooltip for its name, tucked behind the wrench (now a cross)
+   with 10 px showing, like the "Refresh now" tile outside editing, and
+   fanned out to the right while the menu is hovered, holds the keyboard
+   focus or has its submenu open. Tucked away, the tiles leave the page
+   behind them reachable; the menu's own box takes no pointer events, only
+   its tiles do, so the room the fanned-out row would take is free too. */
 .dashboard-edit-menu {
     position: fixed;
     left: 22px;
@@ -5969,9 +5974,17 @@ button.dashboard-role-list__item:focus-visible {
     align-items: center;
     gap: 8px;
     max-width: calc(100vw - 44px);
+    pointer-events: none;
+}
+
+.dashboard-edit-menu > .dashboard-floating-row {
+    z-index: 1;
+    pointer-events: auto;
 }
 
 .dashboard-edit-menu__actions {
+    position: relative;
+    z-index: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -5981,10 +5994,24 @@ button.dashboard-role-list__item:focus-visible {
     transition: opacity 140ms ease, transform 160ms ease;
 }
 
+/* Editing, at rest: the row sits behind the cross, its right edge 10 px past
+   the cross's (the row starts 8 px right of the cross, so -100% + 2 px). */
 .portal-dashboard.is-editing .dashboard-edit-menu__actions {
     opacity: 1;
     pointer-events: auto;
+    transform: translateX(calc(-100% + 2px));
+}
+
+.portal-dashboard.is-editing .dashboard-edit-menu:hover .dashboard-edit-menu__actions,
+.portal-dashboard.is-editing .dashboard-edit-menu:has(:focus-visible) .dashboard-edit-menu__actions,
+.portal-dashboard.is-editing .dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-edit-menu__actions {
     transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-edit-menu__actions {
+        transition: none;
+    }
 }
 
 /* The tiles' names are their tooltips (and aria-labels), not text. */
