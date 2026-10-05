@@ -605,6 +605,9 @@
                 state.editCanvasWidth = 0;
                 state.editCanvasHeight = 0;
             }
+            // The refresh submenu listens: left open, it would hold the tile row
+            // fanned out the next time editing starts.
+            root.dispatchEvent(new CustomEvent('dashboard:edit-mode', { detail: { editing: isEditing } }));
             editToggle.setAttribute('aria-pressed', isEditing ? 'true' : 'false');
             if (editLabel) {
                 editLabel.textContent = '';
@@ -4350,6 +4353,12 @@
                 }
                 refreshModuleFragmentsNow(root).catch(() => {});
             });
+        });
+        // Leaving edit mode folds the list away (and unpins it).
+        root.addEventListener('dashboard:edit-mode', (event) => {
+            if (!event.detail?.editing && isOpen()) {
+                setOpen(false);
+            }
         });
         // Focus leaving the menu (a Tab out of it) folds the list away.
         menu.addEventListener('focusout', (event) => {

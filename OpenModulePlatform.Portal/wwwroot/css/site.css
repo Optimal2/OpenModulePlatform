@@ -5958,22 +5958,22 @@ button.dashboard-role-list__item:focus-visible {
 
 /* The edit menu: a row of tiles at the bottom left. The wrench first; while
    editing the actions are a row of tiles of the wrench's size, each with an
-   icon and a tooltip for its name, tucked behind the wrench (now a cross)
-   with 10 px showing, like the "Refresh now" tile outside editing, and
-   fanned out to the right while the menu is hovered, holds the keyboard
-   focus or has its submenu open. Tucked away, the tiles leave the page
-   behind them reachable; the menu's own box takes no pointer events, only
-   its tiles do, so the room the fanned-out row would take is free too. */
+   icon and a tooltip for its name. At rest every tile is stacked behind the
+   wrench (now a cross) with 10 px showing, like the "Refresh now" tile
+   outside editing; while the menu is hovered, holds the keyboard focus or
+   has its submenu open they fan out to the right. Tucked away, the tiles
+   leave the page behind them reachable: the menu's and the row's own boxes
+   take no pointer events, only the tiles do, until the row is fanned out,
+   when the row's box bridges the gaps between its tiles. The row never
+   wraps: wrapped, its tiles would stack in the open, uncovered. */
 .dashboard-edit-menu {
     position: fixed;
     left: 22px;
     bottom: 22px;
     z-index: 20000;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    max-width: calc(100vw - 44px);
     pointer-events: none;
 }
 
@@ -5983,6 +5983,7 @@ button.dashboard-role-list__item:focus-visible {
 }
 
 .dashboard-edit-menu__actions {
+    --dashboard-tile-tuck: 1;
     position: relative;
     z-index: 0;
     display: flex;
@@ -5994,22 +5995,55 @@ button.dashboard-role-list__item:focus-visible {
     transition: opacity 140ms ease, transform 160ms ease;
 }
 
-/* Editing, at rest: the row sits behind the cross, its right edge 10 px past
-   the cross's (the row starts 8 px right of the cross, so -100% + 2 px). */
 .portal-dashboard.is-editing .dashboard-edit-menu__actions {
     opacity: 1;
+    transform: translateX(0);
+}
+
+.portal-dashboard.is-editing .dashboard-edit-menu__actions > *,
+.portal-dashboard.is-editing .dashboard-edit-menu__save-row > * {
     pointer-events: auto;
-    transform: translateX(calc(-100% + 2px));
+}
+
+/* Each tile's place in the row, so it knows how far back to the cross it
+   goes: the row starts 8 px right of the cross, and a tile stands 56 px
+   (48 + the 8 px gap) right of the one before, tucked to 10 px past the
+   cross's right edge. */
+.dashboard-add-button {
+    --dashboard-tile-index: 0;
+}
+
+.dashboard-refresh-menu {
+    --dashboard-tile-index: 1;
+}
+
+.dashboard-save-button {
+    --dashboard-tile-index: 2;
+}
+
+.dashboard-reset-changes-button {
+    --dashboard-tile-index: 3;
+}
+
+.portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-add-button,
+.portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu,
+.portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-save-button,
+.portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-reset-changes-button {
+    transform: translateX(calc(var(--dashboard-tile-tuck) * (-46px - var(--dashboard-tile-index) * 56px)));
+    transition: transform 160ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
 .portal-dashboard.is-editing .dashboard-edit-menu:hover .dashboard-edit-menu__actions,
 .portal-dashboard.is-editing .dashboard-edit-menu:has(:focus-visible) .dashboard-edit-menu__actions,
 .portal-dashboard.is-editing .dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-edit-menu__actions {
-    transform: translateX(0);
+    --dashboard-tile-tuck: 0;
+    pointer-events: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .dashboard-edit-menu__actions {
+    .dashboard-edit-menu__actions,
+    .dashboard-edit-menu__actions > *,
+    .dashboard-edit-menu__save-row > * {
         transition: none;
     }
 }
