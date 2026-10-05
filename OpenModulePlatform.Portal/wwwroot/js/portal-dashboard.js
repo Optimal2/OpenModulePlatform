@@ -4267,13 +4267,16 @@
     // fits, the place is remembered per user in this browser, and a
     // double-click on the grip (or the submenu's "Put the menu back") returns
     // it to the bottom-left corner. A placed menu is positioned from its
-    // top-left corner. The place the user chose is kept apart from where the
-    // menu stands: a resize or the start of editing clamps the menu into view
-    // from the chosen place, so a window grown back gives the place back.
+    // top-left corner. What is stored is where the menu stands, clamped into
+    // view; a resize or the start of editing clamps it again.
     const dashboardMenuPositionStoragePrefix = 'omp.dashboard.editMenuPosition:';
     const dashboardMenuViewportMargin = 8;
     const dashboardMenuDragThresholdPx = 3;
     const dashboardMenuKeyStepPx = 8;
+    // The fanned-out menu's width before editing has measured it on this page:
+    // the grips column, the back button, four tiles and the gaps between (the
+    // measured width is stored with the place and replaces this).
+    const dashboardMenuFannedWidthFallbackPx = 299;
 
     function bindDashboardMenuDrag(root) {
         const menu = root.querySelector('[data-dashboard-edit-menu]');
@@ -4285,14 +4288,18 @@
 
         // The menu's footprint is its fanned-out width while editing (the row's
         // layout box, whatever the tiles' transforms do); outside editing the
-        // tiles are not laid out, so the width seen then is remembered from the
-        // last time editing measured it, and the start of editing clamps again.
+        // tiles are not laid out, so the width used then is the one editing
+        // measured last (stored with the place, so a fresh load knows it too),
+        // and the start of editing measures and clamps again.
         let fannedWidth = 0;
+        const grips = menu.querySelector('.dashboard-edit-menu__grips');
         const footprint = () => {
-            if (root.classList.contains('is-editing')) {
-                fannedWidth = Math.max(fannedWidth, menu.offsetWidth);
+            // Measured only once the grips column has opened fully, so a width
+            // taken mid-transition is never kept.
+            if (root.classList.contains('is-editing') && menu.offsetWidth > 0 && (grips?.offsetWidth || 0) >= 18) {
+                fannedWidth = menu.offsetWidth;
             }
-            return { width: Math.max(menu.offsetWidth, fannedWidth), height: menu.offsetHeight };
+            return { width: Math.max(menu.offsetWidth, fannedWidth || dashboardMenuFannedWidthFallbackPx), height: menu.offsetHeight };
         };
         const clamp = (left, top) => {
             const { width, height } = footprint();
@@ -4323,12 +4330,15 @@
         const choose = (position, persist) => {
             chosen = position ? { left: Math.round(position.left), top: Math.round(position.top) } : null;
             const placed = show();
+            if (placed) {
+                chosen = { left: Math.round(placed.left), top: Math.round(placed.top) };
+            }
             if (!persist) {
                 return placed;
             }
             try {
                 if (chosen) {
-                    window.localStorage.setItem(storageKey, JSON.stringify(chosen));
+                    window.localStorage.setItem(storageKey, JSON.stringify({ ...chosen, width: fannedWidth || undefined }));
                 } else {
                     window.localStorage.removeItem(storageKey);
                 }
@@ -4346,13 +4356,22 @@
             stored = null;
         }
         if (stored && Number.isFinite(stored.left) && Number.isFinite(stored.top)) {
+            if (Number.isFinite(stored.width) && stored.width > 0) {
+                fannedWidth = stored.width;
+            }
             choose(stored, false);
         }
         window.addEventListener('resize', show);
         root.addEventListener('dashboard:edit-mode', (event) => {
             if (event.detail?.editing) {
-                // The grips column is still widening: measure once it has.
-                window.setTimeout(show, 200);
+                // The grips column is still widening: clamp once it has opened
+                // (its transition ends), with a timer in case no transition runs.
+                window.setTimeout(show, 240);
+            }
+        });
+        grips?.addEventListener('transitionend', (event) => {
+            if (event.propertyName === 'width' && root.classList.contains('is-editing')) {
+                show();
             }
         });
 
@@ -4371,8 +4390,7 @@
                 startY: event.clientY,
                 offsetX: event.clientX - rect.left,
                 offsetY: event.clientY - rect.top,
-                moved: false,
-                last: null
+                moved: false
             };
             try { handle.setPointerCapture(event.pointerId); } catch { /* a pointer the browser does not track */ }
             event.preventDefault();
@@ -4384,16 +4402,23 @@
             if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < dashboardMenuDragThresholdPx) {
                 return;
             }
+            if (!drag.moved) {
+                // A move begins: the submenu, hanging from a tile, would be left
+                // behind or off-screen, so it folds away.
+                root.dispatchEvent(new CustomEvent('dashboard:menu-moving'));
+            }
             drag.moved = true;
             menu.classList.add('is-dragging');
-            drag.last = choose({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY }, false);
+            choose({ left: event.clientX - drag.offsetX, top: event.clientY - drag.offsetY }, false);
         });
         const endDrag = (event) => {
             if (!drag || event.pointerId !== drag.pointerId) {
                 return;
             }
-            if (drag.moved && drag.last) {
-                choose(drag.last, true);
+            if (drag.moved && chosen) {
+                // Where the menu stands now (a resize during the drag may have
+                // moved it on).
+                choose(chosen, true);
             }
             drag = null;
             menu.classList.remove('is-dragging');
@@ -4454,30 +4479,38 @@
             list.hidden = !open;
             pinned = open && pin;
             trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
-            // The menu can stand anywhere: the list opens above its tile and
-            // along its left edge unless the viewport leaves no room there. The
-            // tile may still be tucked (a hover opens the list as the row fans
-            // out), so its fanned-out place is what counts: the tile's current
-            // transform is taken out of the measurement.
-            menu.classList.remove('is-below', 'is-right');
-            list.style.maxHeight = '';
             if (open) {
-                const shift = (() => {
-                    try { return new DOMMatrixReadOnly(window.getComputedStyle(menu).transform).e || 0; } catch { return 0; }
-                })();
-                const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
-                const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
-                const rect = list.getBoundingClientRect();
-                if (rect.right - shift > viewportWidth) {
-                    menu.classList.add('is-right');
-                }
-                if (rect.top < 0) {
-                    menu.classList.add('is-below');
-                    const below = list.getBoundingClientRect();
-                    list.style.maxHeight = `${Math.max(120, viewportHeight - below.top - 22)}px`;
-                }
+                positionList();
             }
         };
+        // The menu can stand anywhere: the list opens above its tile and along
+        // its left edge unless the viewport leaves no room there, and follows a
+        // viewport change while open. The tile may still be tucked (a hover
+        // opens the list as the row fans out), so its fanned-out place is what
+        // counts: the tile's current transform is taken out of the measurement.
+        const positionList = () => {
+            menu.classList.remove('is-below', 'is-right');
+            list.style.maxHeight = '';
+            const shift = (() => {
+                try { return new DOMMatrixReadOnly(window.getComputedStyle(menu).transform).e || 0; } catch { return 0; }
+            })();
+            const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+            const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+            const rect = list.getBoundingClientRect();
+            if (rect.right - shift > viewportWidth) {
+                menu.classList.add('is-right');
+            }
+            if (rect.top < 0) {
+                menu.classList.add('is-below');
+                const below = list.getBoundingClientRect();
+                list.style.maxHeight = `${Math.max(120, viewportHeight - below.top - 22)}px`;
+            }
+        };
+        window.addEventListener('resize', () => {
+            if (!list.hidden) {
+                positionList();
+            }
+        });
         list.querySelector('[data-dashboard-menu-reset-position]')?.addEventListener('click', () => {
             setOpen(false);
             trigger.focus();
@@ -4574,9 +4607,15 @@
                 refreshModuleFragmentsNow(root).catch(() => {});
             });
         });
-        // Leaving edit mode folds the list away (and unpins it).
+        // Leaving edit mode folds the list away (and unpins it); so does the
+        // menu starting to move.
         root.addEventListener('dashboard:edit-mode', (event) => {
             if (!event.detail?.editing && isOpen()) {
+                setOpen(false);
+            }
+        });
+        root.addEventListener('dashboard:menu-moving', () => {
+            if (isOpen()) {
                 setOpen(false);
             }
         });
