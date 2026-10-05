@@ -5991,13 +5991,11 @@ button.dashboard-role-list__item:focus-visible {
     gap: 8px;
     opacity: 0;
     pointer-events: none;
-    transform: translateX(-16px);
-    transition: opacity 140ms ease, transform 160ms ease;
+    transition: opacity 140ms ease;
 }
 
 .portal-dashboard.is-editing .dashboard-edit-menu__actions {
     opacity: 1;
-    transform: translateX(0);
 }
 
 .portal-dashboard.is-editing .dashboard-edit-menu__actions > *,
@@ -6040,10 +6038,27 @@ button.dashboard-role-list__item:focus-visible {
     pointer-events: auto;
 }
 
+/* Tucked away, the tiles cast no shadow: four shadows stacked behind the
+   cross made one grey halo around it. */
+.portal-dashboard.is-editing .dashboard-edit-menu:not(:hover):not(:has(:focus-visible)):not(:has([aria-expanded="true"])) .dashboard-edit-menu__actions :is(.dashboard-add-button, .dashboard-save-button, .dashboard-reset-changes-button, .dashboard-refresh-menu__trigger) {
+    box-shadow: none;
+}
+
+/* Fanned out, the floating row's bridge narrows to the gap, so it does not
+   cover the first tile's edge. */
+.dashboard-edit-menu:hover .dashboard-floating-row::after,
+.dashboard-edit-menu:has(:focus-visible) .dashboard-floating-row::after,
+.dashboard-edit-menu:has([aria-expanded="true"]) .dashboard-floating-row::after {
+    width: 8px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-    .dashboard-edit-menu__actions,
-    .dashboard-edit-menu__actions > *,
-    .dashboard-edit-menu__save-row > * {
+    .portal-dashboard .dashboard-edit-menu .dashboard-edit-menu__actions,
+    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-add-button,
+    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu,
+    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-refresh-menu__trigger,
+    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-save-button,
+    .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-reset-changes-button {
         transition: none;
     }
 }
