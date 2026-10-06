@@ -117,7 +117,7 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
         // in edit mode with unsaved changes: the wrench (a cross while editing) with
         // the "Refresh now" tile behind it, the grips column (drag, pin) left of
         // it, and the row of icon-only tiles (add, refresh with its submenu,
-        // save, reset), plus portal-dashboard.js's
+        // reset, save), plus portal-dashboard.js's
         // unsaved-draft banner and its error variant.
         ["/"] = """
             <div class="portal-dashboard is-editing has-dashboard-changes"><div class="dashboard-edit-menu">
@@ -130,8 +130,8 @@ public sealed class PortalThemeContractTests(PlaywrightSessionFixture playwright
             <div class="dashboard-refresh-menu"><button type="button" class="dashboard-refresh-menu__trigger" aria-haspopup="menu" aria-expanded="false" aria-label="Refresh" title="Every minute"><span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span><span class="dashboard-refresh-menu__label">Refresh</span><span class="dashboard-refresh-menu__chevron" aria-hidden="true"></span></button>
             <div class="dashboard-refresh-menu__list" role="menu"><button type="button" class="dashboard-refresh-menu__option dashboard-refresh-menu__option--action" role="menuitem"><span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span><span>Refresh now</span></button>
             <div class="dashboard-refresh-menu__separator" role="separator"></div><button type="button" class="dashboard-refresh-menu__option" role="menuitemradio" aria-checked="true">Every minute</button></div></div>
-            <div class="dashboard-edit-menu__save-row"><button type="button" class="dashboard-save-button" aria-label="Save" title="Save"><span class="dashboard-action-icon dashboard-action-icon--save" aria-hidden="true"></span><span class="dashboard-edit-menu__label">Save</span></button>
-            <button type="button" class="dashboard-reset-changes-button" aria-label="Reset changes" title="Reset changes"><span class="dashboard-action-icon dashboard-action-icon--reset-history" aria-hidden="true"></span></button></div>
+            <div class="dashboard-edit-menu__save-row"><button type="button" class="dashboard-reset-changes-button" aria-label="Reset changes" title="Reset changes"><span class="dashboard-action-icon dashboard-action-icon--reset-history" aria-hidden="true"></span></button>
+            <button type="button" class="dashboard-save-button" aria-label="Save" title="Save"><span class="dashboard-action-icon dashboard-action-icon--save" aria-hidden="true"></span><span class="dashboard-edit-menu__label">Save</span></button></div>
             </div></div></div>
             <div class="dashboard-draft-banner"><span class="dashboard-draft-banner__message">You have unsaved dashboard changes.</span>
             <span class="dashboard-draft-banner__actions"><button type="button" class="btn btn-secondary btn-sm">Discard</button> <button type="button" class="btn btn-primary btn-sm">Save</button></span></div>

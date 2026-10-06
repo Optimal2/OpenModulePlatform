@@ -25,9 +25,11 @@
     --dashboard-refresh-accent-surface: rgba(14, 165, 233, 0.2);
     --dashboard-refresh-accent-hover: rgba(14, 165, 233, 0.26);
     --dashboard-refresh-accent-text: color-mix(in srgb, #0ea5e9 55%, var(--text));
-    /* The menu's buttons at rest: see-through, so the page shows faintly
-       behind them; hovered, pressed or open they turn solid. */
+    /* The menu's buttons at rest: frosted glass, see-through with a blur, so
+       the page (and a card tucked behind) shows as a soft tone, not a shape;
+       hovered, pressed or open they turn solid. */
     --dashboard-glass: color-mix(in srgb, var(--surface) 55%, transparent);
+    --dashboard-glass-blur: blur(10px);
     --shadow: var(--omp-shadow, 0 8px 24px rgba(17, 24, 39, 0.05));
     --portal-page-chrome-width: 100%;
 }
@@ -6025,6 +6027,8 @@ button.dashboard-role-list__item:focus-visible {
     background: var(--dashboard-glass);
     color: var(--text-muted);
     box-shadow: 0 4px 12px rgba(17, 24, 39, 0.12);
+    -webkit-backdrop-filter: var(--dashboard-glass-blur);
+    backdrop-filter: var(--dashboard-glass-blur);
     transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
@@ -6104,12 +6108,13 @@ button.dashboard-role-list__item:focus-visible {
     z-index: 3;
 }
 
-.dashboard-save-button {
+.dashboard-reset-changes-button {
     --dashboard-tile-index: 2;
     z-index: 2;
 }
 
-.dashboard-reset-changes-button {
+/* Save stands last in the row. */
+.dashboard-save-button {
     --dashboard-tile-index: 3;
     z-index: 1;
 }
@@ -6120,15 +6125,7 @@ button.dashboard-role-list__item:focus-visible {
 .portal-dashboard.is-editing .dashboard-edit-menu__actions .dashboard-reset-changes-button {
     position: relative;
     transform: translateX(calc(var(--dashboard-tile-tuck) * (-46px - var(--dashboard-tile-index) * 46px)));
-    transition: transform 160ms ease, clip-path 160ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-}
-
-/* Tucked, each tile paints only the 10 px that show, so the see-through
-   tiles do not show through one another or the back button. The refresh
-   wrapper is left unclipped (its submenu hangs outside it); its trigger is
-   clipped instead. */
-.portal-dashboard.is-editing .dashboard-edit-menu__actions :is(.dashboard-add-button, .dashboard-refresh-menu__trigger, .dashboard-save-button, .dashboard-reset-changes-button) {
-    clip-path: inset(0 0 0 calc(var(--dashboard-tile-tuck) * (100% - 10px)) round 999px);
+    transition: transform 160ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
 /* Fanned out: hovered, focused by keyboard, with the submenu open, or pinned. */
@@ -6202,6 +6199,8 @@ button.dashboard-role-list__item:focus-visible {
     background: linear-gradient(var(--dashboard-edit-accent-surface), var(--dashboard-edit-accent-surface)), var(--dashboard-glass);
     color: var(--omp-warning-text, #9a5b00);
     box-shadow: 0 8px 22px rgba(245, 158, 11, 0.12);
+    -webkit-backdrop-filter: var(--dashboard-glass-blur);
+    backdrop-filter: var(--dashboard-glass-blur);
     transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
 }
 
@@ -6258,8 +6257,8 @@ button.dashboard-role-list__item:focus-visible {
     width: 10px;
 }
 
-/* In front of the tucked-away card. The card is clipped to its showing
-   edge while tucked, so the wrench can stay see-through. */
+/* In front of the tucked-away card: frosted, so the card behind it shows as
+   a soft tone and only its edge reads as a card. */
 .dashboard-floating-row > [data-dashboard-edit-toggle] {
     position: relative;
     z-index: 1;
@@ -6275,10 +6274,7 @@ button.dashboard-role-list__item:focus-visible {
     padding: 10px 0;
     justify-content: center;
     transform: translateX(calc(-100% + 10px));
-    /* Tucked, only the 10 px that show are painted, so nothing of the card
-       shows through the see-through wrench in front of it. */
-    clip-path: inset(0 0 0 calc(100% - 10px) round 999px);
-    transition: transform 160ms ease, clip-path 160ms ease, background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
+    transition: transform 160ms ease, background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
     border-color: var(--dashboard-refresh-accent-soft);
     background: linear-gradient(var(--dashboard-refresh-accent-surface), var(--dashboard-refresh-accent-surface)), var(--dashboard-glass);
     color: var(--dashboard-refresh-accent-text);
@@ -6297,7 +6293,6 @@ button.dashboard-role-list__item:focus-visible {
 .dashboard-floating-row:hover .dashboard-floating-button--refresh,
 .dashboard-floating-row:has(:focus-visible) .dashboard-floating-button--refresh {
     transform: translateX(8px);
-    clip-path: inset(0 round 999px);
 }
 
 /* Waiting out the cooldown: the countdown in the icon's place, in the muted
@@ -6350,6 +6345,8 @@ button.dashboard-role-list__item:focus-visible {
     background: var(--dashboard-glass);
     color: var(--text);
     box-shadow: 0 8px 22px rgba(17, 24, 39, 0.12);
+    -webkit-backdrop-filter: var(--dashboard-glass-blur);
+    backdrop-filter: var(--dashboard-glass-blur);
     transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
@@ -8234,7 +8231,9 @@ tr.linkbox-editor-row--dragging {
     background: linear-gradient(var(--dashboard-refresh-accent-surface), var(--dashboard-refresh-accent-surface)), var(--dashboard-glass);
     color: var(--dashboard-refresh-accent-text);
     box-shadow: 0 8px 22px rgba(14, 165, 233, 0.16);
-    transition: clip-path 160ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+    -webkit-backdrop-filter: var(--dashboard-glass-blur);
+    backdrop-filter: var(--dashboard-glass-blur);
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
 .dashboard-refresh-menu__trigger:hover,
