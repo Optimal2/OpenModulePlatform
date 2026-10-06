@@ -23,11 +23,12 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   The refresh tiles are a livelier blue. At rest the tiles are stacked
   behind the cross, each showing an edge like fanned cards, and fan out
   while the menu is hovered, focused or has its submenu open, so the page
-  behind it stays reachable. Left of the back button a column of two small
-  grips: the upper drags the whole menu anywhere the row still fits (a
-  double-click, or "Put the menu back" in the refresh submenu, returns it
-  to the corner), the lower pins the row fanned out; both remembered per
-  user in the browser. The buttons are frosted glass at rest (see-through,
+  behind it stays reachable. A column of two small grips grows out of the
+  back button to its left while editing (the button stays put): the upper
+  drags the whole menu anywhere the row still fits (a double-click on it,
+  or "Put the menu back" under Dashboard in the user's settings, returns
+  it to the corner), the lower pins the row fanned out; both remembered
+  per user in the browser. The buttons are frosted glass at rest (see-through,
   with a blur) and solid when hovered, open or pressed; Save, last in the
   row, stays faint until there are changes. The
   refresh tile's tooltip names the setting ("Refresh interval - every

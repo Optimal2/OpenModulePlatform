@@ -1155,4 +1155,6 @@
   <data name="Previous page" xml:space="preserve"><value>Previous page</value></data>
   <data name="Next page" xml:space="preserve"><value>Next page</value></data>
   <data name="Pages" xml:space="preserve"><value>Pages</value></data>
+  <data name="The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner." xml:space="preserve"><value>The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner.</value></data>
+  <data name="The menu will be back in its corner the next time the dashboard opens." xml:space="preserve"><value>The menu will be back in its corner the next time the dashboard opens.</value></data>
 </root>

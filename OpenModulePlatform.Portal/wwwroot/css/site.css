@@ -5973,7 +5973,10 @@ button.dashboard-role-list__item:focus-visible {
    wraps: wrapped, its tiles would stack in the open, uncovered. */
 .dashboard-edit-menu {
     position: fixed;
-    left: 22px;
+    /* Room to the left for the grips column (19 px and an 8 px gap) that
+       grows out of the back button while editing, with the 8 px margin the
+       drag keeps beyond it. */
+    left: 35px;
     bottom: 22px;
     z-index: 20000;
     display: flex;
@@ -5989,29 +5992,32 @@ button.dashboard-role-list__item:focus-visible {
 }
 
 /* The grips column, left of the back button while editing: the drag handle
-   above the pin, two small round buttons as tall together as the tiles. It
-   takes no room outside editing, so the wrench stays where it always was. */
+   above the pin, two small round buttons as tall together as the tiles. */
+/* The grips column lives inside the floating row, out of its flow, and
+   slides out from under the back button to the left while editing (the
+   button itself does not move); hidden it is out of the tab order too. */
 .dashboard-edit-menu__grips {
+    position: absolute;
+    top: 50%;
+    left: -27px;
+    z-index: 0;
     display: flex;
-    flex: none;
     flex-direction: column;
     gap: 4px;
-    width: 0;
-    margin-right: -8px;
-    overflow: hidden;
+    width: 19px;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transition: width 160ms ease, margin-right 160ms ease, opacity 140ms ease, visibility 0s linear 160ms;
+    transform: translate(27px, -50%);
+    transition: transform 160ms ease, opacity 140ms ease, visibility 0s linear 160ms;
 }
 
 .portal-dashboard.is-editing .dashboard-edit-menu__grips {
-    width: 19px;
-    margin-right: 0;
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transition: width 160ms ease, margin-right 160ms ease, opacity 140ms ease, visibility 0s;
+    transform: translate(0, -50%);
+    transition: transform 160ms ease, opacity 140ms ease, visibility 0s;
 }
 
 .dashboard-grip {

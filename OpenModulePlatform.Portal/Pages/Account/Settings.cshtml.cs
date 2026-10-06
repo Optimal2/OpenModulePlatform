@@ -85,6 +85,13 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
 
     public bool NotificationToastsGloballyEnabled { get; private set; } = true;
 
+    /// <summary>
+    /// The per-user key the dashboard script keeps its browser-side state under
+    /// (the draft, the menu's place, the pin); the settings page's "Put the menu
+    /// back" button clears the menu's place with it.
+    /// </summary>
+    public string DashboardDraftKey { get; private set; } = string.Empty;
+
     public async Task<IActionResult> OnGet(string? tab, CancellationToken ct)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -99,6 +106,7 @@ public sealed class SettingsModel : OmpSecurePageModel<PortalResource>
             return Page();
         }
 
+        DashboardDraftKey = $"portal-dashboard-user-{userId.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         var guard = await LoadAsync(userId, tab, loadUserInput: true, loadPortalInput: true, ct);
         return guard ?? Page();
     }

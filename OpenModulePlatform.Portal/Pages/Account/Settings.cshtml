@@ -154,6 +154,17 @@ else if (Model.IsActiveTab(SettingsModel.PortalTab))
         </div>
     </form>
 
+    @* The dashboard's edit menu can be dragged anywhere; this puts it back.
+       Browser-side state, so a button rather than a post. *@
+    <section class="card form-grid settings-panel" data-dashboard-menu-settings data-dashboard-draft-key="@Model.DashboardDraftKey">
+        <h3>@L["Dashboard"]</h3>
+        <p class="muted">@L["The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner."]</p>
+        <div class="toolbar">
+            <button type="button" class="btn btn-secondary" data-dashboard-menu-reset-position-button>@L["Put the menu back"]</button>
+            <span class="muted" data-dashboard-menu-reset-status hidden>@L["The menu will be back in its corner the next time the dashboard opens."]</span>
+        </div>
+    </section>
+
     <form method="post"
           asp-page-handler="ResetDashboard"
           class="card danger-zone"
@@ -201,4 +212,5 @@ else if (Model.IsPortalAdmin)
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/portal-settings-dashboard-menu.js"></script>
 }

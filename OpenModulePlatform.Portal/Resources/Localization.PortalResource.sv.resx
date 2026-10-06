@@ -3271,4 +3271,6 @@
   <data name="Previous page" xml:space="preserve"><value>Föregående sida</value></data>
   <data name="Next page" xml:space="preserve"><value>Nästa sida</value></data>
   <data name="Pages" xml:space="preserve"><value>Sidor</value></data>
+  <data name="The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner." xml:space="preserve"><value>Dashboardens meny kan dras vart som helst på skärmen; det här lägger tillbaka den i sitt hörn.</value></data>
+  <data name="The menu will be back in its corner the next time the dashboard opens." xml:space="preserve"><value>Menyn ligger i sitt hörn igen nästa gång dashboarden öppnas.</value></data>
 </root>

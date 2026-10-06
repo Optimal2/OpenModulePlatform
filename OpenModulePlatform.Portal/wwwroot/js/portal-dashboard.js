@@ -4287,18 +4287,22 @@
     // The drag grip above the pin moves the whole menu: a pointer drag (or the
     // arrow keys on the grip) places it anywhere the fanned-out row still
     // fits, the place is remembered per user in this browser, and a
-    // double-click on the grip (or the submenu's "Put the menu back") returns
-    // it to the bottom-left corner. A placed menu is positioned from its
+    // double-click on the grip (or the "Put the menu back" button in the
+    // user's settings, which clears the stored place) returns it to the
+    // bottom-left corner. A placed menu is positioned from its
     // top-left corner. What is stored is where the menu stands, clamped into
     // view; a resize or the start of editing clamps it again.
     const dashboardMenuPositionStoragePrefix = 'omp.dashboard.editMenuPosition:';
     const dashboardMenuViewportMargin = 8;
+    // The grips column stands this far left of the menu's box while editing.
+    const dashboardMenuGripsReservePx = 27;
     const dashboardMenuDragThresholdPx = 3;
     const dashboardMenuKeyStepPx = 8;
     // The fanned-out menu's width before editing has measured it on this page:
-    // the grips column, the back button, four tiles and the gaps between (the
-    // measured width is stored with the place and replaces this).
-    const dashboardMenuFannedWidthFallbackPx = 299;
+    // the back button, four tiles and the gaps between (the grips stand out
+    // of flow to the left; the measured width is stored with the place and
+    // replaces this).
+    const dashboardMenuFannedWidthFallbackPx = 272;
 
     function bindDashboardMenuDrag(root) {
         const menu = root.querySelector('[data-dashboard-edit-menu]');
@@ -4327,10 +4331,12 @@
             const { width, height } = footprint();
             const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
             const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
-            const maxLeft = Math.max(dashboardMenuViewportMargin, viewportWidth - width - dashboardMenuViewportMargin);
+            // While editing the grips stand left of the box and must stay in view.
+            const minLeft = dashboardMenuViewportMargin + (root.classList.contains('is-editing') ? dashboardMenuGripsReservePx : 0);
+            const maxLeft = Math.max(minLeft, viewportWidth - width - dashboardMenuViewportMargin);
             const maxTop = Math.max(dashboardMenuViewportMargin, viewportHeight - height - dashboardMenuViewportMargin);
             return {
-                left: Math.min(Math.max(dashboardMenuViewportMargin, left), maxLeft),
+                left: Math.min(Math.max(minLeft, left), maxLeft),
                 top: Math.min(Math.max(dashboardMenuViewportMargin, top), maxTop)
             };
         };
@@ -4386,13 +4392,14 @@
         window.addEventListener('resize', show);
         root.addEventListener('dashboard:edit-mode', (event) => {
             if (event.detail?.editing) {
-                // The grips column is still widening: clamp once it has opened
-                // (its transition ends), with a timer in case no transition runs.
+                // The tiles are still being laid out: clamp once the grips
+                // column has slid out (its transition ends), with a timer in
+                // case no transition runs.
                 window.setTimeout(show, 240);
             }
         });
         grips?.addEventListener('transitionend', (event) => {
-            if (event.propertyName === 'width' && root.classList.contains('is-editing')) {
+            if (event.propertyName === 'transform' && root.classList.contains('is-editing')) {
                 show();
             }
         });
@@ -4461,7 +4468,6 @@
             const rect = menu.getBoundingClientRect();
             choose({ left: rect.left + delta[0], top: rect.top + delta[1] }, true);
         });
-        root.addEventListener('dashboard:menu-reset-position', reset);
     }
 
     // The menu's interval tile (editors only: the menu is theirs). Its submenu
@@ -4479,7 +4485,7 @@
             return;
         }
         const options = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-option]'));
-        const items = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-now], [data-dashboard-refresh-option], [data-dashboard-menu-reset-position]'));
+        const items = () => Array.from(list.querySelectorAll('[data-dashboard-refresh-now], [data-dashboard-refresh-option]'));
         const showChoice = (seconds) => {
             options().forEach((option) => {
                 const isChoice = parseRefreshIntervalSeconds(option.dataset.dashboardRefreshOption) === seconds;
@@ -4532,11 +4538,6 @@
             if (!list.hidden) {
                 positionList();
             }
-        });
-        list.querySelector('[data-dashboard-menu-reset-position]')?.addEventListener('click', () => {
-            setOpen(false);
-            trigger.focus();
-            root.dispatchEvent(new CustomEvent('dashboard:menu-reset-position'));
         });
         const isOpen = () => !list.hidden;
         showChoice(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
