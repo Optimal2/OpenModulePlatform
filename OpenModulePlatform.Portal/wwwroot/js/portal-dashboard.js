@@ -4327,6 +4327,16 @@
             }
             return { width: Math.max(menu.offsetWidth, fannedWidth || dashboardMenuFannedWidthFallbackPx), height: menu.offsetHeight };
         };
+        // The page's fixed header (the top bar, and the portal navbar when it
+        // is on) lies over the menu: a menu dragged under it could not be
+        // reached again, so the clamp keeps the menu below the header's edge.
+        const headerBottom = () => {
+            const header = document.querySelector('.app-header');
+            if (!header || window.getComputedStyle(header).position !== 'fixed') {
+                return 0;
+            }
+            return Math.max(0, header.getBoundingClientRect().bottom);
+        };
         const clamp = (left, top) => {
             const { width, height } = footprint();
             const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
@@ -4334,10 +4344,11 @@
             // While editing the grips stand left of the box and must stay in view.
             const minLeft = dashboardMenuViewportMargin + (root.classList.contains('is-editing') ? dashboardMenuGripsReservePx : 0);
             const maxLeft = Math.max(minLeft, viewportWidth - width - dashboardMenuViewportMargin);
-            const maxTop = Math.max(dashboardMenuViewportMargin, viewportHeight - height - dashboardMenuViewportMargin);
+            const minTop = dashboardMenuViewportMargin + headerBottom();
+            const maxTop = Math.max(minTop, viewportHeight - height - dashboardMenuViewportMargin);
             return {
                 left: Math.min(Math.max(minLeft, left), maxLeft),
-                top: Math.min(Math.max(dashboardMenuViewportMargin, top), maxTop)
+                top: Math.min(Math.max(minTop, top), maxTop)
             };
         };
         // The place the user chose; null means the default corner.

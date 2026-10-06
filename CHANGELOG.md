@@ -28,7 +28,9 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   drags the whole menu anywhere the row still fits (a double-click on it,
   or "Put the menu back" under Dashboard in the user's settings, returns
   it to the corner), the lower pins the row fanned out; both remembered
-  per user in the browser. The buttons are frosted glass at rest (see-through,
+  per user in the browser. The menu cannot be dragged under the page's
+  fixed header (the top bar, and the navbar when it is on), where it could
+  not be reached again. The buttons are frosted glass at rest (see-through,
   with a blur) and solid when hovered, open or pressed; Save, last in the
   row, stays faint until there are changes. The
   refresh tile's tooltip names the setting ("Refresh interval - every
