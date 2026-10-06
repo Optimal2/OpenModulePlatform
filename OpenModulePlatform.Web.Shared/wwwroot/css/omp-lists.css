@@ -254,6 +254,27 @@ table[data-list-selection] > tbody > tr.list-row-selected > td {
     margin-top: 12px;
 }
 
+/* The pager: previous and next around "Page x of y", right-aligned under the
+   table, shown only when there is more than one page. */
+.list-pager {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.list-pager__status {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+[data-list-pager][hidden] {
+    display: none;
+}
+
 /* Long unbroken strings (paths, keys) must wrap inside the popover, and very
    long texts scroll instead of growing past the viewport. */
 .info-popover {

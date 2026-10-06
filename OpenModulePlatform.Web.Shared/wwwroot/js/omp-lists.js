@@ -203,6 +203,15 @@
             filterInputs: [],
             pageSize: Number.parseInt(table.dataset.pageSize || '', 10) || 0,
             visibleLimit: 0,
+            // Paging comes in two shapes, both opt-in through data-page-size:
+            // a "show more" button that lengthens the visible window, or a
+            // pager ([data-list-pager="<table id>"] holding [data-list-pager-prev],
+            // [data-list-pager-next] and a [data-list-pager-status] with a
+            // data-template of "Page {0} of {1}") that pages through the
+            // matching rows one page at a time. A search, filter or toggle
+            // change goes back to the first page.
+            pageIndex: 0,
+            pager: document.querySelector(`[data-list-pager="${tableId}"]`),
             countNote: document.querySelector(`[data-list-count="${tableId}"]`),
             showMoreButton: document.querySelector(`[data-list-show-more="${tableId}"]`),
             emptyNote: document.querySelector(`[data-list-empty="${tableId}"]`),
@@ -220,6 +229,14 @@
         table.addEventListener('sortable-list:sorted', () => refreshListController(controller));
         controller.showMoreButton?.addEventListener('click', () => {
             controller.visibleLimit += controller.pageSize;
+            refreshListController(controller);
+        });
+        controller.pager?.querySelector('[data-list-pager-prev]')?.addEventListener('click', () => {
+            controller.pageIndex = Math.max(0, controller.pageIndex - 1);
+            refreshListController(controller);
+        });
+        controller.pager?.querySelector('[data-list-pager-next]')?.addEventListener('click', () => {
+            controller.pageIndex += 1;
             refreshListController(controller);
         });
 
@@ -292,10 +309,12 @@
         });
 
         const rowGroups = getListRowGroups(controller.tbody);
-        const limit = controller.pageSize > 0 ? controller.visibleLimit : Number.POSITIVE_INFINITY;
+        const paged = !!controller.pager && controller.pageSize > 0;
+        const limit = !paged && controller.pageSize > 0 ? controller.visibleLimit : Number.POSITIVE_INFINITY;
         let matchingCount = 0;
         let shownCount = 0;
         const matchingRows = [];
+        const decisions = [];
 
         // Deep search extends the term to the nested lists inside follow rows:
         // a group whose own row misses still matches when a nested tbody row
@@ -331,12 +350,53 @@
                 matchingCount += 1;
             } else if (matches) {
                 show = matchingCount < limit;
+                decisions.push({ rowGroup, deepRows, matchIndex: matchingCount, pinned: false });
                 matchingCount += 1;
             }
             if (pinned || matches) {
                 matchingRows.push(row);
             }
+            if (pinned || !matches) {
+                decisions.push({ rowGroup, deepRows, show, pinned, settled: true });
+                return;
+            }
+            decisions[decisions.length - 1].show = show;
+        });
 
+        // A pager shows one window of the matching rows (pinned rows always).
+        // The page is clamped first: a search or filter can leave fewer pages
+        // than the one the user was on.
+        if (paged) {
+            const pageCount = Math.max(1, Math.ceil(matchingCount / controller.pageSize));
+            controller.pageIndex = Math.min(Math.max(0, controller.pageIndex), pageCount - 1);
+            const start = controller.pageIndex * controller.pageSize;
+            const end = start + controller.pageSize;
+            decisions.forEach((decision) => {
+                if (!decision.settled) {
+                    decision.show = decision.matchIndex >= start && decision.matchIndex < end;
+                }
+            });
+            const status = controller.pager.querySelector('[data-list-pager-status]');
+            if (status) {
+                const template = status.dataset.template || '{0} / {1}';
+                status.textContent = template
+                    .replace('{0}', String(controller.pageIndex + 1))
+                    .replace('{1}', String(pageCount));
+            }
+            const prev = controller.pager.querySelector('[data-list-pager-prev]');
+            const next = controller.pager.querySelector('[data-list-pager-next]');
+            if (prev) {
+                prev.disabled = controller.pageIndex === 0;
+            }
+            if (next) {
+                next.disabled = controller.pageIndex >= pageCount - 1;
+            }
+            controller.pager.hidden = pageCount <= 1;
+        }
+
+        const isPinnedRow = (candidate) => candidate.getAttribute('data-list-pinned') === 'true';
+        const deepHit = (nestedRow) => nestedRow.textContent.toLocaleLowerCase().includes(controller.searchTerm);
+        decisions.forEach(({ rowGroup, deepRows, show }) => {
             rowGroup.forEach((groupRow) => {
                 groupRow.hidden = !show;
             });
@@ -522,6 +582,7 @@
 
             filterInputs.forEach((input) => input.addEventListener('change', () => {
                 controller.visibleLimit = controller.pageSize;
+                controller.pageIndex = 0;
                 refreshListController(controller);
             }));
 
@@ -530,6 +591,7 @@
                     input.checked = false;
                 });
                 controller.visibleLimit = controller.pageSize;
+                controller.pageIndex = 0;
                 refreshListController(controller);
             });
 
@@ -562,6 +624,7 @@
             input.addEventListener('input', () => {
                 controller.searchTerm = input.value.trim().toLocaleLowerCase();
                 controller.visibleLimit = controller.pageSize;
+                controller.pageIndex = 0;
                 refreshListController(controller);
             });
         });
@@ -603,6 +666,7 @@
             controller.deepToggle = toggle;
             toggle.addEventListener('change', () => {
                 controller.visibleLimit = controller.pageSize;
+                controller.pageIndex = 0;
                 refreshListController(controller);
             });
         });
@@ -621,6 +685,7 @@
             controller.filterInputs.push(toggle);
             toggle.addEventListener('change', () => {
                 controller.visibleLimit = controller.pageSize;
+                controller.pageIndex = 0;
                 refreshListController(controller);
             });
         });
