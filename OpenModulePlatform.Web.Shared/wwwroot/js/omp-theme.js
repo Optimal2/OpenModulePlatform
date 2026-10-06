@@ -254,21 +254,61 @@
         });
     }
 
-    function openMenu(container, focusTarget) {
+    // The menu behaves like the top bar's own menus: on a pointer that can
+    // hover, hovering the switch opens it unpinned (no focus moves) and leaving
+    // it closes it after a moment's grace; a click or the keyboard opens it
+    // pinned, which a hover away leaves alone, until the next click, a click
+    // elsewhere or Escape. The top bar's DropdownsOpenOnHover setting
+    // (data-open-on-hover on its root) turns the hover part off.
+    var canHoverMedia = typeof window.matchMedia === 'function'
+        ? window.matchMedia('(hover: hover) and (pointer: fine)')
+        : null;
+    var HOVER_CLOSE_GRACE_MS = 250;
+
+    function canOpenOnHover(container) {
+        if (!canHoverMedia || !canHoverMedia.matches) {
+            return false;
+        }
+
+        var topBarRoot = container.closest('[data-portal-topbar-root]');
+        return !topBarRoot || topBarRoot.getAttribute('data-open-on-hover') !== 'false';
+    }
+
+    function isPinned(container) {
+        return container.getAttribute('data-omp-theme-pinned') === 'true';
+    }
+
+    function clearCloseTimer(container) {
+        var timer = parseInt(container.getAttribute('data-omp-theme-close-timer') || '0', 10);
+        if (timer) {
+            window.clearTimeout(timer);
+        }
+
+        container.removeAttribute('data-omp-theme-close-timer');
+    }
+
+    function openMenu(container, focusTarget, options) {
+        var settings = options || {};
         var toggle = container.querySelector('[data-omp-theme-toggle]');
         var menu = container.querySelector('[data-omp-theme-menu]');
         if (!toggle || !menu) {
             return;
         }
 
+        clearCloseTimer(container);
         closeAll(container);
         syncMenu(menu);
         menu.hidden = false;
         toggle.setAttribute('aria-expanded', 'true');
-        var options = getOptions(menu);
+        container.setAttribute('data-omp-theme-pinned', settings.pinned === false ? 'false' : 'true');
+        if (settings.focus === false) {
+            return;
+        }
+
+        var items = getOptions(menu);
         var target = focusTarget === 'last'
-            ? options[options.length - 1]
-            : menu.querySelector('[aria-checked="true"]') || options[0];
+            ? items[items.length - 1]
+            : menu.querySelector('[aria-checked="true"]') || items[0];
         if (target) {
             target.focus();
         }
@@ -277,6 +317,8 @@
     function closeMenu(container, returnFocus) {
         var toggle = container.querySelector('[data-omp-theme-toggle]');
         var menu = container.querySelector('[data-omp-theme-menu]');
+        clearCloseTimer(container);
+        container.removeAttribute('data-omp-theme-pinned');
         if (!menu || menu.hidden) {
             return;
         }
@@ -288,6 +330,52 @@
                 toggle.focus();
             }
         }
+    }
+
+    // Hover, delegated so a switch rendered later (the Blazor top bar) is
+    // covered too: entering the switch opens it unpinned, leaving it starts
+    // the grace timer, re-entering cancels it. Movement inside the switch
+    // (toggle to menu across the gap) is not a leave.
+    function containerOf(event) {
+        var target = event.target && event.target.closest ? event.target : null;
+        return target ? target.closest('[data-omp-theme-switch]') : null;
+    }
+
+    function handleMouseOver(event) {
+        var container = containerOf(event);
+        if (!container || !canOpenOnHover(container)) {
+            return;
+        }
+
+        if (event.relatedTarget && container.contains(event.relatedTarget)) {
+            return;
+        }
+
+        clearCloseTimer(container);
+        var menu = container.querySelector('[data-omp-theme-menu]');
+        if (menu && menu.hidden) {
+            openMenu(container, null, { pinned: false, focus: false });
+        }
+    }
+
+    function handleMouseOut(event) {
+        var container = containerOf(event);
+        if (!container || !canOpenOnHover(container) || isPinned(container)) {
+            return;
+        }
+
+        if (event.relatedTarget && container.contains(event.relatedTarget)) {
+            return;
+        }
+
+        clearCloseTimer(container);
+        var timer = window.setTimeout(function () {
+            container.removeAttribute('data-omp-theme-close-timer');
+            if (!isPinned(container)) {
+                closeMenu(container, false);
+            }
+        }, HOVER_CLOSE_GRACE_MS);
+        container.setAttribute('data-omp-theme-close-timer', String(timer));
     }
 
     function closeAll(except) {
@@ -329,7 +417,9 @@
         if (target.closest('[data-omp-theme-toggle]')) {
             event.preventDefault();
             var menu = container.querySelector('[data-omp-theme-menu]');
-            if (menu && menu.hidden) {
+            // A click pins: an open menu the hover brought up stays and is
+            // pinned, a closed one opens pinned, a pinned one closes.
+            if (menu && (menu.hidden || !isPinned(container))) {
                 openMenu(container, null);
             } else {
                 closeMenu(container, true);
@@ -431,6 +521,8 @@
 
     document.addEventListener('click', handleClick);
     document.addEventListener('keydown', handleKeydown, true);
+    document.addEventListener('mouseover', handleMouseOver);
+    document.addEventListener('mouseout', handleMouseOut);
 
     window.ompTheme = {
         version: PREFERENCE_VERSION,

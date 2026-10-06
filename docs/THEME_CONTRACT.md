@@ -151,7 +151,12 @@ removed. Consumer repositories that adopt the contract gate their own web apps a
 
 The markup has no state; the script marks `aria-checked` when the menu opens.
 Enter/Space/ArrowDown open it, ArrowUp/ArrowDown/Home/End move, Enter chooses,
-Escape closes; focus returns to the toggle. Behaviour is document-level event
+Escape closes; focus returns to the toggle. On a pointer that can hover,
+hovering the switch opens the menu unpinned (no focus moves) and leaving it
+closes it after a moment; a click or the keyboard opens it pinned, which a
+hover away leaves alone, until the next click, a click elsewhere or Escape,
+like the top bar's own menus (its `DropdownsOpenOnHover` setting turns the
+hover part off here too). Behaviour is document-level event
 delegation, so Blazor re-renders need no init call.
 
 ## Not in version 1

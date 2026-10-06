@@ -147,6 +147,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 
 ### Fixed
 
+- **The theme menu opens on hover like the top bar's other menus.** The
+  theme switch opened only on a click; on a pointer that can hover it now
+  opens unpinned on hover and closes a moment after the pointer leaves,
+  while a click pins it open, the same way as System and Administration.
+  The top bar's `DropdownsOpenOnHover` setting governs it too.
 - **Confirm dialog: the focused button is visibly marked.** The shared
   dialog (ompConfirm, omp-forms.css) puts the focus on a button when it
   opens, but the only sign was a hairline border tint, invisible after a
