@@ -118,7 +118,7 @@
             <div class="empty-state" data-list-empty="maintenance-findings-list" hidden>@L["No rows match the current filters."]</div>
 
             <div class="table-scroll">
-                <table id="maintenance-findings-list" class="grid maintenance-findings-grid sortable-list" data-sortable-list data-list-fit data-page-size="25" data-list-selection="maintenance-findings-list">
+                <table id="maintenance-findings-list" class="grid maintenance-findings-grid sortable-list" data-sortable-list data-list-fit data-page-size="25" data-list-selection-keep-hidden data-list-selection="maintenance-findings-list">
                     <thead>
                         <tr>
                             <th scope="col" class="list-selection-cell">
@@ -211,7 +211,7 @@
             </div>
             <nav class="list-pager" data-list-pager="maintenance-findings-list" aria-label="@L["Pages"]" hidden>
                 <button type="button" class="btn btn-secondary btn-sm" data-list-pager-prev aria-label="@L["Previous page"]" title="@L["Previous page"]">&lsaquo;</button>
-                <span class="list-pager__status" data-list-pager-status data-template="@L["Page {0} of {1}"]"></span>
+                <span class="list-pager__status" data-list-pager-status data-template="@L["Page {0} of {1}"]" aria-live="polite"></span>
                 <button type="button" class="btn btn-secondary btn-sm" data-list-pager-next aria-label="@L["Next page"]" title="@L["Next page"]">&rsaquo;</button>
             </nav>
         </form>
@@ -337,7 +337,7 @@
         </div>
         <nav class="list-pager" data-list-pager="hostagent-jobs-list" aria-label="@L["Pages"]" hidden>
             <button type="button" class="btn btn-secondary btn-sm" data-list-pager-prev aria-label="@L["Previous page"]" title="@L["Previous page"]">&lsaquo;</button>
-            <span class="list-pager__status" data-list-pager-status data-template="@L["Page {0} of {1}"]"></span>
+            <span class="list-pager__status" data-list-pager-status data-template="@L["Page {0} of {1}"]" aria-live="polite"></span>
             <button type="button" class="btn btn-secondary btn-sm" data-list-pager-next aria-label="@L["Next page"]" title="@L["Next page"]">&rsaquo;</button>
         </nav>
     }

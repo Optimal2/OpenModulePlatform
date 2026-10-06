@@ -391,6 +391,15 @@
             if (next) {
                 next.disabled = controller.pageIndex >= pageCount - 1;
             }
+            // Reaching an end disables the button under the keyboard focus;
+            // the focus moves to the other one rather than being dropped.
+            if (prev && next) {
+                if (document.activeElement === next && next.disabled && !prev.disabled) {
+                    prev.focus();
+                } else if (document.activeElement === prev && prev.disabled && !next.disabled) {
+                    next.focus();
+                }
+            }
             controller.pager.hidden = pageCount <= 1;
         }
 
@@ -436,7 +445,8 @@
         }
 
         if (controller.showMoreButton) {
-            controller.showMoreButton.hidden = matchingCount <= shownCount;
+            // A paged table has no use for "show more": the pager pages.
+            controller.showMoreButton.hidden = paged || matchingCount <= shownCount;
         }
 
         // Release the load-time height lock. initAll() freezes the viewport at its initial height

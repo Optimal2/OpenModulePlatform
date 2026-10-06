@@ -11,9 +11,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
 - **Maintenance page: the lists page.** The findings list shows 25 rows a
   page and the HostAgent jobs list 10, with a pager (previous, "Page x of
   y", next) under each table instead of one long list; a search or filter
-  goes back to the first page. The shared list script gained the pager as
-  an opt-in next to its "show more" button (`data-page-size` plus a
-  `[data-list-pager]` element).
+  goes back to the first page. "Select all" selects the page shown; rows
+  ticked on other pages stay ticked and count, so a bulk action can still
+  span pages. The shared list script gained the pager as an opt-in next to
+  its "show more" button (`data-page-size` plus a `[data-list-pager]`
+  element).
 - **Dashboard: the edit menu is a row of tiles.** While editing, the
   actions (add widget, refresh, save, reset) fan out to the right of the
   wrench as tiles of its size, icon-first with the name as tooltip, instead
