@@ -3342,4 +3342,5 @@
   <data name="Move the menu" xml:space="preserve"><value>Move the menu</value></data>
   <data name="Move the menu (double-click to put it back)" xml:space="preserve"><value>Move the menu (double-click to put it back)</value></data>
   <data name="Put the menu back" xml:space="preserve"><value>Put the menu back</value></data>
+  <data name="Refresh interval - {0}" xml:space="preserve"><value>Refresh interval - {0}</value></data>
 </root>

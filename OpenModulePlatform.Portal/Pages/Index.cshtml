@@ -492,7 +492,8 @@
                             aria-haspopup="menu"
                             aria-expanded="false"
                             aria-label="@L["Refresh"]"
-                            title="@L[OpenModulePlatform.Portal.Pages.IndexModel.RefreshIntervalText(Model.DashboardRefreshIntervalSeconds)]">
+                            data-title-template="@L["Refresh interval - {0}"]"
+                            title="@L["Refresh interval - {0}", L[OpenModulePlatform.Portal.Pages.IndexModel.RefreshIntervalText(Model.DashboardRefreshIntervalSeconds)].Value]">
                         <span class="dashboard-action-icon dashboard-action-icon--refresh" aria-hidden="true"></span>
                         <span class="dashboard-refresh-menu__label">@L["Refresh"]</span>
                         <span class="dashboard-refresh-menu__chevron" aria-hidden="true"></span>

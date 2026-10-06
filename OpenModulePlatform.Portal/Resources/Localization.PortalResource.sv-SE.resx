@@ -3464,4 +3464,5 @@
   <data name="Move the menu" xml:space="preserve"><value>Flytta menyn</value></data>
   <data name="Move the menu (double-click to put it back)" xml:space="preserve"><value>Flytta menyn (dubbelklicka för att lägga tillbaka den)</value></data>
   <data name="Put the menu back" xml:space="preserve"><value>Lägg tillbaka menyn</value></data>
+  <data name="Refresh interval - {0}" xml:space="preserve"><value>Uppdateringsintervall – {0}</value></data>
 </root>

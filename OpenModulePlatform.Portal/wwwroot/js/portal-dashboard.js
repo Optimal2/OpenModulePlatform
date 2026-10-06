@@ -690,6 +690,28 @@
             updateCanvasHeight(root, canvas, state);
             onChange();
         });
+
+        // A middle click on a widget removes it while editing, the way a middle
+        // click closes a browser tab: a shortcut to the remove button, nothing
+        // more. Not on the widget's own controls (the same exclusions as the
+        // drag above), so a middle click on a title-bar button stays a click on
+        // that button. The press is taken too, so the browser does not start
+        // its middle-button autoscroll.
+        const isMiddleRemove = (event) => event.button === 1
+            && !!removeButton
+            && root.classList.contains('is-editing')
+            && !event.target.closest('button, a, input, textarea, select, label, summary, [data-widget-resize], [data-widget-settings-panel], [data-widget-zoom-panel], [data-blank-widget-admin]');
+        widget.addEventListener('mousedown', (event) => {
+            if (isMiddleRemove(event)) {
+                event.preventDefault();
+            }
+        });
+        widget.addEventListener('auxclick', (event) => {
+            if (isMiddleRemove(event)) {
+                event.preventDefault();
+                removeButton.click();
+            }
+        });
     }
 
     function bindDashboardBoxSelection(root, canvas) {
@@ -4463,7 +4485,7 @@
                 const isChoice = parseRefreshIntervalSeconds(option.dataset.dashboardRefreshOption) === seconds;
                 option.setAttribute('aria-checked', isChoice ? 'true' : 'false');
                 if (isChoice) {
-                    trigger.title = option.textContent.trim();
+                    trigger.title = (trigger.dataset.titleTemplate || '{0}').replace('{0}', option.textContent.trim());
                 }
             });
         };
