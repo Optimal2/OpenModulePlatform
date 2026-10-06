@@ -4298,6 +4298,17 @@
     const dashboardMenuGripsReservePx = 27;
     const dashboardMenuDragThresholdPx = 3;
     const dashboardMenuKeyStepPx = 8;
+    // The page's fixed header (the top bar, and the portal navbar when it is
+    // on) lies over the dashboard and its menu: nothing of the menu may stand
+    // under it. Returns the header's lower edge in viewport pixels, or 0 when
+    // the page has no fixed header.
+    const dashboardFixedHeaderBottom = () => {
+        const header = document.querySelector('.app-header');
+        if (!header || window.getComputedStyle(header).position !== 'fixed') {
+            return 0;
+        }
+        return Math.max(0, header.getBoundingClientRect().bottom);
+    };
     // The fanned-out menu's width before editing has measured it on this page:
     // the back button, four tiles and the gaps between (the grips stand out
     // of flow to the left; the measured width is stored with the place and
@@ -4327,16 +4338,8 @@
             }
             return { width: Math.max(menu.offsetWidth, fannedWidth || dashboardMenuFannedWidthFallbackPx), height: menu.offsetHeight };
         };
-        // The page's fixed header (the top bar, and the portal navbar when it
-        // is on) lies over the menu: a menu dragged under it could not be
-        // reached again, so the clamp keeps the menu below the header's edge.
-        const headerBottom = () => {
-            const header = document.querySelector('.app-header');
-            if (!header || window.getComputedStyle(header).position !== 'fixed') {
-                return 0;
-            }
-            return Math.max(0, header.getBoundingClientRect().bottom);
-        };
+        // A menu dragged under the fixed header could not be reached again,
+        // so the clamp keeps the menu below the header's edge.
         const clamp = (left, top) => {
             const { width, height } = footprint();
             const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
@@ -4344,7 +4347,7 @@
             // While editing the grips stand left of the box and must stay in view.
             const minLeft = dashboardMenuViewportMargin + (root.classList.contains('is-editing') ? dashboardMenuGripsReservePx : 0);
             const maxLeft = Math.max(minLeft, viewportWidth - width - dashboardMenuViewportMargin);
-            const minTop = dashboardMenuViewportMargin + headerBottom();
+            const minTop = dashboardMenuViewportMargin + dashboardFixedHeaderBottom();
             const maxTop = Math.max(minTop, viewportHeight - height - dashboardMenuViewportMargin);
             return {
                 left: Math.min(Math.max(minLeft, left), maxLeft),
@@ -4401,6 +4404,16 @@
             choose(stored, false);
         }
         window.addEventListener('resize', show);
+        const header = document.querySelector('.app-header');
+        if (header && typeof ResizeObserver === 'function') {
+            // The header's height can change without a window resize (its rows
+            // wrap, the navbar is switched on): the clamp and an open refresh
+            // list follow it.
+            new ResizeObserver(() => {
+                show();
+                root.dispatchEvent(new CustomEvent('dashboard:header-resized'));
+            }).observe(header);
+        }
         root.addEventListener('dashboard:edit-mode', (event) => {
             if (event.detail?.editing) {
                 // The tiles are still being laid out: clamp once the grips
@@ -4523,8 +4536,11 @@
             }
         };
         // The menu can stand anywhere: the list opens above its tile and along
-        // its left edge unless the viewport leaves no room there, and follows a
-        // viewport change while open. The tile may still be tucked (a hover
+        // its left edge unless the viewport (or the fixed header, which lies
+        // over the list) leaves no room there, and follows a viewport or
+        // header change while open. With too little room above, the list
+        // opens on whichever side of the tile has more room, shortened to what
+        // fits there and scrolling. The tile may still be tucked (a hover
         // opens the list as the row fans out), so its fanned-out place is what
         // counts: the tile's current transform is taken out of the measurement.
         const positionList = () => {
@@ -4539,17 +4555,24 @@
             if (rect.right - shift > viewportWidth) {
                 menu.classList.add('is-right');
             }
-            if (rect.top < 0) {
+            const topEdge = dashboardFixedHeaderBottom() + dashboardMenuViewportMargin;
+            if (rect.top < topEdge) {
+                const roomAbove = rect.bottom - topEdge;
                 menu.classList.add('is-below');
-                const below = list.getBoundingClientRect();
-                list.style.maxHeight = `${Math.max(120, viewportHeight - below.top - 22)}px`;
+                const roomBelow = viewportHeight - list.getBoundingClientRect().top - dashboardMenuViewportMargin;
+                if (roomAbove >= roomBelow) {
+                    menu.classList.remove('is-below');
+                }
+                list.style.maxHeight = `${Math.max(60, Math.max(roomAbove, roomBelow))}px`;
             }
         };
-        window.addEventListener('resize', () => {
+        const repositionOpenList = () => {
             if (!list.hidden) {
                 positionList();
             }
-        });
+        };
+        window.addEventListener('resize', repositionOpenList);
+        root.addEventListener('dashboard:header-resized', repositionOpenList);
         const isOpen = () => !list.hidden;
         showChoice(parseRefreshIntervalSeconds(root.dataset.refreshInterval));
 
