@@ -417,9 +417,13 @@
         if (target.closest('[data-omp-theme-toggle]')) {
             event.preventDefault();
             var menu = container.querySelector('[data-omp-theme-menu]');
-            // A click pins: an open menu the hover brought up stays and is
-            // pinned, a closed one opens pinned, a pinned one closes.
-            if (menu && (menu.hidden || !isPinned(container))) {
+            // A click pins: an open menu the hover brought up stays, now
+            // pinned, with the focus left where it was (as the top bar's
+            // menus do); a closed one opens pinned; a pinned one closes.
+            if (menu && !menu.hidden && !isPinned(container)) {
+                clearCloseTimer(container);
+                container.setAttribute('data-omp-theme-pinned', 'true');
+            } else if (menu && menu.hidden) {
                 openMenu(container, null);
             } else {
                 closeMenu(container, true);
