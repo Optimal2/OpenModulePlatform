@@ -1689,6 +1689,48 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# Check 21: Direct TimeZoneInfo IANA lookups stay inside *TimeZoneLookup.cs.
+# Windows hosts before Windows 10 1903 / Server 2019 have no icu.dll, so .NET
+# runs in NLS globalization mode there: TimeZoneInfo.FindSystemTimeZoneById
+# throws TimeZoneNotFoundException for IANA ids and
+# TimeZoneInfo.TryConvertIanaIdToWindowsId returns false. Production code must
+# resolve zones through OmpTimeZoneLookup (OpenModulePlatform.Web.Shared) or a
+# repository-local *TimeZoneLookup.cs, which falls back to a built-in
+# IANA-to-Windows table. This is a working-tree scan, not a diff check, so it
+# runs with or without -BaseCommit. Test projects (any directory segment whose
+# name ends in 'test' or 'tests', for example 'tests' or
+# 'OpenModulePlatform.Portal.Tests') and bin/obj are excluded; files named
+# *TimeZoneLookup.cs are the sanctioned home of these calls.
+# ---------------------------------------------------------------------------
+$timeZoneScanCount = 0
+
+$timeZoneCallPattern = [regex]'TimeZoneInfo\.(FindSystemTimeZoneById|TryConvertIanaIdToWindowsId)\s*\('
+$allCsFiles = @(Get-ChildItem -LiteralPath $repositoryRoot -Recurse -Filter '*.cs' -File -ErrorAction SilentlyContinue)
+foreach ($csFile in $allCsFiles) {
+    $relativeCsPath = $csFile.FullName.Substring($repositoryRoot.Length).TrimStart('\', '/')
+    $csSegments = $relativeCsPath -split '[\\/]'
+    $skipCsFile = $false
+    for ($csSegmentIndex = 0; $csSegmentIndex -lt $csSegments.Count - 1; $csSegmentIndex++) {
+        $csSegment = $csSegments[$csSegmentIndex]
+        if ($csSegment -match '^(?i:bin|obj)$' -or $csSegment -match '(?i)tests?$') {
+            $skipCsFile = $true
+            break
+        }
+    }
+    if ($skipCsFile) {
+        continue
+    }
+    if ($csFile.Name -like '*TimeZoneLookup.cs') {
+        continue
+    }
+
+    $timeZoneScanCount++
+    if ($timeZoneCallPattern.IsMatch([System.IO.File]::ReadAllText($csFile.FullName))) {
+        Add-ValidationError -Errors $errors -Message "Production file '$relativeCsPath' calls TimeZoneInfo.FindSystemTimeZoneById or TimeZoneInfo.TryConvertIanaIdToWindowsId directly. On Windows hosts without icu.dll (before Windows 10 1903 / Server 2019) .NET runs in NLS mode and both fail for IANA ids. Resolve zones through OmpTimeZoneLookup (OpenModulePlatform.Web.Shared) or a repository-local *TimeZoneLookup.cs file instead."
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Assembly version documentation (informational only, not enforced).
 # ---------------------------------------------------------------------------
 Write-Host 'Assembly version note:'
@@ -1842,6 +1884,8 @@ if ($lockstepCheckCount -gt 0 -or $lockstepErrorCount -gt 0) {
     $lockstepPassed = $lockstepCheckCount - $lockstepErrorCount
     Write-Host "$checkMark $lockstepPassed of $lockstepCheckCount changed component(s) passed LOCKSTEP bump validation ($lockstepErrorCount error(s))"
 }
+
+Write-Host "$checkMark $timeZoneScanCount production .cs file(s) scanned; direct TimeZoneInfo IANA lookups are confined to *TimeZoneLookup.cs (Check 21)"
 
 if ($warnings.Count -gt 0) {
     Write-Host "$warningSign $($warnings.Count) warning(s):"

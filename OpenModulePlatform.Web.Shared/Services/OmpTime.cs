@@ -22,11 +22,23 @@ public sealed class OmpTime
     }
 
     internal OmpTime(string timeZoneId, TimeProvider? clock, ILogger<OmpTime>? logger, bool rejectLocalPresentation)
+        : this(timeZoneId, clock, logger, rejectLocalPresentation, OmpTimeZoneLookup.Platform)
+    {
+    }
+
+    internal OmpTime(string timeZoneId, TimeProvider? clock, ILogger<OmpTime>? logger, bool rejectLocalPresentation, OmpTimeZoneLookup timeZoneLookup)
     {
         try
         {
-            _zone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-            if (timeZoneId != "UTC" && !_zone.HasIanaId)
+            // IANA ids are resolved through the shared lookup so hosts without
+            // icu.dll (NLS mode: Windows before 10 1903 / Server 2019) fall back
+            // to the built-in IANA-to-Windows table instead of throwing.
+            _zone = timeZoneLookup.FindSystemTimeZoneById(timeZoneId);
+            // The fallback returns a zone whose id is the Windows name, so
+            // HasIanaId alone cannot enforce the IANA-only policy; a successful
+            // IANA-to-Windows conversion is the proof that the configured id is
+            // an IANA identifier.
+            if (timeZoneId != "UTC" && !_zone.HasIanaId && !timeZoneLookup.TryConvertIanaIdToWindowsId(timeZoneId, out _))
             {
                 throw new TimeZoneNotFoundException("Use an IANA identifier, not a Windows time zone name.");
             }
@@ -40,7 +52,7 @@ public sealed class OmpTime
         _clock = clock ?? TimeProvider.System;
         _logger = logger;
         _rejectLocalPresentation = rejectLocalPresentation;
-        TimeZoneInfo.TryConvertIanaIdToWindowsId(timeZoneId, out var windowsId);
+        timeZoneLookup.TryConvertIanaIdToWindowsId(timeZoneId, out var windowsId);
         _centralEuropean = windowsId is "W. Europe Standard Time" or "Central Europe Standard Time" or "Central European Standard Time" or "Romance Standard Time";
     }
 

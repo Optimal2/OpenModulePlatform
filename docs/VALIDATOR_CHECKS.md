@@ -76,6 +76,7 @@ with a future canonical check. Reserve a number here before using it.
 | 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | repositories whose module definitions declare `consistentArtifactSets` (currently this platform repository and Contoso) |
 | 19 | (repo-local) runtime cascade-bump | base-diff | exactly one consumer repository |
 | 20 | Embedded sqlScripts line endings must match what `.gitattributes` declares for the SQL path (`git check-attr text eol`; text unset or no eol attribute = any form accepted) | worktree | every repository whose definitions embed SQL |
+| 21 | Direct `TimeZoneInfo.FindSystemTimeZoneById`/`TryConvertIanaIdToWindowsId` calls are confined to `*TimeZoneLookup.cs` in production `.cs` files (test projects and bin/obj excluded), because hosts without `icu.dll` (before Windows 10 1903 / Server 2019) run .NET in NLS mode where both fail for IANA ids; production code resolves zones through `OmpTimeZoneLookup` | worktree | this platform repository; synced to consumer validators by the omp-tidszon-utan-icu-server2016 campaign |
 
 Checks 7, 8, 9, 11, 12, 13 and 19, and the unnumbered `repositoryVersion`
 rule (repositoryVersion must move when any component version moved since the

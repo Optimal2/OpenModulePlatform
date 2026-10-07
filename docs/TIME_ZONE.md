@@ -61,6 +61,17 @@ banner service request fields remain UTC instants.
 
 ## Configuration and deployment
 
+Hosts without `icu.dll` (Windows before 10 1903 / Server 2019) run .NET in NLS
+globalization mode, where the platform rejects IANA time zone ids.
+`OmpTimeZoneLookup` (OpenModulePlatform.Web.Shared) keeps IANA configuration
+working there: it tries the platform lookup, then the platform IANA-to-Windows
+conversion, then a small built-in IANA-to-Windows table covering the zones OMP
+and its consumers use. The configured IANA id remains the reported id, and an
+unknown id still stops startup with a clear `TimeZoneNotFoundException`.
+Production code must never call `TimeZoneInfo.FindSystemTimeZoneById` or
+`TimeZoneInfo.TryConvertIanaIdToWindowsId` directly outside a
+`*TimeZoneLookup.cs` file; validator Check 21 enforces this.
+
 Set `OmpTime:TimeZoneId` in application configuration, for example:
 
 ```json
