@@ -1,5 +1,6 @@
 // File: OpenModulePlatform.Bootstrapper/ArtifactSourceStamp.cs
 using System.Text.RegularExpressions;
+using static OpenModulePlatform.Installation.InstallationEngine;
 
 namespace OpenModulePlatform.Bootstrapper;
 
@@ -77,7 +78,7 @@ internal static class ArtifactSourceStamp
         try
         {
             var candidate = Path.GetFullPath(Path.Join(sourceRoot, projectPath));
-            if (!Program.IsSameOrChildPath(sourceRoot, candidate))
+            if (!IsSameOrChildPath(sourceRoot, candidate))
             {
                 return null;
             }

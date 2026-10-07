@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows.Forms;
+using OpenModulePlatform.Installation;
+using static OpenModulePlatform.Installation.InstallationEngine;
 
 namespace OpenModulePlatform.Bootstrapper;
 
@@ -230,8 +232,8 @@ internal static partial class Program
                 // catch clause, the same design as the GUI action boundary.
                 form.SetStatus("Building updated installer package...");
                 var refresh = RunInstallerPackageRefreshCoreAsync(cli, logPath);
-                await Program.WhenSettledAsync(refresh);
-                if (Program.FailureOf(refresh) is not { } ex)
+                await WhenSettledAsync(refresh);
+                if (FailureOf(refresh) is not { } ex)
                 {
                     exitCode = 0;
                     form.SetStatus("Updated installer package created. Starting installer...");
@@ -359,33 +361,6 @@ internal static partial class Program
         {
             StartInstallerGui(payloadRoot);
         }
-    }
-
-    // Builds the PSModulePath handed to Windows PowerShell 5.1 children: the
-    // machine-scope path (so 5.1 finds its own Microsoft.PowerShell.* modules
-    // instead of pwsh 7's incompatible ones), with the current user's Windows
-    // PowerShell module folder prepended. Replacing the whole path with only the
-    // machine scope dropped user-scope modules (Install-Module -Scope CurrentUser),
-    // breaking sibling-repo hooks that import them (R4-G9).
-    internal static string BuildWindowsPowerShellModulePath()
-    {
-        var machineModulePath = Environment.GetEnvironmentVariable(
-            "PSModulePath",
-            EnvironmentVariableTarget.Machine) ?? string.Empty;
-
-        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        var userScope = string.IsNullOrWhiteSpace(userProfile)
-            ? string.Empty
-            : Path.Join(userProfile, "WindowsPowerShell", "Modules");
-
-        if (string.IsNullOrWhiteSpace(userScope))
-        {
-            return machineModulePath;
-        }
-
-        return string.IsNullOrWhiteSpace(machineModulePath)
-            ? userScope
-            : $"{userScope};{machineModulePath}";
     }
 
     private static void RunProcessStreaming(

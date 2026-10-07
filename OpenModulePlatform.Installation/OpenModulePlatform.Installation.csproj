@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RootNamespace>OpenModulePlatform.Installation</RootNamespace>
+    <Platforms>AnyCPU;x64;x86</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenModulePlatform.Artifacts\OpenModulePlatform.Artifacts.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.HostAgent.Runtime\OpenModulePlatform.HostAgent.Runtime.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\shared\ModuleDefinitionSqlOwnership.cs" Link="ModuleDefinitions\ModuleDefinitionSqlOwnership.cs" />
+    <Compile Include="..\shared\ModuleDefinitionSqlText.cs" Link="ModuleDefinitions\ModuleDefinitionSqlText.cs" />
+    <Compile Include="..\shared\ModuleRuntimeMaintenance.cs" Link="ModuleDefinitions\ModuleRuntimeMaintenance.cs" />
+    <Compile Include="..\shared\PlatformConfigurationMigration.cs" Link="ModuleDefinitions\PlatformConfigurationMigration.cs" />
+  </ItemGroup>
+</Project>

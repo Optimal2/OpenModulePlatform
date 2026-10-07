@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
-namespace OpenModulePlatform.Bootstrapper;
+namespace OpenModulePlatform.Installation;
 
 /// <summary>
 /// Writes a JSON configuration file so that a reader never observes a partial

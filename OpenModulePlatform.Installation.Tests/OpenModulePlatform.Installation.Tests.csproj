@@ -21,12 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\OpenModulePlatform.Bootstrapper\OpenModulePlatform.Bootstrapper.csproj" />
+    <ProjectReference Include="..\OpenModulePlatform.Installation\OpenModulePlatform.Installation.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
-    <Using Include="OpenModulePlatform.Installation" />
   </ItemGroup>
 
 </Project>
