@@ -87,6 +87,57 @@ public sealed class OmpTimeZoneLookupTests
         }
     }
 
+    // The platform accepts IANA ids case-insensitively under ICU; the built-in
+    // table must not be stricter than the path it replaces.
+    [Theory]
+    [InlineData("europe/stockholm", "W. Europe Standard Time")]
+    [InlineData("EUROPE/STOCKHOLM", "W. Europe Standard Time")]
+    [InlineData("etc/utc", "UTC")]
+    public void NlsModeTableLookupIsCaseInsensitive(string ianaId, string expectedWindowsId)
+    {
+        var lookup = NlsModeLookup();
+
+        Assert.True(lookup.TryConvertIanaIdToWindowsId(ianaId, out var windowsId));
+        Assert.Equal(expectedWindowsId, windowsId);
+
+        var zone = lookup.FindSystemTimeZoneById(ianaId);
+        Assert.Equal(expectedWindowsId, zone.Id);
+    }
+
+    [Fact]
+    public void NlsModeUnknownIanaIdNamesTheMissingIcuAndTheTable()
+    {
+        var error = Assert.Throws<TimeZoneNotFoundException>(
+            () => NlsModeLookup().FindSystemTimeZoneById("Invalid/Zone"));
+
+        Assert.Contains("Invalid/Zone", error.Message);
+        Assert.Contains("ICU", error.Message);
+        Assert.Contains("Europe/Stockholm", error.Message);
+    }
+
+    // Simulates an ICU host that simply does not know the id: the message must
+    // stay the plain "unknown id" one, not the no-ICU guidance.
+    private static OmpTimeZoneLookup IcuModeLookupWithUnknownZone() => new(
+        platformFind: id => id.Contains('/')
+            ? throw new TimeZoneNotFoundException($"unknown time zone id '{id}'.")
+            : TimeZoneInfo.FindSystemTimeZoneById(id),
+        platformConvert: (string ianaId, out string? windowsId) =>
+        {
+            // The probe id converts; everything else is unknown.
+            windowsId = ianaId == "Europe/Stockholm" ? "W. Europe Standard Time" : string.Empty;
+            return ianaId == "Europe/Stockholm";
+        });
+
+    [Fact]
+    public void IcuModeUnknownIanaIdKeepsTheUnknownIdMessage()
+    {
+        var error = Assert.Throws<TimeZoneNotFoundException>(
+            () => IcuModeLookupWithUnknownZone().FindSystemTimeZoneById("Invalid/Zone"));
+
+        Assert.Contains("Unknown time zone id 'Invalid/Zone'", error.Message);
+        Assert.DoesNotContain("no ICU", error.Message);
+    }
+
     [Fact]
     public void OmpTimeWorksInNlsModeAndKeepsTheIanaId()
     {

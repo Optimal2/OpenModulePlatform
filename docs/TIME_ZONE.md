@@ -66,11 +66,17 @@ globalization mode, where the platform rejects IANA time zone ids.
 `OmpTimeZoneLookup` (OpenModulePlatform.Web.Shared) keeps IANA configuration
 working there: it tries the platform lookup, then the platform IANA-to-Windows
 conversion, then a small built-in IANA-to-Windows table covering the zones OMP
-and its consumers use. The configured IANA id remains the reported id, and an
-unknown id still stops startup with a clear `TimeZoneNotFoundException`.
-Production code must never call `TimeZoneInfo.FindSystemTimeZoneById` or
+and its consumers use. The table matches IANA ids case-insensitively, like the
+ICU path it replaces. The configured IANA id remains the reported id. An
+unknown id still stops startup with a clear `TimeZoneNotFoundException`; on a
+host without ICU the error for an IANA-shaped id says so explicitly and lists
+the ids the built-in table covers.
+Production code must never call `TimeZoneInfo.FindSystemTimeZoneById`,
+`TimeZoneInfo.TryFindSystemTimeZoneById` or
 `TimeZoneInfo.TryConvertIanaIdToWindowsId` directly outside a
-`*TimeZoneLookup.cs` file; validator Check 21 enforces this.
+`*TimeZoneLookup.cs` file (the exact exemption rule is documented under
+validator Check 21 in [VALIDATOR_CHECKS.md](VALIDATOR_CHECKS.md), which
+enforces this).
 
 Set `OmpTime:TimeZoneId` in application configuration, for example:
 

@@ -579,6 +579,285 @@ function ConvertTo-DeclaredLineEndings {
     return $Text
 }
 
+# ---------------------------------------------------------------------------
+# Check 21 support: finding direct TimeZoneInfo platform calls in C# source.
+# ---------------------------------------------------------------------------
+
+function Remove-CSharpCommentsAndStringLiterals {
+    <#
+    .SYNOPSIS
+    Masks comments and string/char literals in C# source with spaces so pattern
+    matching never fires on prose or literal text (validator Check 21). Code
+    outside comments/literals is returned untouched and newlines are preserved,
+    so the result has the same length and line layout as the input.
+
+    Handles // and block comments, regular and interpolated "..." / $"...",
+    verbatim @"..." / $@"..." / @$"..." (with the "" escape), '...' char
+    literals, and C# 11 raw string literals (a quote run of three or more,
+    with optional $ prefixes). Interpolation holes are masked together with
+    their string: deliberately conservative, since a hole is still literal
+    text to the reader and the lookup-file exemption is where real platform
+    calls belong. An unterminated literal masks to the end of the line
+    (regular) or the end of the file (block comment, verbatim and raw
+    strings), which fails loud rather than blind.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    $chars = $Text.ToCharArray()
+    $length = $chars.Length
+    $apostrophe = [char]39
+    $i = 0
+
+    while ($i -lt $length) {
+        $c = $chars[$i]
+
+        # Line comment.
+        if ($c -eq '/' -and $i + 1 -lt $length -and $chars[$i + 1] -eq '/') {
+            $chars[$i] = ' '
+            $chars[$i + 1] = ' '
+            $i += 2
+            while ($i -lt $length -and $chars[$i] -ne "`n") {
+                if ($chars[$i] -ne "`r") { $chars[$i] = ' ' }
+                $i++
+            }
+            continue
+        }
+
+        # Block comment.
+        if ($c -eq '/' -and $i + 1 -lt $length -and $chars[$i + 1] -eq '*') {
+            $chars[$i] = ' '
+            $chars[$i + 1] = ' '
+            $i += 2
+            while ($i -lt $length) {
+                if ($chars[$i] -eq '*' -and $i + 1 -lt $length -and $chars[$i + 1] -eq '/') {
+                    $chars[$i] = ' '
+                    $chars[$i + 1] = ' '
+                    $i += 2
+                    break
+                }
+                if ($chars[$i] -ne "`n" -and $chars[$i] -ne "`r") { $chars[$i] = ' ' }
+                $i++
+            }
+            continue
+        }
+
+        # Literal start: zero or more '$', an optional '@' (either order), then
+        # a quote. Anything else is ordinary code and left untouched.
+        $j = $i
+        while ($j -lt $length -and $chars[$j] -eq '$') { $j++ }
+        $verbatim = $false
+        if ($j -lt $length -and $chars[$j] -eq '@') {
+            $verbatim = $true
+            $j++
+            while ($j -lt $length -and $chars[$j] -eq '$') { $j++ }
+        }
+
+        if ($j -lt $length -and ($chars[$j] -eq '"' -or $chars[$j] -eq $apostrophe)) {
+            $quote = $chars[$j]
+            $isCharLiteral = ($quote -eq $apostrophe)
+
+            # C# 11 raw string literal: a run of at least three double quotes.
+            $quoteRun = 0
+            if (-not $isCharLiteral) {
+                while ($j + $quoteRun -lt $length -and $chars[$j + $quoteRun] -eq '"') { $quoteRun++ }
+            }
+
+            for ($k = $i; $k -lt $j; $k++) { $chars[$k] = ' ' }
+
+            if (-not $isCharLiteral -and $quoteRun -ge 3) {
+                # Raw string: no escapes; it ends at the same quote run.
+                for ($k = 0; $k -lt $quoteRun; $k++) { $chars[$j + $k] = ' ' }
+                $i = $j + $quoteRun
+                while ($i -lt $length) {
+                    if ($chars[$i] -eq '"') {
+                        $run = 0
+                        while ($i + $run -lt $length -and $chars[$i + $run] -eq '"') { $run++ }
+                        for ($k = 0; $k -lt $run; $k++) { $chars[$i + $k] = ' ' }
+                        $i += $run
+                        if ($run -ge $quoteRun) {
+                            break
+                        }
+                        continue
+                    }
+                    if ($chars[$i] -ne "`n" -and $chars[$i] -ne "`r") { $chars[$i] = ' ' }
+                    $i++
+                }
+                continue
+            }
+
+            $chars[$j] = ' '
+            $i = $j + 1
+            while ($i -lt $length) {
+                $cc = $chars[$i]
+                if (-not $verbatim -and $cc -eq '\') {
+                    # Escape sequence: mask the backslash and the next character.
+                    $chars[$i] = ' '
+                    if ($i + 1 -lt $length) {
+                        if ($chars[$i + 1] -ne "`n" -and $chars[$i + 1] -ne "`r") { $chars[$i + 1] = ' ' }
+                        $i += 2
+                    }
+                    else {
+                        $i++
+                    }
+                    continue
+                }
+                if ($cc -eq $quote) {
+                    if ($verbatim -and -not $isCharLiteral -and $i + 1 -lt $length -and $chars[$i + 1] -eq '"') {
+                        # Verbatim "" escape: mask both quotes and keep going.
+                        $chars[$i] = ' '
+                        $chars[$i + 1] = ' '
+                        $i += 2
+                        continue
+                    }
+                    $chars[$i] = ' '
+                    $i++
+                    break
+                }
+                if ($cc -eq "`n" -or $cc -eq "`r") {
+                    # A regular string or char literal cannot span lines: the
+                    # literal was never closed (or was never a literal). Stop
+                    # masking and resume scanning after the line break.
+                    $i++
+                    break
+                }
+                $chars[$i] = ' '
+                $i++
+            }
+            continue
+        }
+
+        $i++
+    }
+
+    return [string]::new($chars)
+}
+
+function Test-DirectTimeZonePlatformCall {
+    <#
+    .SYNOPSIS
+    True when C# source already masked by Remove-CSharpCommentsAndStringLiterals
+    uses TimeZoneInfo.FindSystemTimeZoneById, TryFindSystemTimeZoneById or
+    TryConvertIanaIdToWindowsId directly (validator Check 21).
+
+    Matching is case-sensitive, like the C# compiler. Method-group use without
+    a call parenthesis counts: the call is just as direct when the method is
+    passed as a delegate. Recognized forms: TimeZoneInfo.X, System.TimeZoneInfo.X
+    and global::System.TimeZoneInfo.X with any whitespace/newlines around the
+    dot; a using-alias qualifier (using X = [global::][System.]TimeZoneInfo;);
+    and the bare method name when the file has using static System.TimeZoneInfo;
+    (a member access like lookup.FindSystemTimeZoneById stays clean, as does
+    OmpTimeZoneLookup's own member name, because the bare match requires that
+    no '.' or identifier character precedes).
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$MaskedText
+    )
+
+    $methods = '(?:FindSystemTimeZoneById|TryFindSystemTimeZoneById|TryConvertIanaIdToWindowsId)'
+
+    $qualifiedPattern = '(?<![\w.:])(?:global::)?(?:System\.)?TimeZoneInfo\s*\.\s*' + $methods + '\b'
+    if ([regex]::IsMatch($MaskedText, $qualifiedPattern)) {
+        return $true
+    }
+
+    if ([regex]::IsMatch($MaskedText, '(?m)^\s*using\s+static\s+(?:global::)?(?:System\.)?TimeZoneInfo\s*;')) {
+        if ([regex]::IsMatch($MaskedText, '(?<![\w.])' + $methods + '\b')) {
+            return $true
+        }
+    }
+
+    foreach ($aliasMatch in [regex]::Matches($MaskedText, '(?m)^\s*using\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:global::)?(?:System\.)?TimeZoneInfo\s*;')) {
+        $aliasPattern = '(?<![\w.])' + [regex]::Escape($aliasMatch.Groups[1].Value) + '\s*\.\s*' + $methods + '\b'
+        if ([regex]::IsMatch($MaskedText, $aliasPattern)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-TimeZoneLookupSourceFile {
+    <#
+    .SYNOPSIS
+    The Check 21 exemption: a file is the sanctioned home for direct platform
+    time-zone calls only when its name ends in 'TimeZoneLookup.cs' AND the file
+    declares a type named exactly like the file (OmpTimeZoneLookup.cs declares
+    'class OmpTimeZoneLookup'). The declaration requirement closes the loophole
+    where a file merely carrying the substring in its name
+    (NotATimeZoneLookup.cs holding an unrelated class) was exempt without being
+    a lookup at all. The declaration is matched case-sensitively against text
+    masked by Remove-CSharpCommentsAndStringLiterals, so a comment or a string
+    literal cannot satisfy it.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FileName,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$MaskedText
+    )
+
+    if ($FileName -notmatch '^[A-Za-z0-9_]*TimeZoneLookup\.cs$') {
+        return $false
+    }
+
+    $typeName = [System.IO.Path]::GetFileNameWithoutExtension($FileName)
+    $declarationPattern = '\b(?:class|record|struct|interface)\s+' + [regex]::Escape($typeName) + '\b'
+    return [regex]::IsMatch($MaskedText, $declarationPattern)
+}
+
+function Get-CSharpTestProjectDirectory {
+    <#
+    .SYNOPSIS
+    Absolute paths of directories whose .csproj is a test project, for the
+    Check 21 exclusion: the project name ends in '.Test'/'.Tests', or the
+    project references Microsoft.NET.Test.Sdk or sets
+    <IsTestProject>true</IsTestProject>. Build output, dependency and VCS
+    directories are not descended into. This replaces the old 'tests?$' segment
+    rule, which also excluded production directories like 'Latest', 'Contest'
+    and 'Greatest'.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot
+    )
+
+    $skipDirectories = @('.git', '.vs', 'bin', 'obj', 'node_modules', 'artifacts', 'TestResults')
+    $testProjectDirectories = [System.Collections.Generic.List[string]]::new()
+    $pendingDirectories = [System.Collections.Generic.Stack[string]]::new()
+    $pendingDirectories.Push([System.IO.Path]::GetFullPath($RepositoryRoot))
+
+    while ($pendingDirectories.Count -gt 0) {
+        $directory = $pendingDirectories.Pop()
+        foreach ($projectPath in [System.IO.Directory]::GetFiles($directory, '*.csproj')) {
+            $projectName = [System.IO.Path]::GetFileNameWithoutExtension($projectPath)
+            $isTestProject = $projectName -match '(?i)\.tests?$'
+            if (-not $isTestProject) {
+                $projectContent = [System.IO.File]::ReadAllText($projectPath)
+                $isTestProject = ($projectContent -match 'Microsoft\.NET\.Test\.Sdk') -or
+                    ($projectContent -match '(?i)<IsTestProject>\s*true\s*</IsTestProject>')
+            }
+            if ($isTestProject) {
+                $testProjectDirectories.Add($directory)
+            }
+        }
+        foreach ($childDirectory in [System.IO.Directory]::GetDirectories($directory)) {
+            if ($skipDirectories -notcontains [System.IO.Path]::GetFileName($childDirectory)) {
+                $pendingDirectories.Push($childDirectory)
+            }
+        }
+    }
+
+    return $testProjectDirectories
+}
+
 function Compare-WebSharedBinaryIdentity {
     <#
     .SYNOPSIS

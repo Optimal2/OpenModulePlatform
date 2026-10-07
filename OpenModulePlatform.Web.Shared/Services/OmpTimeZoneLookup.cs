@@ -28,10 +28,13 @@ public sealed class OmpTimeZoneLookup
     /// The built-in IANA-to-Windows fallback table, used only when the
     /// platform itself cannot convert (NLS mode). It covers the zones OMP and
     /// its consumers are configured with; the platform conversion remains the
-    /// primary path for every other IANA id.
+    /// primary path for every other IANA id. IANA ids are ASCII and compared
+    /// case-insensitively, so the table lookup is too: on an ICU host the
+    /// platform accepts 'europe/stockholm', and the fallback must not be
+    /// stricter than the path it replaces.
     /// </summary>
     public static IReadOnlyDictionary<string, string> BuiltInIanaToWindowsIds { get; } =
-        new Dictionary<string, string>(StringComparer.Ordinal)
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["UTC"] = "UTC",
             ["Etc/UTC"] = "UTC",
@@ -51,6 +54,11 @@ public sealed class OmpTimeZoneLookup
 
     private readonly Func<string, TimeZoneInfo> _platformFind;
     private readonly TryConvertIanaIdToWindowsIdDelegate _platformConvert;
+
+    // null = not probed yet. True when the platform converts a known IANA id
+    // (ICU present); false on NLS-mode hosts, where the built-in table is the
+    // only IANA path. Probed lazily so construction never touches the platform.
+    private bool? _platformConvertsIanaIds;
 
     /// <summary>
     /// Creates a lookup. Both delegates default to the platform APIs; tests
@@ -96,8 +104,44 @@ public sealed class OmpTimeZoneLookup
             }
         }
 
+        if (id.Contains('/') && !PlatformConvertsIanaIds())
+        {
+            // NLS mode: the platform knows no IANA ids at all, so "not found"
+            // here means "not in the built-in table", not "not a real zone".
+            // Name the supported ids so the operator can fix the configuration
+            // without reading source.
+            throw new TimeZoneNotFoundException(
+                $"The IANA time zone id '{id}' could not be resolved: this host has no ICU " +
+                "(NLS globalization mode, Windows before 10 1903 / Server 2019), and the id is not in " +
+                "the built-in IANA-to-Windows table. The table covers: " +
+                string.Join(", ", BuiltInIanaToWindowsIds.Keys) +
+                ". Configure one of these ids, or run on a host with ICU.");
+        }
+
         throw new TimeZoneNotFoundException(
             $"Unknown time zone id '{id}'. Configure an IANA identifier such as Europe/Stockholm, or UTC.");
+    }
+
+    /// <summary>
+    /// True when the platform itself converts IANA ids (ICU present). Probed
+    /// once with a known id and cached; a throwing conversion delegate counts
+    /// as "cannot convert".
+    /// </summary>
+    private bool PlatformConvertsIanaIds()
+    {
+        if (_platformConvertsIanaIds is null)
+        {
+            try
+            {
+                _platformConvertsIanaIds = _platformConvert("Europe/Stockholm", out _);
+            }
+            catch
+            {
+                _platformConvertsIanaIds = false;
+            }
+        }
+
+        return _platformConvertsIanaIds.Value;
     }
 
     /// <summary>

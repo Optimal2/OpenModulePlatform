@@ -1764,22 +1764,36 @@ else {
 }
 
 # ---------------------------------------------------------------------------
-# Check 21: Direct TimeZoneInfo IANA lookups stay inside *TimeZoneLookup.cs.
+# Check 21: Direct TimeZoneInfo platform lookups stay inside the lookup file.
 # Windows hosts before Windows 10 1903 / Server 2019 have no icu.dll, so .NET
 # runs in NLS globalization mode there: TimeZoneInfo.FindSystemTimeZoneById
-# throws TimeZoneNotFoundException for IANA ids and
-# TimeZoneInfo.TryConvertIanaIdToWindowsId returns false. Production code must
-# resolve zones through OmpTimeZoneLookup (OpenModulePlatform.Web.Shared) or a
-# repository-local *TimeZoneLookup.cs, which falls back to a built-in
-# IANA-to-Windows table. This is a working-tree scan, not a diff check, so it
-# runs with or without -BaseCommit. Test projects (any directory segment whose
-# name ends in 'test' or 'tests', for example 'tests' or
-# 'OpenModulePlatform.Portal.Tests') and bin/obj are excluded; files named
-# *TimeZoneLookup.cs are the sanctioned home of these calls.
+# and TimeZoneInfo.TryFindSystemTimeZoneById throw TimeZoneNotFoundException
+# for IANA ids and TimeZoneInfo.TryConvertIanaIdToWindowsId returns false.
+# Production code must resolve zones through OmpTimeZoneLookup
+# (OpenModulePlatform.Web.Shared) or a repository-local *TimeZoneLookup.cs,
+# which falls back to a built-in IANA-to-Windows table. This is a working-tree
+# scan, not a diff check, so it runs with or without -BaseCommit.
+#
+# Matching rules (the shared core implements them; docs/VALIDATOR_CHECKS.md
+# has the canonical description):
+# - Comments and string/char literals are masked before matching, so a mention
+#   in prose or a literal never fails the build.
+# - All qualified forms match: TimeZoneInfo.X, System.TimeZoneInfo.X,
+#   global::-prefixed, whitespace/newlines around the dot, and using-alias
+#   qualifiers (using TZ = System.TimeZoneInfo;). With
+#   'using static System.TimeZoneInfo;' the bare method name matches too.
+# - Method-group use without parentheses counts (the method is just as direct
+#   when passed as a delegate).
+# - Excluded: bin/obj, directories named exactly 'test'/'tests' or ending in
+#   '.Test'/'.Tests', and everything under a test .csproj (name or
+#   Microsoft.NET.Test.Sdk / IsTestProject). A directory whose name merely
+#   ENDS in 'test' ('Latest', 'Contest', 'Greatest') is production code.
+# - Exemption: the file name must end in 'TimeZoneLookup.cs' AND the file must
+#   declare a type named exactly like the file (Test-TimeZoneLookupSourceFile).
 # ---------------------------------------------------------------------------
 $timeZoneScanCount = 0
 
-$timeZoneCallPattern = [regex]'TimeZoneInfo\.(FindSystemTimeZoneById|TryConvertIanaIdToWindowsId)\s*\('
+$timeZoneTestProjectDirectories = @(Get-CSharpTestProjectDirectory -RepositoryRoot $repositoryRoot)
 $allCsFiles = @(Get-ChildItem -LiteralPath $repositoryRoot -Recurse -Filter '*.cs' -File -ErrorAction SilentlyContinue)
 foreach ($csFile in $allCsFiles) {
     $relativeCsPath = $csFile.FullName.Substring($repositoryRoot.Length).TrimStart('\', '/')
@@ -1787,21 +1801,31 @@ foreach ($csFile in $allCsFiles) {
     $skipCsFile = $false
     for ($csSegmentIndex = 0; $csSegmentIndex -lt $csSegments.Count - 1; $csSegmentIndex++) {
         $csSegment = $csSegments[$csSegmentIndex]
-        if ($csSegment -match '^(?i:bin|obj)$' -or $csSegment -match '(?i)tests?$') {
+        if ($csSegment -match '^(?i:bin|obj)$' -or $csSegment -match '^(?i:tests?)$' -or $csSegment -match '(?i)\.tests?$') {
             $skipCsFile = $true
             break
+        }
+    }
+    if (-not $skipCsFile) {
+        foreach ($timeZoneTestProjectDirectory in $timeZoneTestProjectDirectories) {
+            if ($csFile.FullName.StartsWith($timeZoneTestProjectDirectory + '\', [StringComparison]::OrdinalIgnoreCase)) {
+                $skipCsFile = $true
+                break
+            }
         }
     }
     if ($skipCsFile) {
         continue
     }
-    if ($csFile.Name -like '*TimeZoneLookup.cs') {
+
+    $maskedCsText = Remove-CSharpCommentsAndStringLiterals -Text ([System.IO.File]::ReadAllText($csFile.FullName))
+    if (Test-TimeZoneLookupSourceFile -FileName $csFile.Name -MaskedText $maskedCsText) {
         continue
     }
 
     $timeZoneScanCount++
-    if ($timeZoneCallPattern.IsMatch([System.IO.File]::ReadAllText($csFile.FullName))) {
-        Add-ValidationError -Errors $errors -Message "Production file '$relativeCsPath' calls TimeZoneInfo.FindSystemTimeZoneById or TimeZoneInfo.TryConvertIanaIdToWindowsId directly. On Windows hosts without icu.dll (before Windows 10 1903 / Server 2019) .NET runs in NLS mode and both fail for IANA ids. Resolve zones through OmpTimeZoneLookup (OpenModulePlatform.Web.Shared) or a repository-local *TimeZoneLookup.cs file instead."
+    if (Test-DirectTimeZonePlatformCall -MaskedText $maskedCsText) {
+        Add-ValidationError -Errors $errors -Message "Production file '$relativeCsPath' uses TimeZoneInfo.FindSystemTimeZoneById, TimeZoneInfo.TryFindSystemTimeZoneById or TimeZoneInfo.TryConvertIanaIdToWindowsId directly (possibly through a using alias or using static). On Windows hosts without icu.dll (before Windows 10 1903 / Server 2019) .NET runs in NLS mode and all three fail for IANA ids. Resolve zones through OmpTimeZoneLookup (OpenModulePlatform.Web.Shared) or a repository-local *TimeZoneLookup.cs file instead."
     }
 }
 
@@ -1964,7 +1988,7 @@ if ($lockstepCheckCount -gt 0 -or $lockstepErrorCount -gt 0) {
     Write-Host "$checkMark $lockstepPassed of $lockstepCheckCount changed component(s) passed LOCKSTEP bump validation ($lockstepErrorCount error(s))"
 }
 
-Write-Host "$checkMark $timeZoneScanCount production .cs file(s) scanned; direct TimeZoneInfo IANA lookups are confined to *TimeZoneLookup.cs (Check 21)"
+Write-Host "$checkMark $timeZoneScanCount production .cs file(s) scanned; direct TimeZoneInfo IANA lookups are confined to the TimeZoneLookup lookup files (Check 21)"
 
 if ($warnings.Count -gt 0) {
     Write-Host "$warningSign $($warnings.Count) warning(s):"

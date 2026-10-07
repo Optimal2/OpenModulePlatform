@@ -527,4 +527,189 @@ Describe 'Check 21: direct TimeZoneInfo IANA lookups stay inside *TimeZoneLookup
             Remove-TemporaryTestRepository -RootPath $repoRoot
         }
     }
+
+    # --- Review findings on the first Check 21 implementation: each fixture
+    # below failed (or passed) the wrong way before the fix. ---
+
+    It 'Fails on a bare call under using static System.TimeZoneInfo (F1)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                "using static System.TimeZoneInfo;`nclass Calendar { void M() { _ = FindSystemTimeZoneById(`"Europe/Stockholm`"); } }",
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a call through a using alias for System.TimeZoneInfo (F1)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                "using TZ = System.TimeZoneInfo;`nclass Calendar { void M() { _ = TZ.FindSystemTimeZoneById(`"Europe/Stockholm`"); } }",
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails when a newline sits between TimeZoneInfo and the member access (F1)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                "class Calendar { void M() { _ = TimeZoneInfo`r`n        .FindSystemTimeZoneById(`"Europe/Stockholm`"); } }",
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a fully qualified System.TimeZoneInfo call (F1)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { void M() { _ = System.TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Passes when the mention sits in comments and string literals only (F2)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                "// Never call TimeZoneInfo.FindSystemTimeZoneById(`"x`") here.`n/* TimeZoneInfo.TryConvertIanaIdToWindowsId(`"x`", out var w) is banned. */`nclass Calendar { string S = `"Use TimeZoneInfo.FindSystemTimeZoneById only inside OmpTimeZoneLookup`"; }",
+                [System.Text.Encoding]::UTF8)
+
+            (Invoke-Validator -ValidatorPath $validatorPath) | Should -Be 0
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails when the call sits in a directory whose name merely ends in test (F3)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            $latestDir = Join-Path $repoRoot 'TestApp\Latest'
+            $null = New-Item -ItemType Directory -Path $latestDir -Force
+            [System.IO.File]::WriteAllText((Join-Path $latestDir 'Calendar.cs'),
+                'class Calendar { void M() { _ = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'Latest[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Passes when the call sits in a test project detected by its csproj (F3)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            # Directory name says nothing about tests; the csproj does.
+            $testProjectDir = Join-Path $repoRoot 'Verification'
+            $null = New-Item -ItemType Directory -Path $testProjectDir -Force
+            [System.IO.File]::WriteAllText((Join-Path $testProjectDir 'Verification.csproj'),
+                "<Project Sdk=`"Microsoft.NET.Sdk`">`r`n  <PropertyGroup>`r`n    <TargetFramework>net8.0</TargetFramework>`r`n  </PropertyGroup>`r`n  <ItemGroup>`r`n    <PackageReference Include=`"Microsoft.NET.Test.Sdk`" Version=`"17.0.0`" />`r`n  </ItemGroup>`r`n</Project>`r`n",
+                [System.Text.Encoding]::UTF8)
+            [System.IO.File]::WriteAllText((Join-Path $testProjectDir 'CalendarTests.cs'),
+                'class CalendarTests { void M() { _ = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            (Invoke-Validator -ValidatorPath $validatorPath) | Should -Be 0
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails when a file merely carries TimeZoneLookup in its name without declaring the type (F4)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\NotATimeZoneLookup.cs'),
+                'class Calendar { void M() { _ = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'NotATimeZoneLookup\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a direct TimeZoneInfo.TryFindSystemTimeZoneById call (G1)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'class Calendar { void M() { _ = TimeZoneInfo.TryFindSystemTimeZoneById("Europe/Stockholm", out var z); } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
+
+    It 'Fails on a method-group use without a call parenthesis (G2)' {
+        $repoRoot = Join-Path ([System.IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
+        try {
+            $validatorPath = New-TemporaryTestRepository -RootPath $repoRoot -ComponentMinVersion '1.0.0' -ModuleDefinitionVersion '1.0.0'
+            [System.IO.File]::WriteAllText((Join-Path $repoRoot 'TestApp\Calendar.cs'),
+                'using System; class Calendar { void M() { Func<string, TimeZoneInfo> f = TimeZoneInfo.FindSystemTimeZoneById; } }',
+                [System.Text.Encoding]::UTF8)
+
+            $result = Invoke-ValidatorWithOutput -ValidatorPath $validatorPath
+
+            $result.ExitCode | Should -Not -Be 0
+            $result.Output | Should -Match 'TestApp[\\/]Calendar\.cs'
+        }
+        finally {
+            Remove-TemporaryTestRepository -RootPath $repoRoot
+        }
+    }
 }
