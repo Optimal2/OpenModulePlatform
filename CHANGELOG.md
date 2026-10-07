@@ -31,9 +31,11 @@ The format is inspired by Keep a Changelog and the project follows semantic vers
   per user in the browser. The menu cannot be dragged under the page's
   fixed header (the top bar, and the navbar when it is on), where it could
   not be reached again, and the refresh submenu opens on the side of its
-  tile with more room when the header leaves too little above. The buttons are frosted glass at rest (see-through,
-  with a blur) and solid when hovered, open or pressed; Save, last in the
-  row, stays faint until there are changes. The
+  tile with more room when the header leaves too little above. The menu's
+  buttons at rest are thinner glass (less surface, less tint, a lighter
+  blur), so the page shows through until they are hovered; the back button
+  while editing is blue glass with a blue glyph at rest and solid blue on
+  hover. Save, last in the row, stays faint until there are changes. The
   refresh tile's tooltip names the setting ("Refresh interval - every
   minute"). A middle click on a widget removes it while editing, as it
   closes a browser tab.

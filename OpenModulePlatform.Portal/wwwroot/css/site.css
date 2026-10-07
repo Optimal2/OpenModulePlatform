@@ -15,21 +15,25 @@
     --accent: var(--omp-accent-surface, #e8f0fe);
     --dashboard-edit-accent: #f59e0b;
     --dashboard-edit-accent-soft: rgba(245, 158, 11, 0.28);
-    --dashboard-edit-accent-surface: rgba(245, 158, 11, 0.16);
+    --dashboard-edit-accent-surface: rgba(245, 158, 11, 0.1);
     /* The floating "Refresh now" has its own accent, cyan, so the card tucked
        behind the amber wrench reads as something else at a glance. The text
        colour leans toward the theme's text, so it is darker on light and
        lighter on dark. */
     --dashboard-refresh-accent: #0ea5e9;
     --dashboard-refresh-accent-soft: rgba(14, 165, 233, 0.38);
-    --dashboard-refresh-accent-surface: rgba(14, 165, 233, 0.2);
+    --dashboard-refresh-accent-surface: rgba(14, 165, 233, 0.12);
     --dashboard-refresh-accent-hover: rgba(14, 165, 233, 0.26);
     --dashboard-refresh-accent-text: color-mix(in srgb, #0ea5e9 55%, var(--text));
-    /* The menu's buttons at rest: frosted glass, see-through with a blur, so
-       the page (and a card tucked behind) shows as a soft tone, not a shape;
-       hovered, pressed or open they turn solid. */
-    --dashboard-glass: color-mix(in srgb, var(--surface) 55%, transparent);
-    --dashboard-glass-blur: blur(10px);
+    /* The menu's buttons at rest: thin glass, mostly see-through with a light
+       blur, so the page (and a card tucked behind) shows through; hovered,
+       pressed or open they turn solid. --dashboard-glass-tint is how much of
+       a tile's colour (the green of Add, the amber of Reset) sits on the
+       glass at rest. Tune these three to make the resting menu lighter or
+       heavier; the opened refresh list keeps its own, denser glass. */
+    --dashboard-glass: color-mix(in srgb, var(--surface) 30%, transparent);
+    --dashboard-glass-blur: blur(4px);
+    --dashboard-glass-tint: 35%;
     --shadow: var(--omp-shadow, 0 8px 24px rgba(17, 24, 39, 0.05));
     --portal-page-chrome-width: 100%;
 }
@@ -6291,6 +6295,12 @@ button.dashboard-role-list__item:focus-visible {
 
 .portal-dashboard.is-editing .dashboard-floating-button {
     border-color: var(--link);
+    background: linear-gradient(color-mix(in srgb, var(--link) 16%, transparent), color-mix(in srgb, var(--link) 16%, transparent)), var(--dashboard-glass);
+    color: var(--link);
+}
+
+.portal-dashboard.is-editing .dashboard-floating-button:hover,
+.portal-dashboard.is-editing .dashboard-floating-button:focus-visible {
     background: var(--link);
     color: var(--omp-on-accent, #ffffff);
 }
@@ -6427,7 +6437,7 @@ button.dashboard-role-list__item:focus-visible {
 
 .dashboard-reset-changes-button {
     border-color: var(--omp-warning-border, #f0b36d);
-    background: linear-gradient(color-mix(in srgb, var(--omp-warning-bg, #fef3c7) 70%, transparent), color-mix(in srgb, var(--omp-warning-bg, #fef3c7) 70%, transparent)), var(--dashboard-glass);
+    background: linear-gradient(color-mix(in srgb, var(--omp-warning-bg, #fef3c7) var(--dashboard-glass-tint), transparent), color-mix(in srgb, var(--omp-warning-bg, #fef3c7) var(--dashboard-glass-tint), transparent)), var(--dashboard-glass);
     color: var(--omp-warning-text, #92400e);
 }
 
@@ -6441,7 +6451,7 @@ button.dashboard-role-list__item:focus-visible {
 
 .dashboard-add-button {
     border-color: var(--omp-success-border, #86c79b);
-    background: linear-gradient(color-mix(in srgb, var(--omp-success-bg, #dcfce7) 70%, transparent), color-mix(in srgb, var(--omp-success-bg, #dcfce7) 70%, transparent)), var(--dashboard-glass);
+    background: linear-gradient(color-mix(in srgb, var(--omp-success-bg, #dcfce7) var(--dashboard-glass-tint), transparent), color-mix(in srgb, var(--omp-success-bg, #dcfce7) var(--dashboard-glass-tint), transparent)), var(--dashboard-glass);
     color: var(--omp-success-text, #166534);
 }
 
@@ -6459,13 +6469,13 @@ button.dashboard-role-list__item:focus-visible {
 .dashboard-save-button:disabled {
     cursor: not-allowed;
     border-color: color-mix(in srgb, var(--border) 60%, transparent);
-    background: color-mix(in srgb, var(--surface) 30%, transparent);
+    background: color-mix(in srgb, var(--surface) 16%, transparent);
     color: var(--text-muted);
 }
 
 .portal-dashboard.is-editing.has-dashboard-changes .dashboard-save-button:not(:disabled) {
     border-color: var(--omp-success-border, #86c79b);
-    background: linear-gradient(color-mix(in srgb, var(--omp-success-bg, #dcfce7) 70%, transparent), color-mix(in srgb, var(--omp-success-bg, #dcfce7) 70%, transparent)), var(--dashboard-glass);
+    background: linear-gradient(color-mix(in srgb, var(--omp-success-bg, #dcfce7) var(--dashboard-glass-tint), transparent), color-mix(in srgb, var(--omp-success-bg, #dcfce7) var(--dashboard-glass-tint), transparent)), var(--dashboard-glass);
     color: var(--omp-success-text, #166534);
 }
 
@@ -8352,7 +8362,9 @@ tr.linkbox-editor-row--dragging {
     padding: 6px;
     border: 1px solid var(--border);
     border-radius: 16px;
-    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
     box-shadow: 0 18px 38px rgba(17, 24, 39, 0.16);
 }
 
