@@ -31,6 +31,89 @@ function ConvertTo-PortableModuleDefinitionSql {
         '')
 }
 
+# Get-GitDeclaredLineEnding and ConvertTo-DeclaredLineEndings are copies of the
+# shared validator core (scripts/omp/validate-component-versions.helpers.ps1);
+# this script stays standalone so it can run in a consumer repository without
+# the validator next to it. Keep them in sync.
+function Get-GitDeclaredLineEnding {
+    <#
+    .SYNOPSIS
+    Returns the line-ending form .gitattributes declares for a repository path:
+    'CRLF', 'LF', or '' when git leaves the bytes alone (the text attribute is
+    unset, no eol attribute applies, the path is outside a git work tree, or
+    git could not answer). '' means "keep the bytes exactly as they are".
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot,
+        [Parameter(Mandatory = $true)][string]$RelativePath
+    )
+
+    $gitPath = $RelativePath -replace '\\', '/'
+    $output = $null
+    $exitCode = 0
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & git -C $RepositoryRoot check-attr text eol -- $gitPath 2>$null
+        $exitCode = $LASTEXITCODE
+    }
+    catch {
+        return ''
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -ne 0 -or $null -eq $output) {
+        return ''
+    }
+
+    $textAttribute = ''
+    $eolAttribute = ''
+    foreach ($attributeLine in @($output)) {
+        if ($attributeLine -match ': text: (\S+)\s*$') {
+            $textAttribute = $Matches[1]
+        }
+        elseif ($attributeLine -match ': eol: (\S+)\s*$') {
+            $eolAttribute = $Matches[1]
+        }
+    }
+
+    # -text (text: unset) means git stores the file byte for byte; no eol applies.
+    if ($textAttribute -eq 'unset') {
+        return ''
+    }
+
+    switch ($eolAttribute) {
+        'crlf' { return 'CRLF' }
+        'lf' { return 'LF' }
+        default { return '' }
+    }
+}
+
+function ConvertTo-DeclaredLineEndings {
+    <#
+    .SYNOPSIS
+    Normalizes every line ending in $Text to the declared form ('CRLF' or
+    'LF'). Any other declaration -- including '' for "git leaves the bytes
+    alone" -- returns the text unchanged.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Declared
+    )
+
+    if ($Declared -eq 'CRLF') {
+        return ($Text -replace "`r`n", "`n") -replace "`n", "`r`n"
+    }
+
+    if ($Declared -eq 'LF') {
+        return $Text -replace "`r`n", "`n"
+    }
+
+    return $Text
+}
+
 function ConvertFrom-JsonDocument {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseCompatibleCommands', '', Justification = 'The ConvertFrom-Json -Depth call is guarded at runtime by checking Get-Command for the Depth parameter; on Windows PowerShell 5.1 the fallback branch without -Depth runs.')]
     param(
@@ -138,6 +221,12 @@ foreach ($definitionFile in $definitionFiles) {
         }
 
         $sqlText = Get-Content -LiteralPath $sqlPath -Raw -Encoding UTF8
+        # Normalize to the line-ending form .gitattributes declares for the
+        # file before embedding. Embedding the bytes exactly as they lie on
+        # disk made the result depend on the local checkout (core.autocrlf) or
+        # on whatever tool last rewrote the file (sed -i writes LF), so the
+        # same definition held different bytes on different machines.
+        $sqlText = ConvertTo-DeclaredLineEndings -Text $sqlText -Declared (Get-GitDeclaredLineEnding -RepositoryRoot $RepositoryRoot -RelativePath ([string]$script.path))
         $sqlText = ConvertTo-PortableModuleDefinitionSql -SqlText $sqlText
         $contentEncoding = 'base64-utf8'
         $content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($sqlText))

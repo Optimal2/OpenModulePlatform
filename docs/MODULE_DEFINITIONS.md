@@ -413,6 +413,15 @@ The older `scripts/dev/embed-module-definition-sql.ps1` helper is retained only
 for legacy JSON-only definitions. Portal executes repairs on the configured OMP
 database connection, so module definition SQL must not switch databases.
 
+The embed helper normalizes each SQL file's line endings to the form
+`.gitattributes` declares for the file (`git check-attr text eol`: `eol=crlf`
+embeds CRLF, `eol=lf` embeds LF, and an unset `text` attribute or missing `eol`
+declaration embeds the bytes exactly as they are) before base64-encoding, so the
+embedded bytes no longer depend on which machine or checkout ran the embed. The
+component-version validator enforces the same contract twice: Check 16 (embedded
+SQL freshness) compares against the declared form, and Check 20 fails when
+embedded content carries line endings that contradict the declaration.
+
 The `compatibleArtifacts` array defines artifact slots, not already-installed
 artifact rows. An artifact zip import uses these rows to validate
 `appKey`/`packageType`/`targetName` and the optional minimum artifact version,

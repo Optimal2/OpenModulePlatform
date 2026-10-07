@@ -1140,10 +1140,13 @@ else {
 # consistency check, not a diff-range check, so it runs with or without
 # -BaseCommit.
 #
-# Line-ending tolerance: the SQL blobs in git are LF-only, but a working tree
-# checked out with core.autocrlf=true materializes CRLF files (and an embed
-# run on such a machine embeds CRLF bytes). Pure CRLF/LF drift is normalized
-# away on both sides; any other byte difference is reported as staleness.
+# Line-ending handling: the embed tool normalizes each SQL file to the form
+# .gitattributes declares for it before embedding, so this check compares both
+# sides normalized to that same declared form. Where no form is declared (text
+# unset, or no eol attribute) the historical LF normalization applies on both
+# sides and pure CRLF/LF drift is still tolerated; any other byte difference
+# is reported as staleness. Check 20 is the hard guard that a declared form is
+# also what the embedded bytes actually carry.
 # ---------------------------------------------------------------------------
 $embeddedSqlChecked = 0
 $embeddedSqlFresh = 0
@@ -1206,6 +1209,17 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         $diskText = Get-Content -LiteralPath $fullSqlPath -Raw -Encoding UTF8
         $portableText = ConvertTo-PortableModuleDefinitionSql -SqlText $diskText
 
+        # The same normalization the embed tool applies: the line-ending form
+        # .gitattributes declares for the SQL path. When nothing is declared
+        # the comparison falls back to the historical LF normalization, which
+        # stays byte-tolerant on purpose (there is no contract to be exact
+        # against); Check 20 below is the hard guard when a form IS declared.
+        $declaredEol = Get-GitDeclaredLineEnding -RepositoryRoot $repositoryRoot -RelativePath $sqlPath
+        $comparisonEol = $declaredEol
+        if ([string]::IsNullOrEmpty($comparisonEol)) {
+            $comparisonEol = 'LF'
+        }
+
         $actualContent = [string](Get-OptionalPropertyValue -Object $script -Name 'content')
         $actualSha256 = [string](Get-OptionalPropertyValue -Object $script -Name 'sha256')
 
@@ -1219,14 +1233,15 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
             }
         }
 
-        # Compare with CRLF normalized to LF on both sides (see Check 16 note).
-        $normalizedDiskText = ConvertTo-LfLineEndings -Text $portableText
-        $normalizedEmbeddedText = ConvertTo-LfLineEndings -Text $embeddedText
+        # Compare with both sides normalized to the declared line-ending form
+        # (see the Check 16 note above).
+        $normalizedDiskText = ConvertTo-DeclaredLineEndings -Text $portableText -Declared $comparisonEol
+        $normalizedEmbeddedText = ConvertTo-DeclaredLineEndings -Text $embeddedText -Declared $comparisonEol
         $contentMatches = [string]::Equals($normalizedEmbeddedText, $normalizedDiskText, [StringComparison]::Ordinal)
 
         # The stored hash was computed over whichever line-ending form the
         # embed tool saw, so accept a match against the raw embedded text, the
-        # raw disk text, or the LF-normalized form.
+        # raw disk text, or the declared-form-normalized form.
         $sha256Matches = $false
         foreach ($shaCandidateText in @($embeddedText, $portableText, $normalizedDiskText)) {
             if ([string]::Equals($actualSha256, (Get-Sha256Hex -Text $shaCandidateText), [StringComparison]::Ordinal)) {
@@ -1241,6 +1256,101 @@ foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
         }
 
         $embeddedSqlFresh++
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Check 20: Embedded sqlScripts line endings match .gitattributes.
+# Check 16 proves the embedded bytes are fresh; this check proves they carry
+# the line-ending form the repository declares for the SQL path. An embed run
+# over a file whose line endings were accidentally rewritten (a Git Bash
+# 'sed -i' writes LF regardless of .gitattributes) otherwise sailed through
+# every gate on the machine that produced it -- the local embed and the local
+# freshness check both saw the same wrong bytes -- and failed
+# validate-module-definitions on every normal checkout, stopping deploys.
+# Only the manifest's module definitions are checked (never build-output
+# copies); where git declares no form for the SQL path (text unset, no eol
+# attribute, or the lookup cannot run) any line-ending form is accepted.
+# ---------------------------------------------------------------------------
+$embeddedEolChecked = 0
+$embeddedEolDeclared = 0
+
+foreach ($manifestDefinition in @($manifest.moduleDefinitions)) {
+    if ($null -eq $manifestDefinition) {
+        continue
+    }
+
+    $moduleKey = [string](Get-OptionalPropertyValue -Object $manifestDefinition -Name 'moduleKey')
+    $relativeDefinitionPath = [string](Get-OptionalPropertyValue -Object $manifestDefinition -Name 'path')
+    if ([string]::IsNullOrWhiteSpace($relativeDefinitionPath)) {
+        continue
+    }
+
+    $definitionPath = Resolve-RepositoryPath -Path $relativeDefinitionPath -BasePath $repositoryRoot
+    if (-not (Test-Path -LiteralPath $definitionPath -PathType Leaf)) {
+        continue
+    }
+
+    $definitionText = Remove-Utf8Bom -Text (Get-Content -LiteralPath $definitionPath -Raw -Encoding UTF8)
+    $definition = ConvertFrom-JsonDocument -Json $definitionText -Depth $jsonDepth
+
+    # runtimeMaintenance.steps embed SQL in the same fields as sqlScripts.
+    $embeddedEolEntries = @(Get-OptionalPropertyValue -Object $definition -Name 'sqlScripts')
+    $runtimeMaintenance = Get-OptionalPropertyValue -Object $definition -Name 'runtimeMaintenance'
+    if ($null -ne $runtimeMaintenance) {
+        $embeddedEolEntries += @(Get-OptionalPropertyValue -Object $runtimeMaintenance -Name 'steps')
+    }
+
+    foreach ($script in $embeddedEolEntries) {
+        if ($null -eq $script) {
+            continue
+        }
+
+        $contentEncoding = [string](Get-OptionalPropertyValue -Object $script -Name 'contentEncoding')
+        if (-not [string]::Equals($contentEncoding, 'base64-utf8', [StringComparison]::Ordinal)) {
+            continue
+        }
+
+        $embeddedContent = [string](Get-OptionalPropertyValue -Object $script -Name 'content')
+        $sqlPath = [string](Get-OptionalPropertyValue -Object $script -Name 'path')
+        if ([string]::IsNullOrWhiteSpace($embeddedContent) -or [string]::IsNullOrWhiteSpace($sqlPath)) {
+            continue
+        }
+
+        $declaredEol = Get-GitDeclaredLineEnding -RepositoryRoot $repositoryRoot -RelativePath $sqlPath
+        if ([string]::IsNullOrEmpty($declaredEol)) {
+            # git leaves these bytes alone; there is no declared form to violate.
+            continue
+        }
+
+        $embeddedEolChecked++
+
+        $scriptKey = [string](Get-OptionalPropertyValue -Object $script -Name 'key')
+        if ([string]::IsNullOrWhiteSpace($scriptKey)) {
+            $scriptKey = '<no-key>'
+        }
+
+        $embeddedBytes = $null
+        try {
+            $embeddedBytes = [Convert]::FromBase64String($embeddedContent)
+        }
+        catch {
+            # Undecodable content is already a Check 16 freshness error.
+            continue
+        }
+
+        $embeddedSqlText = [System.Text.Encoding]::UTF8.GetString($embeddedBytes)
+        $crlfCount = ([regex]::Matches($embeddedSqlText, "`r`n")).Count
+        $loneLfCount = ([regex]::Matches($embeddedSqlText, "(?<!`r)`n")).Count
+
+        $declaredEolLower = $declaredEol.ToLowerInvariant()
+        $matchesDeclaration = ($declaredEol -eq 'CRLF' -and $loneLfCount -eq 0) -or ($declaredEol -eq 'LF' -and $crlfCount -eq 0)
+        if (-not $matchesDeclaration) {
+            Add-ValidationError -Errors $errors -Message "Embedded SQL for script '$scriptKey' ($sqlPath, module '$moduleKey') has the wrong line endings: the embedded content carries $crlfCount CRLF and $loneLfCount lone-LF line ending(s), but .gitattributes declares eol=$declaredEolLower for that path. Re-embed with the embed tool in the OpenModulePlatform repository: scripts/dev/embed-module-definition-sql.ps1 -RepositoryRoot '<path to this repository>'."
+            continue
+        }
+
+        $embeddedEolDeclared++
     }
 }
 
@@ -1718,6 +1828,10 @@ if ($definitionDiffChecked -gt 0) {
 
 if ($embeddedSqlChecked -gt 0) {
     Write-Host "$checkMark $embeddedSqlFresh of $embeddedSqlChecked embedded SQL script(s) passed freshness validation"
+}
+
+if ($embeddedEolChecked -gt 0) {
+    Write-Host "$checkMark $embeddedEolDeclared of $embeddedEolChecked embedded SQL script(s) carry the line endings .gitattributes declares"
 }
 
 if ($transitiveCheckCount -gt 0 -or $transitiveErrorCount -gt 0) {

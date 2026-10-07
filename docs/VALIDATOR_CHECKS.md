@@ -12,7 +12,7 @@ That numbering contract is upheld by this document and by review — **no guard
 enforces it**. Check 15 byte-compares only `validate-component-versions.helpers.ps1`
 and `bump-version.ps1`; `validate-component-versions.ps1` itself is deliberately
 repo-local (see the next section), so nothing would mechanically catch a repository
-that gave `Check 20` a different meaning. Verified 2026-09-08 by extracting every
+that gave `Check 21` a different meaning. Verified 2026-09-08 by extracting every
 `Check N` declaration from all nine validators: checks 1–10, 12, 13, 15 and 16 do
 carry the same meaning everywhere they appear. What differs between repositories is
 which checks are *present*, not what a number *means* — that difference is measured
@@ -75,6 +75,7 @@ with a future canonical check. Reserve a number here before using it.
 | 17 | (repo-local) unconditional artifact-pointer overwrite guard | static SQL scan | exactly one consumer repository |
 | 18 | consistentArtifactSets lockstep (`exact` versionMatchRule) | static | repositories whose module definitions declare `consistentArtifactSets` (currently this platform repository and Contoso) |
 | 19 | (repo-local) runtime cascade-bump | base-diff | exactly one consumer repository |
+| 20 | Embedded sqlScripts line endings must match what `.gitattributes` declares for the SQL path (`git check-attr text eol`; text unset or no eol attribute = any form accepted) | worktree | every repository whose definitions embed SQL |
 
 Checks 7, 8, 9, 11, 12, 13 and 19, and the unnumbered `repositoryVersion`
 rule (repositoryVersion must move when any component version moved since the
@@ -129,6 +130,29 @@ if ($null -ne $check15) {
     }
 }
 ```
+
+## Enumerating the consumer repositories (Check 14 scope)
+
+A Web.Shared (or other shared-project) cascade must take its consumer list from
+`scripts/omp/list-shared-consumers.ps1`, never from memory. The script walks the
+sibling repositories of the OpenModulePlatform checkout, finds every repository
+whose projects carry a `ProjectReference` into a shared project declared in this
+repository's `omp-components.json` (`sharedProjects`), and reports whether each
+referencing repository declares the matching `sharedDependencies`/`treeId` entry
+that Check 14 enforces. It exits non-zero when a referencing repository does not
+declare the dependency, so it doubles as the gap detector.
+
+```powershell
+.\scripts\omp\list-shared-consumers.ps1
+# or, when the consumer checkouts do not sit beside this one:
+.\scripts\omp\list-shared-consumers.ps1 -SiblingRoot 'D:\path\to\workspace'
+```
+
+Measured 2026-10-07 why this must not come from memory: a cascade ran against a
+remembered list of six consumers and missed two referencing repositories — one
+that already carried a `treeId`, and one with a `ProjectReference` but no
+`sharedDependencies` block at all. Both are invisible until someone lists the
+references mechanically.
 
 ## Present-but-vacuous is not applied uniformly (measured 2026-09-07)
 
