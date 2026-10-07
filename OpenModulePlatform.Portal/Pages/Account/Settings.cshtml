@@ -4,6 +4,9 @@
     var ompBranding = await OmpBrandingService.GetBrandingAsync(ViewContext.HttpContext.RequestAborted);
 }
 
+@* The page has no lists, so it is a narrower centred column than the
+   1400 px content shell; the header and the tabs follow the column. *@
+<div class="settings-page">
 <section class="page-header">
     <div>
         <div class="eyebrow">@L["Settings"]</div>
@@ -36,7 +39,7 @@
 {
     @if (Model.CanCreateOmpUser)
     {
-        <form method="post" asp-page-handler="CreateAccount" class="card form-grid settings-panel">
+        <form method="post" asp-page-handler="CreateAccount" class="card form-grid">
             <h3>@ompBranding.ApplyPlatformName(L["Create your OMP account"].Value)</h3>
             <p class="lede">@ompBranding.ApplyPlatformName(L["You are signed in with Windows/AD, but this sign-in is not linked to an OMP user account yet."].Value)</p>
             <p>@ompBranding.ApplyPlatformName(L["Create an OMP account to save profile settings and link this AD sign-in to your account."].Value)</p>
@@ -54,7 +57,7 @@
     }
     else if (!Model.HasOmpUser)
     {
-        <section class="card form-grid settings-panel">
+        <section class="card form-grid">
             <h3>@ompBranding.ApplyPlatformName(L["OMP account creation is disabled."].Value)</h3>
             <p class="lede">
                 @(string.IsNullOrWhiteSpace(Model.OmpUserCreationUnavailableMessage)
@@ -65,7 +68,7 @@
     }
     else
     {
-        <form method="post" asp-page-handler="User" class="card form-grid settings-panel">
+        <form method="post" asp-page-handler="User" class="card form-grid">
             <div class="form-field">
                 <label asp-for="UserInput.DisplayName">@L["Display name"]</label>
                 <input asp-for="UserInput.DisplayName" maxlength="@OpenModulePlatform.Portal.Services.PortalUserSettingsService.DisplayNameMaxLength" />
@@ -77,7 +80,7 @@
             </div>
         </form>
 
-        <section class="card form-grid settings-panel settings-profile-image">
+        <section class="card form-grid settings-profile-image">
             <h3>@L["Profile image"]</h3>
             <div class="settings-profile-image__preview">
                 @if (!string.IsNullOrWhiteSpace(Model.ProfileImageUrl))
@@ -120,7 +123,7 @@
 }
 else if (Model.IsActiveTab(SettingsModel.PortalTab))
 {
-    <form method="post" asp-page-handler="Portal" class="card form-grid settings-panel">
+    <form method="post" asp-page-handler="Portal" class="card form-grid">
         <h3>@ompBranding.PortalName</h3>
         <div class="form-field checkbox-row checkbox-row--boxed">
             <input asp-for="PortalInput.TopbarDropdownsOpenOnHover" type="checkbox" />
@@ -154,46 +157,44 @@ else if (Model.IsActiveTab(SettingsModel.PortalTab))
         </div>
     </form>
 
-    @* The dashboard's edit menu can be dragged anywhere; this puts it back.
-       Browser-side state, so a button rather than a post. *@
-    <section class="card form-grid settings-panel" data-dashboard-menu-settings data-dashboard-draft-key="@Model.DashboardDraftKey">
+    @* One card for the dashboard: a row per action, its explanation left and
+       its button right. "Put the menu back" clears browser-side state, so it
+       is a button rather than a post; the two destructive actions post from
+       their own forms and keep their confirmations. *@
+    <section class="card form-grid" data-dashboard-menu-settings data-dashboard-draft-key="@Model.DashboardDraftKey">
         <h3>@L["Dashboard"]</h3>
-        <p class="muted">@L["The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner."]</p>
-        <div class="toolbar">
-            <button type="button" class="btn btn-secondary" data-dashboard-menu-reset-position-button>@L["Put the menu back"]</button>
-            <span class="muted" data-dashboard-menu-reset-status hidden>@L["The menu will be back in its corner the next time the dashboard opens."]</span>
+        <div class="settings-actions">
+            <div class="settings-actions__row">
+                <div class="settings-actions__text">
+                    <p class="muted">@L["The dashboard menu can be dragged anywhere on the screen; this puts it back in its corner."]</p>
+                    <p class="muted settings-actions__status" data-dashboard-menu-reset-status hidden>@L["The menu will be back in its corner the next time the dashboard opens."]</p>
+                </div>
+                <button type="button" class="btn btn-secondary" data-dashboard-menu-reset-position-button>@L["Put the menu back"]</button>
+            </div>
+            <form method="post"
+                  asp-page-handler="ResetDashboard"
+                  class="settings-actions__row"
+                  data-omp-confirm="@L["This resets your dashboard to the shared default layout. Continue?"]"
+                  data-omp-confirm-ok="@L["Continue"]"
+                  data-omp-confirm-cancel="@L["Cancel"]">
+                <p class="muted settings-actions__text">@L["Reset to the shared default dashboard layout."]</p>
+                <button type="submit" class="btn btn-danger">@L["Reset to default"]</button>
+            </form>
+            <form method="post"
+                  asp-page-handler="ClearDashboard"
+                  class="settings-actions__row"
+                  data-omp-confirm="@L["This removes all widgets from your dashboard. Continue?"]"
+                  data-omp-confirm-ok="@L["Continue"]"
+                  data-omp-confirm-cancel="@L["Cancel"]">
+                <p class="muted settings-actions__text">@L["Clear your dashboard and keep it empty until you add widgets again."]</p>
+                <button type="submit" class="btn btn-danger">@L["Clear dashboard"]</button>
+            </form>
         </div>
     </section>
-
-    <form method="post"
-          asp-page-handler="ResetDashboard"
-          class="card danger-zone"
-          data-omp-confirm="@L["This resets your dashboard to the shared default layout. Continue?"]"
-          data-omp-confirm-ok="@L["Continue"]"
-          data-omp-confirm-cancel="@L["Cancel"]">
-        <h3>@L["Dashboard"]</h3>
-        <p class="muted">@L["Reset to the shared default dashboard layout."]</p>
-        <div class="toolbar">
-            <button type="submit" class="btn btn-danger">@L["Reset to default"]</button>
-        </div>
-    </form>
-
-    <form method="post"
-          asp-page-handler="ClearDashboard"
-          class="card danger-zone"
-          data-omp-confirm="@L["This removes all widgets from your dashboard. Continue?"]"
-          data-omp-confirm-ok="@L["Continue"]"
-          data-omp-confirm-cancel="@L["Cancel"]">
-        <h3>@L["Dashboard"]</h3>
-        <p class="muted">@L["Clear your dashboard and keep it empty until you add widgets again."]</p>
-        <div class="toolbar">
-            <button type="submit" class="btn btn-danger">@L["Clear dashboard"]</button>
-        </div>
-    </form>
 }
 else if (Model.IsPortalAdmin)
 {
-    <section class="card form-grid settings-panel">
+    <section class="card form-grid">
         <h3>@L["Dashboard"]</h3>
         <p class="muted">@L["Default dashboard layout"]</p>
 
@@ -209,6 +210,7 @@ else if (Model.IsPortalAdmin)
         </form>
     </section>
 }
+</div>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />

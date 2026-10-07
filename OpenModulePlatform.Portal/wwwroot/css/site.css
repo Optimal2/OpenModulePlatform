@@ -2356,8 +2356,65 @@ textarea {
     color: var(--link-hover);
 }
 
-.settings-panel {
-    max-width: 760px;
+/* The settings page is a centred column narrower than the content shell:
+   no lists live here, and the header, the tabs and the cards share it. */
+.settings-page {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* Rows of settings actions inside one card: the explanation left, the
+   button right, a hairline between the rows. */
+.settings-actions {
+    display: grid;
+}
+
+.settings-actions__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+    margin: 0;
+}
+
+.settings-actions__row + .settings-actions__row {
+    border-top: 1px solid var(--border);
+}
+
+.settings-actions__row:first-child {
+    padding-top: 0;
+}
+
+.settings-actions__row:last-child {
+    padding-bottom: 0;
+}
+
+.settings-actions__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+}
+
+.settings-actions__text p {
+    margin: 0;
+}
+
+.settings-actions__text .settings-actions__status {
+    margin-top: 4px;
+}
+
+.settings-actions__row > button {
+    flex: 0 0 auto;
+    /* A common width keeps the buttons' left edges in one line. */
+    min-width: 12rem;
+}
+
+@media (max-width: 560px) {
+    .settings-actions__row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
 
 .settings-profile-image__preview {
