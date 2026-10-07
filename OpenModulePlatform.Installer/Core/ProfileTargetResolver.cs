@@ -33,12 +33,69 @@ public static class ProfileTargetResolver
     /// True when the profile deploys the OMP authentication application: the
     /// HostAgent enables IIS Windows authentication for that app, so the
     /// Windows Authentication role service is a prerequisite.
-    /// An artifact counts when its target (or, lacking a target, its source)
-    /// ends in a folder named <c>auth</c>.
+    /// An artifact counts when any folder of its target (or, lacking a target,
+    /// its source) names the auth app: hand-written profiles point the target
+    /// at the deployed folder (<c>...\WebApps\auth</c>, the IIS path the
+    /// HostAgent matches with <c>IsOmpAuthenticationAppPath</c>), while synced
+    /// package targets are versioned artifact-store paths such as
+    /// <c>omp-auth/web/{version}/payload/OpenModulePlatform.Auth.zip</c>.
     /// </summary>
     public static bool ProfileUsesWindowsAuthentication(BootstrapConfig config)
         => config.Artifacts.Any(artifact =>
-            artifact.Enabled && ArtifactEndsInFolder(artifact, "auth"));
+            artifact.Enabled && ArtifactMentionsAuthApp(artifact));
+
+    private static bool ArtifactMentionsAuthApp(ArtifactPayloadOptions artifact)
+    {
+        foreach (var path in new[] { artifact.Target, artifact.Source })
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                continue;
+            }
+
+            var trimmed = path.Trim().TrimEnd('/', '\\');
+            var name = Path.GetFileName(trimmed);
+            if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                name = Path.GetFileNameWithoutExtension(name);
+            }
+
+            if (IsAuthAppName(name))
+            {
+                return true;
+            }
+
+            var directory = Path.GetDirectoryName(trimmed);
+            while (!string.IsNullOrEmpty(directory))
+            {
+                if (IsAuthAppName(Path.GetFileName(directory)))
+                {
+                    return true;
+                }
+
+                var parent = Path.GetDirectoryName(directory);
+                if (parent is null || parent.Equals(directory, StringComparison.Ordinal))
+                {
+                    break;
+                }
+
+                directory = parent;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// A folder or zip-base name denotes the auth app when it is exactly
+    /// <c>auth</c>/<c>omp-auth</c> or ends with a <c>.auth</c>/<c>-auth</c>/
+    /// <c>_auth</c> separator suffix (for example <c>OpenModulePlatform.Auth</c>).
+    /// </summary>
+    private static bool IsAuthAppName(string name)
+        => name.Equals("auth", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".auth", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("-auth", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("_auth", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// True when any selected artifact is a Blazor Server app (folder name
@@ -48,9 +105,6 @@ public static class ProfileTargetResolver
     public static bool ProfileUsesBlazor(BootstrapConfig config)
         => config.Artifacts.Any(artifact =>
             artifact.Enabled && ArtifactFolderName(artifact).Contains("blazor", StringComparison.OrdinalIgnoreCase));
-
-    private static bool ArtifactEndsInFolder(ArtifactPayloadOptions artifact, string folderName)
-        => ArtifactFolderName(artifact).Equals(folderName, StringComparison.OrdinalIgnoreCase);
 
     private static string ArtifactFolderName(ArtifactPayloadOptions artifact)
     {

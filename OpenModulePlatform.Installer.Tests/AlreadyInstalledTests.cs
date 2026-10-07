@@ -62,6 +62,34 @@ public class ProfileTargetResolverTests
     }
 
     [Fact]
+    public void Synced_package_target_for_the_auth_artifact_triggers_windows_authentication()
+    {
+        // A profile refreshed by the payload sync carries versioned
+        // artifact-store targets, not the deployed-app folder: the auth app
+        // must still be recognised or the Web-Windows-Auth feature check
+        // would silently never fire.
+        var config = new OpenModulePlatform.Installation.BootstrapConfig();
+        config.Artifacts.Add(new OpenModulePlatform.Installation.ArtifactPayloadOptions
+        {
+            Source = @"data\global\artifacts\payload\OpenModulePlatform.Auth.zip",
+            Target = @"omp-auth/web/0.3.873/payload/OpenModulePlatform.Auth.zip"
+        });
+        Assert.True(ProfileTargetResolver.ProfileUsesWindowsAuthentication(config));
+    }
+
+    [Fact]
+    public void Portal_artifact_does_not_trigger_windows_authentication()
+    {
+        var config = new OpenModulePlatform.Installation.BootstrapConfig();
+        config.Artifacts.Add(new OpenModulePlatform.Installation.ArtifactPayloadOptions
+        {
+            Source = @"data\global\artifacts\payload\OpenModulePlatform.Portal.zip",
+            Target = @"omp-portal/web/0.3.873/payload/OpenModulePlatform.Portal.zip"
+        });
+        Assert.False(ProfileTargetResolver.ProfileUsesWindowsAuthentication(config));
+    }
+
+    [Fact]
     public void Disabled_auth_artifact_does_not_trigger_windows_authentication()
     {
         var config = new OpenModulePlatform.Installation.BootstrapConfig();
