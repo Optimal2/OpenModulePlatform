@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppTitle" xml:space="preserve"><value>OpenModulePlatform installation</value></data>
+  <data name="ConfirmHeading" xml:space="preserve"><value>Ready to install</value></data>
+  <data name="ConfirmIntro" xml:space="preserve"><value>This installation profile matches this computer. Check the details below, then continue.</value></data>
+  <data name="NoMatchMessage" xml:space="preserve"><value>No installation is prepared for this computer ({0}).</value></data>
+  <data name="NoMatchHint" xml:space="preserve"><value>If you expected an installation here, contact your supplier.</value></data>
+  <data name="NoProfilesMessage" xml:space="preserve"><value>No installation files were found next to this program. Place it in the delivered installation package and start it again.</value></data>
+  <data name="MultipleMatchMessage" xml:space="preserve"><value>More than one installation matches this computer: {0}. Contact your supplier so only one remains.</value></data>
+  <data name="AlreadyInstalledMessage" xml:space="preserve"><value>OpenModulePlatform is already installed on this computer. This program only performs the first installation.</value></data>
+  <data name="PrereqHeading" xml:space="preserve"><value>Checking what this computer needs</value></data>
+  <data name="PrereqAllOk" xml:space="preserve"><value>Everything needed is already in place.</value></data>
+  <data name="PrereqAutoFix" xml:space="preserve"><value>Some parts are missing. They are installed automatically during the installation.</value></data>
+  <data name="PrereqBlocking" xml:space="preserve"><value>Some requirements must be fixed before the installation can continue.</value></data>
+  <data name="PasswordFor" xml:space="preserve"><value>Password for {0}</value></data>
+  <data name="PasswordVerified" xml:space="preserve"><value>The password is verified.</value></data>
+  <data name="PasswordRejected" xml:space="preserve"><value>The password was not accepted: {0}</value></data>
+  <data name="InstallInProgress" xml:space="preserve"><value>Installing. This can take several minutes.</value></data>
+  <data name="InstallDone" xml:space="preserve"><value>The installation is complete.</value></data>
+  <data name="InstallFailed" xml:space="preserve"><value>The installation did not complete: {0}</value></data>
+  <data name="LogFileLabel" xml:space="preserve"><value>Log file: {0}</value></data>
+  <data name="ButtonContinue" xml:space="preserve"><value>Continue</value></data>
+  <data name="ButtonClose" xml:space="preserve"><value>Close</value></data>
+  <data name="ButtonInstall" xml:space="preserve"><value>Install</value></data>
+  <data name="ButtonRecheck" xml:space="preserve"><value>Check again</value></data>
+  <data name="ButtonVerifyPassword" xml:space="preserve"><value>Verify password</value></data>
+  <data name="LabelProfile" xml:space="preserve"><value>Profile</value></data>
+  <data name="LabelComputer" xml:space="preserve"><value>Computer</value></data>
+  <data name="LabelEnvironment" xml:space="preserve"><value>Environment</value></data>
+  <data name="LabelSqlServer" xml:space="preserve"><value>SQL Server</value></data>
+  <data name="LabelDatabase" xml:space="preserve"><value>Database</value></data>
+  <data name="LabelModules" xml:space="preserve"><value>Modules</value></data>
+  <data name="LabelArtifacts" xml:space="preserve"><value>Artifacts</value></data>
+  <data name="LabelInstallRoot" xml:space="preserve"><value>Install root</value></data>
+  <data name="Check_WindowsEdition" xml:space="preserve"><value>Windows version</value></data>
+  <data name="Check_IisWebServer" xml:space="preserve"><value>Web server (IIS)</value></data>
+  <data name="Check_IisWindowsAuthentication" xml:space="preserve"><value>Windows sign-in for the website</value></data>
+  <data name="Check_IisWebSockets" xml:space="preserve"><value>WebSocket support</value></data>
+  <data name="Check_AspNetCoreRuntime" xml:space="preserve"><value>.NET runtime</value></data>
+  <data name="Check_AspNetCoreIisModule" xml:space="preserve"><value>.NET module for IIS</value></data>
+  <data name="Check_HostingBundleInstaller" xml:space="preserve"><value>.NET installation file</value></data>
+  <data name="Check_SqlDatabase" xml:space="preserve"><value>Database</value></data>
+  <data name="Check_FreeDiskSpace" xml:space="preserve"><value>Disk space</value></data>
+  <data name="Check_ServiceAccount" xml:space="preserve"><value>Service account</value></data>
+</root>

@@ -31,6 +31,8 @@
   <Project Path="OpenModulePlatform.HostAgent.Sentinel/OpenModulePlatform.HostAgent.Sentinel.csproj" />
   <Project Path="OpenModulePlatform.Installation/OpenModulePlatform.Installation.csproj" />
   <Project Path="OpenModulePlatform.Installation.Tests/OpenModulePlatform.Installation.Tests.csproj" />
+  <Project Path="OpenModulePlatform.Installer/OpenModulePlatform.Installer.csproj" />
+  <Project Path="OpenModulePlatform.Installer.Tests/OpenModulePlatform.Installer.Tests.csproj" />
   <Project Path="OpenModulePlatform.Bootstrapper/OpenModulePlatform.Bootstrapper.csproj" />
   <Project Path="OpenModulePlatform.Bootstrapper.Tests/OpenModulePlatform.Bootstrapper.Tests.csproj" />
 </Solution>

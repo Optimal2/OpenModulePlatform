@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppTitle" xml:space="preserve"><value>OpenModulePlatform-installation</value></data>
+  <data name="ConfirmHeading" xml:space="preserve"><value>Klar att installera</value></data>
+  <data name="ConfirmIntro" xml:space="preserve"><value>Den här installationsprofilen matchar datorn. Kontrollera uppgifterna nedan och fortsätt.</value></data>
+  <data name="NoMatchMessage" xml:space="preserve"><value>Ingen installation är förberedd för den här datorn ({0}).</value></data>
+  <data name="NoMatchHint" xml:space="preserve"><value>Kontakta din leverantör om du förväntade dig en installation här.</value></data>
+  <data name="NoProfilesMessage" xml:space="preserve"><value>Inga installationsfiler hittades bredvid programmet. Placera det i det levererade installationspaketet och starta det igen.</value></data>
+  <data name="MultipleMatchMessage" xml:space="preserve"><value>Fler än en installation matchar den här datorn: {0}. Kontakta din leverantör så att bara en återstår.</value></data>
+  <data name="AlreadyInstalledMessage" xml:space="preserve"><value>OpenModulePlatform är redan installerat på den här datorn. Det här programmet utför bara den första installationen.</value></data>
+  <data name="PrereqHeading" xml:space="preserve"><value>Kontrollerar vad datorn behöver</value></data>
+  <data name="PrereqAllOk" xml:space="preserve"><value>Allt som behövs finns redan på plats.</value></data>
+  <data name="PrereqAutoFix" xml:space="preserve"><value>Vissa delar saknas. De installeras automatiskt under installationen.</value></data>
+  <data name="PrereqBlocking" xml:space="preserve"><value>Vissa krav måste åtgärdas innan installationen kan fortsätta.</value></data>
+  <data name="PasswordFor" xml:space="preserve"><value>Lösenord för {0}</value></data>
+  <data name="PasswordVerified" xml:space="preserve"><value>Lösenordet är verifierat.</value></data>
+  <data name="PasswordRejected" xml:space="preserve"><value>Lösenordet godkändes inte: {0}</value></data>
+  <data name="InstallInProgress" xml:space="preserve"><value>Installerar. Det kan ta flera minuter.</value></data>
+  <data name="InstallDone" xml:space="preserve"><value>Installationen är klar.</value></data>
+  <data name="InstallFailed" xml:space="preserve"><value>Installationen slutfördes inte: {0}</value></data>
+  <data name="LogFileLabel" xml:space="preserve"><value>Loggfil: {0}</value></data>
+  <data name="ButtonContinue" xml:space="preserve"><value>Fortsätt</value></data>
+  <data name="ButtonClose" xml:space="preserve"><value>Stäng</value></data>
+  <data name="ButtonInstall" xml:space="preserve"><value>Installera</value></data>
+  <data name="ButtonRecheck" xml:space="preserve"><value>Kontrollera igen</value></data>
+  <data name="ButtonVerifyPassword" xml:space="preserve"><value>Verifiera lösenord</value></data>
+  <data name="LabelProfile" xml:space="preserve"><value>Profil</value></data>
+  <data name="LabelComputer" xml:space="preserve"><value>Dator</value></data>
+  <data name="LabelEnvironment" xml:space="preserve"><value>Miljö</value></data>
+  <data name="LabelSqlServer" xml:space="preserve"><value>SQL Server</value></data>
+  <data name="LabelDatabase" xml:space="preserve"><value>Databas</value></data>
+  <data name="LabelModules" xml:space="preserve"><value>Moduler</value></data>
+  <data name="LabelArtifacts" xml:space="preserve"><value>Artefakter</value></data>
+  <data name="LabelInstallRoot" xml:space="preserve"><value>Installationsrot</value></data>
+  <data name="Check_WindowsEdition" xml:space="preserve"><value>Windows-version</value></data>
+  <data name="Check_IisWebServer" xml:space="preserve"><value>Webbserver (IIS)</value></data>
+  <data name="Check_IisWindowsAuthentication" xml:space="preserve"><value>Windows-inloggning för webbplatsen</value></data>
+  <data name="Check_IisWebSockets" xml:space="preserve"><value>WebSocket-stöd</value></data>
+  <data name="Check_AspNetCoreRuntime" xml:space="preserve"><value>.NET-körningsmiljö</value></data>
+  <data name="Check_AspNetCoreIisModule" xml:space="preserve"><value>.NET-modul för IIS</value></data>
+  <data name="Check_HostingBundleInstaller" xml:space="preserve"><value>.NET-installationsfil</value></data>
+  <data name="Check_SqlDatabase" xml:space="preserve"><value>Databas</value></data>
+  <data name="Check_FreeDiskSpace" xml:space="preserve"><value>Diskutrymme</value></data>
+  <data name="Check_ServiceAccount" xml:space="preserve"><value>Tjänstekonto</value></data>
+</root>

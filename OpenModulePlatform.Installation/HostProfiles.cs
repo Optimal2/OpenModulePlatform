@@ -231,6 +231,41 @@ public static class HostProfileDiscovery
 /// </summary>
 public static class HostProfileMatcher
 {
+    /// <summary>
+    /// Returns every profile that matches the candidate machine names, applying the
+    /// same rules as <see cref="SelectConfigPath"/>: case-insensitive matching with
+    /// and without domain suffix, and sample configs shadowed by real profiles (a
+    /// sample match is returned only when no real profile matches). Callers that
+    /// need to distinguish "none", "exactly one" and "several" without parsing
+    /// exception messages (for example a single-purpose first-install tool) use
+    /// this directly; <see cref="SelectConfigPath"/> is the throwing wrapper.
+    /// </summary>
+    public static IReadOnlyList<BootstrapConfigProfile> MatchProfiles(
+        IReadOnlyList<BootstrapConfigProfile> profiles,
+        IReadOnlySet<string> candidateMachineNames)
+    {
+        var machineMatches = profiles
+            .Where(profile => ProfileMatchesMachine(profile, candidateMachineNames))
+            .ToArray();
+
+        // On developer machines the generated sample template carries the
+        // build machine's hostAgent identity, so it can shadow the real host
+        // profile. A sample may only be selected when no real config matches.
+        var nonSampleMatches = machineMatches
+            .Where(static profile => !IsSampleConfig(profile.ConfigPath))
+            .ToArray();
+        if (nonSampleMatches.Length > 0)
+        {
+            machineMatches = nonSampleMatches;
+        }
+
+        return machineMatches;
+    }
+
+    /// <summary>True when the config file is a sample template (<c>*.sample.json</c>).</summary>
+    public static bool IsSampleConfig(string configPath)
+        => Path.GetFileName(configPath).EndsWith(".sample.json", StringComparison.OrdinalIgnoreCase);
+
     public static string SelectConfigPath(
         IReadOnlyList<BootstrapConfigProfile> profiles,
         IReadOnlySet<string> candidateMachineNames)
@@ -242,28 +277,14 @@ public static class HostProfileMatcher
         }
 
         var localMachineNames = candidateMachineNames;
-        var machineMatches = profiles
-            .Where(profile => ProfileMatchesMachine(profile, localMachineNames))
-            .ToArray();
+        var machineMatches = MatchProfiles(profiles, candidateMachineNames);
 
-        // On developer machines the generated sample template carries the
-        // build machine's hostAgent identity, so it can shadow the real host
-        // profile. A sample may only be selected when no real config matches.
-        var nonSampleMatches = machineMatches
-            .Where(static profile => !Path.GetFileName(profile.ConfigPath)
-                .EndsWith(".sample.json", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (nonSampleMatches.Length > 0)
-        {
-            machineMatches = nonSampleMatches;
-        }
-
-        if (machineMatches.Length == 1)
+        if (machineMatches.Count == 1)
         {
             return machineMatches[0].ConfigPath;
         }
 
-        if (machineMatches.Length > 1)
+        if (machineMatches.Count > 1)
         {
             throw new InvalidOperationException(
                 "More than one bootstrap configuration matches this computer. Keep exactly one matching host profile, then start the installer again." + Environment.NewLine + Environment.NewLine
