@@ -666,6 +666,135 @@ public static partial class InstallationEngine
         }
     }
 
+    private const int LockRetryAttempts = 5;
+
+    private static readonly TimeSpan DefaultLockRetryDelay = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Moves <paramref name="source"/> to <paramref name="destination"/>, retrying while a
+    /// transient handle blocks the rename.
+    /// </summary>
+    /// <remarks>
+    /// Antivirus scanners with real-time protection and file-sync engines open freshly written
+    /// files without FileShare.Delete. While such a handle is open anywhere below a directory,
+    /// Windows refuses to rename that directory: "Access to the path ... is denied", which .NET
+    /// surfaces from a directory move as an IOException carrying ERROR_ACCESS_DENIED
+    /// (HResult 0x80070005). UnauthorizedAccessException is retried too, so the retry does not
+    /// depend on that mapping.
+    /// </remarks>
+    /// <param name="copyAsLastResort">
+    /// When the final attempt still fails, copy the tree instead of moving it (a scanner still
+    /// lets the files be read). The source is left for the caller's cleanup. The fallback never
+    /// merges into an existing destination. A copy that fails part-way deletes its partial
+    /// destination with retries before rethrowing; if even that fails, an error line names the
+    /// leftover directory, because an add-missing-only pass would otherwise accept it as
+    /// installed. A process killed mid-copy can still leave a partial destination behind.
+    /// </param>
+    /// <param name="retryDelay">Test seam. Defaults to 3 seconds.</param>
+    internal static void MoveDirectoryWithRetry(
+        string source,
+        string destination,
+        bool copyAsLastResort = false,
+        TimeSpan? retryDelay = null)
+    {
+        var delay = retryDelay ?? DefaultLockRetryDelay;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Move(source, destination);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt < LockRetryAttempts)
+                {
+                    InstallOutput.Info($"Package directory is locked ({ex.Message.TrimEnd('.')}); retrying in {delay.TotalSeconds:0.#} seconds (attempt {attempt}/{LockRetryAttempts}).");
+                    Thread.Sleep(delay);
+                    continue;
+                }
+
+                // Directory.Move is a single rename on the same volume, so a failed attempt never
+                // leaves a partial destination behind. An existing destination therefore belongs
+                // to someone else and must not be merged into.
+                if (!copyAsLastResort
+                    || !Directory.Exists(source)
+                    || Directory.Exists(destination)
+                    || File.Exists(destination))
+                {
+                    throw;
+                }
+
+                InstallOutput.Info($"Package directory is still locked ({ex.Message.TrimEnd('.')}); copying it instead of moving it.");
+                try
+                {
+                    CopyDirectory(source, destination);
+                }
+                catch
+                {
+                    RemovePartialCopy(destination, delay);
+                    throw;
+                }
+
+                return;
+            }
+        }
+    }
+
+    private static void RemovePartialCopy(string destination, TimeSpan delay)
+    {
+        try
+        {
+            DeleteFileOrDirectoryWithRetry(destination, delay);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The copy failure is the exception that propagates; this only has to make the
+            // leftover impossible to miss.
+            InstallOutput.Error($"Partially copied directory '{destination}' could not be removed ({ex.Message.TrimEnd('.')}). Delete it before the next install; otherwise it is treated as already installed.");
+        }
+    }
+
+    /// <summary>
+    /// Deletes a file or directory tree, retrying while a transient scanner handle blocks it.
+    /// </summary>
+    /// <param name="retryDelay">Test seam. Defaults to 3 seconds.</param>
+    internal static void DeleteFileOrDirectoryWithRetry(string path, TimeSpan? retryDelay = null)
+    {
+        var delay = retryDelay ?? DefaultLockRetryDelay;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                TryDeleteFileOrDirectory(path);
+                return;
+            }
+            catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && attempt < LockRetryAttempts)
+            {
+                InstallOutput.Info($"'{path}' is locked ({ex.Message.TrimEnd('.')}); retrying delete in {delay.TotalSeconds:0.#} seconds (attempt {attempt}/{LockRetryAttempts}).");
+                Thread.Sleep(delay);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Removes a temporary directory without letting a failure escape. A leftover staging
+    /// directory is harmless; failing to remove it (for example while a scanner still holds one
+    /// of its files) must neither fail an install that otherwise succeeded nor hide an exception
+    /// that is already propagating.
+    /// </summary>
+    internal static void TryDeleteTemporaryDirectoryBestEffort(string path)
+    {
+        try
+        {
+            TryDeleteDirectory(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            InstallOutput.Info($"Could not delete temporary directory '{path}': {ex.Message}");
+        }
+    }
+
     internal static string NormalizePathForMatch(string path)
         => path.Replace('\\', '/').TrimStart('/').Trim();
 

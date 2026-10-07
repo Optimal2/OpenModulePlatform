@@ -2,6 +2,7 @@ using OpenModulePlatform.Installation;
 
 namespace OpenModulePlatform.Installation.Tests;
 
+[Collection(InstallOutputTestCollection.Name)]
 public sealed class InstallOutputTests
 {
     [Fact]

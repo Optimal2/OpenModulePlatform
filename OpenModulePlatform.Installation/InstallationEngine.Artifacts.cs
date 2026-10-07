@@ -69,7 +69,7 @@ public static partial class InstallationEngine
             {
                 if (artifact.Overwrite && (File.Exists(target) || Directory.Exists(target)))
                 {
-                    TryDeleteFileOrDirectory(target);
+                    DeleteFileOrDirectoryWithRetry(target);
                 }
 
                 CopyDirectory(source, target);
@@ -88,11 +88,11 @@ public static partial class InstallationEngine
 
                     if (artifact.Overwrite && (File.Exists(target) || Directory.Exists(target)))
                     {
-                        TryDeleteFileOrDirectory(target);
+                        DeleteFileOrDirectoryWithRetry(target);
                     }
 
                     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                    Directory.Move(package.ArtifactContentPath, target);
+                    MoveDirectoryWithRetry(package.ArtifactContentPath, target, copyAsLastResort: true);
 
                     if (package.ConfigurationFiles.Count > 0)
                     {
@@ -103,14 +103,14 @@ public static partial class InstallationEngine
                 }
                 finally
                 {
-                    TryDeleteDirectory(stagingPath);
+                    TryDeleteTemporaryDirectoryBestEffort(stagingPath);
                 }
             }
             else if (File.Exists(source))
             {
                 if (artifact.Overwrite && (File.Exists(target) || Directory.Exists(target)))
                 {
-                    TryDeleteFileOrDirectory(target);
+                    DeleteFileOrDirectoryWithRetry(target);
                 }
 
                 Directory.CreateDirectory(target);

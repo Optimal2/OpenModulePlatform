@@ -1399,27 +1399,6 @@ internal static partial class Program
         }
     }
 
-    private static void MoveDirectoryWithRetry(string source, string destination)
-    {
-        // Antivirus scanners and file-sync engines take transient handles on
-        // freshly written package files; a single failed rename should not
-        // abort a refresh that already built a complete package.
-        const int maxAttempts = 5;
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                Directory.Move(source, destination);
-                return;
-            }
-            catch (IOException ex) when (attempt < maxAttempts)
-            {
-                Console.WriteLine($"Package directory is locked ({ex.Message.TrimEnd('.')}); retrying in 3 seconds (attempt {attempt}/{maxAttempts}).");
-                Thread.Sleep(TimeSpan.FromSeconds(3));
-            }
-        }
-    }
-
     private static void CopyDirectoryRecursive(
         string source,
         string destination,
