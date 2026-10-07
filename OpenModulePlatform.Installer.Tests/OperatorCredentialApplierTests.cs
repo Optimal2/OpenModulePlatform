@@ -119,4 +119,25 @@ public class OperatorCredentialApplierTests
         Assert.Equal(string.Empty, config.HostAgent.ServiceAccountPassword);
         Assert.Equal(string.Empty, config.HostAgent.IisAppPoolPassword);
     }
+
+    [Fact]
+    public void Passwords_are_never_trimmed()
+    {
+        // LogonUser validated the exact typed value; leading/trailing spaces
+        // are legal password characters and must survive.
+        var config = ConfigWithServiceAccount(@"CONTOSO\svc-omp");
+        OperatorCredentialApplier.Apply(config, "  padded secret  ");
+        Assert.Equal("  padded secret  ", config.HostAgent.ServiceAccountPassword);
+        Assert.Equal("  padded secret  ", config.HostAgent.IisAppPoolPassword);
+    }
+
+    [Fact]
+    public void A_configured_password_with_spaces_is_reused_verbatim_for_the_pool()
+    {
+        var config = ConfigWithServiceAccount(@"CONTOSO\svc-omp");
+        config.HostAgent.ServiceAccountPassword = " padded ";
+        OperatorCredentialApplier.Apply(config, string.Empty);
+        Assert.Equal(" padded ", config.HostAgent.ServiceAccountPassword);
+        Assert.Equal(" padded ", config.HostAgent.IisAppPoolPassword);
+    }
 }

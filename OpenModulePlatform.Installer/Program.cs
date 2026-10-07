@@ -84,6 +84,12 @@ internal static class Program
         }
 
         ApplicationConfiguration.Initialize();
+        // Crash safety net: any unhandled UI-thread or background exception is
+        // shown to the operator with the log path instead of silently killing
+        // the process. The message never contains secrets (ex.Message only).
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => CrashReporter.Show(e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => CrashReporter.Show(e.ExceptionObject as Exception);
         Application.Run(new MainForm());
         return 0;
     }
@@ -146,9 +152,16 @@ internal static class Program
                 new ThrowingInstallActions(),
                 new ConsoleInstallProgress(),
                 dryRun: true);
+            if (InstallOrchestrator.BlockingChecks(evaluation).Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Dry run result: the installation WOULD BE BLOCKED. Fix the lines marked MISSING above that the installer cannot fix itself, then run again.");
+                return 3;
+            }
+
             return 0;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or SystemException or IOException)
+        catch (Exception ex) when (ex is InvalidOperationException or SystemException or IOException or System.Text.Json.JsonException)
         {
             Console.WriteLine("Dry run failed: " + ex.Message);
             return 1;
@@ -177,9 +190,8 @@ internal static class Program
 /// </summary>
 internal sealed class ThrowingInstallActions : IInstallActions
 {
-    public void InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs)
+    public bool InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs)
         => throw new InvalidOperationException("Dry run must not install features.");
-
     public int RunHostingBundle(string installerPath, bool repair)
         => throw new InvalidOperationException("Dry run must not run the hosting bundle.");
 

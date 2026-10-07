@@ -13,13 +13,17 @@ internal sealed class FakePrerequisiteEnvironment : IPrerequisiteEnvironment
 
     public Dictionary<string, bool?> FeatureStates { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public int? AspNetCoreMajor { get; set; } = 10;
+    public List<int> AspNetCoreMajors { get; } = [10];
 
     public bool IisModuleRegistered { get; set; } = true;
 
     public bool IisModuleDllExists { get; set; } = true;
 
     public (bool Ok, string Detail) SqlProbeResult { get; set; } = (true, "connected");
+
+    public (bool Found, bool HasPrivateKey)? CertificateProbeResult { get; set; } = (true, true);
+
+    public string? LastCertificateThumbprint { get; private set; }
 
     public long FreeDisk { get; set; } = 100L * 1024 * 1024 * 1024;
 
@@ -30,7 +34,7 @@ internal sealed class FakePrerequisiteEnvironment : IPrerequisiteEnvironment
     public bool? IsFeatureInstalled(string featureName)
         => FeatureStates.TryGetValue(featureName, out var state) ? state : true;
 
-    public int? GetHighestAspNetCoreRuntimeMajor() => AspNetCoreMajor;
+    public IReadOnlyList<int> GetInstalledAspNetCoreRuntimeMajors() => AspNetCoreMajors;
 
     public bool IsAspNetCoreIisModuleRegistered() => IisModuleRegistered;
 
@@ -38,6 +42,12 @@ internal sealed class FakePrerequisiteEnvironment : IPrerequisiteEnvironment
 
     public Task<(bool Ok, string Detail)> ProbeSqlDatabaseAsync(string server, string database, bool trustServerCertificate, CancellationToken cancellationToken)
         => Task.FromResult(SqlProbeResult);
+
+    public (bool Found, bool HasPrivateKey)? ProbeLocalMachineCertificate(string thumbprint)
+    {
+        LastCertificateThumbprint = thumbprint;
+        return CertificateProbeResult;
+    }
 
     public long GetFreeDiskBytes(string pathOnTargetDrive) => FreeDisk;
 
@@ -148,7 +158,8 @@ public class PrerequisiteEvaluatorTests
     public async Task Missing_runtime_major_requires_the_hosting_bundle()
     {
         var env = FakePrerequisiteEnvironment.AllGreen();
-        env.AspNetCoreMajor = 8;
+        env.AspNetCoreMajors.Clear();
+        env.AspNetCoreMajors.Add(8);
         env.RuntimeConfigTexts.Add(
             """{"runtimeOptions":{"framework":{"name":"Microsoft.AspNetCore.App","version":"10.0.1"}}}""");
         env.HostingBundles.Add(@"C:\pkg\prereqs\dotnet-hosting-10.0.3-win.exe");
@@ -161,6 +172,25 @@ public class PrerequisiteEvaluatorTests
         Assert.True(evaluation.HostingBundleRequired);
         Assert.False(evaluation.HostingBundleRepairRequired);
         Assert.Equal(@"C:\pkg\prereqs\dotnet-hosting-10.0.3-win.exe", evaluation.HostingBundleInstallerPath);
+    }
+
+    [Fact]
+    public async Task A_newer_runtime_major_alone_does_not_satisfy_the_check()
+    {
+        // No roll-forward across major versions: only .NET 11 installed must
+        // NOT satisfy artifacts built for .NET 10.
+        var env = FakePrerequisiteEnvironment.AllGreen();
+        env.AspNetCoreMajors.Clear();
+        env.AspNetCoreMajors.Add(11);
+        env.HostingBundles.Add(@"C:\pkg\prereqs\dotnet-hosting-10.0.3-win.exe");
+
+        var evaluation = await PrerequisiteEvaluator.EvaluateAsync(
+            MinimalConfig(), @"C:\pkg", env, serviceAccountPasswordValidated: false);
+
+        Assert.Equal(10, evaluation.RequiredRuntimeMajor);
+        var check = evaluation.Checks.Single(c => c.Id == PrerequisiteCheckId.AspNetCoreRuntime);
+        Assert.False(check.IsSatisfied);
+        Assert.True(evaluation.HostingBundleRequired);
     }
 
     [Fact]
@@ -181,7 +211,7 @@ public class PrerequisiteEvaluatorTests
     public async Task Missing_bundle_installer_blocks_install()
     {
         var env = FakePrerequisiteEnvironment.AllGreen();
-        env.AspNetCoreMajor = null;
+        env.AspNetCoreMajors.Clear();
 
         var evaluation = await PrerequisiteEvaluator.EvaluateAsync(
             MinimalConfig(), @"C:\pkg", env, serviceAccountPasswordValidated: false);
@@ -190,6 +220,80 @@ public class PrerequisiteEvaluatorTests
         Assert.False(bundleCheck.IsSatisfied);
         Assert.False(bundleCheck.CanAutoFix);
         Assert.False(evaluation.CanInstall);
+    }
+
+    [Fact]
+    public async Task Https_binding_certificate_is_checked_and_blocks_when_missing()
+    {
+        var config = MinimalConfig();
+        config.HostAgent.IisBindingProtocol = "https";
+        config.HostAgent.IisBindingCertificateThumbprint = "AABBCCDDEEFF00112233445566778899AABBCCDD";
+
+        var okEnv = FakePrerequisiteEnvironment.AllGreen();
+        var ok = await PrerequisiteEvaluator.EvaluateAsync(
+            config, @"C:\pkg", okEnv, serviceAccountPasswordValidated: false);
+        var okCheck = ok.Checks.Single(c => c.Id == PrerequisiteCheckId.IisBindingCertificate);
+        Assert.True(okCheck.IsSatisfied);
+        Assert.Equal("AABBCCDDEEFF00112233445566778899AABBCCDD", okEnv.LastCertificateThumbprint);
+
+        var missingEnv = FakePrerequisiteEnvironment.AllGreen();
+        missingEnv.CertificateProbeResult = (false, false);
+        var missing = await PrerequisiteEvaluator.EvaluateAsync(
+            config, @"C:\pkg", missingEnv, serviceAccountPasswordValidated: false);
+        var missingCheck = missing.Checks.Single(c => c.Id == PrerequisiteCheckId.IisBindingCertificate);
+        Assert.False(missingCheck.IsSatisfied);
+        Assert.False(missingCheck.CanAutoFix);
+        Assert.False(missing.CanInstall);
+    }
+
+    [Fact]
+    public async Task Https_binding_certificate_without_private_key_blocks_install()
+    {
+        var config = MinimalConfig();
+        config.HostAgent.IisBindingProtocol = "https";
+        config.HostAgent.IisBindingCertificateThumbprint = "AABBCCDDEEFF00112233445566778899AABBCCDD";
+        var env = FakePrerequisiteEnvironment.AllGreen();
+        env.CertificateProbeResult = (true, false);
+
+        var evaluation = await PrerequisiteEvaluator.EvaluateAsync(
+            config, @"C:\pkg", env, serviceAccountPasswordValidated: false);
+
+        var check = evaluation.Checks.Single(c => c.Id == PrerequisiteCheckId.IisBindingCertificate);
+        Assert.False(check.IsSatisfied);
+        Assert.Contains("private key", check.Detail);
+        Assert.False(evaluation.CanInstall);
+    }
+
+    [Fact]
+    public async Task Unreadable_certificate_store_blocks_with_a_plain_message()
+    {
+        var config = MinimalConfig();
+        config.HostAgent.IisBindingProtocol = "https";
+        config.HostAgent.IisBindingCertificateThumbprint = "AABBCCDDEEFF00112233445566778899AABBCCDD";
+        var env = FakePrerequisiteEnvironment.AllGreen();
+        env.CertificateProbeResult = null;
+
+        var evaluation = await PrerequisiteEvaluator.EvaluateAsync(
+            config, @"C:\pkg", env, serviceAccountPasswordValidated: false);
+
+        var check = evaluation.Checks.Single(c => c.Id == PrerequisiteCheckId.IisBindingCertificate);
+        Assert.False(check.IsSatisfied);
+        Assert.Contains("could not be read", check.Detail);
+    }
+
+    [Fact]
+    public async Task Certificate_check_runs_only_for_https_with_a_thumbprint()
+    {
+        var env = FakePrerequisiteEnvironment.AllGreen();
+        var http = await PrerequisiteEvaluator.EvaluateAsync(
+            MinimalConfig(), @"C:\pkg", env, serviceAccountPasswordValidated: false);
+        Assert.DoesNotContain(http.Checks, c => c.Id == PrerequisiteCheckId.IisBindingCertificate);
+
+        var config = MinimalConfig();
+        config.HostAgent.IisBindingProtocol = "https";
+        var noThumbprint = await PrerequisiteEvaluator.EvaluateAsync(
+            config, @"C:\pkg", FakePrerequisiteEnvironment.AllGreen(), serviceAccountPasswordValidated: false);
+        Assert.DoesNotContain(noThumbprint.Checks, c => c.Id == PrerequisiteCheckId.IisBindingCertificate);
     }
 
     [Fact]

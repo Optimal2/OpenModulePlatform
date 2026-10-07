@@ -94,17 +94,20 @@ public static class PrerequisiteEvaluator
 
         var requiredMajor = RuntimeRequirementResolver.ResolveRequiredMajor(
             environment.FindRuntimeConfigTexts(payloadRoot));
-        var installedMajor = environment.GetHighestAspNetCoreRuntimeMajor();
-        var runtimeOk = installedMajor is >= 1 && installedMajor.Value >= requiredMajor;
+        var installedMajors = environment.GetInstalledAspNetCoreRuntimeMajors();
+        // Exact major match: .NET rolls forward across patch versions of the
+        // same major only, never across majors, so a newer major alone does
+        // not satisfy the requirement.
+        var runtimeOk = installedMajors.Contains(requiredMajor);
         checks.Add(new PrerequisiteCheckResult(
             PrerequisiteCheckId.AspNetCoreRuntime,
             runtimeOk,
             $"ASP.NET Core runtime {requiredMajor}",
             runtimeOk
-                ? $"Version {installedMajor} is installed."
-                : installedMajor is null
+                ? $"Major version {requiredMajor} is installed."
+                : installedMajors.Count == 0
                     ? "No ASP.NET Core shared runtime was found."
-                    : $"Only version {installedMajor} is installed.")
+                    : $"Only major version(s) {string.Join(", ", installedMajors)} installed; the artifacts need major {requiredMajor} (no roll-forward across major versions).")
         { CanAutoFix = true });
 
         var moduleRegistered = environment.IsAspNetCoreIisModuleRegistered();
@@ -133,6 +136,30 @@ public static class PrerequisiteEvaluator
                 bundlePath is not null
                     ? $"Will run {Path.GetFileName(bundlePath)}."
                     : $"Place the .NET {requiredMajor} hosting bundle installer (dotnet-hosting-{requiredMajor}.*-win.exe) in the package's prereqs folder."));
+        }
+
+        // An https binding with a configured certificate thumbprint needs that
+        // certificate, with its private key, in LocalMachine\My. Not auto-fixable:
+        // the installer never installs certificates.
+        var bindingProtocol = (config.HostAgent.IisBindingProtocol ?? string.Empty).Trim();
+        var bindingThumbprint = (config.HostAgent.IisBindingCertificateThumbprint ?? string.Empty).Trim();
+        if (bindingProtocol.Equals("https", StringComparison.OrdinalIgnoreCase) && bindingThumbprint.Length > 0)
+        {
+            var certificate = environment.ProbeLocalMachineCertificate(bindingThumbprint);
+            checks.Add(new PrerequisiteCheckResult(
+                PrerequisiteCheckId.IisBindingCertificate,
+                certificate is { Found: true, HasPrivateKey: true },
+                "IIS binding certificate",
+                certificate switch
+                {
+                    { Found: true, HasPrivateKey: true }
+                        => $"Certificate {bindingThumbprint} exists in LocalMachine\\My with a private key.",
+                    { Found: true }
+                        => $"Certificate {bindingThumbprint} exists in LocalMachine\\My but has no private key. The https binding needs the certificate with its private key; install it (for example from the PFX) on this server first.",
+                    { Found: false }
+                        => $"Certificate {bindingThumbprint} was not found in LocalMachine\\My. Install the certificate with its private key on this server before the installation.",
+                    _ => $"The certificate store LocalMachine\\My could not be read. Verify that certificate {bindingThumbprint} with its private key is installed on this server."
+                }));
         }
 
         var sql = config.Sql;

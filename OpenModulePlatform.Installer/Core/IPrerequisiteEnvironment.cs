@@ -23,8 +23,13 @@ public interface IPrerequisiteEnvironment
     /// <summary>The install state of the named Windows feature, or null when the feature is unknown.</summary>
     bool? IsFeatureInstalled(string featureName);
 
-    /// <summary>Highest installed major version of the shared ASP.NET Core runtime, or null when none.</summary>
-    int? GetHighestAspNetCoreRuntimeMajor();
+    /// <summary>
+    /// Every installed major version of the shared ASP.NET Core runtime (from
+    /// %ProgramFiles%\dotnet\shared\Microsoft.AspNetCore.App). .NET does not
+    /// roll forward across major versions by default, so the artifacts' exact
+    /// major must be present.
+    /// </summary>
+    IReadOnlyList<int> GetInstalledAspNetCoreRuntimeMajors();
 
     /// <summary>True when AspNetCoreModuleV2 is registered as a global module in applicationHost.config.</summary>
     bool IsAspNetCoreIisModuleRegistered();
@@ -60,4 +65,11 @@ public interface IPrerequisiteEnvironment
 
     /// <summary>True when the directory exists.</summary>
     bool DirectoryExists(string path);
+
+    /// <summary>
+    /// Looks up a certificate by thumbprint in the LocalMachine\My store.
+    /// Returns (found, hasPrivateKey), or null when the store cannot be read.
+    /// Read-only: the store is opened OpenExistingOnly + ReadOnly.
+    /// </summary>
+    (bool Found, bool HasPrivateKey)? ProbeLocalMachineCertificate(string thumbprint);
 }

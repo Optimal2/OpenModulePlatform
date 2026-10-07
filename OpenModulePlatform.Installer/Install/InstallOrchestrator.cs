@@ -9,7 +9,16 @@ public sealed record InstallRequest(
     string ConfigPath,
     string PayloadRoot,
     PrerequisiteEvaluation Evaluation,
-    string OperatorPassword);
+    string OperatorPassword)
+{
+    /// <summary>
+    /// The record's default ToString would print the operator password in clear
+    /// text into logs and crash reports. It never does: the password is always
+    /// redacted.
+    /// </summary>
+    public override string ToString()
+        => $"InstallRequest {{ ConfigPath = {ConfigPath}, PayloadRoot = {PayloadRoot}, OperatorPassword = <redacted> }}";
+}
 
 /// <summary>
 /// Runs the first installation: fix what the prerequisite evaluation found
@@ -32,11 +41,22 @@ public static class InstallOrchestrator
         var evaluation = request.Evaluation;
         var account = evaluation.ServiceAccount;
 
+        // Latest-available artifact selection runs exactly where the Bootstrapper
+        // runs it: before the plan (dry run) and before the chain (real install),
+        // so both report and use the same artifact versions.
+        var artifactSelectionMessages = InstallationEngine.SelectLatestAvailableArtifactPackages(
+            request.Config,
+            request.PayloadRoot);
+
         if (dryRun)
         {
-            ReportPlan(request, progress);
+            ReportPlan(request, progress, artifactSelectionMessages);
             return;
         }
+
+        ReportArtifactSelection(artifactSelectionMessages, progress);
+
+        var restartRequired = false;
 
         // 1. The service account password must validate before anything changes.
         if (account.RequiresPassword)
@@ -69,7 +89,12 @@ public static class InstallOrchestrator
         if (evaluation.MissingIisFeatures.Count > 0)
         {
             progress.Info($"> Install IIS features: {string.Join(", ", evaluation.MissingIisFeatures)}");
-            actions.InstallIisFeatures(evaluation.MissingIisFeatures, evaluation.IsServerOs);
+            if (actions.InstallIisFeatures(evaluation.MissingIisFeatures, evaluation.IsServerOs))
+            {
+                progress.Info("  Windows reports that a restart is required to finish the feature installation (exit code 3010/1641). The installation continues; restart the server at the next opportunity.");
+                restartRequired = true;
+            }
+
             iisChanged = true;
         }
 
@@ -90,7 +115,9 @@ public static class InstallOrchestrator
                 case 0:
                     break;
                 case 3010:
-                    progress.Info("  The hosting bundle asks for a restart (exit code 3010). The installation continues; restart the server when convenient.");
+                case 1641:
+                    progress.Info($"  The hosting bundle asks for a restart (exit code {exitCode}). The installation continues; restart the server at the next opportunity.");
+                    restartRequired = true;
                     break;
                 default:
                     throw new InvalidOperationException($"The hosting bundle installer failed with exit code {exitCode}.");
@@ -149,7 +176,42 @@ public static class InstallOrchestrator
         }
 
         progress.Info(string.Empty);
+        if (restartRequired)
+        {
+            progress.Info("NOTE: Windows requires a restart to finish what was installed. Restart the server at the next opportunity.");
+        }
+
         progress.Info("Installation completed.");
+    }
+
+    /// <summary>
+    /// The red lines the installer cannot fix itself (the unverified
+    /// service-account password is excluded: the operator supplies it). When
+    /// this list is non-empty a real install would be blocked, and
+    /// <c>--dry-run</c> must say so plainly and exit non-zero.
+    /// </summary>
+    internal static IReadOnlyList<PrerequisiteCheckResult> BlockingChecks(PrerequisiteEvaluation evaluation)
+        => evaluation.Checks
+            .Where(check => !check.IsSatisfied
+                && !check.CanAutoFix
+                && check.Id != PrerequisiteCheckId.ServiceAccount)
+            .ToArray();
+
+    /// <summary>The latest-available artifact selection lines, in the progress list.</summary>
+    internal static void ReportArtifactSelection(IReadOnlyList<string> messages, IInstallProgress progress)
+    {
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        progress.Info("> Latest available artifact selection");
+        foreach (var message in messages.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            progress.Info(message);
+        }
+
+        progress.Info(string.Empty);
     }
 
     /// <summary>
@@ -191,7 +253,10 @@ public static class InstallOrchestrator
     }
 
     /// <summary>What <c>--dry-run</c> prints: the same decisions, as "would" lines.</summary>
-    internal static void ReportPlan(InstallRequest request, IInstallProgress progress)
+    internal static void ReportPlan(
+        InstallRequest request,
+        IInstallProgress progress,
+        IReadOnlyList<string>? artifactSelectionMessages = null)
     {
         var evaluation = request.Evaluation;
         var config = request.Config;
@@ -203,6 +268,21 @@ public static class InstallOrchestrator
             progress.Info($"[{(check.IsSatisfied ? "OK" : "MISSING")}] {check.Title}: {check.Detail}");
         }
 
+        ReportArtifactSelection(artifactSelectionMessages ?? [], progress);
+
+        var blocking = BlockingChecks(evaluation);
+        if (blocking.Count > 0)
+        {
+            progress.Info(string.Empty);
+            progress.Info("THE INSTALLATION WOULD BE BLOCKED on this computer:");
+            foreach (var check in blocking)
+            {
+                progress.Info($"  - {check.Title}: {check.Detail}");
+            }
+
+            progress.Info("Fix the lines above before running the installer for real; it cannot fix them itself.");
+        }
+
         progress.Info(string.Empty);
         if (evaluation.ServiceAccount.RequiresPassword)
         {
@@ -211,7 +291,9 @@ public static class InstallOrchestrator
 
         if (evaluation.MissingIisFeatures.Count > 0)
         {
-            progress.Info($"Would install IIS features ({(evaluation.IsServerOs ? "Install-WindowsFeature" : "Enable-WindowsOptionalFeature")}): {string.Join(", ", evaluation.MissingIisFeatures)}.");
+            // The same command names the real path uses: Install-WindowsFeature
+            // on Server, dism.exe /enable-feature on client Windows.
+            progress.Info($"Would install IIS features ({(evaluation.IsServerOs ? "Install-WindowsFeature" : "dism.exe /online /enable-feature")}): {string.Join(", ", evaluation.MissingIisFeatures)}.");
         }
 
         if (evaluation.HostingBundleRequired)

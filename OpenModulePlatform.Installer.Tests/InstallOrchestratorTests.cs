@@ -15,12 +15,17 @@ internal sealed class RecordingInstallActions : IInstallActions
 
     public int HostingBundleExitCode { get; set; }
 
+    public bool FeaturesRestartRequired { get; set; }
+
     public bool HostAgentActive { get; set; } = true;
 
     public (bool Ok, string Detail) PortalResult { get; set; } = (true, "ok");
 
-    public void InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs)
-        => Calls.Add("features:" + string.Join(",", featureNames));
+    public bool InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs)
+    {
+        Calls.Add("features:" + string.Join(",", featureNames));
+        return FeaturesRestartRequired;
+    }
 
     public int RunHostingBundle(string installerPath, bool repair)
     {
@@ -225,6 +230,47 @@ public class InstallOrchestratorTests
     }
 
     [Fact]
+    public async Task Restart_required_exit_code_1641_is_reported_not_a_failure()
+    {
+        var account = ServiceAccountClassifier.Classify(null, "SERVER01");
+        var evaluation = GreenEvaluation(
+            account,
+            bundleRequired: true,
+            bundlePath: @"C:\pkg\prereqs\dotnet-hosting-10.0.3-win.exe");
+        var actions = new RecordingInstallActions { HostingBundleExitCode = 1641 };
+        var progress = new ListInstallProgress();
+
+        await InstallOrchestrator.RunAsync(
+            Request(NoOpChainConfig(), evaluation),
+            actions,
+            progress,
+            dryRun: false);
+
+        Assert.Contains(progress.Lines, line => line.Contains("1641") && line.Contains("restart"));
+        Assert.Contains(progress.Lines, line => line.Contains("requires a restart"));
+        Assert.Contains(progress.Lines, line => line.Contains("Installation completed."));
+    }
+
+    [Fact]
+    public async Task Feature_install_restart_requirement_is_reported_and_the_install_continues()
+    {
+        var account = ServiceAccountClassifier.Classify(null, "SERVER01");
+        var evaluation = GreenEvaluation(account, missingFeatures: ["Web-Server"]);
+        var actions = new RecordingInstallActions { FeaturesRestartRequired = true };
+        var progress = new ListInstallProgress();
+
+        await InstallOrchestrator.RunAsync(
+            Request(NoOpChainConfig(), evaluation),
+            actions,
+            progress,
+            dryRun: false);
+
+        Assert.Contains(progress.Lines, line => line.Contains("restart is required"));
+        Assert.Contains(progress.Lines, line => line.Contains("requires a restart"));
+        Assert.Contains(progress.Lines, line => line.Contains("Installation completed."));
+    }
+
+    [Fact]
     public async Task Bundle_failure_exit_code_fails_the_install()
     {
         var account = ServiceAccountClassifier.Classify(null, "SERVER01");
@@ -299,6 +345,103 @@ public class InstallOrchestratorTests
 
         Assert.Equal("s3cret", config.HostAgent.ServiceAccountPassword);
         Assert.Equal("s3cret", config.HostAgent.IisAppPoolPassword);
+    }
+
+    [Fact]
+    public void Install_request_ToString_never_prints_the_operator_password()
+    {
+        var request = Request(
+            NoOpChainConfig(),
+            GreenEvaluation(ServiceAccountClassifier.Classify(null, "SERVER01")),
+            password: "s3cret with spaces");
+
+        var text = request.ToString();
+        Assert.DoesNotContain("s3cret with spaces", text, StringComparison.Ordinal);
+        Assert.Contains("<redacted>", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dry_run_plan_names_dism_on_client_windows()
+    {
+        var account = ServiceAccountClassifier.Classify(null, "SERVER01");
+        var evaluation = GreenEvaluation(account, missingFeatures: ["IIS-WebServer"]) with { IsServerOs = false };
+        var progress = new ListInstallProgress();
+
+        await InstallOrchestrator.RunAsync(
+            Request(NoOpChainConfig(), evaluation),
+            new RecordingInstallActions(),
+            progress,
+            dryRun: true);
+
+        Assert.Contains(progress.Lines, line => line.Contains("dism.exe"));
+        Assert.DoesNotContain(progress.Lines, line => line.Contains("Enable-WindowsOptionalFeature"));
+    }
+
+    [Fact]
+    public async Task Dry_run_says_plainly_when_the_install_would_be_blocked()
+    {
+        var account = ServiceAccountClassifier.Classify(null, "SERVER01");
+        var evaluation = GreenEvaluation(account) with
+        {
+            Checks =
+            [
+                new PrerequisiteCheckResult(
+                    PrerequisiteCheckId.SqlDatabase,
+                    IsSatisfied: false,
+                    "SQL Server database",
+                    "The database OpenModulePlatform does not exist on sql01. It is never created by this installer.")
+            ]
+        };
+        var progress = new ListInstallProgress();
+
+        await InstallOrchestrator.RunAsync(
+            Request(NoOpChainConfig(), evaluation),
+            new RecordingInstallActions(),
+            progress,
+            dryRun: true);
+
+        Assert.Single(InstallOrchestrator.BlockingChecks(evaluation));
+        Assert.Contains(progress.Lines, line => line.Contains("WOULD BE BLOCKED"));
+        Assert.Contains(progress.Lines, line => line.Contains("does not exist on sql01"));
+    }
+
+    [Fact]
+    public async Task Dry_run_applies_and_reports_latest_available_artifact_selection()
+    {
+        var payloadRoot = Path.Join(Path.GetTempPath(), "omp-installer-tests", Guid.NewGuid().ToString("N"));
+        var artifactsRoot = Path.Join(payloadRoot, "data", "global", "artifacts");
+        Directory.CreateDirectory(artifactsRoot);
+        try
+        {
+            const string oldPackage = "testmod__testapp__web-app__testapp__0.3.1.zip";
+            const string newPackage = "testmod__testapp__web-app__testapp__0.3.2.zip";
+            await File.WriteAllBytesAsync(Path.Join(artifactsRoot, oldPackage), []);
+            await File.WriteAllBytesAsync(Path.Join(artifactsRoot, newPackage), []);
+
+            var account = ServiceAccountClassifier.Classify(null, "SERVER01");
+            var config = NoOpChainConfig();
+            config.Artifacts.Add(new ArtifactPayloadOptions
+            {
+                Source = "data/global/artifacts/" + oldPackage,
+                Target = "testmod/web/0.3.1"
+            });
+            var progress = new ListInstallProgress();
+
+            await InstallOrchestrator.RunAsync(
+                new InstallRequest(config, @"C:\pkg\hosts\prod\bootstrap.json", payloadRoot, GreenEvaluation(account), string.Empty),
+                new RecordingInstallActions(),
+                progress,
+                dryRun: true);
+
+            Assert.Equal("data/global/artifacts/" + newPackage, config.Artifacts[0].Source.Replace('\\', '/'));
+            Assert.Equal("testmod/web/0.3.2", config.Artifacts[0].Target.Replace('\\', '/'));
+            Assert.Contains(progress.Lines, line => line.Contains("Latest available artifact selection"));
+            Assert.Contains(progress.Lines, line => line.Contains(newPackage));
+        }
+        finally
+        {
+            Directory.Delete(payloadRoot, recursive: true);
+        }
     }
 }
 

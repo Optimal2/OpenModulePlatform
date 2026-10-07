@@ -142,7 +142,21 @@ internal sealed class MainForm : Form
         _installButton.Text = UiText.Get("ButtonInstall");
         _passwordVerify.Text = UiText.Get("ButtonVerifyPassword");
 
-        Shown += async (_, _) => await ResolveProfileAsync();
+        Shown += async (_, _) =>
+        {
+            // Catch-all, including JsonException from a malformed profile: show
+            // the error instead of crashing the process.
+            try
+            {
+                await ResolveProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                ShowMessage(
+                    UiText.Get("AppTitle"),
+                    UiText.Format("UnexpectedError", ex.Message));
+            }
+        };
         FormClosing += OnFormClosing;
     }
 
@@ -342,6 +356,8 @@ internal sealed class MainForm : Form
 
         _log?.Dispose();
         _log = InstallSessionLog.CreateNextToExecutable();
+        CrashReporter.LogPath = _log.Path;
+        CrashReporter.CurrentStep = null;
         var uiProgress = new UiInstallProgress(this);
         var progress = new CompositeInstallProgress([uiProgress, _log]);
 
@@ -368,9 +384,12 @@ internal sealed class MainForm : Form
                 dryRun: false));
             _installStatus.Text = UiText.Get("InstallDone");
         }
-        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or SystemException or IOException)
+        // Catch-all, including JsonException and anything the shared install
+        // chain raises: the operator sees the failing step and the log path.
+        catch (Exception ex)
         {
-            progress.Error(ex.Message);
+            var step = CrashReporter.CurrentStep;
+            progress.Error((step is null ? string.Empty : step + " - ") + ex.Message);
             _installStatus.Text = UiText.Format("InstallFailed", ex.Message);
         }
         finally
@@ -388,6 +407,13 @@ internal sealed class MainForm : Form
 
         private void Append(string message)
         {
+            // Track the current step (the "> ..." lines) so a failure can name
+            // the step that was running.
+            if (message.StartsWith("> ", StringComparison.Ordinal))
+            {
+                CrashReporter.CurrentStep = message[2..];
+            }
+
             if (form.IsDisposed)
             {
                 return;

@@ -91,16 +91,16 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
         }
     }
 
-    public int? GetHighestAspNetCoreRuntimeMajor()
+    public IReadOnlyList<int> GetInstalledAspNetCoreRuntimeMajors()
     {
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var runtimeRoot = Path.Join(programFiles, "dotnet", "shared", "Microsoft.AspNetCore.App");
         if (!Directory.Exists(runtimeRoot))
         {
-            return null;
+            return [];
         }
 
-        int? highest = null;
+        var majors = new SortedSet<int>();
         foreach (var directory in Directory.EnumerateDirectories(runtimeRoot))
         {
             var name = Path.GetFileName(directory);
@@ -110,13 +110,10 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
                 continue;
             }
 
-            if (highest is null || major > highest.Value)
-            {
-                highest = major;
-            }
+            majors.Add(major);
         }
 
-        return highest;
+        return majors.ToArray();
     }
 
     public bool IsAspNetCoreIisModuleRegistered()
@@ -145,10 +142,12 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
             return (false, "The profile does not configure sql.server and sql.database.");
         }
 
+        // Connect to master first so "the server does not answer" is reported
+        // distinctly from "the server answers but the database does not exist".
         var builder = new SqlConnectionStringBuilder
         {
             DataSource = server,
-            InitialCatalog = database,
+            InitialCatalog = "master",
             IntegratedSecurity = true,
             TrustServerCertificate = trustServerCertificate,
             ConnectTimeout = 10
@@ -158,15 +157,19 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
         {
             await using var connection = new SqlConnection(builder.ConnectionString);
             await connection.OpenAsync(cancellationToken);
-            await using var command = new SqlCommand("SELECT DB_ID();", connection) { CommandTimeout = 10 };
-            var result = await command.ExecuteScalarAsync(cancellationToken);
-            return result is not null and not DBNull
+            await using var command = new SqlCommand(
+                "SELECT COUNT(1) FROM sys.databases WHERE name = @databaseName;",
+                connection)
+            { CommandTimeout = 10 };
+            command.Parameters.AddWithValue("@databaseName", database.Trim());
+            var count = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
+            return count > 0
                 ? (true, $"Connected to {server}; the database {database} exists.")
-                : (false, $"The database {database} was not found on {server}. It must be created by the database administrator before the installation; this installer never creates databases.");
+                : (false, $"The database {database} does not exist on {server}. It is never created by this installer; have the database administrator create it before the installation.");
         }
         catch (SqlException ex)
         {
-            return (false, $"Could not connect to {server}/{database} with integrated security: {ex.Message}");
+            return (false, $"SQL Server {server} is unreachable with integrated security: {ex.Message}");
         }
     }
 
@@ -249,4 +252,43 @@ public sealed class WindowsPrerequisiteEnvironment : IPrerequisiteEnvironment
     public bool FileExists(string path) => File.Exists(path);
 
     public bool DirectoryExists(string path) => Directory.Exists(path);
+
+    public (bool Found, bool HasPrivateKey)? ProbeLocalMachineCertificate(string thumbprint)
+    {
+        if (string.IsNullOrWhiteSpace(thumbprint))
+        {
+            return (false, false);
+        }
+
+        try
+        {
+            using var store = new System.Security.Cryptography.X509Certificates.X509Store(
+                System.Security.Cryptography.X509Certificates.StoreName.My,
+                System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine);
+            store.Open(
+                System.Security.Cryptography.X509Certificates.OpenFlags.ReadOnly
+                | System.Security.Cryptography.X509Certificates.OpenFlags.OpenExistingOnly);
+            var matches = store.Certificates.Find(
+                System.Security.Cryptography.X509Certificates.X509FindType.FindByThumbprint,
+                thumbprint.Trim(),
+                validOnly: false);
+            if (matches.Count == 0)
+            {
+                return (false, false);
+            }
+
+            var hasPrivateKey = false;
+            foreach (System.Security.Cryptography.X509Certificates.X509Certificate2 certificate in matches)
+            {
+                hasPrivateKey |= certificate.HasPrivateKey;
+                certificate.Dispose();
+            }
+
+            return (true, hasPrivateKey);
+        }
+        catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or SystemException)
+        {
+            return null;
+        }
+    }
 }

@@ -46,4 +46,6 @@
   <data name="Check_SqlDatabase" xml:space="preserve"><value>Database</value></data>
   <data name="Check_FreeDiskSpace" xml:space="preserve"><value>Disk space</value></data>
   <data name="Check_ServiceAccount" xml:space="preserve"><value>Service account</value></data>
+  <data name="Check_IisBindingCertificate" xml:space="preserve"><value>Website certificate (https)</value></data>
+  <data name="UnexpectedError" xml:space="preserve"><value>Something went wrong: {0}</value></data>
 </root>

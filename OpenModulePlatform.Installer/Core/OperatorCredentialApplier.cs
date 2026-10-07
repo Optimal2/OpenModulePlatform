@@ -15,15 +15,17 @@ public static class OperatorCredentialApplier
     public static void Apply(BootstrapConfig config, string serviceAccountPassword)
     {
         var hostAgent = config.HostAgent;
-        var password = serviceAccountPassword.Trim();
+        // Passwords are never trimmed: LogonUser validated the exact typed
+        // value, and leading/trailing spaces are legal password characters.
+        var password = serviceAccountPassword ?? string.Empty;
         if (password.Length > 0)
         {
             hostAgent.ServiceAccountPassword = password;
         }
 
-        var effectivePassword = string.IsNullOrWhiteSpace(hostAgent.ServiceAccountPassword)
+        var effectivePassword = string.IsNullOrEmpty(hostAgent.ServiceAccountPassword)
             ? password
-            : hostAgent.ServiceAccountPassword.Trim();
+            : hostAgent.ServiceAccountPassword;
         if (effectivePassword.Length == 0)
         {
             return;

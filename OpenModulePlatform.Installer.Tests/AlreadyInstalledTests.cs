@@ -49,6 +49,58 @@ public class ProfileTargetResolverTests
     }
 
     [Fact]
+    public void Https_without_host_header_uses_the_machine_fqdn()
+    {
+        // The probe keeps certificate validation on; the certificate is issued
+        // to the server's FQDN, so https://localhost would fail name validation
+        // and report a successful install as failed.
+        var config = new OpenModulePlatform.Installation.BootstrapConfig
+        {
+            HostAgent = new OpenModulePlatform.Installation.HostAgentInstallOptions
+            {
+                IisBindingProtocol = "https",
+                IisBindingPort = 443
+            }
+        };
+        Assert.Equal(
+            "https://server01.example.com/",
+            ProfileTargetResolver.ResolvePortalUrl(config, "server01.example.com"));
+    }
+
+    [Fact]
+    public void Https_host_header_wins_over_the_machine_fqdn()
+    {
+        var config = new OpenModulePlatform.Installation.BootstrapConfig
+        {
+            HostAgent = new OpenModulePlatform.Installation.HostAgentInstallOptions
+            {
+                IisBindingProtocol = "https",
+                IisBindingHostHeader = "portal.example.com",
+                IisBindingPort = 443
+            }
+        };
+        Assert.Equal(
+            "https://portal.example.com/",
+            ProfileTargetResolver.ResolvePortalUrl(config, "server01.example.com"));
+    }
+
+    [Fact]
+    public void Http_without_host_header_stays_on_localhost_even_with_an_fqdn()
+    {
+        var config = new OpenModulePlatform.Installation.BootstrapConfig
+        {
+            HostAgent = new OpenModulePlatform.Installation.HostAgentInstallOptions
+            {
+                IisBindingProtocol = "http",
+                IisBindingPort = 8088
+            }
+        };
+        Assert.Equal(
+            "http://localhost:8088/",
+            ProfileTargetResolver.ResolvePortalUrl(config, "server01.example.com"));
+    }
+
+    [Fact]
     public void Auth_app_artifact_triggers_windows_authentication_requirement()
     {
         var config = new OpenModulePlatform.Installation.BootstrapConfig();

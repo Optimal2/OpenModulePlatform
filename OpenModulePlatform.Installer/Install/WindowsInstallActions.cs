@@ -10,31 +10,61 @@ namespace OpenModulePlatform.Installer.Install;
 /// </summary>
 public sealed class WindowsInstallActions : IInstallActions
 {
-    public void InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs)
+    public bool InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs)
     {
         if (featureNames.Count == 0)
         {
-            return;
+            return false;
         }
 
         if (isServerOs)
         {
             // Install-WindowsFeature is the Server Manager path; /quiet-equivalent
-            // by nature. Keep the command short and explicit.
+            // by nature. Keep the command short and explicit. Its result object
+            // carries Success and RestartNeeded: map them onto exit codes so a
+            // required restart (3010) is reported instead of silently dropped.
             var names = string.Join(",", featureNames);
-            InstallationEngine.RunProcess(
+            var result = InstallationEngine.RunProcess(
                 "powershell.exe",
-                ["-NoProfile", "-NonInteractive", "-Command", $"Install-WindowsFeature -Name {names} | Out-Null"],
+                ["-NoProfile", "-NonInteractive", "-Command",
+                    $"$r = Install-WindowsFeature -Name {names}; if (-not $r.Success) {{ exit 1 }}; if ($r.RestartNeeded -eq 'Yes') {{ exit 3010 }}; exit 0"],
+                throwOnFailure: false,
                 timeout: TimeSpan.FromMinutes(30));
-            return;
+            return InterpretFeatureInstallExitCode($"Install-WindowsFeature {names}", result.ExitCode, result.StdErr);
         }
 
+        var restartRequired = false;
         foreach (var featureName in featureNames)
         {
-            InstallationEngine.RunProcess(
+            // dism /enable-feature answers 3010/1641 when the feature needs a
+            // restart: success, not failure, so check the exit code explicitly
+            // instead of letting RunProcess throw on it.
+            var result = InstallationEngine.RunProcess(
                 "dism.exe",
                 ["/online", "/enable-feature", $"/featurename:{featureName}", "/all", "/norestart", "/quiet"],
+                throwOnFailure: false,
                 timeout: TimeSpan.FromMinutes(30));
+            restartRequired |= InterpretFeatureInstallExitCode($"dism /enable-feature {featureName}", result.ExitCode, result.StdErr);
+        }
+
+        return restartRequired;
+    }
+
+    /// <summary>0 = done; 3010/1641 = done, restart required; anything else is a failure.</summary>
+    internal static bool InterpretFeatureInstallExitCode(string description, int exitCode, string stdErr)
+    {
+        switch (exitCode)
+        {
+            case 0:
+                return false;
+            case 3010:
+            case 1641:
+                return true;
+            default:
+                var detail = (stdErr ?? string.Empty).Trim();
+                throw new InvalidOperationException(
+                    $"{description} failed with exit code {exitCode}."
+                    + (detail.Length == 0 ? string.Empty : " " + detail));
         }
     }
 

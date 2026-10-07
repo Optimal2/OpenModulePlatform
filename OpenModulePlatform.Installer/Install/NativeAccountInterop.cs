@@ -18,7 +18,8 @@ public static class ServiceLogonRight
     {
         try
         {
-            var sid = LookupAccountSid(accountName);
+            var lookupName = NormalizeAccountNameForLookup(accountName, Environment.MachineName);
+            var sid = LookupAccountSid(lookupName);
             AddAccountRight(sid, SeServiceLogonRight);
             detail = $"{accountName} now has the 'Log on as a service' right.";
             return true;
@@ -28,6 +29,26 @@ public static class ServiceLogonRight
             detail = ex.Message;
             return false;
         }
+    }
+
+    /// <summary>
+    /// LookupAccountName does not resolve the <c>.\name</c> shorthand (it fails
+    /// with error 1332, "no mapping between account names and security IDs");
+    /// the machine-qualified form <c>MACHINE\name</c> names the same account and
+    /// resolves. Other forms (bare name, DOMAIN\name, UPN) pass through.
+    /// </summary>
+    internal static string NormalizeAccountNameForLookup(string accountName, string machineName)
+    {
+        var trimmed = (accountName ?? string.Empty).Trim();
+        if (!trimmed.StartsWith(".\\", StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        var machine = string.IsNullOrWhiteSpace(machineName)
+            ? Environment.MachineName
+            : machineName.Trim();
+        return machine + trimmed[1..];
     }
 
     internal static byte[] LookupAccountSid(string accountName)

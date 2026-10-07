@@ -6,10 +6,15 @@ namespace OpenModulePlatform.Installer.Install;
 /// </summary>
 public interface IInstallActions
 {
-    /// <summary>Installs the named Windows features (Install-WindowsFeature on Server, Enable-WindowsOptionalFeature on client).</summary>
-    void InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs);
+    /// <summary>
+    /// Installs the named Windows features (Install-WindowsFeature on Server,
+    /// dism.exe /enable-feature on client). Returns true when Windows reports a
+    /// restart is required (exit code 3010/1641, or RestartNeeded on Server) -
+    /// success, not a failure.
+    /// </summary>
+    bool InstallIisFeatures(IReadOnlyList<string> featureNames, bool isServerOs);
 
-    /// <summary>Runs the hosting-bundle installer. Returns its exit code (0 = success, 3010 = success, restart required).</summary>
+    /// <summary>Runs the hosting-bundle installer. Returns its exit code (0 = success, 3010/1641 = success, restart required).</summary>
     int RunHostingBundle(string installerPath, bool repair);
 
     /// <summary>Restarts IIS (iisreset) after feature or hosting-bundle changes.</summary>

@@ -9,24 +9,63 @@ namespace OpenModulePlatform.Installer.Core;
 public static class ProfileTargetResolver
 {
     /// <summary>
-    /// The portal URL to probe after installation: binding protocol, host header
-    /// (localhost when the binding has no host header) and port (omitted when it
-    /// is the protocol default).
+    /// The portal URL to probe after installation. The host is, in order: the
+    /// binding's host header; for https without a host header the machine's DNS
+    /// FQDN (the probe keeps certificate validation on, and the certificate is
+    /// issued to the FQDN - probing https://localhost would fail name validation
+    /// and report a successful install as failed); localhost only for http. The
+    /// port is omitted when it is the protocol default.
     /// </summary>
     public static string ResolvePortalUrl(BootstrapConfig config)
+        => ResolvePortalUrl(config, LocalMachineFqdn());
+
+    internal static string ResolvePortalUrl(BootstrapConfig config, string? machineFqdn)
     {
         var hostAgent = config.HostAgent;
         var protocol = string.IsNullOrWhiteSpace(hostAgent.IisBindingProtocol)
             ? "http"
             : hostAgent.IisBindingProtocol.Trim().ToLowerInvariant();
-        var host = string.IsNullOrWhiteSpace(hostAgent.IisBindingHostHeader)
-            ? "localhost"
-            : hostAgent.IisBindingHostHeader.Trim();
+        string host;
+        if (!string.IsNullOrWhiteSpace(hostAgent.IisBindingHostHeader))
+        {
+            host = hostAgent.IisBindingHostHeader.Trim();
+        }
+        else if (protocol == "https" && !string.IsNullOrWhiteSpace(machineFqdn))
+        {
+            host = machineFqdn.Trim();
+        }
+        else
+        {
+            host = "localhost";
+        }
+
         var isDefaultPort = (protocol == "http" && hostAgent.IisBindingPort == 80)
             || (protocol == "https" && hostAgent.IisBindingPort == 443);
         return isDefaultPort
             ? $"{protocol}://{host}/"
             : $"{protocol}://{host}:{hostAgent.IisBindingPort}/";
+    }
+
+    /// <summary>
+    /// The local machine's DNS fully qualified name (for example
+    /// <c>SERVER01.example.com</c>), or the bare machine name when no DNS domain
+    /// suffix is configured.
+    /// </summary>
+    internal static string LocalMachineFqdn()
+    {
+        try
+        {
+            var domain = System.Net.NetworkInformation.IPGlobalProperties
+                .GetIPGlobalProperties()
+                .DomainName;
+            return string.IsNullOrWhiteSpace(domain)
+                ? Environment.MachineName
+                : Environment.MachineName + "." + domain.Trim().TrimEnd('.');
+        }
+        catch (Exception ex) when (ex is SystemException or InvalidOperationException)
+        {
+            return Environment.MachineName;
+        }
     }
 
     /// <summary>

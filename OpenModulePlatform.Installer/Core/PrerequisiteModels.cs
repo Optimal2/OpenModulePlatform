@@ -12,7 +12,8 @@ public enum PrerequisiteCheckId
     HostingBundleInstaller,
     SqlDatabase,
     FreeDiskSpace,
-    ServiceAccount
+    ServiceAccount,
+    IisBindingCertificate
 }
 
 /// <summary>One prerequisite line on the panel: green when <see cref="IsSatisfied"/>.</summary>
